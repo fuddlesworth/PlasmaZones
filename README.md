@@ -12,7 +12,7 @@ A window tiling tool for KDE Plasma that brings FancyZones-style layouts to Linu
 
 PlasmaZones lets you divide your screen into zones. When you drag a window while holding Shift (or your configured modifier), the zones light up and you can drop the window into any of them. The window resizes to fill that zone.
 
-Unlike automatic tiling window managers, you design your own layouts. The visual editor makes this straightforward - drag to create zones, resize them, split them, whatever you need. Save your layout and it's ready to use.
+Unlike automatic tiling window managers, you design your own layouts. The visual editor lets you drag to create zones, resize them, split them. Save and you're done.
 
 ## Features
 
@@ -155,8 +155,6 @@ kwin-effect/    # KWin integration
 See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on code style, testing, and submitting changes.
 
 ## Support
-
-If you find this project useful, consider supporting development:
 
 - [Ko-fi](https://ko-fi.com/fuddlesworth)
 - [GitHub Sponsors](https://github.com/sponsors/fuddlesworth)
