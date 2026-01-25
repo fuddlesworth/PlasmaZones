@@ -1,0 +1,689 @@
+# PlasmaZones - Cursor Rules
+# KDE/Plasma FancyZones Implementation - QML/C++/Qt6/Kirigami Best Practices
+
+## Project Overview
+PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality for organizing windows into customizable zones. Uses Qt6, KDE Frameworks 6, Kirigami UI components, and modern C++20.
+
+## License & Copyright
+- ALWAYS include SPDX headers in ALL files (QML and C++)
+- Format: `// SPDX-FileCopyrightText: 2026 fuddlesworth` and `// SPDX-License-Identifier: GPL-3.0-or-later`
+- Use `#pragma once` for C++ headers (not include guards)
+
+## C++ Standards & Style
+
+### General C++ Rules
+- Use **C++20** standard (`CMAKE_CXX_STANDARD 20`)
+- Prefer modern C++ features: `auto`, range-based for, smart pointers, `nullptr`
+- Use **Qt's object model**: Inherit from `QObject`, use `Q_OBJECT` macro
+- **NEVER copy QObjects**: Use `clone()` methods or explicit copy-constructors (marked as `delete`)
+- Use `namespace PlasmaZones` for all project code
+- Prefer `explicit` constructors for single-parameter constructors
+- Use `override` keyword for virtual function overrides
+
+### Naming Conventions
+- **Classes**: `PascalCase` (e.g., `Zone`, `EditorController`)
+- **Functions/Methods**: `camelCase` (e.g., `findZoneById`, `setGeometry`)
+- **Member variables**: `m_` prefix with `camelCase` (e.g., `m_layoutId`, `m_selectedZoneId`)
+- **Constants**: `PascalCase` in classes, `UPPER_SNAKE_CASE` in global scope
+- **Signals**: Past tense verb (e.g., `layoutChanged`, `zoneAdded`)
+- **Slots**: Action verb (e.g., `saveLayout`, `deleteZone`)
+
+### QObject Best Practices
+- Always use `Q_OBJECT` macro in classes with signals/slots/properties
+- Use `Q_PROPERTY` for QML-exposed properties with proper `READ`, `WRITE`, `NOTIFY`
+- Emit signals using `Q_EMIT` (not just `emit`)
+- Use `Q_SIGNALS:` and `Q_SLOTS:` sections (not just `signals:` and `slots:`)
+- Mark QML-invokable functions with `Q_INVOKABLE`
+- Use `Q_ENUM` for enums exposed to QML
+
+### Signal/Slot Patterns
+- Only emit signals when value **actually changes** (check `if (oldValue != newValue)`)
+- Use incremental update signals for performance (e.g., `zoneGeometryChanged(zoneId)` instead of rebuilding entire list)
+- Prefer direct function calls over signals when possible (within same object)
+- Use `QMetaObject::invokeMethod` for cross-thread calls only
+
+### Memory Management
+- Use **parent-based ownership** for QObjects (Qt auto-deletes children)
+- Use `std::unique_ptr` or `QPointer` for optional ownership (don't use raw pointers for owned objects)
+- **NEVER** delete QObjects manually in destructors (Qt handles cleanup)
+- Use `QSharedPointer` only when needed for shared ownership (rare in Qt apps)
+
+### Header Files
+- Use `#pragma once` (not include guards)
+- Forward declare classes when possible (reduce compile times)
+- Group includes: Qt headers first, then KDE, then project headers
+- Use `PLASMAZONES_EXPORT` macro for public API classes
+
+### Qt6 String Literal Handling
+- **CRITICAL**: Qt6 disallows direct `const char*` to `QString` conversions
+- **ALWAYS** use `QLatin1String()` for JSON object keys and string comparisons
+- **ALWAYS** use `QStringLiteral()` for MIME types, file paths, and other string constants
+- **NEVER** use raw string literals (`"text"`) with `QJsonObject` keys or `QString` comparisons
+- Examples:
+  ```cpp
+  // ❌ WRONG - Will cause compilation error in Qt6
+  QJsonObject obj;
+  obj["key"] = "value";
+  if (obj["key"].toString() == "value") { }
+  
+  // ✅ CORRECT - Use QLatin1String for JSON keys and comparisons
+  QJsonObject obj;
+  obj[QLatin1String("key")] = QLatin1String("value");
+  if (obj[QLatin1String("key")].toString() == QLatin1String("value")) { }
+  
+  // ✅ CORRECT - Use QStringLiteral for MIME types and constants
+  mimeData->setData(QStringLiteral("application/json"), data);
+  QString path = QStringLiteral("/path/to/file");
+  ```
+- When using `JsonKeys` constants (which are `const char*`), wrap with `QLatin1String()`:
+  ```cpp
+  // ✅ CORRECT
+  obj[QLatin1String(JsonKeys::Id)] = value;
+  zone[JsonKeys::Id] = obj[QLatin1String(JsonKeys::Id)].toString();
+  ```
+
+## QML Standards & Style
+
+### General QML Rules
+- Use **Qt Quick 6** (`import QtQuick`)
+- Prefer **Kirigami** components for KDE integration (`import org.kde.kirigami as Kirigami`)
+- Use **QtQuick.Controls** for basic controls (Buttons, TextField, etc.)
+- Use **QtQuick.Layouts** for layout management (RowLayout, ColumnLayout, GridLayout)
+- Follow **KDE Human Interface Guidelines (HIG)**
+
+### File Structure
+- QML files should start with SPDX header
+- Add brief documentation comment describing component purpose
+- Group imports: Qt Quick first, then Kirigami, then project-specific
+- Use `//` for single-line comments, `/* */` for multi-line
+
+### Naming Conventions
+- **Components/Files**: `PascalCase.qml` (e.g., `EditorZone.qml`, `ZoneContent.qml`)
+- **IDs**: `camelCase` (e.g., `root`, `editorWindow`, `zoneItem`)
+- **Properties**: `camelCase` (e.g., `canvasWidth`, `selectedZoneId`, `isSelected`)
+- **Functions**: `camelCase` (e.g., `findZoneById`, `toCanvasX`)
+- **Constants**: Group in `QtObject` with `readonly property` (e.g., `constants.previewAreaHeight`)
+
+### Property Binding Best Practices
+- **Always prefer binding over JavaScript assignments** for reactive properties
+- Use `property var` only when necessary (prefer typed properties: `property string`, `property real`, `property bool`)
+- Mark computed/derived properties as `readonly property`
+- Use `required property` for mandatory component properties (Qt 5.15+)
+- Avoid `property alias` unless absolutely necessary (can cause binding issues)
+
+### State Management
+- Use **zone IDs** (not indices) for stable selection (`selectedZoneId: string` not `selectedIndex: int`)
+- Use `Connections` component for explicit signal handling when needed
+- Prefer property bindings over `onPropertyChanged` handlers when possible
+- Use `Qt.binding()` function to restore bindings after assignments
+
+### Coordinate Systems
+- Always handle **relative** (0.0-1.0) and **absolute** (pixels) coordinate conversion
+- Provide helper functions: `toCanvasX/Y/W/H()` and `toRelativeX/Y/W/H()`
+- Check for division by zero and NaN values in coordinate conversions
+- Use zone spacing constants for gaps between zones (typically 8 pixels)
+
+### Performance Optimization
+- Use `Repeater` with `id`-based models, not index-based when possible
+- Prefer incremental updates over full list rebuilds
+- Use `ListView`/`GridView` for large lists (with proper `delegate` and `model`)
+- Avoid creating components unnecessarily (use `Loader` for conditional components)
+- Cache expensive calculations (use properties with proper dependencies)
+- Use `Qt.callLater()` for batching multiple updates
+
+### Kirigami Components
+- Use `Kirigami.ApplicationWindow` for main application windows
+- Use `Kirigami.Page` for individual pages
+- Use `Kirigami.Cards` for card-based layouts
+- Use `Kirigami.FormLayout` for settings forms
+- Use `Kirigami.Theme` for colors, spacing, fonts (never hardcode)
+- Access theme colors: `Kirigami.Theme.backgroundColor`, `Kirigami.Theme.textColor`, etc.
+
+### Interaction Patterns
+- Provide visual feedback for all interactive elements (hover, pressed states)
+- Use `MouseArea` with proper `acceptedButtons` (Qt.LeftButton, Qt.RightButton)
+- Handle both mouse and touch input when appropriate
+- Use `DragHandler` and `TapHandler` for modern gesture support (Qt 6.0+)
+- Implement proper focus management for keyboard navigation
+
+### Accessibility
+- Always provide `text` or `Accessible.name` for screen readers
+- Use semantic roles: `Accessible.Button`, `Accessible.Text`, etc.
+- Support keyboard navigation (Tab order, Enter/Space activation)
+- Use appropriate `icon.name` for visual buttons (KDE icon naming convention)
+- Provide tooltips with `ToolTip` component
+
+## Architecture Patterns
+
+### Service-Oriented Design
+- Use dependency injection for services (pass via constructor or setter)
+- Services: `ILayoutService`, `ZoneManager`, `SnappingService`, `TemplateService`
+- Controllers expose services to QML via `setContextProperty` or properties
+- Keep business logic in C++, UI logic in QML
+
+### Zone Management
+- **ALWAYS use zone IDs (QUuid)**, never indices for zone identification
+- Zones are stored in `ZoneManager` as QObject-based models
+- Expose zones to QML as `QVariantList` (QML can iterate with `for` loops)
+- Use `Q_PROPERTY` for reactive zone updates (QML binding updates automatically)
+
+### Snapping System
+- Delegate snapping logic to `SnappingService` (C++)
+- Support both grid snapping and edge snapping
+- Provide selective snapping (per-edge control: `snapLeft`, `snapRight`, etc.)
+- Visual feedback via `SnapIndicator` component
+- Snap threshold configurable (typically 10-15 pixels)
+
+### Divider Resizing
+- Zones sharing an edge can be resized together (divider operation)
+- Use `getZonesSharingEdge()` to find adjacent zones
+- Block zone data sync during divider operations (`isDividerOperation` flag)
+- Update both zones atomically to prevent visual glitches
+
+### Layout Persistence
+- Use JSON format for layout files (stored in `~/.local/share/plasmazones/layouts/`)
+- Store relative geometry (0.0-1.0) for resolution independence
+- Include zone IDs, names, colors, and metadata
+- Use `QJsonObject`/`QJsonArray` for serialization
+
+## UX/UI Guidelines
+
+### KDE Human Interface Guidelines
+- Follow **KDE HIG**: https://develop.kde.org/hig/
+- Use system theme colors (never hardcode colors - use `Kirigami.Theme`)
+- Support both light and dark themes automatically
+- Use KDE standard icons (Breeze icon theme naming: `view-grid-symbolic`, `edit-delete`, etc.)
+
+### Layout & Spacing
+- Use `Kirigami.Units` for consistent spacing: `Kirigami.Units.gridUnit`, `Kirigami.Units.smallSpacing`
+- Standard spacing: `Kirigami.Units.gridUnit` (8px) for major spacing, `smallSpacing` (4px) for minor
+- Use `Layout` components for automatic spacing and alignment
+- Provide consistent margins/padding (typically 1-2 `gridUnit`)
+
+### Typography
+- Use system fonts: `Kirigami.Theme.defaultFont` for body text
+- Use appropriate font sizes: `Kirigami.Units.fontMetrics.font.pixelSize`
+- Support font scaling (users can change system font size)
+- Use semantic text styles: headings, body, captions
+
+### Window Management
+- Support both **X11 and Wayland** (check `Qt.platform.os === "wayland"`)
+- Use `LayerShellQt` for Wayland overlay windows when available
+- On X11, use `Qt.WindowStaysOnTopHint` for overlays
+- Handle fullscreen properly: `Window.FullScreen` visibility
+- Use frameless windows for overlays: `Qt.FramelessWindowHint`
+
+### Keyboard Shortcuts
+- Provide standard shortcuts: `Escape` (close), `Ctrl+S` (save), `Delete` (remove), `Ctrl+D` (duplicate)
+- Use `Shortcut` component for QML shortcuts
+- Support global shortcuts via `KGlobalAccel` (C++ side) for daemon operations
+- Document shortcuts in tooltips or help menus
+
+### Feedback & Animation
+- Provide immediate visual feedback for all user actions
+- Use subtle animations for state changes (200-300ms duration)
+- Use `PropertyAnimation` or `NumberAnimation` for smooth transitions
+- Avoid excessive animations (don't distract from content)
+- Show loading states for async operations (use `BusyIndicator`)
+
+### Error Handling
+- Show user-friendly error messages (use `Kirigami.OverlaySheet` or `MessageDialog`)
+- Use `i18n()` for all user-facing strings (never hardcode English)
+- Provide actionable error messages (tell user how to fix issue)
+- Log errors to console for debugging (use `qWarning()`, `qCritical()` in C++)
+
+## Internationalization (i18n)
+
+### QML i18n
+- Use `i18n()` function for all user-visible strings
+- Use `i18nc()` with context when needed: `i18nc("@title", "Layout Editor")`
+- Provide context comments for translators: `// TRANSLATORS: Tooltip for save button`
+- Never concatenate strings for translation (use `i18n("Text %1", variable)`)
+
+### C++ i18n
+- Use `i18n()` from `KLocalizedString` (KF6::I18n)
+- Use `i18nc()` with context: `i18nc("@info", "Zone deleted")`
+- Mark strings in `Q_PROPERTY` with `QT_TR_NOOP()` if needed
+- Export translatable strings: `XGETTEXT_OPTIONS` in CMake
+
+## Settings & KConfigXT Conventions
+
+### Architecture Overview
+- **ISettings interface** (`interfaces.h`): Abstract interface declaring all settings methods and signals
+- **Settings class** (`settings.h/cpp`): Concrete implementation with KConfig persistence
+- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema defining settings structure
+- **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig)
+
+**Note on KConfigXT Generated Class:**
+The kcfgc generates a `PlasmaZonesConfig` class, but it is NOT currently used. The Settings class
+manually reads/writes using KConfig APIs for greater control over validation and migration.
+The kcfg file serves primarily as documentation and could enable future auto-generation.
+When adding settings, update kcfg for documentation but implement in Settings.cpp manually.
+
+### Adding a New Setting (Complete Workflow)
+
+When adding a new setting, you MUST update ALL of these files in order:
+
+1. **`plasmazones.kcfg`** - Add entry to appropriate group:
+   ```xml
+   <group name="GroupName">
+     <entry name="SettingName" type="String">
+       <label>Human-readable description</label>
+       <default>DefaultValue</default>
+     </entry>
+   </group>
+   ```
+
+2. **`interfaces.h`** - Add signal declaration to ISettings:
+   ```cpp
+   Q_SIGNALS:
+       void settingNameChanged();  // Past tense verb
+   ```
+
+3. **`settings.h`** - Add Q_PROPERTY, getter, setter, and member variable:
+   ```cpp
+   // In Q_PROPERTY section:
+   Q_PROPERTY(QString settingName READ settingName WRITE setSettingName NOTIFY settingNameChanged)
+
+   // In public section:
+   QString settingName() const { return m_settingName; }
+   void setSettingName(const QString &value);
+
+   // In private section:
+   QString m_settingName = QStringLiteral("DefaultValue");
+   ```
+
+4. **`settings.cpp`** - Add setter implementation, load/save/reset logic:
+   ```cpp
+   // Setter (check value changed before emitting):
+   void Settings::setSettingName(const QString &value) {
+       if (m_settingName != value) {
+           m_settingName = value;
+           Q_EMIT settingNameChanged();
+           Q_EMIT settingsChanged();
+       }
+   }
+
+   // In load():
+   KConfigGroup group = config->group(QStringLiteral("GroupName"));
+   m_settingName = group.readEntry("SettingName", QStringLiteral("DefaultValue"));
+
+   // In save():
+   KConfigGroup group = config->group(QStringLiteral("GroupName"));
+   group.writeEntry("SettingName", m_settingName);
+
+   // In reset():
+   m_settingName = QStringLiteral("DefaultValue");
+   ```
+
+### KConfigXT (kcfg) Conventions
+
+#### Key Naming
+- **Entry names**: `PascalCase` (e.g., `ShowOnAllMonitors`, `BorderWidth`, `OpenEditorShortcut`)
+- **Group names**: `PascalCase` categories (e.g., `Activation`, `Display`, `Appearance`, `GlobalShortcuts`)
+- **CRITICAL**: Key names in kcfg MUST match the keys used in `settings.cpp` load/save for backward compatibility
+
+#### Supported Types
+```xml
+<entry name="..." type="String">    <!-- QString -->
+<entry name="..." type="Bool">      <!-- bool -->
+<entry name="..." type="Int">       <!-- int with optional min/max -->
+<entry name="..." type="Double">    <!-- qreal/double with optional min/max -->
+<entry name="..." type="Color">     <!-- QColor, default as #AARRGGBB -->
+<entry name="..." type="StringList"> <!-- QStringList -->
+```
+
+#### Entry Structure
+```xml
+<entry name="SettingName" type="Type">
+  <label>User-visible description for documentation</label>
+  <default>DefaultValue</default>
+  <min>0</min>       <!-- Optional: for Int/Double -->
+  <max>100</max>     <!-- Optional: for Int/Double -->
+</entry>
+```
+
+#### Group Organization
+- `Activation` - Shortcuts and activation triggers
+- `Display` - Visual display options
+- `Appearance` - Colors, opacity, styling (ricer-friendly)
+- `Zones` - Zone behavior and thresholds
+- `Behavior` - Window management behavior
+- `Exclusions` - Application/window class exclusions
+- `GlobalShortcuts` - KGlobalAccel-registered shortcuts
+- `Editor` - Layout editor settings (local shortcuts)
+- `ZoneSelector` - Zone selector popup settings
+
+### kcfgc Configuration
+```ini
+File=plasmazones.kcfg
+ClassName=PlasmaZonesConfig
+NameSpace=PlasmaZones
+Mutators=true
+DefaultValueGetters=true
+GenerateProperties=true
+ParentInConstructor=true
+Singleton=false
+IncludeFiles=QColor
+```
+
+### Settings Getter/Setter Patterns
+
+#### Simple Types (QString, bool, int, qreal)
+```cpp
+// Getter (inline in header):
+QString settingName() const { return m_settingName; }
+
+// Setter (in cpp):
+void Settings::setSettingName(const QString &value) {
+    if (m_settingName != value) {
+        m_settingName = value;
+        Q_EMIT settingNameChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+```
+
+#### Enum Types (with int wrapper for QML)
+```cpp
+// In header:
+Q_PROPERTY(int enumSettingInt READ enumSettingInt WRITE setEnumSettingInt NOTIFY enumSettingChanged)
+
+EnumType enumSetting() const { return m_enumSetting; }
+void setEnumSetting(EnumType value);
+int enumSettingInt() const { return static_cast<int>(m_enumSetting); }
+void setEnumSettingInt(int value);
+
+// In cpp:
+void Settings::setEnumSettingInt(int value) {
+    setEnumSetting(static_cast<EnumType>(value));
+}
+```
+
+#### Array/Indexed Settings
+```cpp
+// In header:
+QString quickLayoutShortcut(int index) const;
+void setQuickLayoutShortcut(int index, const QString &shortcut);
+
+// Individual accessors for QML binding:
+QString quickLayout1Shortcut() const { return m_quickLayoutShortcuts[0]; }
+void setQuickLayout1Shortcut(const QString &shortcut);
+
+// In cpp - switch for individual signals:
+void Settings::setQuickLayoutShortcut(int index, const QString &shortcut) {
+    if (index >= 0 && index < 9 && m_quickLayoutShortcuts[index] != shortcut) {
+        m_quickLayoutShortcuts[index] = shortcut;
+        switch (index) {
+            case 0: Q_EMIT quickLayout1ShortcutChanged(); break;
+            // ... etc
+        }
+        Q_EMIT settingsChanged();
+    }
+}
+```
+
+### KGlobalAccel Shortcut Integration
+
+#### Registration Pattern (ShortcutManager)
+```cpp
+// Create action with i18n name:
+auto *action = new QAction(i18n("Action Description"), this);
+action->setObjectName(QStringLiteral("unique_action_id"));
+
+// Register with shortcut from settings:
+KGlobalAccel::setGlobalShortcut(action, QKeySequence(m_settings->shortcutSetting()));
+
+// Connect signal for dynamic updates:
+connect(m_settings, &Settings::shortcutSettingChanged,
+        this, &ShortcutManager::updateShortcut);
+```
+
+#### Dynamic Shortcut Updates
+```cpp
+void ShortcutManager::updateShortcut() {
+    if (m_action) {
+        KGlobalAccel::setGlobalShortcut(m_action,
+            QKeySequence(m_settings->shortcutSetting()));
+    }
+}
+```
+
+### Editor Settings Architecture (Important!)
+
+**Editor settings are handled SEPARATELY from the main Settings class.**
+
+The kcfg "Editor" group (15 settings) is loaded/saved by `EditorController::loadEditorSettings()`
+and `EditorController::saveEditorSettings()` in `src/editor/EditorController.cpp`.
+
+This is intentional because:
+1. The editor runs in a separate process from the daemon
+2. Editor settings are only relevant when the editor window is open
+3. It reduces coupling between editor and daemon components
+
+**Editor Settings handled by EditorController:**
+- GridSnappingEnabled, EdgeSnappingEnabled
+- SnapInterval, SnapIntervalX, SnapIntervalY
+- EditorSaveShortcut, EditorDeleteShortcut, EditorDuplicateShortcut
+- EditorSplitHorizontalShortcut, EditorSplitVerticalShortcut
+- EditorFillShortcut, EditorCloseShortcut
+- SnapOverrideModifier, FillOnDropEnabled, FillOnDropModifier
+
+**When adding Editor settings:**
+1. Add entry to kcfg "Editor" group
+2. Add property/member to `EditorController.h`
+3. Add load/save logic in `EditorController::loadEditorSettings()`/`saveEditorSettings()`
+4. Do NOT add to ISettings interface or Settings class
+
+**Known Issue - zonePadding Duplication:**
+`zonePadding` (Zones/Padding) is currently loaded by BOTH Settings.cpp AND EditorController.cpp.
+Each maintains its own copy. The EditorController reads it from the config file directly.
+TODO: Consider having EditorController get zonePadding via D-Bus from Settings instead.
+
+### Common Pitfalls - Settings
+
+- ❌ **DON'T** add Q_PROPERTY without corresponding signal in ISettings interface
+- ❌ **DON'T** forget to add load/save/reset logic when adding new settings
+- ❌ **DON'T** use different key names in kcfg vs settings.cpp (breaks migration)
+- ❌ **DON'T** emit signals without checking if value actually changed
+- ❌ **DON'T** forget to update ShortcutManager when adding new global shortcuts
+- ❌ **DON'T** add Editor group settings to Settings class (use EditorController)
+- ✅ **DO** keep kcfg key names matching settings.cpp for backward compatibility
+- ✅ **DO** add signals to ISettings interface (not just Settings class)
+- ✅ **DO** use `QStringLiteral()` for default values in member initializers
+- ✅ **DO** emit both specific signal AND `settingsChanged()` in setters
+- ✅ **DO** use `Q_EMIT` macro (not just `emit`)
+
+## D-Bus Integration
+
+### Service Definition
+- Use XML interface files (`org.plasmazones.xml`)
+- Generate adaptors with `qt6_add_dbus_adaptor()` in CMake
+- Use `QDBusConnection::sessionBus()` for session services
+- Implement proper error handling (use `QDBusError`)
+
+### Method Signatures
+- Keep D-Bus methods simple (avoid complex nested structures)
+- Use `QVariantMap` or `QJsonObject` for complex data (serialize to string if needed)
+- Provide both async (signals) and sync (return values) patterns
+- Document D-Bus interfaces in XML comments
+
+## Testing Best Practices
+
+### QML Testing
+- Use QML Test Framework: `import QtTest`
+- Test components in isolation (use `TestCase`)
+- Test property bindings and signal emissions
+- Test mouse/touch interactions with `mouseClick()`, `touchEvent()`
+
+### C++ Testing
+- Use Qt Test Framework: `QTEST_MAIN`, `QCOMPARE`, `QVERIFY`
+- Test business logic (not UI rendering)
+- Mock D-Bus services for daemon tests
+- Test edge cases: empty zones, overlapping zones, invalid coordinates
+
+### Integration Testing
+- Test full workflows: create layout → edit zones → save → load
+- Test cross-component communication (QML ↔ C++)
+- Test D-Bus service communication
+- Test both X11 and Wayland paths when possible
+
+## CMake Build System
+
+### Structure
+- Root `CMakeLists.txt` finds Qt6 and KF6
+- Subdirectories: `src/`, `kwin/`, `kcm/`, `tests/`
+- Use `KDEInstallDirs` for installation paths
+- Use `ECM` for KDE CMake utilities
+
+### Qt6 Integration
+- Set `CMAKE_AUTOMOC`, `CMAKE_AUTORCC`, `CMAKE_AUTOUIC` to ON
+- Use `qt6_add_executable()` for applications
+- Use `qt6_add_qml_module()` for QML applications (Qt 6.2+)
+- Use `qt6_add_resources()` for `.qrc` files
+
+### QML Module Registration (CRITICAL)
+- **ALL QML files MUST be listed in `qt_add_qml_module()` in CMakeLists.txt**
+- When creating a new QML component, ALWAYS add it to the `QML_FILES` list
+- When extracting QML components to new files, ALWAYS register them in CMakeLists.txt
+- Missing QML files cause "X is not a type" errors at runtime
+- Example:
+  ```cmake
+  qt_add_qml_module(plasmazones-editor
+      URI org.plasmazones.editor
+      VERSION 1.0
+      RESOURCE_PREFIX /qt/qml
+      QML_FILES
+          editor/qml/EditorWindow.qml
+          editor/qml/NewComponent.qml  # <-- Add new files here!
+  )
+  ```
+
+### KDE Frameworks
+- Required: `KF6::Config`, `KF6::CoreAddons`, `KF6::DBusAddons`, `KF6::I18n`, `KF6::WindowSystem`
+- Optional: `KF6::Activities` (for activity-based layouts)
+- Use `find_package(KF6 REQUIRED COMPONENTS ...)`
+- Use `kcoreaddons_desktop_to_json()` for `.desktop` files
+
+### Export/Installation
+- Use `kf6_install_cmake_config_file()` for CMake config
+- Install desktop files: `install(FILES ... DESTINATION ${KDE_INSTALL_APPDIR})`
+- Install QML modules: Use `qt6_add_qml_module()` with proper installation
+- Install D-Bus services: `${KDE_INSTALL_DBUSINTERFACEDIR}`
+
+## Code Organization
+
+### Directory Structure
+```
+src/
+  core/          # Core domain models (Zone, Layout, ScreenManager)
+  daemon/        # Background daemon service
+  editor/        # Layout editor application
+  dbus/          # D-Bus adaptors and interfaces
+  config/        # Configuration (KConfig)
+  ui/            # Shared QML components
+  editor/qml/    # Editor-specific QML components
+kcm/             # System Settings module
+kwin/            # KWin script integration
+tests/           # Test files
+data/layouts/    # Default layout templates (JSON)
+```
+
+### File Grouping
+- Group related functionality: all zone-related code in `core/zone.*`
+- Separate concerns: UI (QML) vs. logic (C++)
+- Use service classes for cross-cutting concerns (snapping, templates)
+- Keep files under 500 lines (split large files)
+
+## Common Pitfalls to Avoid
+
+### QML Pitfalls
+- ❌ **DON'T** use indices for zone selection (unstable, breaks on reorder)
+- ❌ **DON'T** directly modify properties in `onPropertyChanged` (breaks bindings)
+- ❌ **DON'T** hardcode colors or spacing (use Kirigami.Theme/Units)
+- ❌ **DON'T** create components in loops (use Repeater or ListView)
+- ❌ **DON'T** forget to handle coordinate system conversions
+- ✅ **DO** use zone IDs for all zone operations
+- ✅ **DO** use property bindings for reactive updates
+- ✅ **DO** check for null/undefined before accessing properties
+- ✅ **DO** handle division by zero in coordinate conversions
+
+### C++ Pitfalls
+- ❌ **DON'T** copy QObjects (use `clone()` or explicit copying)
+- ❌ **DON'T** delete QObjects manually (Qt handles cleanup)
+- ❌ **DON'T** forget `Q_OBJECT` macro in classes with signals/slots
+- ❌ **DON'T** emit signals without checking if value actually changed
+- ❌ **DON'T** use raw pointers for owned QObjects
+- ❌ **DON'T** use raw string literals with `QJsonObject` keys or `QString` comparisons (Qt6 requirement)
+- ✅ **DO** use parent-based ownership for QObjects
+- ✅ **DO** emit signals only when values change
+- ✅ **DO** use `Q_EMIT` macro (not just `emit`)
+- ✅ **DO** forward declare classes in headers
+- ✅ **DO** use `QLatin1String()` for JSON keys and string comparisons
+- ✅ **DO** use `QStringLiteral()` for MIME types and string constants
+
+### Architecture Pitfalls
+- ❌ **DON'T** mix UI logic and business logic
+- ❌ **DON'T** expose implementation details to QML
+- ❌ **DON'T** create tight coupling between components
+- ✅ **DO** use dependency injection for services
+- ✅ **DO** keep QML for UI, C++ for logic
+- ✅ **DO** use interfaces for service abstraction
+
+## Performance Considerations
+
+### QML Performance
+- Minimize JavaScript execution (prefer bindings)
+- Avoid creating components unnecessarily
+- Use `ListView`/`GridView` for large lists (not `Repeater`)
+- Cache expensive calculations in properties
+- Use `Qt.callLater()` for batching updates
+
+### C++ Performance
+- Use forward declarations to reduce compile times
+- Avoid unnecessary signal emissions (check value changes)
+- Use `const` methods and parameters when possible
+- Prefer `const QString&` over `QString` for parameters (avoid copies)
+- Use move semantics (`std::move`) for large objects when appropriate
+
+## Documentation
+
+### Code Comments
+- Use `/** */` for class/function documentation (Doxygen style)
+- Use `@brief`, `@param`, `@return` tags
+- Explain **why**, not **what** (code should be self-explanatory)
+- Document public API thoroughly
+- Document edge cases and gotchas
+
+### QML Component Documentation
+- Add brief description at top of component
+- Document `required property` expectations
+- Explain complex property bindings or behaviors
+- Document signals and their purpose
+
+## Version Control
+
+### Git Practices
+- Use descriptive commit messages
+- Follow conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`
+- Include SPDX headers (legal requirement)
+- Don't commit build artifacts (use `.gitignore`)
+- Keep commits atomic (one logical change per commit)
+
+## Debugging Tips
+
+### QML Debugging
+- Use `console.log()` for debugging (remove before commit)
+- Use Qt Creator's QML profiler for performance analysis
+- Check QML console for binding errors
+- Use `Behavior` on properties to visualize updates
+
+### C++ Debugging
+- Use `qDebug()`, `qWarning()`, `qCritical()` for logging
+- Enable `QT_MESSAGE_PATTERN` environment variable for formatted logs
+- Use Qt Creator's debugger for breakpoints
+- Use `Q_ASSERT()` for invariants (debug builds only)
+
+---
+
+**Remember**: This is a KDE application. Always follow KDE development guidelines, use Kirigami for UI components, support accessibility and internationalization, and prioritize user experience. When in doubt, refer to existing KDE applications for patterns.

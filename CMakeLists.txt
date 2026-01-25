@@ -1,0 +1,298 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# PlasmaZones - KDE/Plasma FancyZones Implementation
+
+cmake_minimum_required(VERSION 3.16)
+
+project(PlasmaZones VERSION 1.0.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Build Performance Optimizations
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Unity builds - combine multiple source files into larger translation units
+# This significantly reduces compilation time by reducing header parsing overhead
+option(CMAKE_UNITY_BUILD "Enable unity builds for faster compilation" ON)
+set(CMAKE_UNITY_BUILD_BATCH_SIZE 16 CACHE STRING "Number of sources per unity batch")
+
+# Precompiled headers - reuse expensive header compilation
+option(ENABLE_PCH "Enable precompiled headers" ON)
+
+# ccache support - cache compilation results for faster rebuilds
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    message(STATUS "Found ccache: ${CCACHE_PROGRAM} - enabling compiler cache")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+endif()
+
+# Parallel AUTOMOC for faster meta-object compilation
+set(CMAKE_AUTOMOC_PARALLEL_ENABLED ON)
+
+# Create AUTOMOC include directories to prevent -Wmissing-include-dirs warnings
+# These directories are added to include paths by Qt's AUTOMOC but may not exist
+# if no MOC-generated code is produced for certain targets
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qml_autogen/include)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_autogen/include)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_init_autogen/include)
+
+# KDE/Qt requirements
+set(QT_MIN_VERSION "6.6.0")
+set(KF_MIN_VERSION "6.0.0")
+
+find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
+set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+
+include(KDEInstallDirs)
+set(KDE_SKIP_UNINSTALL_TARGET ON)  # We provide our own uninstall target
+include(KDECMakeSettings)
+include(KDECompilerSettings NO_POLICY_SCOPE)
+include(FeatureSummary)
+
+# Find Qt6
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
+    Core
+    Quick
+    QuickControls2
+    Gui
+    DBus
+    Widgets
+)
+
+# Find KDE Frameworks
+find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
+    Config
+    ConfigWidgets
+    CoreAddons
+    DBusAddons
+    I18n
+    KCMUtils
+    WindowSystem
+    GlobalAccel
+    Notifications
+    ColorScheme
+)
+
+# KActivities is optional (for activity-based layouts)
+# Note: KActivities may be part of Plasma Workspace, check both package names
+find_package(KF6Activities QUIET COMPONENTS Activities)
+if(NOT KF6Activities_FOUND)
+    # Try older package name (KF5)
+    find_package(KActivities QUIET)
+    if(KActivities_FOUND)
+        set(KF6Activities_FOUND TRUE)
+        set(KF6Activities_Activities_FOUND TRUE)
+    endif()
+endif()
+
+if(KF6Activities_FOUND)
+    message(STATUS "KActivities found - activity-based layouts enabled")
+    # Don't add global definitions here - set per-target instead
+else()
+    message(STATUS "KActivities not found - activity support disabled")
+endif()
+
+# LayerShellQt for Wayland overlay support (optional)
+find_package(LayerShellQt QUIET)
+if(LayerShellQt_FOUND)
+    message(STATUS "LayerShellQt found - Wayland overlay support enabled")
+    add_definitions(-DHAVE_LAYER_SHELL)
+else()
+    message(STATUS "LayerShellQt not found - overlay support will be limited")
+endif()
+
+# Install daemon .desktop to session autostart (share/autostart).
+# Set to OFF for user-local installs (e.g. -DCMAKE_INSTALL_PREFIX=$HOME/.local)
+# so the daemon does not autostart until enabled in System Settings.
+option(INSTALL_DAEMON_AUTOSTART "Install daemon .desktop to session autostart" ON)
+
+# ---------------------------------------------------------------------------
+# Code formatting (clang-format for C++, qmlformat for QML)
+#   make clang-format  (or ninja clang-format)
+#   make format-qml   (or ninja format-qml)
+# ---------------------------------------------------------------------------
+include(KDEClangFormat)
+file(GLOB_RECURSE ALL_CLANG_FORMAT_SOURCE_FILES
+    ${CMAKE_SOURCE_DIR}/src/**/*.cpp
+    ${CMAKE_SOURCE_DIR}/src/**/*.h
+    ${CMAKE_SOURCE_DIR}/src/**/*.hpp
+    ${CMAKE_SOURCE_DIR}/kcm/*.cpp
+    ${CMAKE_SOURCE_DIR}/kcm/*.h
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.cpp
+    ${CMAKE_SOURCE_DIR}/kwin-effect/*.h
+    ${CMAKE_SOURCE_DIR}/tests/**/*.cpp
+    ${CMAKE_SOURCE_DIR}/tests/**/*.h
+)
+kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
+
+# QML: qmlformat (from qt6-tools, optional)
+find_program(QMLFORMAT qmlformat)
+file(GLOB_RECURSE ALL_QML_FILES
+    ${CMAKE_SOURCE_DIR}/src/**/*.qml
+    ${CMAKE_SOURCE_DIR}/kcm/**/*.qml
+)
+if(QMLFORMAT AND ALL_QML_FILES)
+    # Run qmlformat via helper script; per-file failures are ignored (one bad QML won't fail target)
+    add_custom_target(format-qml
+        COMMAND ${CMAKE_COMMAND}
+            -DQMLFORMAT=${QMLFORMAT}
+            -DFILES="${ALL_QML_FILES}"
+            -P ${CMAKE_SOURCE_DIR}/cmake/format-qml.cmake
+        COMMENT "Formatting QML files with qmlformat"
+    )
+else()
+    add_custom_target(format-qml
+        COMMAND ${CMAKE_COMMAND} -E echo "qmlformat not found or no QML files; install qt6-tools for QML formatting"
+    )
+endif()
+
+# ---------------------------------------------------------------------------
+# Translations (KI18n / Gettext)
+#   make extract-pot   - extract translatable strings into po/*.pot
+#   po/<lang>/<domain>.po are compiled to .mo and installed by KI18N_INSTALL(po)
+# ---------------------------------------------------------------------------
+find_package(KF6I18n REQUIRED)
+find_program(GETTEXT_XGETTEXT_EXECUTABLE NAMES xgettext)
+find_program(GETTEXT_MSGCAT_EXECUTABLE NAMES msgcat)
+
+# Domains: plasmazonesd (daemon + overlay), plasmazones-editor (editor), kcm_plasmazones (KCM)
+set(PLASMAZONESD_CPP
+    ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
+)
+set(PLASMAZONESD_QML
+    ${CMAKE_SOURCE_DIR}/src/ui/LayoutPreview.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/ZoneItem.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/ZoneOverlay.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/ZoneSelector.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/ZoneSelectorWindow.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/LayoutPicker.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/ZoneEditor.qml
+)
+set(PLASMAZONES_EDITOR_CPP
+    ${CMAKE_SOURCE_DIR}/src/editor/main.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/AddZoneCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ApplyTemplateCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ChangeSelectionCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ChangeZOrderCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DividerResizeCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DuplicateZoneCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/FillZoneCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/SplitZoneCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ClearAllZonesCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DeleteZoneCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DeleteZoneWithFillCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/PasteZonesCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateLayoutNameCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneAppearanceCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneGeometryCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneNameCommand.cpp
+    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneNumberCommand.cpp
+)
+file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
+set(KCM_PLASMAZONES_QML
+    ${CMAKE_SOURCE_DIR}/kcm/ui/main.qml
+    ${CMAKE_SOURCE_DIR}/kcm/ui/ModifierCheckBoxes.qml
+    ${CMAKE_SOURCE_DIR}/kcm/ui/LayoutThumbnail.qml
+    ${CMAKE_SOURCE_DIR}/kcm/ui/KeySequenceInput.qml
+    ${CMAKE_SOURCE_DIR}/kcm/ui/PreviewSizeControl.qml
+    ${CMAKE_SOURCE_DIR}/kcm/ui/PositionPicker.qml
+)
+
+if(GETTEXT_XGETTEXT_EXECUTABLE)
+    add_custom_target(extract-pot
+        COMMENT "Extracting translatable strings into po/*.pot"
+    )
+    foreach(_domain plasmazonesd plasmazones-editor kcm_plasmazones)
+        if(_domain STREQUAL "plasmazonesd")
+            set(_cpp "${PLASMAZONESD_CPP}")
+            set(_qml "${PLASMAZONESD_QML}")
+        elseif(_domain STREQUAL "plasmazones-editor")
+            set(_cpp "${PLASMAZONES_EDITOR_CPP}")
+            set(_qml "${PLASMAZONES_EDITOR_QML}")
+        else()
+            set(_cpp "")
+            set(_qml "${KCM_PLASMAZONES_QML}")
+        endif()
+        list(JOIN _cpp ";" _cstr)
+        list(JOIN _qml ";" _qstr)
+        add_custom_command(TARGET extract-pot POST_BUILD
+            COMMAND ${CMAKE_COMMAND}
+                -DCMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DBINARY_DIR=${CMAKE_BINARY_DIR}
+                -DCMAKE_CMD=${CMAKE_COMMAND}
+                -DDOMAIN=${_domain}
+                -DCPP_FILES="${_cstr}"
+                -DQML_FILES="${_qstr}"
+                -DPOT_FILE=${CMAKE_SOURCE_DIR}/po/${_domain}.pot
+                -DGETTEXT_XGETTEXT_EXECUTABLE=${GETTEXT_XGETTEXT_EXECUTABLE}
+                -DGETTEXT_MSGCAT_EXECUTABLE=${GETTEXT_MSGCAT_EXECUTABLE}
+                -P ${CMAKE_SOURCE_DIR}/cmake/extract-pot.cmake
+        )
+    endforeach()
+else()
+    add_custom_target(extract-pot
+        COMMAND ${CMAKE_COMMAND} -E echo "xgettext not found; install gettext to extract translations"
+    )
+endif()
+
+# Install .po from po/<lang>/<domain>.po → share/locale/<lang>/LC_MESSAGES/<domain>.mo
+# Run extract-pot to create/update po/*.pot; translators add po/<lang>/*.po
+KI18N_INSTALL(po)
+
+# Source directories
+add_subdirectory(src)
+add_subdirectory(kwin-effect)  # KWin C++ Effect with modifier detection (uses effects.mouseChanged)
+add_subdirectory(kcm)
+
+# Tests - enable with -DBUILD_TESTING=ON
+option(BUILD_TESTING "Build tests" OFF)
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# Install D-Bus service
+install(FILES
+    dbus/org.plasmazones.xml
+    DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
+)
+
+# Install default layouts
+install(DIRECTORY data/layouts/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/layouts
+    FILES_MATCHING PATTERN "*.json"
+)
+
+# Install icons
+install(FILES
+    icons/hicolor/scalable/apps/plasmazones.svg
+    icons/hicolor/scalable/apps/plasmazones-editor.svg
+    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
+)
+
+# Custom uninstall target that cleans up directories properly
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/uninstall.cmake.in"
+    "${CMAKE_BINARY_DIR}/cmake_uninstall.cmake"
+    @ONLY
+)
+
+add_custom_target(uninstall
+    COMMAND ${CMAKE_COMMAND} -P ${CMAKE_BINARY_DIR}/cmake_uninstall.cmake
+    COMMENT "Uninstalling PlasmaZones..."
+)
+
+# Feature summary
+feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

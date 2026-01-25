@@ -1,0 +1,438 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Layout Management Interface -->
+    <interface name="org.plasmazones.LayoutManager">
+        <method name="getActiveLayout">
+            <arg name="layoutJson" type="s" direction="out"/>
+        </method>
+        <method name="getLayoutList">
+            <arg name="layouts" type="as" direction="out"/>
+        </method>
+        <method name="getLayout">
+            <arg name="id" type="s" direction="in"/>
+            <arg name="layoutJson" type="s" direction="out"/>
+        </method>
+        <method name="setActiveLayout">
+            <arg name="id" type="s" direction="in"/>
+        </method>
+        <method name="applyQuickLayout">
+            <arg name="number" type="i" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+        </method>
+        <method name="createLayout">
+            <arg name="name" type="s" direction="in"/>
+            <arg name="type" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="deleteLayout">
+            <arg name="id" type="s" direction="in"/>
+        </method>
+        <method name="duplicateLayout">
+            <arg name="id" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="importLayout">
+            <arg name="filePath" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="exportLayout">
+            <arg name="layoutId" type="s" direction="in"/>
+            <arg name="filePath" type="s" direction="in"/>
+        </method>
+        <method name="openEditor"/>
+        <method name="openEditorForScreen">
+            <arg name="screenName" type="s" direction="in"/>
+        </method>
+        <method name="getLayoutForScreen">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="assignLayoutToScreen">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="in"/>
+        </method>
+        <method name="clearAssignment">
+            <arg name="screenName" type="s" direction="in"/>
+        </method>
+        <!-- Per-virtual-desktop layout assignment methods -->
+        <method name="getLayoutForScreenDesktop">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="assignLayoutToScreenDesktop">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="layoutId" type="s" direction="in"/>
+        </method>
+        <method name="clearAssignmentForScreenDesktop">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+        </method>
+        <method name="hasExplicitAssignmentForScreenDesktop">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="hasAssignment" type="b" direction="out"/>
+        </method>
+        <method name="getVirtualDesktopCount">
+            <arg name="count" type="i" direction="out"/>
+        </method>
+        <method name="getVirtualDesktopNames">
+            <arg name="names" type="as" direction="out"/>
+        </method>
+        <method name="getAllScreenAssignments">
+            <arg name="assignmentsJson" type="s" direction="out"/>
+        </method>
+        <signal name="virtualDesktopCountChanged">
+            <arg name="count" type="i"/>
+        </signal>
+        <signal name="layoutChanged">
+            <arg name="layoutJson" type="s"/>
+        </signal>
+        <signal name="layoutListChanged"/>
+        <signal name="screenLayoutChanged">
+            <arg name="screenName" type="s"/>
+            <arg name="layoutId" type="s"/>
+        </signal>
+    </interface>
+
+    <!-- Overlay Control Interface -->
+    <interface name="org.plasmazones.Overlay">
+        <!-- Visibility control -->
+        <method name="showOverlay"/>
+        <method name="hideOverlay"/>
+        <method name="toggleOverlay"/>
+        <method name="isOverlayVisible">
+            <arg name="visible" type="b" direction="out"/>
+        </method>
+
+        <!-- Zone highlighting -->
+        <method name="highlightZone">
+            <arg name="zoneId" type="s" direction="in"/>
+        </method>
+        <method name="highlightZones">
+            <arg name="zoneIds" type="as" direction="in"/>
+        </method>
+        <method name="clearHighlight"/>
+
+        <!-- Zone detection for cursor position -->
+        <method name="detectZoneAtPosition">
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+            <arg name="zoneId" type="s" direction="out"/>
+        </method>
+        <method name="detectMultiZoneAtPosition">
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+            <arg name="zoneIds" type="as" direction="out"/>
+        </method>
+        <method name="getZoneGeometry">
+            <arg name="zoneId" type="s" direction="in"/>
+            <arg name="geometry" type="s" direction="out"/>
+        </method>
+
+        <!-- Window snapping notifications from KWin -->
+        <method name="windowSnapped">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneId" type="s" direction="in"/>
+        </method>
+        <method name="setWindowSticky">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="sticky" type="b" direction="in"/>
+        </method>
+        <method name="windowUnsnapped">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+
+        <!-- Window tracking queries -->
+        <method name="getZoneForWindow">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneId" type="s" direction="out"/>
+        </method>
+        <method name="getMultiZoneForWindow">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneIds" type="as" direction="out"/>
+        </method>
+        <method name="getWindowsInZone">
+            <arg name="zoneId" type="s" direction="in"/>
+            <arg name="windowIds" type="as" direction="out"/>
+        </method>
+        <method name="getSnappedWindows">
+            <arg name="windowIds" type="as" direction="out"/>
+        </method>
+
+        <signal name="overlayVisibilityChanged">
+            <arg name="visible" type="b"/>
+        </signal>
+        <signal name="zoneHighlightChanged">
+            <arg name="zoneId" type="s"/>
+        </signal>
+        <signal name="windowZoneChanged">
+            <arg name="windowId" type="s"/>
+            <arg name="zoneId" type="s"/>
+        </signal>
+
+        <!-- Zone Selector methods -->
+        <method name="showZoneSelector"/>
+        <method name="hideZoneSelector"/>
+        <method name="isZoneSelectorVisible">
+            <arg name="visible" type="b" direction="out"/>
+        </method>
+        <method name="setZoneSelectorActiveZone">
+            <arg name="zoneIndex" type="i" direction="in"/>
+        </method>
+        <method name="getZoneSelectorActiveZone">
+            <arg name="zoneIndex" type="i" direction="out"/>
+        </method>
+
+        <!-- Zone Selector signals -->
+        <signal name="zoneSelectorVisibilityChanged">
+            <arg name="visible" type="b"/>
+        </signal>
+        <signal name="zoneSelectorZoneSelected">
+            <arg name="zoneIndex" type="i"/>
+        </signal>
+    </interface>
+
+    <!-- Settings Interface -->
+    <interface name="org.plasmazones.Settings">
+        <method name="reloadSettings"/>
+        <method name="saveSettings"/>
+        <method name="resetToDefaults"/>
+        <method name="getAllSettings">
+            <arg name="settingsJson" type="s" direction="out"/>
+        </method>
+        <method name="getSetting">
+            <arg name="key" type="s" direction="in"/>
+            <arg name="value" type="v" direction="out"/>
+        </method>
+        <method name="setSetting">
+            <arg name="key" type="s" direction="in"/>
+            <arg name="value" type="v" direction="in"/>
+            <arg name="success" type="b" direction="out"/>
+        </method>
+        <method name="getSettingKeys">
+            <arg name="keys" type="as" direction="out"/>
+        </method>
+        <signal name="settingsChanged"/>
+
+        <!-- Zone Selector settings -->
+        <method name="isZoneSelectorEnabled">
+            <arg name="enabled" type="b" direction="out"/>
+        </method>
+        <method name="setZoneSelectorEnabled">
+            <arg name="enabled" type="b" direction="in"/>
+        </method>
+        <method name="getZoneSelectorTriggerDistance">
+            <arg name="distance" type="i" direction="out"/>
+        </method>
+        <method name="setZoneSelectorTriggerDistance">
+            <arg name="distance" type="i" direction="in"/>
+        </method>
+        <method name="getZoneSelectorPosition">
+            <arg name="position" type="i" direction="out"/>
+        </method>
+        <method name="setZoneSelectorPosition">
+            <arg name="position" type="i" direction="in"/>
+        </method>
+        <signal name="zoneSelectorEnabledChanged">
+            <arg name="enabled" type="b"/>
+        </signal>
+        <signal name="zoneSelectorTriggerDistanceChanged">
+            <arg name="distance" type="i"/>
+        </signal>
+        <signal name="zoneSelectorPositionChanged">
+            <arg name="position" type="i"/>
+        </signal>
+    </interface>
+
+    <!-- Window Drag Interface (KWin script -> Daemon) -->
+    <interface name="org.plasmazones.WindowDrag">
+        <!-- Called when window drag starts -->
+        <!-- Note: Using 'd' (double) because KWin QML DBusCall sends JS numbers as doubles -->
+        <method name="dragStarted">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="x" type="d" direction="in"/>
+            <arg name="y" type="d" direction="in"/>
+            <arg name="width" type="d" direction="in"/>
+            <arg name="height" type="d" direction="in"/>
+            <arg name="appName" type="s" direction="in"/>
+            <arg name="windowClass" type="s" direction="in"/>
+        </method>
+
+        <!-- Called while window is being dragged -->
+        <!-- Note: Using 'i' (int32) because KWin's QPoint cursor position is integer-based -->
+        <!-- and Workspace.keyboardModifiers returns Qt::KeyboardModifiers (int flags) -->
+        <method name="dragMoved">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="cursorX" type="i" direction="in"/>
+            <arg name="cursorY" type="i" direction="in"/>
+            <arg name="modifiers" type="i" direction="in"/>
+        </method>
+
+        <!-- Called when window drag ends -->
+        <!-- Returns snap geometry if window should be snapped -->
+        <method name="dragStopped">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="snapX" type="i" direction="out"/>
+            <arg name="snapY" type="i" direction="out"/>
+            <arg name="snapWidth" type="i" direction="out"/>
+            <arg name="snapHeight" type="i" direction="out"/>
+            <arg name="shouldSnap" type="b" direction="out"/>
+        </method>
+
+        <!-- Cancel current snap operation -->
+        <method name="cancelSnap"/>
+
+        <!-- Signals -->
+        <signal name="windowSnapped">
+            <arg name="windowId" type="s"/>
+            <arg name="zoneId" type="s"/>
+        </signal>
+        <signal name="snapCancelled">
+            <arg name="windowId" type="s"/>
+        </signal>
+    </interface>
+
+    <!-- Screen Management Interface -->
+    <interface name="org.plasmazones.Screen">
+        <method name="getScreens">
+            <arg name="screens" type="as" direction="out"/>
+        </method>
+        <method name="getScreenInfo">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="screenJson" type="s" direction="out"/>
+        </method>
+        <signal name="screenAdded">
+            <arg name="screenName" type="s"/>
+        </signal>
+        <signal name="screenRemoved">
+            <arg name="screenName" type="s"/>
+        </signal>
+        <signal name="screenGeometryChanged">
+            <arg name="screenName" type="s"/>
+        </signal>
+    </interface>
+
+    <!-- Window Tracking Interface -->
+    <interface name="org.plasmazones.WindowTracking">
+        <method name="windowSnapped">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneId" type="s" direction="in"/>
+        </method>
+        <method name="windowUnsnapped">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+        <method name="getZoneForWindow">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneId" type="s" direction="out"/>
+        </method>
+        <method name="getMultiZoneForWindow">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="zoneIds" type="as" direction="out"/>
+        </method>
+        <method name="getWindowsInZone">
+            <arg name="zoneId" type="s" direction="in"/>
+            <arg name="windowIds" type="as" direction="out"/>
+        </method>
+        <method name="getSnappedWindows">
+            <arg name="windowIds" type="as" direction="out"/>
+        </method>
+        <method name="getLastUsedZoneId">
+            <arg name="zoneId" type="s" direction="out"/>
+        </method>
+        <!-- Pre-snap geometry storage for unsnap restoration -->
+        <method name="storePreSnapGeometry">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+            <arg name="width" type="i" direction="in"/>
+            <arg name="height" type="i" direction="in"/>
+        </method>
+        <method name="hasPreSnapGeometry">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="hasGeometry" type="b" direction="out"/>
+        </method>
+        <!-- Get validated pre-snap geometry (adjusts off-screen positions) -->
+        <!-- Return order: found (bool), x, y, width, height -->
+        <method name="getValidatedPreSnapGeometry">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="found" type="b" direction="out"/>
+            <arg name="x" type="i" direction="out"/>
+            <arg name="y" type="i" direction="out"/>
+            <arg name="width" type="i" direction="out"/>
+            <arg name="height" type="i" direction="out"/>
+        </method>
+        <method name="clearPreSnapGeometry">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+        <!-- Floating window management -->
+        <method name="setWindowFloating">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="floating" type="b" direction="in"/>
+        </method>
+        <method name="isWindowFloating">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="floating" type="b" direction="out"/>
+        </method>
+        <method name="getFloatingWindows">
+            <arg name="windowIds" type="as" direction="out"/>
+        </method>
+        <method name="windowUnsnappedForFloat">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+        <method name="getPreFloatZone">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="found" type="b" direction="out"/>
+            <arg name="zoneId" type="s" direction="out"/>
+        </method>
+        <method name="clearPreFloatZone">
+            <arg name="windowId" type="s" direction="in"/>
+        </method>
+        <!-- Zone geometry queries -->
+        <method name="getZoneGeometry">
+            <arg name="zoneId" type="s" direction="in"/>
+            <arg name="geometryJson" type="s" direction="out"/>
+        </method>
+        <method name="getZoneGeometryForScreen">
+            <arg name="zoneId" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="geometryJson" type="s" direction="out"/>
+        </method>
+        <!-- Snap new window to last used zone (checks moveNewWindowsToLastZone setting internally) -->
+        <method name="snapToLastZone">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="windowScreenName" type="s" direction="in"/>
+            <arg name="sticky" type="b" direction="in"/>
+            <arg name="snapX" type="i" direction="out"/>
+            <arg name="snapY" type="i" direction="out"/>
+            <arg name="snapWidth" type="i" direction="out"/>
+            <arg name="snapHeight" type="i" direction="out"/>
+            <arg name="shouldSnap" type="b" direction="out"/>
+        </method>
+        <!-- Restore window to persisted zone from previous session -->
+        <method name="restoreToPersistedZone">
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="sticky" type="b" direction="in"/>
+            <arg name="snapX" type="i" direction="out"/>
+            <arg name="snapY" type="i" direction="out"/>
+            <arg name="snapWidth" type="i" direction="out"/>
+            <arg name="snapHeight" type="i" direction="out"/>
+            <arg name="shouldRestore" type="b" direction="out"/>
+        </method>
+        <!-- Get updated geometries for resolution change (checks keepWindowsInZonesOnResolutionChange) -->
+        <method name="getUpdatedWindowGeometries">
+            <arg name="geometriesJson" type="s" direction="out"/>
+        </method>
+        <signal name="windowZoneChanged">
+            <arg name="windowId" type="s"/>
+            <arg name="zoneId" type="s"/>
+        </signal>
+        <!-- Phase 1 keyboard navigation: daemon emits these when shortcuts fire -->
+        <signal name="toggleWindowFloatRequested">
+            <arg name="shouldFloat" type="b"/>
+        </signal>
+    </interface>
+</node>

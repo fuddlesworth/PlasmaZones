@@ -1,0 +1,34 @@
+title: "[Question] "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about PlasmaZones? Ask here.
+
+        Please check the README and existing discussions first.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What would you like to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Any relevant context (what you're trying to accomplish, your setup, etc.)
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the README
+          required: true
+        - label: I searched existing discussions
+          required: true

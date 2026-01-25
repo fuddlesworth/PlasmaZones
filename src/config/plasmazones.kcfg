@@ -1,0 +1,377 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 fuddlesworth -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!--
+  KConfigXT schema for PlasmaZones settings.
+  Key names match what settings.cpp load/save functions use for backward compatibility.
+  Generated class: PlasmaZonesConfig (see plasmazones.kcfgc)
+-->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name="plasmazonesrc"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Activation Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Activation">
+    <entry name="ShiftDrag" type="Bool">
+      <label>Hold Shift while dragging to activate zones (deprecated - use DragActivationModifier)</label>
+      <default>true</default>
+    </entry>
+    <entry name="DragActivationModifier" type="Int">
+      <label>Modifier key to activate zone overlay while dragging (0=Disabled,1=Shift,2=Ctrl,3=Alt,4=Meta,5=Ctrl+Alt,6=Ctrl+Shift,7=Alt+Shift,8=Always,9=Alt+Meta,10=Ctrl+Alt+Meta)</label>
+      <default>3</default>
+      <min>0</min>
+      <max>10</max>
+    </entry>
+    <entry name="SkipSnapModifier" type="Int">
+      <label>Modifier key to skip zone snapping while dragging (0=Disabled,1=Shift,2=Ctrl,3=Alt,4=Meta,5=Ctrl+Alt,6=Ctrl+Shift,7=Alt+Shift,8=Always)</label>
+      <default>1</default>
+      <min>0</min>
+      <max>8</max>
+    </entry>
+    <entry name="MultiZoneModifier" type="Int">
+      <label>Modifier key to span window across multiple zones (0=Disabled,1=Shift,2=Ctrl,3=Alt,4=Meta,5=Ctrl+Alt,6=Ctrl+Shift,7=Alt+Shift,8=Always,9=Alt+Meta,10=Ctrl+Alt+Meta)</label>
+      <default>5</default>
+      <min>0</min>
+      <max>10</max>
+    </entry>
+    <entry name="MiddleClickMultiZone" type="Bool">
+      <label>Middle click to snap to multiple zones</label>
+      <default>true</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Display Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Display">
+    <entry name="ShowOnAllMonitors" type="Bool">
+      <label>Show zones on all monitors when activated</label>
+      <default>false</default>
+    </entry>
+    <entry name="DisabledMonitors" type="StringList">
+      <label>Monitor names where PlasmaZones is disabled (no overlay, no zone picker, no snapping)</label>
+      <default></default>
+    </entry>
+    <entry name="ShowNumbers" type="Bool">
+      <label>Show zone numbers in overlay</label>
+      <default>true</default>
+    </entry>
+    <entry name="FlashOnSwitch" type="Bool">
+      <label>Flash zones when switching layouts</label>
+      <default>true</default>
+    </entry>
+    <entry name="ShowOsdOnLayoutSwitch" type="Bool">
+      <label>Show OSD notification when switching layouts via keyboard</label>
+      <default>true</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Appearance Settings (ricer-friendly)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Appearance">
+    <entry name="UseSystemColors" type="Bool">
+      <label>Use system accent colors</label>
+      <default>true</default>
+    </entry>
+    <entry name="HighlightColor" type="Color">
+      <label>Color for highlighted/active zones</label>
+      <default>#800078D4</default>
+    </entry>
+    <entry name="InactiveColor" type="Color">
+      <label>Color for inactive zones</label>
+      <default>#40808080</default>
+    </entry>
+    <entry name="BorderColor" type="Color">
+      <label>Zone border color</label>
+      <default>#C8FFFFFF</default>
+    </entry>
+    <entry name="NumberColor" type="Color">
+      <label>Zone number text color</label>
+      <default>#FFFFFFFF</default>
+    </entry>
+    <entry name="ActiveOpacity" type="Double">
+      <label>Opacity for active/highlighted zones</label>
+      <default>0.5</default>
+      <min>0.0</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="InactiveOpacity" type="Double">
+      <label>Opacity for inactive zones</label>
+      <default>0.3</default>
+      <min>0.0</min>
+      <max>1.0</max>
+    </entry>
+    <entry name="BorderWidth" type="Int">
+      <label>Zone border width in pixels</label>
+      <default>2</default>
+      <min>0</min>
+      <max>10</max>
+    </entry>
+    <entry name="BorderRadius" type="Int">
+      <label>Zone corner radius in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="EnableBlur" type="Bool">
+      <label>Enable blur effect behind zones</label>
+      <default>true</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Zone Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Zones">
+    <entry name="Padding" type="Int">
+      <label>Padding inside zones in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="AdjacentThreshold" type="Int">
+      <label>Threshold for detecting adjacent zones</label>
+      <default>20</default>
+      <min>5</min>
+      <max>100</max>
+    </entry>
+    <entry name="PollIntervalMs" type="Int">
+      <label>Window move detection polling interval (milliseconds)</label>
+      <default>50</default>
+      <min>10</min>
+      <max>1000</max>
+    </entry>
+    <entry name="MinimumZoneSizePx" type="Int">
+      <label>Minimum zone size for window snapping (pixels)</label>
+      <default>100</default>
+      <min>50</min>
+      <max>500</max>
+    </entry>
+    <entry name="MinimumZoneDisplaySizePx" type="Int">
+      <label>Minimum zone size for display/clipping (pixels)</label>
+      <default>10</default>
+      <min>1</min>
+      <max>50</max>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Behavior Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Behavior">
+    <entry name="KeepOnResolutionChange" type="Bool">
+      <label>Keep windows in zones when resolution changes</label>
+      <default>true</default>
+    </entry>
+    <entry name="MoveNewToLastZone" type="Bool">
+      <label>Move new windows to last used zone</label>
+      <default>false</default>
+    </entry>
+    <entry name="RestoreSizeOnUnsnap" type="Bool">
+      <label>Restore original window size when unsnapping</label>
+      <default>true</default>
+    </entry>
+    <entry name="StickyWindowHandling" type="Int">
+      <label>Sticky window handling (0=TreatAsNormal,1=RestoreOnly,2=IgnoreAll)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
+    <entry name="DefaultLayoutId" type="String">
+      <label>Default layout to use when no explicit assignment exists</label>
+      <default></default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Exclusion Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Exclusions">
+    <entry name="Applications" type="StringList">
+      <label>Applications excluded from zone snapping</label>
+      <default></default>
+    </entry>
+    <entry name="WindowClasses" type="StringList">
+      <label>Window classes excluded from zone snapping</label>
+      <default></default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Global Shortcuts (KGlobalAccel)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="GlobalShortcuts">
+    <entry name="OpenEditorShortcut" type="String">
+      <label>Shortcut to open layout editor</label>
+      <default>Meta+Shift+E</default>
+    </entry>
+    <entry name="QuickLayout1Shortcut" type="String">
+      <label>Shortcut to apply quick layout 1</label>
+      <default>Meta+Ctrl+Alt+1</default>
+    </entry>
+    <entry name="QuickLayout2Shortcut" type="String">
+      <label>Shortcut to apply quick layout 2</label>
+      <default>Meta+Ctrl+Alt+2</default>
+    </entry>
+    <entry name="QuickLayout3Shortcut" type="String">
+      <label>Shortcut to apply quick layout 3</label>
+      <default>Meta+Ctrl+Alt+3</default>
+    </entry>
+    <entry name="QuickLayout4Shortcut" type="String">
+      <label>Shortcut to apply quick layout 4</label>
+      <default>Meta+Ctrl+Alt+4</default>
+    </entry>
+    <entry name="QuickLayout5Shortcut" type="String">
+      <label>Shortcut to apply quick layout 5</label>
+      <default>Meta+Ctrl+Alt+5</default>
+    </entry>
+    <entry name="QuickLayout6Shortcut" type="String">
+      <label>Shortcut to apply quick layout 6</label>
+      <default>Meta+Ctrl+Alt+6</default>
+    </entry>
+    <entry name="QuickLayout7Shortcut" type="String">
+      <label>Shortcut to apply quick layout 7</label>
+      <default>Meta+Ctrl+Alt+7</default>
+    </entry>
+    <entry name="QuickLayout8Shortcut" type="String">
+      <label>Shortcut to apply quick layout 8</label>
+      <default>Meta+Ctrl+Alt+8</default>
+    </entry>
+    <entry name="QuickLayout9Shortcut" type="String">
+      <label>Shortcut to apply quick layout 9</label>
+      <default>Meta+Ctrl+Alt+9</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Editor Settings (local shortcuts - not KGlobalAccel)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Editor">
+    <entry name="GridSnappingEnabled" type="Bool">
+      <label>Enable grid snapping in layout editor</label>
+      <default>true</default>
+    </entry>
+    <entry name="EdgeSnappingEnabled" type="Bool">
+      <label>Enable edge snapping in layout editor</label>
+      <default>true</default>
+    </entry>
+    <entry name="SnapInterval" type="Double">
+      <label>Grid snap interval (as fraction of canvas, 0.01-0.5) - deprecated, use SnapIntervalX/Y</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>0.5</max>
+    </entry>
+    <entry name="SnapIntervalX" type="Double">
+      <label>Grid snap interval X-axis (as fraction of canvas, 0.01-0.5)</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>0.5</max>
+    </entry>
+    <entry name="SnapIntervalY" type="Double">
+      <label>Grid snap interval Y-axis (as fraction of canvas, 0.01-0.5)</label>
+      <default>0.1</default>
+      <min>0.01</min>
+      <max>0.5</max>
+    </entry>
+    <!-- Note: Save, Delete, Close shortcuts now use Qt StandardKey (system shortcuts)
+         and are not configurable. Only app-specific shortcuts are defined here. -->
+    <entry name="EditorDuplicateShortcut" type="String">
+      <label>Keyboard shortcut to duplicate selected zone in editor</label>
+      <default>Ctrl+D</default>
+    </entry>
+    <entry name="EditorSplitHorizontalShortcut" type="String">
+      <label>Keyboard shortcut to split zone horizontally in editor</label>
+      <default>Ctrl+Shift+H</default>
+    </entry>
+    <entry name="EditorSplitVerticalShortcut" type="String">
+      <label>Keyboard shortcut to split zone vertically in editor</label>
+      <!-- Note: Changed from Ctrl+Shift+V to avoid conflict with Paste with Offset -->
+      <default>Ctrl+Alt+V</default>
+    </entry>
+    <entry name="EditorFillShortcut" type="String">
+      <label>Keyboard shortcut to fill zone with available space in editor</label>
+      <default>Ctrl+Shift+F</default>
+    </entry>
+    <entry name="FillOnDropEnabled" type="Bool">
+      <label>Enable fill-on-drop behavior in editor</label>
+      <default>true</default>
+    </entry>
+    <entry name="FillOnDropModifier" type="Int">
+      <label>Modifier key for fill-on-drop (Qt::KeyboardModifier value)</label>
+      <!-- Qt::ControlModifier = 0x04000000 -->
+      <default>67108864</default>
+    </entry>
+    <entry name="SnapOverrideModifier" type="Int">
+      <label>Modifier key to temporarily invert snapping behavior (Qt::KeyboardModifier value)</label>
+      <!-- Qt::ShiftModifier = 0x02000000 -->
+      <default>33554432</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Zone Selector Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="ZoneSelector">
+    <entry name="Enabled" type="Bool">
+      <label>Enable zone selector popup</label>
+      <default>true</default>
+    </entry>
+    <entry name="TriggerDistance" type="Int">
+      <label>Trigger distance from edge (pixels)</label>
+      <default>50</default>
+      <min>10</min>
+      <max>200</max>
+    </entry>
+    <entry name="Position" type="Int">
+      <label>Zone selector position (0=Top,1=Bottom,2=Left,3=Right)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>3</max>
+    </entry>
+    <entry name="LayoutMode" type="Int">
+      <label>Zone selector layout mode (0=Grid,1=Horizontal,2=Vertical)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
+    <entry name="SizeMode" type="Int">
+      <label>Size mode (0=Auto,1=Manual) - Auto calculates preview size from screen</label>
+      <default>0</default>
+      <min>0</min>
+      <max>1</max>
+    </entry>
+    <entry name="MaxRows" type="Int">
+      <label>Maximum visible rows before scrolling (Auto mode)</label>
+      <default>4</default>
+      <min>1</min>
+      <max>10</max>
+    </entry>
+    <entry name="PreviewWidth" type="Int">
+      <label>Preview width in pixels (Manual mode)</label>
+      <default>180</default>
+      <min>80</min>
+      <max>400</max>
+    </entry>
+    <entry name="PreviewHeight" type="Int">
+      <label>Preview height in pixels (Manual mode, when aspect unlocked)</label>
+      <default>101</default>
+      <min>60</min>
+      <max>300</max>
+    </entry>
+    <entry name="PreviewLockAspect" type="Bool">
+      <label>Lock preview to screen aspect ratio</label>
+      <default>true</default>
+    </entry>
+    <entry name="GridColumns" type="Int">
+      <label>Grid columns for zone selector (Manual mode)</label>
+      <default>3</default>
+      <min>1</min>
+      <max>10</max>
+    </entry>
+  </group>
+</kcfg>

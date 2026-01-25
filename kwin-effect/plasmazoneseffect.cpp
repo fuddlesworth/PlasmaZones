@@ -1,0 +1,1349 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "plasmazoneseffect.h"
+#include "dbus_constants.h"
+
+#include <window.h>
+#include <effect/effectwindow.h>
+#include <effect/globals.h> // For ElectricBorder enum
+#include <core/output.h> // For Output::name() for multi-monitor support
+
+#include <QDBusConnection>
+#include <QDBusReply>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QLoggingCategory>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QPointer>
+// QGuiApplication::queryKeyboardModifiers() doesn't work in KWin effects on Wayland
+// because the effect runs inside the compositor process. We use mouseChanged instead.
+
+namespace PlasmaZones {
+
+Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
+
+// Navigation directive prefix constant - used for keyboard navigation commands
+static const QString NavigateDirectivePrefix = QStringLiteral("navigate:");
+
+PlasmaZonesEffect::PlasmaZonesEffect()
+    : Effect()
+{
+    // Connect to window lifecycle signals
+    connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
+    connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
+
+    // mouseChanged is the only reliable way to get modifier state in a KWin effect on Wayland;
+    // QGuiApplication::queryKeyboardModifiers() doesn't work since effects run in the compositor.
+    connect(KWin::effects, &KWin::EffectsHandler::mouseChanged, this, &PlasmaZonesEffect::slotMouseChanged);
+
+    // Connect to screen geometry changes for keepWindowsInZonesOnResolutionChange feature
+    // In KWin 6, use virtualScreenGeometryChanged (not per-screen signal)
+    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, this,
+            &PlasmaZonesEffect::slotScreenGeometryChanged);
+
+    // Connect to daemon's settingsChanged D-Bus signal
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                          QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
+    qCDebug(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
+
+    // Connect to keyboard navigation D-Bus signals (Phase 1)
+    connectNavigationSignals();
+
+    // Sync floating window state from daemon's persisted state
+    syncFloatingWindowsFromDaemon();
+
+    // Setup polling timer for detecting window moves
+    // In KWin 6, we poll windows to check isUserMove() state
+    m_pollTimer.setInterval(50); // 20 Hz update rate
+    connect(&m_pollTimer, &QTimer::timeout, this, &PlasmaZonesEffect::pollWindowMoves);
+
+    // Setup screen geometry change debounce timer
+    // This prevents rapid-fire updates from causing windows to be resnapped unnecessarily
+    // when monitors are connected/disconnected or arrangement changes occur
+    m_screenChangeDebounce.setSingleShot(true);
+    m_screenChangeDebounce.setInterval(500); // 500ms debounce
+    connect(&m_screenChangeDebounce, &QTimer::timeout, this, &PlasmaZonesEffect::applyScreenGeometryChange);
+
+    // Store initial virtual screen geometry for comparison
+    m_lastVirtualScreenGeometry = KWin::effects->virtualScreenGeometry();
+
+    // Connect to existing windows
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        setupWindowConnections(w);
+    }
+
+    // Start polling
+    m_pollTimer.start();
+
+    // The daemon disables KWin's Quick Tile via kwriteconfig6. We don't reserve electric borders
+    // here because that would turn on the edge effect visually; the daemon's config approach
+    // is the right way to prevent Quick Tile from activating.
+
+    qCDebug(lcEffect) << "Initialized - C++ effect with D-Bus support and mouseChanged connection";
+}
+
+PlasmaZonesEffect::~PlasmaZonesEffect()
+{
+    m_pollTimer.stop();
+    m_screenChangeDebounce.stop();
+    // We no longer reserve/unreserve edges; the daemon disables KWin snap via config.
+}
+
+bool PlasmaZonesEffect::supported()
+{
+    // This effect works on both X11 and Wayland
+    return true;
+}
+
+bool PlasmaZonesEffect::enabledByDefault()
+{
+    return true;
+}
+
+void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
+{
+    Q_UNUSED(flags)
+    // Called when KWin wants effects to reload or when daemon notifies of settings change
+    qCDebug(lcEffect) << "reconfigure() called";
+}
+
+bool PlasmaZonesEffect::isActive() const
+{
+    return m_draggedWindow != nullptr;
+}
+
+void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
+{
+    setupWindowConnections(w);
+    updateWindowStickyState(w);
+
+    // Check if we should auto-snap new windows to last used zone
+    // Use stricter filter - only normal application windows, NOT dialogs/utilities
+    if (shouldAutoSnapWindow(w) && !w->isMinimized()) {
+        // Use QPointer to safely handle window destruction during the delay
+        // Raw pointer capture would become dangling if window closes before timer fires
+        QPointer<KWin::EffectWindow> safeWindow = w;
+        QTimer::singleShot(100, this, [this, safeWindow]() {
+            if (safeWindow && shouldAutoSnapWindow(safeWindow)) {
+                callSnapToLastZone(safeWindow);
+            }
+        });
+    }
+}
+
+void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
+{
+    if (w == m_draggedWindow) {
+        // Window being dragged was closed
+        m_draggedWindow = nullptr;
+        m_draggedWindowId.clear();
+    }
+
+    // Clean up floating window tracking using stable ID
+    QString windowId = getWindowId(w);
+    QString stableId = extractStableId(windowId);
+    m_floatingWindows.remove(stableId);
+
+    // Notify daemon to clean up tracking data for this window
+    // This prevents memory leaks in m_windowZoneAssignments for windows
+    // that were snapped but not dragged (e.g., keyboard navigation, auto-snap)
+    ensureWindowTrackingInterface();
+    if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+        m_windowTrackingInterface->asyncCall(QStringLiteral("windowClosed"), windowId);
+    }
+}
+
+void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
+{
+    if (!w)
+        return;
+
+    connect(w, &KWin::EffectWindow::windowDesktopsChanged, this, [this](KWin::EffectWindow* window) {
+        updateWindowStickyState(window);
+    });
+
+    // Connect to geometry changes for this window
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
+            [this, w](KWin::EffectWindow* window, const QRectF& oldGeometry) {
+                Q_UNUSED(oldGeometry)
+                if (window == m_draggedWindow) {
+                    // Skip if window has gone fullscreen - don't track fullscreen windows
+                    // This prevents sending drag updates during fullscreen transitions
+                    // which could interfere with games entering fullscreen mode
+                    if (window->isFullScreen()) {
+                        qCDebug(lcEffect) << "Window went fullscreen during drag, stopping tracking";
+                        m_draggedWindow = nullptr;
+                        m_draggedWindowId.clear();
+                        return;
+                    }
+                    // Window geometry changed during drag - send update
+                    // Use tracked modifiers from mouseChanged signal
+                    QPointF cursorPos = KWin::effects->cursorPos();
+                    callDragMoved(m_draggedWindowId, cursorPos, m_currentModifiers);
+                }
+            });
+}
+
+void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
+                                         Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
+                                         Qt::KeyboardModifiers oldmodifiers)
+{
+    Q_UNUSED(pos)
+    Q_UNUSED(oldpos)
+    Q_UNUSED(buttons)
+    Q_UNUSED(oldbuttons)
+    Q_UNUSED(oldmodifiers)
+
+    // Track the current keyboard modifiers from KWin's input system
+    // This is called whenever the mouse moves or modifiers change
+    if (m_currentModifiers != modifiers) {
+        m_currentModifiers = modifiers;
+        qCDebug(lcEffect) << "Modifiers changed to" << static_cast<int>(modifiers);
+
+        // If we're currently dragging, send an update with the new modifiers
+        if (m_draggedWindow) {
+            QPointF cursorPos = KWin::effects->cursorPos();
+            callDragMoved(m_draggedWindowId, cursorPos, m_currentModifiers);
+        }
+    }
+}
+
+void PlasmaZonesEffect::slotScreenGeometryChanged()
+{
+    // Debounce screen geometry changes to prevent rapid-fire updates
+    // The virtualScreenGeometryChanged signal can fire multiple times in quick succession
+    // for various reasons:
+    // - Monitor connect/disconnect
+    // - Monitor arrangement changes in system settings
+    // - Resolution changes
+    // - KWin internal geometry recalculations
+    //
+    // Without debouncing, this causes windows to be resnapped at random/unexpected times.
+    // We wait 500ms after the last signal before actually applying changes.
+
+    QRect currentGeometry = KWin::effects->virtualScreenGeometry();
+    qCDebug(lcEffect) << "virtualScreenGeometryChanged fired"
+                      << "- current:" << currentGeometry << "- previous:" << m_lastVirtualScreenGeometry
+                      << "- pending:" << m_pendingScreenChange;
+
+    // Check if the geometry actually changed significantly
+    if (currentGeometry == m_lastVirtualScreenGeometry && !m_pendingScreenChange) {
+        qCDebug(lcEffect) << "Screen geometry unchanged, ignoring signal";
+        return;
+    }
+
+    m_pendingScreenChange = true;
+    m_screenChangeDebounce.start(); // Restart timer (debounce)
+}
+
+void PlasmaZonesEffect::applyScreenGeometryChange()
+{
+    if (!m_pendingScreenChange) {
+        return;
+    }
+
+    QRect currentGeometry = KWin::effects->virtualScreenGeometry();
+    qCDebug(lcEffect) << "Applying debounced screen geometry change"
+                      << "- previous:" << m_lastVirtualScreenGeometry << "- current:" << currentGeometry;
+
+    m_pendingScreenChange = false;
+    m_lastVirtualScreenGeometry = currentGeometry;
+
+    // Call daemon to get updated window geometries
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        qCDebug(lcEffect) << "WindowTracking interface not available";
+        return;
+    }
+
+    QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getUpdatedWindowGeometries"));
+
+    if (msg.type() != QDBusMessage::ReplyMessage || msg.arguments().isEmpty()) {
+        qCDebug(lcEffect) << "No window geometries to update";
+        return;
+    }
+
+    QString geometriesJson = msg.arguments().at(0).toString();
+    if (geometriesJson.isEmpty() || geometriesJson == QStringLiteral("[]")) {
+        qCDebug(lcEffect) << "Empty geometries list from daemon";
+        return;
+    }
+
+    // Parse JSON array of window geometries
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcEffect) << "Failed to parse window geometries:" << parseError.errorString();
+        return;
+    }
+
+    QJsonArray geometries = doc.array();
+    qCDebug(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
+
+    // Build a map of windowId -> EffectWindow for faster lookup
+    QHash<QString, KWin::EffectWindow*> windowMap;
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w) {
+            windowMap[getWindowId(w)] = w;
+        }
+    }
+
+    // Apply new geometries to windows
+    for (const QJsonValue& value : geometries) {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        QJsonObject obj = value.toObject();
+        QString windowId = obj[QStringLiteral("windowId")].toString();
+        int x = obj[QStringLiteral("x")].toInt();
+        int y = obj[QStringLiteral("y")].toInt();
+        int width = obj[QStringLiteral("width")].toInt();
+        int height = obj[QStringLiteral("height")].toInt();
+
+        KWin::EffectWindow* window = windowMap.value(windowId);
+        if (window && shouldHandleWindow(window)) {
+            QRect newGeometry(x, y, width, height);
+
+            // Only apply if the geometry actually changed
+            QRectF currentWindowGeometry = window->frameGeometry();
+            if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
+                qCDebug(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
+                                  << newGeometry;
+                applySnapGeometry(window, newGeometry);
+            } else {
+                qCDebug(lcEffect) << "Window" << windowId << "already at target geometry, skipping";
+            }
+        }
+    }
+}
+
+void PlasmaZonesEffect::slotSettingsChanged()
+{
+    qCDebug(lcEffect) << "Daemon signaled settingsChanged";
+}
+
+void PlasmaZonesEffect::pollWindowMoves()
+{
+    // Check all windows for user move state
+    const auto windows = KWin::effects->stackingOrder();
+
+    KWin::EffectWindow* movingWindow = nullptr;
+
+    for (KWin::EffectWindow* w : windows) {
+        if (w && w->isUserMove() && !w->isUserResize() && shouldHandleWindow(w)) {
+            movingWindow = w;
+            break;
+        }
+    }
+
+    // Detect start of drag
+    if (movingWindow && !m_draggedWindow) {
+        m_draggedWindow = movingWindow;
+        m_draggedWindowId = getWindowId(movingWindow);
+        m_lastCursorPos = KWin::effects->cursorPos();
+
+        // Note: Screen edges are now reserved preemptively at effect initialization
+        // to prevent the race condition where Quick Tile triggers before drag detection
+
+        qCDebug(lcEffect) << "Window move started -" << movingWindow->windowClass()
+                          << "current modifiers:" << static_cast<int>(m_currentModifiers);
+        callDragStarted(m_draggedWindowId, movingWindow->frameGeometry());
+    }
+    // Detect ongoing drag - send position updates
+    else if (movingWindow && movingWindow == m_draggedWindow) {
+        // Re-check if window has gone fullscreen during drag (e.g., game entered fullscreen)
+        // If so, stop tracking immediately to prevent interference with fullscreen mode
+        if (movingWindow->isFullScreen()) {
+            qCDebug(lcEffect) << "Window went fullscreen mid-drag, stopping tracking";
+            m_draggedWindow = nullptr;
+            m_draggedWindowId.clear();
+            return;
+        }
+        QPointF cursorPos = KWin::effects->cursorPos();
+        if (cursorPos != m_lastCursorPos) {
+            m_lastCursorPos = cursorPos;
+            // Use tracked modifiers from mouseChanged signal instead of QGuiApplication
+            // QGuiApplication::queryKeyboardModifiers() does NOT work in KWin effects on Wayland
+            callDragMoved(m_draggedWindowId, cursorPos, m_currentModifiers);
+        }
+    }
+    // Detect end of drag
+    else if (!movingWindow && m_draggedWindow) {
+        qCDebug(lcEffect) << "Window move finished";
+        // Save the window pointer before clearing - we need it to apply the snap geometry
+        KWin::EffectWindow* windowToSnap = m_draggedWindow;
+        QString windowIdToSnap = m_draggedWindowId;
+
+        // Clear state first to prevent re-entry issues
+        m_draggedWindow = nullptr;
+        m_draggedWindowId.clear();
+
+        // Call dragStopped with the window so we can apply snap geometry
+        callDragStopped(windowToSnap, windowIdToSnap);
+    }
+}
+
+QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return QString();
+    }
+
+    // Create a stable identifier from window properties
+    // Format: "windowClass:resourceName:internalId"
+    QString windowClass = w->windowClass();
+    QString resourceName = w->windowRole().isEmpty() ? windowClass : w->windowRole();
+    QString internalId = QString::number(reinterpret_cast<quintptr>(w));
+
+    return QStringLiteral("%1:%2:%3").arg(windowClass, resourceName, internalId);
+}
+
+bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    // Skip special windows
+    if (w->isSpecialWindow()) {
+        return false;
+    }
+    if (w->isDesktop()) {
+        return false;
+    }
+    if (w->isDock()) {
+        return false;
+    }
+    if (w->isFullScreen()) {
+        return false;
+    }
+    // Skip windows that skip the switcher (tooltips, popups, etc.)
+    if (w->isSkipSwitcher()) {
+        return false;
+    }
+
+    return true;
+}
+
+bool PlasmaZonesEffect::shouldAutoSnapWindow(KWin::EffectWindow* w) const
+{
+    // First apply basic filter
+    if (!shouldHandleWindow(w)) {
+        return false;
+    }
+
+    // Only auto-snap normal windows (main application windows)
+    // This single check excludes all non-normal window types:
+    // dialogs, utilities, splash screens, notifications, OSD, menus, tooltips, etc.
+    // Window types are mutually exclusive in KWin.
+    if (!w->isNormalWindow()) {
+        return false;
+    }
+
+    // Modal check is NOT redundant - isModal() is a property, not a window type.
+    // A normal window CAN be modal (e.g., file chooser that was incorrectly typed).
+    if (w->isModal()) {
+        return false;
+    }
+
+    // Popup check handles X11 edge cases where popups might be classified as normal
+    if (w->isPopupWindow()) {
+        return false;
+    }
+
+    return true;
+}
+
+void PlasmaZonesEffect::ensureDBusInterface()
+{
+    if (m_dbusInterface && m_dbusInterface->isValid()) {
+        return;
+    }
+
+    m_dbusInterface = std::make_unique<QDBusInterface>(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                                       QDBusConnection::sessionBus());
+
+    if (!m_dbusInterface->isValid()) {
+        qCWarning(lcEffect) << "Cannot connect to PlasmaZones daemon -" << m_dbusInterface->lastError().message();
+    }
+}
+
+void PlasmaZonesEffect::ensureWindowTrackingInterface()
+{
+    if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+        return;
+    }
+
+    m_windowTrackingInterface = std::make_unique<QDBusInterface>(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking, QDBusConnection::sessionBus());
+
+    if (!m_windowTrackingInterface->isValid()) {
+        qCWarning(lcEffect) << "Cannot connect to WindowTracking interface -"
+                            << m_windowTrackingInterface->lastError().message();
+    }
+}
+
+void PlasmaZonesEffect::ensureZoneDetectionInterface()
+{
+    if (m_zoneDetectionInterface && m_zoneDetectionInterface->isValid()) {
+        return;
+    }
+
+    m_zoneDetectionInterface = std::make_unique<QDBusInterface>(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::ZoneDetection, QDBusConnection::sessionBus());
+
+    if (!m_zoneDetectionInterface->isValid()) {
+        qCWarning(lcEffect) << "Cannot connect to ZoneDetection interface -"
+                            << m_zoneDetectionInterface->lastError().message();
+    }
+}
+
+void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
+{
+    // Sync floating window state from daemon's persisted state on startup
+    // Note: The daemon now stores floating windows by STABLE ID (without pointer address)
+    // so we can directly use those IDs for comparison
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        qCDebug(lcEffect) << "Cannot sync floating windows - daemon not available yet";
+        return;
+    }
+
+    QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getFloatingWindows"));
+    if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+        QStringList floatingWindows = msg.arguments().at(0).toStringList();
+        for (const QString& stableId : floatingWindows) {
+            // Store by stable ID (daemon already returns stable IDs)
+            m_floatingWindows.insert(stableId);
+        }
+        if (!floatingWindows.isEmpty()) {
+            qCDebug(lcEffect) << "Synced" << floatingWindows.size() << "floating windows from daemon (stable IDs)";
+        }
+    }
+}
+
+void PlasmaZonesEffect::connectNavigationSignals()
+{
+    // Connect to WindowTracking navigation signals
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("moveWindowToZoneRequested"), this,
+                                          SLOT(slotMoveWindowToZoneRequested(QString, QString)));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("focusWindowInZoneRequested"), this,
+                                          SLOT(slotFocusWindowInZoneRequested(QString, QString)));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("restoreWindowRequested"), this,
+                                          SLOT(slotRestoreWindowRequested()));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("toggleWindowFloatRequested"), this,
+                                          SLOT(slotToggleWindowFloatRequested(bool)));
+
+    qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
+}
+
+KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
+{
+    // Prefer KWin's active (focused) window when it is manageable and on current desktop
+    KWin::EffectWindow* active = KWin::effects->activeWindow();
+    if (active && active->isOnCurrentActivity() && active->isOnCurrentDesktop() && !active->isMinimized()
+        && shouldHandleWindow(active)) {
+        return active;
+    }
+    // Fallback: topmost manageable window on current desktop (e.g. when activeWindow() is
+    // null or refers to a dialog/utility we don't handle)
+    const auto windows = KWin::effects->stackingOrder();
+    for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+        KWin::EffectWindow* w = *it;
+        if (w && w->isOnCurrentActivity() && w->isOnCurrentDesktop() && !w->isMinimized() && shouldHandleWindow(w)) {
+            return w;
+        }
+    }
+    return nullptr;
+}
+
+QString PlasmaZonesEffect::queryAdjacentZone(const QString& currentZoneId, const QString& direction)
+{
+    ensureZoneDetectionInterface();
+    if (!m_zoneDetectionInterface || !m_zoneDetectionInterface->isValid()) {
+        return QString();
+    }
+
+    QDBusMessage msg = m_zoneDetectionInterface->call(QStringLiteral("getAdjacentZone"), currentZoneId, direction);
+
+    if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+        return msg.arguments().at(0).toString();
+    }
+    return QString();
+}
+
+QString PlasmaZonesEffect::queryFirstZoneInDirection(const QString& direction)
+{
+    ensureZoneDetectionInterface();
+    if (!m_zoneDetectionInterface || !m_zoneDetectionInterface->isValid()) {
+        return QString();
+    }
+
+    QDBusMessage msg = m_zoneDetectionInterface->call(QStringLiteral("getFirstZoneInDirection"), direction);
+
+    if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+        return msg.arguments().at(0).toString();
+    }
+    return QString();
+}
+
+QString PlasmaZonesEffect::queryZoneGeometry(const QString& zoneId)
+{
+    return queryZoneGeometryForScreen(zoneId, QString());
+}
+
+QString PlasmaZonesEffect::queryZoneGeometryForScreen(const QString& zoneId, const QString& screenName)
+{
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        return QString();
+    }
+
+    // Use the screen-aware version for multi-monitor support
+    QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneGeometryForScreen"), zoneId, screenName);
+
+    if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+        return msg.arguments().at(0).toString();
+    }
+    return QString();
+}
+
+QString PlasmaZonesEffect::getWindowScreenName(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return QString();
+    }
+
+    // Get screen from EffectWindow - returns KWin::Output*
+    auto* output = w->screen();
+    if (output) {
+        return output->name();
+    }
+    return QString();
+}
+
+void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason)
+{
+    QDBusMessage feedbackSignal = QDBusMessage::createSignal(DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                                             QStringLiteral("navigationFeedback"));
+    feedbackSignal << success << action << reason;
+    QDBusConnection::sessionBus().send(feedbackSignal);
+}
+
+void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry)
+{
+    qCDebug(lcEffect) << "Move window to zone requested -" << targetZoneId;
+
+    KWin::EffectWindow* activeWindow = getActiveWindow();
+    if (!activeWindow || !shouldHandleWindow(activeWindow)) {
+        qCDebug(lcEffect) << "No valid active window for move";
+        emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_window"));
+        return;
+    }
+
+    QString windowId = getWindowId(activeWindow);
+    QString stableId = extractStableId(windowId);
+
+    // Check if window is floating - skip if so (use stable ID for comparison)
+    if (m_floatingWindows.contains(stableId)) {
+        qCDebug(lcEffect) << "Window is floating, skipping move";
+        emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("window_floating"));
+        return;
+    }
+
+    // Check if this is a navigation directive (navigate:left, navigate:right, etc.)
+    if (targetZoneId.startsWith(NavigateDirectivePrefix)) {
+        QString direction = targetZoneId.mid(NavigateDirectivePrefix.length());
+        qCDebug(lcEffect) << "Navigation direction:" << direction;
+
+        // Get current zone for this window
+        ensureWindowTrackingInterface();
+        if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+            return;
+        }
+
+        QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), windowId);
+
+        QString currentZoneId;
+        if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+            currentZoneId = msg.arguments().at(0).toString();
+        }
+
+        QString targetZone;
+        QString screenName = getWindowScreenName(activeWindow);
+
+        if (currentZoneId.isEmpty()) {
+            // Window not snapped - snap directly to the edge zone in the direction pressed
+            // This is more intuitive: pressing "left" snaps to leftmost, "right" to rightmost, etc.
+            qCDebug(lcEffect) << "Window not snapped, finding first zone in direction" << direction;
+
+            // Store current geometry as pre-snap geometry
+            QRectF currentGeom = activeWindow->frameGeometry();
+            m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), windowId,
+                                                 static_cast<int>(currentGeom.x()), static_cast<int>(currentGeom.y()),
+                                                 static_cast<int>(currentGeom.width()),
+                                                 static_cast<int>(currentGeom.height()));
+
+            // Find the edge zone in the direction pressed
+            targetZone = queryFirstZoneInDirection(direction);
+            if (targetZone.isEmpty()) {
+                qCDebug(lcEffect) << "No zones available for navigation";
+                emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_zones"));
+                return;
+            }
+            qCDebug(lcEffect) << "Found first zone in direction" << direction << ":" << targetZone;
+        } else {
+            // Window is already snapped - navigate to adjacent zone
+            targetZone = queryAdjacentZone(currentZoneId, direction);
+            if (targetZone.isEmpty()) {
+                qCDebug(lcEffect) << "No adjacent zone in direction" << direction;
+                emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"));
+                return;
+            }
+        }
+
+        // Get geometry for target zone (use window's screen for multi-monitor support)
+        QString geometryJson = queryZoneGeometryForScreen(targetZone, screenName);
+        if (geometryJson.isEmpty()) {
+            qCDebug(lcEffect) << "Could not get geometry for zone" << targetZone;
+            return;
+        }
+
+        // Parse geometry JSON
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(geometryJson.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            qCWarning(lcEffect) << "Failed to parse zone geometry:" << parseError.errorString();
+            return;
+        }
+
+        QJsonObject obj = doc.object();
+        QRect geometry(obj[QStringLiteral("x")].toInt(), obj[QStringLiteral("y")].toInt(),
+                       obj[QStringLiteral("width")].toInt(), obj[QStringLiteral("height")].toInt());
+
+        qCDebug(lcEffect) << "Moving window to zone" << targetZone << "geometry:" << geometry;
+
+        // Apply geometry
+        applySnapGeometry(activeWindow, geometry);
+
+        // Notify daemon of the snap
+        m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), windowId, targetZone);
+
+        // Emit success feedback
+        emitNavigationFeedback(true, QStringLiteral("move"));
+
+    } else if (!targetZoneId.isEmpty()) {
+        // Direct zone ID - need to get geometry for active window's screen (multi-monitor support)
+        // The daemon may have provided geometry based on primary screen, but we need to use
+        // the geometry for the screen where the active window is located
+        QString geometryJson = zoneGeometry;
+
+        // Always recalculate geometry for the active window's screen to ensure multi-monitor support
+        // This fixes the "push to empty zone" feature on secondary monitors
+        QString screenName = getWindowScreenName(activeWindow);
+        if (!screenName.isEmpty()) {
+            QString screenGeometry = queryZoneGeometryForScreen(targetZoneId, screenName);
+            if (!screenGeometry.isEmpty()) {
+                geometryJson = screenGeometry;
+                qCDebug(lcEffect) << "Using geometry for window's screen" << screenName;
+            }
+        }
+
+        // Fall back to provided geometry or fetch from primary screen
+        if (geometryJson.isEmpty()) {
+            geometryJson = queryZoneGeometry(targetZoneId);
+        }
+
+        if (geometryJson.isEmpty()) {
+            qCDebug(lcEffect) << "Could not get geometry for zone" << targetZoneId;
+            emitNavigationFeedback(false, QStringLiteral("push"), QStringLiteral("geometry_error"));
+            return;
+        }
+
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(geometryJson.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+            qCWarning(lcEffect) << "Failed to parse zone geometry:" << parseError.errorString();
+            return;
+        }
+
+        QJsonObject obj = doc.object();
+        QRect geometry(obj[QStringLiteral("x")].toInt(), obj[QStringLiteral("y")].toInt(),
+                       obj[QStringLiteral("width")].toInt(), obj[QStringLiteral("height")].toInt());
+
+        qCDebug(lcEffect) << "Moving window to zone" << targetZoneId << "geometry:" << geometry << "on screen"
+                          << screenName;
+
+        // Store pre-snap geometry if not already tracked (for unsnapped window moving to zone)
+        ensureWindowTrackingInterface();
+        if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+            QDBusMessage checkMsg = m_windowTrackingInterface->call(QStringLiteral("hasPreSnapGeometry"), windowId);
+            bool hasGeometry = false;
+            if (checkMsg.type() == QDBusMessage::ReplyMessage && !checkMsg.arguments().isEmpty()) {
+                hasGeometry = checkMsg.arguments().at(0).toBool();
+            }
+
+            if (!hasGeometry) {
+                QRectF currentGeom = activeWindow->frameGeometry();
+                m_windowTrackingInterface->asyncCall(
+                    QStringLiteral("storePreSnapGeometry"), windowId, static_cast<int>(currentGeom.x()),
+                    static_cast<int>(currentGeom.y()), static_cast<int>(currentGeom.width()),
+                    static_cast<int>(currentGeom.height()));
+            }
+        }
+
+        applySnapGeometry(activeWindow, geometry);
+
+        // Notify daemon
+        if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+            m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), windowId, targetZoneId);
+        }
+
+        // Emit success feedback AFTER the window is moved (not from the daemon)
+        emitNavigationFeedback(true, QStringLiteral("push"));
+    }
+}
+
+void PlasmaZonesEffect::slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId)
+{
+    Q_UNUSED(windowId) // We'll find the window ourselves
+    qCDebug(lcEffect) << "Focus window in zone requested -" << targetZoneId;
+
+    if (targetZoneId.isEmpty()) {
+        return;
+    }
+
+    // Check if this is a navigation directive
+    QString actualZoneId = targetZoneId;
+    if (targetZoneId.startsWith(NavigateDirectivePrefix)) {
+        QString direction = targetZoneId.mid(NavigateDirectivePrefix.length());
+
+        // Get current active window's zone
+        KWin::EffectWindow* activeWindow = getActiveWindow();
+        if (!activeWindow) {
+            return;
+        }
+
+        QString activeWindowId = getWindowId(activeWindow);
+        ensureWindowTrackingInterface();
+        if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+            return;
+        }
+
+        QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), activeWindowId);
+
+        QString currentZoneId;
+        if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+            currentZoneId = msg.arguments().at(0).toString();
+        }
+
+        if (currentZoneId.isEmpty()) {
+            // Window not snapped - can't navigate focus from unsnapped window
+            // Focus navigation requires knowing the current zone to find adjacent
+            qCDebug(lcEffect) << "Focus navigation requires snapped window";
+            emitNavigationFeedback(false, QStringLiteral("focus"), QStringLiteral("not_snapped"));
+            return;
+        }
+
+        actualZoneId = queryAdjacentZone(currentZoneId, direction);
+        if (actualZoneId.isEmpty()) {
+            qCDebug(lcEffect) << "No adjacent zone in direction" << direction;
+            emitNavigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"));
+            return;
+        }
+    }
+
+    // Get windows in the target zone
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        return;
+    }
+
+    QDBusMessage zoneReply = m_windowTrackingInterface->call(QStringLiteral("getWindowsInZone"), actualZoneId);
+
+    QStringList windowsInZone;
+    if (zoneReply.type() == QDBusMessage::ReplyMessage && !zoneReply.arguments().isEmpty()) {
+        windowsInZone = zoneReply.arguments().at(0).toStringList();
+    }
+
+    if (windowsInZone.isEmpty()) {
+        qCDebug(lcEffect) << "No windows in zone" << actualZoneId;
+        emitNavigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window_in_zone"));
+        return;
+    }
+
+    // Find the first matching window and activate it
+    QString targetWindowId = windowsInZone.first();
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && getWindowId(w) == targetWindowId) {
+            qCDebug(lcEffect) << "Activating window" << targetWindowId;
+            KWin::effects->activateWindow(w);
+            emitNavigationFeedback(true, QStringLiteral("focus"));
+            return;
+        }
+    }
+
+    // Window not found in effect's window list
+    emitNavigationFeedback(false, QStringLiteral("focus"), QStringLiteral("window_not_found"));
+}
+
+void PlasmaZonesEffect::slotRestoreWindowRequested()
+{
+    qCDebug(lcEffect) << "Restore window requested";
+
+    KWin::EffectWindow* activeWindow = getActiveWindow();
+    if (!activeWindow || !shouldHandleWindow(activeWindow)) {
+        qCDebug(lcEffect) << "No valid active window for restore";
+        emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("no_window"));
+        return;
+    }
+
+    QString windowId = getWindowId(activeWindow);
+
+    // Get pre-snap geometry from daemon
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("dbus_error"));
+        return;
+    }
+
+    // Call getValidatedPreSnapGeometry for safety
+    QDBusMessage reply = m_windowTrackingInterface->call(QStringLiteral("getValidatedPreSnapGeometry"), windowId);
+
+    if (reply.type() != QDBusMessage::ReplyMessage) {
+        qCDebug(lcEffect) << "Failed to get pre-snap geometry";
+        emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("no_geometry"));
+        return;
+    }
+
+    // Parse out parameters: found (bool), x, y, width, height
+    // Qt D-Bus adaptor return order: return value FIRST, then output parameters
+    if (reply.arguments().size() < 5) {
+        emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("invalid_response"));
+        return;
+    }
+
+    bool found = reply.arguments().at(0).toBool();
+    int x = reply.arguments().at(1).toInt();
+    int y = reply.arguments().at(2).toInt();
+    int width = reply.arguments().at(3).toInt();
+    int height = reply.arguments().at(4).toInt();
+
+    if (!found || width <= 0 || height <= 0) {
+        qCDebug(lcEffect) << "No valid pre-snap geometry found";
+        emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("not_snapped"));
+        return;
+    }
+
+    QRect geometry(x, y, width, height);
+    qCDebug(lcEffect) << "Restoring window to" << geometry;
+
+    applySnapGeometry(activeWindow, geometry);
+
+    // Notify daemon to clear pre-snap geometry and tracking
+    m_windowTrackingInterface->asyncCall(QStringLiteral("windowUnsnapped"), windowId);
+    m_windowTrackingInterface->asyncCall(QStringLiteral("clearPreSnapGeometry"), windowId);
+
+    emitNavigationFeedback(true, QStringLiteral("restore"));
+}
+
+void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
+{
+    Q_UNUSED(shouldFloat) // We determine the new state ourselves by toggling
+    qCDebug(lcEffect) << "Toggle float requested";
+
+    KWin::EffectWindow* activeWindow = getActiveWindow();
+    if (!activeWindow || !shouldHandleWindow(activeWindow)) {
+        qCDebug(lcEffect) << "No valid active window for float toggle";
+        emitNavigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_window"));
+        return;
+    }
+
+    QString windowId = getWindowId(activeWindow);
+    QString stableId = extractStableId(windowId);
+
+    // Check current float state and TOGGLE it (use stable ID for comparison)
+    bool isCurrentlyFloating = m_floatingWindows.contains(stableId);
+    bool newFloatState = !isCurrentlyFloating;
+
+    qCDebug(lcEffect) << "Window" << stableId << "currently floating:" << isCurrentlyFloating
+                      << "-> new state:" << newFloatState;
+
+    ensureWindowTrackingInterface();
+
+    if (newFloatState) {
+        // Float the window (store by stable ID)
+        m_floatingWindows.insert(stableId);
+        qCDebug(lcEffect) << "Window" << stableId << "is now floating";
+
+        // Restore to original size when floating
+        if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+            QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getValidatedPreSnapGeometry"), windowId);
+
+            // Qt D-Bus adaptor return order: return value FIRST, then output parameters
+            if (msg.type() == QDBusMessage::ReplyMessage && msg.arguments().size() >= 5) {
+                bool found = msg.arguments().at(0).toBool();
+                int x = msg.arguments().at(1).toInt();
+                int y = msg.arguments().at(2).toInt();
+                int width = msg.arguments().at(3).toInt();
+                int height = msg.arguments().at(4).toInt();
+
+                if (found && width > 0 && height > 0) {
+                    QRect geometry(x, y, width, height);
+                    qCDebug(lcEffect) << "Restoring float window to original size" << geometry;
+                    applySnapGeometry(activeWindow, geometry);
+                }
+            }
+
+            // Unsnap for float (saves zone for restore-on-unfloat; no-op if never snapped)
+            m_windowTrackingInterface->asyncCall(QStringLiteral("windowUnsnappedForFloat"), windowId);
+            m_windowTrackingInterface->asyncCall(QStringLiteral("setWindowFloating"), windowId, true);
+        }
+    } else {
+        // Unfloat the window (remove by stable ID)
+        m_floatingWindows.remove(stableId);
+        qCDebug(lcEffect) << "Window" << stableId << "is no longer floating";
+
+        // Sync float state with daemon
+        if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+            m_windowTrackingInterface->asyncCall(QStringLiteral("setWindowFloating"), windowId, false);
+
+            // Restore to previous zone if it was snapped before being floated
+            QDBusMessage preMsg = m_windowTrackingInterface->call(QStringLiteral("getPreFloatZone"), windowId);
+            if (preMsg.type() == QDBusMessage::ReplyMessage && preMsg.arguments().size() >= 2
+                && preMsg.arguments().at(0).toBool()) {
+                QString zoneId = preMsg.arguments().at(1).toString();
+                if (!zoneId.isEmpty()) {
+                    QString screenName = getWindowScreenName(activeWindow);
+                    QString geometryJson = queryZoneGeometryForScreen(zoneId, screenName);
+                    if (!geometryJson.isEmpty()) {
+                        QJsonParseError parseError;
+                        QJsonDocument doc = QJsonDocument::fromJson(geometryJson.toUtf8(), &parseError);
+                        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+                            QJsonObject obj = doc.object();
+                            QRect geometry(obj[QStringLiteral("x")].toInt(), obj[QStringLiteral("y")].toInt(),
+                                           obj[QStringLiteral("width")].toInt(), obj[QStringLiteral("height")].toInt());
+                            qCDebug(lcEffect) << "Restoring unfloated window to zone" << zoneId;
+                            applySnapGeometry(activeWindow, geometry);
+                            m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), windowId, zoneId);
+                        }
+                    }
+                    m_windowTrackingInterface->asyncCall(QStringLiteral("clearPreFloatZone"), windowId);
+                }
+            }
+        }
+    }
+
+    // Emit success feedback with the action result
+    QString actionResult = newFloatState ? QStringLiteral("floated") : QStringLiteral("unfloated");
+    emitNavigationFeedback(true, QStringLiteral("float"), actionResult);
+}
+
+bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
+{
+    Q_UNUSED(border)
+    // We no longer reserve edges, so this callback won't be triggered by our effect.
+    // The daemon handles disabling Quick Tile via KWin config.
+    return false;
+}
+
+void PlasmaZonesEffect::callSnapToLastZone(KWin::EffectWindow* window)
+{
+    if (!window) {
+        return;
+    }
+
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        return;
+    }
+
+    QString windowId = getWindowId(window);
+    QString screenName = getWindowScreenName(window);
+    bool sticky = isWindowSticky(window);
+
+    // Use QPointer to safely handle window destruction during async calls
+    QPointer<KWin::EffectWindow> safeWindow = window;
+
+    // FIRST: Try to restore to persisted zone from previous session
+    // This takes priority over "snap to last zone" to ensure windows return
+    // to their original positions after relog, not to the last-used zone.
+    QDBusPendingCall restoreCall =
+        m_windowTrackingInterface->asyncCall(QStringLiteral("restoreToPersistedZone"), windowId, screenName, sticky);
+
+    QDBusPendingCallWatcher* restoreWatcher = new QDBusPendingCallWatcher(restoreCall, this);
+    connect(restoreWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, safeWindow, windowId, sticky](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+
+                QDBusPendingReply<int, int, int, int, bool> reply = *w;
+                if (reply.isError()) {
+                    qCDebug(lcEffect) << "restoreToPersistedZone error:" << reply.error().message();
+                    // Fall through to snapToLastZone
+                } else {
+                    int snapX = reply.argumentAt<0>();
+                    int snapY = reply.argumentAt<1>();
+                    int snapWidth = reply.argumentAt<2>();
+                    int snapHeight = reply.argumentAt<3>();
+                    bool shouldRestore = reply.argumentAt<4>();
+
+                    if (shouldRestore && safeWindow) {
+                        QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
+                        qCDebug(lcEffect)
+                            << "Restoring window" << windowId << "to persisted zone geometry:" << snapGeometry;
+                        applySnapGeometry(safeWindow, snapGeometry);
+                        return; // Successfully restored, don't fall back to snapToLastZone
+                    }
+                }
+
+                // FALLBACK: No persisted zone found, try "snap to last zone" feature
+                if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+                    return;
+                }
+
+                // BUG FIX: Pass the window's current screen name to prevent cross-monitor snapping
+                // Without this, windows on monitor 2 would snap to zones on monitor 1
+                QString windowScreenName = getWindowScreenName(safeWindow);
+                QDBusPendingCall snapCall = m_windowTrackingInterface->asyncCall(QStringLiteral("snapToLastZone"),
+                                                                                 windowId, windowScreenName, sticky);
+
+                QDBusPendingCallWatcher* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
+                connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
+                        [this, safeWindow, windowId](QDBusPendingCallWatcher* sw) {
+                            sw->deleteLater();
+
+                            QDBusPendingReply<int, int, int, int, bool> snapReply = *sw;
+                            if (snapReply.isError()) {
+                                qCDebug(lcEffect) << "snapToLastZone not applied:" << snapReply.error().message();
+                                return;
+                            }
+
+                            int snapX = snapReply.argumentAt<0>();
+                            int snapY = snapReply.argumentAt<1>();
+                            int snapWidth = snapReply.argumentAt<2>();
+                            int snapHeight = snapReply.argumentAt<3>();
+                            bool shouldSnap = snapReply.argumentAt<4>();
+
+                            if (shouldSnap && safeWindow) {
+                                QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
+                                qCDebug(lcEffect) << "Auto-snapping new window" << windowId
+                                                  << "to last zone geometry:" << snapGeometry;
+                                applySnapGeometry(safeWindow, snapGeometry);
+                            }
+                        });
+            });
+}
+
+void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)
+{
+    updateWindowStickyState(m_draggedWindow);
+    ensureDBusInterface();
+    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
+        return;
+    }
+
+    // Get window class info for exclusion filtering
+    QString appName;
+    QString windowClass;
+    if (m_draggedWindow) {
+        windowClass = m_draggedWindow->windowClass();
+        // Use windowClass as appName too - KWin effect doesn't have separate appName
+        appName = windowClass;
+    }
+
+    // D-Bus interface expects doubles for geometry + strings for app info (sddddss signature)
+    m_dbusInterface->asyncCall(QStringLiteral("dragStarted"), windowId, geometry.x(), geometry.y(), geometry.width(),
+                               geometry.height(), appName, windowClass);
+}
+bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
+{
+    return w && w->isOnAllDesktops();
+}
+
+void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
+{
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid() || !w) {
+        return;
+    }
+
+    QString windowId = getWindowId(w);
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    bool sticky = isWindowSticky(w);
+    m_windowTrackingInterface->asyncCall(QStringLiteral("setWindowSticky"), windowId, sticky);
+}
+
+void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods)
+{
+    ensureDBusInterface();
+    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
+        return;
+    }
+
+    // D-Bus interface expects ints for cursor position and modifiers (siii signature)
+    m_dbusInterface->asyncCall(QStringLiteral("dragMoved"), windowId, static_cast<int>(cursorPos.x()),
+                               static_cast<int>(cursorPos.y()), static_cast<int>(mods));
+}
+
+void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId)
+{
+    ensureDBusInterface();
+    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
+        return;
+    }
+
+    // Make ASYNC call to get snap geometry - prevents UI freeze if daemon is slow
+    // D-Bus signature: dragStopped(s) -> (iiiib)
+    // The method has out parameters: snapX, snapY, snapWidth, snapHeight, shouldSnap
+    QDBusPendingCall pendingCall = m_dbusInterface->asyncCall(QStringLiteral("dragStopped"), windowId);
+
+    // Use QPointer to safely handle window destruction during async call
+    QPointer<KWin::EffectWindow> safeWindow = window;
+
+    // Create watcher to handle the reply
+    QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<int, int, int, int, bool> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
+            return;
+        }
+
+        int snapX = reply.argumentAt<0>();
+        int snapY = reply.argumentAt<1>();
+        int snapWidth = reply.argumentAt<2>();
+        int snapHeight = reply.argumentAt<3>();
+        bool shouldSnap = reply.argumentAt<4>();
+
+        qCDebug(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
+                          << "geometry=" << QRect(snapX, snapY, snapWidth, snapHeight);
+
+        if (shouldSnap && safeWindow) {
+            // Final fullscreen check before applying geometry - window could have
+            // transitioned to fullscreen between drag stop and this point
+            if (safeWindow->isFullScreen()) {
+                qCDebug(lcEffect) << "Window is fullscreen at drag stop, skipping snap";
+            } else {
+                QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
+                applySnapGeometry(safeWindow, snapGeometry);
+            }
+        }
+    });
+}
+
+void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry)
+{
+    if (!window) {
+        qCWarning(lcEffect) << "Cannot apply geometry - window is null";
+        return;
+    }
+
+    if (!geometry.isValid()) {
+        qCWarning(lcEffect) << "Cannot apply geometry - geometry is invalid";
+        return;
+    }
+
+    // Don't call moveResize() on fullscreen windows, it can crash KWin.
+    // See KDE bugs #429752, #301529, #489546.
+    if (window->isFullScreen()) {
+        qCDebug(lcEffect) << "Skipping geometry change - window is fullscreen";
+        return;
+    }
+
+    qCDebug(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geometry;
+
+    // In KWin 6, we use the window's moveResize methods
+    // First, we need to check if the window is in a valid state
+    if (window->isUserMove() || window->isUserResize()) {
+        qCDebug(lcEffect) << "Window still in user move/resize state, deferring geometry change";
+        // Schedule the geometry change for next frame when the move operation is complete
+        // Use QPointer to safely handle window destruction during the timer delay
+        QPointer<KWin::EffectWindow> safeWindow = window;
+        QTimer::singleShot(100, this, [this, safeWindow, geometry]() {
+            // Re-check all conditions including fullscreen - window state can change during delay
+            // QPointer automatically becomes null if the window is destroyed
+            if (safeWindow && !safeWindow->isUserMove() && !safeWindow->isUserResize() && !safeWindow->isFullScreen()) {
+                applySnapGeometry(safeWindow, geometry);
+            }
+        });
+        return;
+    }
+
+    // KWin 6: EffectWindow exposes window() which returns the underlying Window*
+    // Window has moveResize(const QRectF &geometry) method
+    KWin::Window* kwinWindow = window->window();
+    if (kwinWindow) {
+        qCDebug(lcEffect) << "Using Window::moveResize() directly";
+        kwinWindow->moveResize(QRectF(geometry));
+    } else {
+        qCWarning(lcEffect) << "Cannot get underlying Window from EffectWindow";
+    }
+}
+
+QString PlasmaZonesEffect::extractStableId(const QString& windowId)
+{
+    // Window ID format: "windowClass:resourceName:pointerAddress"
+    // Stable ID: "windowClass:resourceName" (without pointer address)
+    // This allows matching windows across KWin restarts since only the pointer changes
+
+    // Find the last colon (separates pointer address from the rest)
+    int lastColon = windowId.lastIndexOf(QLatin1Char(':'));
+    if (lastColon <= 0) {
+        // No colon found or only one part - return as-is
+        return windowId;
+    }
+
+    // Check if what's after the last colon looks like a pointer address (all digits)
+    QString potentialPointer = windowId.mid(lastColon + 1);
+    bool isPointer = !potentialPointer.isEmpty();
+    for (const QChar& c : potentialPointer) {
+        if (!c.isDigit()) {
+            isPointer = false;
+            break;
+        }
+    }
+
+    if (isPointer) {
+        // Strip the pointer address
+        return windowId.left(lastColon);
+    }
+
+    // Not a pointer format, return as-is
+    return windowId;
+}
+
+} // namespace PlasmaZones
+
+// KWin Effect Factory - creates the plugin
+#include <effect/effect.h>
+
+namespace KWin {
+
+KWIN_EFFECT_FACTORY_SUPPORTED(PlasmaZones::PlasmaZonesEffect, "metadata.json",
+                              return PlasmaZones::PlasmaZonesEffect::supported();)
+
+} // namespace KWin
+
+// MOC include - REQUIRED for the Q_OBJECT in KWIN_EFFECT_FACTORY_SUPPORTED
+#include "plasmazoneseffect.moc"

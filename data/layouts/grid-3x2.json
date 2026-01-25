@@ -1,0 +1,47 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-4444555588aa}",
+    "name": "Grid (3x2)",
+    "description": "Six zones in a 3 column by 2 row grid",
+    "type": 3,
+    "isBuiltIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-grid32-1}",
+            "name": "Top Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.333333, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid32-2}",
+            "name": "Top Center",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.333333, "y": 0, "width": 0.333334, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid32-3}",
+            "name": "Top Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.666667, "y": 0, "width": 0.333333, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid32-4}",
+            "name": "Bottom Left",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.333333, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid32-5}",
+            "name": "Bottom Center",
+            "zoneNumber": 5,
+            "relativeGeometry": { "x": 0.333333, "y": 0.5, "width": 0.333334, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid32-6}",
+            "name": "Bottom Right",
+            "zoneNumber": 6,
+            "relativeGeometry": { "x": 0.666667, "y": 0.5, "width": 0.333333, "height": 0.5 }
+        }
+    ]
+}

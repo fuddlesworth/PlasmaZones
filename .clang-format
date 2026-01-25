@@ -1,0 +1,68 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# KDE-style clang-format for PlasmaZones (C++20, Qt/KDE conventions).
+# See: https://community.kde.org/Policies/Frameworks_Coding_Style
+#      https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+
+Language: Cpp
+BasedOnStyle: WebKit
+
+# C++20 (project uses set(CMAKE_CXX_STANDARD 20))
+Standard: c++20
+
+# 4 spaces indent (KDE standard)
+IndentWidth: 4
+TabWidth: 4
+
+# 120 characters (KDE common choice)
+ColumnLimit: 120
+
+# Sort includes inside groups (set false to avoid churn until a dedicated pass)
+SortIncludes: false
+
+# Braces: break after class/struct/function, same line for control flow
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: false
+  AfterStruct: true
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+
+# Pointer/ref alignment: int *foo (left, KDE/Qt style)
+PointerAlignment: Left
+
+AlignAfterOpenBracket: Align
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortEnumsOnASingleLine: false
+AlwaysBreakBeforeMultilineStrings: true
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBinaryOperators: NonAssignment
+Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
+KeepEmptyLinesAtTheStartOfBlocks: false
+NamespaceIndentation: None
+SpaceAfterTemplateKeyword: false
+AlwaysBreakTemplateDeclarations: true
+AllowShortLambdasOnASingleLine: Empty
+AllowAllArgumentsOnNextLine: false
+
+# Qt macros: keep opening brace attached
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - Q_FOREVER
+  - QBENCHMARK
+  - QBENCHMARK_ONCE

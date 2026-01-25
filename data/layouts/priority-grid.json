@@ -1,0 +1,29 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-44445555aaaa}",
+    "name": "Priority Grid",
+    "description": "Large center with smaller sides (like Windows FancyZones)",
+    "type": 4,
+    "isBuiltIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-priority-1}",
+            "name": "Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.25, "height": 1.0 }
+        },
+        {
+            "id": "{zone-priority-2}",
+            "name": "Center",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.25, "y": 0, "width": 0.5, "height": 1.0 }
+        },
+        {
+            "id": "{zone-priority-3}",
+            "name": "Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.75, "y": 0, "width": 0.25, "height": 1.0 }
+        }
+    ]
+}

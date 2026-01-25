@@ -1,0 +1,17 @@
+{
+    "KPlugin": {
+        "Name": "PlasmaZones",
+        "Description": "Configure window zone snapping",
+        "Icon": "preferences-system-windows-actions",
+        "Authors": [
+            {
+                "Name": "fuddlesworth",
+                "Email": "plasmazones@kde.org"
+            }
+        ],
+        "License": "GPL-3.0-or-later"
+    },
+    "X-KDE-ParentApp": "systemsettings",
+    "X-KDE-System-Settings-Parent-Category": "windowmanagement",
+    "X-KDE-Weight": 70
+}

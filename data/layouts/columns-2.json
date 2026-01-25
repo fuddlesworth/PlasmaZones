@@ -1,0 +1,24 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-444455556666}",
+    "name": "Columns (2)",
+    "description": "Two equal vertical columns",
+    "type": 1,
+    "defaultOrder": 0,
+    "isBuiltIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-col2-1}",
+            "name": "Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 1.0 }
+        },
+        {
+            "id": "{zone-col2-2}",
+            "name": "Right",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 1.0 }
+        }
+    ]
+}

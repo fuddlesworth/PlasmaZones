@@ -1,0 +1,35 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-44445555cccc}",
+    "name": "Wide",
+    "description": "Large top area with row of smaller areas below",
+    "type": 5,
+    "builtIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-wide-1}",
+            "name": "Main",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 1.0, "height": 0.65 }
+        },
+        {
+            "id": "{zone-wide-2}",
+            "name": "Bottom Left",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0, "y": 0.65, "width": 0.333333, "height": 0.35 }
+        },
+        {
+            "id": "{zone-wide-3}",
+            "name": "Bottom Center",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.333333, "y": 0.65, "width": 0.333334, "height": 0.35 }
+        },
+        {
+            "id": "{zone-wide-4}",
+            "name": "Bottom Right",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.666667, "y": 0.65, "width": 0.333333, "height": 0.35 }
+        }
+    ]
+}

@@ -1,0 +1,380 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# PlasmaZones Core Library and Daemon
+
+include(GenerateExportHeader)
+
+# QTP0004: All QML files are explicitly listed in qt_add_qml_module
+qt_policy(SET QTP0004 NEW)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Shared QML Components (must be built first)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_subdirectory(shared)
+
+# KConfigXT for settings (GENERATE_MOC ensures Q_OBJECT is processed)
+kconfig_add_kcfg_files(plasmazones_settings_SRCS
+    config/plasmazones.kcfgc
+    GENERATE_MOC
+)
+
+# Core library sources
+set(plasmazones_core_SRCS
+    core/constants.h
+    core/logging.h
+    core/logging.cpp
+    core/interfaces.h
+    core/interfaces.cpp
+    core/platform.cpp
+    core/platform.h
+    core/geometryutils.cpp
+    core/geometryutils.h
+    core/zone.cpp
+    core/zone.h
+    core/layout.cpp
+    core/layout.h
+    core/layoutmanager.cpp
+    core/layoutmanager.h
+    core/screenmanager.cpp
+    core/screenmanager.h
+    core/virtualdesktopmanager.cpp
+    core/virtualdesktopmanager.h
+    core/activitymanager.cpp
+    core/activitymanager.h
+    core/zonedetector.cpp
+    core/zonedetector.h
+    core/zonehighlighter.cpp
+    core/zonehighlighter.h
+    config/settings.cpp
+    config/settings.h
+    dbus/layoutadaptor.cpp
+    dbus/layoutadaptor.h
+    dbus/settingsadaptor.cpp
+    dbus/settingsadaptor.h
+    dbus/overlayadaptor.cpp
+    dbus/overlayadaptor.h
+    dbus/zonedetectionadaptor.cpp
+    dbus/zonedetectionadaptor.h
+    dbus/windowtrackingadaptor.cpp
+    dbus/windowtrackingadaptor.h
+    dbus/screenadaptor.cpp
+    dbus/screenadaptor.h
+    dbus/windowdragadaptor.cpp
+    dbus/windowdragadaptor.h
+    ${plasmazones_settings_SRCS}
+)
+
+# Create core library
+add_library(plasmazones_core SHARED ${plasmazones_core_SRCS})
+
+# Generate export header
+generate_export_header(plasmazones_core
+    EXPORT_FILE_NAME plasmazones_export.h
+    EXPORT_MACRO_NAME PLASMAZONES_EXPORT
+)
+
+# Pass LayerShellQt availability to source files (for core library only, daemon done later)
+if(LayerShellQt_FOUND)
+    target_compile_definitions(plasmazones_core PRIVATE HAVE_LAYER_SHELL)
+endif()
+
+target_link_libraries(plasmazones_core
+    PUBLIC
+        Qt6::Core
+        Qt6::Quick
+        Qt6::Gui
+        Qt6::DBus
+        KF6::ConfigCore
+        KF6::ConfigGui
+        KF6::CoreAddons
+        KF6::WindowSystem
+        KF6::I18n
+        KF6::ColorScheme
+)
+
+# Conditionally link KActivities if available
+# Try KF6::Activities first, fallback to KActivities
+if(KF6Activities_FOUND)
+    target_link_libraries(plasmazones_core
+        PUBLIC
+            KF6::Activities
+    )
+    target_compile_definitions(plasmazones_core PRIVATE HAVE_KACTIVITIES)
+elseif(KActivities_FOUND)
+    # KActivities might be found but need different linking approach
+    find_library(KACTIVITIES_LIBRARY KActivities)
+    if(KACTIVITIES_LIBRARY)
+        target_link_libraries(plasmazones_core
+            PUBLIC
+                ${KACTIVITIES_LIBRARY}
+        )
+        target_compile_definitions(plasmazones_core PRIVATE HAVE_KACTIVITIES)
+    endif()
+endif()
+
+# Conditionally link LayerShellQt if available (needed for actualAvailableGeometry probe)
+if(LayerShellQt_FOUND)
+    target_link_libraries(plasmazones_core
+        PUBLIC
+            LayerShellQt::Interface
+    )
+endif()
+
+target_include_directories(plasmazones_core
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<INSTALL_INTERFACE:include/plasmazones>
+)
+
+set_target_properties(plasmazones_core PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    SOVERSION 1
+    EXPORT_NAME Core
+)
+
+# Precompiled headers for core library - dramatically reduces compile time
+if(ENABLE_PCH)
+    target_precompile_headers(plasmazones_core
+        PRIVATE
+            <QObject>
+            <QString>
+            <QList>
+            <QVariant>
+            <QRect>
+            <QPoint>
+            <QSize>
+            <QDebug>
+            <QJsonObject>
+            <QJsonArray>
+            <memory>
+            <vector>
+            <functional>
+    )
+endif()
+
+install(TARGETS plasmazones_core
+    EXPORT PlasmaZonesTargets
+    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+)
+
+# Daemon executable
+set(plasmazones_daemon_SRCS
+    daemon/main.cpp
+    daemon/daemon.cpp
+    daemon/daemon.h
+    daemon/overlayservice.cpp
+    daemon/overlayservice.h
+    daemon/shortcutmanager.cpp
+    daemon/shortcutmanager.h
+    daemon/zoneselectorcontroller.cpp
+    daemon/zoneselectorcontroller.h
+)
+
+# QML resources for the daemon overlay
+qt_add_resources(plasmazones_daemon_SRCS daemon/resources.qrc)
+
+add_executable(plasmazonesd ${plasmazones_daemon_SRCS})
+
+# Pass LayerShellQt availability to daemon source files (after target is created)
+if(LayerShellQt_FOUND)
+    target_compile_definitions(plasmazonesd PRIVATE HAVE_LAYER_SHELL)
+endif()
+
+target_link_libraries(plasmazonesd
+    PRIVATE
+        plasmazones_core
+        plasmazones_shared_qml
+        plasmazones_shared_qmlplugin  # Generated by qt_add_qml_module
+        Qt6::Widgets
+        Qt6::Quick
+        Qt6::QuickControls2
+        KF6::DBusAddons
+        KF6::GlobalAccel
+        KF6::Notifications
+)
+
+# Conditionally link LayerShellQt if available
+if(LayerShellQt_FOUND)
+    target_link_libraries(plasmazonesd
+        PRIVATE
+            LayerShellQt::Interface
+    )
+endif()
+
+install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
+
+# Separate precompiled headers for executables (different PIC/PIE settings than shared lib)
+if(ENABLE_PCH)
+    target_precompile_headers(plasmazonesd
+        PRIVATE
+            <QObject>
+            <QString>
+            <QList>
+            <QVariant>
+            <QDebug>
+    )
+endif()
+
+# Autostart desktop file (only when INSTALL_DAEMON_AUTOSTART=ON; set OFF for user-local installs)
+if(INSTALL_DAEMON_AUTOSTART)
+    install(FILES
+        daemon/org.plasmazones.daemon.desktop
+        DESTINATION ${KDE_INSTALL_AUTOSTARTDIR}
+    )
+endif()
+
+# Also install to applications dir for portal discovery
+install(FILES
+    daemon/org.plasmazones.daemon.desktop
+    DESTINATION ${KDE_INSTALL_APPDIR}
+)
+
+# Install KConfig settings file
+install(FILES
+    config/plasmazones.kcfg
+    DESTINATION ${KDE_INSTALL_KCFGDIR}
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Layout Editor
+# ═══════════════════════════════════════════════════════════════════════════════
+
+set(plasmazones_editor_SRCS
+    editor/main.cpp
+    editor/EditorController.cpp
+    editor/EditorController.h
+    editor/services/ILayoutService.h
+    editor/services/DBusLayoutService.cpp
+    editor/services/DBusLayoutService.h
+    editor/services/ZoneManager.cpp
+    editor/services/ZoneManager.h
+    editor/services/SnappingService.cpp
+    editor/services/SnappingService.h
+    editor/services/TemplateService.cpp
+    editor/services/TemplateService.h
+    editor/services/TemplateStrategy.h
+    editor/undo/UndoController.cpp
+    editor/undo/UndoController.h
+    editor/undo/commands/BaseZoneCommand.cpp
+    editor/undo/commands/BaseZoneCommand.h
+    editor/undo/commands/CommandId.h
+    editor/undo/commands/AddZoneCommand.cpp
+    editor/undo/commands/AddZoneCommand.h
+    editor/undo/commands/DeleteZoneCommand.cpp
+    editor/undo/commands/DeleteZoneCommand.h
+    editor/undo/commands/UpdateZoneGeometryCommand.cpp
+    editor/undo/commands/UpdateZoneGeometryCommand.h
+        editor/undo/commands/UpdateZoneNameCommand.cpp
+        editor/undo/commands/UpdateZoneNameCommand.h
+        editor/undo/commands/UpdateZoneNumberCommand.cpp
+        editor/undo/commands/UpdateZoneNumberCommand.h
+    editor/undo/commands/UpdateZoneAppearanceCommand.cpp
+    editor/undo/commands/UpdateZoneAppearanceCommand.h
+    editor/undo/commands/DuplicateZoneCommand.cpp
+    editor/undo/commands/DuplicateZoneCommand.h
+    editor/undo/commands/SplitZoneCommand.cpp
+    editor/undo/commands/SplitZoneCommand.h
+    editor/undo/commands/FillZoneCommand.cpp
+    editor/undo/commands/FillZoneCommand.h
+    editor/undo/commands/DeleteZoneWithFillCommand.cpp
+    editor/undo/commands/DeleteZoneWithFillCommand.h
+    editor/undo/commands/DividerResizeCommand.cpp
+    editor/undo/commands/DividerResizeCommand.h
+    editor/undo/commands/ChangeZOrderCommand.cpp
+    editor/undo/commands/ChangeZOrderCommand.h
+    editor/undo/commands/ApplyTemplateCommand.cpp
+    editor/undo/commands/ApplyTemplateCommand.h
+    editor/undo/commands/ClearAllZonesCommand.cpp
+    editor/undo/commands/ClearAllZonesCommand.h
+    editor/undo/commands/UpdateLayoutNameCommand.cpp
+    editor/undo/commands/UpdateLayoutNameCommand.h
+    editor/undo/commands/ChangeSelectionCommand.cpp
+    editor/undo/commands/ChangeSelectionCommand.h
+    editor/undo/commands/BatchUpdateAppearanceCommand.cpp
+    editor/undo/commands/BatchUpdateAppearanceCommand.h
+    editor/undo/commands/PasteZonesCommand.cpp
+    editor/undo/commands/PasteZonesCommand.h
+)
+
+# Create the executable first
+add_executable(plasmazones-editor ${plasmazones_editor_SRCS})
+
+# Add QML module to the executable
+qt_add_qml_module(plasmazones-editor
+    URI org.plasmazones.editor
+    VERSION 1.0
+    RESOURCE_PREFIX /qt/qml
+    QML_FILES
+        editor/qml/EditorWindow.qml
+        editor/qml/EditorZone.qml
+        editor/qml/TopBar.qml
+        editor/qml/PropertyPanel.qml
+        editor/qml/ControlBar.qml
+        editor/qml/DividerManager.qml
+        editor/qml/ResizeHandles.qml
+        editor/qml/ZoneContent.qml
+        editor/qml/ActionButtons.qml
+        editor/qml/SnapIndicator.qml
+        editor/qml/DimensionTooltip.qml
+        editor/qml/EditorNotifications.qml
+        editor/qml/ZoneContextMenu.qml
+        editor/qml/EditorShortcuts.qml
+        editor/qml/KeyboardNavigation.qml
+        editor/qml/ZoneDragHandler.qml
+        editor/qml/ZoneFillAnimation.qml
+        editor/qml/ZoneGeometrySync.qml
+        editor/qml/GridOverlay.qml
+        editor/qml/CanvasMouseHandler.qml
+        editor/qml/ZoneOperations.qml
+        editor/qml/HelpDialogContent.qml
+        editor/qml/TemplatePreview.qml
+    )
+
+target_link_libraries(plasmazones-editor
+    PRIVATE
+        plasmazones_core
+        plasmazones_shared_qml
+        plasmazones_shared_qmlplugin  # Generated by qt_add_qml_module
+        Qt6::Quick
+        Qt6::QuickControls2
+        Qt6::Widgets
+        Qt6::DBus
+        KF6::I18n
+        KF6::I18nQml
+        KF6::CoreAddons
+        KF6::WindowSystem
+)
+
+# Pass LayerShellQt availability to editor
+if(LayerShellQt_FOUND)
+    target_compile_definitions(plasmazones-editor PRIVATE HAVE_LAYER_SHELL)
+    target_link_libraries(plasmazones-editor
+        PRIVATE
+            LayerShellQt::Interface
+    )
+endif()
+
+install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
+
+# Separate precompiled headers for executables (different PIC/PIE settings than shared lib)
+if(ENABLE_PCH)
+    target_precompile_headers(plasmazones-editor
+        PRIVATE
+            <QObject>
+            <QString>
+            <QList>
+            <QVariant>
+            <QRect>
+            <QDebug>
+            <memory>
+    )
+endif()
+
+# Desktop file for the editor (org.kde naming for portal integration)
+install(FILES
+    editor/org.plasmazones.editor.desktop
+    DESTINATION ${KDE_INSTALL_APPDIR}
+)

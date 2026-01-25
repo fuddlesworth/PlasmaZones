@@ -1,0 +1,894 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR "fuddlesworth"
+# This file is distributed under the same license as the PlasmaZones package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PlasmaZones 1.0.0\n"
+"Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
+"POT-Creation-Date: 2026-01-25 15:20-0600\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:25
+msgid "PlasmaZones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:86
+msgid "Enable PlasmaZones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:93
+msgid "Running"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:93
+msgid "Stopped"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:115
+msgid "Layouts"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:119
+msgid "Editor"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:123
+msgid "Assignments"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:127
+msgid "Appearance"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:131
+msgid "Behavior"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:135
+msgid "Zone Selector"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:139
+msgid "Exclusions"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:163
+msgid "PlasmaZones is disabled"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:169
+msgid "Turn on PlasmaZones to manage window layouts."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:196
+msgid "New Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:202
+msgid "Edit"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:213
+msgid "Duplicate"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:224
+msgid "Delete"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:234
+msgid "Delete the selected layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:238
+msgid "Set as Default"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:247
+msgid "Set this layout as the default for screens without specific assignments"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:253
+msgid "Import"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:259
+msgid "Export"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:364
+msgid "Unnamed Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:366
+msgid "System layout with %1 zones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:367
+msgid "Custom layout with %1 zones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:445
+msgid "Default layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:458
+msgid "System • %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:460
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1224
+msgid "%1 zones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:479
+msgid "No layouts available"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:480
+msgid "Start the PlasmaZones daemon or create a new layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:499
+msgid "Keyboard Shortcuts"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:504
+msgid "Duplicate zone:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:510
+msgid "Keyboard shortcut to duplicate the selected zone. Click and press keys."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:515
+msgid "Split horizontally:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:521
+msgid ""
+"Keyboard shortcut to split selected zone horizontally. Click and press keys."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:526
+msgid "Split vertically:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:532
+msgid ""
+"Keyboard shortcut to split selected zone vertically. Click and press keys."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:537
+msgid "Fill space:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:543
+msgid ""
+"Keyboard shortcut to expand selected zone to fill available space. Click and "
+"press keys."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:547
+msgid "Reset shortcuts:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:551
+msgid "Reset to Defaults"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:558
+msgid "Reset all editor shortcuts to their default values"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:565
+msgid "Snapping"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:569
+msgid "Grid snapping:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:570
+msgid "Enable grid snapping"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:574
+msgid "Snap zones to a grid while dragging or resizing"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:578
+msgid "Edge snapping:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:579
+msgid "Enable edge snapping"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:583
+msgid "Snap zones to edges of other zones while dragging or resizing"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:587
+msgid "Grid interval X:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:607
+msgid "Grid interval Y:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:628
+msgid "Snap override modifiers:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:639
+msgid "Fill on Drop"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:644
+msgid "Enable:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:645
+msgid "Fill zone on drop with modifier key"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:649
+msgid ""
+"When enabled, holding the modifier key while dropping a zone expands it to "
+"fill available space"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:654
+msgid "Fill on drop modifiers:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:731
+msgid ""
+"Assign different layouts to each monitor and configure quick-switch keyboard "
+"shortcuts."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:742
+msgid "Monitor Assignments"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:798
+msgid "Unknown Monitor"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:808
+msgid "Primary"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:821
+msgid "All Desktops:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:829
+msgid "Default"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:881
+msgid "Clear assignment"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:890
+msgid "Per-desktop"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:895
+msgid "Hide per-desktop assignments"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:896
+msgid "Show per-desktop assignments"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:903
+msgid "Disable PlasmaZones on this monitor"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:907
+msgid ""
+"When enabled, the zone overlay and zone picker will not appear on this "
+"monitor, and windows will not snap to zones here."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:923
+msgid "Per-Desktop Overrides"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:930
+msgid "Override the default layout for specific virtual desktops"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:949
+msgid "Desktop %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:972
+msgid "Use default"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1032
+msgid "Clear assignment for this desktop"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1049
+msgid "No monitors detected"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1050
+msgid "Make sure the PlasmaZones daemon is running"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1060
+msgid ""
+"Per-desktop layout assignments are available when using multiple virtual "
+"desktops. Add more desktops in System Settings → Virtual Desktops."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1072
+msgid "Quick Layout Shortcuts"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1082
+msgid "Assign layouts to keyboard shortcuts for instant switching."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1108
+msgid "Not assigned"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1124
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:32
+msgid "None"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1224
+msgid "No shortcut assigned"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1271
+msgid "Clear shortcut"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1295
+msgid "Colors"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1300
+msgid "Color scheme:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1301
+msgid "Use system accent color"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1307
+msgid "Highlight:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1326
+msgid "Inactive:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1345
+msgid "Border:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1365
+msgid "Import colors:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1370
+msgid "From pywal"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1376
+msgid "From file..."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1385
+msgid "Opacity"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1389
+msgid "Active zone:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1408
+msgid "Inactive zone:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1429
+msgid "Border"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1433
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:122
+msgid "Width:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1442
+msgid "Radius:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1453
+msgid "Effects"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1457
+msgid "Blur:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1458
+msgid "Enable blur behind zones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1464
+msgid "Numbers:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1465
+msgid "Show zone numbers"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1471
+msgid "Animation:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1472
+msgid "Flash zones when switching layouts"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1478
+msgid "Notifications:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1479
+msgid "Show OSD when switching layouts"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1500
+msgid "Activation"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1505
+msgid "Zone activation modifiers:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1516
+msgid "Multi-Zone Selection"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1521
+msgid "Multi-zone modifier:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1524
+msgid ""
+"Hold this modifier combination while dragging to span windows across "
+"multiple zones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1531
+msgid "Middle click:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1532
+msgid "Use middle mouse button to select multiple zones"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1538
+msgid "Edge threshold:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1546
+msgid "Distance from zone edge for multi-zone selection"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1552
+msgid "Zone Settings"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1556
+msgid "Zone padding:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1565
+msgid "Display:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1566
+msgid "Show zones on all monitors while dragging"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1574
+msgid "Window Behavior"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1578
+msgid "Resolution:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1579
+msgid "Keep windows in zones when resolution changes"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1585
+msgid "New windows:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1586
+msgid "Move new windows to their last used zone"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1592
+msgid "Unsnapping:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1593
+msgid "Restore original window size when unsnapping"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1600
+msgid "Sticky windows:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1604
+msgid "Treat as normal"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1605
+msgid "Restore only"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1606
+msgid "Ignore all"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1619
+msgid ""
+"Sticky windows appear on all desktops. Choose how snapping should behave."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1640
+msgid ""
+"The zone selector popup appears when dragging windows to screen edges, "
+"allowing quick layout selection."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1647
+msgid "Enable zone selector popup"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1660
+msgid "Position"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1678
+msgid ""
+"Choose where the popup appears on screen. Edges and corners are supported."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1692
+msgid "Trigger & Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1705
+msgid "Trigger distance"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1710
+msgid "How close to the edge before the popup appears"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1748
+msgid "Arrangement:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1752
+msgid "Grid"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1753
+msgid "Horizontal"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1754
+msgid "Vertical"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1768
+msgid "Grid columns:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1777
+msgid "Max visible rows:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1786
+msgid "Scrolling enabled when more rows exist"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1799
+msgid "Preview Size"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1890
+msgid "Auto"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1900
+#, javascript-format
+msgid "~10%% of screen width (120-280px)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1904
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:31
+msgid "Small"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1916
+msgid "120px width"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1920
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:35
+msgid "Medium"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1932
+msgid "180px width"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1936
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:39
+msgid "Large"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1948
+msgid "260px width"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1952
+msgid "Custom"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1962
+msgid "Custom size with slider"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:1975
+msgid "Size:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2007
+msgid "Preview size adjusts automatically based on your screen resolution."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2032
+msgid ""
+"Windows from excluded applications or with excluded window classes will not "
+"snap to zones."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2043
+msgid "Excluded Applications"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2057
+msgid "Application name (e.g., firefox, konsole)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2068
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2154
+msgid "Add"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2115
+msgid "No excluded applications"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2116
+msgid "Add application names above to exclude them from zone snapping"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2129
+msgid "Excluded Window Classes"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2143
+msgid "Window class (use xprop to find)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2202
+msgid "No excluded window classes"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2203
+msgid "Use 'xprop | grep WM_CLASS' to find window classes"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2224
+msgid "Choose Highlight Color"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2230
+msgid "Choose Inactive Zone Color"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2236
+msgid "Choose Border Color"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2243
+msgid "Import Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2251
+msgid "Export Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2260
+msgid "Import Colors from File"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2269
+msgid "Delete Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2270
+msgid "Are you sure you want to delete '%1'?"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2287
+msgid "Edit Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2300
+msgid "Use the visual editor to create and modify zone layouts."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2306
+msgid "Open Layout Editor"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2320
+msgid "You can also edit layout JSON files directly:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/main.qml:2326
+msgid "Open Layouts Folder"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:36
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:100
+msgid "Shift"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:39
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:116
+msgid "Ctrl"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:42
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:132
+msgid "Alt"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:45
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:148
+msgid "Meta"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:110
+msgid "Shift modifier key"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:126
+msgid "Control modifier key"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:142
+msgid "Alt modifier key"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:158
+msgid "Meta/Super modifier key"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/ModifierCheckBoxes.qml:164
+msgid "Active: %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/LayoutThumbnail.qml:69
+msgid "Unnamed"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/KeySequenceInput.qml:46
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/KeySequenceInput.qml:244
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/KeySequenceInput.qml:245
+msgid "Press keys..."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/KeySequenceInput.qml:47
+msgid "Click to set shortcut"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:33
+msgid "Compact layout previews"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:37
+msgid "Balanced size (default)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:41
+msgid "Detailed layout previews"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:73
+msgid "Presets:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:109
+msgid "(Custom)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:199
+msgid "Height:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:263
+msgid "Lock aspect ratio"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PreviewSizeControl.qml:348
+msgid ""
+"Preview: %1 x %2 pixels\n"
+"Aspect ratio: %3"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Top-Left"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Top"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Top-Right"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Left"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Right"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Bottom-Left"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Bottom"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/kcm/ui/PositionPicker.qml:26
+msgid "Bottom-Right"
+msgstr ""

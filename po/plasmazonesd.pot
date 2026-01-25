@@ -1,0 +1,262 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR "fuddlesworth"
+# This file is distributed under the same license as the PlasmaZones package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PlasmaZones 1.0.0\n"
+"Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
+"POT-Creation-Date: 2026-01-25 15:20-0600\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: English\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/main.cpp:39
+msgid "PlasmaZones Daemon"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/main.cpp:40
+msgid "FancyZones-style window snapping for KDE Plasma"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/main.cpp:41
+msgid "© 2026 fuddlesworth"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/main.cpp:42
+msgid "fuddlesworth"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/main.cpp:54
+msgid "Replace existing daemon instance"
+msgstr ""
+
+#. i18n for translation support
+#: /home/nlavender/Documents/QFancyZones/src/daemon/daemon.cpp:503
+msgid "Zone Layout: %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:203
+msgid "Open Zone Editor"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:216
+msgid "Previous Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:221
+msgid "Next Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:235
+msgid "Apply Layout %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:284
+msgid "Move Window Left"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:291
+msgid "Move Window Right"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:298
+msgid "Move Window Up"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:305
+msgid "Move Window Down"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:313
+msgid "Focus Zone Left"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:320
+msgid "Focus Zone Right"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:327
+msgid "Focus Zone Up"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:334
+msgid "Focus Zone Down"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:342
+msgid "Push to Empty Zone"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:349
+msgid "Restore Window Size"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/daemon/shortcutmanager.cpp:357
+msgid "Toggle Window Float"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPreview.qml:59
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPicker.qml:107
+msgctxt "@info:accessibility"
+msgid "Layout: %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPreview.qml:60
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPicker.qml:108
+msgctxt "@info:accessibility"
+msgid "Click to select this layout. Contains %1 zones."
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPreview.qml:177
+msgctxt "@tooltip"
+msgid "Current layout: %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPreview.qml:177
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPicker.qml:194
+msgctxt "@tooltip"
+msgid "Select layout: %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneItem.qml:143
+msgid "Meta+Alt+%1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneOverlay.qml:82
+msgid ""
+"PlasmaZones Overlay Active\n"
+"(No zones defined)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneSelector.qml:213
+msgid "Select Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneSelector.qml:254
+msgid "Layout %1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneSelector.qml:325
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneSelectorWindow.qml:705
+#: /home/nlavender/Documents/QFancyZones/src/ui/LayoutPicker.qml:232
+msgid "No layouts available"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:22
+msgid "PlasmaZones Layout Editor"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:88
+msgid "Canvas (Free-form)"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:89
+msgid "Grid"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:103
+msgid "Columns:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:112
+msgid "Rows:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:129
+msgid "Add Zone"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:130
+msgid "Add a new zone to the layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:137
+msgid "Delete Zone"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:139
+msgid "Delete the selected zone"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:150
+msgid "Layout Name"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:159
+msgid "Cancel"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:160
+msgid "Cancel editing and discard changes"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:166
+msgid "Save Layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:169
+msgid "Save the current layout"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:299
+msgid "Zone Properties"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:303
+msgid "Name:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:309
+msgid "Zone Number:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:317
+msgid "Shortcut:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:319
+msgid "e.g., Meta+Alt+1"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:325
+msgid "Appearance"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:329
+msgid "Custom colors:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:335
+msgid "Highlight:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:342
+msgid "Opacity:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:351
+msgid "Border radius:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:361
+msgid "Geometry"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:365
+msgid "Position:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:372
+msgid "Size:"
+msgstr ""
+
+#: /home/nlavender/Documents/QFancyZones/src/ui/ZoneEditor.qml:484
+msgid "Custom Layout"
+msgstr ""

@@ -1,0 +1,29 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-444455550001}",
+    "name": "Split Focus",
+    "description": "50% main column with 2 stacked zones on the right",
+    "type": 5,
+    "builtIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-splitfocus-1}",
+            "name": "Main",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 1.0 }
+        },
+        {
+            "id": "{zone-splitfocus-2}",
+            "name": "Top Right",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 }
+        },
+        {
+            "id": "{zone-splitfocus-3}",
+            "name": "Bottom Right",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 }
+        }
+    ]
+}

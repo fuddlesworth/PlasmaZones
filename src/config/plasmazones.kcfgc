@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# KConfigXT code generator configuration
+# Generates PlasmaZonesConfig class from plasmazones.kcfg
+#
+# Note: The Settings class uses this config internally but provides
+# additional features like migration, validation, and ISettings interface.
+# Use Settings for application code; PlasmaZonesConfig is the generated base.
+
+File=plasmazones.kcfg
+ClassName=PlasmaZonesConfig
+NameSpace=PlasmaZones
+Mutators=true
+DefaultValueGetters=true
+GenerateProperties=true
+ParentInConstructor=true
+Singleton=false
+IncludeFiles=QColor

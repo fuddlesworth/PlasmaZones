@@ -1,0 +1,35 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-44445555dddd}",
+    "name": "Master + Stack",
+    "description": "Classic tiling layout with 60% master and 40% stacked",
+    "type": 5,
+    "builtIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-master-1}",
+            "name": "Master",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.6, "height": 1.0 }
+        },
+        {
+            "id": "{zone-master-2}",
+            "name": "Stack 1",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.6, "y": 0, "width": 0.4, "height": 0.333333 }
+        },
+        {
+            "id": "{zone-master-3}",
+            "name": "Stack 2",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0.6, "y": 0.333333, "width": 0.4, "height": 0.333334 }
+        },
+        {
+            "id": "{zone-master-4}",
+            "name": "Stack 3",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.6, "y": 0.666667, "width": 0.4, "height": 0.333333 }
+        }
+    ]
+}

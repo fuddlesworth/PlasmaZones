@@ -1,0 +1,35 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-444455559999}",
+    "name": "Grid (2x2)",
+    "description": "Four equal quadrants",
+    "type": 3,
+    "isBuiltIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-grid22-1}",
+            "name": "Top Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid22-2}",
+            "name": "Top Right",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid22-3}",
+            "name": "Bottom Left",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid22-4}",
+            "name": "Bottom Right",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 }
+        }
+    ]
+}

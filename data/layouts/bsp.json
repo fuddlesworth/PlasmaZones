@@ -1,0 +1,35 @@
+{
+    "id": "{a1b2c3d4-1111-2222-3333-44445555ffff}",
+    "name": "BSP",
+    "description": "Binary space partitioning - recursive split layout",
+    "type": 5,
+    "builtIn": true,
+    "zonePadding": 8,
+    "showZoneNumbers": true,
+    "zones": [
+        {
+            "id": "{zone-bsp-1}",
+            "name": "Top Left",
+            "zoneNumber": 1,
+            "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 0.6 }
+        },
+        {
+            "id": "{zone-bsp-2}",
+            "name": "Top Right",
+            "zoneNumber": 2,
+            "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.4 }
+        },
+        {
+            "id": "{zone-bsp-3}",
+            "name": "Bottom Left",
+            "zoneNumber": 3,
+            "relativeGeometry": { "x": 0, "y": 0.6, "width": 0.5, "height": 0.4 }
+        },
+        {
+            "id": "{zone-bsp-4}",
+            "name": "Bottom Right",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0.5, "y": 0.4, "width": 0.5, "height": 0.6 }
+        }
+    ]
+}
