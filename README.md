@@ -84,11 +84,14 @@ systemctl --user enable --now plasmazones.service
 ## Getting Started
 
 1. Enable the daemon: `systemctl --user enable --now plasmazones.service`
-2. Run `plasmazones-editor`
-3. Create a new layout or pick a template
-4. Drag on the canvas to draw zones
-5. Save with Ctrl+S
-6. Drag any window while holding Shift to snap it
+2. Enable the KWin effect: System Settings > Desktop Effects > PlasmaZones
+3. Run `plasmazones-editor`
+4. Create a new layout or pick a template
+5. Drag on the canvas to draw zones
+6. Save with Ctrl+S
+7. Drag any window while holding Shift to snap it
+
+The KWin effect detects modifier keys during window dragging. Without it, you can set the activation modifier to "Always" in settings as a workaround.
 
 ## Keyboard Shortcuts
 
