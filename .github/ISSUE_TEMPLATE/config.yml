@@ -3,8 +3,8 @@ contact_links:
   - name: Bug Reports
     url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=bug-reports
     about: Report a bug or unexpected behavior
-  - name: Feature Requests
-    url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=feature-requests
+  - name: Ideas
+    url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=ideas
     about: Suggest a new feature or improvement
   - name: Questions
     url: https://github.com/fuddlesworth/PlasmaZones/discussions/new?category=q-a
