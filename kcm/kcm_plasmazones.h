@@ -9,8 +9,10 @@
 #include <QMap>
 #include <QSet>
 #include <QDBusMessage>
+#include <functional>
 
 class QTimer;
+class QProcess;
 
 namespace PlasmaZones {
 
@@ -19,7 +21,7 @@ namespace PlasmaZones {
  */
 namespace KCMConstants {
 constexpr int DaemonStatusPollIntervalMs = 2000;
-constexpr const char* AutostartDesktopFilename = "org.plasmazones.daemon.desktop";
+constexpr const char* SystemdServiceName = "plasmazones.service";
 }
 
 class Settings;
@@ -397,8 +399,12 @@ private Q_SLOTS:
 
 private:
     void notifyDaemon();
-    bool isDaemonAutostart() const;
+    void refreshDaemonEnabledState(); // Async refresh of systemd enabled state
     void setDaemonAutostart(bool enabled);
+
+    // Async systemctl helper - runs command and calls callback with (success, output)
+    using SystemctlCallback = std::function<void(bool success, const QString& output)>;
+    void runSystemctl(const QStringList& args, SystemctlCallback callback = nullptr);
 
     // D-Bus helper for calls with timeout and error handling
     // Returns the reply message; check reply.type() == QDBusMessage::ErrorMessage for errors

@@ -432,6 +432,9 @@ void Daemon::start()
 
     m_running = true;
     Q_EMIT started();
+
+    // Signal that daemon is fully initialized and ready for queries
+    Q_EMIT m_layoutAdaptor->daemonReady();
 }
 
 void Daemon::stop()

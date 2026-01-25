@@ -83,6 +83,12 @@ public Q_SLOTS:
     QVariantMap getAllQuickLayoutSlots();
 
 Q_SIGNALS:
+    /**
+     * @brief Emitted when the daemon has fully initialized and is ready
+     * @note KCM should wait for this signal before querying layouts
+     */
+    void daemonReady();
+
     void layoutChanged(const QString& layoutJson);
     void layoutListChanged();
     void screenLayoutChanged(const QString& screenName, const QString& layoutId);

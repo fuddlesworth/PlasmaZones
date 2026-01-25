@@ -218,18 +218,12 @@ if(ENABLE_PCH)
     )
 endif()
 
-# Autostart desktop file (only when INSTALL_DAEMON_AUTOSTART=ON; set OFF for user-local installs)
-if(INSTALL_DAEMON_AUTOSTART)
-    install(FILES
-        daemon/org.plasmazones.daemon.desktop
-        DESTINATION ${KDE_INSTALL_AUTOSTARTDIR}
-    )
-endif()
-
-# Also install to applications dir for portal discovery
+# Systemd user service (preferred over autostart for proper session ordering)
+# This ensures PlasmaZones starts AFTER plasma-workspace.target, avoiding
+# race conditions with KDE's session restore
 install(FILES
-    daemon/org.plasmazones.daemon.desktop
-    DESTINATION ${KDE_INSTALL_APPDIR}
+    daemon/plasmazones.service
+    DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
 
 # Install KConfig settings file

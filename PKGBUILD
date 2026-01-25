@@ -33,6 +33,7 @@ provides=('plasmazones')
 conflicts=('plasmazones')
 source=("${pkgname}::git+${url}.git")
 sha256sums=('SKIP')
+install=plasmazones.install
 
 pkgver() {
     cd "$pkgname"
@@ -44,7 +45,6 @@ build() {
     cmake -B build -S "$pkgname" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
-        -DINSTALL_DAEMON_AUTOSTART=ON \
         -DBUILD_TESTING=OFF \
         -Wno-dev
     cmake --build build --parallel

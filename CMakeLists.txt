@@ -108,10 +108,10 @@ else()
     message(STATUS "LayerShellQt not found - overlay support will be limited")
 endif()
 
-# Install daemon .desktop to session autostart (share/autostart).
-# Set to OFF for user-local installs (e.g. -DCMAKE_INSTALL_PREFIX=$HOME/.local)
-# so the daemon does not autostart until enabled in System Settings.
-option(INSTALL_DAEMON_AUTOSTART "Install daemon .desktop to session autostart" ON)
+# Systemd user unit directory (fallback if not provided by ECM)
+if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)
+    set(KDE_INSTALL_SYSTEMDUSERUNITDIR "lib/systemd/user")
+endif()
 
 # ---------------------------------------------------------------------------
 # Code formatting (clang-format for C++, qmlformat for QML)

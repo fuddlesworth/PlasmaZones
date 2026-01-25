@@ -26,7 +26,6 @@
 #include <QDBusConnectionInterface>
 #include <QDBusReply>
 #include <QJsonDocument>
-#include <csignal>
 #include <QJsonObject>
 #include <QSet>
 #include <QtGui/QtGui> // For Qt::KeyboardModifier flags
@@ -53,9 +52,10 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     connect(m_daemonCheckTimer, &QTimer::timeout, this, &KCMPlasmaZones::checkDaemonStatus);
     m_daemonCheckTimer->start();
 
-    // Load daemon enabled state from autostart file
-    m_daemonEnabled = isDaemonAutostart();
+    // Load daemon enabled state from systemd (async)
     m_lastDaemonState = isDaemonRunning();
+    m_daemonEnabled = m_lastDaemonState; // Assume enabled if running, will be corrected async
+    refreshDaemonEnabledState();
 
     // Listen for layout changes from the daemon
     // When layouts are edited and saved, the daemon emits layoutListChanged
@@ -67,6 +67,11 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     // Also listen for individual layout changes (when a specific layout is updated)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
+                                          this, SLOT(loadLayouts()));
+
+    // Listen for daemon ready signal (emitted when daemon finishes initialization)
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager), QStringLiteral("daemonReady"),
                                           this, SLOT(loadLayouts()));
 
     // Listen for active layout ID changes (e.g., when layout changes via hotkey)
@@ -1411,7 +1416,7 @@ void KCMPlasmaZones::setDaemonEnabled(bool enabled)
     }
     m_daemonEnabled = enabled;
 
-    // Update autostart file
+    // Update systemd service enabled state
     setDaemonAutostart(enabled);
 
     // Start or stop daemon immediately
@@ -1424,14 +1429,32 @@ void KCMPlasmaZones::setDaemonEnabled(bool enabled)
     Q_EMIT daemonEnabledChanged();
 }
 
+void KCMPlasmaZones::runSystemctl(const QStringList& args, SystemctlCallback callback)
+{
+    auto* proc = new QProcess(this);
+    connect(proc, &QProcess::finished, this, [proc, callback, args](int exitCode, QProcess::ExitStatus status) {
+        bool success = (status == QProcess::NormalExit && exitCode == 0);
+        QString output = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        if (!success) {
+            QString errorOutput = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+            qCWarning(lcKcm) << "systemctl" << args << "failed:" << errorOutput;
+        }
+        if (callback) {
+            callback(success, output);
+        }
+        proc->deleteLater();
+    });
+    proc->start(QStringLiteral("systemctl"), args);
+}
+
 void KCMPlasmaZones::startDaemon()
 {
     if (isDaemonRunning()) {
         return;
     }
-    if (!QProcess::startDetached(QStringLiteral("plasmazonesd"), {})) {
-        qCWarning(lcKcm) << "Failed to start plasmazonesd daemon";
-    }
+    runSystemctl({QStringLiteral("--user"), QStringLiteral("start"),
+                  QLatin1String(KCMConstants::SystemdServiceName)});
+    // Layouts will be loaded when daemonReady D-Bus signal is received
 }
 
 void KCMPlasmaZones::stopDaemon()
@@ -1439,51 +1462,34 @@ void KCMPlasmaZones::stopDaemon()
     if (!isDaemonRunning()) {
         return;
     }
-    // Get daemon PID via D-Bus and send SIGTERM for clean shutdown
-    // The daemon handles SIGTERM gracefully (see daemon/main.cpp)
-    QDBusConnectionInterface* iface = QDBusConnection::sessionBus().interface();
-    if (iface) {
-        QDBusReply<uint> reply = iface->servicePid(QString(DBus::ServiceName));
-        if (reply.isValid() && reply.value() > 0) {
-            kill(static_cast<pid_t>(reply.value()), SIGTERM);
-        }
-    }
+    runSystemctl({QStringLiteral("--user"), QStringLiteral("stop"),
+                  QLatin1String(KCMConstants::SystemdServiceName)});
 }
 
-bool KCMPlasmaZones::isDaemonAutostart() const
+void KCMPlasmaZones::refreshDaemonEnabledState()
 {
-    QString autostartPath = QStandardPaths::writableLocation(QStandardPaths::ConfigLocation)
-        + QStringLiteral("/autostart/") + QLatin1String(KCMConstants::AutostartDesktopFilename);
-    QFile file(autostartPath);
-    if (!file.exists()) {
-        // If no override file, check if system autostart exists (enabled by default)
-        return true;
-    }
-    KConfig config(autostartPath, KConfig::SimpleConfig);
-    return !config.group(QStringLiteral("Desktop Entry")).readEntry("Hidden", false);
+    runSystemctl({QStringLiteral("--user"), QStringLiteral("is-enabled"),
+                  QLatin1String(KCMConstants::SystemdServiceName)},
+                 [this](bool /*success*/, const QString& output) {
+                     bool enabled = (output == QLatin1String("enabled"));
+                     if (m_daemonEnabled != enabled) {
+                         m_daemonEnabled = enabled;
+                         Q_EMIT daemonEnabledChanged();
+                     }
+                 });
 }
 
 void KCMPlasmaZones::setDaemonAutostart(bool enabled)
 {
-    QString autostartDir =
-        QStandardPaths::writableLocation(QStandardPaths::ConfigLocation) + QStringLiteral("/autostart");
-    QDir().mkpath(autostartDir);
-
-    QString autostartPath = autostartDir + QStringLiteral("/") + QLatin1String(KCMConstants::AutostartDesktopFilename);
-
-    // Create or modify the autostart file
-    KConfig config(autostartPath, KConfig::SimpleConfig);
-    KConfigGroup group = config.group(QStringLiteral("Desktop Entry"));
-
-    // Ensure basic entries exist
-    group.writeEntry("Type", "Application");
-    group.writeEntry("Name", "PlasmaZones Daemon");
-    group.writeEntry("Exec", "plasmazonesd");
-    group.writeEntry("X-DBUS-ServiceName", "org.plasmazones");
-    group.writeEntry("X-KDE-autostart-phase", 2);
-    group.writeEntry("NoDisplay", true);
-    group.writeEntry("Hidden", !enabled); // Hidden=true means disabled
-    config.sync();
+    QString action = enabled ? QStringLiteral("enable") : QStringLiteral("disable");
+    runSystemctl({QStringLiteral("--user"), action,
+                  QLatin1String(KCMConstants::SystemdServiceName)},
+                 [this](bool success, const QString& /*output*/) {
+                     if (success) {
+                         // Refresh the enabled state to confirm the change
+                         refreshDaemonEnabledState();
+                     }
+                 });
 }
 
 void KCMPlasmaZones::checkDaemonStatus()
@@ -1492,12 +1498,14 @@ void KCMPlasmaZones::checkDaemonStatus()
     if (currentState != m_lastDaemonState) {
         m_lastDaemonState = currentState;
         Q_EMIT daemonRunningChanged();
+
+        // Note: When daemon starts, we rely on the daemonReady D-Bus signal
+        // to trigger loadLayouts(). No polling needed here.
     }
 }
 
 void KCMPlasmaZones::loadLayouts()
 {
-    // Create a new list to ensure QML detects the change
     QVariantList newLayouts;
 
     // Load from daemon via D-Bus
@@ -1513,215 +1521,13 @@ void KCMPlasmaZones::loadLayouts()
         }
     }
 
-    // Fallback: if daemon not running, show placeholder built-in layouts with zones for preview
-    // LayoutType enum: Custom=0, Grid=1, Columns=2, Rows=3, PriorityGrid=4, Focus=5
-    if (newLayouts.isEmpty()) {
-        // Columns (2) layout
-        QVariantMap layout1;
-        layout1[QStringLiteral("id")] = QStringLiteral("builtin-columns-2");
-        layout1[QStringLiteral("name")] = QStringLiteral("Columns (2)");
-        layout1[QStringLiteral("zoneCount")] = 2;
-        layout1[QStringLiteral("isSystem")] = true;
-        layout1[QStringLiteral("type")] = 2; // Columns
+    // No fallback layouts - if daemon isn't running, show empty list
+    // The QML UI should handle this gracefully with a message like "Enable daemon to see layouts"
 
-        // Add zone preview data
-        QVariantList zones1;
-        QVariantMap zone1a;
-        QVariantMap geo1a;
-        geo1a[QStringLiteral("x")] = 0.0;
-        geo1a[QStringLiteral("y")] = 0.0;
-        geo1a[QStringLiteral("width")] = 0.5;
-        geo1a[QStringLiteral("height")] = 1.0;
-        zone1a[QStringLiteral("relativeGeometry")] = geo1a;
-        zones1.append(zone1a);
-        QVariantMap zone1b;
-        QVariantMap geo1b;
-        geo1b[QStringLiteral("x")] = 0.5;
-        geo1b[QStringLiteral("y")] = 0.0;
-        geo1b[QStringLiteral("width")] = 0.5;
-        geo1b[QStringLiteral("height")] = 1.0;
-        zone1b[QStringLiteral("relativeGeometry")] = geo1b;
-        zones1.append(zone1b);
-        layout1[QStringLiteral("zones")] = zones1;
-        newLayouts.append(layout1);
-
-        // Columns (3) layout
-        QVariantMap layout2;
-        layout2[QStringLiteral("id")] = QStringLiteral("builtin-columns-3");
-        layout2[QStringLiteral("name")] = QStringLiteral("Columns (3)");
-        layout2[QStringLiteral("zoneCount")] = 3;
-        layout2[QStringLiteral("isSystem")] = true;
-        layout2[QStringLiteral("type")] = 2; // Columns
-        QVariantList zones2;
-        QVariantMap zone2a;
-        QVariantMap geo2a;
-        geo2a[QStringLiteral("x")] = 0.0;
-        geo2a[QStringLiteral("y")] = 0.0;
-        geo2a[QStringLiteral("width")] = 0.333;
-        geo2a[QStringLiteral("height")] = 1.0;
-        zone2a[QStringLiteral("relativeGeometry")] = geo2a;
-        zones2.append(zone2a);
-        QVariantMap zone2b;
-        QVariantMap geo2b;
-        geo2b[QStringLiteral("x")] = 0.333;
-        geo2b[QStringLiteral("y")] = 0.0;
-        geo2b[QStringLiteral("width")] = 0.333;
-        geo2b[QStringLiteral("height")] = 1.0;
-        zone2b[QStringLiteral("relativeGeometry")] = geo2b;
-        zones2.append(zone2b);
-        QVariantMap zone2c;
-        QVariantMap geo2c;
-        geo2c[QStringLiteral("x")] = 0.666;
-        geo2c[QStringLiteral("y")] = 0.0;
-        geo2c[QStringLiteral("width")] = 0.334;
-        geo2c[QStringLiteral("height")] = 1.0;
-        zone2c[QStringLiteral("relativeGeometry")] = geo2c;
-        zones2.append(zone2c);
-        layout2[QStringLiteral("zones")] = zones2;
-        newLayouts.append(layout2);
-
-        // Grid (2x2) layout
-        QVariantMap layout3;
-        layout3[QStringLiteral("id")] = QStringLiteral("builtin-grid-2x2");
-        layout3[QStringLiteral("name")] = QStringLiteral("Grid (2x2)");
-        layout3[QStringLiteral("zoneCount")] = 4;
-        layout3[QStringLiteral("isSystem")] = true;
-        layout3[QStringLiteral("type")] = 1; // Grid
-        QVariantList zones3;
-        QVariantMap zone3a;
-        QVariantMap geo3a;
-        geo3a[QStringLiteral("x")] = 0.0;
-        geo3a[QStringLiteral("y")] = 0.0;
-        geo3a[QStringLiteral("width")] = 0.5;
-        geo3a[QStringLiteral("height")] = 0.5;
-        zone3a[QStringLiteral("relativeGeometry")] = geo3a;
-        zones3.append(zone3a);
-        QVariantMap zone3b;
-        QVariantMap geo3b;
-        geo3b[QStringLiteral("x")] = 0.5;
-        geo3b[QStringLiteral("y")] = 0.0;
-        geo3b[QStringLiteral("width")] = 0.5;
-        geo3b[QStringLiteral("height")] = 0.5;
-        zone3b[QStringLiteral("relativeGeometry")] = geo3b;
-        zones3.append(zone3b);
-        QVariantMap zone3c;
-        QVariantMap geo3c;
-        geo3c[QStringLiteral("x")] = 0.0;
-        geo3c[QStringLiteral("y")] = 0.5;
-        geo3c[QStringLiteral("width")] = 0.5;
-        geo3c[QStringLiteral("height")] = 0.5;
-        zone3c[QStringLiteral("relativeGeometry")] = geo3c;
-        zones3.append(zone3c);
-        QVariantMap zone3d;
-        QVariantMap geo3d;
-        geo3d[QStringLiteral("x")] = 0.5;
-        geo3d[QStringLiteral("y")] = 0.5;
-        geo3d[QStringLiteral("width")] = 0.5;
-        geo3d[QStringLiteral("height")] = 0.5;
-        zone3d[QStringLiteral("relativeGeometry")] = geo3d;
-        zones3.append(zone3d);
-        layout3[QStringLiteral("zones")] = zones3;
-        newLayouts.append(layout3);
-
-        // Grid (3x2) layout
-        QVariantMap layout4;
-        layout4[QStringLiteral("id")] = QStringLiteral("builtin-grid-3x2");
-        layout4[QStringLiteral("name")] = QStringLiteral("Grid (3x2)");
-        layout4[QStringLiteral("zoneCount")] = 6;
-        layout4[QStringLiteral("isSystem")] = true;
-        layout4[QStringLiteral("type")] = 1; // Grid
-        QVariantList zones4;
-        for (int i = 0; i < 6; ++i) {
-            QVariantMap zone;
-            QVariantMap geo;
-            geo[QStringLiteral("x")] = (i % 3) * 0.333;
-            geo[QStringLiteral("y")] = (i / 3) * 0.5;
-            geo[QStringLiteral("width")] = 0.333;
-            geo[QStringLiteral("height")] = 0.5;
-            zone[QStringLiteral("relativeGeometry")] = geo;
-            zones4.append(zone);
-        }
-        layout4[QStringLiteral("zones")] = zones4;
-        newLayouts.append(layout4);
-
-        // Priority Grid layout
-        QVariantMap layout5;
-        layout5[QStringLiteral("id")] = QStringLiteral("builtin-priority");
-        layout5[QStringLiteral("name")] = QStringLiteral("Priority Grid");
-        layout5[QStringLiteral("zoneCount")] = 3;
-        layout5[QStringLiteral("isSystem")] = true;
-        layout5[QStringLiteral("type")] = 4; // PriorityGrid
-        QVariantList zones5;
-        QVariantMap zone5a;
-        QVariantMap geo5a;
-        geo5a[QStringLiteral("x")] = 0.0;
-        geo5a[QStringLiteral("y")] = 0.0;
-        geo5a[QStringLiteral("width")] = 0.67;
-        geo5a[QStringLiteral("height")] = 1.0;
-        zone5a[QStringLiteral("relativeGeometry")] = geo5a;
-        zones5.append(zone5a);
-        QVariantMap zone5b;
-        QVariantMap geo5b;
-        geo5b[QStringLiteral("x")] = 0.67;
-        geo5b[QStringLiteral("y")] = 0.0;
-        geo5b[QStringLiteral("width")] = 0.33;
-        geo5b[QStringLiteral("height")] = 0.5;
-        zone5b[QStringLiteral("relativeGeometry")] = geo5b;
-        zones5.append(zone5b);
-        QVariantMap zone5c;
-        QVariantMap geo5c;
-        geo5c[QStringLiteral("x")] = 0.67;
-        geo5c[QStringLiteral("y")] = 0.5;
-        geo5c[QStringLiteral("width")] = 0.33;
-        geo5c[QStringLiteral("height")] = 0.5;
-        zone5c[QStringLiteral("relativeGeometry")] = geo5c;
-        zones5.append(zone5c);
-        layout5[QStringLiteral("zones")] = zones5;
-        newLayouts.append(layout5);
-
-        // Focus layout
-        QVariantMap layout6;
-        layout6[QStringLiteral("id")] = QStringLiteral("builtin-focus");
-        layout6[QStringLiteral("name")] = QStringLiteral("Focus");
-        layout6[QStringLiteral("zoneCount")] = 3;
-        layout6[QStringLiteral("isSystem")] = true;
-        layout6[QStringLiteral("type")] = 5; // Focus
-        QVariantList zones6;
-        QVariantMap zone6a;
-        QVariantMap geo6a;
-        geo6a[QStringLiteral("x")] = 0.0;
-        geo6a[QStringLiteral("y")] = 0.0;
-        geo6a[QStringLiteral("width")] = 0.15;
-        geo6a[QStringLiteral("height")] = 1.0;
-        zone6a[QStringLiteral("relativeGeometry")] = geo6a;
-        zones6.append(zone6a);
-        QVariantMap zone6b;
-        QVariantMap geo6b;
-        geo6b[QStringLiteral("x")] = 0.15;
-        geo6b[QStringLiteral("y")] = 0.0;
-        geo6b[QStringLiteral("width")] = 0.70;
-        geo6b[QStringLiteral("height")] = 1.0;
-        zone6b[QStringLiteral("relativeGeometry")] = geo6b;
-        zones6.append(zone6b);
-        QVariantMap zone6c;
-        QVariantMap geo6c;
-        geo6c[QStringLiteral("x")] = 0.85;
-        geo6c[QStringLiteral("y")] = 0.0;
-        geo6c[QStringLiteral("width")] = 0.15;
-        geo6c[QStringLiteral("height")] = 1.0;
-        zone6c[QStringLiteral("relativeGeometry")] = geo6c;
-        zones6.append(zone6c);
-        layout6[QStringLiteral("zones")] = zones6;
-        newLayouts.append(layout6);
-    }
-
-    // Always update to ensure QML detects changes
-    // QVariantList comparison might not work correctly for deep comparison
     m_layouts = newLayouts;
-
     Q_EMIT layoutsChanged();
 
-    // Always fetch the active layout from the daemon on load
+    // Fetch the active layout from the daemon
     if (!newLayouts.isEmpty()) {
         QDBusMessage activeReply =
             callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getActiveLayout"));
@@ -1742,8 +1548,6 @@ void KCMPlasmaZones::loadLayouts()
     // Emit layoutToSelectChanged after layoutsChanged so the model is updated first
     if (!m_layoutToSelect.isEmpty()) {
         Q_EMIT layoutToSelectChanged();
-        // Clear the selection target after emitting (QML will handle the selection)
-        // We keep it until next operation to allow retry if needed
     }
 }
 

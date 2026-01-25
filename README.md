@@ -62,26 +62,33 @@ cmake --build . -j$(nproc)
 sudo cmake --install .
 ```
 
+After installing, enable the daemon:
+
+```bash
+systemctl --user enable --now plasmazones.service
+```
+
 For a local install without root:
 
 ```bash
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=$HOME/.local \
-    -DINSTALL_DAEMON_AUTOSTART=OFF
+    -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build . -j$(nproc)
 cmake --install .
-```
 
-The `INSTALL_DAEMON_AUTOSTART=OFF` flag prevents the daemon from starting automatically at login - you'll enable it manually in System Settings > PlasmaZones when you're ready.
+# Enable the service
+systemctl --user enable --now plasmazones.service
+```
 
 ## Getting Started
 
-1. Run `plasmazones-editor`
-2. Create a new layout or pick a template
-3. Drag on the canvas to draw zones
-4. Save with Ctrl+S
-5. Drag any window while holding Shift to snap it
+1. Enable the daemon: `systemctl --user enable --now plasmazones.service`
+2. Run `plasmazones-editor`
+3. Create a new layout or pick a template
+4. Drag on the canvas to draw zones
+5. Save with Ctrl+S
+6. Drag any window while holding Shift to snap it
 
 ## Keyboard Shortcuts
 

@@ -1,0 +1,15 @@
+[Unit]
+Description=PlasmaZones Window Snapping Daemon
+Documentation=https://github.com/fuddlesworth/PlasmaZones
+PartOf=graphical-session.target
+After=plasma-workspace.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/plasmazonesd
+Restart=on-failure
+RestartSec=5
+Slice=session.slice
+
+[Install]
+WantedBy=plasma-workspace.target

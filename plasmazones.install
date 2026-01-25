@@ -1,0 +1,30 @@
+post_install() {
+    echo ""
+    echo "==> PlasmaZones installed successfully!"
+    echo ""
+    echo "    To enable the daemon at login, run:"
+    echo "        systemctl --user enable plasmazones.service"
+    echo ""
+    echo "    To start it now without logging out:"
+    echo "        systemctl --user start plasmazones.service"
+    echo ""
+    echo "    Or enable via System Settings > Window Management > PlasmaZones"
+    echo ""
+}
+
+post_upgrade() {
+    echo ""
+    echo "==> PlasmaZones upgraded!"
+    echo ""
+    echo "    If the daemon was running, restart it with:"
+    echo "        systemctl --user restart plasmazones.service"
+    echo ""
+}
+
+post_remove() {
+    echo ""
+    echo "==> Stopping and disabling PlasmaZones daemon..."
+    systemctl --user stop plasmazones.service 2>/dev/null || true
+    systemctl --user disable plasmazones.service 2>/dev/null || true
+    echo ""
+}
