@@ -35,6 +35,30 @@ constexpr int TexCoordAttrib = 1;
 // UBO binding point
 constexpr GLuint UBOBindingPoint = 0;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Uniform Slot Mapping Constants
+// ═══════════════════════════════════════════════════════════════════════════════
+// These constants define the mapping between customParams member variables
+// (m_customParams1-4) and the uniform buffer array indices.
+//
+// Layout: customParams[vecIndex][componentIndex]
+// - m_customParams1 → customParams[0] (slots 0-3:  x=0, y=1, z=2, w=3)
+// - m_customParams2 → customParams[1] (slots 4-7:  x=4, y=5, z=6, w=7)
+// - m_customParams3 → customParams[2] (slots 8-11: x=8, y=9, z=10, w=11)
+// - m_customParams4 → customParams[3] (slots 12-15: x=12, y=13, z=14, w=15)
+//
+// Same mapping applies to customColors[0-3] ↔ m_customColor1-4
+constexpr int UniformVecIndex1 = 0;
+constexpr int UniformVecIndex2 = 1;
+constexpr int UniformVecIndex3 = 2;
+constexpr int UniformVecIndex4 = 3;
+
+// Component indices within each vec4
+constexpr int ComponentX = 0;
+constexpr int ComponentY = 1;
+constexpr int ComponentZ = 2;
+constexpr int ComponentW = 3;
+
 } // anonymous namespace
 
 // =============================================================================
@@ -66,7 +90,15 @@ ZoneShaderNode::ZoneShaderNode(QQuickItem* item)
 
 ZoneShaderNode::~ZoneShaderNode()
 {
-    // Safety cleanup: if releaseResources() wasn't called by Qt, try to clean up here
+    // Safety cleanup: if releaseResources() wasn't called by Qt, try to clean up here.
+    //
+    // Qt Limitation Note: The scene graph should call releaseResources() before destroying
+    // the node, but this may not happen in all cases (e.g., context loss, application exit,
+    // or exceptions during teardown). When no GL context is available, OpenGL resources
+    // will leak. This is a known Qt limitation - QOpenGLContext::aboutToBeDestroyed could
+    // be used for cleanup scheduling, but would require significant architectural changes.
+    // In practice, this warning indicates an edge case during shutdown and the leak is
+    // typically reclaimed by the OS when the process exits.
     if (m_initialized) {
         qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderNode destroyed with active GL resources - "
                                << "attempting cleanup";
@@ -631,46 +663,47 @@ void ZoneShaderNode::syncUniformsFromData()
     m_uniforms.highlightedCount = highlightedCount;
 
     // Update custom parameters (4 vec4s, slots 0-15)
-    m_uniforms.customParams[0][0] = m_customParams1.x();
-    m_uniforms.customParams[0][1] = m_customParams1.y();
-    m_uniforms.customParams[0][2] = m_customParams1.z();
-    m_uniforms.customParams[0][3] = m_customParams1.w();
+    // See Uniform Slot Mapping Constants above for layout documentation
+    m_uniforms.customParams[UniformVecIndex1][ComponentX] = m_customParams1.x();
+    m_uniforms.customParams[UniformVecIndex1][ComponentY] = m_customParams1.y();
+    m_uniforms.customParams[UniformVecIndex1][ComponentZ] = m_customParams1.z();
+    m_uniforms.customParams[UniformVecIndex1][ComponentW] = m_customParams1.w();
 
-    m_uniforms.customParams[1][0] = m_customParams2.x();
-    m_uniforms.customParams[1][1] = m_customParams2.y();
-    m_uniforms.customParams[1][2] = m_customParams2.z();
-    m_uniforms.customParams[1][3] = m_customParams2.w();
+    m_uniforms.customParams[UniformVecIndex2][ComponentX] = m_customParams2.x();
+    m_uniforms.customParams[UniformVecIndex2][ComponentY] = m_customParams2.y();
+    m_uniforms.customParams[UniformVecIndex2][ComponentZ] = m_customParams2.z();
+    m_uniforms.customParams[UniformVecIndex2][ComponentW] = m_customParams2.w();
 
-    m_uniforms.customParams[2][0] = m_customParams3.x();
-    m_uniforms.customParams[2][1] = m_customParams3.y();
-    m_uniforms.customParams[2][2] = m_customParams3.z();
-    m_uniforms.customParams[2][3] = m_customParams3.w();
+    m_uniforms.customParams[UniformVecIndex3][ComponentX] = m_customParams3.x();
+    m_uniforms.customParams[UniformVecIndex3][ComponentY] = m_customParams3.y();
+    m_uniforms.customParams[UniformVecIndex3][ComponentZ] = m_customParams3.z();
+    m_uniforms.customParams[UniformVecIndex3][ComponentW] = m_customParams3.w();
 
-    m_uniforms.customParams[3][0] = m_customParams4.x();
-    m_uniforms.customParams[3][1] = m_customParams4.y();
-    m_uniforms.customParams[3][2] = m_customParams4.z();
-    m_uniforms.customParams[3][3] = m_customParams4.w();
+    m_uniforms.customParams[UniformVecIndex4][ComponentX] = m_customParams4.x();
+    m_uniforms.customParams[UniformVecIndex4][ComponentY] = m_customParams4.y();
+    m_uniforms.customParams[UniformVecIndex4][ComponentZ] = m_customParams4.z();
+    m_uniforms.customParams[UniformVecIndex4][ComponentW] = m_customParams4.w();
 
     // Update custom colors (4 color slots)
-    m_uniforms.customColors[0][0] = static_cast<float>(m_customColor1.redF());
-    m_uniforms.customColors[0][1] = static_cast<float>(m_customColor1.greenF());
-    m_uniforms.customColors[0][2] = static_cast<float>(m_customColor1.blueF());
-    m_uniforms.customColors[0][3] = static_cast<float>(m_customColor1.alphaF());
+    m_uniforms.customColors[UniformVecIndex1][ComponentX] = static_cast<float>(m_customColor1.redF());
+    m_uniforms.customColors[UniformVecIndex1][ComponentY] = static_cast<float>(m_customColor1.greenF());
+    m_uniforms.customColors[UniformVecIndex1][ComponentZ] = static_cast<float>(m_customColor1.blueF());
+    m_uniforms.customColors[UniformVecIndex1][ComponentW] = static_cast<float>(m_customColor1.alphaF());
 
-    m_uniforms.customColors[1][0] = static_cast<float>(m_customColor2.redF());
-    m_uniforms.customColors[1][1] = static_cast<float>(m_customColor2.greenF());
-    m_uniforms.customColors[1][2] = static_cast<float>(m_customColor2.blueF());
-    m_uniforms.customColors[1][3] = static_cast<float>(m_customColor2.alphaF());
+    m_uniforms.customColors[UniformVecIndex2][ComponentX] = static_cast<float>(m_customColor2.redF());
+    m_uniforms.customColors[UniformVecIndex2][ComponentY] = static_cast<float>(m_customColor2.greenF());
+    m_uniforms.customColors[UniformVecIndex2][ComponentZ] = static_cast<float>(m_customColor2.blueF());
+    m_uniforms.customColors[UniformVecIndex2][ComponentW] = static_cast<float>(m_customColor2.alphaF());
 
-    m_uniforms.customColors[2][0] = static_cast<float>(m_customColor3.redF());
-    m_uniforms.customColors[2][1] = static_cast<float>(m_customColor3.greenF());
-    m_uniforms.customColors[2][2] = static_cast<float>(m_customColor3.blueF());
-    m_uniforms.customColors[2][3] = static_cast<float>(m_customColor3.alphaF());
+    m_uniforms.customColors[UniformVecIndex3][ComponentX] = static_cast<float>(m_customColor3.redF());
+    m_uniforms.customColors[UniformVecIndex3][ComponentY] = static_cast<float>(m_customColor3.greenF());
+    m_uniforms.customColors[UniformVecIndex3][ComponentZ] = static_cast<float>(m_customColor3.blueF());
+    m_uniforms.customColors[UniformVecIndex3][ComponentW] = static_cast<float>(m_customColor3.alphaF());
 
-    m_uniforms.customColors[3][0] = static_cast<float>(m_customColor4.redF());
-    m_uniforms.customColors[3][1] = static_cast<float>(m_customColor4.greenF());
-    m_uniforms.customColors[3][2] = static_cast<float>(m_customColor4.blueF());
-    m_uniforms.customColors[3][3] = static_cast<float>(m_customColor4.alphaF());
+    m_uniforms.customColors[UniformVecIndex4][ComponentX] = static_cast<float>(m_customColor4.redF());
+    m_uniforms.customColors[UniformVecIndex4][ComponentY] = static_cast<float>(m_customColor4.greenF());
+    m_uniforms.customColors[UniformVecIndex4][ComponentZ] = static_cast<float>(m_customColor4.blueF());
+    m_uniforms.customColors[UniformVecIndex4][ComponentW] = static_cast<float>(m_customColor4.alphaF());
 
     // Update zone data arrays
     for (int i = 0; i < MaxZones; ++i) {

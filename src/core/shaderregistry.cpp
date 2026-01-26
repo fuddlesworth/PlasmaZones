@@ -74,6 +74,10 @@ ShaderRegistry *ShaderRegistry::s_instance = nullptr;
 ShaderRegistry::ShaderRegistry(QObject *parent)
     : QObject(parent)
 {
+    // Thread safety note: This singleton is created early during Daemon::init() on the main
+    // thread, before any other threads access ShaderRegistry::instance(). All subsequent
+    // access is from the main thread (Qt GUI thread). If multi-threaded access is ever
+    // needed, add std::call_once or mutex protection around s_instance assignment.
     s_instance = this;
 
 #ifdef PLASMAZONES_SHADERS_ENABLED

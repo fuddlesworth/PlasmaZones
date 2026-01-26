@@ -55,10 +55,25 @@
 
 namespace PlasmaZones {
 
-// Helper to recursively convert D-Bus arguments to plain QVariant types
-// D-Bus returns nested structures (maps/lists) as QDBusArgument objects which
-// are read-only after extraction. We must convert them to plain Qt types to
-// avoid "write from a read-only object" errors when QML accesses the data.
+/**
+ * @brief Recursively convert D-Bus arguments to plain QVariant types
+ *
+ * D-Bus returns nested structures (maps/lists) as QDBusArgument objects which
+ * are read-only after extraction. We must convert them to plain Qt types to
+ * avoid "write from a read-only object" errors when QML accesses the data.
+ *
+ * Why manual conversion instead of qdbus_cast<>():
+ * - QDBusReply<QVariantList>::value() returns a QVariantList where nested
+ *   maps/lists are still wrapped in QDBusArgument
+ * - Qt's automatic type conversion only handles top-level types
+ * - Shader parameter lists contain nested QVariantMaps (each parameter's
+ *   metadata), which remain as QDBusArgument after initial extraction
+ * - qdbus_cast<>() would require registering every nested structure type
+ *   with the Qt meta-type system, which is impractical for dynamic data
+ *
+ * This function handles the recursive unwrapping that Qt doesn't provide
+ * automatically for nested heterogeneous structures.
+ */
 static QVariant convertDbusArgument(const QVariant& value)
 {
     // Handle QDBusArgument wrapper - extract to plain types first
