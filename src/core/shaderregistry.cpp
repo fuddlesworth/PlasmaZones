@@ -22,14 +22,7 @@
 namespace PlasmaZones {
 
 // Namespace UUID for generating deterministic shader IDs (UUID v5)
-// This ensures shader names always map to the same UUID
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
-
-// "No shader" is represented by empty string, not a special UUID.
-// This is simpler to check (isEmpty()) and matches Qt's convention for optional values.
-// The NoneShaderUuid is kept for backward compatibility with existing layouts
-// that may have stored the null UUID, and is checked in isNoneShader().
-static const QString NoneShaderUuid = QUuid().toString(QUuid::WithBraces);
 
 // Uniform name components for slot mapping
 static const char* const UniformVecNames[] = { "customParams1", "customParams2", "customParams3", "customParams4" };
@@ -60,14 +53,11 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     return QString();
 }
 
-/**
- * @brief Convert shader name to deterministic UUID string
- * Uses UUID v5 (SHA-1 based) to generate consistent IDs from names
- */
+// Convert shader name to deterministic UUID (v5)
 static QString shaderNameToUuid(const QString &name)
 {
-    if (name.isEmpty() || name == QLatin1String("none")) {
-        return NoneShaderUuid;
+    if (name.isEmpty()) {
+        return QString();
     }
     return QUuid::createUuidV5(ShaderNamespaceUuid, name).toString(QUuid::WithBraces);
 }
@@ -123,8 +113,7 @@ QString ShaderRegistry::noneShaderUuid()
 
 bool ShaderRegistry::isNoneShader(const QString &id)
 {
-    // Empty is preferred, but we still accept old formats for existing layouts
-    return id.isEmpty() || id == QLatin1String("none") || id == NoneShaderUuid;
+    return id.isEmpty();
 }
 
 QString ShaderRegistry::systemShaderDir()

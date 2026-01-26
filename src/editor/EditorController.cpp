@@ -667,8 +667,7 @@ void EditorController::loadLayout(const QString& layoutId)
     }
 
     // Load shader settings
-    QString loadedShaderId = layoutObj[QLatin1String(JsonKeys::ShaderId)].toString();
-    m_currentShaderId = ShaderRegistry::isNoneShader(loadedShaderId) ? QString() : loadedShaderId;
+    m_currentShaderId = layoutObj[QLatin1String(JsonKeys::ShaderId)].toString();
     if (layoutObj.contains(QLatin1String(JsonKeys::ShaderParams))) {
         m_currentShaderParams = layoutObj[QLatin1String(JsonKeys::ShaderParams)].toObject().toVariantMap();
     } else {
@@ -3120,14 +3119,11 @@ QString EditorController::noneShaderUuid() const
 
 void EditorController::setCurrentShaderId(const QString& id)
 {
-    // Normalize old "none" values to empty string
-    const QString normalizedId = ShaderRegistry::isNoneShader(id) ? QString() : id;
-
-    // Validate shader ID - must be empty (no shader) or exist in available shaders
-    bool isValid = normalizedId.isEmpty();
+    // Validate: must be empty (no shader) or exist in available shaders
+    bool isValid = id.isEmpty();
     if (!isValid) {
         for (const QVariant& shader : m_availableShaders) {
-            if (shader.toMap().value(QLatin1String("id")).toString() == normalizedId) {
+            if (shader.toMap().value(QLatin1String("id")).toString() == id) {
                 isValid = true;
                 break;
             }
@@ -3135,30 +3131,26 @@ void EditorController::setCurrentShaderId(const QString& id)
     }
 
     if (!isValid) {
-        qCWarning(lcEditor) << "Invalid shader ID:" << id << "- ignoring";
+        qCWarning(lcEditor) << "Invalid shader ID:" << id;
         return;
     }
 
-    if (m_currentShaderId != normalizedId) {
-        // Create undo command
-        auto* cmd = new UpdateShaderIdCommand(this, m_currentShaderId, normalizedId);
+    if (m_currentShaderId != id) {
+        auto* cmd = new UpdateShaderIdCommand(this, m_currentShaderId, id);
         m_undoController->push(cmd);
     }
 }
 
 void EditorController::setCurrentShaderIdDirect(const QString& id)
 {
-    const QString normalizedId = ShaderRegistry::isNoneShader(id) ? QString() : id;
+    if (m_currentShaderId != id) {
+        m_currentShaderId = id;
 
-    if (m_currentShaderId != normalizedId) {
-        m_currentShaderId = normalizedId;
-
-        // Update cached shader parameters from D-Bus
-        // This is done once when shader changes, not on every QML access
-        if (normalizedId.isEmpty()) {
+        // Update cached shader parameters
+        if (id.isEmpty()) {
             m_cachedShaderParameters.clear();
         } else {
-            QVariantMap info = getShaderInfo(normalizedId);
+            QVariantMap info = getShaderInfo(id);
             m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
         }
 

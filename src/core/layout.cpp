@@ -398,8 +398,7 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
 
     // Shader support
-    QString shaderId = json[JsonKeys::ShaderId].toString();
-    layout->m_shaderId = ShaderRegistry::isNoneShader(shaderId) ? QString() : shaderId;
+    layout->m_shaderId = json[JsonKeys::ShaderId].toString();
     if (json.contains(JsonKeys::ShaderParams)) {
         layout->m_shaderParams = json[JsonKeys::ShaderParams].toObject().toVariantMap();
     }

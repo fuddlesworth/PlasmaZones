@@ -446,12 +446,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     layout->setName(obj[JsonKeys::Name].toString());
 
     // Update shader settings
-    if (obj.contains(JsonKeys::ShaderId)) {
-        QString shaderId = obj[JsonKeys::ShaderId].toString();
-        layout->setShaderId(ShaderRegistry::isNoneShader(shaderId) ? QString() : shaderId);
-    } else {
-        layout->setShaderId(QString());
-    }
+    layout->setShaderId(obj[JsonKeys::ShaderId].toString());
     if (obj.contains(JsonKeys::ShaderParams)) {
         layout->setShaderParams(obj[JsonKeys::ShaderParams].toObject().toVariantMap());
     } else {
