@@ -55,25 +55,9 @@
 
 namespace PlasmaZones {
 
-/**
- * @brief Recursively convert D-Bus arguments to plain QVariant types
- *
- * D-Bus returns nested structures (maps/lists) as QDBusArgument objects which
- * are read-only after extraction. We must convert them to plain Qt types to
- * avoid "write from a read-only object" errors when QML accesses the data.
- *
- * Why manual conversion instead of qdbus_cast<>():
- * - QDBusReply<QVariantList>::value() returns a QVariantList where nested
- *   maps/lists are still wrapped in QDBusArgument
- * - Qt's automatic type conversion only handles top-level types
- * - Shader parameter lists contain nested QVariantMaps (each parameter's
- *   metadata), which remain as QDBusArgument after initial extraction
- * - qdbus_cast<>() would require registering every nested structure type
- *   with the Qt meta-type system, which is impractical for dynamic data
- *
- * This function handles the recursive unwrapping that Qt doesn't provide
- * automatically for nested heterogeneous structures.
- */
+// D-Bus wraps nested maps/lists in QDBusArgument which is read-only.
+// QML chokes on these, so we recursively unwrap everything to plain QVariants.
+// qdbus_cast won't help here - it only handles top-level types.
 static QVariant convertDbusArgument(const QVariant& value)
 {
     // Handle QDBusArgument wrapper - extract to plain types first
@@ -583,7 +567,7 @@ void EditorController::createNewLayout()
     m_isNewLayout = true;
     m_hasUnsavedChanges = true;
 
-    // Reset shader state for new layout (empty = no shader)
+    // Reset shader state
     m_currentShaderId.clear();
     m_currentShaderParams.clear();
     m_cachedShaderParameters.clear();
@@ -682,8 +666,7 @@ void EditorController::loadLayout(const QString& layoutId)
         m_zoneManager->setZones(zones);
     }
 
-    // Load shader settings (empty = no shader effect)
-    // Legacy layouts may have "none" or null UUID - isNoneShader() handles these
+    // Load shader settings
     QString loadedShaderId = layoutObj[QLatin1String(JsonKeys::ShaderId)].toString();
     m_currentShaderId = ShaderRegistry::isNoneShader(loadedShaderId) ? QString() : loadedShaderId;
     if (layoutObj.contains(QLatin1String(JsonKeys::ShaderParams))) {
@@ -3137,8 +3120,7 @@ QString EditorController::noneShaderUuid() const
 
 void EditorController::setCurrentShaderId(const QString& id)
 {
-    // Normalize: empty string is the canonical "no shader" representation
-    // Legacy "none" or null UUID values are also accepted and normalized to empty
+    // Normalize old "none" values to empty string
     const QString normalizedId = ShaderRegistry::isNoneShader(id) ? QString() : id;
 
     // Validate shader ID - must be empty (no shader) or exist in available shaders
@@ -3166,7 +3148,6 @@ void EditorController::setCurrentShaderId(const QString& id)
 
 void EditorController::setCurrentShaderIdDirect(const QString& id)
 {
-    // Normalize: empty string is the canonical "no shader" representation
     const QString normalizedId = ShaderRegistry::isNoneShader(id) ? QString() : id;
 
     if (m_currentShaderId != normalizedId) {

@@ -77,10 +77,8 @@ ShaderRegistry *ShaderRegistry::s_instance = nullptr;
 ShaderRegistry::ShaderRegistry(QObject *parent)
     : QObject(parent)
 {
-    // Thread safety note: This singleton is created early during Daemon::init() on the main
-    // thread, before any other threads access ShaderRegistry::instance(). All subsequent
-    // access is from the main thread (Qt GUI thread). If multi-threaded access is ever
-    // needed, add std::call_once or mutex protection around s_instance assignment.
+    // This gets created during Daemon::init() before anything else touches it,
+    // so we're safe. If we ever need multi-threaded access, slap a mutex on this.
     s_instance = this;
 
 #ifdef PLASMAZONES_SHADERS_ENABLED
@@ -119,17 +117,13 @@ ShaderRegistry *ShaderRegistry::instance()
 
 QString ShaderRegistry::noneShaderUuid()
 {
-    // Return empty string as the canonical "no shader" value.
-    // This simplifies comparisons and is the Qt convention for optional values.
+    // Empty string means "no shader" - keeps things simple
     return QString();
 }
 
 bool ShaderRegistry::isNoneShader(const QString &id)
 {
-    // Primary check: empty string is the canonical "no shader" representation.
-    // Also accept legacy values for backward compatibility:
-    // - "none" string literal (old format)
-    // - Null UUID (very old format)
+    // Empty is preferred, but we still accept old formats for existing layouts
     return id.isEmpty() || id == QLatin1String("none") || id == NoneShaderUuid;
 }
 

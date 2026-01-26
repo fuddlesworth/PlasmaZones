@@ -75,14 +75,12 @@ public:
     static ShaderRegistry *instance();
 
     /**
-     * Get the canonical "no shader" ID value (empty string)
-     * @return Empty QString
+     * Returns empty string (the "no shader" value)
      */
     static QString noneShaderUuid();
 
     /**
-     * Check if a shader ID represents "no shader effect"
-     * Accepts: empty string (canonical), "none" (legacy), null UUID (very old legacy)
+     * Check if shader ID means "no effect" (empty, "none", or null UUID)
      */
     static bool isNoneShader(const QString &id);
 

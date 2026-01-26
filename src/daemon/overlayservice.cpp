@@ -37,12 +37,7 @@ namespace PlasmaZones {
 
 namespace {
 
-/**
- * @brief Write a property to a QML object with fallback
- *
- * Tries QQmlProperty first for proper QML binding support,
- * falls back to QObject::setProperty for non-QML properties.
- */
+// Set a QML property, falling back to setProperty if needed
 void writeQmlProperty(QObject* object, const QString& name, const QVariant& value)
 {
     if (!object) {
@@ -57,21 +52,8 @@ void writeQmlProperty(QObject* object, const QString& name, const QVariant& valu
     }
 }
 
-/**
- * @brief Patch zone data with overlay highlight state
- *
- * ZoneDataProvider and shaders need isHighlighted to be accurate for rendering.
- * However, buildZonesList() uses Zone::isHighlighted() which reflects the model
- * state, not the overlay's keyboard/hover highlight which is tracked separately
- * in the overlay window properties (highlightedZoneId / highlightedZoneIds).
- *
- * This function synchronizes the overlay's highlight state into the zone data
- * so shaders render highlights correctly.
- *
- * @param zones Zone data list from buildZonesList()
- * @param window Overlay window containing highlight properties
- * @return Zone data with isHighlighted updated from overlay state
- */
+// The zone model doesn't know about overlay highlights (keyboard/hover),
+// so we patch isHighlighted here before passing to shaders
 QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWindow* window)
 {
     if (!window) {

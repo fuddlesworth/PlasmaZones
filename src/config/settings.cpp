@@ -1197,7 +1197,7 @@ void Settings::reset()
     m_enableShaderEffects = true;
     m_shaderQuality = 1; // Medium
     m_shaderFrameRate = 60;
-    m_defaultShaderId.clear(); // Empty = no shader effect
+    m_defaultShaderId.clear();
     m_defaultShaderParams = QStringLiteral("{}");
 
     // Global Shortcuts defaults

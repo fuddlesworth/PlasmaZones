@@ -445,8 +445,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
 
-    // Update shader settings (empty = no shader effect)
-    // Normalize legacy "none" or null UUID values to empty string
+    // Update shader settings
     if (obj.contains(JsonKeys::ShaderId)) {
         QString shaderId = obj[JsonKeys::ShaderId].toString();
         layout->setShaderId(ShaderRegistry::isNoneShader(shaderId) ? QString() : shaderId);

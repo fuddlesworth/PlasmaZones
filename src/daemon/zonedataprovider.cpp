@@ -50,7 +50,6 @@ void ZoneDataProvider::setPixel(QImage &img, int col, int row, float x, float y,
 // Encode two 16-bit pixel values into RGBA (R,G = first value, B,A = second value)
 void ZoneDataProvider::setPixel16(QImage &img, int col, int row, int val1, int val2)
 {
-    // Bounds validation to prevent undefined behavior
     Q_ASSERT(col >= 0 && col < img.width());
     Q_ASSERT(row >= 0 && row < img.height());
     Q_ASSERT(val1 >= 0 && val1 <= 65535);

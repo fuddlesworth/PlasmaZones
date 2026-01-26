@@ -35,19 +35,9 @@ constexpr int TexCoordAttrib = 1;
 // UBO binding point
 constexpr GLuint UBOBindingPoint = 0;
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Uniform Slot Mapping Constants
-// ═══════════════════════════════════════════════════════════════════════════════
-// These constants define the mapping between customParams member variables
-// (m_customParams1-4) and the uniform buffer array indices.
-//
-// Layout: customParams[vecIndex][componentIndex]
-// - m_customParams1 → customParams[0] (slots 0-3:  x=0, y=1, z=2, w=3)
-// - m_customParams2 → customParams[1] (slots 4-7:  x=4, y=5, z=6, w=7)
-// - m_customParams3 → customParams[2] (slots 8-11: x=8, y=9, z=10, w=11)
-// - m_customParams4 → customParams[3] (slots 12-15: x=12, y=13, z=14, w=15)
-//
-// Same mapping applies to customColors[0-3] ↔ m_customColor1-4
+// Maps m_customParams1-4 to customParams[0-3] in the UBO
+// Each vec4 holds 4 slots: customParams1.xyzw = slots 0-3, etc.
+// Same deal for colors: m_customColor1-4 → customColors[0-3]
 constexpr int UniformVecIndex1 = 0;
 constexpr int UniformVecIndex2 = 1;
 constexpr int UniformVecIndex3 = 2;
@@ -90,15 +80,9 @@ ZoneShaderNode::ZoneShaderNode(QQuickItem* item)
 
 ZoneShaderNode::~ZoneShaderNode()
 {
-    // Safety cleanup: if releaseResources() wasn't called by Qt, try to clean up here.
-    //
-    // Qt Limitation Note: The scene graph should call releaseResources() before destroying
-    // the node, but this may not happen in all cases (e.g., context loss, application exit,
-    // or exceptions during teardown). When no GL context is available, OpenGL resources
-    // will leak. This is a known Qt limitation - QOpenGLContext::aboutToBeDestroyed could
-    // be used for cleanup scheduling, but would require significant architectural changes.
-    // In practice, this warning indicates an edge case during shutdown and the leak is
-    // typically reclaimed by the OS when the process exits.
+    // Qt should call releaseResources() before we get here, but sometimes it doesn't
+    // (context loss, weird shutdown order, etc). If there's no GL context we can't
+    // clean up properly - the resources leak, but OS reclaims them on exit anyway.
     if (m_initialized) {
         qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderNode destroyed with active GL resources - "
                                << "attempting cleanup";
@@ -662,8 +646,7 @@ void ZoneShaderNode::syncUniformsFromData()
     }
     m_uniforms.highlightedCount = highlightedCount;
 
-    // Update custom parameters (4 vec4s, slots 0-15)
-    // See Uniform Slot Mapping Constants above for layout documentation
+    // Pack custom params into the UBO (4 vec4s = 16 float slots)
     m_uniforms.customParams[UniformVecIndex1][ComponentX] = m_customParams1.x();
     m_uniforms.customParams[UniformVecIndex1][ComponentY] = m_customParams1.y();
     m_uniforms.customParams[UniformVecIndex1][ComponentZ] = m_customParams1.z();

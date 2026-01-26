@@ -397,8 +397,7 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_defaultOrder = json[JsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
 
-    // Shader support (empty = no shader effect)
-    // Normalize legacy "none" or null UUID values to empty string
+    // Shader support
     QString shaderId = json[JsonKeys::ShaderId].toString();
     layout->m_shaderId = ShaderRegistry::isNoneShader(shaderId) ? QString() : shaderId;
     if (json.contains(JsonKeys::ShaderParams)) {
