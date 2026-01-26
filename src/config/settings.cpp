@@ -989,7 +989,7 @@ void Settings::load()
     m_shaderQuality = qBound(0, shaderQuality, 2);
     int shaderFps = shaders.readEntry("ShaderFrameRate", 60);
     m_shaderFrameRate = qBound(30, shaderFps, 144);
-    m_defaultShaderId = shaders.readEntry("DefaultShaderId", QStringLiteral("none"));
+    m_defaultShaderId = shaders.readEntry("DefaultShaderId", QString());
     m_defaultShaderParams = shaders.readEntry("DefaultShaderParams", QStringLiteral("{}"));
 
     // Global Shortcuts
@@ -1197,7 +1197,7 @@ void Settings::reset()
     m_enableShaderEffects = true;
     m_shaderQuality = 1; // Medium
     m_shaderFrameRate = 60;
-    m_defaultShaderId = QStringLiteral("none");
+    m_defaultShaderId.clear(); // Empty = no shader effect
     m_defaultShaderParams = QStringLiteral("{}");
 
     // Global Shortcuts defaults

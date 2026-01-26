@@ -665,7 +665,7 @@ private:
     bool m_enableShaderEffects = true;
     int m_shaderQuality = 1; // 0=Low, 1=Medium, 2=High
     int m_shaderFrameRate = 60; // Target FPS for shader animations
-    QString m_defaultShaderId = QStringLiteral("none");
+    QString m_defaultShaderId; // Empty = no shader effect
     QString m_defaultShaderParams = QStringLiteral("{}");
 
     // Global Shortcuts (configurable, registered with KGlobalAccel)

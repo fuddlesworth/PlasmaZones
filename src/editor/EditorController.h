@@ -405,8 +405,8 @@ private:
     QVariantMap getShaderInfo(const QString& shaderId) const;
 
     /**
-     * @brief Creates a "none" shader entry for the dropdown
-     * @return QVariantMap with id="none" and name="No Effect"
+     * @brief Creates a "no effect" shader entry for the dropdown
+     * @return QVariantMap with id="" (empty) and name="No Effect"
      */
     QVariantMap createNoneShaderEntry() const;
 
@@ -465,7 +465,7 @@ private:
     bool m_shadersEnabled = false;
 
     // Current layout's shader settings
-    QString m_currentShaderId = QStringLiteral("none");
+    QString m_currentShaderId; // Empty = no shader effect
     QVariantMap m_currentShaderParams;
 
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)

@@ -445,16 +445,13 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
 
-    // Update shader settings
+    // Update shader settings (empty = no shader effect)
+    // Normalize legacy "none" or null UUID values to empty string
     if (obj.contains(JsonKeys::ShaderId)) {
         QString shaderId = obj[JsonKeys::ShaderId].toString();
-        if (shaderId.isEmpty()) {
-            layout->setShaderId(ShaderRegistry::noneShaderUuid());
-        } else {
-            layout->setShaderId(shaderId);
-        }
+        layout->setShaderId(ShaderRegistry::isNoneShader(shaderId) ? QString() : shaderId);
     } else {
-        layout->setShaderId(ShaderRegistry::noneShaderUuid());
+        layout->setShaderId(QString());
     }
     if (obj.contains(JsonKeys::ShaderParams)) {
         layout->setShaderParams(obj[JsonKeys::ShaderParams].toObject().toVariantMap());

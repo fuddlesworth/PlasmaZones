@@ -583,10 +583,10 @@ void EditorController::createNewLayout()
     m_isNewLayout = true;
     m_hasUnsavedChanges = true;
 
-    // Reset shader state for new layout
-    m_currentShaderId = ShaderRegistry::noneShaderUuid();
+    // Reset shader state for new layout (empty = no shader)
+    m_currentShaderId.clear();
     m_currentShaderParams.clear();
-    m_cachedShaderParameters.clear(); // Clear cache for "none" shader
+    m_cachedShaderParameters.clear();
 
     // Refresh available shaders from daemon
     refreshAvailableShaders();
@@ -682,9 +682,10 @@ void EditorController::loadLayout(const QString& layoutId)
         m_zoneManager->setZones(zones);
     }
 
-    // Load shader settings (with defaults for layouts without shader data)
+    // Load shader settings (empty = no shader effect)
+    // Legacy layouts may have "none" or null UUID - isNoneShader() handles these
     QString loadedShaderId = layoutObj[QLatin1String(JsonKeys::ShaderId)].toString();
-    m_currentShaderId = loadedShaderId.isEmpty() ? ShaderRegistry::noneShaderUuid() : loadedShaderId;
+    m_currentShaderId = ShaderRegistry::isNoneShader(loadedShaderId) ? QString() : loadedShaderId;
     if (layoutObj.contains(QLatin1String(JsonKeys::ShaderParams))) {
         m_currentShaderParams = layoutObj[QLatin1String(JsonKeys::ShaderParams)].toObject().toVariantMap();
     } else {
@@ -3136,11 +3137,12 @@ QString EditorController::noneShaderUuid() const
 
 void EditorController::setCurrentShaderId(const QString& id)
 {
-    // Normalize empty string to "none" UUID for consistency
-    const QString normalizedId = id.isEmpty() ? ShaderRegistry::noneShaderUuid() : id;
+    // Normalize: empty string is the canonical "no shader" representation
+    // Legacy "none" or null UUID values are also accepted and normalized to empty
+    const QString normalizedId = ShaderRegistry::isNoneShader(id) ? QString() : id;
 
-    // Validate shader ID - must be "none" UUID or exist in available shaders
-    bool isValid = ShaderRegistry::isNoneShader(normalizedId);
+    // Validate shader ID - must be empty (no shader) or exist in available shaders
+    bool isValid = normalizedId.isEmpty();
     if (!isValid) {
         for (const QVariant& shader : m_availableShaders) {
             if (shader.toMap().value(QLatin1String("id")).toString() == normalizedId) {
@@ -3151,7 +3153,7 @@ void EditorController::setCurrentShaderId(const QString& id)
     }
 
     if (!isValid) {
-        qCWarning(lcEditor) << "Invalid shader ID:" << normalizedId << "- ignoring";
+        qCWarning(lcEditor) << "Invalid shader ID:" << id << "- ignoring";
         return;
     }
 
@@ -3164,15 +3166,15 @@ void EditorController::setCurrentShaderId(const QString& id)
 
 void EditorController::setCurrentShaderIdDirect(const QString& id)
 {
-    // Normalize empty string to "none" UUID for consistency
-    const QString normalizedId = id.isEmpty() ? ShaderRegistry::noneShaderUuid() : id;
+    // Normalize: empty string is the canonical "no shader" representation
+    const QString normalizedId = ShaderRegistry::isNoneShader(id) ? QString() : id;
 
     if (m_currentShaderId != normalizedId) {
         m_currentShaderId = normalizedId;
 
         // Update cached shader parameters from D-Bus
         // This is done once when shader changes, not on every QML access
-        if (ShaderRegistry::isNoneShader(normalizedId)) {
+        if (normalizedId.isEmpty()) {
             m_cachedShaderParameters.clear();
         } else {
             QVariantMap info = getShaderInfo(normalizedId);
@@ -3319,7 +3321,7 @@ QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
 QVariantMap EditorController::createNoneShaderEntry() const
 {
     QVariantMap entry;
-    entry[QLatin1String("id")] = ShaderRegistry::noneShaderUuid();
+    entry[QLatin1String("id")] = QString(); // Empty string = no shader
     entry[QLatin1String("name")] = i18nc("@item:inlistbox No shader effect", "No Effect");
     entry[QLatin1String("description")] = i18nc("@info", "Standard zone rendering without shader effects");
     return entry;

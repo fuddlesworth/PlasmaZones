@@ -232,7 +232,7 @@ public:
 
     /**
      * @brief Default shader ID for new layouts
-     * @return Shader identifier (e.g., "none", "glow", "neon")
+     * @return Shader identifier (empty = no shader, or e.g., "glow", "neon")
      */
     virtual QString defaultShaderId() const = 0;
     virtual void setDefaultShaderId(const QString& shaderId) = 0;

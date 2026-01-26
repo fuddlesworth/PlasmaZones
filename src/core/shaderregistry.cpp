@@ -25,7 +25,10 @@ namespace PlasmaZones {
 // This ensures shader names always map to the same UUID
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
 
-// Special UUID for "none" shader (null UUID)
+// "No shader" is represented by empty string, not a special UUID.
+// This is simpler to check (isEmpty()) and matches Qt's convention for optional values.
+// The NoneShaderUuid is kept for backward compatibility with existing layouts
+// that may have stored the null UUID, and is checked in isNoneShader().
 static const QString NoneShaderUuid = QUuid().toString(QUuid::WithBraces);
 
 // Uniform name components for slot mapping
@@ -93,9 +96,9 @@ ShaderRegistry::ShaderRegistry(QObject *parent)
         setupFileWatcher();
         refresh();
     } else {
-        // Still register "none" placeholder even when shaders disabled
+        // Still register "no effect" placeholder even when shaders disabled
         ShaderInfo none;
-        none.id = NoneShaderUuid;
+        none.id = QString(); // Empty string = no shader
         none.name = tr("No Effect");
         none.description = tr("Default zone rendering without shader effects");
         m_shaders.insert(none.id, none);
@@ -116,12 +119,18 @@ ShaderRegistry *ShaderRegistry::instance()
 
 QString ShaderRegistry::noneShaderUuid()
 {
-    return NoneShaderUuid;
+    // Return empty string as the canonical "no shader" value.
+    // This simplifies comparisons and is the Qt convention for optional values.
+    return QString();
 }
 
 bool ShaderRegistry::isNoneShader(const QString &id)
 {
-    return id.isEmpty() || id == NoneShaderUuid || id == QLatin1String("none");
+    // Primary check: empty string is the canonical "no shader" representation.
+    // Also accept legacy values for backward compatibility:
+    // - "none" string literal (old format)
+    // - Null UUID (very old format)
+    return id.isEmpty() || id == QLatin1String("none") || id == NoneShaderUuid;
 }
 
 QString ShaderRegistry::systemShaderDir()
@@ -192,9 +201,9 @@ void ShaderRegistry::refresh()
 
     m_shaders.clear();
 
-    // Always add "none" placeholder first
+    // Always add "no effect" placeholder first (empty ID)
     ShaderInfo none;
-    none.id = NoneShaderUuid;
+    none.id = QString(); // Empty string = no shader
     none.name = tr("No Effect");
     none.description = tr("Default zone rendering without shader effects");
     m_shaders.insert(none.id, none);

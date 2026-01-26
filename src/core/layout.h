@@ -202,7 +202,7 @@ private:
     QVector<Zone*> m_zones;
 
     // Shader support
-    QString m_shaderId = QStringLiteral("none"); // Shader effect ID ("none" = no shader)
+    QString m_shaderId; // Shader effect ID (empty = no shader)
     QVariantMap m_shaderParams; // Shader-specific parameters
 
     // Cache last geometry used for recalculation to avoid redundant work
