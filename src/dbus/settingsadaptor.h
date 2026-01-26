@@ -46,6 +46,54 @@ public Q_SLOTS:
     bool setSetting(const QString& key, const QDBusVariant& value);
     QStringList getSettingKeys();
 
+    /**
+     * @brief Get list of available shader effects
+     * @return List of shader metadata (id, name, description, etc.)
+     */
+    QVariantList availableShaders();
+
+    /**
+     * @brief Get detailed information about a specific shader
+     * @param shaderId UUID of the shader to query
+     * @return Shader metadata map, or empty map if not found
+     */
+    QVariantMap shaderInfo(const QString& shaderId);
+
+    /**
+     * @brief Get default parameter values for a shader
+     * @param shaderId UUID of the shader to query
+     * @return Map of parameter IDs to default values
+     */
+    QVariantMap defaultShaderParams(const QString& shaderId);
+
+    /**
+     * @brief Check if shader effects are enabled (compiled with shader support)
+     * @return true if shaders are available
+     */
+    bool shadersEnabled();
+
+    /**
+     * @brief Check if user-installed shaders are supported
+     * @return true if user shaders can be loaded
+     */
+    bool userShadersEnabled();
+
+    /**
+     * @brief Get the user shader installation directory path
+     * @return Path to ~/.local/share/plasmazones/shaders
+     */
+    QString userShaderDirectory();
+
+    /**
+     * @brief Open the user shader directory in the file manager
+     */
+    void openUserShaderDirectory();
+
+    /**
+     * @brief Refresh the shader registry (reload all shaders)
+     */
+    void refreshShaders();
+
 Q_SIGNALS:
     void settingsChanged();
 

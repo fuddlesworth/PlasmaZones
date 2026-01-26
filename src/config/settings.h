@@ -109,6 +109,15 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(int zoneSelectorGridColumns READ zoneSelectorGridColumns WRITE setZoneSelectorGridColumns NOTIFY
                    zoneSelectorGridColumnsChanged)
 
+    // Shader Effects
+    Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
+                   enableShaderEffectsChanged)
+    Q_PROPERTY(int shaderQuality READ shaderQuality WRITE setShaderQuality NOTIFY shaderQualityChanged)
+    Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
+    Q_PROPERTY(QString defaultShaderId READ defaultShaderId WRITE setDefaultShaderId NOTIFY defaultShaderIdChanged)
+    Q_PROPERTY(QString defaultShaderParams READ defaultShaderParams WRITE setDefaultShaderParams NOTIFY
+                   defaultShaderParamsChanged)
+
     // Global Shortcuts (configurable via KCM, registered with KGlobalAccel)
     Q_PROPERTY(
         QString openEditorShortcut READ openEditorShortcut WRITE setOpenEditorShortcut NOTIFY openEditorShortcutChanged)
@@ -444,6 +453,18 @@ public:
     }
     void setZoneSelectorMaxRows(int rows) override;
 
+    // Shader Effects
+    bool enableShaderEffects() const override { return m_enableShaderEffects; }
+    void setEnableShaderEffects(bool enable) override;
+    int shaderQuality() const override { return m_shaderQuality; }
+    void setShaderQuality(int quality) override;
+    int shaderFrameRate() const override { return m_shaderFrameRate; }
+    void setShaderFrameRate(int fps) override;
+    QString defaultShaderId() const override { return m_defaultShaderId; }
+    void setDefaultShaderId(const QString& id) override;
+    QString defaultShaderParams() const override { return m_defaultShaderParams; }
+    void setDefaultShaderParams(const QString& params) override;
+
     // Global Shortcuts (for KGlobalAccel)
     QString openEditorShortcut() const
     {
@@ -639,6 +660,13 @@ private:
     int m_zoneSelectorPreviewHeight = 101; // preview height in pixels (Manual mode, when unlocked)
     bool m_zoneSelectorPreviewLockAspect = true;
     int m_zoneSelectorGridColumns = 3; // grid columns (Manual mode)
+
+    // Shader Effects
+    bool m_enableShaderEffects = true;
+    int m_shaderQuality = 1; // 0=Low, 1=Medium, 2=High
+    int m_shaderFrameRate = 60; // Target FPS for shader animations
+    QString m_defaultShaderId = QStringLiteral("none");
+    QString m_defaultShaderParams = QStringLiteral("{}");
 
     // Global Shortcuts (configurable, registered with KGlobalAccel)
     QString m_openEditorShortcut = QStringLiteral("Meta+Shift+E");

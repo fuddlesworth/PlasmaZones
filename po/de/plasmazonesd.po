@@ -5,7 +5,7 @@
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: PlasmaZones 1.0.0\n"
+"Project-Id-Version: PlasmaZones 1.1.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
 "POT-Creation-Date: 2026-01-25 15:15-0600\n"
 "PO-Revision-Date: 2026-01-25 15:15-0600\n"

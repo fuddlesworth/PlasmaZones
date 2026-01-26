@@ -6,6 +6,7 @@
 #include "zone.h"
 #include "plasmazones_export.h"
 #include <QObject>
+#include <QVariantMap>
 #include <QVector>
 #include <QUuid>
 #include <QString>
@@ -48,6 +49,8 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zonesChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
     Q_PROPERTY(bool isSystemLayout READ isSystemLayout NOTIFY sourcePathChanged)
+    Q_PROPERTY(QString shaderId READ shaderId WRITE setShaderId NOTIFY shaderIdChanged)
+    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
 
 public:
     explicit Layout(QObject* parent = nullptr);
@@ -117,6 +120,12 @@ public:
     // This determines whether the layout can be edited/deleted in place
     bool isSystemLayout() const;
 
+    // Shader support
+    QString shaderId() const { return m_shaderId; }
+    void setShaderId(const QString& id);
+    QVariantMap shaderParams() const { return m_shaderParams; }
+    void setShaderParams(const QVariantMap& params);
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -172,6 +181,8 @@ Q_SIGNALS:
     void zonePaddingChanged();
     void showZoneNumbersChanged();
     void sourcePathChanged();
+    void shaderIdChanged();
+    void shaderParamsChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
@@ -189,6 +200,10 @@ private:
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)
     QVector<Zone*> m_zones;
+
+    // Shader support
+    QString m_shaderId = QStringLiteral("none"); // Shader effect ID ("none" = no shader)
+    QVariantMap m_shaderParams; // Shader-specific parameters
 
     // Cache last geometry used for recalculation to avoid redundant work
     mutable QRectF m_lastRecalcGeometry;

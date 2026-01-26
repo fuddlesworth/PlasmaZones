@@ -3,11 +3,13 @@
 
 #include "daemon.h"
 #include "../core/logging.h"
+#include "rendering/zoneshaderitem.h"
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
+#include <QtQml/qqml.h>
 #include <KAboutData>
 #include <KLocalizedString>
 #include <KDBusService>
@@ -32,11 +34,15 @@ int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
 
+    // Register ZoneShaderItem for QML
+    // This enables RenderNodeOverlay.qml to use the GPU-accelerated shader item
+    qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
+
     // Set translation domain BEFORE any i18n() calls
     KLocalizedString::setApplicationDomain("plasmazonesd");
 
     // Set up application metadata
-    KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), QStringLiteral("1.0.0"),
+    KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), QStringLiteral("1.1.0"),
                          i18n("FancyZones-style window snapping for KDE Plasma"), KAboutLicense::GPL_V3,
                          i18n("© 2026 fuddlesworth"));
     aboutData.addAuthor(i18n("fuddlesworth"));

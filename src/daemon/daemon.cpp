@@ -20,6 +20,7 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
+#include "../core/shaderregistry.h"
 
 #include <QGuiApplication>
 #include <QScreen>
@@ -66,6 +67,11 @@ bool Daemon::init()
 {
     // Load settings
     m_settings->load();
+
+    // Initialize shader registry singleton (must be done early, before D-Bus adaptors)
+    // The registry checks for Qt6::ShaderTools availability at compile time
+    // and for qsb tool availability at runtime
+    new ShaderRegistry(this);
 
     m_layoutManager->setSettings(m_settings.get());
     // Load layouts (pass defaultLayoutId so initial active uses Settings default when set)

@@ -1,0 +1,80 @@
+{
+    "id": "neon-glow",
+    "name": "Neon Glow",
+    "description": "Cyberpunk-style neon borders with intense inner glow, pulsing, and bloom effects",
+    "author": "PlasmaZones",
+    "version": "2.0",
+    "renderType": "rendernode",
+    "fragmentShader": "effect.glsl",
+    "vertexShader": "zone.vert.glsl",
+    "parameters": [
+        {
+            "id": "glowIntensity",
+            "name": "Glow Intensity",
+            "type": "float",
+            "slot": 0,
+            "default": 2.5,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse Speed",
+            "type": "float",
+            "slot": 1,
+            "default": 2.0,
+            "min": 0.5,
+            "max": 4.0
+        },
+        {
+            "id": "glowSize",
+            "name": "Glow Size",
+            "type": "float",
+            "slot": 2,
+            "default": 35.0,
+            "min": 10.0,
+            "max": 60.0
+        },
+        {
+            "id": "coreIntensity",
+            "name": "Core Brightness",
+            "type": "float",
+            "slot": 3,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 3.0
+        },
+        {
+            "id": "fillDim",
+            "name": "Fill Darkness",
+            "type": "float",
+            "slot": 4,
+            "default": 0.08,
+            "min": 0.0,
+            "max": 0.3
+        },
+        {
+            "id": "flickerAmount",
+            "name": "Flicker Amount",
+            "type": "float",
+            "slot": 5,
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.3
+        },
+        {
+            "id": "neonColor",
+            "name": "Neon Color",
+            "type": "color",
+            "slot": 0,
+            "default": "#ff0066"
+        },
+        {
+            "id": "accentColor",
+            "name": "Highlight Color",
+            "type": "color",
+            "slot": 1,
+            "default": "#00ffff"
+        }
+    ]
+}

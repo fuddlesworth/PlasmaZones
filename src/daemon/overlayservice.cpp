@@ -9,6 +9,7 @@
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
+#include "../core/shaderregistry.h"
 
 #include <QCoreApplication>
 #include <QCursor>
@@ -21,6 +22,8 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QPointer>
+#include <QTimer>
+#include <QMutexLocker>
 #include "../core/logging.h"
 #include <KLocalizedContext>
 #include <cmath>
@@ -46,6 +49,36 @@ void writeQmlProperty(QObject* object, const QString& name, const QVariant& valu
     } else {
         object->setProperty(name.toUtf8().constData(), value);
     }
+}
+
+// Patch zone maps with overlay highlight from window (highlightedZoneId / highlightedZoneIds).
+// ZoneDataProvider and shaders need isHighlighted; buildZonesList uses zone->isHighlighted()
+// which does not reflect the overlay's keyboard/hover highlight.
+QVariantList patchZonesWithHighlight(const QVariantList& zones, QQuickWindow* window)
+{
+    if (!window) {
+        return zones;
+    }
+    const QString hid = window->property("highlightedZoneId").toString();
+    const QVariantList hids = window->property("highlightedZoneIds").toList();
+
+    QVariantList out;
+    for (const QVariant& z : zones) {
+        QVariantMap m = z.toMap();
+        const QString id = m.value(QLatin1String("id")).toString();
+        bool hi = (!id.isEmpty() && id == hid);
+        if (!hi) {
+            for (const QVariant& v : hids) {
+                if (v.toString() == id) {
+                    hi = true;
+                    break;
+                }
+            }
+        }
+        m[QLatin1String("isHighlighted")] = hi;
+        out.append(m);
+    }
+    return out;
 }
 
 QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName)
@@ -402,6 +435,15 @@ OverlayService::OverlayService(QObject* parent)
     } else {
         qCWarning(lcOverlay) << "Created before QGuiApplication - screen signals not connected";
     }
+
+    // Connect to system sleep/resume via logind to restart shader timer after wake
+    // This prevents large iTimeDelta jumps when system resumes from sleep
+    QDBusConnection::systemBus().connect(
+        QStringLiteral("org.freedesktop.login1"),
+        QStringLiteral("/org/freedesktop/login1"),
+        QStringLiteral("org.freedesktop.login1.Manager"),
+        QStringLiteral("PrepareForSleep"),
+        this, SLOT(onPrepareForSleep(bool)));
 }
 
 bool OverlayService::isVisible() const
@@ -457,6 +499,11 @@ void OverlayService::show()
         return;
     }
 
+    // Handle any pending shader error from previous session
+    if (m_shaderErrorPending) {
+        qCDebug(lcOverlay) << "Previous shader error (falling back to standard overlay):" << m_pendingShaderError;
+    }
+
     // Check if we should show on all monitors or just the cursor's screen
     bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
 
@@ -475,6 +522,15 @@ void OverlayService::show()
     }
 
     m_visible = true;
+
+    // Initialize shader timing (shared across all monitors for synchronized effects)
+    {
+        QMutexLocker locker(&m_shaderTimerMutex);
+        m_shaderTimer.start();
+        m_lastFrameTime.store(0);
+        m_frameCount.store(0);
+    }
+    m_zoneDataDirty = true; // Rebuild zone data on next frame
 
     for (auto* screen : Utils::allScreens()) {
         // Skip screens that aren't the cursor's screen when single-monitor mode is enabled
@@ -495,6 +551,12 @@ void OverlayService::show()
         }
     }
 
+    // Start shader animation if using shader overlay
+    if (useShaderOverlay()) {
+        updateZonesForAllWindows(); // Push initial zone data
+        startShaderAnimation();
+    }
+
     Q_EMIT visibilityChanged(true);
 }
 
@@ -502,6 +564,11 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
 {
     if (m_visible) {
         return;
+    }
+
+    // Handle any pending shader error from previous session
+    if (m_shaderErrorPending) {
+        qCDebug(lcOverlay) << "Previous shader error (falling back to standard overlay):" << m_pendingShaderError;
     }
 
     // Check if we should show on all monitors or just the cursor's screen
@@ -524,6 +591,15 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
 
     m_visible = true;
 
+    // Initialize shader timing (shared across all monitors for synchronized effects)
+    {
+        QMutexLocker locker(&m_shaderTimerMutex);
+        m_shaderTimer.start();
+        m_lastFrameTime.store(0);
+        m_frameCount.store(0);
+    }
+    m_zoneDataDirty = true; // Rebuild zone data on next frame
+
     for (auto* screen : Utils::allScreens()) {
         // Skip screens that aren't the cursor's screen when single-monitor mode is enabled
         if (!showOnAllMonitors && screen != cursorScreen) {
@@ -543,6 +619,12 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         }
     }
 
+    // Start shader animation if using shader overlay
+    if (useShaderOverlay()) {
+        updateZonesForAllWindows(); // Push initial zone data
+        startShaderAnimation();
+    }
+
     Q_EMIT visibilityChanged(true);
 }
 
@@ -554,11 +636,24 @@ void OverlayService::hide()
 
     m_visible = false;
 
+    // Stop shader animation
+    stopShaderAnimation();
+
+    // Invalidate shader timer
+    {
+        QMutexLocker locker(&m_shaderTimerMutex);
+        m_shaderTimer.invalidate();
+    }
+
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
             window->hide();
         }
     }
+
+    // Reset shader error state so next show() can try shader overlay again
+    m_shaderErrorPending = false;
+    m_pendingShaderError.clear();
 
     Q_EMIT visibilityChanged(false);
 }
@@ -585,6 +680,27 @@ void OverlayService::updateLayout(Layout* layout)
                     QMetaObject::invokeMethod(window, "flash");
                 }
             }
+        }
+
+        // Shader state management - MUST be outside flashZonesOnSwitch block
+        // to ensure shader animations work regardless of flash setting
+        if (useShaderOverlay()) {
+            // Ensure shader timing + updates continue after layout switch
+            {
+                QMutexLocker locker(&m_shaderTimerMutex);
+                if (!m_shaderTimer.isValid()) {
+                    m_shaderTimer.start();
+                    m_lastFrameTime.store(0);
+                    m_frameCount.store(0);
+                }
+            }
+            m_zoneDataDirty = true;
+            updateZonesForAllWindows();
+            if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
+                startShaderAnimation();
+            }
+        } else {
+            stopShaderAnimation();
         }
     }
 }
@@ -658,6 +774,9 @@ void OverlayService::updateGeometries()
 
 void OverlayService::highlightZone(const QString& zoneId)
 {
+    // Mark zone data dirty for shader overlay updates
+    m_zoneDataDirty = true;
+
     // Update the highlightedZoneId property on all overlay windows
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
@@ -670,6 +789,9 @@ void OverlayService::highlightZone(const QString& zoneId)
 
 void OverlayService::highlightZones(const QStringList& zoneIds)
 {
+    // Mark zone data dirty for shader overlay updates
+    m_zoneDataDirty = true;
+
     // Update the highlightedZoneIds property on all overlay windows
     // Use QQmlProperty to properly set QML property (setProperty() doesn't always work)
     QVariantList zoneIdList;
@@ -692,6 +814,9 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
 
 void OverlayService::clearHighlight()
 {
+    // Mark zone data dirty for shader overlay updates
+    m_zoneDataDirty = true;
+
     // Clear the highlight on all overlay windows
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
@@ -705,6 +830,8 @@ void OverlayService::setLayout(Layout* layout)
 {
     if (m_layout != layout) {
         m_layout = layout;
+        // Mark zone data as dirty when layout changes to ensure shader overlay updates
+        m_zoneDataDirty = true;
     }
 }
 
@@ -930,6 +1057,22 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             m_selectedZoneRelGeo = QRectF();
             window->setProperty("selectedLayoutId", QString());
             window->setProperty("selectedZoneIndex", -1);
+        }
+    }
+}
+
+void OverlayService::updateMousePosition(int cursorX, int cursorY)
+{
+    if (!m_visible) {
+        return;
+    }
+
+    // Update mouse position on all overlay windows for shader effects
+    for (auto* window : std::as_const(m_overlayWindows)) {
+        if (window) {
+            // Convert global cursor position to window-local coordinates
+            const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
+            window->setProperty("mousePosition", QPointF(localPos.x(), localPos.y()));
         }
     }
 }
@@ -1280,7 +1423,30 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         return;
     }
 
-    QQmlComponent component(m_engine.get(), QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")));
+    // Choose overlay type based on shader settings
+    const bool usingShader = useShaderOverlay();
+
+    QUrl qmlSource;
+    if (usingShader) {
+        // Use RenderNodeOverlay with ZoneShaderItem for GPU-accelerated rendering
+        qmlSource = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml"));
+        qCDebug(lcOverlay) << "Creating render node shader overlay for screen:" << screen->name();
+    } else {
+        qmlSource = QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml"));
+    }
+
+    // Expose overlayService to QML context for error reporting
+    m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
+
+    QQmlComponent component(m_engine.get(), qmlSource);
+
+    // Fall back to standard overlay if shader overlay fails to load
+    if (component.isError() && usingShader) {
+        qCWarning(lcOverlay) << "Failed to load shader overlay:" << component.errors();
+        qCWarning(lcOverlay) << "Falling back to standard overlay";
+        qmlSource = QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml"));
+        component.loadUrl(qmlSource);
+    }
 
     if (component.isError()) {
         qCWarning(lcOverlay) << "Failed to load ZoneOverlay.qml:" << component.errors();
@@ -1296,7 +1462,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     auto* window = qobject_cast<QQuickWindow*>(obj);
     if (!window) {
         qCWarning(lcOverlay) << "Created object is not a QQuickWindow";
-        obj->deleteLater(); // Use deleteLater for QML-created objects
+        obj->deleteLater();
         return;
     }
 
@@ -1310,6 +1476,18 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     window->setY(geom.y());
     window->setWidth(geom.width());
     window->setHeight(geom.height());
+
+    // Set shader-specific properties if using shader overlay
+    if (usingShader && m_layout) {
+        auto* registry = ShaderRegistry::instance();
+        if (registry) {
+            const QString shaderId = m_layout->shaderId();
+            window->setProperty("shaderSource", registry->shaderUrl(shaderId));
+            // Translate parameter IDs to shader uniform names (mapsTo values)
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, m_layout->shaderParams());
+            window->setProperty("shaderParams", QVariant::fromValue(translatedParams));
+        }
+    }
 
     // Configure LayerShellQt for Wayland overlay if available
 #ifdef HAVE_LAYER_SHELL
@@ -1368,6 +1546,10 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         }
     });
 
+    if (usingShader) {
+        window->setProperty("zoneDataVersion", m_zoneDataVersion);
+    }
+
     m_overlayWindows.insert(screen, window);
 }
 
@@ -1410,9 +1592,42 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         window->setProperty("showNumbers", showNumbers);
     }
 
-    // Update zones on the window (QML root has the zones property)
+    // Update shader-specific properties if using shader overlay
+    if (useShaderOverlay() && screenLayout) {
+        auto* registry = ShaderRegistry::instance();
+        if (registry) {
+            const QString shaderId = screenLayout->shaderId();
+            window->setProperty("shaderSource", registry->shaderUrl(shaderId));
+            // Translate parameter IDs to shader uniform names (mapsTo values)
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
+            window->setProperty("shaderParams", QVariant::fromValue(translatedParams));
+        }
+    }
+
+    // Update zones on the window (QML root has the zones property).
+    // Patch isHighlighted from overlay's highlightedZoneId/highlightedZoneIds so
+    // ZoneDataProvider and fallback Repeater/ZoneLabel see the correct state.
     QVariantList zones = buildZonesList(screen);
-    window->setProperty("zones", zones);
+    QVariantList patched = patchZonesWithHighlight(zones, window);
+    window->setProperty("zones", patched);
+
+    // Shader overlay: zoneCount, highlightedCount, zoneDataVersion
+    if (useShaderOverlay()) {
+        int highlightedCount = 0;
+        for (const QVariant& z : patched) {
+            if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+                ++highlightedCount;
+            }
+        }
+        window->setProperty("zoneCount", patched.size());
+        window->setProperty("highlightedCount", highlightedCount);
+        ++m_zoneDataVersion;
+        for (auto* w : std::as_const(m_overlayWindows)) {
+            if (w) {
+                w->setProperty("zoneDataVersion", m_zoneDataVersion);
+            }
+        }
+    }
 }
 
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
@@ -1493,6 +1708,47 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     map[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
     map[JsonKeys::BorderWidth] = zone->borderWidth();
     map[JsonKeys::BorderRadius] = zone->borderRadius();
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Shader-specific data (ZoneDataProvider texture)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Normalized coordinates 0-1 over the overlay (full screen). relativeGeometry is 0-1
+    // over the available area only; the overlay covers the full screen, so we must use
+    // overlay-based normalized so shader (rect * iResolution) matches overlay pixels.
+    const QRectF screenGeom = screen->geometry();
+    const qreal ow = screenGeom.width() > 0 ? screenGeom.width() : 1.0;
+    const qreal oh = screenGeom.height() > 0 ? screenGeom.height() : 1.0;
+    map[QLatin1String("normalizedX")] = overlayGeom.x() / ow;
+    map[QLatin1String("normalizedY")] = overlayGeom.y() / oh;
+    map[QLatin1String("normalizedWidth")] = overlayGeom.width() / ow;
+    map[QLatin1String("normalizedHeight")] = overlayGeom.height() / oh;
+
+    // Fill color (RGBA premultiplied alpha) for shader
+    QColor fillColor = zone->useCustomColors() ? zone->highlightColor()
+                                               : (m_settings ? m_settings->highlightColor() : QColor(Qt::blue));
+    qreal alpha = zone->useCustomColors() ? zone->activeOpacity()
+                                          : (m_settings ? m_settings->activeOpacity() : 0.5);
+    map[QLatin1String("fillR")] = fillColor.redF() * alpha;
+    map[QLatin1String("fillG")] = fillColor.greenF() * alpha;
+    map[QLatin1String("fillB")] = fillColor.blueF() * alpha;
+    map[QLatin1String("fillA")] = alpha;
+
+    // Border color (RGBA) for shader
+    QColor borderClr = zone->useCustomColors() ? zone->borderColor()
+                                               : (m_settings ? m_settings->borderColor() : QColor(Qt::white));
+    map[QLatin1String("borderR")] = borderClr.redF();
+    map[QLatin1String("borderG")] = borderClr.greenF();
+    map[QLatin1String("borderB")] = borderClr.blueF();
+    map[QLatin1String("borderA")] = borderClr.alphaF();
+
+    // Shader params: borderRadius, borderWidth (from zone or settings)
+    map[QLatin1String("shaderBorderRadius")] = zone->useCustomColors()
+                                                   ? zone->borderRadius()
+                                                   : (m_settings ? m_settings->borderRadius() : 8);
+    map[QLatin1String("shaderBorderWidth")] = zone->useCustomColors()
+                                                  ? zone->borderWidth()
+                                                  : (m_settings ? m_settings->borderWidth() : 2);
 
     return map;
 }
@@ -1649,6 +1905,167 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     qreal width = relGeoMap.value(QStringLiteral("width"), 0.0).toReal();
     qreal height = relGeoMap.value(QStringLiteral("height"), 0.0).toReal();
     m_selectedZoneRelGeo = QRectF(x, y, width, height);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shader Support Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool OverlayService::canUseShaders() const
+{
+#ifdef PLASMAZONES_SHADERS_ENABLED
+    auto* registry = ShaderRegistry::instance();
+    return registry && registry->shadersEnabled();
+#else
+    return false;
+#endif
+}
+
+bool OverlayService::useShaderOverlay() const
+{
+    if (!canUseShaders()) {
+        return false;
+    }
+    if (!m_layout || ShaderRegistry::isNoneShader(m_layout->shaderId())) {
+        return false;
+    }
+    if (m_shaderErrorPending) {
+        return false; // Previous error, fall back to standard overlay
+    }
+    if (m_settings && !m_settings->enableShaderEffects()) {
+        return false; // User disabled shaders globally
+    }
+
+    auto* registry = ShaderRegistry::instance();
+    return registry && registry->shader(m_layout->shaderId()).isValid();
+}
+
+void OverlayService::startShaderAnimation()
+{
+    if (!m_shaderUpdateTimer) {
+        m_shaderUpdateTimer = new QTimer(this);
+        m_shaderUpdateTimer->setTimerType(Qt::PreciseTimer);
+        connect(m_shaderUpdateTimer, &QTimer::timeout, this, &OverlayService::updateShaderUniforms);
+    }
+
+    // Get frame rate from settings (default 60fps, bounded 30-144)
+    const int frameRate = qBound(30, m_settings ? m_settings->shaderFrameRate() : 60, 144);
+    // Use qRound for more accurate frame timing (e.g., 60fps -> 17ms not 16ms)
+    const int interval = qRound(1000.0 / frameRate);
+    m_shaderUpdateTimer->start(interval);
+
+    qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
+}
+
+void OverlayService::stopShaderAnimation()
+{
+    if (m_shaderUpdateTimer) {
+        m_shaderUpdateTimer->stop();
+        qCDebug(lcOverlay) << "Shader animation stopped";
+    }
+}
+
+void OverlayService::updateShaderUniforms()
+{
+    qint64 currentTime;
+    {
+        QMutexLocker locker(&m_shaderTimerMutex);
+        if (!m_shaderTimer.isValid()) {
+            return;
+        }
+        currentTime = m_shaderTimer.elapsed();
+    }
+
+    const float iTime = currentTime / 1000.0f;
+
+    // Calculate delta time with clamp (max 100ms prevents jumps after sleep/resume)
+    constexpr float maxDelta = 0.1f;
+    const qint64 lastTime = m_lastFrameTime.exchange(currentTime);
+    float iTimeDelta = qMin((currentTime - lastTime) / 1000.0f, maxDelta);
+
+    // Prevent frame counter overflow (reset at 1 billion, ~193 days at 60fps)
+    int frame = m_frameCount.fetch_add(1);
+    if (frame > 1000000000) {
+        m_frameCount.store(0);
+    }
+
+    // Update zone data for shaders if dirty (highlight changed, layout changed, etc.)
+    if (m_zoneDataDirty) {
+        updateZonesForAllWindows();
+    }
+
+    // Update ALL shader overlay windows with synchronized time
+    for (auto* window : std::as_const(m_overlayWindows)) {
+        if (window) {
+            // Set time uniforms on the window (QML root)
+            window->setProperty("iTime", static_cast<qreal>(iTime));
+            window->setProperty("iTimeDelta", static_cast<qreal>(iTimeDelta));
+            window->setProperty("iFrame", frame);
+        }
+    }
+}
+
+void OverlayService::updateZonesForAllWindows()
+{
+    m_zoneDataDirty = false;
+
+    for (auto it = m_overlayWindows.begin(); it != m_overlayWindows.end(); ++it) {
+        QScreen* screen = it.key();
+        QQuickWindow* window = it.value();
+
+        if (!window) {
+            continue;
+        }
+
+        QVariantList zones = buildZonesList(screen);
+        QVariantList patched = patchZonesWithHighlight(zones, window);
+
+        int highlightedCount = 0;
+        for (const QVariant& z : patched) {
+            if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
+                ++highlightedCount;
+            }
+        }
+
+        window->setProperty("zones", patched);
+        window->setProperty("zoneCount", patched.size());
+        window->setProperty("highlightedCount", highlightedCount);
+    }
+
+    ++m_zoneDataVersion;
+    for (auto* w : std::as_const(m_overlayWindows)) {
+        if (w) {
+            w->setProperty("zoneDataVersion", m_zoneDataVersion);
+        }
+    }
+}
+
+void OverlayService::onPrepareForSleep(bool goingToSleep)
+{
+    if (goingToSleep) {
+        // System going to sleep - nothing to do
+        return;
+    }
+
+    // System waking up - restart shader timer to avoid large iTimeDelta
+    QMutexLocker locker(&m_shaderTimerMutex);
+    if (m_visible && m_shaderTimer.isValid()) {
+        m_shaderTimer.restart();
+        m_lastFrameTime.store(0);
+        qCDebug(lcOverlay) << "Shader timer restarted after system resume";
+    }
+}
+
+void OverlayService::onShaderError(const QString& errorLog)
+{
+    qCWarning(lcOverlay) << "Shader error during overlay:" << errorLog;
+
+    // Defer handling to next show() - don't recreate windows mid-drag
+    m_shaderErrorPending = true;
+    m_pendingShaderError = errorLog;
+
+    // For current session, the overlay falls back to transparent
+    // (shader shows nothing on error, but window remains to prevent flicker)
 }
 
 } // namespace PlasmaZones

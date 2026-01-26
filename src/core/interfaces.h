@@ -208,6 +208,42 @@ public:
     virtual int zoneSelectorMaxRows() const = 0;
     virtual void setZoneSelectorMaxRows(int rows) = 0;
 
+    // Shader effects
+    /**
+     * @brief Whether shader effects are enabled globally
+     * @return true if shader effects are enabled
+     */
+    virtual bool enableShaderEffects() const = 0;
+    virtual void setEnableShaderEffects(bool enable) = 0;
+
+    /**
+     * @brief Shader rendering quality level (0-2: low, medium, high)
+     * @return Quality level from 0 (low) to 2 (high)
+     */
+    virtual int shaderQuality() const = 0;
+    virtual void setShaderQuality(int quality) = 0;
+
+    /**
+     * @brief Target frame rate for animated shader effects
+     * @return Frame rate in FPS (e.g., 30, 60)
+     */
+    virtual int shaderFrameRate() const = 0;
+    virtual void setShaderFrameRate(int fps) = 0;
+
+    /**
+     * @brief Default shader ID for new layouts
+     * @return Shader identifier (e.g., "none", "glow", "neon")
+     */
+    virtual QString defaultShaderId() const = 0;
+    virtual void setDefaultShaderId(const QString& shaderId) = 0;
+
+    /**
+     * @brief Default shader parameters as JSON string
+     * @return JSON object string with parameter key-value pairs
+     */
+    virtual QString defaultShaderParams() const = 0;
+    virtual void setDefaultShaderParams(const QString& params) = 0;
+
     // Persistence
     virtual void load() = 0;
     virtual void save() = 0;
@@ -257,6 +293,12 @@ Q_SIGNALS:
     void zoneSelectorGridColumnsChanged();
     void zoneSelectorSizeModeChanged();
     void zoneSelectorMaxRowsChanged();
+    // Shader effects
+    void enableShaderEffectsChanged();
+    void shaderQualityChanged();
+    void shaderFrameRateChanged();
+    void defaultShaderIdChanged();
+    void defaultShaderParamsChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
     void previousLayoutShortcutChanged();
@@ -459,6 +501,9 @@ public:
     virtual void showZoneSelector() = 0;
     virtual void hideZoneSelector() = 0;
     virtual void updateSelectorPosition(int cursorX, int cursorY) = 0;
+
+    // Mouse position for shader effects (updated during window drag)
+    virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
     // Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;

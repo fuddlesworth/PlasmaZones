@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 1.0.0 LANGUAGES CXX)
+project(PlasmaZones VERSION 1.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -65,6 +65,13 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     DBus
     Widgets
 )
+
+# Optional: Qt6::ShaderTools for shader effects support
+# RenderNode shaders use raw GLSL - no Qt6::ShaderTools compilation needed
+# Shaders are always enabled with the RenderNode implementation
+message(STATUS "RenderNode shaders ENABLED (raw GLSL, no qsb compilation)")
+set(PLASMAZONES_SHADERS_ENABLED ON)
+add_compile_definitions(PLASMAZONES_SHADERS_ENABLED)
 
 # Find KDE Frameworks
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
@@ -275,11 +282,25 @@ install(DIRECTORY data/layouts/
     FILES_MATCHING PATTERN "*.json"
 )
 
-# Install icons
+# Install bundled RenderNode shaders (raw GLSL, no compilation needed)
+install(DIRECTORY data/shaders/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/shaders
+    FILES_MATCHING
+    PATTERN "metadata.json"
+    PATTERN "*.glsl"
+    PATTERN "preview.png"
+)
+
+# Install icons (hicolor for dark themes, hicolor-light for light themes)
 install(FILES
     icons/hicolor/scalable/apps/plasmazones.svg
     icons/hicolor/scalable/apps/plasmazones-editor.svg
     DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor/scalable/apps
+)
+install(FILES
+    icons/hicolor-light/scalable/apps/plasmazones.svg
+    icons/hicolor-light/scalable/apps/plasmazones-editor.svg
+    DESTINATION ${KDE_INSTALL_ICONDIR}/hicolor-light/scalable/apps
 )
 
 # Custom uninstall target that cleans up directories properly

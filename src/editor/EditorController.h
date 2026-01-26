@@ -74,6 +74,16 @@ class EditorController : public QObject
     // Zone settings (from global settings)
     Q_PROPERTY(int zonePadding READ zonePadding NOTIFY zonePaddingChanged)
 
+    // Shader properties for current layout
+    Q_PROPERTY(QString currentShaderId READ currentShaderId WRITE setCurrentShaderId NOTIFY currentShaderIdChanged)
+    Q_PROPERTY(QVariantMap currentShaderParams READ currentShaderParams WRITE setCurrentShaderParams NOTIFY
+                   currentShaderParamsChanged)
+    Q_PROPERTY(QVariantList availableShaders READ availableShaders NOTIFY availableShadersChanged)
+    Q_PROPERTY(QVariantList currentShaderParameters READ currentShaderParameters NOTIFY currentShaderParametersChanged)
+    Q_PROPERTY(bool shadersEnabled READ shadersEnabled NOTIFY shadersEnabledChanged)
+    Q_PROPERTY(bool hasShaderEffect READ hasShaderEffect NOTIFY currentShaderIdChanged)
+    Q_PROPERTY(QString noneShaderUuid READ noneShaderUuid CONSTANT)
+
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
@@ -110,6 +120,15 @@ public:
     bool canPaste() const;
     UndoController* undoController() const;
 
+    // Shader getters
+    QString currentShaderId() const;
+    QVariantMap currentShaderParams() const;
+    QVariantList availableShaders() const { return m_availableShaders; }
+    QVariantList currentShaderParameters() const;
+    bool shadersEnabled() const { return m_shadersEnabled; }
+    bool hasShaderEffect() const;
+    QString noneShaderUuid() const;
+
     // Property setters
     void setLayoutName(const QString& name);
     void setLayoutNameDirect(const QString& name); // For undo/redo (bypasses command creation)
@@ -127,6 +146,20 @@ public:
     void setFillOnDropModifier(int modifier);
     void setTargetScreen(const QString& screenName);
     void setTargetScreenDirect(const QString& screenName); // Sets screen without loading layout (for initialization)
+
+    // Shader setters (create undo commands)
+    void setCurrentShaderId(const QString& id);
+    void setCurrentShaderParams(const QVariantMap& params);
+
+    // Shader setters - Direct (for undo/redo, bypass command creation)
+    void setCurrentShaderIdDirect(const QString& id);
+    void setCurrentShaderParamsDirect(const QVariantMap& params);
+    void setShaderParameterDirect(const QString& key, const QVariant& value);
+
+    // Shader operations (QML-invokable)
+    Q_INVOKABLE void setShaderParameter(const QString& key, const QVariant& value);
+    Q_INVOKABLE void resetShaderParameters();
+    Q_INVOKABLE void refreshAvailableShaders();
 
 public Q_SLOTS:
     // Layout operations
@@ -301,6 +334,13 @@ Q_SIGNALS:
     void targetScreenChanged();
     void zonePaddingChanged();
 
+    // Shader signals
+    void currentShaderIdChanged();
+    void currentShaderParamsChanged();
+    void availableShadersChanged();
+    void currentShaderParametersChanged();
+    void shadersEnabledChanged();
+
     // Incremental update signals (to avoid full Repeater rebuilds)
     void zoneGeometryChanged(const QString& zoneId);
     void zoneNameChanged(const QString& zoneId);
@@ -357,6 +397,19 @@ private:
      */
     QVariantList deserializeZonesFromClipboard(const QString& clipboardText);
 
+    /**
+     * @brief Gets shader info from daemon via D-Bus
+     * @param shaderId Shader ID to query
+     * @return Shader metadata as QVariantMap, or empty map if not found
+     */
+    QVariantMap getShaderInfo(const QString& shaderId) const;
+
+    /**
+     * @brief Creates a "none" shader entry for the dropdown
+     * @return QVariantMap with id="none" and name="No Effect"
+     */
+    QVariantMap createNoneShaderEntry() const;
+
     // Layout data
     QString m_layoutId;
     QString m_layoutName;
@@ -406,6 +459,18 @@ private:
 
     // Clipboard state
     bool m_canPaste = false;
+
+    // Shader state (cached from D-Bus query - NOT a local ShaderRegistry)
+    QVariantList m_availableShaders;
+    bool m_shadersEnabled = false;
+
+    // Current layout's shader settings
+    QString m_currentShaderId = QStringLiteral("none");
+    QVariantMap m_currentShaderParams;
+
+    // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
+    // Updated when shader selection changes
+    QVariantList m_cachedShaderParameters;
 
     // Multi-zone drag state
     bool m_multiZoneDragActive = false;
