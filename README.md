@@ -21,7 +21,7 @@ Define zones on your screen. Drag windows into them. Done.
 
 ## How It Works
 
-Hold **Shift** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
+Hold **Alt** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
 <!-- TODO: GIF of zones highlighted during drag -->
 <!-- ![Drag and Snap](docs/media/drag-snap.gif) -->
@@ -208,7 +208,7 @@ systemctl --user enable --now plasmazones.service
 3. Click **Open Editor** to create a layout
 4. Draw zones or pick a template
 5. Save with **Ctrl+S**
-6. **Drag any window while holding Shift** - zones appear, drop to snap
+6. **Drag any window while holding Alt** - zones appear, drop to snap
 
 ---
 

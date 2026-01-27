@@ -1248,13 +1248,3 @@ if [ -z "$RESULT" ]; then
 fi
 ```
 
----
-
-## Version History
-
-| Version | Changes |
-|---------|---------|
-| 1.0.0 | Initial release with LayoutManager and Overlay |
-| 1.1.0 | Added WindowTracking, WindowDrag, ZoneDetection |
-| 1.2.0 | Added Settings, keyboard navigation, session persistence |
-| 1.3.0 | Added per-virtual-desktop assignments, quick layout slots |
