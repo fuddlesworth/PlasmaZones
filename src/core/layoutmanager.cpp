@@ -414,8 +414,7 @@ void LayoutManager::loadLayouts(const QString& defaultLayoutId)
         if (!initial) {
             initial = m_layouts.first();
         }
-        qCDebug(lcLayout) << "Set active layout to:" << initial->name() << "with" << initial->zoneCount()
-                          << "zones";
+        qCDebug(lcLayout) << "Set active layout to:" << initial->name() << "with" << initial->zoneCount() << "zones";
         setActiveLayout(initial);
     }
 

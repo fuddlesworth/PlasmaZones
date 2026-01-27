@@ -13,7 +13,7 @@ namespace PlasmaZones {
 
 // Boilerplate prepended to all user shaders
 // Post-processing approach: zones are pre-rendered, shader applies effects
-static const char *SHADER_BOILERPLATE = R"(#version 440
+static const char* SHADER_BOILERPLATE = R"(#version 440
 
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -97,7 +97,7 @@ float detectEdge(vec2 uv, float radius) {
 // ============ USER CODE BELOW ============
 )";
 
-ShaderCompiler::ShaderCompiler(QObject *parent)
+ShaderCompiler::ShaderCompiler(QObject* parent)
     : QObject(parent)
     , m_boilerplate(QString::fromUtf8(SHADER_BOILERPLATE))
 {
@@ -115,7 +115,7 @@ QString ShaderCompiler::qsbToolPath()
     const QStringList searchPaths = {
         QStringLiteral("/usr/lib/qt6/bin"),
         QStringLiteral("/usr/lib64/qt6/bin"),
-        QStringLiteral("/usr/lib/x86_64-linux-gnu/qt6/bin"),  // Debian/Ubuntu
+        QStringLiteral("/usr/lib/x86_64-linux-gnu/qt6/bin"), // Debian/Ubuntu
         QStringLiteral("/usr/lib/aarch64-linux-gnu/qt6/bin"), // ARM64
         QStringLiteral("/opt/qt6/bin"),
         QStringLiteral("/usr/local/qt6/bin"),
@@ -145,12 +145,12 @@ bool ShaderCompiler::isQsbAvailable() const
     return !qsbToolPath().isEmpty();
 }
 
-QString ShaderCompiler::wrapWithBoilerplate(const QString &userCode) const
+QString ShaderCompiler::wrapWithBoilerplate(const QString& userCode) const
 {
     return m_boilerplate + userCode;
 }
 
-ShaderCompiler::Result ShaderCompiler::compile(const QString &fragPath, const QString &outputPath)
+ShaderCompiler::Result ShaderCompiler::compile(const QString& fragPath, const QString& outputPath)
 {
     QFile file(fragPath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -165,8 +165,7 @@ ShaderCompiler::Result ShaderCompiler::compile(const QString &fragPath, const QS
     return compileWithBoilerplate(userCode, outputPath);
 }
 
-ShaderCompiler::Result ShaderCompiler::compileWithBoilerplate(const QString &userCode,
-                                                               const QString &outputPath)
+ShaderCompiler::Result ShaderCompiler::compileWithBoilerplate(const QString& userCode, const QString& outputPath)
 {
     if (!isQsbAvailable()) {
         m_lastError = QStringLiteral("qsb tool not found. Install qt6-shadertools.");
@@ -190,7 +189,7 @@ ShaderCompiler::Result ShaderCompiler::compileWithBoilerplate(const QString &use
     return runQsb(tempFile.fileName(), outputPath);
 }
 
-ShaderCompiler::Result ShaderCompiler::runQsb(const QString &inputPath, const QString &outputPath)
+ShaderCompiler::Result ShaderCompiler::runQsb(const QString& inputPath, const QString& outputPath)
 {
     Q_EMIT compilationStarted(inputPath);
 
@@ -201,7 +200,7 @@ ShaderCompiler::Result ShaderCompiler::runQsb(const QString &inputPath, const QS
     args << QStringLiteral("--glsl") << QStringLiteral("100es,120,150");
     args << QStringLiteral("--hlsl") << QStringLiteral("50");
     args << QStringLiteral("--msl") << QStringLiteral("12");
-    args << QStringLiteral("-b");  // Batchable for ShaderEffect (CRITICAL!)
+    args << QStringLiteral("-b"); // Batchable for ShaderEffect (CRITICAL!)
     args << QStringLiteral("-o") << outputPath;
     args << inputPath;
 
@@ -218,8 +217,7 @@ ShaderCompiler::Result ShaderCompiler::runQsb(const QString &inputPath, const QS
 
     if (!qsb.waitForFinished(CompilationTimeoutMs)) {
         qsb.kill();
-        m_lastError = QStringLiteral("qsb compilation timed out after %1 seconds")
-                          .arg(CompilationTimeoutMs / 1000);
+        m_lastError = QStringLiteral("qsb compilation timed out after %1 seconds").arg(CompilationTimeoutMs / 1000);
         qCWarning(lcCore) << m_lastError;
         Q_EMIT compilationFinished(inputPath, Result::Timeout);
         return Result::Timeout;

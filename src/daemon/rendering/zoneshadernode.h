@@ -45,45 +45,45 @@ constexpr int MaxZones = 64;
 struct alignas(16) ZoneShaderUniforms
 {
     // Transform and opacity from Qt scene graph (offset 0)
-    float qt_Matrix[16];     // mat4: 64 bytes at offset 0
-    float qt_Opacity;        // float: 4 bytes at offset 64
+    float qt_Matrix[16]; // mat4: 64 bytes at offset 0
+    float qt_Opacity; // float: 4 bytes at offset 64
 
     // Shader timing uniforms (Shadertoy-compatible)
-    float iTime;             // float: 4 bytes at offset 68
-    float iTimeDelta;        // float: 4 bytes at offset 72
-    int iFrame;              // int: 4 bytes at offset 76
+    float iTime; // float: 4 bytes at offset 68
+    float iTimeDelta; // float: 4 bytes at offset 72
+    int iFrame; // int: 4 bytes at offset 76
 
     // Resolution (vec2 aligned to 8 bytes)
-    float iResolution[2];    // vec2: 8 bytes at offset 80
+    float iResolution[2]; // vec2: 8 bytes at offset 80
 
     // Zone counts
-    int zoneCount;           // int: 4 bytes at offset 88
-    int highlightedCount;    // int: 4 bytes at offset 92
+    int zoneCount; // int: 4 bytes at offset 88
+    int highlightedCount; // int: 4 bytes at offset 92
 
     // Mouse position uniform (replaces previous padding)
     // iMouse.xy = mouse position in pixels
     // iMouse.zw = mouse position normalized (0-1)
-    float iMouse[4];         // vec4: 16 bytes at offset 96-111
+    float iMouse[4]; // vec4: 16 bytes at offset 96-111
 
     // Custom shader parameters as arrays for cleaner slot-based access
     // 16 float parameters total (slots 0-15), accessed as customParams[slot/4][slot%4]
-    float customParams[4][4];  // vec4[4]: 64 bytes at offset 112 (slots 0-15)
+    float customParams[4][4]; // vec4[4]: 64 bytes at offset 112 (slots 0-15)
 
     // Custom colors for shader effects (8 color slots)
-    float customColors[8][4];  // vec4[8]: 128 bytes at offset 176 (color slots 0-7)
+    float customColors[8][4]; // vec4[8]: 128 bytes at offset 176 (color slots 0-7)
 
     // Zone data arrays (each element is vec4, naturally aligned)
     // zoneRects: x, y, width, height (normalized 0-1 coordinates)
-    float zoneRects[MaxZones][4];       // vec4[64]: 1024 bytes at offset 304 (176 + 128)
+    float zoneRects[MaxZones][4]; // vec4[64]: 1024 bytes at offset 304 (176 + 128)
 
     // zoneFillColors: RGBA fill color for each zone
-    float zoneFillColors[MaxZones][4];  // vec4[64]: 1024 bytes at offset 1328 (304 + 1024)
+    float zoneFillColors[MaxZones][4]; // vec4[64]: 1024 bytes at offset 1328 (304 + 1024)
 
     // zoneBorderColors: RGBA border color for each zone
     float zoneBorderColors[MaxZones][4]; // vec4[64]: 1024 bytes at offset 2352 (1328 + 1024)
 
     // zoneParams: x=borderRadius, y=borderWidth, z=isHighlighted (0/1), w=zoneNumber
-    float zoneParams[MaxZones][4];      // vec4[64]: 1024 bytes at offset 3376 (2352 + 1024)
+    float zoneParams[MaxZones][4]; // vec4[64]: 1024 bytes at offset 3376 (2352 + 1024)
 
     // Total: 4400 bytes, padded to 4416 for 16-byte alignment
 };
@@ -96,13 +96,13 @@ static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds ex
  */
 struct ZoneData
 {
-    QRectF rect;              // Zone rectangle in normalized coordinates (0-1)
-    QColor fillColor;         // Fill color with alpha
-    QColor borderColor;       // Border color with alpha
+    QRectF rect; // Zone rectangle in normalized coordinates (0-1)
+    QColor fillColor; // Fill color with alpha
+    QColor borderColor; // Border color with alpha
     float borderRadius = 0.0f; // Corner radius in pixels
-    float borderWidth = 2.0f;  // Border width in pixels
+    float borderWidth = 2.0f; // Border width in pixels
     bool isHighlighted = false; // Whether zone is currently highlighted
-    int zoneNumber = 0;        // Zone number for display (1-based)
+    int zoneNumber = 0; // Zone number for display (1-based)
 };
 
 /**
@@ -352,23 +352,35 @@ public:
      * @brief Check if shaders are compiled and ready
      * @return true if shader program is linked and valid
      */
-    bool isShaderReady() const { return m_shaderReady; }
+    bool isShaderReady() const
+    {
+        return m_shaderReady;
+    }
 
     /**
      * @brief Get the last shader compilation error
      * @return Error string, empty if no error
      */
-    QString shaderError() const { return m_shaderError; }
+    QString shaderError() const
+    {
+        return m_shaderError;
+    }
 
     /**
      * @brief Mark node as needing shader recompilation
      */
-    void invalidateShader() { m_shaderDirty = true; }
+    void invalidateShader()
+    {
+        m_shaderDirty = true;
+    }
 
     /**
      * @brief Mark node as needing uniform buffer update
      */
-    void invalidateUniforms() { m_uniformsDirty = true; }
+    void invalidateUniforms()
+    {
+        m_uniformsDirty = true;
+    }
 
 private:
     // OpenGL resource initialization

@@ -253,43 +253,43 @@ QStringList SettingsAdaptor::getSettingKeys()
 
 QVariantList SettingsAdaptor::availableShaders()
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     return registry ? registry->availableShadersVariant() : QVariantList();
 }
 
 QVariantMap SettingsAdaptor::shaderInfo(const QString& shaderId)
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     return registry ? registry->shaderInfo(shaderId) : QVariantMap();
 }
 
 QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     return registry ? registry->defaultParams(shaderId) : QVariantMap();
 }
 
 bool SettingsAdaptor::shadersEnabled()
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     return registry ? registry->shadersEnabled() : false;
 }
 
 bool SettingsAdaptor::userShadersEnabled()
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     return registry ? registry->userShadersEnabled() : false;
 }
 
 QString SettingsAdaptor::userShaderDirectory()
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     return registry ? registry->userShaderDirectory() : QString();
 }
 
 void SettingsAdaptor::openUserShaderDirectory()
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     if (registry) {
         registry->openUserShaderDirectory();
     }
@@ -297,7 +297,7 @@ void SettingsAdaptor::openUserShaderDirectory()
 
 void SettingsAdaptor::refreshShaders()
 {
-    auto *registry = ShaderRegistry::instance();
+    auto* registry = ShaderRegistry::instance();
     if (registry) {
         registry->refresh();
     }

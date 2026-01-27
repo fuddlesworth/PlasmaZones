@@ -757,7 +757,8 @@ void Settings::load()
             activation.writeEntry("DragActivationModifier", static_cast<int>(m_dragActivationModifier));
         }
     } else {
-        m_dragActivationModifier = static_cast<DragModifier>(qBound(0, dragMod, static_cast<int>(DragModifier::CtrlAltMeta)));
+        m_dragActivationModifier =
+            static_cast<DragModifier>(qBound(0, dragMod, static_cast<int>(DragModifier::CtrlAltMeta)));
     }
     qCDebug(lcConfig) << "Loaded DragActivationModifier=" << static_cast<int>(m_dragActivationModifier);
 
@@ -768,8 +769,7 @@ void Settings::load()
     // Multi-zone modifier: hold this to span windows across multiple zones (default: Ctrl+Alt)
     int multiZoneMod = activation.readEntry("MultiZoneModifier", static_cast<int>(DragModifier::CtrlAlt));
     if (multiZoneMod < 0 || multiZoneMod > static_cast<int>(DragModifier::CtrlAltMeta)) {
-        qCWarning(lcConfig) << "Invalid MultiZoneModifier value:" << multiZoneMod
-                            << "using default (CtrlAlt=5)";
+        qCWarning(lcConfig) << "Invalid MultiZoneModifier value:" << multiZoneMod << "using default (CtrlAlt=5)";
         multiZoneMod = static_cast<int>(DragModifier::CtrlAlt);
     }
     m_multiZoneModifier = static_cast<DragModifier>(multiZoneMod);

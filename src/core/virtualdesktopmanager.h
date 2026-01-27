@@ -55,10 +55,10 @@ public:
      */
     void setCurrentDesktop(int desktop);
 
-/**
- * @brief Get total number of virtual desktops
- * @return Number of desktops (queried via KWin D-Bus)
- */
+    /**
+     * @brief Get total number of virtual desktops
+     * @return Number of desktops (queried via KWin D-Bus)
+     */
     int desktopCount() const;
 
     /**

@@ -450,9 +450,15 @@ public:
     void setZoneSelectorMaxRows(int rows) override;
 
     // Shader Effects
-    bool enableShaderEffects() const override { return m_enableShaderEffects; }
+    bool enableShaderEffects() const override
+    {
+        return m_enableShaderEffects;
+    }
     void setEnableShaderEffects(bool enable) override;
-    int shaderFrameRate() const override { return m_shaderFrameRate; }
+    int shaderFrameRate() const override
+    {
+        return m_shaderFrameRate;
+    }
     void setShaderFrameRate(int fps) override;
 
     // Global Shortcuts (for KGlobalAccel)

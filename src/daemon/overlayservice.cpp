@@ -367,31 +367,27 @@ void updateZoneSelectorWindowLayout(QQuickWindow* window, QScreen* screen, ISett
             LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
         switch (pos) {
         case ZoneSelectorPosition::TopLeft:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
             break;
         case ZoneSelectorPosition::Top:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                              | LayerShellQt::Window::AnchorRight);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                                    | LayerShellQt::Window::AnchorRight);
             break;
         case ZoneSelectorPosition::TopRight:
             anchors =
                 LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
             break;
         case ZoneSelectorPosition::Left:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                              | LayerShellQt::Window::AnchorBottom);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                                    | LayerShellQt::Window::AnchorBottom);
             break;
         case ZoneSelectorPosition::Right:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                              | LayerShellQt::Window::AnchorBottom);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                                    | LayerShellQt::Window::AnchorBottom);
             break;
         case ZoneSelectorPosition::BottomLeft:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorLeft);
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
             break;
         case ZoneSelectorPosition::Bottom:
             anchors =
@@ -399,8 +395,8 @@ void updateZoneSelectorWindowLayout(QQuickWindow* window, QScreen* screen, ISett
                                               | LayerShellQt::Window::AnchorRight);
             break;
         case ZoneSelectorPosition::BottomRight:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorRight);
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
             break;
         default:
             // Already initialized to Top anchors
@@ -432,12 +428,10 @@ OverlayService::OverlayService(QObject* parent)
 
     // Connect to system sleep/resume via logind to restart shader timer after wake
     // This prevents large iTimeDelta jumps when system resumes from sleep
-    QDBusConnection::systemBus().connect(
-        QStringLiteral("org.freedesktop.login1"),
-        QStringLiteral("/org/freedesktop/login1"),
-        QStringLiteral("org.freedesktop.login1.Manager"),
-        QStringLiteral("PrepareForSleep"),
-        this, SLOT(onPrepareForSleep(bool)));
+    QDBusConnection::systemBus().connect(QStringLiteral("org.freedesktop.login1"),
+                                         QStringLiteral("/org/freedesktop/login1"),
+                                         QStringLiteral("org.freedesktop.login1.Manager"),
+                                         QStringLiteral("PrepareForSleep"), this, SLOT(onPrepareForSleep(bool)));
 
     // Reset shader error state on construction (fresh start after reboot)
     m_shaderErrorPending = false;
@@ -553,7 +547,7 @@ void OverlayService::show()
     // were created before shaders were ready (e.g., at startup after reboot)
     const bool shouldUseShader = useShaderOverlay();
     bool needsRecreate = false;
-    
+
     // Check if any existing windows are the wrong type
     for (auto* screen : Utils::allScreens()) {
         if (!m_overlayWindows.contains(screen)) {
@@ -563,7 +557,7 @@ void OverlayService::show()
         if (!window) {
             continue;
         }
-        
+
         // Check if window type matches what we need
         // Use isShaderOverlay property set at creation time (more reliable than shaderSource
         // which can be set on non-shader windows by updateOverlayWindow())
@@ -571,11 +565,11 @@ void OverlayService::show()
         if (windowIsShader != shouldUseShader) {
             needsRecreate = true;
             qCDebug(lcOverlay) << "Overlay window type mismatch detected, will recreate"
-                              << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
+                               << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
             break;
         }
     }
-    
+
     // Recreate windows if type mismatch detected
     if (needsRecreate) {
         const auto screens = m_overlayWindows.keys();
@@ -592,7 +586,7 @@ void OverlayService::show()
             }
         }
     }
-    
+
     if (shouldUseShader) {
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();
@@ -664,7 +658,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
     // were created before shaders were ready (e.g., at startup after reboot)
     const bool shouldUseShader = useShaderOverlay();
     bool needsRecreate = false;
-    
+
     // Check if any existing windows are the wrong type
     for (auto* screen : Utils::allScreens()) {
         if (!m_overlayWindows.contains(screen)) {
@@ -674,7 +668,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (!window) {
             continue;
         }
-        
+
         // Check if window type matches what we need
         // Use isShaderOverlay property set at creation time (more reliable than shaderSource
         // which can be set on non-shader windows by updateOverlayWindow())
@@ -682,11 +676,11 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (windowIsShader != shouldUseShader) {
             needsRecreate = true;
             qCDebug(lcOverlay) << "Overlay window type mismatch detected, will recreate"
-                              << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
+                               << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
             break;
         }
     }
-    
+
     // Recreate windows if type mismatch detected
     if (needsRecreate) {
         const auto screens = m_overlayWindows.keys();
@@ -703,7 +697,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             }
         }
     }
-    
+
     if (shouldUseShader) {
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();
@@ -943,7 +937,7 @@ void OverlayService::setSettings(ISettings* settings)
                     // Only recreate if the overlay type actually needs to change
                     if (wasUsingShader != shouldUseShader) {
                         qCDebug(lcOverlay) << "Shader effects setting changed, recreating overlay windows"
-                                          << "(was:" << wasUsingShader << "now:" << shouldUseShader << ")";
+                                           << "(was:" << wasUsingShader << "now:" << shouldUseShader << ")";
 
                         // Stop shader animation if it was running
                         if (wasUsingShader) {
@@ -1276,31 +1270,27 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
             LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
         switch (pos) {
         case ZoneSelectorPosition::TopLeft:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
             break;
         case ZoneSelectorPosition::Top:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                              | LayerShellQt::Window::AnchorRight);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                                    | LayerShellQt::Window::AnchorRight);
             break;
         case ZoneSelectorPosition::TopRight:
             anchors =
                 LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
             break;
         case ZoneSelectorPosition::Left:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                              | LayerShellQt::Window::AnchorBottom);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                                    | LayerShellQt::Window::AnchorBottom);
             break;
         case ZoneSelectorPosition::Right:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                              | LayerShellQt::Window::AnchorBottom);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                                    | LayerShellQt::Window::AnchorBottom);
             break;
         case ZoneSelectorPosition::BottomLeft:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorLeft);
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
             break;
         case ZoneSelectorPosition::Bottom:
             anchors =
@@ -1308,8 +1298,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
                                               | LayerShellQt::Window::AnchorRight);
             break;
         case ZoneSelectorPosition::BottomRight:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorRight);
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
             break;
         default:
             // Already initialized to Top anchors
@@ -1466,14 +1456,12 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
 
         switch (pos) {
         case ZoneSelectorPosition::TopLeft:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
             margins = QMargins(0, 0, screenW - layout.barWidth, screenH - layout.barHeight);
             break;
         case ZoneSelectorPosition::Top:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                              | LayerShellQt::Window::AnchorRight);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                                    | LayerShellQt::Window::AnchorRight);
             margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
             break;
         case ZoneSelectorPosition::TopRight:
@@ -1482,20 +1470,18 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
             margins = QMargins(screenW - layout.barWidth, 0, 0, screenH - layout.barHeight);
             break;
         case ZoneSelectorPosition::Left:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                              | LayerShellQt::Window::AnchorBottom);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                                    | LayerShellQt::Window::AnchorBottom);
             margins = QMargins(0, vMargin, 0, vMargin);
             break;
         case ZoneSelectorPosition::Right:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                              | LayerShellQt::Window::AnchorBottom);
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                                    | LayerShellQt::Window::AnchorBottom);
             margins = QMargins(0, vMargin, 0, vMargin);
             break;
         case ZoneSelectorPosition::BottomLeft:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorLeft);
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
             margins = QMargins(0, screenH - layout.barHeight, screenW - layout.barWidth, 0);
             break;
         case ZoneSelectorPosition::Bottom:
@@ -1505,8 +1491,8 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
             margins = QMargins(hMargin, std::max(0, screenH - layout.barHeight), hMargin, 0);
             break;
         case ZoneSelectorPosition::BottomRight:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                    | LayerShellQt::Window::AnchorRight);
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
             margins = QMargins(screenW - layout.barWidth, screenH - layout.barHeight, 0, 0);
             break;
         default:
@@ -1848,28 +1834,25 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     // Fill color (RGBA premultiplied alpha) for shader
     QColor fillColor = zone->useCustomColors() ? zone->highlightColor()
                                                : (m_settings ? m_settings->highlightColor() : QColor(Qt::blue));
-    qreal alpha = zone->useCustomColors() ? zone->activeOpacity()
-                                          : (m_settings ? m_settings->activeOpacity() : 0.5);
+    qreal alpha = zone->useCustomColors() ? zone->activeOpacity() : (m_settings ? m_settings->activeOpacity() : 0.5);
     map[QLatin1String("fillR")] = fillColor.redF() * alpha;
     map[QLatin1String("fillG")] = fillColor.greenF() * alpha;
     map[QLatin1String("fillB")] = fillColor.blueF() * alpha;
     map[QLatin1String("fillA")] = alpha;
 
     // Border color (RGBA) for shader
-    QColor borderClr = zone->useCustomColors() ? zone->borderColor()
-                                               : (m_settings ? m_settings->borderColor() : QColor(Qt::white));
+    QColor borderClr =
+        zone->useCustomColors() ? zone->borderColor() : (m_settings ? m_settings->borderColor() : QColor(Qt::white));
     map[QLatin1String("borderR")] = borderClr.redF();
     map[QLatin1String("borderG")] = borderClr.greenF();
     map[QLatin1String("borderB")] = borderClr.blueF();
     map[QLatin1String("borderA")] = borderClr.alphaF();
 
     // Shader params: borderRadius, borderWidth (from zone or settings)
-    map[QLatin1String("shaderBorderRadius")] = zone->useCustomColors()
-                                                   ? zone->borderRadius()
-                                                   : (m_settings ? m_settings->borderRadius() : 8);
-    map[QLatin1String("shaderBorderWidth")] = zone->useCustomColors()
-                                                  ? zone->borderWidth()
-                                                  : (m_settings ? m_settings->borderWidth() : 2);
+    map[QLatin1String("shaderBorderRadius")] =
+        zone->useCustomColors() ? zone->borderRadius() : (m_settings ? m_settings->borderRadius() : 8);
+    map[QLatin1String("shaderBorderWidth")] =
+        zone->useCustomColors() ? zone->borderWidth() : (m_settings ? m_settings->borderWidth() : 2);
 
     return map;
 }

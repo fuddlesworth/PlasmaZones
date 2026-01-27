@@ -39,7 +39,10 @@ public:
 
     void undo() override;
     void redo() override;
-    int id() const override { return m_isSingleParam ? CommandId::UpdateShaderParams : -1; }
+    int id() const override
+    {
+        return m_isSingleParam ? CommandId::UpdateShaderParams : -1;
+    }
     bool mergeWith(const QUndoCommand* other) override;
 
 private:

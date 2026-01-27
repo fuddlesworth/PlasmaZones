@@ -25,9 +25,10 @@ namespace PlasmaZones {
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
 
 // Uniform name components for slot mapping
-static const char* const UniformVecNames[] = { "customParams1", "customParams2", "customParams3", "customParams4" };
-static const char* const UniformComponents[] = { "_x", "_y", "_z", "_w" };
-static const char* const UniformColorNames[] = { "customColor1", "customColor2", "customColor3", "customColor4", "customColor5", "customColor6", "customColor7", "customColor8" };
+static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4"};
+static const char* const UniformComponents[] = {"_x", "_y", "_z", "_w"};
+static const char* const UniformColorNames[] = {"customColor1", "customColor2", "customColor3", "customColor4",
+                                                "customColor5", "customColor6", "customColor7", "customColor8"};
 
 QString ShaderRegistry::ParameterInfo::uniformName() const
 {
@@ -54,7 +55,7 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
 }
 
 // Convert shader name to deterministic UUID (v5)
-static QString shaderNameToUuid(const QString &name)
+static QString shaderNameToUuid(const QString& name)
 {
     if (name.isEmpty()) {
         return QString();
@@ -62,9 +63,9 @@ static QString shaderNameToUuid(const QString &name)
     return QUuid::createUuidV5(ShaderNamespaceUuid, name).toString(QUuid::WithBraces);
 }
 
-ShaderRegistry *ShaderRegistry::s_instance = nullptr;
+ShaderRegistry* ShaderRegistry::s_instance = nullptr;
 
-ShaderRegistry::ShaderRegistry(QObject *parent)
+ShaderRegistry::ShaderRegistry(QObject* parent)
     : QObject(parent)
 {
     // This gets created during Daemon::init() before anything else touches it,
@@ -94,7 +95,7 @@ ShaderRegistry::~ShaderRegistry()
     }
 }
 
-ShaderRegistry *ShaderRegistry::instance()
+ShaderRegistry* ShaderRegistry::instance()
 {
     return s_instance;
 }
@@ -105,7 +106,7 @@ QString ShaderRegistry::noneShaderUuid()
     return QString();
 }
 
-bool ShaderRegistry::isNoneShader(const QString &id)
+bool ShaderRegistry::isNoneShader(const QString& id)
 {
     return id.isEmpty();
 }
@@ -113,16 +114,15 @@ bool ShaderRegistry::isNoneShader(const QString &id)
 QString ShaderRegistry::systemShaderDir()
 {
     // System shaders installed by package
-    return QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   QStringLiteral("plasmazones/shaders"),
-                                   QStandardPaths::LocateDirectory);
+    return QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
+                                  QStandardPaths::LocateDirectory);
 }
 
 QString ShaderRegistry::userShaderDir()
 {
     // User shaders in ~/.local/share/plasmazones/shaders
     return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-           + QStringLiteral("/plasmazones/shaders");
+        + QStringLiteral("/plasmazones/shaders");
 }
 
 void ShaderRegistry::ensureUserShaderDirExists() const
@@ -147,11 +147,10 @@ void ShaderRegistry::setupFileWatcher()
         qCDebug(lcCore) << "Watching user shader directory:" << userDir;
     }
 
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged,
-            this, &ShaderRegistry::onUserShaderDirChanged);
+    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, &ShaderRegistry::onUserShaderDirChanged);
 }
 
-void ShaderRegistry::onUserShaderDirChanged(const QString &path)
+void ShaderRegistry::onUserShaderDirChanged(const QString& path)
 {
     Q_UNUSED(path)
 
@@ -194,9 +193,7 @@ void ShaderRegistry::loadSystemShaders()
     // locateAll() returns paths in priority order: user first, system last
     // We reverse to load system first, so user shaders with same ID can override
     QStringList allDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation,
-        QStringLiteral("plasmazones/shaders"),
-        QStandardPaths::LocateDirectory);
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
 
     if (allDirs.isEmpty()) {
         qCDebug(lcCore) << "No system shader directories found";
@@ -206,7 +203,7 @@ void ShaderRegistry::loadSystemShaders()
     // Reverse order: load system shaders first, user shaders last (override)
     std::reverse(allDirs.begin(), allDirs.end());
 
-    for (const QString &shaderDir : allDirs) {
+    for (const QString& shaderDir : allDirs) {
         QDir dir(shaderDir);
         if (!dir.exists()) {
             continue;
@@ -215,7 +212,7 @@ void ShaderRegistry::loadSystemShaders()
         const auto entries = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
         const int beforeCount = m_shaders.size();
 
-        for (const QString &entry : entries) {
+        for (const QString& entry : entries) {
             if (entry == QLatin1String("none")) {
                 continue; // Skip "none" - already added
             }
@@ -236,7 +233,7 @@ void ShaderRegistry::loadUserShaders()
     QDir dir(userDir);
     const auto entries = dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
-    for (const QString &entry : entries) {
+    for (const QString& entry : entries) {
         if (entry == QLatin1String("none")) {
             continue; // Skip "none"
         }
@@ -244,7 +241,7 @@ void ShaderRegistry::loadUserShaders()
     }
 }
 
-void ShaderRegistry::loadShaderFromDir(const QString &shaderDir, bool isUserShader)
+void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShader)
 {
     QDir dir(shaderDir);
     const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
@@ -267,8 +264,7 @@ void ShaderRegistry::loadShaderFromDir(const QString &shaderDir, bool isUserShad
     // shaderUrl points directly to the raw GLSL fragment shader
     info.shaderUrl = QUrl::fromLocalFile(info.sourcePath);
 
-    qCDebug(lcCore) << "  Shader:" << info.name << "[" << info.id << "]"
-                    << (isUserShader ? "(user)" : "(system)");
+    qCDebug(lcCore) << "  Shader:" << info.name << "[" << info.id << "]" << (isUserShader ? "(user)" : "(system)");
 
     // Check for preview image
     const QString previewPath = dir.filePath(QStringLiteral("preview.png"));
@@ -279,7 +275,7 @@ void ShaderRegistry::loadShaderFromDir(const QString &shaderDir, bool isUserShad
     m_shaders.insert(info.id, info);
 }
 
-ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString &shaderDir)
+ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& shaderDir)
 {
     ShaderInfo info;
     QDir dir(shaderDir);
@@ -287,7 +283,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString &sha
     // Default name from directory name, ID is UUID generated from name
     const QString shaderName = dir.dirName();
     info.id = shaderNameToUuid(shaderName);
-    info.name = shaderName;  // Human-readable name defaults to directory name
+    info.name = shaderName; // Human-readable name defaults to directory name
 
     const QString metadataPath = dir.filePath(QStringLiteral("metadata.json"));
     QFile file(metadataPath);
@@ -321,7 +317,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString &sha
 
     // Parse parameters
     const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();
-    for (const QJsonValue &paramValue : paramsArray) {
+    for (const QJsonValue& paramValue : paramsArray) {
         QJsonObject paramObj = paramValue.toObject();
         ParameterInfo param;
         param.id = paramObj.value(QLatin1String("id")).toString();
@@ -350,18 +346,18 @@ QList<ShaderRegistry::ShaderInfo> ShaderRegistry::availableShaders() const
 QVariantList ShaderRegistry::availableShadersVariant() const
 {
     QVariantList result;
-    for (const ShaderInfo &info : m_shaders) {
+    for (const ShaderInfo& info : m_shaders) {
         result.append(shaderInfoToVariantMap(info));
     }
     return result;
 }
 
-ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString &id) const
+ShaderRegistry::ShaderInfo ShaderRegistry::shader(const QString& id) const
 {
     return m_shaders.value(id);
 }
 
-QVariantMap ShaderRegistry::shaderInfo(const QString &id) const
+QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
 {
     if (!m_shaders.contains(id)) {
         return QVariantMap();
@@ -369,13 +365,13 @@ QVariantMap ShaderRegistry::shaderInfo(const QString &id) const
     return shaderInfoToVariantMap(m_shaders.value(id));
 }
 
-QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo &info) const
+QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
 {
     QVariantMap map;
     // Required fields (always set to non-empty strings)
     map[QStringLiteral("id")] = info.id.isEmpty() ? QStringLiteral("unknown") : info.id;
     map[QStringLiteral("name")] = info.name.isEmpty() ? info.id : info.name;
-    map[QStringLiteral("description")] = info.description;  // Empty string is OK
+    map[QStringLiteral("description")] = info.description; // Empty string is OK
     map[QStringLiteral("author")] = info.author;
     map[QStringLiteral("version")] = info.version;
     map[QStringLiteral("isUserShader")] = info.isUserShader;
@@ -385,18 +381,18 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo &info) const
     if (info.shaderUrl.isValid()) {
         map[QStringLiteral("shaderUrl")] = info.shaderUrl.toString();
     } else {
-        map[QStringLiteral("shaderUrl")] = QString();  // Empty string, not null
+        map[QStringLiteral("shaderUrl")] = QString(); // Empty string, not null
     }
 
     if (!info.previewPath.isEmpty()) {
         map[QStringLiteral("previewPath")] = info.previewPath;
     } else {
-        map[QStringLiteral("previewPath")] = QString();  // Empty string, not null
+        map[QStringLiteral("previewPath")] = QString(); // Empty string, not null
     }
 
     // Parameters list (empty list is OK for D-Bus)
     QVariantList params;
-    for (const ParameterInfo &param : info.parameters) {
+    for (const ParameterInfo& param : info.parameters) {
         params.append(parameterInfoToVariantMap(param));
     }
     map[QStringLiteral("parameters")] = params;
@@ -404,7 +400,7 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo &info) const
     return map;
 }
 
-QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo &param) const
+QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param) const
 {
     QVariantMap map;
     map[QStringLiteral("id")] = param.id;
@@ -431,7 +427,7 @@ QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo &param
     return map;
 }
 
-QUrl ShaderRegistry::shaderUrl(const QString &id) const
+QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
     if (isNoneShader(id) || !m_shaders.contains(id)) {
         return QUrl();
@@ -461,18 +457,17 @@ void ShaderRegistry::openUserShaderDirectory() const
     QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDir()));
 }
 
-bool ShaderRegistry::validateParams(const QString &id, const QVariantMap &params) const
+bool ShaderRegistry::validateParams(const QString& id, const QVariantMap& params) const
 {
     const ShaderInfo info = shader(id);
     if (!info.isValid()) {
         return false;
     }
 
-    for (const ParameterInfo &param : info.parameters) {
+    for (const ParameterInfo& param : info.parameters) {
         if (params.contains(param.id)) {
             if (!validateParameterValue(param, params.value(param.id))) {
-                qCWarning(lcCore) << "Invalid shader parameter:" << param.id
-                                  << "for shader:" << id;
+                qCWarning(lcCore) << "Invalid shader parameter:" << param.id << "for shader:" << id;
                 return false;
             }
         }
@@ -480,30 +475,38 @@ bool ShaderRegistry::validateParams(const QString &id, const QVariantMap &params
     return true;
 }
 
-bool ShaderRegistry::validateParameterValue(const ParameterInfo &param, const QVariant &value) const
+bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QVariant& value) const
 {
     if (param.type == QLatin1String("float")) {
         bool ok = false;
         double v = value.toDouble(&ok);
-        if (!ok) return false;
-        if (param.minValue.isValid() && v < param.minValue.toDouble()) return false;
-        if (param.maxValue.isValid() && v > param.maxValue.toDouble()) return false;
+        if (!ok)
+            return false;
+        if (param.minValue.isValid() && v < param.minValue.toDouble())
+            return false;
+        if (param.maxValue.isValid() && v > param.maxValue.toDouble())
+            return false;
     } else if (param.type == QLatin1String("int")) {
         bool ok = false;
         int v = value.toInt(&ok);
-        if (!ok) return false;
-        if (param.minValue.isValid() && v < param.minValue.toInt()) return false;
-        if (param.maxValue.isValid() && v > param.maxValue.toInt()) return false;
+        if (!ok)
+            return false;
+        if (param.minValue.isValid() && v < param.minValue.toInt())
+            return false;
+        if (param.maxValue.isValid() && v > param.maxValue.toInt())
+            return false;
     } else if (param.type == QLatin1String("color")) {
         QColor c(value.toString());
-        if (!c.isValid()) return false;
+        if (!c.isValid())
+            return false;
     } else if (param.type == QLatin1String("bool")) {
-        if (!value.canConvert<bool>()) return false;
+        if (!value.canConvert<bool>())
+            return false;
     }
     return true;
 }
 
-QVariantMap ShaderRegistry::validateAndCoerceParams(const QString &id, const QVariantMap &params) const
+QVariantMap ShaderRegistry::validateAndCoerceParams(const QString& id, const QVariantMap& params) const
 {
     QVariantMap result;
     const ShaderInfo info = shader(id);
@@ -511,7 +514,7 @@ QVariantMap ShaderRegistry::validateAndCoerceParams(const QString &id, const QVa
         return result;
     }
 
-    for (const ParameterInfo &param : info.parameters) {
+    for (const ParameterInfo& param : info.parameters) {
         if (params.contains(param.id) && validateParameterValue(param, params.value(param.id))) {
             result[param.id] = params.value(param.id);
         } else {
@@ -521,17 +524,17 @@ QVariantMap ShaderRegistry::validateAndCoerceParams(const QString &id, const QVa
     return result;
 }
 
-QVariantMap ShaderRegistry::defaultParams(const QString &id) const
+QVariantMap ShaderRegistry::defaultParams(const QString& id) const
 {
     QVariantMap result;
     const ShaderInfo info = shader(id);
-    for (const ParameterInfo &param : info.parameters) {
+    for (const ParameterInfo& param : info.parameters) {
         result[param.id] = param.defaultValue;
     }
     return result;
 }
 
-QVariantMap ShaderRegistry::translateParamsToUniforms(const QString &shaderId, const QVariantMap &storedParams) const
+QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const
 {
     QVariantMap result;
     const ShaderInfo info = shader(shaderId);
@@ -542,7 +545,7 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString &shaderId, c
 
     // Build translation map from parameter definitions
     // Also start with default values for uniforms that aren't in storedParams
-    for (const ParameterInfo &param : info.parameters) {
+    for (const ParameterInfo& param : info.parameters) {
         const QString uniformName = param.uniformName();
         if (uniformName.isEmpty()) {
             continue; // Parameter doesn't map to a uniform

@@ -27,7 +27,10 @@ public:
 
     void undo() override;
     void redo() override;
-    int id() const override { return CommandId::UpdateShaderId; }
+    int id() const override
+    {
+        return CommandId::UpdateShaderId;
+    }
     bool mergeWith(const QUndoCommand* other) override;
 
 private:

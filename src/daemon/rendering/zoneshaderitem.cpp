@@ -186,21 +186,13 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
             QVariant val = params.value(key);
             if (val.canConvert<QColor>()) {
                 QColor color = val.value<QColor>();
-                return QVector4D(
-                    static_cast<float>(color.redF()),
-                    static_cast<float>(color.greenF()),
-                    static_cast<float>(color.blueF()),
-                    static_cast<float>(color.alphaF())
-                );
+                return QVector4D(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
+                                 static_cast<float>(color.blueF()), static_cast<float>(color.alphaF()));
             } else if (val.typeId() == QMetaType::QString) {
                 QColor color(val.toString());
                 if (color.isValid()) {
-                    return QVector4D(
-                        static_cast<float>(color.redF()),
-                        static_cast<float>(color.greenF()),
-                        static_cast<float>(color.blueF()),
-                        static_cast<float>(color.alphaF())
-                    );
+                    return QVector4D(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
+                                     static_cast<float>(color.blueF()), static_cast<float>(color.alphaF()));
                 }
             }
         }
@@ -496,54 +488,30 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setCustomParams2(m_customParams2);
     node->setCustomParams3(m_customParams3);
     node->setCustomParams4(m_customParams4);
-    node->setCustomColor1(QColor::fromRgbF(
-        static_cast<float>(m_customColor1.x()),
-        static_cast<float>(m_customColor1.y()),
-        static_cast<float>(m_customColor1.z()),
-        static_cast<float>(m_customColor1.w())
-    ));
-    node->setCustomColor2(QColor::fromRgbF(
-        static_cast<float>(m_customColor2.x()),
-        static_cast<float>(m_customColor2.y()),
-        static_cast<float>(m_customColor2.z()),
-        static_cast<float>(m_customColor2.w())
-    ));
-    node->setCustomColor3(QColor::fromRgbF(
-        static_cast<float>(m_customColor3.x()),
-        static_cast<float>(m_customColor3.y()),
-        static_cast<float>(m_customColor3.z()),
-        static_cast<float>(m_customColor3.w())
-    ));
-    node->setCustomColor4(QColor::fromRgbF(
-        static_cast<float>(m_customColor4.x()),
-        static_cast<float>(m_customColor4.y()),
-        static_cast<float>(m_customColor4.z()),
-        static_cast<float>(m_customColor4.w())
-    ));
-    node->setCustomColor5(QColor::fromRgbF(
-        static_cast<float>(m_customColor5.x()),
-        static_cast<float>(m_customColor5.y()),
-        static_cast<float>(m_customColor5.z()),
-        static_cast<float>(m_customColor5.w())
-    ));
-    node->setCustomColor6(QColor::fromRgbF(
-        static_cast<float>(m_customColor6.x()),
-        static_cast<float>(m_customColor6.y()),
-        static_cast<float>(m_customColor6.z()),
-        static_cast<float>(m_customColor6.w())
-    ));
-    node->setCustomColor7(QColor::fromRgbF(
-        static_cast<float>(m_customColor7.x()),
-        static_cast<float>(m_customColor7.y()),
-        static_cast<float>(m_customColor7.z()),
-        static_cast<float>(m_customColor7.w())
-    ));
-    node->setCustomColor8(QColor::fromRgbF(
-        static_cast<float>(m_customColor8.x()),
-        static_cast<float>(m_customColor8.y()),
-        static_cast<float>(m_customColor8.z()),
-        static_cast<float>(m_customColor8.w())
-    ));
+    node->setCustomColor1(
+        QColor::fromRgbF(static_cast<float>(m_customColor1.x()), static_cast<float>(m_customColor1.y()),
+                         static_cast<float>(m_customColor1.z()), static_cast<float>(m_customColor1.w())));
+    node->setCustomColor2(
+        QColor::fromRgbF(static_cast<float>(m_customColor2.x()), static_cast<float>(m_customColor2.y()),
+                         static_cast<float>(m_customColor2.z()), static_cast<float>(m_customColor2.w())));
+    node->setCustomColor3(
+        QColor::fromRgbF(static_cast<float>(m_customColor3.x()), static_cast<float>(m_customColor3.y()),
+                         static_cast<float>(m_customColor3.z()), static_cast<float>(m_customColor3.w())));
+    node->setCustomColor4(
+        QColor::fromRgbF(static_cast<float>(m_customColor4.x()), static_cast<float>(m_customColor4.y()),
+                         static_cast<float>(m_customColor4.z()), static_cast<float>(m_customColor4.w())));
+    node->setCustomColor5(
+        QColor::fromRgbF(static_cast<float>(m_customColor5.x()), static_cast<float>(m_customColor5.y()),
+                         static_cast<float>(m_customColor5.z()), static_cast<float>(m_customColor5.w())));
+    node->setCustomColor6(
+        QColor::fromRgbF(static_cast<float>(m_customColor6.x()), static_cast<float>(m_customColor6.y()),
+                         static_cast<float>(m_customColor6.z()), static_cast<float>(m_customColor6.w())));
+    node->setCustomColor7(
+        QColor::fromRgbF(static_cast<float>(m_customColor7.x()), static_cast<float>(m_customColor7.y()),
+                         static_cast<float>(m_customColor7.z()), static_cast<float>(m_customColor7.w())));
+    node->setCustomColor8(
+        QColor::fromRgbF(static_cast<float>(m_customColor8.x()), static_cast<float>(m_customColor8.y()),
+                         static_cast<float>(m_customColor8.z()), static_cast<float>(m_customColor8.w())));
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Sync shader source FIRST (must compile before zone data can be used)
@@ -621,12 +589,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
                 // Rectangle (already normalized 0-1)
                 const ZoneRect& rect = snapshot.rects[i];
-                zd.rect = QRectF(
-                    static_cast<qreal>(rect.x),
-                    static_cast<qreal>(rect.y),
-                    static_cast<qreal>(rect.width),
-                    static_cast<qreal>(rect.height)
-                );
+                zd.rect = QRectF(static_cast<qreal>(rect.x), static_cast<qreal>(rect.y), static_cast<qreal>(rect.width),
+                                 static_cast<qreal>(rect.height));
                 zd.zoneNumber = rect.zoneNumber;
                 zd.isHighlighted = rect.highlighted;
 
@@ -636,21 +600,13 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
                 // Fill color
                 const ZoneColor& fill = snapshot.fillColors[i];
-                zd.fillColor = QColor::fromRgbF(
-                    static_cast<float>(fill.r),
-                    static_cast<float>(fill.g),
-                    static_cast<float>(fill.b),
-                    static_cast<float>(fill.a)
-                );
+                zd.fillColor = QColor::fromRgbF(static_cast<float>(fill.r), static_cast<float>(fill.g),
+                                                static_cast<float>(fill.b), static_cast<float>(fill.a));
 
                 // Border color
                 const ZoneColor& border = snapshot.borderColors[i];
-                zd.borderColor = QColor::fromRgbF(
-                    static_cast<float>(border.r),
-                    static_cast<float>(border.g),
-                    static_cast<float>(border.b),
-                    static_cast<float>(border.a)
-                );
+                zd.borderColor = QColor::fromRgbF(static_cast<float>(border.r), static_cast<float>(border.g),
+                                                  static_cast<float>(border.b), static_cast<float>(border.a));
 
                 zoneDataVec.append(zd);
             }

@@ -3201,9 +3201,8 @@ void EditorController::resetShaderParameters()
 {
     if (!m_currentShaderParams.isEmpty()) {
         // Create undo command for reset (batch change to empty)
-        auto* cmd = new UpdateShaderParamsCommand(
-            this, m_currentShaderParams, QVariantMap(),
-            i18nc("@action", "Reset Shader Parameters"));
+        auto* cmd = new UpdateShaderParamsCommand(this, m_currentShaderParams, QVariantMap(),
+                                                  i18nc("@action", "Reset Shader Parameters"));
         m_undoController->push(cmd);
     }
 }

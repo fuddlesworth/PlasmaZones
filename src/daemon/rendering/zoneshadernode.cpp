@@ -23,10 +23,10 @@ namespace {
 // Triangle strip: (-1,-1), (1,-1), (-1,1), (1,1)
 constexpr float QuadVertices[] = {
     // Position      UV
-    -1.0f, -1.0f,   0.0f, 0.0f,  // Bottom-left
-     1.0f, -1.0f,   1.0f, 0.0f,  // Bottom-right
-    -1.0f,  1.0f,   0.0f, 1.0f,  // Top-left
-     1.0f,  1.0f,   1.0f, 1.0f,  // Top-right
+    -1.0f, -1.0f, 0.0f, 0.0f, // Bottom-left
+    1.0f,  -1.0f, 1.0f, 0.0f, // Bottom-right
+    -1.0f, 1.0f,  0.0f, 1.0f, // Top-left
+    1.0f,  1.0f,  1.0f, 1.0f, // Top-right
 };
 
 constexpr int PositionAttrib = 0;
@@ -85,7 +85,7 @@ ZoneShaderNode::~ZoneShaderNode()
     // clean up properly - the resources leak, but OS reclaims them on exit anyway.
     if (m_initialized) {
         qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderNode destroyed with active GL resources - "
-                               << "attempting cleanup";
+                                          << "attempting cleanup";
         // Try to clean up if we have a valid context
         QOpenGLContext* ctx = QOpenGLContext::currentContext();
         if (ctx) {
@@ -560,8 +560,9 @@ bool ZoneShaderNode::createShaderProgram()
                 ef->glUniformBlockBinding(m_program->programId(), blockIndex, UBOBindingPoint);
             } else {
                 // UBO block is required - fail if not found
-                m_shaderError = QStringLiteral("Required UBO block 'ZoneUniforms' not found in shader. "
-                                               "Shader must define this uniform block for zone rendering.");
+                m_shaderError = QStringLiteral(
+                    "Required UBO block 'ZoneUniforms' not found in shader. "
+                    "Shader must define this uniform block for zone rendering.");
                 qCWarning(PlasmaZones::lcOverlay) << m_shaderError;
                 m_program.reset();
                 return false;

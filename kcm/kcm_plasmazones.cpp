@@ -71,8 +71,8 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
 
     // Listen for daemon ready signal (emitted when daemon finishes initialization)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                          QString(DBus::Interface::LayoutManager), QStringLiteral("daemonReady"),
-                                          this, SLOT(loadLayouts()));
+                                          QString(DBus::Interface::LayoutManager), QStringLiteral("daemonReady"), this,
+                                          SLOT(loadLayouts()));
 
     // Listen for active layout ID changes (e.g., when layout changes via hotkey)
     // This updates the selection in the settings panel to match the current layout
@@ -1478,8 +1478,7 @@ void KCMPlasmaZones::startDaemon()
     if (isDaemonRunning()) {
         return;
     }
-    runSystemctl({QStringLiteral("--user"), QStringLiteral("start"),
-                  QLatin1String(KCMConstants::SystemdServiceName)});
+    runSystemctl({QStringLiteral("--user"), QStringLiteral("start"), QLatin1String(KCMConstants::SystemdServiceName)});
     // Layouts will be loaded when daemonReady D-Bus signal is received
 }
 
@@ -1488,28 +1487,26 @@ void KCMPlasmaZones::stopDaemon()
     if (!isDaemonRunning()) {
         return;
     }
-    runSystemctl({QStringLiteral("--user"), QStringLiteral("stop"),
-                  QLatin1String(KCMConstants::SystemdServiceName)});
+    runSystemctl({QStringLiteral("--user"), QStringLiteral("stop"), QLatin1String(KCMConstants::SystemdServiceName)});
 }
 
 void KCMPlasmaZones::refreshDaemonEnabledState()
 {
-    runSystemctl({QStringLiteral("--user"), QStringLiteral("is-enabled"),
-                  QLatin1String(KCMConstants::SystemdServiceName)},
-                 [this](bool /*success*/, const QString& output) {
-                     bool enabled = (output == QLatin1String("enabled"));
-                     if (m_daemonEnabled != enabled) {
-                         m_daemonEnabled = enabled;
-                         Q_EMIT daemonEnabledChanged();
-                     }
-                 });
+    runSystemctl(
+        {QStringLiteral("--user"), QStringLiteral("is-enabled"), QLatin1String(KCMConstants::SystemdServiceName)},
+        [this](bool /*success*/, const QString& output) {
+            bool enabled = (output == QLatin1String("enabled"));
+            if (m_daemonEnabled != enabled) {
+                m_daemonEnabled = enabled;
+                Q_EMIT daemonEnabledChanged();
+            }
+        });
 }
 
 void KCMPlasmaZones::setDaemonAutostart(bool enabled)
 {
     QString action = enabled ? QStringLiteral("enable") : QStringLiteral("disable");
-    runSystemctl({QStringLiteral("--user"), action,
-                  QLatin1String(KCMConstants::SystemdServiceName)},
+    runSystemctl({QStringLiteral("--user"), action, QLatin1String(KCMConstants::SystemdServiceName)},
                  [this](bool success, const QString& /*output*/) {
                      if (success) {
                          // Refresh the enabled state to confirm the change

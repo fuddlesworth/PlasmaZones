@@ -29,12 +29,13 @@ public:
     /**
      * @brief Shader parameter metadata
      */
-    struct ParameterInfo {
+    struct ParameterInfo
+    {
         QString id;
         QString name;
-        QString group;           ///< Optional group for UI organization (collapsible sections)
-        QString type;            ///< "float", "color", "int", "bool"
-        int slot = -1;           ///< Uniform slot: 0-15 for floats, 0-7 for colors
+        QString group; ///< Optional group for UI organization (collapsible sections)
+        QString type; ///< "float", "color", "int", "bool"
+        int slot = -1; ///< Uniform slot: 0-15 for floats, 0-7 for colors
         QVariant defaultValue;
         QVariant minValue;
         QVariant maxValue;
@@ -44,36 +45,37 @@ public:
         QString uniformName() const;
     };
 
-
     /**
      * @brief Complete shader metadata
      */
-    struct ShaderInfo {
+    struct ShaderInfo
+    {
         QString id;
         QString name;
         QString description;
         QString author;
         QString version;
-        QUrl shaderUrl;          ///< file:// URL to fragment shader (.glsl)
-        QString sourcePath;      ///< Path to fragment shader source
-        QString vertexShaderPath;///< Path to vertex shader
-        QString previewPath;     ///< Absolute path to preview.png
+        QUrl shaderUrl; ///< file:// URL to fragment shader (.glsl)
+        QString sourcePath; ///< Path to fragment shader source
+        QString vertexShaderPath; ///< Path to vertex shader
+        QString previewPath; ///< Absolute path to preview.png
         QList<ParameterInfo> parameters;
 
-        bool isUserShader = false;      ///< True for ~/.local/share shaders
+        bool isUserShader = false; ///< True for ~/.local/share shaders
 
-        bool isValid() const {
+        bool isValid() const
+        {
             return !id.isEmpty() && (ShaderRegistry::isNoneShader(id) || shaderUrl.isValid());
         }
     };
 
-    explicit ShaderRegistry(QObject *parent = nullptr);
+    explicit ShaderRegistry(QObject* parent = nullptr);
     ~ShaderRegistry() override;
 
     /**
      * Singleton access (created by Daemon)
      */
-    static ShaderRegistry *instance();
+    static ShaderRegistry* instance();
 
     /**
      * Returns empty string (no shader)
@@ -83,7 +85,7 @@ public:
     /**
      * Check if shader ID is empty (no effect)
      */
-    static bool isNoneShader(const QString &id);
+    static bool isNoneShader(const QString& id);
 
     /**
      * Get all available shaders
@@ -99,17 +101,17 @@ public:
     /**
      * Get specific shader info (returns invalid ShaderInfo if not found)
      */
-    ShaderInfo shader(const QString &id) const;
+    ShaderInfo shader(const QString& id) const;
 
     /**
      * Get shader info as QVariantMap for D-Bus/QML
      */
-    Q_INVOKABLE QVariantMap shaderInfo(const QString &id) const;
+    Q_INVOKABLE QVariantMap shaderInfo(const QString& id) const;
 
     /**
      * Get shader .qsb URL (returns empty if not found or "none")
      */
-    Q_INVOKABLE QUrl shaderUrl(const QString &id) const;
+    Q_INVOKABLE QUrl shaderUrl(const QString& id) const;
 
     /**
      * Check if shaders are available (Qt6::ShaderTools was found at build)
@@ -134,17 +136,17 @@ public:
     /**
      * Validate shader parameters against schema
      */
-    bool validateParams(const QString &id, const QVariantMap &params) const;
+    bool validateParams(const QString& id, const QVariantMap& params) const;
 
     /**
      * Validate and coerce params, returning map with defaults for invalid values
      */
-    QVariantMap validateAndCoerceParams(const QString &id, const QVariantMap &params) const;
+    QVariantMap validateAndCoerceParams(const QString& id, const QVariantMap& params) const;
 
     /**
      * Get default parameters for a shader
      */
-    Q_INVOKABLE QVariantMap defaultParams(const QString &id) const;
+    Q_INVOKABLE QVariantMap defaultParams(const QString& id) const;
 
     /**
      * Translate stored parameter values (keyed by parameter ID) to shader uniforms (keyed by mapsTo)
@@ -157,7 +159,7 @@ public:
      * @param storedParams Parameters with ID keys (from layout's shaderParams)
      * @return Parameters with mapsTo keys (for shader uniforms)
      */
-    Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString &shaderId, const QVariantMap &storedParams) const;
+    Q_INVOKABLE QVariantMap translateParamsToUniforms(const QString& shaderId, const QVariantMap& storedParams) const;
 
     /**
      * Reload shader list (called on file changes, startup)
@@ -166,30 +168,30 @@ public:
 
 Q_SIGNALS:
     void shadersChanged();
-    void shaderCompilationStarted(const QString &shaderId);
-    void shaderCompilationFinished(const QString &shaderId, bool success, const QString &error);
+    void shaderCompilationStarted(const QString& shaderId);
+    void shaderCompilationFinished(const QString& shaderId, bool success, const QString& error);
 
 private Q_SLOTS:
-    void onUserShaderDirChanged(const QString &path);
+    void onUserShaderDirChanged(const QString& path);
     void performDebouncedRefresh();
 
 private:
     void loadSystemShaders();
     void loadUserShaders();
-    void loadShaderFromDir(const QString &shaderDir, bool isUserShader);
-    ShaderInfo loadShaderMetadata(const QString &shaderDir);
-    bool validateParameterValue(const ParameterInfo &param, const QVariant &value) const;
+    void loadShaderFromDir(const QString& shaderDir, bool isUserShader);
+    ShaderInfo loadShaderMetadata(const QString& shaderDir);
+    bool validateParameterValue(const ParameterInfo& param, const QVariant& value) const;
     void setupFileWatcher();
     void ensureUserShaderDirExists() const;
-    QVariantMap shaderInfoToVariantMap(const ShaderInfo &info) const;
-    QVariantMap parameterInfoToVariantMap(const ParameterInfo &param) const;
+    QVariantMap shaderInfoToVariantMap(const ShaderInfo& info) const;
+    QVariantMap parameterInfoToVariantMap(const ParameterInfo& param) const;
 
     QHash<QString, ShaderInfo> m_shaders;
     bool m_shadersEnabled = false;
-    QFileSystemWatcher *m_watcher = nullptr;
-    QTimer *m_refreshTimer = nullptr;
+    QFileSystemWatcher* m_watcher = nullptr;
+    QTimer* m_refreshTimer = nullptr;
 
-    static ShaderRegistry *s_instance;
+    static ShaderRegistry* s_instance;
     static QString systemShaderDir();
     static QString userShaderDir();
 

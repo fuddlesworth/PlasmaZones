@@ -123,9 +123,15 @@ public:
     // Shader getters
     QString currentShaderId() const;
     QVariantMap currentShaderParams() const;
-    QVariantList availableShaders() const { return m_availableShaders; }
+    QVariantList availableShaders() const
+    {
+        return m_availableShaders;
+    }
     QVariantList currentShaderParameters() const;
-    bool shadersEnabled() const { return m_shadersEnabled; }
+    bool shadersEnabled() const
+    {
+        return m_shadersEnabled;
+    }
     bool hasShaderEffect() const;
     QString noneShaderUuid() const;
 

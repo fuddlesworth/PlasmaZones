@@ -121,9 +121,15 @@ public:
     bool isSystemLayout() const;
 
     // Shader support
-    QString shaderId() const { return m_shaderId; }
+    QString shaderId() const
+    {
+        return m_shaderId;
+    }
     void setShaderId(const QString& id);
-    QVariantMap shaderParams() const { return m_shaderParams; }
+    QVariantMap shaderParams() const
+    {
+        return m_shaderParams;
+    }
     void setShaderParams(const QVariantMap& params);
 
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
