@@ -145,15 +145,23 @@ Full KCM module for configuration - no config file editing required.
 <summary><b>More Settings Screenshots</b></summary>
 
 #### Appearance
+Customize zone visuals: shader effects, colors, opacity, border styles, and highlight animations.
+
 ![Appearance Settings](docs/media/screenshots/kcm-appearance.png)
 
 #### Behavior
+Configure drag modifiers, snap thresholds, auto-snap for new windows, and session persistence options.
+
 ![Behavior Settings](docs/media/screenshots/kcm-behavior.png)
 
 #### Zone Selector
+Set up the edge-triggered zone picker: trigger distance, display duration, and selector appearance.
+
 ![Zone Selector Settings](docs/media/screenshots/kcm-zoneselector.png)
 
 #### Shortcuts
+Configure all keyboard shortcuts for layout switching, window navigation, and editor access.
+
 ![Shortcuts Settings](docs/media/screenshots/kcm-shortcuts.png)
 
 </details>
