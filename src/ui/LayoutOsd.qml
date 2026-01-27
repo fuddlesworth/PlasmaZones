@@ -53,6 +53,7 @@ Window {
     // Show the OSD with animation
     function show() {
         // Stop any running animations to prevent conflicts
+        showAnimation.stop();
         hideAnimation.stop();
         dismissTimer.stop();
 
