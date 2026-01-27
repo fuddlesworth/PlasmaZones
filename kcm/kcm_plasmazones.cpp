@@ -1105,6 +1105,8 @@ void KCMPlasmaZones::defaults()
     Q_EMIT borderWidthChanged();
     Q_EMIT borderRadiusChanged();
     Q_EMIT enableBlurChanged();
+    Q_EMIT enableShaderEffectsChanged();
+    Q_EMIT shaderFrameRateChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT adjacentThresholdChanged();
     Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();

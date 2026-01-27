@@ -150,6 +150,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("borderWidth", borderWidth, setBorderWidth)
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
     REGISTER_BOOL_SETTING("enableBlur", enableBlur, setEnableBlur)
+    REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
+    REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
 
     // Zone settings (DRY: using macros)
     REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
