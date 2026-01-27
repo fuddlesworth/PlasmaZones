@@ -40,7 +40,7 @@ constexpr int MaxZones = 64;
  * - mat4: 64 bytes (4 vec4), align to 16
  * - arrays: element size rounded up to vec4 (16 bytes), align to 16
  *
- * Total size: 4288 bytes
+ * Total size: 4400 bytes (4416 with 16-byte alignment padding)
  */
 struct alignas(16) ZoneShaderUniforms
 {

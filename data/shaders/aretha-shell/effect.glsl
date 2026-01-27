@@ -229,19 +229,19 @@ vec3 dataStream(vec2 uv, float t) {
     float columnSpeed = 0.5 + columnSeed * 0.8;
     float columnPhase = columnSeed * 100.0;
 
-    // Calculate falling position (inverted so rain falls top -> bottom, matching Ghostty)
+    // Calculate falling position
     // In screen coords (Y=0 at top, Y=1 at bottom), falling DOWN means fallPos increases 0->1
-    float fallPos = 1.0 - fract(t * STREAM_SPEED * columnSpeed + columnPhase);
+    float fallPos = fract(t * STREAM_SPEED * columnSpeed + columnPhase);
 
     // Create the stream trail (trail ABOVE head = lower Y values in screen coords)
-    // distFromHead > 0 when pixel is ABOVE head (lower Y), < 0 when BELOW head (higher Y)
-    // Match Ghostty: uv.y - fallPos (positive when uv.y > fallPos, i.e., pixel is below head)
-    float distFromHead = uv.y - fallPos;
+    // distFromHead > 0 when pixel is ABOVE head (lower Y in screen coords)
+    // Rain falls down, trail follows above
+    float distFromHead = fallPos - uv.y;
     
-    // Wrap around when head crosses bottom and reappears at top
+    // Wrap around when head crosses top and reappears at bottom
     if (distFromHead < 0.0) distFromHead += 1.0;
     
-    // Trail intensity: brightest at head (distFromHead=0), fading as we go up (distFromHead increases)
+    // Trail intensity: brightest at head (distFromHead=0), fading upward (distFromHead increases)
     float trail = 1.0 - distFromHead / TRAIL_LENGTH;
     trail = max(0.0, trail);
     trail = trail * trail; // Quadratic falloff
@@ -286,7 +286,7 @@ vec3 dataStream(vec2 uv, float t) {
 // Horizontal scan line accent (from DataStream) - defined but not used in Ghostty mainImage
 // Keeping for potential future use, but not calling it to match Ghostty exactly
 float scanLine(vec2 uv, float t) {
-    float scanY = 1.0 - fract(t * 0.25);  // top -> bottom
+    float scanY = fract(t * 0.25);  // top -> bottom (Y increases downward in screen coords)
     return smoothstep(0.015, 0.0, abs(uv.y - scanY)) * 0.15;
 }
 
@@ -469,8 +469,9 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
 // === MAIN ===
 void main() {
-    // Use screen coordinates directly (Y=0 at top, matching Qt/PlasmaZones convention)
-    vec2 fragCoord = vTexCoord * iResolution;
+    // Convert texture coords to screen coords (Y=0 at top, matching Qt/PlasmaZones convention)
+    // OpenGL texture coords have Y=0 at bottom, so invert Y to match Qt screen coords
+    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
