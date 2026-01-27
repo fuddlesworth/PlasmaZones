@@ -217,32 +217,11 @@ public:
     virtual void setEnableShaderEffects(bool enable) = 0;
 
     /**
-     * @brief Shader rendering quality level (0-2: low, medium, high)
-     * @return Quality level from 0 (low) to 2 (high)
-     */
-    virtual int shaderQuality() const = 0;
-    virtual void setShaderQuality(int quality) = 0;
-
-    /**
      * @brief Target frame rate for animated shader effects
-     * @return Frame rate in FPS (e.g., 30, 60)
+     * @return Frame rate in FPS (30-144)
      */
     virtual int shaderFrameRate() const = 0;
     virtual void setShaderFrameRate(int fps) = 0;
-
-    /**
-     * @brief Default shader ID for new layouts
-     * @return Shader identifier (empty = no shader, or e.g., "glow", "neon")
-     */
-    virtual QString defaultShaderId() const = 0;
-    virtual void setDefaultShaderId(const QString& shaderId) = 0;
-
-    /**
-     * @brief Default shader parameters as JSON string
-     * @return JSON object string with parameter key-value pairs
-     */
-    virtual QString defaultShaderParams() const = 0;
-    virtual void setDefaultShaderParams(const QString& params) = 0;
 
     // Persistence
     virtual void load() = 0;
@@ -295,10 +274,7 @@ Q_SIGNALS:
     void zoneSelectorMaxRowsChanged();
     // Shader effects
     void enableShaderEffectsChanged();
-    void shaderQualityChanged();
     void shaderFrameRateChanged();
-    void defaultShaderIdChanged();
-    void defaultShaderParamsChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
     void previousLayoutShortcutChanged();

@@ -1461,6 +1461,34 @@ KCM.AbstractKCM {
             }
 
             CheckBox {
+                Kirigami.FormData.label: i18n("Shaders:")
+                text: i18n("Enable shader effects")
+                checked: kcm.enableShaderEffects
+                onToggled: kcm.enableShaderEffects = checked
+            }
+
+            RowLayout {
+                Kirigami.FormData.label: i18n("Shader FPS:")
+                enabled: kcm.enableShaderEffects
+                spacing: Kirigami.Units.smallSpacing
+
+                Slider {
+                    id: shaderFpsSlider
+                    Layout.preferredWidth: constants.sliderPreferredWidth
+                    from: 30
+                    to: 144
+                    stepSize: 1
+                    value: kcm.shaderFrameRate
+                    onMoved: kcm.shaderFrameRate = Math.round(value)
+                }
+
+                Label {
+                    text: Math.round(shaderFpsSlider.value) + " fps"
+                    Layout.preferredWidth: constants.sliderValueLabelWidth + 10
+                }
+            }
+
+            CheckBox {
                 Kirigami.FormData.label: i18n("Numbers:")
                 text: i18n("Show zone numbers")
                 checked: kcm.showZoneNumbers

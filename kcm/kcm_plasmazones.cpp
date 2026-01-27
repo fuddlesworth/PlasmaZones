@@ -200,6 +200,14 @@ bool KCMPlasmaZones::enableBlur() const
 {
     return m_settings->enableBlur();
 }
+bool KCMPlasmaZones::enableShaderEffects() const
+{
+    return m_settings->enableShaderEffects();
+}
+int KCMPlasmaZones::shaderFrameRate() const
+{
+    return m_settings->shaderFrameRate();
+}
 
 // Zone getters
 int KCMPlasmaZones::zonePadding() const
@@ -574,6 +582,22 @@ void KCMPlasmaZones::setEnableBlur(bool enable)
     if (m_settings->enableBlur() != enable) {
         m_settings->setEnableBlur(enable);
         Q_EMIT enableBlurChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setEnableShaderEffects(bool enable)
+{
+    if (m_settings->enableShaderEffects() != enable) {
+        m_settings->setEnableShaderEffects(enable);
+        Q_EMIT enableShaderEffectsChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setShaderFrameRate(int fps)
+{
+    if (m_settings->shaderFrameRate() != fps) {
+        m_settings->setShaderFrameRate(fps);
+        Q_EMIT shaderFrameRateChanged();
         setNeedsSave(true);
     }
 }

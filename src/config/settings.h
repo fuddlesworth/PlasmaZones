@@ -112,11 +112,7 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
                    enableShaderEffectsChanged)
-    Q_PROPERTY(int shaderQuality READ shaderQuality WRITE setShaderQuality NOTIFY shaderQualityChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
-    Q_PROPERTY(QString defaultShaderId READ defaultShaderId WRITE setDefaultShaderId NOTIFY defaultShaderIdChanged)
-    Q_PROPERTY(QString defaultShaderParams READ defaultShaderParams WRITE setDefaultShaderParams NOTIFY
-                   defaultShaderParamsChanged)
 
     // Global Shortcuts (configurable via KCM, registered with KGlobalAccel)
     Q_PROPERTY(
@@ -456,14 +452,8 @@ public:
     // Shader Effects
     bool enableShaderEffects() const override { return m_enableShaderEffects; }
     void setEnableShaderEffects(bool enable) override;
-    int shaderQuality() const override { return m_shaderQuality; }
-    void setShaderQuality(int quality) override;
     int shaderFrameRate() const override { return m_shaderFrameRate; }
     void setShaderFrameRate(int fps) override;
-    QString defaultShaderId() const override { return m_defaultShaderId; }
-    void setDefaultShaderId(const QString& id) override;
-    QString defaultShaderParams() const override { return m_defaultShaderParams; }
-    void setDefaultShaderParams(const QString& params) override;
 
     // Global Shortcuts (for KGlobalAccel)
     QString openEditorShortcut() const
@@ -663,10 +653,7 @@ private:
 
     // Shader Effects
     bool m_enableShaderEffects = true;
-    int m_shaderQuality = 1; // 0=Low, 1=Medium, 2=High
-    int m_shaderFrameRate = 60; // Target FPS for shader animations
-    QString m_defaultShaderId; // Empty = no shader effect
-    QString m_defaultShaderParams = QStringLiteral("{}");
+    int m_shaderFrameRate = 60;
 
     // Global Shortcuts (configurable, registered with KGlobalAccel)
     QString m_openEditorShortcut = QStringLiteral("Meta+Shift+E");
