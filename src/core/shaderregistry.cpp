@@ -27,7 +27,7 @@ static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2
 // Uniform name components for slot mapping
 static const char* const UniformVecNames[] = { "customParams1", "customParams2", "customParams3", "customParams4" };
 static const char* const UniformComponents[] = { "_x", "_y", "_z", "_w" };
-static const char* const UniformColorNames[] = { "customColor1", "customColor2", "customColor3", "customColor4" };
+static const char* const UniformColorNames[] = { "customColor1", "customColor2", "customColor3", "customColor4", "customColor5", "customColor6", "customColor7", "customColor8" };
 
 QString ShaderRegistry::ParameterInfo::uniformName() const
 {
@@ -36,8 +36,8 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     }
 
     if (type == QLatin1String("color")) {
-        // Color slots 0-3 → customColor1-4
-        if (slot >= 0 && slot < 4) {
+        // Color slots 0-7 → customColor1-8
+        if (slot >= 0 && slot < 8) {
             return QString::fromLatin1(UniformColorNames[slot]);
         }
         return QString();
@@ -339,6 +339,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString &sha
         ParameterInfo param;
         param.id = paramObj.value(QLatin1String("id")).toString();
         param.name = paramObj.value(QLatin1String("name")).toString(param.id);
+        param.group = paramObj.value(QLatin1String("group")).toString();
         param.type = paramObj.value(QLatin1String("type")).toString(QStringLiteral("float"));
         param.slot = paramObj.value(QLatin1String("slot")).toInt(-1);
         param.defaultValue = paramObj.value(QLatin1String("default")).toVariant();
@@ -427,6 +428,9 @@ QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo &param
     map[QStringLiteral("useZoneColor")] = param.useZoneColor;
 
     // Only include optional values if they are valid (D-Bus can't marshal null QVariants)
+    if (!param.group.isEmpty()) {
+        map[QStringLiteral("group")] = param.group;
+    }
     if (param.defaultValue.isValid()) {
         map[QStringLiteral("default")] = param.defaultValue;
     }

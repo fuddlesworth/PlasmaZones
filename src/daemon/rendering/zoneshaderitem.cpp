@@ -211,6 +211,10 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
     setCustomColor2(extractColor(QStringLiteral("customColor2"), m_customColor2));
     setCustomColor3(extractColor(QStringLiteral("customColor3"), m_customColor3));
     setCustomColor4(extractColor(QStringLiteral("customColor4"), m_customColor4));
+    setCustomColor5(extractColor(QStringLiteral("customColor5"), m_customColor5));
+    setCustomColor6(extractColor(QStringLiteral("customColor6"), m_customColor6));
+    setCustomColor7(extractColor(QStringLiteral("customColor7"), m_customColor7));
+    setCustomColor8(extractColor(QStringLiteral("customColor8"), m_customColor8));
 
     Q_EMIT shaderParamsChanged();
     update();
@@ -222,7 +226,7 @@ void ZoneShaderItem::setCustomParams1(const QVector4D& params)
         return;
     }
     m_customParams1 = params;
-    Q_EMIT customParams1Changed();
+    Q_EMIT customParamsChanged();
     update();
 }
 
@@ -232,7 +236,7 @@ void ZoneShaderItem::setCustomParams2(const QVector4D& params)
         return;
     }
     m_customParams2 = params;
-    Q_EMIT customParams2Changed();
+    Q_EMIT customParamsChanged();
     update();
 }
 
@@ -242,7 +246,7 @@ void ZoneShaderItem::setCustomColor1(const QVector4D& color)
         return;
     }
     m_customColor1 = color;
-    Q_EMIT customColor1Changed();
+    Q_EMIT customColorsChanged();
     update();
 }
 
@@ -252,7 +256,7 @@ void ZoneShaderItem::setCustomColor2(const QVector4D& color)
         return;
     }
     m_customColor2 = color;
-    Q_EMIT customColor2Changed();
+    Q_EMIT customColorsChanged();
     update();
 }
 
@@ -262,7 +266,7 @@ void ZoneShaderItem::setCustomParams3(const QVector4D& params)
         return;
     }
     m_customParams3 = params;
-    Q_EMIT customParams3Changed();
+    Q_EMIT customParamsChanged();
     update();
 }
 
@@ -272,7 +276,7 @@ void ZoneShaderItem::setCustomParams4(const QVector4D& params)
         return;
     }
     m_customParams4 = params;
-    Q_EMIT customParams4Changed();
+    Q_EMIT customParamsChanged();
     update();
 }
 
@@ -282,7 +286,7 @@ void ZoneShaderItem::setCustomColor3(const QVector4D& color)
         return;
     }
     m_customColor3 = color;
-    Q_EMIT customColor3Changed();
+    Q_EMIT customColorsChanged();
     update();
 }
 
@@ -292,7 +296,47 @@ void ZoneShaderItem::setCustomColor4(const QVector4D& color)
         return;
     }
     m_customColor4 = color;
-    Q_EMIT customColor4Changed();
+    Q_EMIT customColorsChanged();
+    update();
+}
+
+void ZoneShaderItem::setCustomColor5(const QVector4D& color)
+{
+    if (m_customColor5 == color) {
+        return;
+    }
+    m_customColor5 = color;
+    Q_EMIT customColorsChanged();
+    update();
+}
+
+void ZoneShaderItem::setCustomColor6(const QVector4D& color)
+{
+    if (m_customColor6 == color) {
+        return;
+    }
+    m_customColor6 = color;
+    Q_EMIT customColorsChanged();
+    update();
+}
+
+void ZoneShaderItem::setCustomColor7(const QVector4D& color)
+{
+    if (m_customColor7 == color) {
+        return;
+    }
+    m_customColor7 = color;
+    Q_EMIT customColorsChanged();
+    update();
+}
+
+void ZoneShaderItem::setCustomColor8(const QVector4D& color)
+{
+    if (m_customColor8 == color) {
+        return;
+    }
+    m_customColor8 = color;
+    Q_EMIT customColorsChanged();
     update();
 }
 
@@ -446,7 +490,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setMousePosition(m_iMouse);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // Sync custom shader parameters (16 floats in 4 vec4s + 4 colors)
+    // Sync custom shader parameters (16 floats in 4 vec4s + 8 colors)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     node->setCustomParams1(m_customParams1);
     node->setCustomParams2(m_customParams2);
@@ -475,6 +519,30 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         static_cast<float>(m_customColor4.y()),
         static_cast<float>(m_customColor4.z()),
         static_cast<float>(m_customColor4.w())
+    ));
+    node->setCustomColor5(QColor::fromRgbF(
+        static_cast<float>(m_customColor5.x()),
+        static_cast<float>(m_customColor5.y()),
+        static_cast<float>(m_customColor5.z()),
+        static_cast<float>(m_customColor5.w())
+    ));
+    node->setCustomColor6(QColor::fromRgbF(
+        static_cast<float>(m_customColor6.x()),
+        static_cast<float>(m_customColor6.y()),
+        static_cast<float>(m_customColor6.z()),
+        static_cast<float>(m_customColor6.w())
+    ));
+    node->setCustomColor7(QColor::fromRgbF(
+        static_cast<float>(m_customColor7.x()),
+        static_cast<float>(m_customColor7.y()),
+        static_cast<float>(m_customColor7.z()),
+        static_cast<float>(m_customColor7.w())
+    ));
+    node->setCustomColor8(QColor::fromRgbF(
+        static_cast<float>(m_customColor8.x()),
+        static_cast<float>(m_customColor8.y()),
+        static_cast<float>(m_customColor8.z()),
+        static_cast<float>(m_customColor8.w())
     ));
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

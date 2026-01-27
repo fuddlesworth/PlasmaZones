@@ -25,7 +25,7 @@ layout(std140) uniform ZoneUniforms {
     vec4 customParams[4];  // [0-3], access as customParams[0].x for slot 0, etc.
     // 4 color parameters
     // customColors[0]: fieldColor, customColors[1]: highlightColor
-    vec4 customColors[4];  // [0-3], access as customColors[0] for color slot 0, etc.
+    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
     // Zone data
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];

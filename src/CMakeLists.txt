@@ -337,6 +337,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ZoneOperations.qml
         editor/qml/HelpDialogContent.qml
         editor/qml/TemplatePreview.qml
+        editor/qml/ShaderParameterSection.qml
     )
 
 target_link_libraries(plasmazones-editor

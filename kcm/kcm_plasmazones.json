@@ -2,7 +2,7 @@
     "KPlugin": {
         "Name": "PlasmaZones",
         "Description": "Configure window zone snapping",
-        "Icon": "preferences-system-windows-actions",
+        "Icon": "plasmazones",
         "Authors": [
             {
                 "Name": "fuddlesworth",

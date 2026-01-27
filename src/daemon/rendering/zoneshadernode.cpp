@@ -667,7 +667,7 @@ void ZoneShaderNode::syncUniformsFromData()
     m_uniforms.customParams[UniformVecIndex4][ComponentZ] = m_customParams4.z();
     m_uniforms.customParams[UniformVecIndex4][ComponentW] = m_customParams4.w();
 
-    // Update custom colors (4 color slots)
+    // Update custom colors (8 color slots)
     m_uniforms.customColors[UniformVecIndex1][ComponentX] = static_cast<float>(m_customColor1.redF());
     m_uniforms.customColors[UniformVecIndex1][ComponentY] = static_cast<float>(m_customColor1.greenF());
     m_uniforms.customColors[UniformVecIndex1][ComponentZ] = static_cast<float>(m_customColor1.blueF());
@@ -687,6 +687,26 @@ void ZoneShaderNode::syncUniformsFromData()
     m_uniforms.customColors[UniformVecIndex4][ComponentY] = static_cast<float>(m_customColor4.greenF());
     m_uniforms.customColors[UniformVecIndex4][ComponentZ] = static_cast<float>(m_customColor4.blueF());
     m_uniforms.customColors[UniformVecIndex4][ComponentW] = static_cast<float>(m_customColor4.alphaF());
+
+    m_uniforms.customColors[4][ComponentX] = static_cast<float>(m_customColor5.redF());
+    m_uniforms.customColors[4][ComponentY] = static_cast<float>(m_customColor5.greenF());
+    m_uniforms.customColors[4][ComponentZ] = static_cast<float>(m_customColor5.blueF());
+    m_uniforms.customColors[4][ComponentW] = static_cast<float>(m_customColor5.alphaF());
+
+    m_uniforms.customColors[5][ComponentX] = static_cast<float>(m_customColor6.redF());
+    m_uniforms.customColors[5][ComponentY] = static_cast<float>(m_customColor6.greenF());
+    m_uniforms.customColors[5][ComponentZ] = static_cast<float>(m_customColor6.blueF());
+    m_uniforms.customColors[5][ComponentW] = static_cast<float>(m_customColor6.alphaF());
+
+    m_uniforms.customColors[6][ComponentX] = static_cast<float>(m_customColor7.redF());
+    m_uniforms.customColors[6][ComponentY] = static_cast<float>(m_customColor7.greenF());
+    m_uniforms.customColors[6][ComponentZ] = static_cast<float>(m_customColor7.blueF());
+    m_uniforms.customColors[6][ComponentW] = static_cast<float>(m_customColor7.alphaF());
+
+    m_uniforms.customColors[7][ComponentX] = static_cast<float>(m_customColor8.redF());
+    m_uniforms.customColors[7][ComponentY] = static_cast<float>(m_customColor8.greenF());
+    m_uniforms.customColors[7][ComponentZ] = static_cast<float>(m_customColor8.blueF());
+    m_uniforms.customColors[7][ComponentW] = static_cast<float>(m_customColor8.alphaF());
 
     // Update zone data arrays
     for (int i = 0; i < MaxZones; ++i) {

@@ -649,9 +649,13 @@ Window {
         property string pendingShaderId: ""
         property bool pendingHasEffect: false
 
+        // Accordion state - only one group expanded at a time (-1 = all collapsed)
+        property int expandedGroupIndex: 0
+
         // Initialize pending state when dialog opens
         onOpened: {
             shaderDialog.initializePendingState();
+            shaderDialog.expandedGroupIndex = 0;  // Reset to first group expanded
         }
 
         // When pending shader changes, reinitialize params with new shader's defaults
@@ -772,6 +776,50 @@ Window {
         property var shaderParams: shaderDialog.currentShaderInfo ? (shaderDialog.currentShaderInfo.parameters || []) : []
         property var currentParams: shaderDialog.pendingParams
         property string noneShaderId: editorWindow._editorController ? editorWindow._editorController.noneShaderUuid : ""
+
+        // Computed property: parameters grouped by their "group" field
+        // Returns array of { name: string, params: array } objects
+        // Returns empty array if no parameters have groups defined (triggers flat layout)
+        property var parameterGroups: buildParameterGroups(shaderDialog.shaderParams)
+
+        // Helper function to group parameters by their "group" field
+        function buildParameterGroups(params) {
+            if (!params || params.length === 0) return [];
+
+            // Check if any parameter has a group defined
+            var hasGroups = false;
+            for (var i = 0; i < params.length; i++) {
+                if (params[i] && params[i].group) {
+                    hasGroups = true;
+                    break;
+                }
+            }
+
+            // If no groups defined, return empty to use flat layout
+            if (!hasGroups) return [];
+
+            // Group parameters by their group field
+            var groupMap = {};
+            var groupOrder = [];
+            for (var j = 0; j < params.length; j++) {
+                var param = params[j];
+                if (!param) continue;
+                var groupName = param.group || i18nc("@title:group", "General");
+                if (!groupMap[groupName]) {
+                    groupMap[groupName] = [];
+                    groupOrder.push(groupName);
+                }
+                groupMap[groupName].push(param);
+            }
+
+            // Convert to array of objects
+            var result = [];
+            for (var k = 0; k < groupOrder.length; k++) {
+                var name = groupOrder[k];
+                result.push({ name: name, params: groupMap[name] });
+            }
+            return result;
+        }
 
         function firstEffectId() {
             var shaders = editorWindow._editorController ? editorWindow._editorController.availableShaders : [];
@@ -909,19 +957,29 @@ Window {
                 }
             }
 
-            Kirigami.FormLayout {
+            // ═══════════════════════════════════════════════════════════════════
+            // PARAMETER SECTIONS - Grouped with collapsible headers
+            // ═══════════════════════════════════════════════════════════════════
+            ColumnLayout {
                 Layout.fillWidth: true
                 visible: shaderDialog.hasShaderEffect
+                spacing: Kirigami.Units.smallSpacing
 
                 Kirigami.Separator {
-                    Kirigami.FormData.isSection: true
-                    Kirigami.FormData.label: i18nc("@title:group", "Parameters")
+                    Layout.fillWidth: true
                     visible: shaderDialog.shaderParams.length > 0
+                }
+
+                QQC.Label {
+                    Layout.fillWidth: true
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    visible: shaderDialog.shaderParams.length > 0
+                    text: i18nc("@title:group", "Parameters")
+                    font.weight: Font.DemiBold
                 }
 
                 // Message when shader has no parameters
                 QQC.Label {
-                    Kirigami.FormData.label: ""
                     Layout.fillWidth: true
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     Layout.rightMargin: Kirigami.Units.largeSpacing
@@ -933,37 +991,105 @@ Window {
                     color: Kirigami.Theme.disabledTextColor
                 }
 
+                // Grouped parameters - show collapsible sections when groups are defined
+                // Uses accordion behavior: only one section expanded at a time
                 Repeater {
-                    model: shaderDialog.shaderParams
+                    id: groupRepeater
+                    model: shaderDialog.parameterGroups
 
-                    delegate: Loader {
-                        id: paramLoader
-                        Layout.fillWidth: true
-                        visible: sourceComponent !== null
-
+                    delegate: ShaderParameterSection {
+                        id: paramSection
                         required property var modelData
                         required property int index
 
-                        Kirigami.FormData.label: modelData.name || modelData.id
+                        Layout.fillWidth: true
+                        title: modelData.name
+                        groupParams: modelData.params  // Explicit property, not closure
 
-                        sourceComponent: modelData.type === "float"
-                            ? floatParamRow
-                            : modelData.type === "color"
-                                ? colorParamRow
-                                : modelData.type === "bool"
-                                    ? boolParamRow
-                                    : modelData.type === "int"
-                                        ? intParamRow
-                                        : null
+                        // Accordion behavior: expand only if this is the active index
+                        expanded: shaderDialog.expandedGroupIndex === index
 
-                        onLoaded: {
-                            if (item) {
-                                item.modelData = modelData;
+                        // Toggle accordion: collapse if already open, otherwise open this one
+                        onToggled: {
+                            shaderDialog.expandedGroupIndex = expanded ? -1 : index;
+                        }
+
+                        contentItem: Component {
+                            Kirigami.FormLayout {
+                                id: groupFormLayout
+
+                                Repeater {
+                                    // Use the section's groupParams property (explicit binding)
+                                    model: paramSection.groupParams
+
+                                    delegate: Loader {
+                                        id: groupParamLoader
+                                        Layout.fillWidth: true
+                                        visible: sourceComponent !== null
+
+                                        required property var modelData
+                                        required property int index
+
+                                        Kirigami.FormData.label: modelData.name || modelData.id
+
+                                        sourceComponent: modelData.type === "float"
+                                            ? floatParamRow
+                                            : modelData.type === "color"
+                                                ? colorParamRow
+                                                : modelData.type === "bool"
+                                                    ? boolParamRow
+                                                    : modelData.type === "int"
+                                                        ? intParamRow
+                                                        : null
+
+                                        onLoaded: {
+                                            if (item) {
+                                                item.modelData = modelData;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
+                // Flat parameters - show when no groups are defined (backward compatible)
+                Kirigami.FormLayout {
+                    Layout.fillWidth: true
+                    visible: shaderDialog.parameterGroups.length === 0 && shaderDialog.shaderParams.length > 0
+
+                    Repeater {
+                        model: shaderDialog.parameterGroups.length === 0 ? shaderDialog.shaderParams : []
+
+                        delegate: Loader {
+                            id: flatParamLoader
+                            Layout.fillWidth: true
+                            visible: sourceComponent !== null
+
+                            required property var modelData
+                            required property int index
+
+                            Kirigami.FormData.label: modelData.name || modelData.id
+
+                            sourceComponent: modelData.type === "float"
+                                ? floatParamRow
+                                : modelData.type === "color"
+                                    ? colorParamRow
+                                    : modelData.type === "bool"
+                                        ? boolParamRow
+                                        : modelData.type === "int"
+                                            ? intParamRow
+                                            : null
+
+                            onLoaded: {
+                                if (item) {
+                                    item.modelData = modelData;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

@@ -69,23 +69,23 @@ struct alignas(16) ZoneShaderUniforms
     // 16 float parameters total (slots 0-15), accessed as customParams[slot/4][slot%4]
     float customParams[4][4];  // vec4[4]: 64 bytes at offset 112 (slots 0-15)
 
-    // Custom colors for shader effects (4 color slots)
-    float customColors[4][4];  // vec4[4]: 64 bytes at offset 176 (color slots 0-3)
+    // Custom colors for shader effects (8 color slots)
+    float customColors[8][4];  // vec4[8]: 128 bytes at offset 176 (color slots 0-7)
 
     // Zone data arrays (each element is vec4, naturally aligned)
     // zoneRects: x, y, width, height (normalized 0-1 coordinates)
-    float zoneRects[MaxZones][4];       // vec4[64]: 1024 bytes at offset 240
+    float zoneRects[MaxZones][4];       // vec4[64]: 1024 bytes at offset 304 (176 + 128)
 
     // zoneFillColors: RGBA fill color for each zone
-    float zoneFillColors[MaxZones][4];  // vec4[64]: 1024 bytes at offset 1200
+    float zoneFillColors[MaxZones][4];  // vec4[64]: 1024 bytes at offset 1328 (304 + 1024)
 
     // zoneBorderColors: RGBA border color for each zone
-    float zoneBorderColors[MaxZones][4]; // vec4[64]: 1024 bytes at offset 2224
+    float zoneBorderColors[MaxZones][4]; // vec4[64]: 1024 bytes at offset 2352 (1328 + 1024)
 
     // zoneParams: x=borderRadius, y=borderWidth, z=isHighlighted (0/1), w=zoneNumber
-    float zoneParams[MaxZones][4];      // vec4[64]: 1024 bytes at offset 3248
+    float zoneParams[MaxZones][4];      // vec4[64]: 1024 bytes at offset 3376 (2352 + 1024)
 
-    // Total: 4272 bytes, padded to 4288 for 16-byte alignment
+    // Total: 4400 bytes, padded to 4416 for 16-byte alignment
 };
 
 // Verify struct size at compile time (approximately, accounting for alignment)
@@ -296,6 +296,30 @@ public:
      */
     void setCustomColor4(const QColor& color);
 
+    /**
+     * @brief Set custom color (slot 5)
+     * @param color Color value
+     */
+    void setCustomColor5(const QColor& color);
+
+    /**
+     * @brief Set custom color (slot 6)
+     * @param color Color value
+     */
+    void setCustomColor6(const QColor& color);
+
+    /**
+     * @brief Set custom color (slot 7)
+     * @param color Color value
+     */
+    void setCustomColor7(const QColor& color);
+
+    /**
+     * @brief Set custom color (slot 8)
+     * @param color Color value
+     */
+    void setCustomColor8(const QColor& color);
+
     // Shader loading
 
     /**
@@ -402,11 +426,15 @@ private:
     QVector4D m_customParams3;
     QVector4D m_customParams4;
 
-    // Custom colors (4 colors)
+    // Custom colors (8 colors)
     QColor m_customColor1 = Qt::white;
     QColor m_customColor2 = Qt::white;
     QColor m_customColor3 = Qt::white;
     QColor m_customColor4 = Qt::white;
+    QColor m_customColor5 = Qt::white;
+    QColor m_customColor6 = Qt::white;
+    QColor m_customColor7 = Qt::white;
+    QColor m_customColor8 = Qt::white;
 };
 
 // Inline implementations for simple setters
@@ -491,6 +519,30 @@ inline void ZoneShaderNode::setCustomColor3(const QColor& color)
 inline void ZoneShaderNode::setCustomColor4(const QColor& color)
 {
     m_customColor4 = color;
+    m_uniformsDirty = true;
+}
+
+inline void ZoneShaderNode::setCustomColor5(const QColor& color)
+{
+    m_customColor5 = color;
+    m_uniformsDirty = true;
+}
+
+inline void ZoneShaderNode::setCustomColor6(const QColor& color)
+{
+    m_customColor6 = color;
+    m_uniformsDirty = true;
+}
+
+inline void ZoneShaderNode::setCustomColor7(const QColor& color)
+{
+    m_customColor7 = color;
+    m_uniformsDirty = true;
+}
+
+inline void ZoneShaderNode::setCustomColor8(const QColor& color)
+{
+    m_customColor8 = color;
     m_uniformsDirty = true;
 }
 

@@ -133,16 +133,22 @@ class PLASMAZONES_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
 
     // Custom parameters (16 floats in 4 vec4s, slots 0-15)
-    Q_PROPERTY(QVector4D customParams1 READ customParams1 WRITE setCustomParams1 NOTIFY customParams1Changed FINAL)
-    Q_PROPERTY(QVector4D customParams2 READ customParams2 WRITE setCustomParams2 NOTIFY customParams2Changed FINAL)
-    Q_PROPERTY(QVector4D customParams3 READ customParams3 WRITE setCustomParams3 NOTIFY customParams3Changed FINAL)
-    Q_PROPERTY(QVector4D customParams4 READ customParams4 WRITE setCustomParams4 NOTIFY customParams4Changed FINAL)
+    // All use consolidated customParamsChanged signal
+    Q_PROPERTY(QVector4D customParams1 READ customParams1 WRITE setCustomParams1 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams2 READ customParams2 WRITE setCustomParams2 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams3 READ customParams3 WRITE setCustomParams3 NOTIFY customParamsChanged FINAL)
+    Q_PROPERTY(QVector4D customParams4 READ customParams4 WRITE setCustomParams4 NOTIFY customParamsChanged FINAL)
 
-    // Custom colors (4 colors)
-    Q_PROPERTY(QVector4D customColor1 READ customColor1 WRITE setCustomColor1 NOTIFY customColor1Changed FINAL)
-    Q_PROPERTY(QVector4D customColor2 READ customColor2 WRITE setCustomColor2 NOTIFY customColor2Changed FINAL)
-    Q_PROPERTY(QVector4D customColor3 READ customColor3 WRITE setCustomColor3 NOTIFY customColor3Changed FINAL)
-    Q_PROPERTY(QVector4D customColor4 READ customColor4 WRITE setCustomColor4 NOTIFY customColor4Changed FINAL)
+    // Custom colors (8 colors)
+    // All use consolidated customColorsChanged signal
+    Q_PROPERTY(QVector4D customColor1 READ customColor1 WRITE setCustomColor1 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor2 READ customColor2 WRITE setCustomColor2 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor3 READ customColor3 WRITE setCustomColor3 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor4 READ customColor4 WRITE setCustomColor4 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor5 READ customColor5 WRITE setCustomColor5 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor6 READ customColor6 WRITE setCustomColor6 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor7 READ customColor7 WRITE setCustomColor7 NOTIFY customColorsChanged FINAL)
+    Q_PROPERTY(QVector4D customColor8 READ customColor8 WRITE setCustomColor8 NOTIFY customColorsChanged FINAL)
 
     // Status
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
@@ -208,7 +214,7 @@ public:
     QVector4D customParams4() const { return m_customParams4; }
     void setCustomParams4(const QVector4D& params);
 
-    // Custom color getters/setters (4 colors)
+    // Custom color getters/setters (8 colors)
     QVector4D customColor1() const { return m_customColor1; }
     void setCustomColor1(const QVector4D& color);
 
@@ -220,6 +226,18 @@ public:
 
     QVector4D customColor4() const { return m_customColor4; }
     void setCustomColor4(const QVector4D& color);
+
+    QVector4D customColor5() const { return m_customColor5; }
+    void setCustomColor5(const QVector4D& color);
+
+    QVector4D customColor6() const { return m_customColor6; }
+    void setCustomColor6(const QVector4D& color);
+
+    QVector4D customColor7() const { return m_customColor7; }
+    void setCustomColor7(const QVector4D& color);
+
+    QVector4D customColor8() const { return m_customColor8; }
+    void setCustomColor8(const QVector4D& color);
 
     // Status getters
     Status status() const { return m_status; }
@@ -264,14 +282,8 @@ Q_SIGNALS:
     void highlightedCountChanged();
     void shaderSourceChanged();
     void shaderParamsChanged();
-    void customParams1Changed();
-    void customParams2Changed();
-    void customParams3Changed();
-    void customParams4Changed();
-    void customColor1Changed();
-    void customColor2Changed();
-    void customColor3Changed();
-    void customColor4Changed();
+    void customParamsChanged();  // Emitted when any customParams1-4 changes
+    void customColorsChanged();  // Emitted when any customColor1-8 changes
     void statusChanged();
     void errorLogChanged();
 
@@ -351,6 +363,10 @@ private:
     QVector4D m_customColor2 = QVector4D(0.2f, 0.2f, 0.2f, 0.8f); // Default gray inactive
     QVector4D m_customColor3 = QVector4D(1.0f, 1.0f, 1.0f, 0.0f); // Default white, alpha 0 = not set
     QVector4D m_customColor4 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
+    QVector4D m_customColor5 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
+    QVector4D m_customColor6 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
+    QVector4D m_customColor7 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
+    QVector4D m_customColor8 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
 
     // Status
     Status m_status = Status::Null;

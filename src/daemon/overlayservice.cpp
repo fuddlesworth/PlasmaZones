@@ -444,6 +444,10 @@ OverlayService::OverlayService(QObject* parent)
         QStringLiteral("org.freedesktop.login1.Manager"),
         QStringLiteral("PrepareForSleep"),
         this, SLOT(onPrepareForSleep(bool)));
+
+    // Reset shader error state on construction (fresh start after reboot)
+    m_shaderErrorPending = false;
+    m_pendingShaderError.clear();
 }
 
 bool OverlayService::isVisible() const
@@ -551,8 +555,51 @@ void OverlayService::show()
         }
     }
 
-    // Start shader animation if using shader overlay
-    if (useShaderOverlay()) {
+    // Check if we need to recreate windows - this handles the case where windows
+    // were created before shaders were ready (e.g., at startup after reboot)
+    const bool shouldUseShader = useShaderOverlay();
+    bool needsRecreate = false;
+    
+    // Check if any existing windows are the wrong type
+    for (auto* screen : Utils::allScreens()) {
+        if (!m_overlayWindows.contains(screen)) {
+            continue;
+        }
+        auto* window = m_overlayWindows.value(screen);
+        if (!window) {
+            continue;
+        }
+        
+        // Check if window type matches what we need
+        // Use isShaderOverlay property set at creation time (more reliable than shaderSource
+        // which can be set on non-shader windows by updateOverlayWindow())
+        const bool windowIsShader = window->property("isShaderOverlay").toBool();
+        if (windowIsShader != shouldUseShader) {
+            needsRecreate = true;
+            qCDebug(lcOverlay) << "Overlay window type mismatch detected, will recreate"
+                              << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
+            break;
+        }
+    }
+    
+    // Recreate windows if type mismatch detected
+    if (needsRecreate) {
+        const auto screens = m_overlayWindows.keys();
+        for (QScreen* screen : screens) {
+            destroyOverlayWindow(screen);
+        }
+        for (QScreen* screen : screens) {
+            if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
+                createOverlayWindow(screen);
+                updateOverlayWindow(screen);
+                if (auto* window = m_overlayWindows.value(screen)) {
+                    window->show();
+                }
+            }
+        }
+    }
+    
+    if (shouldUseShader) {
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();
     }
@@ -619,8 +666,51 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         }
     }
 
-    // Start shader animation if using shader overlay
-    if (useShaderOverlay()) {
+    // Check if we need to recreate windows - this handles the case where windows
+    // were created before shaders were ready (e.g., at startup after reboot)
+    const bool shouldUseShader = useShaderOverlay();
+    bool needsRecreate = false;
+    
+    // Check if any existing windows are the wrong type
+    for (auto* screen : Utils::allScreens()) {
+        if (!m_overlayWindows.contains(screen)) {
+            continue;
+        }
+        auto* window = m_overlayWindows.value(screen);
+        if (!window) {
+            continue;
+        }
+        
+        // Check if window type matches what we need
+        // Use isShaderOverlay property set at creation time (more reliable than shaderSource
+        // which can be set on non-shader windows by updateOverlayWindow())
+        const bool windowIsShader = window->property("isShaderOverlay").toBool();
+        if (windowIsShader != shouldUseShader) {
+            needsRecreate = true;
+            qCDebug(lcOverlay) << "Overlay window type mismatch detected, will recreate"
+                              << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
+            break;
+        }
+    }
+    
+    // Recreate windows if type mismatch detected
+    if (needsRecreate) {
+        const auto screens = m_overlayWindows.keys();
+        for (QScreen* screen : screens) {
+            destroyOverlayWindow(screen);
+        }
+        for (QScreen* screen : screens) {
+            if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
+                createOverlayWindow(screen);
+                updateOverlayWindow(screen);
+                if (auto* window = m_overlayWindows.value(screen)) {
+                    window->show();
+                }
+            }
+        }
+    }
+    
+    if (shouldUseShader) {
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();
     }
@@ -838,7 +928,63 @@ void OverlayService::setLayout(Layout* layout)
 void OverlayService::setSettings(ISettings* settings)
 {
     if (m_settings != settings) {
+        // Disconnect from old settings signals
+        if (m_settings) {
+            disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
+        }
+
         m_settings = settings;
+
+        // Connect to new settings signals
+        if (m_settings) {
+            connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
+                // When shader effects setting changes, recreate overlay windows if visible
+                // to switch between shader and non-shader overlay types
+                if (m_visible) {
+                    // Check if we were using shaders before the setting changed
+                    // (shader timer running indicates we were using shader overlay)
+                    const bool wasUsingShader = m_shaderUpdateTimer && m_shaderUpdateTimer->isActive();
+                    const bool shouldUseShader = useShaderOverlay();
+
+                    // Only recreate if the overlay type actually needs to change
+                    if (wasUsingShader != shouldUseShader) {
+                        qCDebug(lcOverlay) << "Shader effects setting changed, recreating overlay windows"
+                                          << "(was:" << wasUsingShader << "now:" << shouldUseShader << ")";
+
+                        // Stop shader animation if it was running
+                        if (wasUsingShader) {
+                            stopShaderAnimation();
+                        }
+
+                        // Store current visibility state
+                        const bool wasVisible = m_visible;
+
+                        // Recreate all overlay windows
+                        const auto screens = m_overlayWindows.keys();
+                        for (QScreen* screen : screens) {
+                            destroyOverlayWindow(screen);
+                        }
+
+                        // Recreate windows with correct type
+                        for (QScreen* screen : screens) {
+                            if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
+                                createOverlayWindow(screen);
+                                updateOverlayWindow(screen);
+                                if (wasVisible && m_overlayWindows.value(screen)) {
+                                    m_overlayWindows.value(screen)->show();
+                                }
+                            }
+                        }
+
+                        // Start shader animation if needed
+                        if (shouldUseShader && wasVisible) {
+                            updateZonesForAllWindows(); // Push initial zone data
+                            startShaderAnimation();
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -1477,6 +1623,9 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     window->setWidth(geom.width());
     window->setHeight(geom.height());
 
+    // Mark window type for reliable type detection (used by mismatch detection logic)
+    window->setProperty("isShaderOverlay", usingShader);
+
     // Set shader-specific properties if using shader overlay
     if (usingShader && m_layout) {
         auto* registry = ShaderRegistry::instance();
@@ -1593,7 +1742,9 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     }
 
     // Update shader-specific properties if using shader overlay
-    if (useShaderOverlay() && screenLayout) {
+    // Only update if this window is actually a shader overlay window (check isShaderOverlay property)
+    const bool windowIsShader = window->property("isShaderOverlay").toBool();
+    if (windowIsShader && useShaderOverlay() && screenLayout) {
         auto* registry = ShaderRegistry::instance();
         if (registry) {
             const QString shaderId = screenLayout->shaderId();
@@ -1602,6 +1753,10 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
             window->setProperty("shaderParams", QVariant::fromValue(translatedParams));
         }
+    } else if (windowIsShader && !useShaderOverlay()) {
+        // Clear shader properties if window is shader type but shaders are now disabled
+        window->setProperty("shaderSource", QUrl());
+        window->setProperty("shaderParams", QVariantMap());
     }
 
     // Update zones on the window (QML root has the zones property).

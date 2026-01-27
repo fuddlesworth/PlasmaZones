@@ -32,8 +32,9 @@ public:
     struct ParameterInfo {
         QString id;
         QString name;
+        QString group;           ///< Optional group for UI organization (collapsible sections)
         QString type;            ///< "float", "color", "int", "bool"
-        int slot = -1;           ///< Uniform slot: 0-15 for floats, 0-3 for colors
+        int slot = -1;           ///< Uniform slot: 0-15 for floats, 0-7 for colors
         QVariant defaultValue;
         QVariant minValue;
         QVariant maxValue;

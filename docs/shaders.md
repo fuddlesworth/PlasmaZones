@@ -29,6 +29,7 @@ Create custom GPU-accelerated effects for zone overlays using GLSL shaders.
         {
             "id": "intensity",
             "name": "Effect Intensity",
+            "group": "Appearance",
             "type": "float",
             "slot": 0,
             "default": 1.0,
@@ -38,6 +39,7 @@ Create custom GPU-accelerated effects for zone overlays using GLSL shaders.
         {
             "id": "mainColor",
             "name": "Main Color",
+            "group": "Colors",
             "type": "color",
             "slot": 0,
             "default": "#ff6600"
@@ -45,6 +47,25 @@ Create custom GPU-accelerated effects for zone overlays using GLSL shaders.
     ]
 }
 ```
+
+### Parameter Groups
+
+For shaders with many parameters, you can organize them into collapsible groups using the optional `group` field:
+
+```json
+{
+    "id": "glowSize",
+    "name": "Glow Size",
+    "group": "Glow Effects",
+    "type": "float",
+    "slot": 2,
+    "default": 35.0,
+    "min": 10.0,
+    "max": 60.0
+}
+```
+
+Parameters with the same `group` value will appear together in a collapsible section in the editor. The first group is expanded by default; others are collapsed to reduce clutter. Parameters without a `group` field are shown in a flat list (backward compatible).
 
 ### Parameter Slots
 

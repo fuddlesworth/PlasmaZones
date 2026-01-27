@@ -56,6 +56,10 @@ Window {
     property vector4d customColor2: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
     property vector4d customColor3: Qt.vector4d(1.0, 1.0, 1.0, 0.0)
     property vector4d customColor4: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
+    property vector4d customColor5: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
+    property vector4d customColor6: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
+    property vector4d customColor7: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
+    property vector4d customColor8: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
 
     // Update custom params when shaderParams changes
     onShaderParamsChanged: {
@@ -67,6 +71,10 @@ Window {
         customColor2 = internal.buildCustomColor(2)
         customColor3 = internal.buildCustomColor(3)
         customColor4 = internal.buildCustomColor(4)
+        customColor5 = internal.buildCustomColor(5)
+        customColor6 = internal.buildCustomColor(6)
+        customColor7 = internal.buildCustomColor(7)
+        customColor8 = internal.buildCustomColor(8)
     }
 
     // Compatibility properties
@@ -133,6 +141,10 @@ Window {
             customColor2: root.customColor2
             customColor3: root.customColor3
             customColor4: root.customColor4
+            customColor5: root.customColor5
+            customColor6: root.customColor6
+            customColor7: root.customColor7
+            customColor8: root.customColor8
 
             // Shader params map
             shaderParams: root.shaderParams
