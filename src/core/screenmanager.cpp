@@ -16,10 +16,8 @@
 #include <QDBusPendingCallWatcher>
 #include <QRegularExpression>
 
-#ifdef HAVE_LAYER_SHELL
 #include <LayerShellQt/Window>
 #include <LayerShellQt/Shell>
-#endif
 
 namespace PlasmaZones {
 
@@ -134,14 +132,6 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
         return;
     }
 
-#ifdef HAVE_LAYER_SHELL
-    if (!Platform::isWayland() || !Platform::hasLayerShell()) {
-        // On X11, Qt's availableGeometry() works correctly
-        // Just cache it directly
-        s_availableGeometryCache.insert(screen->name(), screen->availableGeometry());
-        return;
-    }
-
     // Create the main sensor (anchored to all edges) for available area size
     auto* sensor = new QWindow();
     sensor->setScreen(screen);
@@ -188,11 +178,6 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
     // Query KDE Plasma for panel information via D-Bus (most accurate method)
     // Schedule initial query with debounce to coalesce multiple sensor creations
     scheduleDbusQuery();
-
-#else
-    // No LayerShellQt - use Qt's availableGeometry
-    s_availableGeometryCache.insert(screen->name(), screen->availableGeometry());
-#endif
 }
 
 void ScreenManager::destroyGeometrySensor(QScreen* screen)
@@ -208,7 +193,6 @@ void ScreenManager::destroyGeometrySensor(QScreen* screen)
     }
 }
 
-#ifdef HAVE_LAYER_SHELL
 void ScreenManager::scheduleDbusQuery()
 {
     if (m_dbusQueryPending) {
@@ -431,21 +415,6 @@ void ScreenManager::queryKdePlasmaPanels()
     });
 }
 
-#else
-void ScreenManager::scheduleDbusQuery()
-{
-}
-void ScreenManager::queryKdePlasmaPanels()
-{
-}
-void ScreenManager::calculateAvailableGeometry(QScreen* screen)
-{
-    if (screen) {
-        s_availableGeometryCache.insert(screen->name(), screen->availableGeometry());
-    }
-}
-#endif
-
 void ScreenManager::onSensorGeometryChanged(QScreen* screen)
 {
     // Main sensor geometry changed - re-query panels and recalculate
@@ -485,7 +454,7 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen)
     }
 
     // Fallback: check if Qt's availableGeometry differs from geometry
-    // This works on X11 and some Wayland compositors
+    // This can work on some Wayland compositors before sensor data is available
     QRect availGeom = screen->availableGeometry();
     QRect screenGeom = screen->geometry();
 

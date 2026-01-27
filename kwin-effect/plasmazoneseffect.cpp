@@ -97,7 +97,8 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
 
 bool PlasmaZonesEffect::supported()
 {
-    // This effect works on both X11 and Wayland
+    // This effect is a compositor plugin that works in KWin on Wayland
+    // Note: PlasmaZones daemon requires Wayland with LayerShellQt
     return true;
 }
 
@@ -454,7 +455,7 @@ bool PlasmaZonesEffect::shouldAutoSnapWindow(KWin::EffectWindow* w) const
         return false;
     }
 
-    // Popup check handles X11 edge cases where popups might be classified as normal
+    // Popup check handles edge cases where popups might be classified as normal
     if (w->isPopupWindow()) {
         return false;
     }

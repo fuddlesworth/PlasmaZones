@@ -85,8 +85,8 @@ Window {
     signal zoneClicked(int index)
     signal zoneHovered(int index)
 
-    flags: Qt.FramelessWindowHint |
-           (Qt.platform.pluginName === "wayland" ? Qt.WindowDoesNotAcceptFocus : Qt.WindowStaysOnTopHint)
+    // Window flags - LayerShellQt handles the overlay behavior on Wayland
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     visible: false
 

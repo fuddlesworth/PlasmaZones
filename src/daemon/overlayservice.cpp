@@ -28,10 +28,8 @@
 #include <KLocalizedContext>
 #include <cmath>
 
-#ifdef HAVE_LAYER_SHELL
 #include <LayerShellQt/Window>
 #include <LayerShellQt/Shell>
-#endif
 
 namespace PlasmaZones {
 
@@ -363,57 +361,53 @@ void updateZoneSelectorWindowLayout(QQuickWindow* window, QScreen* screen, ISett
 
     const ZoneSelectorPosition pos = settings ? settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
 
-#ifdef HAVE_LAYER_SHELL
-    if (Platform::isWayland() && Platform::hasLayerShell()) {
-        if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-            // Initialize to Top anchors as safe default
-            LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
-                LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
-            switch (pos) {
-            case ZoneSelectorPosition::TopLeft:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
-                break;
-            case ZoneSelectorPosition::Top:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                                  | LayerShellQt::Window::AnchorRight);
-                break;
-            case ZoneSelectorPosition::TopRight:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
-                break;
-            case ZoneSelectorPosition::Left:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                                  | LayerShellQt::Window::AnchorBottom);
-                break;
-            case ZoneSelectorPosition::Right:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                                  | LayerShellQt::Window::AnchorBottom);
-                break;
-            case ZoneSelectorPosition::BottomLeft:
-                anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                        | LayerShellQt::Window::AnchorLeft);
-                break;
-            case ZoneSelectorPosition::Bottom:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                                  | LayerShellQt::Window::AnchorRight);
-                break;
-            case ZoneSelectorPosition::BottomRight:
-                anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                        | LayerShellQt::Window::AnchorRight);
-                break;
-            default:
-                // Already initialized to Top anchors
-                break;
-            }
-            layerWindow->setAnchors(anchors);
+    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+        // Initialize to Top anchors as safe default
+        LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
+        switch (pos) {
+        case ZoneSelectorPosition::TopLeft:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            break;
+        case ZoneSelectorPosition::Top:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                              | LayerShellQt::Window::AnchorRight);
+            break;
+        case ZoneSelectorPosition::TopRight:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
+            break;
+        case ZoneSelectorPosition::Left:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                              | LayerShellQt::Window::AnchorBottom);
+            break;
+        case ZoneSelectorPosition::Right:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                              | LayerShellQt::Window::AnchorBottom);
+            break;
+        case ZoneSelectorPosition::BottomLeft:
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorLeft);
+            break;
+        case ZoneSelectorPosition::Bottom:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
+                                              | LayerShellQt::Window::AnchorRight);
+            break;
+        case ZoneSelectorPosition::BottomRight:
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorRight);
+            break;
+        default:
+            // Already initialized to Top anchors
+            break;
         }
+        layerWindow->setAnchors(anchors);
     }
-#endif
 
     applyZoneSelectorGeometry(window, screen, layout, pos);
 }
@@ -1267,80 +1261,70 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     window->setScreen(screen);
     const QRect screenGeom = screen->geometry();
 
-    // Configure LayerShellQt for Wayland overlay if available
-#ifdef HAVE_LAYER_SHELL
-    if (Platform::isWayland() && Platform::hasLayerShell()) {
-        if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-            // Explicitly use the Qt window's screen for the layer surface
-            layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
-            // Use LayerTop instead of LayerOverlay to receive pointer input
-            layerWindow->setLayer(LayerShellQt::Window::LayerTop);
-            layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+    // Configure LayerShellQt for Wayland overlay
+    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+        // Explicitly use the Qt window's screen for the layer surface
+        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        // Use LayerTop instead of LayerOverlay to receive pointer input
+        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
+        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
 
-            // Anchor based on position setting
-            ZoneSelectorPosition pos = m_settings ? m_settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
-            // Initialize to Top anchors as safe default
-            LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
-                LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
-            switch (pos) {
-            case ZoneSelectorPosition::TopLeft:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
-                break;
-            case ZoneSelectorPosition::Top:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                                  | LayerShellQt::Window::AnchorRight);
-                break;
-            case ZoneSelectorPosition::TopRight:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
-                break;
-            case ZoneSelectorPosition::Left:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                                  | LayerShellQt::Window::AnchorBottom);
-                break;
-            case ZoneSelectorPosition::Right:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                                  | LayerShellQt::Window::AnchorBottom);
-                break;
-            case ZoneSelectorPosition::BottomLeft:
-                anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                        | LayerShellQt::Window::AnchorLeft);
-                break;
-            case ZoneSelectorPosition::Bottom:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                                  | LayerShellQt::Window::AnchorRight);
-                break;
-            case ZoneSelectorPosition::BottomRight:
-                anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                        | LayerShellQt::Window::AnchorRight);
-                break;
-            default:
-                // Already initialized to Top anchors
-                break;
-            }
-            layerWindow->setAnchors(anchors);
-            // Use -1 to ignore other exclusive zones - this gives us deterministic positioning
-            // The window will render exactly where we specify via setMargins()
-            // This fixes the hover coordinate mismatch when panels are present
-            layerWindow->setExclusiveZone(-1);
-            // Include screen name in scope so the compositor doesn't mix up layer surfaces
-            // across monitors.
-            layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screen->name()));
-            qCDebug(lcOverlay) << "Created layer shell zone selector for screen:" << screen->name();
+        // Anchor based on position setting
+        ZoneSelectorPosition pos = m_settings ? m_settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
+        // Initialize to Top anchors as safe default
+        LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
+        switch (pos) {
+        case ZoneSelectorPosition::TopLeft:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            break;
+        case ZoneSelectorPosition::Top:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                              | LayerShellQt::Window::AnchorRight);
+            break;
+        case ZoneSelectorPosition::TopRight:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
+            break;
+        case ZoneSelectorPosition::Left:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                              | LayerShellQt::Window::AnchorBottom);
+            break;
+        case ZoneSelectorPosition::Right:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                              | LayerShellQt::Window::AnchorBottom);
+            break;
+        case ZoneSelectorPosition::BottomLeft:
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorLeft);
+            break;
+        case ZoneSelectorPosition::Bottom:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
+                                              | LayerShellQt::Window::AnchorRight);
+            break;
+        case ZoneSelectorPosition::BottomRight:
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorRight);
+            break;
+        default:
+            // Already initialized to Top anchors
+            break;
         }
-    } else if (Platform::isX11()) {
-        window->setFlags(window->flags() | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::Tool);
+        layerWindow->setAnchors(anchors);
+        // Use -1 to ignore other exclusive zones - this gives us deterministic positioning
+        // The window will render exactly where we specify via setMargins()
+        // This fixes the hover coordinate mismatch when panels are present
+        layerWindow->setExclusiveZone(-1);
+        // Include screen name in scope so the compositor doesn't mix up layer surfaces
+        // across monitors.
+        layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screen->name()));
+        qCDebug(lcOverlay) << "Created layer shell zone selector for screen:" << screen->name();
     }
-#else
-    if (Platform::isX11()) {
-        window->setFlags(window->flags() | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint | Qt::Tool);
-    }
-#endif
 
     // Set screen properties for proper layout preview scaling
     qreal aspectRatio =
@@ -1466,76 +1450,72 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     }
 
     const ZoneSelectorPosition pos = m_settings ? m_settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
-#ifdef HAVE_LAYER_SHELL
-    if (Platform::isWayland() && Platform::hasLayerShell()) {
-        if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-            const int screenW = screenGeom.width();
-            const int screenH = screenGeom.height();
-            const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
-            const int vMargin = std::max(0, (screenH - layout.barHeight) / 2);
+    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+        const int screenW = screenGeom.width();
+        const int screenH = screenGeom.height();
+        const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
+        const int vMargin = std::max(0, (screenH - layout.barHeight) / 2);
 
-            // exclusiveZone(-1) ignores panel geometry; the popup renders at absolute screen
-            // coordinates over any panels, so hover coordinates match (no offset mismatch).
+        // exclusiveZone(-1) ignores panel geometry; the popup renders at absolute screen
+        // coordinates over any panels, so hover coordinates match (no offset mismatch).
 
-            // Initialize to Top position as safe default
-            LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
-                LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
-            QMargins margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
+        // Initialize to Top position as safe default
+        LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
+        QMargins margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
 
-            switch (pos) {
-            case ZoneSelectorPosition::TopLeft:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
-                margins = QMargins(0, 0, screenW - layout.barWidth, screenH - layout.barHeight);
-                break;
-            case ZoneSelectorPosition::Top:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                                  | LayerShellQt::Window::AnchorRight);
-                margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
-                break;
-            case ZoneSelectorPosition::TopRight:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
-                margins = QMargins(screenW - layout.barWidth, 0, 0, screenH - layout.barHeight);
-                break;
-            case ZoneSelectorPosition::Left:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                                  | LayerShellQt::Window::AnchorBottom);
-                margins = QMargins(0, vMargin, 0, vMargin);
-                break;
-            case ZoneSelectorPosition::Right:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                                  | LayerShellQt::Window::AnchorBottom);
-                margins = QMargins(0, vMargin, 0, vMargin);
-                break;
-            case ZoneSelectorPosition::BottomLeft:
-                anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                        | LayerShellQt::Window::AnchorLeft);
-                margins = QMargins(0, screenH - layout.barHeight, screenW - layout.barWidth, 0);
-                break;
-            case ZoneSelectorPosition::Bottom:
-                anchors =
-                    LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                                  | LayerShellQt::Window::AnchorRight);
-                margins = QMargins(hMargin, std::max(0, screenH - layout.barHeight), hMargin, 0);
-                break;
-            case ZoneSelectorPosition::BottomRight:
-                anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
-                                                        | LayerShellQt::Window::AnchorRight);
-                margins = QMargins(screenW - layout.barWidth, screenH - layout.barHeight, 0, 0);
-                break;
-            default:
-                // Already initialized to Top position
-                break;
-            }
-            layerWindow->setAnchors(anchors);
-            layerWindow->setMargins(margins);
+        switch (pos) {
+        case ZoneSelectorPosition::TopLeft:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+            margins = QMargins(0, 0, screenW - layout.barWidth, screenH - layout.barHeight);
+            break;
+        case ZoneSelectorPosition::Top:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                              | LayerShellQt::Window::AnchorRight);
+            margins = QMargins(hMargin, 0, hMargin, std::max(0, screenH - layout.barHeight));
+            break;
+        case ZoneSelectorPosition::TopRight:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
+            margins = QMargins(screenW - layout.barWidth, 0, 0, screenH - layout.barHeight);
+            break;
+        case ZoneSelectorPosition::Left:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                              | LayerShellQt::Window::AnchorBottom);
+            margins = QMargins(0, vMargin, 0, vMargin);
+            break;
+        case ZoneSelectorPosition::Right:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                              | LayerShellQt::Window::AnchorBottom);
+            margins = QMargins(0, vMargin, 0, vMargin);
+            break;
+        case ZoneSelectorPosition::BottomLeft:
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorLeft);
+            margins = QMargins(0, screenH - layout.barHeight, screenW - layout.barWidth, 0);
+            break;
+        case ZoneSelectorPosition::Bottom:
+            anchors =
+                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
+                                              | LayerShellQt::Window::AnchorRight);
+            margins = QMargins(hMargin, std::max(0, screenH - layout.barHeight), hMargin, 0);
+            break;
+        case ZoneSelectorPosition::BottomRight:
+            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom
+                                                    | LayerShellQt::Window::AnchorRight);
+            margins = QMargins(screenW - layout.barWidth, screenH - layout.barHeight, 0, 0);
+            break;
+        default:
+            // Already initialized to Top position
+            break;
         }
+        layerWindow->setAnchors(anchors);
+        layerWindow->setMargins(margins);
     }
-#endif
     applyZoneSelectorGeometry(window, screen, layout, pos);
 
     if (auto* contentRoot = window->contentItem()) {
@@ -1638,39 +1618,25 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         }
     }
 
-    // Configure LayerShellQt for Wayland overlay if available
-#ifdef HAVE_LAYER_SHELL
-    if (Platform::isWayland() && Platform::hasLayerShell()) {
-        if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-            // Explicitly use the Qt window's screen for the layer surface
-            layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
-            layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
-            layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-            layerWindow->setAnchors(
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-                                              | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-            layerWindow->setExclusiveZone(-1); // Don't reserve space
-            // Include screen name in scope so the compositor doesn't mix up layer surfaces
-            // across monitors.
-            layerWindow->setScope(QStringLiteral("plasmazones-overlay-%1").arg(screen->name()));
-            qCDebug(lcOverlay) << "Created layer shell overlay for screen:" << screen->name();
-        }
-    } else if (Platform::isX11()) {
-        window->setFlags(window->flags() | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
-        window->setProperty("_q_application_system_icon", true);
+    // Configure LayerShellQt for Wayland overlay
+    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+        // Explicitly use the Qt window's screen for the layer surface
+        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
+        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setExclusiveZone(-1); // Don't reserve space
+        // Include screen name in scope so the compositor doesn't mix up layer surfaces
+        // across monitors.
+        layerWindow->setScope(QStringLiteral("plasmazones-overlay-%1").arg(screen->name()));
+        qCDebug(lcOverlay) << "Created layer shell overlay for screen:" << screen->name();
     }
-#else
-    if (Platform::isWayland()) {
-        qCWarning(lcOverlay) << "LayerShellQt not available - overlay may not work on Wayland";
-    } else if (Platform::isX11()) {
-        window->setFlags(window->flags() | Qt::WindowStaysOnTopHint | Qt::FramelessWindowHint);
-        window->setProperty("_q_application_system_icon", true);
-    }
-#endif
 
-    // Check if overlay support is available
-    if (!Platform::hasOverlaySupport()) {
-        qCWarning(lcOverlay) << "Overlay support not available on platform:" << Platform::displayServer();
+    // Check if platform is supported
+    if (!Platform::isSupported()) {
+        qCWarning(lcOverlay) << "Platform not supported - PlasmaZones requires Wayland";
     }
 
     // Explicitly ensure window is hidden after creation

@@ -106,14 +106,10 @@ else()
     message(STATUS "KActivities not found - activity support disabled")
 endif()
 
-# LayerShellQt for Wayland overlay support (optional)
-find_package(LayerShellQt QUIET)
-if(LayerShellQt_FOUND)
-    message(STATUS "LayerShellQt found - Wayland overlay support enabled")
-    add_definitions(-DHAVE_LAYER_SHELL)
-else()
-    message(STATUS "LayerShellQt not found - overlay support will be limited")
-endif()
+# LayerShellQt for Wayland overlay support (REQUIRED)
+# PlasmaZones requires Wayland with LayerShellQt for proper overlay functionality.
+# X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
+find_package(LayerShellQt REQUIRED)
 
 # Systemd user unit directory (fallback if not provided by ECM)
 if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)

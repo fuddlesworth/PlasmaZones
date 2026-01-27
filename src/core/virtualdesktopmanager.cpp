@@ -4,8 +4,6 @@
 #include "virtualdesktopmanager.h"
 #include "layoutmanager.h"
 #include "logging.h"
-#include <KWindowSystem>
-#include <KX11Extras>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -31,18 +29,11 @@ VirtualDesktopManager::~VirtualDesktopManager()
 
 bool VirtualDesktopManager::init()
 {
-    // Try KWin D-Bus first - works on both Wayland and X11
+    // Initialize KWin D-Bus interface for virtual desktop management
     initKWinDBus();
 
     if (!m_useKWinDBus) {
-        // Fall back to X11-specific API if KWin D-Bus unavailable
-        if (KWindowSystem::isPlatformX11()) {
-            qCDebug(lcCore) << "Using KX11Extras fallback for X11";
-        } else if (KWindowSystem::isPlatformWayland()) {
-            qCWarning(lcCore) << "KWin D-Bus unavailable on Wayland, virtual desktop support limited";
-        } else {
-            qCWarning(lcCore) << "Unknown platform, virtual desktop support may be limited";
-        }
+        qCWarning(lcCore) << "KWin D-Bus unavailable, virtual desktop support limited";
     }
 
     return true;
@@ -51,14 +42,13 @@ bool VirtualDesktopManager::init()
 void VirtualDesktopManager::initKWinDBus()
 {
     // Connect to KWin's VirtualDesktopManager D-Bus interface
-    // This works on both Wayland and X11 when KWin is running
     m_kwinVDInterface =
         new QDBusInterface(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                            QStringLiteral("org.kde.KWin.VirtualDesktopManager"), QDBusConnection::sessionBus(), this);
 
     if (m_kwinVDInterface->isValid()) {
         m_useKWinDBus = true;
-        qCDebug(lcCore) << "Using KWin D-Bus interface (works on Wayland and X11)";
+        qCDebug(lcCore) << "Using KWin D-Bus interface for virtual desktops";
 
         // Get initial state
         refreshFromKWin();
@@ -244,7 +234,6 @@ void VirtualDesktopManager::start()
         m_currentDesktop = currentDesktop();
     }
 
-    connectSignals();
     updateActiveLayout();
 }
 
@@ -255,7 +244,7 @@ void VirtualDesktopManager::stop()
     }
 
     m_running = false;
-    disconnectSignals();
+    // Note: KWin D-Bus signals stay connected for lifetime
 }
 
 int VirtualDesktopManager::currentDesktop() const
@@ -263,11 +252,6 @@ int VirtualDesktopManager::currentDesktop() const
     if (m_useKWinDBus) {
         // Use cached value from KWin D-Bus (updated by signals)
         return m_currentDesktop;
-    }
-
-    // Legacy X11 fallback
-    if (KWindowSystem::isPlatformX11()) {
-        return KX11Extras::currentDesktop();
     }
 
     return 1;
@@ -281,7 +265,7 @@ void VirtualDesktopManager::setCurrentDesktop(int desktop)
     }
 
     if (m_useKWinDBus && m_kwinVDInterface) {
-        // Use KWin D-Bus to switch desktops (works on Wayland and X11)
+        // Use KWin D-Bus to switch desktops
         if (desktop > m_desktopCount) {
             qCWarning(lcCore) << "Desktop number" << desktop << "exceeds maximum" << m_desktopCount;
             return;
@@ -294,19 +278,7 @@ void VirtualDesktopManager::setCurrentDesktop(int desktop)
         return;
     }
 
-    // Legacy X11 fallback
-    if (!KWindowSystem::isPlatformX11()) {
-        qCWarning(lcCore) << "setCurrentDesktop: KWin D-Bus unavailable and not on X11";
-        return;
-    }
-
-    const int maxDesktops = KX11Extras::numberOfDesktops();
-    if (desktop > maxDesktops) {
-        qCWarning(lcCore) << "Desktop number" << desktop << "exceeds maximum" << maxDesktops;
-        return;
-    }
-
-    KX11Extras::setCurrentDesktop(desktop);
+    qCWarning(lcCore) << "setCurrentDesktop: KWin D-Bus unavailable";
 }
 
 void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
@@ -351,11 +323,6 @@ int VirtualDesktopManager::desktopCount() const
         return m_desktopCount;
     }
 
-    // Legacy X11 fallback
-    if (KWindowSystem::isPlatformX11()) {
-        return KX11Extras::numberOfDesktops();
-    }
-
     return 1;
 }
 
@@ -365,22 +332,11 @@ QStringList VirtualDesktopManager::desktopNames() const
         return m_desktopNames;
     }
 
-    // Legacy X11 fallback or generate defaults
+    // Generate defaults
     QStringList names;
     int count = desktopCount();
-
-    if (KWindowSystem::isPlatformX11()) {
-        for (int i = 1; i <= count; ++i) {
-            QString name = KX11Extras::desktopName(i);
-            if (name.isEmpty()) {
-                name = QStringLiteral("Desktop %1").arg(i);
-            }
-            names.append(name);
-        }
-    } else {
-        for (int i = 1; i <= count; ++i) {
-            names.append(QStringLiteral("Desktop %1").arg(i));
-        }
+    for (int i = 1; i <= count; ++i) {
+        names.append(QStringLiteral("Desktop %1").arg(i));
     }
 
     return names;
@@ -389,21 +345,10 @@ QStringList VirtualDesktopManager::desktopNames() const
 void VirtualDesktopManager::connectSignals()
 {
     // KWin D-Bus signals are connected in initKWinDBus()
-    // Only connect X11 signals if not using KWin D-Bus
-    if (!m_useKWinDBus && KWindowSystem::isPlatformX11()) {
-        auto* x11extras = KX11Extras::self();
-        connect(x11extras, &KX11Extras::currentDesktopChanged, this, &VirtualDesktopManager::onCurrentDesktopChanged);
-
-        connect(x11extras, &KX11Extras::numberOfDesktopsChanged, this,
-                &VirtualDesktopManager::onNumberOfDesktopsChanged);
-    }
 }
 
 void VirtualDesktopManager::disconnectSignals()
 {
-    if (!m_useKWinDBus && KWindowSystem::isPlatformX11()) {
-        disconnect(KX11Extras::self(), nullptr, this, nullptr);
-    }
     // Note: KWin D-Bus signals stay connected for lifetime
 }
 

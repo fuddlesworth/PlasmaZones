@@ -142,9 +142,8 @@ Window {
         return editorShortcuts.formatShortcut(shortcut);
     }
 
-    // Window flags - proper for both X11 and Wayland
-    // On Wayland, WindowStaysOnTopHint doesn't work - use LayerShellQt if available
-    flags: Qt.FramelessWindowHint | (Qt.platform.os === "wayland" ? 0 : Qt.WindowStaysOnTopHint) | Qt.WindowFullScreenButtonHint
+    // Window flags - fullscreen editor window on Wayland
+    flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
     visibility: Window.FullScreen
     title: i18nc("@title", "Layout Editor")

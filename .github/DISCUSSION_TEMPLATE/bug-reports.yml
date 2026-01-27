@@ -51,9 +51,9 @@ body:
     id: display-server
     attributes:
       label: Display Server
+      description: PlasmaZones requires Wayland
       options:
         - Wayland
-        - X11
     validations:
       required: true
 

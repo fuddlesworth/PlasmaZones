@@ -19,6 +19,7 @@ depends=(
     'kglobalaccel'
     'knotifications'
     'kcolorscheme'
+    'layer-shell-qt'
 )
 makedepends=(
     'git'
@@ -27,7 +28,6 @@ makedepends=(
 )
 optdepends=(
     'plasma-activities: activity-based layouts'
-    'layer-shell-qt: better Wayland overlay support'
 )
 provides=('plasmazones')
 conflicts=('plasmazones')

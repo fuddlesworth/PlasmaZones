@@ -6,58 +6,56 @@
 
 </div>
 
-A window tiling tool for KDE Plasma that brings FancyZones-style layouts to Linux. Define custom zones on your screen and snap windows into them by dragging with a modifier key held down.
+FancyZones for KDE Plasma. Define zones on your screen, drag windows into them with a modifier key held.
 
-## What It Does
+## How it works
 
-PlasmaZones lets you divide your screen into zones. When you drag a window while holding Shift (or your configured modifier), the zones light up and you can drop the window into any of them. The window resizes to fill that zone.
+Hold Shift (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
-Unlike automatic tiling window managers, you design your own layouts. The visual editor lets you drag to create zones, resize them, split them. Save and you're done.
+You design your own layouts with a visual editor. Draw zones, resize them, split them, save. Done.
 
 ## Features
 
 **Editor**
-- Visual layout editor - draw zones on a canvas
-- Templates for common layouts (columns, grids, focus layout)
-- Undo/redo for all operations
-- Copy/paste zones within or between layouts
+- Draw zones on a canvas
+- Templates for common layouts (columns, grids, focus)
+- Undo/redo, copy/paste
 - Grid and edge snapping
-- Per-zone colors, opacity, and border styling
-- Shader effect configuration with live preview
+- Per-zone colors and styling
+- Shader effects with live preview
 
-**Window Management**
-- Drag windows with modifier key to snap into zones
-- Move windows between zones with keyboard
-- Focus windows in adjacent zones
-- Push window to first empty zone
-- Restore window to original size
-- Toggle per-window floating
+**Window snapping**
+- Drag with modifier to snap
+- Move between zones with keyboard
+- Focus adjacent zones
+- Push to first empty zone
+- Restore original size
+- Per-window floating toggle
 
-**Shader Effects**
-- GPU-accelerated zone overlays with custom shaders
-- 8 built-in effects: Neon Glow, Glass Morphism, Minimalist, Holographic, and more
-- Customizable parameters per shader (colors, intensity, animation speed)
-- User shader support - create your own effects
-- Automatic hot-reload when editing shaders
+**Shaders**
+- GPU-accelerated zone overlays
+- 8 built-in effects (neon glow, glass, holographic, etc)
+- Custom shader support
+- Hot-reload while editing
 
 **Integration**
-- Multi-monitor support with per-display layouts
-- Virtual desktop support with per-desktop layouts
-- KDE Activity support (optional, needs KActivities)
-- Settings module in System Settings
-- D-Bus API for scripting
-- Wayland and X11 support
+- Multi-monitor with per-display layouts
+- Virtual desktop layouts
+- Activity layouts (optional)
+- System Settings module
+- D-Bus API
+- Wayland (requires LayerShellQt)
 
 ## Requirements
 
 - Qt 6.6+
 - KDE Frameworks 6.0+
+- LayerShellQt
 - CMake 3.16+
 - C++20 compiler
 
-Optional dependencies:
-- `KF6::Activities` - enables activity-based layouts
-- `LayerShellQt` - better Wayland overlay support
+Optional:
+- KF6::Activities for activity layouts
 
 ## Building
 
@@ -70,115 +68,102 @@ cmake --build . -j$(nproc)
 sudo cmake --install .
 ```
 
-After installing, enable the daemon:
+Enable the daemon:
 
 ```bash
 systemctl --user enable --now plasmazones.service
 ```
 
-For a local install without root:
+Local install (no root):
 
 ```bash
-cmake .. \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=$HOME/.local
+cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build . -j$(nproc)
 cmake --install .
-
-# Enable the service
 systemctl --user enable --now plasmazones.service
 ```
 
-## Getting Started
+## Quick start
 
-1. Enable the KWin effect: System Settings > Desktop Effects > PlasmaZones
-2. Enable the daemon: `systemctl --user enable --now plasmazones.service`
+1. System Settings > Desktop Effects > enable PlasmaZones
+2. `systemctl --user enable --now plasmazones.service`
 3. Run `plasmazones-editor`
-4. Create a new layout or pick a template
-5. Drag on the canvas to draw zones
-6. Save with Ctrl+S
-7. Drag any window while holding Shift to snap it
+4. Create a layout or pick a template
+5. Draw zones, save with Ctrl+S
+6. Drag windows while holding Shift
 
-## Keyboard Shortcuts
+## Shortcuts
 
-**In the editor:**
+**Editor**
 
-| Action | Shortcut |
-|--------|----------|
+| Action | Key |
+|--------|-----|
 | Save | Ctrl+S |
 | Undo/Redo | Ctrl+Z / Ctrl+Shift+Z |
-| Delete zone | Delete |
+| Delete | Delete |
 | Duplicate | Ctrl+D |
 | Split H/V | Ctrl+Shift+H / Ctrl+Alt+V |
-| Move zone | Arrow keys |
-| Resize zone | Shift+Arrow |
+| Move | Arrows |
+| Resize | Shift+Arrows |
 
-**Global:**
+**Global**
 
-| Action | Shortcut |
-|--------|----------|
+| Action | Key |
+|--------|-----|
 | Open editor | Meta+Shift+E |
-| Previous/next layout | Meta+Alt+[ / ] |
+| Prev/next layout | Meta+Alt+[ / ] |
 | Quick layout 1-9 | Meta+Alt+1-9 |
-| Move window to adjacent zone | Meta+Alt+Shift+Arrow |
-| Focus window in adjacent zone | Alt+Shift+Arrow |
-| Push to empty zone | Meta+Return |
-| Restore original size | Meta+Escape |
+| Move to zone | Meta+Alt+Shift+Arrow |
+| Focus zone | Alt+Shift+Arrow |
+| Push to empty | Meta+Return |
+| Restore size | Meta+Escape |
 | Toggle float | Meta+F |
 
-All shortcuts can be customized in System Settings.
+Customize in System Settings.
 
-## Configuration
+## Config
 
-Access settings in **System Settings > PlasmaZones** or run `systemsettings plasmazones`.
+Settings in System Settings > PlasmaZones or `systemsettings plasmazones`.
 
-Layout files are stored in `~/.local/share/plasmazones/layouts/` as JSON.
+Layouts stored in `~/.local/share/plasmazones/layouts/` as JSON.
 
-### D-Bus Interface
+### D-Bus
 
 ```bash
 # List layouts
 qdbus org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getLayoutList
 
-# Show zone overlay
+# Show overlay
 qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.show
 ```
 
 Full interface in `dbus/org.plasmazones.xml`.
 
-## Shader Effects
+## Shaders
 
-PlasmaZones includes GPU-accelerated shader effects for zone overlays. Select an effect in the editor under the Shader tab.
+GPU shaders for zone overlays. Pick one in the editor.
 
-**Built-in shaders:**
-- **Neon Glow** - Cyberpunk-style glowing borders
-- **Glass Morphism** - Frosted glass with blur
-- **Minimalist** - Clean cards with soft shadows
-- **Holographic** - Iridescent rainbow effects
-- **Gradient Mesh** - Flowing color gradients
-- **Liquid Warp** - Fluid distortion animation
-- **Magnetic Field** - Field line visualizations
-- **Particle Field** - Floating particle effects
+Built-in: Neon Glow, Glass Morphism, Minimalist, Holographic, Gradient Mesh, Liquid Warp, Magnetic Field, Particle Field.
 
-**Custom shaders:** Create your own effects by placing shader folders in `~/.local/share/plasmazones/shaders/`. See [docs/shaders.md](docs/shaders.md) for the quickstart guide.
+Custom shaders go in `~/.local/share/plasmazones/shaders/`. See [docs/shaders.md](docs/shaders.md).
 
-## Project Layout
+## Layout
 
 ```
 src/
 ├── core/       # Zone, Layout, ShaderRegistry
-├── daemon/     # Background service, overlay rendering
+├── daemon/     # Background service, overlay
 ├── editor/     # Layout editor
 ├── dbus/       # D-Bus adaptors
-└── config/     # KConfig settings
+└── config/     # KConfig
 kcm/            # System Settings module
 kwin-effect/    # KWin integration
-data/shaders/   # Built-in shader effects
+data/shaders/   # Built-in shaders
 ```
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on code style, testing, and submitting changes.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Support
 
@@ -187,7 +172,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on code style, testing, an
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](LICENSE) for details.
+GPL-3.0-or-later
 
 ---
 

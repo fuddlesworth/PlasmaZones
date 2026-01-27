@@ -54,10 +54,7 @@ Window {
     }
 
     // Window flags - LayerShellQt handles the overlay behavior on Wayland
-    // On X11, use WindowStaysOnTopHint as fallback
-    // Qt.platform.pluginName is the platform plugin ("wayland" or "xcb"); Qt.platform.os
-    // is the OS name ("linux"), not the display server.
-    flags: Qt.FramelessWindowHint | (Qt.platform.pluginName === "wayland" ? Qt.WindowDoesNotAcceptFocus : Qt.WindowStaysOnTopHint)
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
     // Start hidden; OverlayService controls visibility via show()/hide().
     visible: false

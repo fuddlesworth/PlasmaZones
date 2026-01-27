@@ -11,8 +11,8 @@ namespace PlasmaZones {
 /**
  * @brief Platform detection and utilities
  *
- * Provides runtime detection of display server (Wayland/X11)
- * and platform-specific features.
+ * Provides runtime detection of Wayland display server.
+ * PlasmaZones requires Wayland with LayerShellQt - X11 is not supported.
  */
 namespace Platform {
 
@@ -23,28 +23,16 @@ namespace Platform {
 PLASMAZONES_EXPORT bool isWayland();
 
 /**
- * @brief Check if running on X11
- * @return true if DISPLAY is set and not Wayland
- */
-PLASMAZONES_EXPORT bool isX11();
-
-/**
  * @brief Get the display server name
- * @return "wayland", "x11", or "unknown"
+ * @return "wayland" or "unknown"
  */
 PLASMAZONES_EXPORT QString displayServer();
 
 /**
- * @brief Check if LayerShellQt is available at runtime
- * @return true if LayerShellQt is compiled in and available
+ * @brief Check if the platform is supported
+ * @return true if running on Wayland (required for PlasmaZones)
  */
-PLASMAZONES_EXPORT bool hasLayerShell();
-
-/**
- * @brief Check if overlay support is available
- * @return true if either LayerShellQt is available or running on X11
- */
-PLASMAZONES_EXPORT bool hasOverlaySupport();
+PLASMAZONES_EXPORT bool isSupported();
 
 } // namespace Platform
 

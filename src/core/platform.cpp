@@ -5,10 +5,6 @@
 #include <QGuiApplication>
 #include <QString>
 
-#ifdef HAVE_LAYER_SHELL
-#include <LayerShellQt/Shell>
-#endif
-
 namespace PlasmaZones {
 
 namespace Platform {
@@ -37,53 +33,18 @@ bool isWayland()
     return false;
 }
 
-bool isX11()
-{
-    // Check DISPLAY environment variable
-    if (qEnvironmentVariableIsEmpty("DISPLAY")) {
-        return false;
-    }
-
-    // If not Wayland, assume X11
-    return !isWayland();
-}
-
 QString displayServer()
 {
     if (isWayland()) {
         return QStringLiteral("wayland");
-    } else if (isX11()) {
-        return QStringLiteral("x11");
     }
     return QStringLiteral("unknown");
 }
 
-bool hasLayerShell()
+bool isSupported()
 {
-#ifdef HAVE_LAYER_SHELL
-    // LayerShellQt is compiled in - runtime availability checked when creating windows
-    // Attempting to get Shell instance would require a window, so just check compile-time availability
-    // Runtime check happens in OverlayService::createOverlayWindow() via LayerShellQt::Window::get()
-    return true;
-#else
-    return false;
-#endif
-}
-
-bool hasOverlaySupport()
-{
-    // On Wayland, need LayerShellQt
-    if (isWayland()) {
-        return hasLayerShell();
-    }
-
-    // On X11, can use regular windows as overlay
-    if (isX11()) {
-        return true;
-    }
-
-    // Unknown platform - assume no support
-    return false;
+    // PlasmaZones requires Wayland - X11 is not supported
+    return isWayland();
 }
 
 } // namespace Platform

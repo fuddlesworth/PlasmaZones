@@ -55,10 +55,10 @@ public:
      */
     void setCurrentDesktop(int desktop);
 
-    /**
-     * @brief Get total number of virtual desktops
-     * @return Number of desktops (queried via KWin D-Bus on Wayland/X11)
-     */
+/**
+ * @brief Get total number of virtual desktops
+ * @return Number of desktops (queried via KWin D-Bus)
+ */
     int desktopCount() const;
 
     /**
@@ -103,7 +103,7 @@ private:
     LayoutManager* m_layoutManager = nullptr;
     QDBusInterface* m_kwinVDInterface = nullptr;
     bool m_running = false;
-    bool m_useKWinDBus = false; // True if KWin D-Bus is available (Wayland/X11)
+    bool m_useKWinDBus = false; // True if KWin D-Bus is available
     int m_currentDesktop = 1;
     int m_desktopCount = 1;
     QStringList m_desktopNames;

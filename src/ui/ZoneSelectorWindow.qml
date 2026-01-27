@@ -93,8 +93,8 @@ Window {
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
 
-    // Window configuration for overlay
-    flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+    // Window configuration for overlay - LayerShellQt handles layering on Wayland
+    flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
 
     // Shadow effect for the container

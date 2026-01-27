@@ -76,10 +76,7 @@ generate_export_header(plasmazones_core
     EXPORT_MACRO_NAME PLASMAZONES_EXPORT
 )
 
-# Pass LayerShellQt availability to source files (for core library only, daemon done later)
-if(LayerShellQt_FOUND)
-    target_compile_definitions(plasmazones_core PRIVATE HAVE_LAYER_SHELL)
-endif()
+# LayerShellQt is required - no conditional needed
 
 target_link_libraries(plasmazones_core
     PUBLIC
@@ -115,13 +112,11 @@ elseif(KActivities_FOUND)
     endif()
 endif()
 
-# Conditionally link LayerShellQt if available (needed for actualAvailableGeometry probe)
-if(LayerShellQt_FOUND)
-    target_link_libraries(plasmazones_core
-        PUBLIC
-            LayerShellQt::Interface
-    )
-endif()
+# Link LayerShellQt (required for overlay and geometry sensor windows)
+target_link_libraries(plasmazones_core
+    PUBLIC
+        LayerShellQt::Interface
+)
 
 target_include_directories(plasmazones_core
     PUBLIC
@@ -185,10 +180,7 @@ qt_add_resources(plasmazones_daemon_SRCS daemon/resources.qrc)
 
 add_executable(plasmazonesd ${plasmazones_daemon_SRCS})
 
-# Pass LayerShellQt availability to daemon source files (after target is created)
-if(LayerShellQt_FOUND)
-    target_compile_definitions(plasmazonesd PRIVATE HAVE_LAYER_SHELL)
-endif()
+# LayerShellQt is required - no conditional needed
 
 target_link_libraries(plasmazonesd
     PRIVATE
@@ -204,13 +196,11 @@ target_link_libraries(plasmazonesd
         KF6::Notifications
 )
 
-# Conditionally link LayerShellQt if available
-if(LayerShellQt_FOUND)
-    target_link_libraries(plasmazonesd
-        PRIVATE
-            LayerShellQt::Interface
-    )
-endif()
+# Link LayerShellQt (required)
+target_link_libraries(plasmazonesd
+    PRIVATE
+        LayerShellQt::Interface
+)
 
 install(TARGETS plasmazonesd DESTINATION ${KDE_INSTALL_BINDIR})
 
@@ -355,14 +345,11 @@ target_link_libraries(plasmazones-editor
         KF6::WindowSystem
 )
 
-# Pass LayerShellQt availability to editor
-if(LayerShellQt_FOUND)
-    target_compile_definitions(plasmazones-editor PRIVATE HAVE_LAYER_SHELL)
-    target_link_libraries(plasmazones-editor
-        PRIVATE
-            LayerShellQt::Interface
-    )
-endif()
+# Link LayerShellQt (required)
+target_link_libraries(plasmazones-editor
+    PRIVATE
+        LayerShellQt::Interface
+)
 
 install(TARGETS plasmazones-editor DESTINATION ${KDE_INSTALL_BINDIR})
 

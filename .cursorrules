@@ -207,9 +207,9 @@ PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality f
 - Use semantic text styles: headings, body, captions
 
 ### Window Management
-- Support both **X11 and Wayland** (check `Qt.platform.os === "wayland"`)
-- Use `LayerShellQt` for Wayland overlay windows when available
-- On X11, use `Qt.WindowStaysOnTopHint` for overlays
+- **Wayland only** - X11 is not supported (Plasma 6 is Wayland-first)
+- Use `LayerShellQt` for overlay windows (required dependency)
+- LayerShellQt provides proper layer ordering for overlays during drag operations
 - Handle fullscreen properly: `Window.FullScreen` visibility
 - Use frameless windows for overlays: `Qt.FramelessWindowHint`
 
@@ -526,7 +526,7 @@ TODO: Consider having EditorController get zonePadding via D-Bus from Settings i
 - Test full workflows: create layout → edit zones → save → load
 - Test cross-component communication (QML ↔ C++)
 - Test D-Bus service communication
-- Test both X11 and Wayland paths when possible
+- Test on Wayland (only supported platform)
 
 ## CMake Build System
 
