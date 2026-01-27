@@ -61,6 +61,7 @@ class PLASMAZONES_EXPORT Settings : public ISettings
 
     // Zone settings
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Performance and behavior (configurable constants)
@@ -323,6 +324,12 @@ public:
         return m_zonePadding;
     }
     void setZonePadding(int padding) override;
+
+    int outerGap() const override
+    {
+        return m_outerGap;
+    }
+    void setOuterGap(int gap) override;
 
     int adjacentThreshold() const override
     {
@@ -638,6 +645,7 @@ private:
 
     // Zone settings (DRY: use constants from Defaults namespace)
     int m_zonePadding = Defaults::ZonePadding;
+    int m_outerGap = Defaults::OuterGap;
     int m_adjacentThreshold = Defaults::AdjacentThreshold;
 
     // Performance and behavior (DRY: use constants from Defaults namespace)

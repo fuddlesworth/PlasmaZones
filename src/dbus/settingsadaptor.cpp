@@ -155,6 +155,7 @@ void SettingsAdaptor::initializeRegistry()
 
     // Zone settings (DRY: using macros)
     REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
+    REGISTER_INT_SETTING("outerGap", outerGap, setOuterGap)
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
     REGISTER_INT_SETTING("pollIntervalMs", pollIntervalMs, setPollIntervalMs)
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)

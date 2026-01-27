@@ -1606,6 +1606,15 @@ KCM.AbstractKCM {
                 textFromValue: function(value) { return value + " px" }
             }
 
+            SpinBox {
+                Kirigami.FormData.label: i18n("Edge gap:")
+                from: 0
+                to: constants.thresholdMax
+                value: kcm.outerGap
+                onValueModified: kcm.outerGap = value
+                textFromValue: function(value) { return value + " px" }
+            }
+
             CheckBox {
                 Kirigami.FormData.label: i18n("Display:")
                 text: i18n("Show zones on all monitors while dragging")

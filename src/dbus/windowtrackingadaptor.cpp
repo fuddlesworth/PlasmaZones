@@ -688,10 +688,11 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
     // Recalculate zone geometry for target screen
     layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(targetScreen));
 
-    // Get zone geometry with spacing
-    // Use global zonePadding setting for consistent spacing
-    int spacing = m_settings ? m_settings->zonePadding() : 8;
-    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithSpacing(zone, targetScreen, spacing, true);
+    // Get zone geometry with gaps
+    // Use per-layout zonePadding/outerGap if set, otherwise fall back to global setting
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, targetScreen, zonePadding, outerGap, true);
     if (!zoneGeom.isValid()) {
         qCWarning(lcDbusWindow) << "Invalid zone geometry";
         return;
@@ -842,9 +843,10 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
     // Recalculate zone geometry for target screen
     layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(targetScreen));
 
-    // Get zone geometry with spacing
-    int spacing = m_settings ? m_settings->zonePadding() : 8;
-    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithSpacing(zone, targetScreen, spacing, true);
+    // Get zone geometry with gaps
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, targetScreen, zonePadding, outerGap, true);
     if (!zoneGeom.isValid()) {
         qCWarning(lcDbusWindow) << "Invalid zone geometry for persisted restore";
         return;
@@ -940,9 +942,10 @@ QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
         }
 
         layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(targetScreen));
-        // Use global zonePadding setting for consistent spacing
-        int updateSpacing = m_settings ? m_settings->zonePadding() : 8;
-        QRectF zoneGeom = GeometryUtils::getZoneGeometryWithSpacing(zone, targetScreen, updateSpacing, true);
+        // Use per-layout zonePadding/outerGap if set, otherwise fall back to global setting
+        int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+        int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+        QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, targetScreen, zonePadding, outerGap, true);
 
         if (zoneGeom.isValid()) {
             QJsonObject windowObj;
@@ -1179,9 +1182,10 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
     // Recalculate zone geometry for screen
     layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(targetScreen));
 
-    // Get zone geometry with spacing
-    int spacing = m_settings ? m_settings->zonePadding() : 8;
-    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithSpacing(zone, targetScreen, spacing, true);
+    // Get zone geometry with gaps
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, targetScreen, zonePadding, outerGap, true);
 
     if (!zoneGeom.isValid()) {
         qCWarning(lcDbusWindow) << "getZoneGeometryForScreen: invalid geometry for zone:" << zoneId;

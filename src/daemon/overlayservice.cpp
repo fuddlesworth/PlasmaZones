@@ -1781,12 +1781,13 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
         return map;
     }
 
-    // Calculate zone geometry with spacing applied (matches snap geometry).
+    // Calculate zone geometry with gaps applied (matches snap geometry).
     // useAvailableGeometry=true means zones are calculated within the usable screen area
     // (excluding panels/taskbars), so windows won't overlap with system UI.
-    // Layout's zonePadding takes precedence over global settings
-    int spacing = layout ? layout->zonePadding() : (m_settings ? m_settings->zonePadding() : 8);
-    QRectF geom = GeometryUtils::getZoneGeometryWithSpacing(zone, screen, spacing, true);
+    // Layout's zonePadding/outerGap takes precedence over global settings
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
 
     // Convert to overlay window local coordinates
     // The overlay covers the full screen, but zones are positioned within available area

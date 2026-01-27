@@ -263,6 +263,16 @@ void Settings::setZonePadding(int padding)
     }
 }
 
+void Settings::setOuterGap(int gap)
+{
+    gap = qMax(0, gap);
+    if (m_outerGap != gap) {
+        m_outerGap = gap;
+        Q_EMIT outerGapChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setAdjacentThreshold(int threshold)
 {
     threshold = qMax(0, threshold);
@@ -875,6 +885,13 @@ void Settings::load()
     }
     m_zonePadding = zonePadding;
 
+    int outerGap = zones.readEntry("OuterGap", Defaults::OuterGap);
+    if (outerGap < 0) {
+        qCWarning(lcConfig) << "Invalid outer gap:" << outerGap << "using default";
+        outerGap = Defaults::OuterGap;
+    }
+    m_outerGap = outerGap;
+
     int adjacentThreshold = zones.readEntry("AdjacentThreshold", Defaults::AdjacentThreshold);
     if (adjacentThreshold < 0) {
         qCWarning(lcConfig) << "Invalid adjacent threshold:" << adjacentThreshold << "using default";
@@ -1057,6 +1074,7 @@ void Settings::save()
 
     // Zones
     zones.writeEntry("Padding", m_zonePadding);
+    zones.writeEntry("OuterGap", m_outerGap);
     zones.writeEntry("AdjacentThreshold", m_adjacentThreshold);
 
     // Performance and behavior
@@ -1149,6 +1167,7 @@ void Settings::reset()
 
     // Zone settings defaults (DRY)
     m_zonePadding = Defaults::ZonePadding;
+    m_outerGap = Defaults::OuterGap;
     m_adjacentThreshold = Defaults::AdjacentThreshold;
 
     // Performance and behavior defaults (DRY)

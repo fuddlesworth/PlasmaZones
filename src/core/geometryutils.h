@@ -10,6 +10,7 @@
 namespace PlasmaZones {
 
 class Zone;
+class Layout;
 class ISettings;
 
 /**
@@ -65,7 +66,7 @@ PLASMAZONES_EXPORT QRectF toOverlayCoordinates(const QRectF& geometry, QScreen* 
 PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);
 
 /**
- * @brief Get zone geometry with explicit spacing applied (uses global setting)
+ * @brief Get zone geometry with explicit spacing applied (uniform spacing)
  * @param zone Zone to get geometry for
  * @param screen Screen to calculate relative to
  * @param spacing Explicit spacing value in pixels (from settings->zonePadding())
@@ -74,6 +75,21 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithSpacing(Zone* zone, QScreen* screen, int spacing,
                                                      bool useAvailableGeometry = true);
+
+/**
+ * @brief Get zone geometry with differentiated inner/outer gaps
+ * @param zone Zone to get geometry for
+ * @param screen Screen to calculate relative to
+ * @param innerGap Gap between adjacent zones (zonePadding)
+ * @param outerGap Gap at screen boundaries
+ * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
+ * @return Geometry with appropriate gaps applied
+ *
+ * This version applies outerGap to zone edges that touch screen boundaries
+ * (relative position 0 or 1), and innerGap/2 to edges between zones.
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap,
+                                                   bool useAvailableGeometry = true);
 
 /**
  * @brief Calculate absolute zone geometry using available screen area
@@ -85,6 +101,32 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithSpacing(Zone* zone, QScreen* screen
  * ensuring zones don't overlap with system UI elements.
  */
 PLASMAZONES_EXPORT QRectF calculateZoneGeometryInAvailableArea(Zone* zone, QScreen* screen);
+
+/**
+ * @brief Get effective zone padding for a layout
+ * @param layout Layout to get padding for (may have per-layout override)
+ * @param settings Global settings (used if layout has no override)
+ * @return Effective zone padding in pixels
+ *
+ * Returns layout-specific zonePadding if set (>= 0), otherwise falls back
+ * to global settings->zonePadding(), or default of 8 if settings is null.
+ */
+PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings);
+
+/**
+ * @brief Get effective outer gap for a layout
+ * @param layout Layout to get outer gap for (may have per-layout override)
+ * @param settings Global settings (used if layout has no override)
+ * @return Effective outer gap in pixels
+ *
+ * Returns layout-specific outerGap if set (>= 0), otherwise falls back
+ * to global settings->outerGap(), or default of 8.
+ *
+ * Outer gap is applied to zone edges at screen boundaries (positions 0 or 1),
+ * while zonePadding is applied between adjacent zones. Use getZoneGeometryWithGaps()
+ * to apply differentiated gaps.
+ */
+PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
 
 } // namespace GeometryUtils
 

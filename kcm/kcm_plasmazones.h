@@ -78,6 +78,7 @@ class KCMPlasmaZones : public KQuickConfigModule
 
     // Zones
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Behavior
@@ -190,6 +191,7 @@ public:
     bool enableShaderEffects() const;
     int shaderFrameRate() const;
     int zonePadding() const;
+    int outerGap() const;
     int adjacentThreshold() const;
     bool keepWindowsInZonesOnResolutionChange() const;
     bool moveNewWindowsToLastZone() const;
@@ -256,6 +258,7 @@ public:
     void setEnableShaderEffects(bool enable);
     void setShaderFrameRate(int fps);
     void setZonePadding(int padding);
+    void setOuterGap(int gap);
     void setAdjacentThreshold(int threshold);
     void setKeepWindowsInZonesOnResolutionChange(bool keep);
     void setMoveNewWindowsToLastZone(bool move);
@@ -363,6 +366,7 @@ Q_SIGNALS:
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
     void zonePaddingChanged();
+    void outerGapChanged();
     void adjacentThresholdChanged();
     void keepWindowsInZonesOnResolutionChangeChanged();
     void moveNewWindowsToLastZoneChanged();

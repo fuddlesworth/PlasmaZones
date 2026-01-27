@@ -191,6 +191,7 @@ Window {
                 isHovered: false
                 isActive: true
                 zonePadding: 2
+                edgeGap: 2
                 minZoneSize: 12
                 showZoneNumbers: true
                 inactiveOpacity: 0.3

@@ -30,6 +30,7 @@ constexpr qreal InactiveOpacity = 0.3;
 constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
 constexpr int ZonePadding = 8;
+constexpr int OuterGap = 8;  // Gap at screen edges (separate from zonePadding between zones)
 constexpr int AdjacentThreshold = 20;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
@@ -104,6 +105,7 @@ inline constexpr QLatin1String Description{"description"};
 inline constexpr QLatin1String Author{"author"};
 inline constexpr QLatin1String Zones{"zones"};
 inline constexpr QLatin1String ZonePadding{"zonePadding"};
+inline constexpr QLatin1String OuterGap{"outerGap"};
 inline constexpr QLatin1String ShowZoneNumbers{"showZoneNumbers"};
 inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; // Legacy, for backward compat when loading
 inline constexpr QLatin1String IsSystem{"isSystem"}; // New: determined by source path
