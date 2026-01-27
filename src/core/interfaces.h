@@ -88,6 +88,15 @@ enum class StickyWindowHandling {
 };
 
 /**
+ * @brief OSD style options for layout switch notifications
+ */
+enum class OsdStyle {
+    None = 0, ///< No OSD shown on layout switch
+    Text = 1, ///< Text-only Plasma OSD (layout name)
+    Preview = 2 ///< Visual layout preview OSD (default)
+};
+
+/**
  * @brief Abstract interface for settings management
  *
  * Allows dependency inversion - components depend on this interface
@@ -128,6 +137,8 @@ public:
     virtual void setFlashZonesOnSwitch(bool flash) = 0;
     virtual bool showOsdOnLayoutSwitch() const = 0;
     virtual void setShowOsdOnLayoutSwitch(bool show) = 0;
+    virtual OsdStyle osdStyle() const = 0;
+    virtual void setOsdStyle(OsdStyle style) = 0;
 
     // Appearance
     virtual bool useSystemColors() const = 0;
@@ -240,6 +251,7 @@ Q_SIGNALS:
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
+    void osdStyleChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();
     void inactiveColorChanged();

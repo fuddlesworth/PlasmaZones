@@ -103,7 +103,8 @@ Item {
             // Zone number label
             Label {
                 anchors.centerIn: parent
-                text: index + 1
+                // Use actual zoneNumber from data if available, otherwise fall back to index + 1
+                text: modelData.zoneNumber !== undefined ? modelData.zoneNumber : (index + 1)
                 font.pixelSize: Math.min(parent.width, parent.height) * 0.4
                 font.bold: true
                 color: Kirigami.Theme.textColor

@@ -342,7 +342,7 @@ void Daemon::start()
         // Show OSD with the new layout name (if enabled)
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
             if (auto* layout = m_layoutManager->activeLayout()) {
-                showLayoutOsd(layout->name());
+                showLayoutOsd(layout);
             }
         }
     });
@@ -352,7 +352,7 @@ void Daemon::start()
         // Show OSD with the new layout name (if enabled)
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
             if (auto* layout = m_layoutManager->activeLayout()) {
-                showLayoutOsd(layout->name());
+                showLayoutOsd(layout);
             }
         }
     });
@@ -362,7 +362,7 @@ void Daemon::start()
         // Show OSD with the new layout name (if enabled)
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
             if (auto* layout = m_layoutManager->activeLayout()) {
-                showLayoutOsd(layout->name());
+                showLayoutOsd(layout);
             }
         }
     });
@@ -499,21 +499,48 @@ void Daemon::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
-void Daemon::showLayoutOsd(const QString& layoutName)
+void Daemon::showLayoutOsd(Layout* layout)
 {
-    // Use KDE Plasma's OSD service for native-feeling notifications
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
-                                       QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+    if (!layout) {
+        return;
+    }
 
-    // Arguments: icon name, text to display
-    // Using PlasmaZones app icon with clear "Zone Layout:" prefix
-    // Use i18n for translation support
-    QString displayText = i18n("Zone Layout: %1", layoutName);
-    msg << QStringLiteral("plasmazones") << displayText;
+    const QString layoutName = layout->name();
 
-    QDBusConnection::sessionBus().asyncCall(msg);
-    qCDebug(lcDaemon) << "Showing OSD for layout:" << layoutName;
+    // Check OSD style setting
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+
+    switch (style) {
+    case OsdStyle::None:
+        // No OSD
+        qCDebug(lcDaemon) << "OSD disabled, skipping for layout:" << layoutName;
+        return;
+
+    case OsdStyle::Text:
+        // Use KDE Plasma's OSD service for text-only notification
+        {
+            QDBusMessage msg = QDBusMessage::createMethodCall(
+                QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+
+            QString displayText = i18n("Zone Layout: %1", layoutName);
+            msg << QStringLiteral("plasmazones") << displayText;
+
+            QDBusConnection::sessionBus().asyncCall(msg);
+            qCDebug(lcDaemon) << "Showing text OSD for layout:" << layoutName;
+        }
+        break;
+
+    case OsdStyle::Preview:
+        // Use visual layout preview OSD
+        if (m_overlayService) {
+            m_overlayService->showLayoutOsd(layout);
+            qCDebug(lcDaemon) << "Showing preview OSD for layout:" << layoutName;
+        } else {
+            qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
+        }
+        break;
+    }
 }
 
 // Screen management now handled by ScreenManager (SRP)

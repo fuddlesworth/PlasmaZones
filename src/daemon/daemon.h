@@ -12,6 +12,7 @@
 
 namespace PlasmaZones {
 
+class Layout;
 class LayoutManager;
 class ZoneDetector;
 class Settings;
@@ -100,7 +101,7 @@ public:
     Q_INVOKABLE void clearHighlight();
 
     // OSD notifications
-    Q_INVOKABLE void showLayoutOsd(const QString& layoutName);
+    void showLayoutOsd(Layout* layout);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
