@@ -8,5 +8,6 @@
         <file alias="ZoneSelector.qml">../ui/ZoneSelector.qml</file>
         <file alias="ZoneSelectorWindow.qml">../ui/ZoneSelectorWindow.qml</file>
         <file alias="LayoutPreview.qml">../ui/LayoutPreview.qml</file>
+        <file alias="LayoutOsd.qml">../ui/LayoutOsd.qml</file>
     </qresource>
 </RCC>

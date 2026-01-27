@@ -158,6 +158,10 @@ bool KCMPlasmaZones::showOsdOnLayoutSwitch() const
 {
     return m_settings->showOsdOnLayoutSwitch();
 }
+int KCMPlasmaZones::osdStyle() const
+{
+    return m_settings->osdStyleInt();
+}
 
 // Appearance getters
 bool KCMPlasmaZones::useSystemColors() const
@@ -491,6 +495,14 @@ void KCMPlasmaZones::setShowOsdOnLayoutSwitch(bool show)
     if (m_settings->showOsdOnLayoutSwitch() != show) {
         m_settings->setShowOsdOnLayoutSwitch(show);
         Q_EMIT showOsdOnLayoutSwitchChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setOsdStyle(int style)
+{
+    if (m_settings->osdStyleInt() != style) {
+        m_settings->setOsdStyleInt(style);
+        Q_EMIT osdStyleChanged();
         setNeedsSave(true);
     }
 }

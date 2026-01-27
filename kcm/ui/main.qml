@@ -1503,10 +1503,27 @@ KCM.AbstractKCM {
             }
 
             CheckBox {
+                id: showOsdCheckbox
                 Kirigami.FormData.label: i18n("Notifications:")
                 text: i18n("Show OSD when switching layouts")
                 checked: kcm.showOsdOnLayoutSwitch
                 onToggled: kcm.showOsdOnLayoutSwitch = checked
+            }
+
+            ComboBox {
+                Kirigami.FormData.label: i18n("OSD style:")
+                enabled: showOsdCheckbox.checked
+                // OsdStyle enum: 0=None, 1=Text, 2=Preview
+                // ComboBox only shows Text (1) and Preview (2), so map: 1->0, 2->1
+                // Use Math.max to handle edge case where osdStyle could be 0 (None)
+                currentIndex: Math.max(0, kcm.osdStyle - 1)
+                model: [
+                    i18n("Text only"),
+                    i18n("Visual preview")
+                ]
+                onActivated: (index) => {
+                    kcm.osdStyle = index + 1 // Convert back: 0->1 (Text), 1->2 (Preview)
+                }
             }
             }
         }

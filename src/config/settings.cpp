@@ -142,6 +142,20 @@ void Settings::setShowOsdOnLayoutSwitch(bool show)
     }
 }
 
+void Settings::setOsdStyle(OsdStyle style)
+{
+    if (m_osdStyle != style) {
+        m_osdStyle = style;
+        Q_EMIT osdStyleChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setOsdStyleInt(int style)
+{
+    setOsdStyle(static_cast<OsdStyle>(style));
+}
+
 void Settings::setUseSystemColors(bool use)
 {
     if (m_useSystemColors != use) {
@@ -783,6 +797,11 @@ void Settings::load()
     m_showZoneNumbers = display.readEntry("ShowNumbers", true);
     m_flashZonesOnSwitch = display.readEntry("FlashOnSwitch", true);
     m_showOsdOnLayoutSwitch = display.readEntry("ShowOsdOnLayoutSwitch", true);
+    int osdStyleInt = display.readEntry("OsdStyle", static_cast<int>(OsdStyle::Preview));
+    if (osdStyleInt < 0 || osdStyleInt > 2) {
+        osdStyleInt = static_cast<int>(OsdStyle::Preview);
+    }
+    m_osdStyle = static_cast<OsdStyle>(osdStyleInt);
 
     // Appearance with validation
     m_useSystemColors = appearance.readEntry("UseSystemColors", true);
@@ -1022,6 +1041,7 @@ void Settings::save()
     display.writeEntry("ShowNumbers", m_showZoneNumbers);
     display.writeEntry("FlashOnSwitch", m_flashZonesOnSwitch);
     display.writeEntry("ShowOsdOnLayoutSwitch", m_showOsdOnLayoutSwitch);
+    display.writeEntry("OsdStyle", static_cast<int>(m_osdStyle));
 
     // Appearance
     appearance.writeEntry("UseSystemColors", m_useSystemColors);

@@ -98,7 +98,11 @@ public:
     QRect getSelectedZoneGeometry(QScreen* screen) const override;
     void clearSelectedZone() override;
 
+    // Layout OSD (visual preview when switching layouts)
+    void showLayoutOsd(Layout* layout);
+
 public Q_SLOTS:
+    void hideLayoutOsd();
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML
@@ -129,9 +133,14 @@ private:
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
+    // Layout OSD windows
+    QHash<QScreen*, QQuickWindow*> m_layoutOsdWindows;
+
     void createZoneSelectorWindow(QScreen* screen);
     void destroyZoneSelectorWindow(QScreen* screen);
     void updateZoneSelectorWindow(QScreen* screen);
+    void createLayoutOsdWindow(QScreen* screen);
+    void destroyLayoutOsdWindow(QScreen* screen);
 
     // Shader support methods
     bool useShaderOverlay() const;

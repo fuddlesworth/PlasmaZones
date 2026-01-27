@@ -1023,6 +1023,7 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
 {
     destroyOverlayWindow(screen);
     destroyZoneSelectorWindow(screen);
+    destroyLayoutOsdWindow(screen);
 }
 
 void OverlayService::showZoneSelector()
@@ -2170,6 +2171,162 @@ void OverlayService::onShaderError(const QString& errorLog)
 
     // For current session, the overlay falls back to transparent
     // (shader shows nothing on error, but window remains to prevent flicker)
+}
+
+void OverlayService::showLayoutOsd(Layout* layout)
+{
+    if (!layout) {
+        qCDebug(lcOverlay) << "No layout provided for OSD";
+        return;
+    }
+
+    // Don't show OSD for empty layouts
+    if (layout->zones().isEmpty()) {
+        qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << layout->name();
+        return;
+    }
+
+    // Show on primary screen only for OSD
+    QScreen* screen = Utils::primaryScreen();
+    if (!screen) {
+        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+        return;
+    }
+
+    // Create window if needed
+    if (!m_layoutOsdWindows.contains(screen)) {
+        createLayoutOsdWindow(screen);
+    }
+
+    auto* window = m_layoutOsdWindows.value(screen);
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to get layout OSD window";
+        return;
+    }
+
+    // Get screen geometry for aspect ratio
+    const QRect screenGeom = screen->geometry();
+    qreal aspectRatio =
+        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    // Ensure aspect ratio is within reasonable bounds
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+
+    // Set layout data
+    writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
+    writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
+    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+
+    // Build zones list with relative geometry
+    QVariantList zonesList;
+    for (auto* zone : layout->zones()) {
+        if (zone) {
+            QVariantMap zoneMap;
+            zoneMap[QStringLiteral("id")] = zone->id().toString();
+            zoneMap[QStringLiteral("zoneNumber")] = zone->zoneNumber();
+            // Use relative geometry for preview scaling
+            QRectF relGeo = zone->relativeGeometry();
+            QVariantMap relGeoMap;
+            relGeoMap[QStringLiteral("x")] = relGeo.x();
+            relGeoMap[QStringLiteral("y")] = relGeo.y();
+            relGeoMap[QStringLiteral("width")] = relGeo.width();
+            relGeoMap[QStringLiteral("height")] = relGeo.height();
+            zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
+            zonesList.append(zoneMap);
+        }
+    }
+    writeQmlProperty(window, QStringLiteral("zones"), zonesList);
+
+    // Set explicit window size before positioning (fixes first-show centering issue)
+    // OSD is approximately 280x200 based on QML layout (200px preview + margins + label)
+    const int osdWidth = 280;
+    const int osdHeight = static_cast<int>(200 / aspectRatio) + 80; // preview height + margins + label
+    window->setWidth(osdWidth);
+    window->setHeight(osdHeight);
+
+    // Center the window on screen
+    int x = screenGeom.x() + (screenGeom.width() - osdWidth) / 2;
+    int y = screenGeom.y() + (screenGeom.height() - osdHeight) / 2;
+    window->setPosition(x, y);
+
+    // Show with animation
+    QMetaObject::invokeMethod(window, "show");
+
+    qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name();
+}
+
+void OverlayService::hideLayoutOsd()
+{
+    for (auto* window : std::as_const(m_layoutOsdWindows)) {
+        if (window && window->isVisible()) {
+            QMetaObject::invokeMethod(window, "hide");
+        }
+    }
+}
+
+void OverlayService::createLayoutOsdWindow(QScreen* screen)
+{
+    if (!screen) {
+        qCWarning(lcOverlay) << "Screen is null for layout OSD";
+        return;
+    }
+
+    if (m_layoutOsdWindows.contains(screen)) {
+        return;
+    }
+
+    QQmlComponent component(m_engine.get(), QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")));
+
+    if (component.isError()) {
+        qCWarning(lcOverlay) << "Failed to load LayoutOsd.qml:" << component.errors();
+        return;
+    }
+
+    if (component.status() != QQmlComponent::Ready) {
+        qCWarning(lcOverlay) << "LayoutOsd QML component not ready, status:" << component.status();
+        return;
+    }
+
+    QObject* obj = component.create();
+    if (!obj) {
+        qCWarning(lcOverlay) << "Failed to create layout OSD window:" << component.errors();
+        return;
+    }
+
+    auto* window = qobject_cast<QQuickWindow*>(obj);
+    if (!window) {
+        qCWarning(lcOverlay) << "Created object is not a QQuickWindow";
+        obj->deleteLater();
+        return;
+    }
+
+    // Take C++ ownership
+    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+
+    // Set screen
+    window->setScreen(screen);
+
+    // Note: We intentionally do NOT use LayerShellQt for the OSD window.
+    // LayerShell windows cannot be positioned manually (setPosition is ignored).
+    // Instead, we use the window flags set in QML (FramelessWindowHint | Tool |
+    // WindowStaysOnTopHint | BypassWindowManagerHint) which allow free positioning.
+
+    // Connect dismissed signal to clean up
+    connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
+
+    // Initially hidden
+    window->setVisible(false);
+
+    m_layoutOsdWindows.insert(screen, window);
+
+    qCDebug(lcOverlay) << "Created layout OSD window for screen:" << screen->name();
+}
+
+void OverlayService::destroyLayoutOsdWindow(QScreen* screen)
+{
+    if (auto* window = m_layoutOsdWindows.take(screen)) {
+        window->close();
+        window->deleteLater();
+    }
 }
 
 } // namespace PlasmaZones
