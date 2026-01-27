@@ -109,6 +109,10 @@ inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; // Legacy, for backward c
 inline constexpr QLatin1String IsSystem{"isSystem"}; // New: determined by source path
 inline constexpr QLatin1String ZoneCount{"zoneCount"};
 
+// Shader keys
+inline constexpr QLatin1String ShaderId{"shaderId"};
+inline constexpr QLatin1String ShaderParams{"shaderParams"};
+
 // Assignment keys
 inline constexpr QLatin1String Assignments{"assignments"};
 inline constexpr QLatin1String Screen{"screen"};

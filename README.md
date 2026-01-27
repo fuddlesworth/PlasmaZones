@@ -23,6 +23,7 @@ Unlike automatic tiling window managers, you design your own layouts. The visual
 - Copy/paste zones within or between layouts
 - Grid and edge snapping
 - Per-zone colors, opacity, and border styling
+- Shader effect configuration with live preview
 
 **Window Management**
 - Drag windows with modifier key to snap into zones
@@ -31,6 +32,13 @@ Unlike automatic tiling window managers, you design your own layouts. The visual
 - Push window to first empty zone
 - Restore window to original size
 - Toggle per-window floating
+
+**Shader Effects**
+- GPU-accelerated zone overlays with custom shaders
+- 8 built-in effects: Neon Glow, Glass Morphism, Minimalist, Holographic, and more
+- Customizable parameters per shader (colors, intensity, animation speed)
+- User shader support - create your own effects
+- Automatic hot-reload when editing shaders
 
 **Integration**
 - Multi-monitor support with per-display layouts
@@ -138,17 +146,34 @@ qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.show
 
 Full interface in `dbus/org.plasmazones.xml`.
 
+## Shader Effects
+
+PlasmaZones includes GPU-accelerated shader effects for zone overlays. Select an effect in the editor under the Shader tab.
+
+**Built-in shaders:**
+- **Neon Glow** - Cyberpunk-style glowing borders
+- **Glass Morphism** - Frosted glass with blur
+- **Minimalist** - Clean cards with soft shadows
+- **Holographic** - Iridescent rainbow effects
+- **Gradient Mesh** - Flowing color gradients
+- **Liquid Warp** - Fluid distortion animation
+- **Magnetic Field** - Field line visualizations
+- **Particle Field** - Floating particle effects
+
+**Custom shaders:** Create your own effects by placing shader folders in `~/.local/share/plasmazones/shaders/`. See [docs/shaders.md](docs/shaders.md) for the quickstart guide.
+
 ## Project Layout
 
 ```
 src/
-├── core/       # Zone, Layout, detection logic
-├── daemon/     # Background service
+├── core/       # Zone, Layout, ShaderRegistry
+├── daemon/     # Background service, overlay rendering
 ├── editor/     # Layout editor
 ├── dbus/       # D-Bus adaptors
 └── config/     # KConfig settings
 kcm/            # System Settings module
 kwin-effect/    # KWin integration
+data/shaders/   # Built-in shader effects
 ```
 
 ## Contributing

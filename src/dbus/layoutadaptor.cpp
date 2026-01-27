@@ -9,6 +9,7 @@
 #include "../core/virtualdesktopmanager.h"
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
+#include "../core/shaderregistry.h"
 #include "../core/utils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -443,6 +444,14 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
+
+    // Update shader settings
+    layout->setShaderId(obj[JsonKeys::ShaderId].toString());
+    if (obj.contains(JsonKeys::ShaderParams)) {
+        layout->setShaderParams(obj[JsonKeys::ShaderParams].toObject().toVariantMap());
+    } else {
+        layout->setShaderParams(QVariantMap());
+    }
 
     // Clear existing zones and add new ones
     layout->clearZones();

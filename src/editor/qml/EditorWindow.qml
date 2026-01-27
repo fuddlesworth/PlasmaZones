@@ -224,6 +224,7 @@ Window {
         availableScreens: editorWindow._availableScreens
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
+        shaderDialog: shaderDialog
         importDialog: importDialog
         editorWindow: editorWindow
         exportDialog: exportDialog
@@ -632,6 +633,517 @@ Window {
             editorWindow: editorWindow
         }
 
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SHADER SETTINGS DIALOG
+    // ═══════════════════════════════════════════════════════════════════
+    Kirigami.Dialog {
+        id: shaderDialog
+
+        title: i18nc("@title:window", "Shader Effect")
+        preferredWidth: Kirigami.Units.gridUnit * 32
+
+        // Pending state - buffered until Apply is clicked
+        property var pendingParams: ({})
+        property string pendingShaderId: ""
+        property bool pendingHasEffect: false
+
+        // Initialize pending state when dialog opens
+        onOpened: {
+            shaderDialog.initializePendingState();
+        }
+
+        // When pending shader changes, reinitialize params with new shader's defaults
+        onPendingShaderIdChanged: {
+            if (shaderDialog.visible) {
+                shaderDialog.initializePendingParamsForShader();
+            }
+        }
+
+        function initializePendingState() {
+            if (!editorWindow._editorController) return;
+            pendingShaderId = editorWindow._editorController.currentShaderId || "";
+            pendingHasEffect = editorWindow._editorController.hasShaderEffect;
+            // Copy current params to pending
+            var current = editorWindow._editorController.currentShaderParams || {};
+            var copy = {};
+            for (var key in current) {
+                copy[key] = current[key];
+            }
+            pendingParams = copy;
+        }
+
+        function initializePendingParamsForShader() {
+            // When shader changes, initialize params with defaults from new shader
+            var info = shaderDialog.currentShaderInfo;
+            if (!info || !info.parameters) {
+                pendingParams = {};
+                return;
+            }
+            var defaults = {};
+            for (var i = 0; i < info.parameters.length; i++) {
+                var param = info.parameters[i];
+                if (param && param.id !== undefined && param.default !== undefined) {
+                    defaults[param.id] = param.default;
+                }
+            }
+            pendingParams = defaults;
+        }
+
+        function setPendingParam(paramId, value) {
+            var copy = {};
+            for (var key in pendingParams) {
+                copy[key] = pendingParams[key];
+            }
+            copy[paramId] = value;
+            pendingParams = copy;
+        }
+
+        function applyChanges() {
+            if (!editorWindow._editorController) return;
+
+            // Apply shader selection
+            if (pendingShaderId !== editorWindow._editorController.currentShaderId) {
+                editorWindow._editorController.currentShaderId = pendingShaderId;
+            }
+
+            // Apply all pending parameter changes
+            var currentParams = editorWindow._editorController.currentShaderParams || {};
+            for (var paramId in pendingParams) {
+                if (pendingParams[paramId] !== currentParams[paramId]) {
+                    editorWindow._editorController.setShaderParameter(paramId, pendingParams[paramId]);
+                }
+            }
+        }
+
+        function resetToDefaults() {
+            if (!editorWindow._editorController) return;
+            // Get default values from shader parameters
+            var defaults = {};
+            var params = shaderDialog.shaderParams;
+            for (var i = 0; i < params.length; i++) {
+                var param = params[i];
+                if (param && param.id !== undefined && param.default !== undefined) {
+                    defaults[param.id] = param.default;
+                }
+            }
+            pendingParams = defaults;
+        }
+
+        standardButtons: Kirigami.Dialog.NoButton
+
+        // Custom footer with Defaults on left, Apply on right (KCM style)
+        footer: QQC.DialogButtonBox {
+            QQC.Button {
+                text: i18nc("@action:button", "Defaults")
+                icon.name: "edit-undo"
+                visible: shaderDialog.shaderParams.length > 0
+                QQC.DialogButtonBox.buttonRole: QQC.DialogButtonBox.ResetRole
+                onClicked: shaderDialog.resetToDefaults()
+            }
+
+            QQC.Button {
+                text: i18nc("@action:button", "Apply")
+                icon.name: "dialog-ok-apply"
+                QQC.DialogButtonBox.buttonRole: QQC.DialogButtonBox.AcceptRole
+                onClicked: {
+                    shaderDialog.applyChanges();
+                    shaderDialog.close();
+                }
+            }
+        }
+
+        // Helper to get current shader info from the available shaders list (uses pending state)
+        property var currentShaderInfo: {
+            if (!editorWindow._editorController) return null;
+            var shaders = editorWindow._editorController.availableShaders;
+            var targetId = shaderDialog.pendingShaderId;
+            if (!shaders || !targetId) return null;
+            for (var i = 0; i < shaders.length; i++) {
+                if (shaders[i] && shaders[i].id === targetId) {
+                    return shaders[i];
+                }
+            }
+            return null;
+        }
+
+        property bool hasShaderEffect: shaderDialog.pendingShaderId !== "" && shaderDialog.pendingShaderId !== shaderDialog.noneShaderId
+        property var shaderParams: shaderDialog.currentShaderInfo ? (shaderDialog.currentShaderInfo.parameters || []) : []
+        property var currentParams: shaderDialog.pendingParams
+        property string noneShaderId: editorWindow._editorController ? editorWindow._editorController.noneShaderUuid : ""
+
+        function firstEffectId() {
+            var shaders = editorWindow._editorController ? editorWindow._editorController.availableShaders : [];
+            for (var i = 0; i < shaders.length; i++) {
+                if (shaders[i] && shaders[i].id && shaders[i].id !== shaderDialog.noneShaderId) {
+                    return shaders[i].id;
+                }
+            }
+            return shaderDialog.noneShaderId;
+        }
+
+        function parameterValue(paramId, fallback) {
+            var params = shaderDialog.pendingParams;
+            if (params && params[paramId] !== undefined) {
+                return params[paramId];
+            }
+            return fallback;
+        }
+
+        ColumnLayout {
+            spacing: Kirigami.Units.largeSpacing
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+
+                QQC.Switch {
+                    Kirigami.FormData.label: i18nc("@label", "Enable effect:")
+                    checked: shaderDialog.hasShaderEffect
+
+                    Accessible.name: i18nc("@label", "Enable shader effect")
+                    Accessible.description: i18nc("@info", "Turn the shader effect on or off for zone overlays")
+
+                    onToggled: {
+                        if (checked) {
+                            if (shaderDialog.pendingShaderId === shaderDialog.noneShaderId) {
+                                shaderDialog.pendingShaderId = shaderDialog.firstEffectId();
+                            }
+                        } else {
+                            shaderDialog.pendingShaderId = shaderDialog.noneShaderId;
+                        }
+                    }
+                }
+            }
+
+            // Message when effect is disabled
+            QQC.Label {
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.rightMargin: Kirigami.Units.largeSpacing
+                Layout.topMargin: Kirigami.Units.smallSpacing
+                Layout.bottomMargin: Kirigami.Units.smallSpacing
+                visible: !shaderDialog.hasShaderEffect
+                text: i18nc("@info", "The shader effect is disabled for this layout.")
+                wrapMode: Text.WordWrap
+                color: Kirigami.Theme.disabledTextColor
+            }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+                visible: shaderDialog.hasShaderEffect
+
+                // Shader effect selector
+                QQC.ComboBox {
+                    id: shaderComboBox
+                    Kirigami.FormData.label: i18nc("@label:listbox", "Effect:")
+
+                    model: editorWindow._editorController ? editorWindow._editorController.availableShaders : []
+                    textRole: "name"
+                    valueRole: "id"
+
+                    Accessible.name: i18nc("@label:listbox", "Shader effect")
+                    Accessible.description: i18nc("@info", "Select a visual effect for zone overlays")
+
+                    function findShaderIndex() {
+                        if (!model) return 0;
+                        var targetId = shaderDialog.pendingShaderId;
+                        for (var i = 0; i < model.length; i++) {
+                            if (model[i] && model[i].id === targetId) return i;
+                        }
+                        return 0;
+                    }
+
+                    Component.onCompleted: currentIndex = findShaderIndex()
+
+                    onActivated: {
+                        if (currentValue !== undefined) {
+                            shaderDialog.pendingShaderId = currentValue;
+                        }
+                    }
+
+                    Connections {
+                        target: shaderDialog
+                        function onPendingShaderIdChanged() {
+                            shaderComboBox.currentIndex = shaderComboBox.findShaderIndex();
+                        }
+                    }
+
+                    Connections {
+                        target: editorWindow._editorController
+                        function onAvailableShadersChanged() {
+                            shaderComboBox.currentIndex = shaderComboBox.findShaderIndex();
+                        }
+                    }
+                }
+
+                // Shader description (inline, below selector)
+                QQC.Label {
+                    Kirigami.FormData.label: ""
+                    Layout.fillWidth: true
+                    visible: shaderDialog.currentShaderInfo
+                        && shaderDialog.currentShaderInfo.description
+                    text: shaderDialog.currentShaderInfo ? (shaderDialog.currentShaderInfo.description || "") : ""
+                    wrapMode: Text.WordWrap
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                }
+
+                // Author/version metadata
+                QQC.Label {
+                    Kirigami.FormData.label: ""
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    text: {
+                        if (!shaderDialog.currentShaderInfo) return "";
+                        var info = shaderDialog.currentShaderInfo;
+                        var parts = [];
+                        if (info.author) parts.push(i18nc("@info shader author", "by %1", info.author));
+                        if (info.version) parts.push(i18nc("@info shader version", "v%1", info.version));
+                        if (info.isUserShader) parts.push(i18nc("@info user-installed shader", "(User shader)"));
+                        return parts.join(" · ");
+                    }
+                    wrapMode: Text.WordWrap
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                }
+            }
+
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
+                visible: shaderDialog.hasShaderEffect
+
+                Kirigami.Separator {
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18nc("@title:group", "Parameters")
+                    visible: shaderDialog.shaderParams.length > 0
+                }
+
+                // Message when shader has no parameters
+                QQC.Label {
+                    Kirigami.FormData.label: ""
+                    Layout.fillWidth: true
+                    Layout.leftMargin: Kirigami.Units.largeSpacing
+                    Layout.rightMargin: Kirigami.Units.largeSpacing
+                    Layout.topMargin: Kirigami.Units.smallSpacing
+                    Layout.bottomMargin: Kirigami.Units.smallSpacing
+                    visible: shaderDialog.shaderParams.length === 0
+                    text: i18nc("@info", "This effect has no configurable parameters.")
+                    wrapMode: Text.WordWrap
+                    color: Kirigami.Theme.disabledTextColor
+                }
+
+                Repeater {
+                    model: shaderDialog.shaderParams
+
+                    delegate: Loader {
+                        id: paramLoader
+                        Layout.fillWidth: true
+                        visible: sourceComponent !== null
+
+                        required property var modelData
+                        required property int index
+
+                        Kirigami.FormData.label: modelData.name || modelData.id
+
+                        sourceComponent: modelData.type === "float"
+                            ? floatParamRow
+                            : modelData.type === "color"
+                                ? colorParamRow
+                                : modelData.type === "bool"
+                                    ? boolParamRow
+                                    : modelData.type === "int"
+                                        ? intParamRow
+                                        : null
+
+                        onLoaded: {
+                            if (item) {
+                                item.modelData = modelData;
+                            }
+                        }
+                    }
+                }
+
+            }
+        }
+
+        Component {
+            id: floatParamRow
+
+            RowLayout {
+                property var modelData
+
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC.Slider {
+                    id: floatSlider
+                    Layout.fillWidth: true
+
+                    from: modelData && modelData.min !== undefined ? modelData.min : 0
+                    to: modelData && modelData.max !== undefined ? modelData.max : 1
+                    stepSize: modelData && modelData.step !== undefined ? modelData.step : 0.01
+
+                    value: modelData ? shaderDialog.parameterValue(
+                        modelData.id,
+                        modelData.default !== undefined ? modelData.default : 0.5
+                    ) : 0.5
+
+                    Accessible.name: modelData ? (modelData.name || modelData.id) : ""
+                    Accessible.description: modelData ? (modelData.description || "") : ""
+
+                    QQC.ToolTip.text: modelData ? (modelData.description || "") : ""
+                    QQC.ToolTip.visible: hovered && modelData && modelData.description
+                    QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
+
+                    onMoved: {
+                        if (modelData) {
+                            shaderDialog.setPendingParam(modelData.id, value);
+                        }
+                    }
+                }
+
+                QQC.Label {
+                    text: floatSlider.value.toFixed(2)
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 4
+                    horizontalAlignment: Text.AlignRight
+                    font: Kirigami.Theme.smallFont
+                }
+            }
+        }
+
+        Component {
+            id: colorParamRow
+
+            RowLayout {
+                property var modelData
+
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                Rectangle {
+                    id: colorSwatch
+
+                    property color currentColor: {
+                        if (!modelData) return "#ffffff";
+                        var colorStr = shaderDialog.parameterValue(
+                            modelData.id,
+                            modelData.default || "#ffffff"
+                        );
+                        return Qt.color(colorStr);
+                    }
+
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 3
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 1.5
+                    radius: Kirigami.Units.smallSpacing
+                    color: currentColor
+                    border.width: 1
+                    border.color: Kirigami.Theme.separatorColor
+
+                    Accessible.name: modelData ? i18nc("@label", "%1 color", modelData.name || modelData.id) : ""
+                    Accessible.role: Accessible.Button
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            if (!modelData) return;
+                            shaderColorDialog.selectedColor = colorSwatch.currentColor;
+                            shaderColorDialog.paramId = modelData.id;
+                            shaderColorDialog.paramName = modelData.name || modelData.id;
+                            shaderColorDialog.open();
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                QQC.Label {
+                    text: colorSwatch.currentColor.toString().toUpperCase()
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 6
+                    horizontalAlignment: Text.AlignRight
+                    color: Kirigami.Theme.disabledTextColor
+                    font: Kirigami.Theme.smallFont
+                }
+            }
+        }
+
+        Component {
+            id: boolParamRow
+
+            RowLayout {
+                property var modelData
+
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC.CheckBox {
+                    checked: modelData ? shaderDialog.parameterValue(
+                        modelData.id,
+                        modelData.default !== undefined ? modelData.default : false
+                    ) : false
+
+                    Accessible.name: modelData ? (modelData.name || modelData.id) : ""
+                    Accessible.description: modelData ? (modelData.description || "") : ""
+
+                    onToggled: {
+                        if (modelData) {
+                            shaderDialog.setPendingParam(modelData.id, checked);
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+
+        Component {
+            id: intParamRow
+
+            RowLayout {
+                property var modelData
+
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC.SpinBox {
+                    from: modelData && modelData.min !== undefined ? modelData.min : 0
+                    to: modelData && modelData.max !== undefined ? modelData.max : 100
+
+                    value: modelData ? shaderDialog.parameterValue(
+                        modelData.id,
+                        modelData.default !== undefined ? modelData.default : 0
+                    ) : 0
+
+                    Accessible.name: modelData ? (modelData.name || modelData.id) : ""
+                    Accessible.description: modelData ? (modelData.description || "") : ""
+
+                    onValueModified: {
+                        if (modelData) {
+                            shaderDialog.setPendingParam(modelData.id, value);
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+            }
+        }
+    }
+
+    // Shared color dialog for shader parameters
+    ColorDialog {
+        id: shaderColorDialog
+
+        property string paramId: ""
+        property string paramName: ""
+
+        title: i18nc("@title:window", "Choose %1", paramName)
+
+        onAccepted: {
+            if (paramId) {
+                shaderDialog.setPendingParam(paramId, selectedColor.toString());
+            }
+        }
     }
 
     Connections {

@@ -8,11 +8,15 @@
 #include <QObject>
 #include <QHash>
 #include <QPointer>
+#include <QElapsedTimer>
+#include <QMutex>
 #include <memory>
+#include <atomic>
 
 class QQmlEngine;
 class QQuickWindow;
 class QScreen;
+class QTimer;
 
 namespace PlasmaZones {
 
@@ -78,6 +82,9 @@ public:
     void hideZoneSelector() override;
     void updateSelectorPosition(int cursorX, int cursorY) override;
 
+    // Mouse position for shader effects
+    void updateMousePosition(int cursorX, int cursorY) override;
+
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
     QString selectedLayoutId() const override
@@ -93,6 +100,9 @@ public:
 
 public Q_SLOTS:
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
+
+    // Shader error reporting from QML
+    void onShaderError(const QString& errorLog);
 
 private:
     void createOverlayWindow(QScreen* screen);
@@ -122,6 +132,34 @@ private:
     void createZoneSelectorWindow(QScreen* screen);
     void destroyZoneSelectorWindow(QScreen* screen);
     void updateZoneSelectorWindow(QScreen* screen);
+
+    // Shader support methods
+    bool useShaderOverlay() const;
+    bool canUseShaders() const;
+    void startShaderAnimation();
+    void stopShaderAnimation();
+    void updateShaderUniforms();
+    void updateZonesForAllWindows();
+
+private Q_SLOTS:
+    // System sleep/resume handler (connected to logind PrepareForSleep signal)
+    void onPrepareForSleep(bool goingToSleep);
+
+private:
+    // Shader timing (shared across all monitors for synchronized effects)
+    QElapsedTimer m_shaderTimer;
+    std::atomic<qint64> m_lastFrameTime{0};
+    std::atomic<int> m_frameCount{0};
+    QTimer* m_shaderUpdateTimer = nullptr;
+    mutable QMutex m_shaderTimerMutex;
+
+    // Shader state
+    bool m_zoneDataDirty = true;
+    bool m_shaderErrorPending = false;
+    QString m_pendingShaderError;
+
+    // Zone data version for shader synchronization
+    int m_zoneDataVersion = 0;
 };
 
 } // namespace PlasmaZones

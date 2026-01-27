@@ -5,6 +5,7 @@
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/logging.h"
+#include "../core/shaderregistry.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QColor>
@@ -149,6 +150,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("borderWidth", borderWidth, setBorderWidth)
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
     REGISTER_BOOL_SETTING("enableBlur", enableBlur, setEnableBlur)
+    REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
+    REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
 
     // Zone settings (DRY: using macros)
     REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
@@ -242,6 +245,62 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 QStringList SettingsAdaptor::getSettingKeys()
 {
     return m_getters.keys();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shader Registry D-Bus Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList SettingsAdaptor::availableShaders()
+{
+    auto *registry = ShaderRegistry::instance();
+    return registry ? registry->availableShadersVariant() : QVariantList();
+}
+
+QVariantMap SettingsAdaptor::shaderInfo(const QString& shaderId)
+{
+    auto *registry = ShaderRegistry::instance();
+    return registry ? registry->shaderInfo(shaderId) : QVariantMap();
+}
+
+QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
+{
+    auto *registry = ShaderRegistry::instance();
+    return registry ? registry->defaultParams(shaderId) : QVariantMap();
+}
+
+bool SettingsAdaptor::shadersEnabled()
+{
+    auto *registry = ShaderRegistry::instance();
+    return registry ? registry->shadersEnabled() : false;
+}
+
+bool SettingsAdaptor::userShadersEnabled()
+{
+    auto *registry = ShaderRegistry::instance();
+    return registry ? registry->userShadersEnabled() : false;
+}
+
+QString SettingsAdaptor::userShaderDirectory()
+{
+    auto *registry = ShaderRegistry::instance();
+    return registry ? registry->userShaderDirectory() : QString();
+}
+
+void SettingsAdaptor::openUserShaderDirectory()
+{
+    auto *registry = ShaderRegistry::instance();
+    if (registry) {
+        registry->openUserShaderDirectory();
+    }
+}
+
+void SettingsAdaptor::refreshShaders()
+{
+    auto *registry = ShaderRegistry::instance();
+    if (registry) {
+        registry->refresh();
+    }
 }
 
 } // namespace PlasmaZones

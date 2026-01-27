@@ -381,6 +381,11 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     m_lastCursorX = cursorX;
     m_lastCursorY = cursorY;
 
+    // Update mouse position for shader effects
+    if (m_overlayService && m_overlayShown) {
+        m_overlayService->updateMousePosition(cursorX, cursorY);
+    }
+
     // Check if we should show/hide the zone selector based on cursor proximity to edge
     checkZoneSelectorTrigger(cursorX, cursorY);
 

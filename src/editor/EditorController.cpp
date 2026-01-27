@@ -26,8 +26,11 @@
 #include "undo/commands/BatchUpdateAppearanceCommand.h"
 #include "undo/commands/PasteZonesCommand.h"
 #include "undo/commands/DividerResizeCommand.h"
+#include "undo/commands/UpdateShaderIdCommand.h"
+#include "undo/commands/UpdateShaderParamsCommand.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/shaderregistry.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -37,6 +40,7 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <QGuiApplication>
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -50,6 +54,87 @@
 #include <utility>
 
 namespace PlasmaZones {
+
+// D-Bus wraps nested maps/lists in QDBusArgument which is read-only.
+// QML chokes on these, so we recursively unwrap everything to plain QVariants.
+// qdbus_cast won't help here - it only handles top-level types.
+static QVariant convertDbusArgument(const QVariant& value)
+{
+    // Handle QDBusArgument wrapper - extract to plain types first
+    if (value.canConvert<QDBusArgument>()) {
+        const QDBusArgument arg = value.value<QDBusArgument>();
+        switch (arg.currentType()) {
+        case QDBusArgument::MapType: {
+            // Extract the entire map at once, then recursively convert values
+            QVariantMap map;
+            arg >> map;
+            QVariantMap result;
+            for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+                result.insert(it.key(), convertDbusArgument(it.value()));
+            }
+            return result;
+        }
+        case QDBusArgument::ArrayType: {
+            // Extract the entire list at once using operator>>, which is more
+            // reliable than beginArray()/endArray() for nested structures
+            QVariantList list;
+            arg >> list;
+            QVariantList result;
+            result.reserve(list.size());
+            for (const QVariant& item : list) {
+                result.append(convertDbusArgument(item));
+            }
+            return result;
+        }
+        case QDBusArgument::StructureType: {
+            // Handle D-Bus structures (less common, but can occur)
+            QVariantList structData;
+            arg >> structData;
+            QVariantList result;
+            result.reserve(structData.size());
+            for (const QVariant& item : structData) {
+                result.append(convertDbusArgument(item));
+            }
+            return result;
+        }
+        case QDBusArgument::BasicType:
+        case QDBusArgument::VariantType: {
+            // Basic types can be extracted directly
+            QVariant extracted;
+            arg >> extracted;
+            return extracted;
+        }
+        default:
+            // Unknown type - return as-is (may cause issues, but log for debugging)
+            qCWarning(lcEditor) << "Unhandled QDBusArgument type:" << arg.currentType();
+            return value;
+        }
+    }
+
+    // Handle QVariantList that might contain nested QDBusArgument objects
+    if (value.typeId() == QMetaType::QVariantList) {
+        const QVariantList list = value.toList();
+        QVariantList result;
+        result.reserve(list.size());
+        for (const QVariant& item : list) {
+            result.append(convertDbusArgument(item));
+        }
+        return result;
+    }
+
+    // Handle QVariantMap that might contain nested QDBusArgument objects
+    if (value.typeId() == QMetaType::QVariantMap) {
+        const QVariantMap map = value.toMap();
+        QVariantMap result;
+        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+            result.insert(it.key(), convertDbusArgument(it.value()));
+        }
+        return result;
+    }
+
+    // Plain types pass through unchanged
+    return value;
+}
 
 EditorController::EditorController(QObject* parent)
     : QObject(parent)
@@ -482,6 +567,14 @@ void EditorController::createNewLayout()
     m_isNewLayout = true;
     m_hasUnsavedChanges = true;
 
+    // Reset shader state
+    m_currentShaderId.clear();
+    m_currentShaderParams.clear();
+    m_cachedShaderParameters.clear();
+
+    // Refresh available shaders from daemon
+    refreshAvailableShaders();
+
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
     Q_EMIT zonesChanged();
@@ -489,6 +582,9 @@ void EditorController::createNewLayout()
     Q_EMIT selectedZoneIdsChanged();
     Q_EMIT isNewLayoutChanged();
     Q_EMIT hasUnsavedChangesChanged();
+    Q_EMIT currentShaderIdChanged();
+    Q_EMIT currentShaderParamsChanged();
+    Q_EMIT currentShaderParametersChanged();
 }
 
 void EditorController::loadLayout(const QString& layoutId)
@@ -570,6 +666,14 @@ void EditorController::loadLayout(const QString& layoutId)
         m_zoneManager->setZones(zones);
     }
 
+    // Load shader settings
+    m_currentShaderId = layoutObj[QLatin1String(JsonKeys::ShaderId)].toString();
+    if (layoutObj.contains(QLatin1String(JsonKeys::ShaderParams))) {
+        m_currentShaderParams = layoutObj[QLatin1String(JsonKeys::ShaderParams)].toObject().toVariantMap();
+    } else {
+        m_currentShaderParams.clear();
+    }
+
     m_selectedZoneId.clear();
     m_selectedZoneIds.clear();
     m_isNewLayout = false;
@@ -580,6 +684,17 @@ void EditorController::loadLayout(const QString& layoutId)
         m_undoController->clear();
     }
 
+    // Refresh available shaders from daemon
+    refreshAvailableShaders();
+
+    // Update cached shader parameters after refresh (needs D-Bus access)
+    if (ShaderRegistry::isNoneShader(m_currentShaderId)) {
+        m_cachedShaderParameters.clear();
+    } else {
+        QVariantMap info = getShaderInfo(m_currentShaderId);
+        m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+    }
+
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
     Q_EMIT zonesChanged();
@@ -587,6 +702,9 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT selectedZoneIdsChanged();
     Q_EMIT isNewLayoutChanged();
     Q_EMIT hasUnsavedChangesChanged();
+    Q_EMIT currentShaderIdChanged();
+    Q_EMIT currentShaderParamsChanged();
+    Q_EMIT currentShaderParametersChanged();
 }
 
 /**
@@ -651,6 +769,14 @@ void EditorController::saveLayout()
         zonesArray.append(zoneObj);
     }
     layoutObj[QLatin1String(JsonKeys::Zones)] = zonesArray;
+
+    // Include shader settings
+    if (!ShaderRegistry::isNoneShader(m_currentShaderId)) {
+        layoutObj[QLatin1String(JsonKeys::ShaderId)] = m_currentShaderId;
+    }
+    if (!m_currentShaderParams.isEmpty()) {
+        layoutObj[QLatin1String(JsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(m_currentShaderParams);
+    }
 
     QJsonDocument doc(layoutObj);
     QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
@@ -2958,6 +3084,220 @@ QStringList EditorController::pasteZones(bool withOffset)
     }
 
     return newZoneIds;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHADER SUPPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString EditorController::currentShaderId() const
+{
+    return m_currentShaderId;
+}
+
+QVariantMap EditorController::currentShaderParams() const
+{
+    return m_currentShaderParams;
+}
+
+QVariantList EditorController::currentShaderParameters() const
+{
+    // Return cached parameters - populated when shader is selected
+    // This avoids D-Bus calls on every QML property access
+    return m_cachedShaderParameters;
+}
+
+bool EditorController::hasShaderEffect() const
+{
+    return !ShaderRegistry::isNoneShader(m_currentShaderId);
+}
+
+QString EditorController::noneShaderUuid() const
+{
+    return ShaderRegistry::noneShaderUuid();
+}
+
+void EditorController::setCurrentShaderId(const QString& id)
+{
+    // Validate: must be empty (no shader) or exist in available shaders
+    bool isValid = id.isEmpty();
+    if (!isValid) {
+        for (const QVariant& shader : m_availableShaders) {
+            if (shader.toMap().value(QLatin1String("id")).toString() == id) {
+                isValid = true;
+                break;
+            }
+        }
+    }
+
+    if (!isValid) {
+        qCWarning(lcEditor) << "Invalid shader ID:" << id;
+        return;
+    }
+
+    if (m_currentShaderId != id) {
+        auto* cmd = new UpdateShaderIdCommand(this, m_currentShaderId, id);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setCurrentShaderIdDirect(const QString& id)
+{
+    if (m_currentShaderId != id) {
+        m_currentShaderId = id;
+
+        // Update cached shader parameters
+        if (id.isEmpty()) {
+            m_cachedShaderParameters.clear();
+        } else {
+            QVariantMap info = getShaderInfo(id);
+            m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
+        }
+
+        markUnsaved();
+        Q_EMIT currentShaderIdChanged();
+        Q_EMIT currentShaderParametersChanged();
+    }
+}
+
+void EditorController::setCurrentShaderParams(const QVariantMap& params)
+{
+    if (m_currentShaderParams != params) {
+        // Create undo command for batch params change
+        auto* cmd = new UpdateShaderParamsCommand(this, m_currentShaderParams, params);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setCurrentShaderParamsDirect(const QVariantMap& params)
+{
+    if (m_currentShaderParams != params) {
+        m_currentShaderParams = params;
+        markUnsaved();
+        Q_EMIT currentShaderParamsChanged();
+    }
+}
+
+void EditorController::setShaderParameter(const QString& key, const QVariant& value)
+{
+    if (m_currentShaderParams.value(key) != value) {
+        // Create undo command for single param change (supports merging)
+        QVariant oldValue = m_currentShaderParams.value(key);
+        auto* cmd = new UpdateShaderParamsCommand(this, key, oldValue, value);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setShaderParameterDirect(const QString& key, const QVariant& value)
+{
+    if (m_currentShaderParams.value(key) != value) {
+        m_currentShaderParams[key] = value;
+        markUnsaved();
+        Q_EMIT currentShaderParamsChanged();
+    }
+}
+
+void EditorController::resetShaderParameters()
+{
+    if (!m_currentShaderParams.isEmpty()) {
+        // Create undo command for reset (batch change to empty)
+        auto* cmd = new UpdateShaderParamsCommand(
+            this, m_currentShaderParams, QVariantMap(),
+            i18nc("@action", "Reset Shader Parameters"));
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::refreshAvailableShaders()
+{
+    // Query daemon's ShaderRegistry via SettingsAdaptor D-Bus
+    QDBusInterface settingsIface(QStringLiteral("org.plasmazones"), QStringLiteral("/PlasmaZones"),
+                                 QStringLiteral("org.plasmazones.Settings"), QDBusConnection::sessionBus());
+
+    if (!settingsIface.isValid()) {
+        qCWarning(lcEditor) << "Cannot query shaders: daemon D-Bus interface unavailable";
+        m_availableShaders.clear();
+        m_shadersEnabled = false;
+        Q_EMIT availableShadersChanged();
+        Q_EMIT shadersEnabledChanged();
+        return;
+    }
+
+    // Check if shaders are supported (system capability, not user preference)
+    QDBusReply<bool> enabledReply = settingsIface.call(QStringLiteral("shadersEnabled"));
+    m_shadersEnabled = enabledReply.isValid() && enabledReply.value();
+
+    // Get available shaders list
+    QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
+    if (reply.isValid()) {
+        m_availableShaders.clear();
+
+        // Add "none" shader entry first so it appears at the top of the dropdown
+        m_availableShaders.append(createNoneShaderEntry());
+
+        // D-Bus returns nested structures (QVariantMap, QVariantList) as QDBusArgument
+        // Use convertDbusArgument to recursively convert them to proper Qt types
+        for (const QVariant& item : reply.value()) {
+            QVariant converted = convertDbusArgument(item);
+            if (converted.typeId() == QMetaType::QVariantMap) {
+                QVariantMap map = converted.toMap();
+                // Validate that required fields exist
+                if (map.contains(QLatin1String("id")) && map.contains(QLatin1String("name"))) {
+                    // Skip "none" entries from D-Bus - we already added our own above
+                    const QString id = map.value(QLatin1String("id")).toString();
+                    if (ShaderRegistry::isNoneShader(id)) {
+                        continue;
+                    }
+                    m_availableShaders.append(map);
+                } else {
+                    qCWarning(lcEditor) << "Shader entry missing required fields (id/name):" << map;
+                }
+            } else {
+                qCWarning(lcEditor) << "Unexpected shader list item type after conversion:" << converted.typeName();
+            }
+        }
+
+        qCDebug(lcEditor) << "Loaded" << m_availableShaders.size() << "shaders (including 'No Effect')";
+        Q_EMIT availableShadersChanged();
+    } else {
+        qCWarning(lcEditor) << "D-Bus availableShaders call failed:" << reply.error().message();
+        m_availableShaders.clear();
+        // Still add "none" entry even on D-Bus failure so user can disable effects
+        m_availableShaders.append(createNoneShaderEntry());
+        Q_EMIT availableShadersChanged();
+    }
+
+    Q_EMIT shadersEnabledChanged();
+}
+
+QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
+{
+    if (ShaderRegistry::isNoneShader(shaderId)) {
+        return QVariantMap();
+    }
+
+    QDBusInterface settingsIface(QStringLiteral("org.plasmazones"), QStringLiteral("/PlasmaZones"),
+                                 QStringLiteral("org.plasmazones.Settings"), QDBusConnection::sessionBus());
+
+    if (settingsIface.isValid()) {
+        QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("shaderInfo"), shaderId);
+        if (reply.isValid()) {
+            // D-Bus may return nested structures as QDBusArgument - convert recursively
+            QVariant converted = convertDbusArgument(QVariant::fromValue(reply.value()));
+            return converted.toMap();
+        }
+        qCWarning(lcEditor) << "D-Bus shaderInfo call failed:" << reply.error().message();
+    }
+    return QVariantMap();
+}
+
+QVariantMap EditorController::createNoneShaderEntry() const
+{
+    QVariantMap entry;
+    entry[QLatin1String("id")] = QString(); // Empty string = no shader
+    entry[QLatin1String("name")] = i18nc("@item:inlistbox No shader effect", "No Effect");
+    entry[QLatin1String("description")] = i18nc("@info", "Standard zone rendering without shader effects");
+    return entry;
 }
 
 } // namespace PlasmaZones

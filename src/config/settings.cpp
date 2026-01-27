@@ -477,6 +477,26 @@ void Settings::setZoneSelectorMaxRows(int rows)
     }
 }
 
+// Shader Effects implementations
+void Settings::setEnableShaderEffects(bool enable)
+{
+    if (m_enableShaderEffects != enable) {
+        m_enableShaderEffects = enable;
+        Q_EMIT enableShaderEffectsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setShaderFrameRate(int fps)
+{
+    fps = qBound(30, fps, 144);
+    if (m_shaderFrameRate != fps) {
+        m_shaderFrameRate = fps;
+        Q_EMIT shaderFrameRateChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 // Global Shortcuts implementations
 void Settings::setOpenEditorShortcut(const QString& shortcut)
 {
@@ -934,6 +954,11 @@ void Settings::load()
     }
     m_zoneSelectorMaxRows = maxRows;
 
+    // Shader Effects
+    KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
+    m_enableShaderEffects = shaders.readEntry("EnableShaderEffects", true);
+    m_shaderFrameRate = qBound(30, shaders.readEntry("ShaderFrameRate", 60), 144);
+
     // Global Shortcuts
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
     m_openEditorShortcut = globalShortcuts.readEntry("OpenEditorShortcut", QStringLiteral("Meta+Shift+E"));
@@ -1043,6 +1068,11 @@ void Settings::save()
     zoneSelector.writeEntry("SizeMode", static_cast<int>(m_zoneSelectorSizeMode));
     zoneSelector.writeEntry("MaxRows", m_zoneSelectorMaxRows);
 
+    // Shader Effects
+    KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
+    shaders.writeEntry("EnableShaderEffects", m_enableShaderEffects);
+    shaders.writeEntry("ShaderFrameRate", m_shaderFrameRate);
+
     // Global Shortcuts
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
     globalShortcuts.writeEntry("OpenEditorShortcut", m_openEditorShortcut);
@@ -1126,6 +1156,10 @@ void Settings::reset()
     m_zoneSelectorGridColumns = 3;
     m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto; // Auto-calculate sizes from screen
     m_zoneSelectorMaxRows = 4; // Max visible rows before scrolling
+
+    // Shader Effects defaults
+    m_enableShaderEffects = true;
+    m_shaderFrameRate = 60;
 
     // Global Shortcuts defaults
     m_openEditorShortcut = QStringLiteral("Meta+Shift+E");

@@ -16,7 +16,9 @@ enum CommandId {
     UpdateAppearance = 2, // UpdateZoneAppearanceCommand
     ChangeZOrder = 3, // ChangeZOrderCommand
     UpdateLayoutName = 4, // UpdateLayoutNameCommand
-    ChangeSelection = 5 // ChangeSelectionCommand
+    ChangeSelection = 5, // ChangeSelectionCommand
+    UpdateShaderId = 6, // UpdateShaderIdCommand
+    UpdateShaderParams = 7 // UpdateShaderParamsCommand (single param mode only)
 };
 
 } // namespace PlasmaZones

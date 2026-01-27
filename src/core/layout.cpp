@@ -4,6 +4,7 @@
 #include "layout.h"
 #include "constants.h"
 #include "logging.h"
+#include "shaderregistry.h"
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
@@ -36,6 +37,8 @@ Layout::Layout(const Layout& other)
     , m_showZoneNumbers(other.m_showZoneNumbers)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_defaultOrder(other.m_defaultOrder)
+    , m_shaderId(other.m_shaderId)
+    , m_shaderParams(other.m_shaderParams)
 {
     // Deep copy zones using clone() method
     for (const auto* zone : other.m_zones) {
@@ -61,6 +64,8 @@ Layout& Layout::operator=(const Layout& other)
         m_showZoneNumbers = other.m_showZoneNumbers;
         m_defaultOrder = other.m_defaultOrder;
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
+        m_shaderId = other.m_shaderId;
+        m_shaderParams = other.m_shaderParams;
 
         // Deep copy zones using clone() method
         qDeleteAll(m_zones);
@@ -144,6 +149,24 @@ void Layout::setSourcePath(const QString& path)
     if (m_sourcePath != path) {
         m_sourcePath = path;
         Q_EMIT sourcePathChanged();
+    }
+}
+
+void Layout::setShaderId(const QString& id)
+{
+    if (m_shaderId != id) {
+        m_shaderId = id;
+        Q_EMIT shaderIdChanged();
+        Q_EMIT layoutModified();
+    }
+}
+
+void Layout::setShaderParams(const QVariantMap& params)
+{
+    if (m_shaderParams != params) {
+        m_shaderParams = params;
+        Q_EMIT shaderParamsChanged();
+        Q_EMIT layoutModified();
     }
 }
 
@@ -338,6 +361,14 @@ QJsonObject Layout::toJson() const
     }
     // Note: isBuiltIn is no longer serialized - it's determined by source path at load time
 
+    // Shader support
+    if (!ShaderRegistry::isNoneShader(m_shaderId)) {
+        json[JsonKeys::ShaderId] = m_shaderId;
+    }
+    if (!m_shaderParams.isEmpty()) {
+        json[JsonKeys::ShaderParams] = QJsonObject::fromVariantMap(m_shaderParams);
+    }
+
     QJsonArray zonesArray;
     for (const auto* zone : m_zones) {
         zonesArray.append(zone->toJson());
@@ -365,6 +396,12 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_showZoneNumbers = json[JsonKeys::ShowZoneNumbers].toBool(true);
     layout->m_defaultOrder = json[JsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
+
+    // Shader support
+    layout->m_shaderId = json[JsonKeys::ShaderId].toString();
+    if (json.contains(JsonKeys::ShaderParams)) {
+        layout->m_shaderParams = json[JsonKeys::ShaderParams].toObject().toVariantMap();
+    }
 
     const auto zonesArray = json[JsonKeys::Zones].toArray();
     for (const auto& zoneValue : zonesArray) {

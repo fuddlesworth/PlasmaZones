@@ -46,6 +46,8 @@ set(plasmazones_core_SRCS
     core/zonedetector.h
     core/zonehighlighter.cpp
     core/zonehighlighter.h
+    core/shaderregistry.cpp
+    core/shaderregistry.h
     config/settings.cpp
     config/settings.h
     dbus/layoutadaptor.cpp
@@ -171,6 +173,11 @@ set(plasmazones_daemon_SRCS
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
     daemon/zoneselectorcontroller.h
+    # Shader rendering system
+    daemon/rendering/zoneshaderitem.h
+    daemon/rendering/zoneshaderitem.cpp
+    daemon/rendering/zoneshadernode.h
+    daemon/rendering/zoneshadernode.cpp
 )
 
 # QML resources for the daemon overlay
@@ -191,6 +198,7 @@ target_link_libraries(plasmazonesd
         Qt6::Widgets
         Qt6::Quick
         Qt6::QuickControls2
+        Qt6::OpenGL  # Required for ZoneShaderItem rendering
         KF6::DBusAddons
         KF6::GlobalAccel
         KF6::Notifications
@@ -291,6 +299,10 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/BatchUpdateAppearanceCommand.h
     editor/undo/commands/PasteZonesCommand.cpp
     editor/undo/commands/PasteZonesCommand.h
+    editor/undo/commands/UpdateShaderIdCommand.cpp
+    editor/undo/commands/UpdateShaderIdCommand.h
+    editor/undo/commands/UpdateShaderParamsCommand.cpp
+    editor/undo/commands/UpdateShaderParamsCommand.h
 )
 
 # Create the executable first
@@ -370,5 +382,11 @@ endif()
 # Desktop file for the editor (org.kde naming for portal integration)
 install(FILES
     editor/org.plasmazones.editor.desktop
+    DESTINATION ${KDE_INSTALL_APPDIR}
+)
+
+# Desktop file for the daemon (for XDG portal registration, NoDisplay=true)
+install(FILES
+    daemon/org.plasmazones.daemon.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
 )

@@ -70,6 +70,11 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
 
+    // Shader Effects
+    Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
+                   enableShaderEffectsChanged)
+    Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
+
     // Zones
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
@@ -180,6 +185,8 @@ public:
     int borderWidth() const;
     int borderRadius() const;
     bool enableBlur() const;
+    bool enableShaderEffects() const;
+    int shaderFrameRate() const;
     int zonePadding() const;
     int adjacentThreshold() const;
     bool keepWindowsInZonesOnResolutionChange() const;
@@ -243,6 +250,8 @@ public:
     void setBorderWidth(int width);
     void setBorderRadius(int radius);
     void setEnableBlur(bool enable);
+    void setEnableShaderEffects(bool enable);
+    void setShaderFrameRate(int fps);
     void setZonePadding(int padding);
     void setAdjacentThreshold(int threshold);
     void setKeepWindowsInZonesOnResolutionChange(bool keep);
@@ -347,6 +356,8 @@ Q_SIGNALS:
     void borderWidthChanged();
     void borderRadiusChanged();
     void enableBlurChanged();
+    void enableShaderEffectsChanged();
+    void shaderFrameRateChanged();
     void zonePaddingChanged();
     void adjacentThresholdChanged();
     void keepWindowsInZonesOnResolutionChangeChanged();

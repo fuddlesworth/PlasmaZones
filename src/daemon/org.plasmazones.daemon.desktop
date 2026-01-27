@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+[Desktop Entry]
+Type=Application
+Name=PlasmaZones Daemon
+Comment=Window tiling zone management daemon
+Exec=plasmazonesd
+Icon=plasmazones
+NoDisplay=true
+X-KDE-StartupNotify=false
+X-DBUS-ServiceName=org.plasmazones
