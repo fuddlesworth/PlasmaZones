@@ -404,12 +404,6 @@ private:
      */
     QVariantMap getShaderInfo(const QString& shaderId) const;
 
-    /**
-     * @brief Creates a "no effect" shader entry for the dropdown
-     * @return QVariantMap with id="" (empty) and name="No Effect"
-     */
-    QVariantMap createNoneShaderEntry() const;
-
     // Layout data
     QString m_layoutId;
     QString m_layoutName;

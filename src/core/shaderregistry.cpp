@@ -83,14 +83,8 @@ ShaderRegistry::ShaderRegistry(QObject *parent)
         ensureUserShaderDirExists();
         setupFileWatcher();
         refresh();
-    } else {
-        // Still register "no effect" placeholder even when shaders disabled
-        ShaderInfo none;
-        none.id = QString(); // Empty string = no shader
-        none.name = tr("No Effect");
-        none.description = tr("Default zone rendering without shader effects");
-        m_shaders.insert(none.id, none);
     }
+    // No "no effect" placeholder needed - there's a toggle to disable shaders
 }
 
 ShaderRegistry::~ShaderRegistry()
@@ -183,13 +177,6 @@ void ShaderRegistry::refresh()
     qCDebug(lcCore) << "Refreshing shader registry";
 
     m_shaders.clear();
-
-    // Always add "no effect" placeholder first (empty ID)
-    ShaderInfo none;
-    none.id = QString(); // Empty string = no shader
-    none.name = tr("No Effect");
-    none.description = tr("Default zone rendering without shader effects");
-    m_shaders.insert(none.id, none);
 
     if (m_shadersEnabled) {
         // Load order matters: system shaders first, then user shaders

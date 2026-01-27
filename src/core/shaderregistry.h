@@ -86,7 +86,7 @@ public:
     static bool isNoneShader(const QString &id);
 
     /**
-     * Get all available shaders (includes "No Effect" entry with empty ID)
+     * Get all available shaders
      * @note Returns by value since internal storage is QHash
      */
     QList<ShaderInfo> availableShaders() const;

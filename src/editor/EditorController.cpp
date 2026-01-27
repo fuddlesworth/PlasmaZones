@@ -3232,9 +3232,6 @@ void EditorController::refreshAvailableShaders()
     if (reply.isValid()) {
         m_availableShaders.clear();
 
-        // Add "none" shader entry first so it appears at the top of the dropdown
-        m_availableShaders.append(createNoneShaderEntry());
-
         // D-Bus returns nested structures (QVariantMap, QVariantList) as QDBusArgument
         // Use convertDbusArgument to recursively convert them to proper Qt types
         for (const QVariant& item : reply.value()) {
@@ -3243,11 +3240,6 @@ void EditorController::refreshAvailableShaders()
                 QVariantMap map = converted.toMap();
                 // Validate that required fields exist
                 if (map.contains(QLatin1String("id")) && map.contains(QLatin1String("name"))) {
-                    // Skip "none" entries from D-Bus - we already added our own above
-                    const QString id = map.value(QLatin1String("id")).toString();
-                    if (ShaderRegistry::isNoneShader(id)) {
-                        continue;
-                    }
                     m_availableShaders.append(map);
                 } else {
                     qCWarning(lcEditor) << "Shader entry missing required fields (id/name):" << map;
@@ -3257,13 +3249,11 @@ void EditorController::refreshAvailableShaders()
             }
         }
 
-        qCDebug(lcEditor) << "Loaded" << m_availableShaders.size() << "shaders (including 'No Effect')";
+        qCDebug(lcEditor) << "Loaded" << m_availableShaders.size() << "shaders";
         Q_EMIT availableShadersChanged();
     } else {
         qCWarning(lcEditor) << "D-Bus availableShaders call failed:" << reply.error().message();
         m_availableShaders.clear();
-        // Still add "none" entry even on D-Bus failure so user can disable effects
-        m_availableShaders.append(createNoneShaderEntry());
         Q_EMIT availableShadersChanged();
     }
 
@@ -3289,15 +3279,6 @@ QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
         qCWarning(lcEditor) << "D-Bus shaderInfo call failed:" << reply.error().message();
     }
     return QVariantMap();
-}
-
-QVariantMap EditorController::createNoneShaderEntry() const
-{
-    QVariantMap entry;
-    entry[QLatin1String("id")] = QString(); // Empty string = no shader
-    entry[QLatin1String("name")] = i18nc("@item:inlistbox No shader effect", "No Effect");
-    entry[QLatin1String("description")] = i18nc("@info", "Standard zone rendering without shader effects");
-    return entry;
 }
 
 } // namespace PlasmaZones
