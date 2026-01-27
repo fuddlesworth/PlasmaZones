@@ -35,23 +35,23 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 
 | Feature | PlasmaZones | KZones | MouseTiler | Polonium | Built-in Plasma |
 |---------|:-----------:|:------:|:----------:|:--------:|:---------------:|
-| Multiple saved layouts | ✓ | ✓ (JSON) | ✗ | ✗ | ✗ |
-| Visual layout editor | ✓ | ✗ | ✗ | ✗ | ✓ (Meta+T) |
-| GPU shader effects | ✓ (10+) | ✗ | ✗ | ✗ | ✗ |
-| Full KCM integration | ✓ | ✗ | ✗ | ✗ | Partial |
-| Per-virtual-desktop layouts | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Per-activity layouts | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Window session persistence | ✓ | ✗ | ✗* | ✗ | ✗ |
-| Visual layout OSD | ✓ | OSD text | ✗ | ✗ | ✗ |
-| Multi-zone spanning | ✓ | ✓ | ✗ | ✗ | ✗ |
-| Keyboard navigation | ✓ | ✓ (14+) | Basic | ✓ | ✓ (6.3+) |
-| Quick layout slots (1-9) | ✓ | ✓ | ✗ | ✗ | ✗ |
-| D-Bus API | ✓ (80+) | ✗ | ✗ | ✗ | ✗ |
-| Multi-monitor | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Native C++ performance | ✓ | ✗ | ✗ | ✗ | ✓ |
-| Touch/stylus support | ✗ | ✗ | ✓ | ✗ | ✗ |
-| Zone overlay | ✓ | ✓ | ✓ | ✗ | ✓ (Shift+drag) |
-| Zone selector widget | ✓ | ✓ | ✗ | ✗ | ✗ |
+| Multiple saved layouts | ✅ | ✅ (JSON) | ❌ | ❌ | ❌ |
+| Visual layout editor | ✅ | ❌ | ❌ | ❌ | ✅ (Meta+T) |
+| GPU shader effects | ✅ (10+) | ❌ | ❌ | ❌ | ❌ |
+| Full KCM integration | ✅ | ❌ | ❌ | ❌ | Partial |
+| Per-virtual-desktop layouts | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Per-activity layouts | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Window session persistence | ✅ | ❌ | ❌* | ❌ | ❌ |
+| Visual layout OSD | ✅ | OSD text | ❌ | ❌ | ❌ |
+| Multi-zone spanning | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Keyboard navigation | ✅ | ✅ (14+) | Basic | ✅ | ✅ (6.3+) |
+| Quick layout slots (1-9) | ✅ | ✅ | ❌ | ❌ | ❌ |
+| D-Bus API | ✅ (80+) | ❌ | ❌ | ❌ | ❌ |
+| Multi-monitor | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Native C++ performance | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Touch/stylus support | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Zone overlay | ✅ | ✅ | ✅ | ❌ | ✅ (Shift+drag) |
+| Zone selector widget | ✅ | ✅ | ❌ | ❌ | ❌ |
 
 *MouseTiler works with separate "Remember Window Positions" script for persistence
 
