@@ -470,6 +470,11 @@ void Daemon::start()
         m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber);
     });
 
+    // Cycle windows within zone shortcut (monocle-style navigation)
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool forward) {
+        m_windowTrackingAdaptor->cycleWindowsInZone(forward);
+    });
+
     // Connect to KWin script
     connectToKWinScript();
 

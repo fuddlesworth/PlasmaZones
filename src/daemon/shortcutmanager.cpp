@@ -111,6 +111,12 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::rotateWindowsCounterclockwiseShortcutChanged, this,
             &ShortcutManager::updateRotateWindowsCounterclockwiseShortcut);
 
+    // Cycle Windows in Zone shortcuts
+    connect(m_settings, &Settings::cycleWindowForwardShortcutChanged, this,
+            &ShortcutManager::updateCycleWindowForwardShortcut);
+    connect(m_settings, &Settings::cycleWindowBackwardShortcutChanged, this,
+            &ShortcutManager::updateCycleWindowBackwardShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -132,6 +138,7 @@ void ShortcutManager::registerShortcuts()
     setupSwapWindowShortcuts();
     setupSnapToZoneShortcuts();
     setupRotateWindowsShortcuts();
+    setupCycleWindowsShortcuts();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -177,6 +184,10 @@ void ShortcutManager::updateShortcuts()
     // Rotate Windows shortcuts
     updateRotateWindowsClockwiseShortcut();
     updateRotateWindowsCounterclockwiseShortcut();
+
+    // Cycle Windows in Zone shortcuts
+    updateCycleWindowForwardShortcut();
+    updateCycleWindowBackwardShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -255,6 +266,13 @@ void ShortcutManager::unregisterShortcuts()
 
     delete m_rotateWindowsCounterclockwiseAction;
     m_rotateWindowsCounterclockwiseAction = nullptr;
+
+    // Cycle Windows in Zone actions
+    delete m_cycleWindowForwardAction;
+    m_cycleWindowForwardAction = nullptr;
+
+    delete m_cycleWindowBackwardAction;
+    m_cycleWindowBackwardAction = nullptr;
 }
 
 void ShortcutManager::onOpenEditor()
@@ -772,6 +790,58 @@ void ShortcutManager::updateRotateWindowsCounterclockwiseShortcut()
     if (m_rotateWindowsCounterclockwiseAction) {
         KGlobalAccel::setGlobalShortcut(m_rotateWindowsCounterclockwiseAction,
                                         QKeySequence(m_settings->rotateWindowsCounterclockwiseShortcut()));
+    }
+}
+
+// Cycle Windows in Zone - Setup
+void ShortcutManager::setupCycleWindowsShortcuts()
+{
+    if (!m_cycleWindowForwardAction) {
+        m_cycleWindowForwardAction = new QAction(i18n("Cycle Window Forward in Zone"), this);
+        m_cycleWindowForwardAction->setObjectName(QStringLiteral("cycle_window_forward"));
+        KGlobalAccel::setGlobalShortcut(m_cycleWindowForwardAction,
+                                        QKeySequence(m_settings->cycleWindowForwardShortcut()));
+        connect(m_cycleWindowForwardAction, &QAction::triggered, this, &ShortcutManager::onCycleWindowForward);
+    }
+
+    if (!m_cycleWindowBackwardAction) {
+        m_cycleWindowBackwardAction = new QAction(i18n("Cycle Window Backward in Zone"), this);
+        m_cycleWindowBackwardAction->setObjectName(QStringLiteral("cycle_window_backward"));
+        KGlobalAccel::setGlobalShortcut(m_cycleWindowBackwardAction,
+                                        QKeySequence(m_settings->cycleWindowBackwardShortcut()));
+        connect(m_cycleWindowBackwardAction, &QAction::triggered, this, &ShortcutManager::onCycleWindowBackward);
+    }
+
+    qCInfo(lcShortcuts) << "Cycle windows shortcuts registered (Meta+Alt+. / Meta+Alt+,)";
+}
+
+// Cycle Windows in Zone - Slot handlers
+void ShortcutManager::onCycleWindowForward()
+{
+    qCDebug(lcShortcuts) << "Cycle window forward triggered";
+    Q_EMIT cycleWindowsInZoneRequested(true);
+}
+
+void ShortcutManager::onCycleWindowBackward()
+{
+    qCDebug(lcShortcuts) << "Cycle window backward triggered";
+    Q_EMIT cycleWindowsInZoneRequested(false);
+}
+
+// Cycle Windows in Zone - Shortcut update handlers
+void ShortcutManager::updateCycleWindowForwardShortcut()
+{
+    if (m_cycleWindowForwardAction) {
+        KGlobalAccel::setGlobalShortcut(m_cycleWindowForwardAction,
+                                        QKeySequence(m_settings->cycleWindowForwardShortcut()));
+    }
+}
+
+void ShortcutManager::updateCycleWindowBackwardShortcut()
+{
+    if (m_cycleWindowBackwardAction) {
+        KGlobalAccel::setGlobalShortcut(m_cycleWindowBackwardAction,
+                                        QKeySequence(m_settings->cycleWindowBackwardShortcut()));
     }
 }
 

@@ -244,6 +244,10 @@ Q_SIGNALS:
     // Rotate Windows Shortcuts
     void rotateWindowsClockwiseShortcutChanged();
     void rotateWindowsCounterclockwiseShortcutChanged();
+
+    // Cycle Windows in Zone Shortcuts
+    void cycleWindowForwardShortcutChanged();
+    void cycleWindowBackwardShortcutChanged();
 };
 
 /**

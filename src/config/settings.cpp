@@ -908,6 +908,25 @@ void Settings::setRotateWindowsCounterclockwiseShortcut(const QString& shortcut)
     }
 }
 
+// Cycle Windows in Zone Shortcuts
+void Settings::setCycleWindowForwardShortcut(const QString& shortcut)
+{
+    if (m_cycleWindowForwardShortcut != shortcut) {
+        m_cycleWindowForwardShortcut = shortcut;
+        Q_EMIT cycleWindowForwardShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setCycleWindowBackwardShortcut(const QString& shortcut)
+{
+    if (m_cycleWindowBackwardShortcut != shortcut) {
+        m_cycleWindowBackwardShortcut = shortcut;
+        Q_EMIT cycleWindowBackwardShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -1234,6 +1253,13 @@ void Settings::load()
     m_rotateWindowsCounterclockwiseShortcut =
         navigationShortcuts.readEntry("RotateWindowsCounterclockwise", QStringLiteral("Meta+Ctrl+["));
 
+    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    // Cycles focus between windows stacked in the same zone (monocle-style navigation)
+    m_cycleWindowForwardShortcut =
+        navigationShortcuts.readEntry("CycleWindowForward", QStringLiteral("Meta+Alt+."));
+    m_cycleWindowBackwardShortcut =
+        navigationShortcuts.readEntry("CycleWindowBackward", QStringLiteral("Meta+Alt+,"));
+
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1364,6 +1390,10 @@ void Settings::save()
     navigationShortcuts.writeEntry("RotateWindowsClockwise", m_rotateWindowsClockwiseShortcut);
     navigationShortcuts.writeEntry("RotateWindowsCounterclockwise", m_rotateWindowsCounterclockwiseShortcut);
 
+    // Cycle Windows in Zone Shortcuts
+    navigationShortcuts.writeEntry("CycleWindowForward", m_cycleWindowForwardShortcut);
+    navigationShortcuts.writeEntry("CycleWindowBackward", m_cycleWindowBackwardShortcut);
+
     config->sync();
 }
 
@@ -1476,6 +1506,10 @@ void Settings::reset()
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     m_rotateWindowsClockwiseShortcut = QStringLiteral("Meta+Ctrl+]");
     m_rotateWindowsCounterclockwiseShortcut = QStringLiteral("Meta+Ctrl+[");
+
+    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
+    m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
 
     Q_EMIT settingsChanged();
 }

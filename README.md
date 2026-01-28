@@ -74,6 +74,7 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Drag with modifier to snap windows to zones
 - Move windows between zones with keyboard shortcuts
 - Focus adjacent zones without mouse
+- Cycle through windows stacked in the same zone (monocle-style)
 - Push window to first empty zone
 - Restore original size on unsnap
 - Per-window floating toggle
@@ -248,12 +249,15 @@ systemctl --user enable --now plasmazones.service
 | Push to empty zone | `Meta+Alt+Return` |
 | Restore window size | `Meta+Alt+Escape` |
 | Toggle float | `Meta+Alt+F` |
+| Cycle window forward | `Meta+Alt+.` |
+| Cycle window backward | `Meta+Alt+,` |
 
 **Shortcut Pattern:** Shortcuts are designed to avoid conflicts with KDE defaults:
 - `Meta+Alt+{key}` — Layout operations and actions
 - `Meta+Alt+Shift+Arrow` — Window zone movement (avoids KDE's `Meta+Shift+Arrow` screen movement)
 - `Meta+Ctrl+Alt+Arrow` — Swap windows between zones (avoids KDE's `Meta+Ctrl+Arrow` desktop switching)
 - `Meta+Ctrl+[/]` — Rotate all windows through zones (complements layout cycling `Meta+Alt+[/]`)
+- `Meta+Alt+./,` — Cycle through windows stacked in the same zone (monocle-style)
 - `Alt+Shift+Arrow` — Focus navigation (avoids KDE's `Meta+Arrow` quick tile)
 - `Meta+Ctrl+{1-9}` — Direct zone snapping
 

@@ -119,6 +119,12 @@ Q_SIGNALS:
      */
     void rotateWindowsRequested(bool clockwise);
 
+    /**
+     * @brief Emitted when cycle windows in zone is requested
+     * @param forward true for forward/next, false for backward/previous
+     */
+    void cycleWindowsInZoneRequested(bool forward);
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -177,6 +183,12 @@ private Q_SLOTS:
     void updateRotateWindowsClockwiseShortcut();
     void updateRotateWindowsCounterclockwiseShortcut();
 
+    // Cycle Windows in Zone
+    void onCycleWindowForward();
+    void onCycleWindowBackward();
+    void updateCycleWindowForwardShortcut();
+    void updateCycleWindowBackwardShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -185,6 +197,7 @@ private:
     void setupSwapWindowShortcuts();
     void setupSnapToZoneShortcuts();
     void setupRotateWindowsShortcuts();
+    void setupCycleWindowsShortcuts();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -219,6 +232,10 @@ private:
     // Rotate Windows actions
     QAction* m_rotateWindowsClockwiseAction = nullptr;
     QAction* m_rotateWindowsCounterclockwiseAction = nullptr;
+
+    // Cycle Windows in Zone actions
+    QAction* m_cycleWindowForwardAction = nullptr;
+    QAction* m_cycleWindowBackwardAction = nullptr;
 };
 
 } // namespace PlasmaZones

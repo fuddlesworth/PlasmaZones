@@ -209,6 +209,13 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString rotateWindowsCounterclockwiseShortcut READ rotateWindowsCounterclockwiseShortcut WRITE
                    setRotateWindowsCounterclockwiseShortcut NOTIFY rotateWindowsCounterclockwiseShortcutChanged)
 
+    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    // Cycles focus between windows stacked in the same zone
+    Q_PROPERTY(QString cycleWindowForwardShortcut READ cycleWindowForwardShortcut WRITE setCycleWindowForwardShortcut
+                   NOTIFY cycleWindowForwardShortcutChanged)
+    Q_PROPERTY(QString cycleWindowBackwardShortcut READ cycleWindowBackwardShortcut WRITE setCycleWindowBackwardShortcut
+                   NOTIFY cycleWindowBackwardShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -749,6 +756,18 @@ public:
     }
     void setRotateWindowsCounterclockwiseShortcut(const QString& shortcut);
 
+    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    QString cycleWindowForwardShortcut() const
+    {
+        return m_cycleWindowForwardShortcut;
+    }
+    void setCycleWindowForwardShortcut(const QString& shortcut);
+    QString cycleWindowBackwardShortcut() const
+    {
+        return m_cycleWindowBackwardShortcut;
+    }
+    void setCycleWindowBackwardShortcut(const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -876,6 +895,11 @@ private:
     // Rotates all windows in the current layout clockwise or counterclockwise
     QString m_rotateWindowsClockwiseShortcut = QStringLiteral("Meta+Ctrl+]");
     QString m_rotateWindowsCounterclockwiseShortcut = QStringLiteral("Meta+Ctrl+[");
+
+    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    // Cycles focus between windows stacked in the same zone (monocle-style navigation)
+    QString m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
+    QString m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
 };
 
 } // namespace PlasmaZones

@@ -373,6 +373,16 @@
       <label>Shortcut to rotate all windows counterclockwise through zones</label>
       <default>Meta+Ctrl+[</default>
     </entry>
+
+    <!-- Cycle Windows in Zone Shortcuts (monocle-style navigation) -->
+    <entry name="CycleWindowForward" type="String">
+      <label>Shortcut to cycle focus to next window in the same zone</label>
+      <default>Meta+Alt+.</default>
+    </entry>
+    <entry name="CycleWindowBackward" type="String">
+      <label>Shortcut to cycle focus to previous window in the same zone</label>
+      <default>Meta+Alt+,</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

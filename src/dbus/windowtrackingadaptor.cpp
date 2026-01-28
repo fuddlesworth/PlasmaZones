@@ -1278,6 +1278,27 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
     Q_EMIT navigationFeedback(true, QStringLiteral("rotate"), QString());
 }
 
+void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
+{
+    qCDebug(lcDbusWindow) << "cycleWindowsInZone called, forward:" << forward;
+
+    // This method cycles focus between windows stacked in the same zone as the currently
+    // focused window. Useful for monocle-style workflows.
+    //
+    // Since we don't know which window is focused from the daemon side, we emit a signal
+    // that the KWin effect will handle. The effect will:
+    //   1. Get the focused window ID
+    //   2. Call getZoneForWindow() to find its zone
+    //   3. Call getWindowsInZone() to get all windows in that zone
+    //   4. Determine the next/previous window in the list
+    //   5. Activate that window
+    //
+    // We encode the direction as a special directive that KWin interprets.
+    QString directive = forward ? QStringLiteral("cycle:forward") : QStringLiteral("cycle:backward");
+    Q_EMIT cycleWindowsInZoneRequested(directive, QString());
+    // Note: Success/failure feedback will be emitted by the KWin effect
+}
+
 bool WindowTrackingAdaptor::queryWindowFloating(const QString& windowId)
 {
     // Query if a window is floating - called by KWin effect to sync state
