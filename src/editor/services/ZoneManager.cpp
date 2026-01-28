@@ -24,7 +24,7 @@ ZoneManager::ZoneManager(QObject* parent)
 QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
 {
     QVariantMap zone;
-    zone[JsonKeys::Id] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    zone[JsonKeys::Id] = QUuid::createUuid().toString();
     zone[JsonKeys::Name] = name;
     zone[JsonKeys::ZoneNumber] = number;
     zone[JsonKeys::X] = x;
@@ -1785,7 +1785,7 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
     int existingIndex = -1;
     if (zoneId.isEmpty()) {
         // ID is empty, generate new one
-        zoneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        zoneId = QUuid::createUuid().toString();
     } else {
         existingIndex = findZoneIndex(zoneId);
         if (existingIndex >= 0) {
@@ -1796,7 +1796,7 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
                 // Don't do anything here - we'll update it below
             } else {
                 // For paste operations: generate new ID
-                zoneId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+                zoneId = QUuid::createUuid().toString();
                 existingIndex = -1; // Reset since we're using a new ID
             }
         }

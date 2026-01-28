@@ -672,7 +672,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
  */
 void EditorController::createNewLayout()
 {
-    m_layoutId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_layoutId = QUuid::createUuid().toString();
     m_layoutName = i18n("New Layout");
     if (m_zoneManager) {
         m_zoneManager->clearAllZones();
@@ -3037,7 +3037,7 @@ QString EditorController::serializeZonesToClipboard(const QVariantList& zones)
         QJsonObject zoneObj;
 
         // Generate new UUID for paste (preserve original ID in metadata)
-        zoneObj[QLatin1String("id")] = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        zoneObj[QLatin1String("id")] = QUuid::createUuid().toString();
         zoneObj[QLatin1String("name")] = zone[JsonKeys::Name].toString();
         zoneObj[QLatin1String("zoneNumber")] = zone[JsonKeys::ZoneNumber].toInt();
         zoneObj[QLatin1String("x")] = zone[JsonKeys::X].toDouble();
@@ -3240,7 +3240,7 @@ QStringList EditorController::pasteZones(bool withOffset)
         QVariantMap zone = zoneVar.toMap();
 
         // Generate new ID
-        QString newId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QString newId = QUuid::createUuid().toString();
         zone[JsonKeys::Id] = newId;
 
         // Adjust position if offset requested

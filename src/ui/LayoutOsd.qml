@@ -216,20 +216,6 @@ Window {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        // Subtle highlight accent at top
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.topMargin: 4
-            anchors.leftMargin: parent.width * 0.25
-            anchors.rightMargin: parent.width * 0.25
-            height: 3
-            radius: 1.5
-            color: highlightColor
-            opacity: 0.7
-        }
-
     }
 
     // Click to dismiss

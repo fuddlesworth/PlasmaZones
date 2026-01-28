@@ -775,6 +775,7 @@ void LayoutManager::ensureLayoutDirectory()
 
 QString LayoutManager::layoutFilePath(const QUuid& id) const
 {
+    // Strip braces only for filesystem path (avoid { } in filenames). Everywhere else we use default (with braces).
     return m_layoutDirectory + QStringLiteral("/") + id.toString(QUuid::WithoutBraces) + QStringLiteral(".json");
 }
 

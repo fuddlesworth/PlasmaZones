@@ -13,6 +13,8 @@
 #include "logging.h"
 #include <QGuiApplication>
 #include <QScreen>
+#include <QSet>
+#include <QUuid>
 
 namespace PlasmaZones {
 
@@ -365,10 +367,25 @@ QString WindowTrackingService::findEmptyZone() const
         return QString();
     }
 
+    // Pattern B: build occupied zones from assignments, then return first layout zone not in that set.
+    QSet<QUuid> occupiedZoneIds;
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        const QString& zoneId = it.value();
+        if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+            continue;
+        }
+        auto uuid = Utils::parseUuid(zoneId);
+        if (uuid) {
+            occupiedZoneIds.insert(*uuid);
+        } else {
+            qCWarning(lcCore) << "Invalid zone ID format in assignment for window" << it.key()
+                              << "- zone ID:" << zoneId;
+        }
+    }
+
     for (Zone* zone : layout->zones()) {
-        QString zoneId = zone->id().toString();
-        if (windowsInZone(zoneId).isEmpty()) {
-            return zoneId;
+        if (!occupiedZoneIds.contains(zone->id())) {
+            return zone->id().toString();
         }
     }
     return QString();

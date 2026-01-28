@@ -60,7 +60,7 @@ static QString shaderNameToUuid(const QString& name)
     if (name.isEmpty()) {
         return QString();
     }
-    return QUuid::createUuidV5(ShaderNamespaceUuid, name).toString(QUuid::WithBraces);
+    return QUuid::createUuidV5(ShaderNamespaceUuid, name).toString();
 }
 
 ShaderRegistry* ShaderRegistry::s_instance = nullptr;
