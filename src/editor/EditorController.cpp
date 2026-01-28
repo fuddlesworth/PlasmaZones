@@ -171,6 +171,7 @@ EditorController::EditorController(QObject* parent)
                 Q_EMIT selectedZoneIdsChanged();
             }
         }
+        ++m_zonesVersion;
         Q_EMIT zonesChanged();
     });
     connect(m_zoneManager, &ZoneManager::zoneAdded, this, &EditorController::zoneAdded);
@@ -693,6 +694,7 @@ void EditorController::createNewLayout()
     // Refresh available shaders from daemon
     refreshAvailableShaders();
 
+    ++m_zonesVersion;
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
     Q_EMIT zonesChanged();
@@ -825,6 +827,7 @@ void EditorController::loadLayout(const QString& layoutId)
         m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
     }
 
+    ++m_zonesVersion;
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
     Q_EMIT zonesChanged();
@@ -2067,6 +2070,69 @@ bool EditorController::isSelected(const QString& zoneId) const
     return m_selectedZoneIds.contains(zoneId);
 }
 
+bool EditorController::allSelectedUseCustomColors() const
+{
+    if (!m_zoneManager || m_selectedZoneIds.isEmpty()) {
+        return false;
+    }
+    
+    for (const QString& zoneId : m_selectedZoneIds) {
+        const QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+        if (zone.isEmpty()) {
+            return false;
+        }
+        // Check useCustomColors property (JsonKeys::UseCustomColors is already QLatin1String)
+        if (!zone.value(QString(JsonKeys::UseCustomColors), false).toBool()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QStringList EditorController::selectZonesInRect(qreal x, qreal y, qreal width, qreal height, bool additive)
+{
+    if (!m_zoneManager || width <= 0.0 || height <= 0.0) {
+        return QStringList();
+    }
+    
+    const qreal rectRight = x + width;
+    const qreal rectBottom = y + height;
+    
+    // Start with existing selection if additive
+    QStringList selectedIds = additive ? m_selectedZoneIds : QStringList();
+    
+    // Get zones and check intersection
+    const QVariantList& zonesList = m_zoneManager->zones();
+    for (const QVariant& zoneVar : zonesList) {
+        const QVariantMap zone = zoneVar.toMap();
+        const QString zoneId = zone.value(QString(JsonKeys::Id)).toString();
+        if (zoneId.isEmpty()) {
+            continue;
+        }
+        
+        // Zone bounds
+        const qreal zoneX = zone.value(QString(JsonKeys::X)).toDouble();
+        const qreal zoneY = zone.value(QString(JsonKeys::Y)).toDouble();
+        const qreal zoneRight = zoneX + zone.value(QString(JsonKeys::Width)).toDouble();
+        const qreal zoneBottom = zoneY + zone.value(QString(JsonKeys::Height)).toDouble();
+        
+        // Check AABB intersection
+        const bool intersects = !(zoneRight < x || zoneX > rectRight || 
+                                  zoneBottom < y || zoneY > rectBottom);
+        
+        if (intersects && !selectedIds.contains(zoneId)) {
+            selectedIds.append(zoneId);
+        }
+    }
+    
+    // Update selection if we found any zones
+    if (!selectedIds.isEmpty()) {
+        setSelectedZoneIds(selectedIds);
+    }
+    
+    return selectedIds;
+}
+
 // ============================================================================
 // Batch operations for multi-selection
 // ============================================================================
@@ -2758,6 +2824,14 @@ int EditorController::zoneIndexById(const QString& zoneId) const
         return -1;
     }
     return m_zoneManager->findZoneIndex(zoneId);
+}
+
+QVariantMap EditorController::getZoneById(const QString& zoneId) const
+{
+    if (!m_zoneManager) {
+        return QVariantMap();
+    }
+    return m_zoneManager->getZoneById(zoneId);
 }
 
 /**

@@ -5,6 +5,8 @@
 
 #include "ILayoutService.h"
 
+class QDBusInterface;
+
 namespace PlasmaZones {
 
 /**
@@ -19,7 +21,7 @@ class DBusLayoutService : public ILayoutService
 
 public:
     explicit DBusLayoutService(QObject* parent = nullptr);
-    ~DBusLayoutService() override = default;
+    ~DBusLayoutService() override;
 
     QString loadLayout(const QString& layoutId) override;
     QString createLayout(const QString& jsonLayout) override;
@@ -28,9 +30,21 @@ public:
     void assignLayoutToScreen(const QString& screenName, const QString& layoutId) override;
 
 private:
+    /**
+     * @brief Get or create the cached D-Bus interface
+     * @return Pointer to valid interface, or nullptr if connection failed
+     *
+     * Performance optimization: Reuses the same QDBusInterface instance
+     * instead of creating a new one for every D-Bus call.
+     */
+    QDBusInterface* getInterface();
+
     QString m_serviceName;
     QString m_objectPath;
     QString m_interfaceName;
+    
+    // Cached D-Bus interface (performance optimization)
+    QDBusInterface* m_interface = nullptr;
 };
 
 } // namespace PlasmaZones

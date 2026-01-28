@@ -49,33 +49,29 @@ Window {
     }
     property var _zonesRepeater: null
     // Helper to get selected zone data - reactive to both selectedZoneId AND zones changes
-    // Force re-evaluation by accessing zones in the binding
-    // Use Qt.callLater to defer evaluation and avoid invalid context errors during zone removal
+    // Uses C++ Q_INVOKABLE method for O(1) lookup instead of O(n) JavaScript loop
     property var selectedZone: {
         var controller = editorWindow._editorController;
         if (!controller)
             return null;
 
+        var zoneId = selectedZoneId;
+        if (!zoneId || zoneId === "")
+            return null;
+
+        // Use zonesVersion for dependency tracking instead of accessing zones.
+        // This avoids copying the entire QVariantList just to create a binding dependency.
+        // zonesVersion is a lightweight integer that increments on any zone change.
+        var _ = controller.zonesVersion;
+        
+        // Use efficient C++ lookup instead of JavaScript loop
         try {
-            var zonesList = controller.zones;
-            var zoneId = selectedZoneId;
-            if (!zoneId || zoneId === "")
-                return null;
-
-            if (!zonesList || !zonesList.length)
-                return null;
-
-            for (var i = 0; i < zonesList.length; i++) {
-                var zone = zonesList[i];
-                if (zone && zone.id === zoneId)
-                    return zone;
-
-            }
+            var zone = controller.getZoneById(zoneId);
+            return (zone && zone.id) ? zone : null;
         } catch (e) {
             console.warn("EditorWindow: Error accessing selectedZone:", e);
             return null;
         }
-        return null;
     }
 
     function toggleFullscreenMode() {
@@ -83,16 +79,11 @@ Window {
     }
 
     // Helper to check if a zone is currently selected
+    // Uses C++ Q_INVOKABLE method - faster than JavaScript loop due to no JS engine overhead
     function isZoneSelected(zoneId) {
-        if (!zoneId || !selectedZoneIds)
+        if (!zoneId || !editorWindow._editorController)
             return false;
-
-        for (var i = 0; i < selectedZoneIds.length; i++) {
-            if (selectedZoneIds[i] === zoneId)
-                return true;
-
-        }
-        return false;
+        return editorWindow._editorController.isSelected(zoneId);
     }
 
     // Handle zone click with modifier keys for multi-selection
@@ -123,16 +114,12 @@ Window {
             return null;
 
         var controller = editorWindow._editorController;
-        if (!controller || !controller.zones)
+        if (!controller)
             return null;
 
-        var zones = controller.zones;
-        for (var i = 0; i < zones.length; i++) {
-            if (zones[i].id === zoneId)
-                return zones[i];
-
-        }
-        return null;
+        // Use efficient C++ lookup instead of JavaScript loop
+        var zone = controller.getZoneById(zoneId);
+        return (zone && zone.id) ? zone : null;
     }
 
     // Helper function to find zone item by ID from the Repeater

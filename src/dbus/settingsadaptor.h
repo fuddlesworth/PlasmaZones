@@ -9,6 +9,7 @@
 #include <QDBusVariant>
 #include <QString>
 #include <QVariant>
+#include <QTimer>
 #include <functional>
 #include <QHash>
 
@@ -32,7 +33,7 @@ class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit SettingsAdaptor(ISettings* settings, QObject* parent = nullptr);
-    ~SettingsAdaptor() override = default;
+    ~SettingsAdaptor() override;
 
 public Q_SLOTS:
     // Settings operations
@@ -99,6 +100,14 @@ Q_SIGNALS:
 
 private:
     void initializeRegistry();
+    
+    /**
+     * @brief Schedule a debounced save
+     * 
+     * Performance optimization: Batches multiple setting changes into a single
+     * save operation instead of writing to disk on every change.
+     */
+    void scheduleSave();
 
     ISettings* m_settings; // Interface type (DIP)
 
@@ -108,6 +117,10 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
+    
+    // Debounced save timer (performance optimization)
+    QTimer* m_saveTimer = nullptr;
+    static constexpr int SaveDebounceMs = 500; // 500ms debounce
 };
 
 } // namespace PlasmaZones

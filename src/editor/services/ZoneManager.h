@@ -127,11 +127,14 @@ public:
     QString addZoneFromMap(const QVariantMap& zoneData, bool allowIdReuse = false);
 
     /**
-     * @brief Get complete zone data by ID (for undo state)
+     * @brief Get complete zone data by ID (for undo state and QML lookup)
      * @param zoneId Zone ID to retrieve
      * @return Complete zone data as QVariantMap, or empty map if not found
+     *
+     * This method is Q_INVOKABLE for efficient O(1) lookup from QML,
+     * avoiding expensive O(n) loops in property bindings.
      */
-    QVariantMap getZoneById(const QString& zoneId) const;
+    Q_INVOKABLE QVariantMap getZoneById(const QString& zoneId) const;
 
     /**
      * @brief Set complete zone data (for undo restoration)

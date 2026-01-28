@@ -37,32 +37,17 @@ Rectangle {
     property color multiInactiveColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.25)
     property color multiBorderColor: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8)
     // Computed property: true if ALL selected zones have useCustomColors enabled
+    // Uses C++ method for O(n) lookup instead of O(n*m) JavaScript nested loops (performance optimization)
     readonly property bool allSelectedUseCustomColors: {
         if (!editorController || selectionCount < 2)
             return false;
-
-        var zones = editorController.zones;
-        var selectedIds = editorController.selectedZoneIds;
-        if (!zones || !selectedIds || selectedIds.length === 0)
-            return false;
-
-        for (var i = 0; i < selectedIds.length; i++) {
-            var zoneId = selectedIds[i];
-            var found = false;
-            for (var j = 0; j < zones.length; j++) {
-                if (zones[j].id === zoneId) {
-                    if (!zones[j].useCustomColors)
-                        return false;
-
-                    found = true;
-                    break;
-                }
-            }
-            if (!found)
-                return false;
-
-        }
-        return true;
+        
+        // Use zonesVersion for dependency tracking instead of accessing zones.
+        // This avoids copying the entire QVariantList just to create a binding dependency.
+        var _ = editorController.zonesVersion;
+        
+        // Use efficient C++ method for the actual check
+        return editorController.allSelectedUseCustomColors();
     }
 
     // In RowLayout, use Layout properties to control width based on visibility
@@ -682,24 +667,16 @@ Rectangle {
                         id: highlightColorPreview
 
                         // Store the base color (without opacity applied) for color picker
+                        // Use selectedZone directly instead of looping through zones (performance optimization)
                         property color baseColor: {
-                            if (!editorController || !selectedZoneId)
+                            if (!selectedZone)
                                 return Qt.transparent;
 
-                            var zones = editorController.zones;
-                            if (!zones)
-                                return Qt.transparent;
+                            var colorStr = selectedZone.highlightColor;
+                            if (colorStr && typeof colorStr === 'string')
+                                return appearanceConstants.parseArgbHex(colorStr);
 
-                            for (var i = 0; i < zones.length; i++) {
-                                if (zones[i].id === selectedZoneId) {
-                                    var colorStr = zones[i].highlightColor;
-                                    if (colorStr && typeof colorStr === 'string')
-                                        return appearanceConstants.parseArgbHex(colorStr);
-
-                                    return colorStr || Qt.transparent;
-                                }
-                            }
-                            return Qt.transparent;
+                            return colorStr || Qt.transparent;
                         }
 
                         width: appearanceConstants.colorButtonSize
@@ -760,30 +737,19 @@ Rectangle {
                     Label {
                         id: highlightColorLabel
 
-                        // Direct binding that reads from zones list to ensure reactivity
+                        // Use selectedZone directly instead of looping through zones (performance optimization)
                         readonly property color displayColor: {
-                            // Force dependency on zones list and selectedZoneId
-                            var zones = editorController ? editorController.zones : null;
-                            var zoneId = selectedZoneId;
-                            if (!zones || !zoneId)
+                            if (!selectedZone)
                                 return Qt.transparent;
 
-                            // Find zone directly from zones list to get fresh data
-                            for (var i = 0; i < zones.length; i++) {
-                                // Parse ARGB hex string (QColor::HexArgb format)
+                            var colorValue = selectedZone.highlightColor;
+                            if (!colorValue)
+                                return Qt.transparent;
 
-                                if (zones[i].id === zoneId) {
-                                    var colorValue = zones[i].highlightColor;
-                                    if (!colorValue)
-                                        return Qt.transparent;
+                            if (typeof colorValue === 'string')
+                                return appearanceConstants.parseArgbHex(colorValue);
 
-                                    if (typeof colorValue === 'string')
-                                        return appearanceConstants.parseArgbHex(colorValue);
-
-                                    return colorValue;
-                                }
-                            }
-                            return Qt.transparent;
+                            return colorValue;
                         }
 
                         text: displayColor !== Qt.transparent ? displayColor.toString().toUpperCase() : ""
@@ -804,24 +770,16 @@ Rectangle {
                         id: inactiveColorPreview
 
                         // Store the base color (without opacity applied) for color picker
+                        // Use selectedZone directly instead of looping through zones (performance optimization)
                         property color baseColor: {
-                            if (!editorController || !selectedZoneId)
+                            if (!selectedZone)
                                 return Qt.transparent;
 
-                            var zones = editorController.zones;
-                            if (!zones)
-                                return Qt.transparent;
+                            var colorStr = selectedZone.inactiveColor;
+                            if (colorStr && typeof colorStr === 'string')
+                                return appearanceConstants.parseArgbHex(colorStr);
 
-                            for (var i = 0; i < zones.length; i++) {
-                                if (zones[i].id === selectedZoneId) {
-                                    var colorStr = zones[i].inactiveColor;
-                                    if (colorStr && typeof colorStr === 'string')
-                                        return appearanceConstants.parseArgbHex(colorStr);
-
-                                    return colorStr || Qt.transparent;
-                                }
-                            }
-                            return Qt.transparent;
+                            return colorStr || Qt.transparent;
                         }
 
                         width: appearanceConstants.colorButtonSize
@@ -882,30 +840,19 @@ Rectangle {
                     Label {
                         id: inactiveColorLabel
 
-                        // Direct binding that reads from zones list to ensure reactivity
+                        // Use selectedZone directly instead of looping through zones (performance optimization)
                         readonly property color displayColor: {
-                            // Force dependency on zones list and selectedZoneId
-                            var zones = editorController ? editorController.zones : null;
-                            var zoneId = selectedZoneId;
-                            if (!zones || !zoneId)
+                            if (!selectedZone)
                                 return Qt.transparent;
 
-                            // Find zone directly from zones list to get fresh data
-                            for (var i = 0; i < zones.length; i++) {
-                                // Parse ARGB hex string (QColor::HexArgb format)
+                            var colorValue = selectedZone.inactiveColor;
+                            if (!colorValue)
+                                return Qt.transparent;
 
-                                if (zones[i].id === zoneId) {
-                                    var colorValue = zones[i].inactiveColor;
-                                    if (!colorValue)
-                                        return Qt.transparent;
+                            if (typeof colorValue === 'string')
+                                return appearanceConstants.parseArgbHex(colorValue);
 
-                                    if (typeof colorValue === 'string')
-                                        return appearanceConstants.parseArgbHex(colorValue);
-
-                                    return colorValue;
-                                }
-                            }
-                            return Qt.transparent;
+                            return colorValue;
                         }
 
                         text: displayColor !== Qt.transparent ? displayColor.toString().toUpperCase() : ""
@@ -930,25 +877,16 @@ Rectangle {
                         radius: Kirigami.Units.smallSpacing
                         border.color: Kirigami.Theme.disabledTextColor
                         border.width: 1
-                        // Direct binding that reads from zones list
+                        // Use selectedZone directly instead of looping through zones (performance optimization)
                         color: {
-                            if (!editorController || !selectedZoneId)
+                            if (!selectedZone)
                                 return Qt.transparent;
 
-                            var zones = editorController.zones;
-                            if (!zones)
-                                return Qt.transparent;
+                            var colorStr = selectedZone.borderColor;
+                            if (colorStr && typeof colorStr === 'string')
+                                return appearanceConstants.parseArgbHex(colorStr);
 
-                            for (var i = 0; i < zones.length; i++) {
-                                if (zones[i].id === selectedZoneId) {
-                                    var colorStr = zones[i].borderColor;
-                                    if (colorStr && typeof colorStr === 'string')
-                                        return appearanceConstants.parseArgbHex(colorStr);
-
-                                    return colorStr || Qt.transparent;
-                                }
-                            }
-                            return Qt.transparent;
+                            return colorStr || Qt.transparent;
                         }
                         Accessible.name: i18nc("@label", "Border color picker")
                         Accessible.description: i18nc("@info", "Click to choose border color")
@@ -986,17 +924,10 @@ Rectangle {
                             onClicked: {
                                 // Use theme disabledTextColor as fallback (matches multi-select defaults)
                                 var currentColor = Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.8);
-                                if (editorController && editorController.zones && selectedZoneId) {
-                                    var zones = editorController.zones;
-                                    for (var i = 0; i < zones.length; i++) {
-                                        if (zones[i].id === selectedZoneId) {
-                                            var colorValue = zones[i].borderColor;
-                                            if (colorValue)
-                                                currentColor = typeof colorValue === 'string' ? appearanceConstants.parseArgbHex(colorValue) : colorValue;
-
-                                            break;
-                                        }
-                                    }
+                                // Use selectedZone directly instead of looping through zones (performance optimization)
+                                if (selectedZone && selectedZone.borderColor) {
+                                    var colorValue = selectedZone.borderColor;
+                                    currentColor = typeof colorValue === 'string' ? appearanceConstants.parseArgbHex(colorValue) : colorValue;
                                 }
                                 borderColorDialog.selectedColor = currentColor;
                                 borderColorDialog.open();
@@ -1008,30 +939,19 @@ Rectangle {
                     Label {
                         id: borderColorLabel
 
-                        // Direct binding that reads from zones list to ensure reactivity
+                        // Use selectedZone directly instead of looping through zones (performance optimization)
                         readonly property color displayColor: {
-                            // Force dependency on zones list and selectedZoneId
-                            var zones = editorController ? editorController.zones : null;
-                            var zoneId = selectedZoneId;
-                            if (!zones || !zoneId)
+                            if (!selectedZone)
                                 return Qt.transparent;
 
-                            // Find zone directly from zones list to get fresh data
-                            for (var i = 0; i < zones.length; i++) {
-                                // Parse ARGB hex string (QColor::HexArgb format)
+                            var colorValue = selectedZone.borderColor;
+                            if (!colorValue)
+                                return Qt.transparent;
 
-                                if (zones[i].id === zoneId) {
-                                    var colorValue = zones[i].borderColor;
-                                    if (!colorValue)
-                                        return Qt.transparent;
+                            if (typeof colorValue === 'string')
+                                return appearanceConstants.parseArgbHex(colorValue);
 
-                                    if (typeof colorValue === 'string')
-                                        return appearanceConstants.parseArgbHex(colorValue);
-
-                                    return colorValue;
-                                }
-                            }
-                            return Qt.transparent;
+                            return colorValue;
                         }
 
                         text: displayColor !== Qt.transparent ? displayColor.toString().toUpperCase() : ""

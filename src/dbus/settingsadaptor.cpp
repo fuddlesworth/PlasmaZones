@@ -17,12 +17,39 @@ namespace PlasmaZones {
 SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_settings(settings)
+    , m_saveTimer(new QTimer(this))
 {
     Q_ASSERT(settings);
     initializeRegistry();
 
+    // Configure debounced save timer (performance optimization)
+    m_saveTimer->setSingleShot(true);
+    m_saveTimer->setInterval(SaveDebounceMs);
+    connect(m_saveTimer, &QTimer::timeout, this, [this]() {
+        m_settings->save();
+        qCDebug(lcDbusSettings) << "Debounced settings save completed";
+    });
+
     // Connect to interface signals (DIP)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
+}
+
+SettingsAdaptor::~SettingsAdaptor()
+{
+    // Flush any pending debounced saves before destruction
+    // This ensures settings are not lost on shutdown
+    if (m_saveTimer->isActive()) {
+        m_saveTimer->stop();
+        m_settings->save();
+        qCDebug(lcDbusSettings) << "Flushed pending settings save on destruction";
+    }
+}
+
+void SettingsAdaptor::scheduleSave()
+{
+    // Restart the timer on each setting change (debouncing)
+    // This batches multiple rapid changes into a single save
+    m_saveTimer->start();
 }
 
 // Note: Macros are defined in initializeRegistry() to avoid namespace pollution
@@ -234,8 +261,10 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     if (it != m_setters.end()) {
         bool result = it.value()(value.variant());
         if (result) {
-            m_settings->save();
-            qCDebug(lcDbusSettings) << "Setting" << key << "updated successfully";
+            // Use debounced save instead of immediate save (performance optimization)
+            // This batches multiple rapid setting changes into a single disk write
+            scheduleSave();
+            qCDebug(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
         } else {
             qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
         }

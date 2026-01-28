@@ -565,12 +565,15 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
 
         QList<int> leftZones;
         QList<int> rightZones;
+        // Pre-allocate capacity (performance optimization)
+        leftZones.reserve(m_zones.size() / 2);
+        rightZones.reserve(m_zones.size() / 2);
 
         for (int i = 0; i < m_zones.size(); ++i) {
-            QVariantMap zone = m_zones[i].toMap();
-            qreal zx = zone[JsonKeys::X].toDouble();
-            qreal zw = zone[JsonKeys::Width].toDouble();
-            qreal rightEdge = zx + zw;
+            const QVariantMap zone = m_zones[i].toMap();
+            const qreal zx = zone[JsonKeys::X].toDouble();
+            const qreal zw = zone[JsonKeys::Width].toDouble();
+            const qreal rightEdge = zx + zw;
 
             if (qAbs(rightEdge - oldDividerPos) < threshold) {
                 leftZones.append(i);
@@ -580,21 +583,21 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
         }
 
         for (int idx : leftZones) {
-            QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
-            qreal w = zone[JsonKeys::Width].toDouble();
-            qreal h = zone[JsonKeys::Height].toDouble();
+            const QVariantMap zone = m_zones[idx].toMap();
+            const QString zoneId = zone[JsonKeys::Id].toString();
+            const qreal x = zone[JsonKeys::X].toDouble();
+            const qreal y = zone[JsonKeys::Y].toDouble();
+            const qreal w = zone[JsonKeys::Width].toDouble();
+            const qreal h = zone[JsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
         for (int idx : rightZones) {
-            QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
-            qreal w = zone[JsonKeys::Width].toDouble();
-            qreal h = zone[JsonKeys::Height].toDouble();
+            const QVariantMap zone = m_zones[idx].toMap();
+            const QString zoneId = zone[JsonKeys::Id].toString();
+            const qreal x = zone[JsonKeys::X].toDouble();
+            const qreal y = zone[JsonKeys::Y].toDouble();
+            const qreal w = zone[JsonKeys::Width].toDouble();
+            const qreal h = zone[JsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
     } else {
@@ -606,12 +609,15 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
 
         QList<int> topZones;
         QList<int> bottomZones;
+        // Pre-allocate capacity (performance optimization)
+        topZones.reserve(m_zones.size() / 2);
+        bottomZones.reserve(m_zones.size() / 2);
 
         for (int i = 0; i < m_zones.size(); ++i) {
-            QVariantMap zone = m_zones[i].toMap();
-            qreal zy = zone[JsonKeys::Y].toDouble();
-            qreal zh = zone[JsonKeys::Height].toDouble();
-            qreal bottomEdge = zy + zh;
+            const QVariantMap zone = m_zones[i].toMap();
+            const qreal zy = zone[JsonKeys::Y].toDouble();
+            const qreal zh = zone[JsonKeys::Height].toDouble();
+            const qreal bottomEdge = zy + zh;
 
             if (qAbs(bottomEdge - oldDividerPos) < threshold) {
                 topZones.append(i);
@@ -621,21 +627,21 @@ QVector<QPair<QString, QRectF>> ZoneManager::collectGeometriesAtDivider(const QS
         }
 
         for (int idx : topZones) {
-            QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
-            qreal w = zone[JsonKeys::Width].toDouble();
-            qreal h = zone[JsonKeys::Height].toDouble();
+            const QVariantMap zone = m_zones[idx].toMap();
+            const QString zoneId = zone[JsonKeys::Id].toString();
+            const qreal x = zone[JsonKeys::X].toDouble();
+            const qreal y = zone[JsonKeys::Y].toDouble();
+            const qreal w = zone[JsonKeys::Width].toDouble();
+            const qreal h = zone[JsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
         for (int idx : bottomZones) {
-            QVariantMap zone = m_zones[idx].toMap();
-            QString zoneId = zone[JsonKeys::Id].toString();
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
-            qreal w = zone[JsonKeys::Width].toDouble();
-            qreal h = zone[JsonKeys::Height].toDouble();
+            const QVariantMap zone = m_zones[idx].toMap();
+            const QString zoneId = zone[JsonKeys::Id].toString();
+            const qreal x = zone[JsonKeys::X].toDouble();
+            const qreal y = zone[JsonKeys::Y].toDouble();
+            const qreal w = zone[JsonKeys::Width].toDouble();
+            const qreal h = zone[JsonKeys::Height].toDouble();
             result.append(qMakePair(zoneId, QRectF(x, y, w, h)));
         }
     }
@@ -676,12 +682,15 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         QList<int> leftZones;
         QList<int> rightZones;
+        // Pre-allocate capacity (performance optimization)
+        leftZones.reserve(m_zones.size() / 2);
+        rightZones.reserve(m_zones.size() / 2);
 
         for (int i = 0; i < m_zones.size(); ++i) {
-            QVariantMap zone = m_zones[i].toMap();
-            qreal zx = zone[JsonKeys::X].toDouble();
-            qreal zw = zone[JsonKeys::Width].toDouble();
-            qreal rightEdge = zx + zw;
+            const QVariantMap zone = m_zones[i].toMap();
+            const qreal zx = zone[JsonKeys::X].toDouble();
+            const qreal zw = zone[JsonKeys::Width].toDouble();
+            const qreal rightEdge = zx + zw;
 
             if (qAbs(rightEdge - oldDividerPos) < threshold) {
                 leftZones.append(i);
@@ -787,12 +796,15 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
         QList<int> topZones;
         QList<int> bottomZones;
+        // Pre-allocate capacity (performance optimization)
+        topZones.reserve(m_zones.size() / 2);
+        bottomZones.reserve(m_zones.size() / 2);
 
         for (int i = 0; i < m_zones.size(); ++i) {
-            QVariantMap zone = m_zones[i].toMap();
-            qreal zy = zone[JsonKeys::Y].toDouble();
-            qreal zh = zone[JsonKeys::Height].toDouble();
-            qreal bottomEdge = zy + zh;
+            const QVariantMap zone = m_zones[i].toMap();
+            const qreal zy = zone[JsonKeys::Y].toDouble();
+            const qreal zh = zone[JsonKeys::Height].toDouble();
+            const qreal bottomEdge = zy + zh;
 
             if (qAbs(bottomEdge - oldDividerPos) < threshold) {
                 topZones.append(i);

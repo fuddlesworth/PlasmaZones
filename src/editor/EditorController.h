@@ -33,6 +33,10 @@ class EditorController : public QObject
     Q_PROPERTY(QString layoutId READ layoutId NOTIFY layoutIdChanged)
     Q_PROPERTY(QString layoutName READ layoutName WRITE setLayoutName NOTIFY layoutNameChanged)
     Q_PROPERTY(QVariantList zones READ zones NOTIFY zonesChanged)
+    // Lightweight version counter for efficient QML binding dependencies.
+    // Use this instead of accessing 'zones' when you only need to detect changes.
+    // Avoids copying the entire QVariantList just to create a binding dependency.
+    Q_PROPERTY(int zonesVersion READ zonesVersion NOTIFY zonesChanged)
     Q_PROPERTY(QString selectedZoneId READ selectedZoneId WRITE setSelectedZoneId NOTIFY selectedZoneIdChanged)
     Q_PROPERTY(QStringList selectedZoneIds READ selectedZoneIds WRITE setSelectedZoneIds NOTIFY selectedZoneIdsChanged)
     Q_PROPERTY(int selectionCount READ selectionCount NOTIFY selectedZoneIdsChanged)
@@ -101,6 +105,7 @@ public:
     QString layoutId() const;
     QString layoutName() const;
     QVariantList zones() const; // Delegates to ZoneManager
+    int zonesVersion() const { return m_zonesVersion; } // Lightweight change counter
     QString selectedZoneId() const;
     QStringList selectedZoneIds() const;
     int selectionCount() const;
@@ -208,6 +213,16 @@ public Q_SLOTS:
     // Delegates to ZoneManager
     int zoneIndexById(const QString& zoneId) const;
 
+    /**
+     * @brief Get complete zone data by ID
+     * @param zoneId Zone ID to retrieve
+     * @return Complete zone data as QVariantMap, or empty map if not found
+     *
+     * Performance optimization: O(1) lookup instead of O(n) JavaScript loop in QML.
+     * Delegates to ZoneManager::getZoneById().
+     */
+    Q_INVOKABLE QVariantMap getZoneById(const QString& zoneId) const;
+
     // Divider resizing - find zones that share an edge
     Q_INVOKABLE QVariantList getZonesSharingEdge(const QString& zoneId, qreal edgeX, qreal edgeY,
                                                  qreal threshold = 0.01);
@@ -250,6 +265,28 @@ public Q_SLOTS:
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE bool isSelected(const QString& zoneId) const;
+    
+    /**
+     * @brief Check if all selected zones have useCustomColors enabled
+     * @return true if all selected zones use custom colors, false otherwise
+     *
+     * Performance optimization: O(n) C++ lookup instead of O(n*m) JavaScript nested loops.
+     */
+    Q_INVOKABLE bool allSelectedUseCustomColors() const;
+    
+    /**
+     * @brief Select zones that intersect with a rectangle
+     * @param x Rectangle X in relative coordinates (0.0-1.0)
+     * @param y Rectangle Y in relative coordinates (0.0-1.0)
+     * @param width Rectangle width in relative coordinates
+     * @param height Rectangle height in relative coordinates
+     * @param additive If true, add to existing selection; if false, replace
+     * @return List of selected zone IDs
+     *
+     * Performance optimization: Avoids QVariantList copy and JavaScript iteration.
+     * Used during marquee/rectangle selection drag operations.
+     */
+    Q_INVOKABLE QStringList selectZonesInRect(qreal x, qreal y, qreal width, qreal height, bool additive);
 
     // Batch operations for multi-selection
     Q_INVOKABLE void deleteSelectedZones();
@@ -432,6 +469,7 @@ private:
     // Layout data
     QString m_layoutId;
     QString m_layoutName;
+    int m_zonesVersion = 0; // Increments on any zone change (lightweight binding dependency)
     QString m_selectedZoneId; // Use ID instead of index (backward compat: synced with first of m_selectedZoneIds)
     QStringList m_selectedZoneIds; // Multi-selection: list of selected zone IDs
     bool m_hasUnsavedChanges = false;

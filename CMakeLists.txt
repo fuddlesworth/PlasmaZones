@@ -36,6 +36,32 @@ endif()
 # Parallel AUTOMOC for faster meta-object compilation
 set(CMAKE_AUTOMOC_PARALLEL_ENABLED ON)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Release Build Optimizations (LTO and aggressive optimization)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Link-Time Optimization (LTO) for Release builds
+# Benefits: 5-15% runtime performance improvement, smaller binary size
+# Trade-off: Significantly increased link times (2-5x longer) and memory usage
+# Recommendation: Keep enabled for release builds, disable for development
+# To disable: cmake -DENABLE_LTO=OFF ..
+option(ENABLE_LTO "Enable Link-Time Optimization for Release builds" ON)
+if(ENABLE_LTO AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT IPO_SUPPORTED OUTPUT IPO_OUTPUT)
+    if(IPO_SUPPORTED)
+        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+        message(STATUS "Link-Time Optimization (LTO) enabled for Release builds")
+        message(STATUS "  Note: LTO increases link times significantly. Use -DENABLE_LTO=OFF for faster dev builds.")
+    else()
+        message(WARNING "LTO not supported by compiler: ${IPO_OUTPUT}")
+    endif()
+endif()
+
+# QML compilation to C++ (qmlcachegen) for faster QML execution
+# Qt6 enables this by default when using qt_add_qml_module
+set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config")
+
 # Create AUTOMOC include directories to prevent -Wmissing-include-dirs warnings
 # These directories are added to include paths by Qt's AUTOMOC but may not exist
 # if no MOC-generated code is produced for certain targets

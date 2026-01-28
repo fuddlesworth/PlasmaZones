@@ -55,53 +55,28 @@ Item {
      * @brief Select zones that intersect with the selection rectangle
      * @param rect Selection rectangle in canvas pixel coordinates
      * @param additive If true, add to existing selection; if false, replace selection
+     *
+     * Uses C++ Q_INVOKABLE method for better performance during drag operations.
      */
     function selectZonesInRect(rect, additive) {
         if (!editorController || !drawingArea || rect.width < 1 || rect.height < 1)
-            return ;
+            return;
 
         // Guard against division by zero
         if (drawingArea.width <= 0 || drawingArea.height <= 0)
-            return ;
+            return;
 
-        // Convert rectangle to relative coordinates
-        var relRect = {
-            "x": rect.x / drawingArea.width,
-            "y": rect.y / drawingArea.height,
-            "width": rect.width / drawingArea.width,
-            "height": rect.height / drawingArea.height,
-            "right": (rect.x + rect.width) / drawingArea.width,
-            "bottom": (rect.y + rect.height) / drawingArea.height
-        };
-        // Get all zones and check intersection
-        var zones = editorController.zones;
-        var selectedIds = additive ? editorController.selectedZoneIds.slice() : [];
-        for (var i = 0; i < zones.length; i++) {
-            var zone = zones[i];
-            if (!zone || !zone.id)
-                continue;
-
-            // Zone bounds in relative coordinates
-            var zoneLeft = zone.x;
-            var zoneTop = zone.y;
-            var zoneRight = zone.x + zone.width;
-            var zoneBottom = zone.y + zone.height;
-            // Check if zone intersects with selection rectangle
-            var intersects = !(zoneRight < relRect.x || zoneLeft > relRect.right || zoneBottom < relRect.y || zoneTop > relRect.bottom);
-            if (intersects) {
-                // Add to selection if not already selected
-                if (selectedIds.indexOf(zone.id) === -1)
-                    selectedIds.push(zone.id);
-
-            }
-        }
-        // Update selection
-        if (selectedIds.length > 0) {
-            editorController.setSelectedZoneIds(selectedIds);
-            // Update anchor for shift+click range selection
-            if (editorWindow)
-                editorWindow.selectionAnchorId = selectedIds[selectedIds.length - 1];
-
+        // Convert to relative coordinates and delegate to C++ for efficient iteration
+        var relX = rect.x / drawingArea.width;
+        var relY = rect.y / drawingArea.height;
+        var relWidth = rect.width / drawingArea.width;
+        var relHeight = rect.height / drawingArea.height;
+        
+        var selectedIds = editorController.selectZonesInRect(relX, relY, relWidth, relHeight, additive);
+        
+        // Update anchor for shift+click range selection
+        if (selectedIds.length > 0 && editorWindow) {
+            editorWindow.selectionAnchorId = selectedIds[selectedIds.length - 1];
         }
     }
 
