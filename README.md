@@ -237,9 +237,17 @@ systemctl --user enable --now plasmazones.service
 | Move window down | `Meta+Alt+Shift+Down` |
 | Focus zone left | `Alt+Shift+Left` |
 | Focus zone right | `Alt+Shift+Right` |
-| Push to empty zone | `Meta+Return` |
-| Restore window size | `Meta+Escape` |
-| Toggle float | `Meta+F` |
+| Focus zone up | `Alt+Shift+Up` |
+| Focus zone down | `Alt+Shift+Down` |
+| Push to empty zone | `Meta+Alt+Return` |
+| Restore window size | `Meta+Alt+Escape` |
+| Toggle float | `Meta+Alt+F` |
+
+**Shortcut Pattern:** Shortcuts are designed to avoid conflicts with KDE defaults:
+- `Meta+Alt+{key}` — Layout operations and actions
+- `Meta+Alt+Shift+Arrow` — Window zone movement (avoids KDE's `Meta+Shift+Arrow` screen movement)
+- `Alt+Shift+Arrow` — Focus navigation (avoids KDE's `Meta+Arrow` quick tile)
+- `Meta+Ctrl+{1-9}` — Direct zone snapping
 
 All shortcuts configurable in System Settings → Shortcuts → PlasmaZones.
 

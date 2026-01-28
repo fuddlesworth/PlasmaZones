@@ -1098,6 +1098,11 @@ void Settings::load()
     }
 
     // Keyboard Navigation Shortcuts (Phase 1 features)
+    // Shortcut pattern philosophy for consistency and KDE conflict avoidance:
+    //   Meta+Alt+{key}         = Layout operations ([, ], 1-9, Return, Escape, F)
+    //   Meta+Alt+Shift+Arrow   = Window zone movement
+    //   Alt+Shift+Arrow        = Focus zone navigation (lighter action, no Meta)
+    //   Meta+Ctrl+{1-9}        = Direct zone snapping
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
     // we use Meta+Alt+Shift+Arrow instead.
     KConfigGroup navigationShortcuts = config->group(QStringLiteral("NavigationShortcuts"));
@@ -1111,9 +1116,9 @@ void Settings::load()
     m_focusZoneRightShortcut = navigationShortcuts.readEntry("FocusZoneRight", QStringLiteral("Alt+Shift+Right"));
     m_focusZoneUpShortcut = navigationShortcuts.readEntry("FocusZoneUp", QStringLiteral("Alt+Shift+Up"));
     m_focusZoneDownShortcut = navigationShortcuts.readEntry("FocusZoneDown", QStringLiteral("Alt+Shift+Down"));
-    m_pushToEmptyZoneShortcut = navigationShortcuts.readEntry("PushToEmptyZone", QStringLiteral("Meta+Return"));
-    m_restoreWindowSizeShortcut = navigationShortcuts.readEntry("RestoreWindowSize", QStringLiteral("Meta+Escape"));
-    m_toggleWindowFloatShortcut = navigationShortcuts.readEntry("ToggleWindowFloat", QStringLiteral("Meta+F"));
+    m_pushToEmptyZoneShortcut = navigationShortcuts.readEntry("PushToEmptyZone", QStringLiteral("Meta+Alt+Return"));
+    m_restoreWindowSizeShortcut = navigationShortcuts.readEntry("RestoreWindowSize", QStringLiteral("Meta+Alt+Escape"));
+    m_toggleWindowFloatShortcut = navigationShortcuts.readEntry("ToggleWindowFloat", QStringLiteral("Meta+Alt+F"));
 
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     for (int i = 0; i < 9; ++i) {
@@ -1313,6 +1318,11 @@ void Settings::reset()
     }
 
     // Keyboard Navigation Shortcuts defaults (Phase 1 features)
+    // Shortcut pattern philosophy for consistency and KDE conflict avoidance:
+    //   Meta+Alt+{key}         = Layout operations ([, ], 1-9, Return, Escape, F)
+    //   Meta+Alt+Shift+Arrow   = Window zone movement
+    //   Alt+Shift+Arrow        = Focus zone navigation (lighter action, no Meta)
+    //   Meta+Ctrl+{1-9}        = Direct zone snapping
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
     // we use Meta+Alt+Shift+Arrow instead.
     m_moveWindowLeftShortcut = QStringLiteral("Meta+Alt+Shift+Left");
@@ -1324,9 +1334,9 @@ void Settings::reset()
     m_focusZoneRightShortcut = QStringLiteral("Alt+Shift+Right");
     m_focusZoneUpShortcut = QStringLiteral("Alt+Shift+Up");
     m_focusZoneDownShortcut = QStringLiteral("Alt+Shift+Down");
-    m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Return");
-    m_restoreWindowSizeShortcut = QStringLiteral("Meta+Escape");
-    m_toggleWindowFloatShortcut = QStringLiteral("Meta+F");
+    m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Alt+Return");
+    m_restoreWindowSizeShortcut = QStringLiteral("Meta+Alt+Escape");
+    m_toggleWindowFloatShortcut = QStringLiteral("Meta+Alt+F");
 
     // Snap to Zone by Number Shortcuts
     for (int i = 0; i < 9; ++i) {
