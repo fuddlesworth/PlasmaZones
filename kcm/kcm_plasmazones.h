@@ -57,6 +57,8 @@ class KCMPlasmaZones : public KQuickConfigModule
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
+    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY
+                   showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyle WRITE setOsdStyle NOTIFY osdStyleChanged)
 
     // Appearance
@@ -188,6 +190,7 @@ public:
     bool showZoneNumbers() const;
     bool flashZonesOnSwitch() const;
     bool showOsdOnLayoutSwitch() const;
+    bool showNavigationOsd() const;
     int osdStyle() const;
     bool useSystemColors() const;
     QColor highlightColor() const;
@@ -263,6 +266,7 @@ public:
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
     void setShowOsdOnLayoutSwitch(bool show);
+    void setShowNavigationOsd(bool show);
     void setOsdStyle(int style);
     void setUseSystemColors(bool use);
     void setHighlightColor(const QColor& color);
@@ -383,6 +387,7 @@ Q_SIGNALS:
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
+    void showNavigationOsdChanged();
     void osdStyleChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();

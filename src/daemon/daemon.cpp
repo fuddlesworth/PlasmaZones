@@ -475,6 +475,18 @@ void Daemon::start()
         m_windowTrackingAdaptor->cycleWindowsInZone(forward);
     });
 
+    // Connect navigation feedback signal to show OSD (Qt signal from WindowTrackingAdaptor)
+    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
+            [this](bool success, const QString& action, const QString& reason) {
+                // Only show OSD if setting is enabled
+                if (m_settings && m_settings->showNavigationOsd()) {
+                    m_overlayService->showNavigationOsd(success, action, reason);
+                }
+            });
+
+    // Note: KWin effect reports navigation feedback via reportNavigationFeedback D-Bus method,
+    // which emits the Qt navigationFeedback signal. No D-Bus signal connection needed.
+
     // Connect to KWin script
     connectToKWinScript();
 
@@ -588,6 +600,8 @@ void Daemon::showLayoutOsd(Layout* layout)
 // Screen management now handled by ScreenManager (SRP)
 // Shortcut management now handled by ShortcutManager (SRP)
 // Signals are connected in start() method
+// Note: Navigation feedback from KWin effect comes via reportNavigationFeedback D-Bus method,
+// which emits the Qt navigationFeedback signal handled by the connection above.
 
 void Daemon::connectToKWinScript()
 {

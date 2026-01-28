@@ -485,6 +485,12 @@
         <method name="getUpdatedWindowGeometries">
             <arg name="geometriesJson" type="s" direction="out"/>
         </method>
+        <!-- Report navigation feedback from KWin effect (emits Qt signal for OSD) -->
+        <method name="reportNavigationFeedback">
+            <arg name="success" type="b" direction="in"/>
+            <arg name="action" type="s" direction="in"/>
+            <arg name="reason" type="s" direction="in"/>
+        </method>
         <signal name="windowZoneChanged">
             <arg name="windowId" type="s"/>
             <arg name="zoneId" type="s"/>
@@ -492,6 +498,12 @@
         <!-- Phase 1 keyboard navigation: daemon emits these when shortcuts fire -->
         <signal name="toggleWindowFloatRequested">
             <arg name="shouldFloat" type="b"/>
+        </signal>
+        <!-- Navigation feedback signal (emitted by daemon when KWin effect reports via reportNavigationFeedback) -->
+        <signal name="navigationFeedback">
+            <arg name="success" type="b"/>
+            <arg name="action" type="s"/>
+            <arg name="reason" type="s"/>
         </signal>
     </interface>
 </node>

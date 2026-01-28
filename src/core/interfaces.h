@@ -157,6 +157,7 @@ Q_SIGNALS:
     void showZoneNumbersChanged();
     void flashZonesOnSwitchChanged();
     void showOsdOnLayoutSwitchChanged();
+    void showNavigationOsdChanged();
     void osdStyleChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();

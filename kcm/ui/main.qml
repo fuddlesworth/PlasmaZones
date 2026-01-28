@@ -1726,12 +1726,24 @@ KCM.AbstractKCM {
                 onToggled: kcm.flashZonesOnSwitch = checked
             }
 
+            Kirigami.Separator {
+                Kirigami.FormData.isSection: true
+                Kirigami.FormData.label: i18n("On-Screen Display")
+            }
+
             CheckBox {
                 id: showOsdCheckbox
-                Kirigami.FormData.label: i18n("Notifications:")
+                Kirigami.FormData.label: i18n("Layout switch:")
                 text: i18n("Show OSD when switching layouts")
                 checked: kcm.showOsdOnLayoutSwitch
                 onToggled: kcm.showOsdOnLayoutSwitch = checked
+            }
+
+            CheckBox {
+                Kirigami.FormData.label: i18n("Keyboard navigation:")
+                text: i18n("Show OSD when using keyboard navigation")
+                checked: kcm.showNavigationOsd
+                onToggled: kcm.showNavigationOsd = checked
             }
 
             ComboBox {

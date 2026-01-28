@@ -169,6 +169,10 @@ bool KCMPlasmaZones::showOsdOnLayoutSwitch() const
 {
     return m_settings->showOsdOnLayoutSwitch();
 }
+bool KCMPlasmaZones::showNavigationOsd() const
+{
+    return m_settings->showNavigationOsd();
+}
 int KCMPlasmaZones::osdStyle() const
 {
     return m_settings->osdStyleInt();
@@ -522,6 +526,14 @@ void KCMPlasmaZones::setShowOsdOnLayoutSwitch(bool show)
     if (m_settings->showOsdOnLayoutSwitch() != show) {
         m_settings->setShowOsdOnLayoutSwitch(show);
         Q_EMIT showOsdOnLayoutSwitchChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setShowNavigationOsd(bool show)
+{
+    if (m_settings->showNavigationOsd() != show) {
+        m_settings->setShowNavigationOsd(show);
+        Q_EMIT showNavigationOsdChanged();
         setNeedsSave(true);
     }
 }
@@ -1211,6 +1223,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT showZoneNumbersChanged();
     Q_EMIT flashZonesOnSwitchChanged();
     Q_EMIT showOsdOnLayoutSwitchChanged();
+    Q_EMIT showNavigationOsdChanged();
     Q_EMIT useSystemColorsChanged();
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();

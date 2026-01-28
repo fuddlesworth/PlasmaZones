@@ -9,7 +9,7 @@ msgstr ""
 "#-#-#-#-#  plasmazonesd-cpp.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
 "Project-Id-Version: PlasmaZones 1.0.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-28 13:34-0600\n"
+"POT-Creation-Date: 2026-01-28 17:05-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: English\n"
@@ -20,7 +20,7 @@ msgstr ""
 "#-#-#-#-#  plasmazonesd-qml.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
 "Project-Id-Version: PlasmaZones 1.0.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-27 18:01-0600\n"
+"POT-Creation-Date: 2026-01-28 17:15-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: English\n"
@@ -29,273 +29,338 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/main.cpp:45
+#: src/daemon/main.cpp:45
 msgid "PlasmaZones Daemon"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/main.cpp:46
+#: src/daemon/main.cpp:46
 msgid "FancyZones-style window snapping for KDE Plasma"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/main.cpp:47
+#: src/daemon/main.cpp:47
 msgid "© 2026 fuddlesworth"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/main.cpp:48
+#: src/daemon/main.cpp:48
 msgid "fuddlesworth"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/main.cpp:60
+#: src/daemon/main.cpp:60
 msgid "Replace existing daemon instance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/daemon.cpp:563
+#: src/daemon/daemon.cpp:580
 msgid "Zone Layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:287
+#: src/daemon/shortcutmanager.cpp:305
 msgid "Open Zone Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:300
+#: src/daemon/shortcutmanager.cpp:318
 msgid "Previous Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:305
+#: src/daemon/shortcutmanager.cpp:323
 msgid "Next Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:319
+#: src/daemon/shortcutmanager.cpp:337
 msgid "Apply Layout %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:368
+#: src/daemon/shortcutmanager.cpp:386
 msgid "Move Window Left"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:375
+#: src/daemon/shortcutmanager.cpp:393
 msgid "Move Window Right"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:382
+#: src/daemon/shortcutmanager.cpp:400
 msgid "Move Window Up"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:389
+#: src/daemon/shortcutmanager.cpp:407
 msgid "Move Window Down"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:397
+#: src/daemon/shortcutmanager.cpp:415
 msgid "Focus Zone Left"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:404
+#: src/daemon/shortcutmanager.cpp:422
 msgid "Focus Zone Right"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:411
+#: src/daemon/shortcutmanager.cpp:429
 msgid "Focus Zone Up"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:418
+#: src/daemon/shortcutmanager.cpp:436
 msgid "Focus Zone Down"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:426
+#: src/daemon/shortcutmanager.cpp:444
 msgid "Push to Empty Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:433
+#: src/daemon/shortcutmanager.cpp:451
 msgid "Restore Window Size"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:441
+#: src/daemon/shortcutmanager.cpp:459
 msgid "Toggle Window Float"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:602
+#: src/daemon/shortcutmanager.cpp:620
 msgid "Swap Window Left"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:609
+#: src/daemon/shortcutmanager.cpp:627
 msgid "Swap Window Right"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:616
+#: src/daemon/shortcutmanager.cpp:634
 msgid "Swap Window Up"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:623
+#: src/daemon/shortcutmanager.cpp:641
 msgid "Swap Window Down"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:695
+#: src/daemon/shortcutmanager.cpp:713
 msgid "Snap to Zone %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:729
+#: src/daemon/shortcutmanager.cpp:747
 msgid "Rotate Windows Clockwise"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:737
+#: src/daemon/shortcutmanager.cpp:755
 msgid "Rotate Windows Counterclockwise"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPreview.qml:59
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPicker.qml:107
+#: src/daemon/shortcutmanager.cpp:800
+msgid "Cycle Window Forward in Zone"
+msgstr ""
+
+#: src/daemon/shortcutmanager.cpp:808
+msgid "Cycle Window Backward in Zone"
+msgstr ""
+
+#: src/ui/LayoutPreview.qml:59 src/ui/LayoutPicker.qml:107
 msgctxt "@info:accessibility"
 msgid "Layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPreview.qml:60
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPicker.qml:108
+#: src/ui/LayoutPreview.qml:60 src/ui/LayoutPicker.qml:108
 msgctxt "@info:accessibility"
 msgid "Click to select this layout. Contains %1 zones."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPreview.qml:178
+#: src/ui/LayoutPreview.qml:178
 msgctxt "@tooltip"
 msgid "Current layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPreview.qml:178
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPicker.qml:194
+#: src/ui/LayoutPreview.qml:178 src/ui/LayoutPicker.qml:194
 msgctxt "@tooltip"
 msgid "Select layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneItem.qml:143
+#: src/ui/ZoneItem.qml:143
 msgid "Meta+Alt+%1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneOverlay.qml:79
+#: src/ui/ZoneOverlay.qml:79
 msgid ""
 "PlasmaZones Overlay Active\n"
 "(No zones defined)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneSelector.qml:213
+#: src/ui/ZoneSelector.qml:213
 msgid "Select Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneSelector.qml:254
+#: src/ui/ZoneSelector.qml:254
 msgid "Layout %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneSelector.qml:325
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneSelectorWindow.qml:705
-#: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPicker.qml:232
+#: src/ui/ZoneSelector.qml:325 src/ui/ZoneSelectorWindow.qml:705
+#: src/ui/LayoutPicker.qml:232
 msgid "No layouts available"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:22
+#: src/ui/ZoneEditor.qml:22
 msgid "PlasmaZones Layout Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:88
+#: src/ui/ZoneEditor.qml:88
 msgid "Canvas (Free-form)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:89
+#: src/ui/ZoneEditor.qml:89
 msgid "Grid"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:103
+#: src/ui/ZoneEditor.qml:103
 msgid "Columns:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:112
+#: src/ui/ZoneEditor.qml:112
 msgid "Rows:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:129
+#: src/ui/ZoneEditor.qml:129
 msgid "Add Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:130
+#: src/ui/ZoneEditor.qml:130
 msgid "Add a new zone to the layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:137
+#: src/ui/ZoneEditor.qml:137
 msgid "Delete Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:139
+#: src/ui/ZoneEditor.qml:139
 msgid "Delete the selected zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:150
+#: src/ui/ZoneEditor.qml:150
 msgid "Layout Name"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:159
+#: src/ui/ZoneEditor.qml:159
 msgid "Cancel"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:160
+#: src/ui/ZoneEditor.qml:160
 msgid "Cancel editing and discard changes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:166
+#: src/ui/ZoneEditor.qml:166
 msgid "Save Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:169
+#: src/ui/ZoneEditor.qml:169
 msgid "Save the current layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:299
+#: src/ui/ZoneEditor.qml:299
 msgid "Zone Properties"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:303
+#: src/ui/ZoneEditor.qml:303
 msgid "Name:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:309
+#: src/ui/ZoneEditor.qml:309
 msgid "Zone Number:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:317
+#: src/ui/ZoneEditor.qml:317
 msgid "Shortcut:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:319
+#: src/ui/ZoneEditor.qml:319
 msgid "e.g., Meta+Alt+1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:325
+#: src/ui/ZoneEditor.qml:325
 msgid "Appearance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:329
+#: src/ui/ZoneEditor.qml:329
 msgid "Custom colors:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:335
+#: src/ui/ZoneEditor.qml:335
 msgid "Highlight:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:342
+#: src/ui/ZoneEditor.qml:342
 msgid "Opacity:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:351
+#: src/ui/ZoneEditor.qml:351
 msgid "Border radius:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:361
+#: src/ui/ZoneEditor.qml:361
 msgid "Geometry"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:365
+#: src/ui/ZoneEditor.qml:365
 msgid "Position:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:372
+#: src/ui/ZoneEditor.qml:372
 msgid "Size:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/ui/ZoneEditor.qml:484
+#: src/ui/ZoneEditor.qml:484
 msgid "Custom Layout"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:19
+msgid "Navigation feedback"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:20
+msgid ""
+"Brief feedback when using keyboard navigation to move or focus windows "
+"between zones"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:50
+msgid "Moved"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:50 src/ui/NavigationOsd.qml:52
+msgid "No zone"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:52 src/ui/NavigationOsd.qml:66
+msgid "Focus"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:54
+msgid "Pushed"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:54
+msgid "No empty zone"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:56
+msgid "Restored"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:56 src/ui/NavigationOsd.qml:58
+#: src/ui/NavigationOsd.qml:60 src/ui/NavigationOsd.qml:62
+#: src/ui/NavigationOsd.qml:64 src/ui/NavigationOsd.qml:66
+#: src/ui/NavigationOsd.qml:68
+msgid "Failed"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:58
+msgid "Floating"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:60
+msgid "Snapped"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:62
+msgid "Swapped"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:64
+msgid "Rotated"
+msgstr ""
+
+#: src/ui/NavigationOsd.qml:68
+msgid "Done"
 msgstr ""

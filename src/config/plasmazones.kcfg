@@ -68,6 +68,10 @@
       <label>Show OSD notification when switching layouts via keyboard</label>
       <default>true</default>
     </entry>
+    <entry name="ShowNavigationOsd" type="Bool">
+      <label>Show OSD feedback when using keyboard navigation to move or focus windows between zones</label>
+      <default>true</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

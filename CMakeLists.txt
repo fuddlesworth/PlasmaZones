@@ -212,6 +212,8 @@ set(PLASMAZONESD_QML
     ${CMAKE_SOURCE_DIR}/src/ui/ZoneSelectorWindow.qml
     ${CMAKE_SOURCE_DIR}/src/ui/LayoutPicker.qml
     ${CMAKE_SOURCE_DIR}/src/ui/ZoneEditor.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/LayoutOsd.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/NavigationOsd.qml
 )
 set(PLASMAZONES_EDITOR_CPP
     ${CMAKE_SOURCE_DIR}/src/editor/main.cpp
@@ -262,14 +264,23 @@ if(GETTEXT_XGETTEXT_EXECUTABLE)
         endif()
         list(JOIN _cpp ";" _cstr)
         list(JOIN _qml ";" _qstr)
+        # Write file lists and source dir to files so the script avoids shell splitting
+        set(_cpp_file "${CMAKE_BINARY_DIR}/po-extract-${_domain}-cpp.txt")
+        set(_qml_file "${CMAKE_BINARY_DIR}/po-extract-${_domain}-qml.txt")
+        set(_src_dir_file "${CMAKE_BINARY_DIR}/po-extract-src-dir.txt")
+        string(REPLACE ";" "\n" _cpp_lines "${_cpp}")
+        string(REPLACE ";" "\n" _qml_lines "${_qml}")
+        file(WRITE "${_cpp_file}" "${_cpp_lines}\n")
+        file(WRITE "${_qml_file}" "${_qml_lines}\n")
+        file(WRITE "${_src_dir_file}" "${CMAKE_SOURCE_DIR}\n")
         add_custom_command(TARGET extract-pot POST_BUILD
             COMMAND ${CMAKE_COMMAND}
-                -DCMAKE_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+                -DCMAKE_SOURCE_DIR_FILE=${_src_dir_file}
                 -DBINARY_DIR=${CMAKE_BINARY_DIR}
                 -DCMAKE_CMD=${CMAKE_COMMAND}
                 -DDOMAIN=${_domain}
-                -DCPP_FILES="${_cstr}"
-                -DQML_FILES="${_qstr}"
+                -DCPP_FILES_FILE=${_cpp_file}
+                -DQML_FILES_FILE=${_qml_file}
                 -DPOT_FILE=${CMAKE_SOURCE_DIR}/po/${_domain}.pot
                 -DGETTEXT_XGETTEXT_EXECUTABLE=${GETTEXT_XGETTEXT_EXECUTABLE}
                 -DGETTEXT_MSGCAT_EXECUTABLE=${GETTEXT_MSGCAT_EXECUTABLE}

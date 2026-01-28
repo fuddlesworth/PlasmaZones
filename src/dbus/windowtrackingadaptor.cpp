@@ -1350,6 +1350,14 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
     Q_EMIT navigationFeedback(true, QStringLiteral("rotate"), QString());
 }
 
+void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString& action, const QString& reason)
+{
+    // This method is called by KWin effect via D-Bus to report navigation results.
+    // Emit the Qt signal which triggers the OSD display.
+    qCDebug(lcDbusWindow) << "KWin effect reported navigation feedback: success=" << success << "action=" << action << "reason=" << reason;
+    Q_EMIT navigationFeedback(success, action, reason);
+}
+
 void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
 {
     qCDebug(lcDbusWindow) << "cycleWindowsInZone called, forward:" << forward;
