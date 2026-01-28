@@ -3,14 +3,28 @@
 
 #include "activitymanager.h"
 #include "layoutmanager.h"
+#include "virtualdesktopmanager.h"
 #include "logging.h"
 #include <QGuiApplication>
 #include <QScreen>
 
-// KActivities is optional - check at compile time
+// PlasmaActivities/KActivities is optional - check at compile time
+// Plasma 6 uses PlasmaActivities package but keeps KActivities namespace
 #ifdef HAVE_KACTIVITIES
+// Try Plasma 6 headers first (PlasmaActivities package)
+#if __has_include(<PlasmaActivities/plasmaactivities/controller.h>)
+#include <PlasmaActivities/plasmaactivities/controller.h>
+#include <PlasmaActivities/plasmaactivities/info.h>
+#define PLASMA_ACTIVITIES_V6
+#elif __has_include(<plasmaactivities/controller.h>)
+#include <plasmaactivities/controller.h>
+#include <plasmaactivities/info.h>
+#define PLASMA_ACTIVITIES_V6
+#else
+// Fall back to KActivities (KF5/KF6)
 #include <KActivities/Controller>
 #include <KActivities/Info>
+#endif
 #define KACTIVITIES_AVAILABLE
 #endif
 
@@ -28,11 +42,17 @@ ActivityManager::~ActivityManager()
     stop();
 }
 
+void ActivityManager::setVirtualDesktopManager(VirtualDesktopManager* vdm)
+{
+    m_virtualDesktopManager = vdm;
+}
+
 bool ActivityManager::isAvailable()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    // Check if KActivities runtime is available
-    return KActivities::Controller().serviceStatus() == KActivities::Controller::Running;
+    // Check if we have a running controller with Running status
+    // Note: This is a quick check; full availability requires async init
+    return true; // Compiled with support, actual status checked via D-Bus
 #else
     return false;
 #endif
@@ -41,13 +61,55 @@ bool ActivityManager::isAvailable()
 bool ActivityManager::init()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    m_activitiesAvailable = (KActivities::Controller().serviceStatus() == KActivities::Controller::Running);
+    // Create our persistent controller instance
+    // Important: Controller needs to be long-lived to sync with the service
+    auto* controller = new KActivities::Controller(this);
+    m_controller = controller;
+
+    // Connect to serviceStatusChanged to handle async service availability
+    connect(controller, &KActivities::Controller::serviceStatusChanged, this,
+            [this, controller](KActivities::Controller::ServiceStatus status) {
+                bool wasAvailable = m_activitiesAvailable;
+                m_activitiesAvailable = (status == KActivities::Controller::Running);
+
+                if (m_activitiesAvailable && !wasAvailable) {
+                    // Service just became available - fetch current activity
+                    m_currentActivity = controller->currentActivity();
+                    qCDebug(lcCore) << "KActivities service now running, current activity:"
+                                    << m_currentActivity << "(" << activityName(m_currentActivity) << ")";
+
+                    // Emit signals so UI can update
+                    Q_EMIT activitiesChanged();
+                    if (!m_currentActivity.isEmpty()) {
+                        Q_EMIT currentActivityChanged(m_currentActivity);
+                    }
+
+                    // Update layout if we're running
+                    if (m_running) {
+                        updateActiveLayout();
+                    }
+                } else if (!m_activitiesAvailable && wasAvailable) {
+                    qCDebug(lcCore) << "KActivities service stopped";
+                    m_currentActivity.clear();
+                    Q_EMIT activitiesChanged();
+                }
+            });
+
+    // Check initial status
+    auto status = controller->serviceStatus();
+    m_activitiesAvailable = (status == KActivities::Controller::Running);
+
     if (m_activitiesAvailable) {
-        m_currentActivity = KActivities::Controller().currentActivity();
-        qCDebug(lcCore) << "KActivities available, current activity:" << m_currentActivity;
+        m_currentActivity = controller->currentActivity();
+        qCDebug(lcCore) << "KActivities available, current activity:" << m_currentActivity
+                        << "(" << activityName(m_currentActivity) << ")";
+    } else if (status == KActivities::Controller::Unknown) {
+        // Service status unknown - it may become available later
+        qCDebug(lcCore) << "KActivities service status unknown - waiting for connection";
     } else {
         qCDebug(lcCore) << "KActivities service not running - activity support disabled";
     }
+
     return true; // Always return true - activities are optional
 #else
     qCDebug(lcCore) << "KActivities support not compiled in - activity support disabled";
@@ -91,6 +153,47 @@ QString ActivityManager::currentActivity() const
     return m_currentActivity;
 }
 
+QStringList ActivityManager::activities() const
+{
+#ifdef KACTIVITIES_AVAILABLE
+    if (!m_activitiesAvailable || !m_controller) {
+        return {};
+    }
+    auto* controller = qobject_cast<KActivities::Controller*>(m_controller);
+    return controller ? controller->activities() : QStringList{};
+#else
+    return {};
+#endif
+}
+
+QString ActivityManager::activityName(const QString& activityId) const
+{
+#ifdef KACTIVITIES_AVAILABLE
+    if (!m_activitiesAvailable || activityId.isEmpty()) {
+        return {};
+    }
+    KActivities::Info info(activityId);
+    return info.name();
+#else
+    Q_UNUSED(activityId)
+    return {};
+#endif
+}
+
+QString ActivityManager::activityIcon(const QString& activityId) const
+{
+#ifdef KACTIVITIES_AVAILABLE
+    if (!m_activitiesAvailable || activityId.isEmpty()) {
+        return {};
+    }
+    KActivities::Info info(activityId);
+    return info.icon();
+#else
+    Q_UNUSED(activityId)
+    return {};
+#endif
+}
+
 void ActivityManager::onCurrentActivityChanged(const QString& activityId)
 {
     if (m_currentActivity == activityId) {
@@ -98,26 +201,49 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
     }
 
     m_currentActivity = activityId;
-    qCDebug(lcCore) << "Activity changed to:" << activityId;
+    qCDebug(lcCore) << "Activity changed to:" << activityId << "(" << activityName(activityId) << ")";
 
     updateActiveLayout();
     Q_EMIT currentActivityChanged(activityId);
 }
 
+void ActivityManager::onActivityAdded(const QString& activityId)
+{
+    qCDebug(lcCore) << "Activity added:" << activityId << "(" << activityName(activityId) << ")";
+    Q_EMIT activitiesChanged();
+}
+
+void ActivityManager::onActivityRemoved(const QString& activityId)
+{
+    qCDebug(lcCore) << "Activity removed:" << activityId;
+    Q_EMIT activitiesChanged();
+}
+
 void ActivityManager::connectSignals()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    auto& controller = KActivities::Controller::instance();
-    connect(&controller, &KActivities::Controller::currentActivityChanged, this,
+    if (!m_controller) {
+        return;
+    }
+    auto* controller = qobject_cast<KActivities::Controller*>(m_controller);
+    if (!controller) {
+        return;
+    }
+    connect(controller, &KActivities::Controller::currentActivityChanged, this,
             &ActivityManager::onCurrentActivityChanged);
+    connect(controller, &KActivities::Controller::activityAdded, this,
+            &ActivityManager::onActivityAdded);
+    connect(controller, &KActivities::Controller::activityRemoved, this,
+            &ActivityManager::onActivityRemoved);
 #endif
 }
 
 void ActivityManager::disconnectSignals()
 {
 #ifdef KACTIVITIES_AVAILABLE
-    auto& controller = KActivities::Controller::instance();
-    disconnect(&controller, nullptr, this, nullptr);
+    if (m_controller) {
+        disconnect(m_controller, nullptr, this, nullptr);
+    }
 #endif
 }
 
@@ -133,17 +259,25 @@ void ActivityManager::updateActiveLayout()
         return;
     }
 
-    // Get current virtual desktop (coordinate with VirtualDesktopManager)
-    // Use 0 for all desktops to prioritize activity, or get current desktop if needed
-    int currentDesktop = 0; // Could integrate with VirtualDesktopManager if needed
+    // Get current virtual desktop from VirtualDesktopManager if available
+    // This ensures activity + desktop combination is properly considered
+    int currentDesktop = 0;
+    if (m_virtualDesktopManager) {
+        currentDesktop = m_virtualDesktopManager->currentDesktop();
+    }
 
     // Find layout for current screen, desktop, and activity
-    // Activity takes precedence over desktop in lookup
+    // LayoutManager::layoutForScreen has fallback logic:
+    // 1. Exact match (screen + desktop + activity)
+    // 2. Screen + desktop (any activity)
+    // 3. Screen only (any desktop, any activity)
+    // 4. Active layout (global fallback)
     auto* layout = m_layoutManager->layoutForScreen(screen->name(), currentDesktop, m_currentActivity);
 
     if (layout && layout != m_layoutManager->activeLayout()) {
-        qCDebug(lcCore) << "Switching to layout" << layout->name() << "for activity" << m_currentActivity << "desktop"
-                        << currentDesktop << "on screen" << screen->name();
+        qCDebug(lcCore) << "Switching to layout" << layout->name() << "for activity"
+                        << activityName(m_currentActivity) << "(" << m_currentActivity << ")"
+                        << "desktop" << currentDesktop << "on screen" << screen->name();
         m_layoutManager->setActiveLayout(layout);
     }
 }

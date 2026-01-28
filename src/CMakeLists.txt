@@ -99,23 +99,37 @@ target_link_libraries(plasmazones_core
         KF6::ColorScheme
 )
 
-# Conditionally link KActivities if available
-# Try KF6::Activities first, fallback to KActivities
-if(KF6Activities_FOUND)
-    target_link_libraries(plasmazones_core
-        PUBLIC
-            KF6::Activities
-    )
-    target_compile_definitions(plasmazones_core PRIVATE HAVE_KACTIVITIES)
-elseif(KActivities_FOUND)
-    # KActivities might be found but need different linking approach
-    find_library(KACTIVITIES_LIBRARY KActivities)
-    if(KACTIVITIES_LIBRARY)
+# Conditionally link PlasmaActivities/KActivities if available
+# Plasma 6 uses Plasma::Activities, KF6 uses KF6::Activities, KF5 uses KActivities
+if(PlasmaActivities_FOUND)
+    # Check for Plasma 6 target first
+    if(TARGET Plasma::Activities)
         target_link_libraries(plasmazones_core
             PUBLIC
-                ${KACTIVITIES_LIBRARY}
+                Plasma::Activities
         )
         target_compile_definitions(plasmazones_core PRIVATE HAVE_KACTIVITIES)
+        message(STATUS "Linking PlasmaActivities via Plasma::Activities target")
+    elseif(TARGET KF6::Activities)
+        target_link_libraries(plasmazones_core
+            PUBLIC
+                KF6::Activities
+        )
+        target_compile_definitions(plasmazones_core PRIVATE HAVE_KACTIVITIES)
+        message(STATUS "Linking PlasmaActivities via KF6::Activities target")
+    else()
+        # Fallback to library name lookup
+        find_library(PLASMA_ACTIVITIES_LIBRARY NAMES PlasmaActivities KActivities)
+        if(PLASMA_ACTIVITIES_LIBRARY)
+            target_link_libraries(plasmazones_core
+                PUBLIC
+                    ${PLASMA_ACTIVITIES_LIBRARY}
+            )
+            target_compile_definitions(plasmazones_core PRIVATE HAVE_KACTIVITIES)
+            message(STATUS "Linking PlasmaActivities via library: ${PLASMA_ACTIVITIES_LIBRARY}")
+        else()
+            message(WARNING "PlasmaActivities found but no linkable target/library available")
+        endif()
     endif()
 endif()
 

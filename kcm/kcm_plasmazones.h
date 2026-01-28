@@ -165,6 +165,11 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopCountChanged)
     Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopNamesChanged)
 
+    // KDE Activities support
+    Q_PROPERTY(bool activitiesAvailable READ activitiesAvailable NOTIFY activitiesAvailableChanged)
+    Q_PROPERTY(QVariantList activities READ activities NOTIFY activitiesChanged)
+    Q_PROPERTY(QString currentActivity READ currentActivity NOTIFY currentActivityChanged)
+
     // Daemon status
     Q_PROPERTY(bool daemonRunning READ isDaemonRunning NOTIFY daemonRunningChanged)
     Q_PROPERTY(bool daemonEnabled READ isDaemonEnabled WRITE setDaemonEnabled NOTIFY daemonEnabledChanged)
@@ -238,6 +243,11 @@ public:
     // Virtual desktop support
     int virtualDesktopCount() const;
     QStringList virtualDesktopNames() const;
+
+    // KDE Activities support
+    bool activitiesAvailable() const;
+    QVariantList activities() const;
+    QString currentActivity() const;
 
     // Daemon status
     bool isDaemonRunning() const;
@@ -350,6 +360,15 @@ public Q_SLOTS:
     Q_INVOKABLE void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
     Q_INVOKABLE QString getQuickLayoutShortcut(int slotNumber) const;
 
+    // Per-activity screen assignments
+    Q_INVOKABLE void assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                   const QString& layoutId);
+    Q_INVOKABLE void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
+    Q_INVOKABLE QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE QString getActivityName(const QString& activityId) const;
+    Q_INVOKABLE QString getActivityIcon(const QString& activityId) const;
+
     // Daemon control
     Q_INVOKABLE void startDaemon();
     Q_INVOKABLE void stopDaemon();
@@ -417,6 +436,10 @@ Q_SIGNALS:
     void screenAssignmentsChanged();
     void virtualDesktopCountChanged();
     void virtualDesktopNamesChanged();
+    void activitiesAvailableChanged();
+    void activitiesChanged();
+    void currentActivityChanged();
+    void activityAssignmentsChanged();
     void daemonRunningChanged();
     void daemonEnabledChanged();
     void quickLayoutSlotsRefreshed(); // Emitted when quick layout slots are reloaded from daemon
@@ -426,10 +449,13 @@ private Q_SLOTS:
     void refreshScreens();
     void checkDaemonStatus();
     void refreshVirtualDesktops();
+    void refreshActivities();
     void onActiveLayoutIdChanged(const QString& layoutId);
     void onScreenLayoutChanged(const QString& screenName, const QString& layoutId);
     void onQuickLayoutSlotsChanged();
     void onSettingsChanged();
+    void onCurrentActivityChanged(const QString& activityId);
+    void onActivitiesChanged();
 
 private:
     void notifyDaemon();
@@ -464,6 +490,16 @@ private:
     // Virtual desktop support
     int m_virtualDesktopCount = 1;
     QStringList m_virtualDesktopNames;
+
+    // KDE Activities support
+    bool m_activitiesAvailable = false;
+    QVariantList m_activities;
+    QString m_currentActivity;
+
+    // Pending per-activity assignments (not yet applied)
+    // Key format: "screenName:activityId" -> layoutId (empty string means cleared)
+    QMap<QString, QString> m_pendingActivityAssignments;
+    QSet<QString> m_clearedActivityAssignments; // Keys that should be cleared on save
 
     // Pending per-desktop assignments (not yet applied)
     // Key format: "screenName:desktopNumber" -> layoutId (empty string means cleared)

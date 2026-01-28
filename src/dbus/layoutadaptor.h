@@ -15,6 +15,7 @@ namespace PlasmaZones {
 
 class LayoutManager; // Concrete type needed for signal connections
 class VirtualDesktopManager;
+class ActivityManager;
 class Layout;
 
 /**
@@ -34,6 +35,7 @@ public:
     ~LayoutAdaptor() override = default;
 
     void setVirtualDesktopManager(VirtualDesktopManager* vdm);
+    void setActivityManager(ActivityManager* am);
 
 public Q_SLOTS:
     // Layout queries
@@ -82,6 +84,52 @@ public Q_SLOTS:
     void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
     QVariantMap getAllQuickLayoutSlots();
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // KDE Activities Support
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Check if KDE Activities support is available
+     * @return true if KActivities is running
+     */
+    bool isActivitiesAvailable();
+
+    /**
+     * @brief Get list of all activity IDs
+     * @return List of activity UUIDs
+     */
+    QStringList getActivities();
+
+    /**
+     * @brief Get the current activity ID
+     * @return Current activity UUID, or empty if unavailable
+     */
+    QString getCurrentActivity();
+
+    /**
+     * @brief Get activity info as JSON
+     * @param activityId Activity UUID
+     * @return JSON with id, name, icon fields
+     */
+    QString getActivityInfo(const QString& activityId);
+
+    /**
+     * @brief Get all activities as JSON array
+     * @return JSON array with activity info objects
+     */
+    QString getAllActivitiesInfo();
+
+    // Per-activity layout assignments (screen + activity, any desktop)
+    QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId);
+    void assignLayoutToScreenActivity(const QString& screenName, const QString& activityId, const QString& layoutId);
+    void clearAssignmentForScreenActivity(const QString& screenName, const QString& activityId);
+    bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId);
+
+    // Full assignment (screen + desktop + activity)
+    QString getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId);
+    void assignLayoutToScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId, const QString& layoutId);
+    void clearAssignmentForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when the daemon has fully initialized and is ready
@@ -108,6 +156,17 @@ Q_SIGNALS:
      */
     void quickLayoutSlotsChanged();
 
+    /**
+     * @brief Emitted when the current KDE Activity changes
+     * @param activityId The new activity ID
+     */
+    void currentActivityChanged(const QString& activityId);
+
+    /**
+     * @brief Emitted when the list of KDE Activities changes (added/removed)
+     */
+    void activitiesChanged();
+
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals
     // (LayoutManager redeclares signals for Q_PROPERTY, so we use string-based connections)
@@ -119,9 +178,11 @@ private:
     void invalidateCache();
     void connectLayoutManagerSignals();
     void connectVirtualDesktopSignals();
+    void connectActivitySignals();
 
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
+    ActivityManager* m_activityManager = nullptr;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;

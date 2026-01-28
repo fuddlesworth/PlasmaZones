@@ -113,23 +113,29 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
     ColorScheme
 )
 
-# KActivities is optional (for activity-based layouts)
-# Note: KActivities may be part of Plasma Workspace, check both package names
-find_package(KF6Activities QUIET COMPONENTS Activities)
-if(NOT KF6Activities_FOUND)
-    # Try older package name (KF5)
+# KActivities/PlasmaActivities is optional (for activity-based layouts)
+# Plasma 6 renamed KActivities to PlasmaActivities
+find_package(PlasmaActivities QUIET)
+if(NOT PlasmaActivities_FOUND)
+    # Try KF6 name (some distros)
+    find_package(KF6Activities QUIET COMPONENTS Activities)
+    if(KF6Activities_FOUND)
+        set(PlasmaActivities_FOUND TRUE)
+    endif()
+endif()
+if(NOT PlasmaActivities_FOUND)
+    # Try older KF5 package name
     find_package(KActivities QUIET)
     if(KActivities_FOUND)
-        set(KF6Activities_FOUND TRUE)
-        set(KF6Activities_Activities_FOUND TRUE)
+        set(PlasmaActivities_FOUND TRUE)
     endif()
 endif()
 
-if(KF6Activities_FOUND)
-    message(STATUS "KActivities found - activity-based layouts enabled")
+if(PlasmaActivities_FOUND)
+    message(STATUS "PlasmaActivities found - activity-based layouts enabled")
     # Don't add global definitions here - set per-target instead
 else()
-    message(STATUS "KActivities not found - activity support disabled")
+    message(STATUS "PlasmaActivities/KActivities not found - activity support disabled")
 endif()
 
 # LayerShellQt for Wayland overlay support (REQUIRED)
