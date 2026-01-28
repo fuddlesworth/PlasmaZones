@@ -648,6 +648,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("rotateWindowsRequested"), this,
                                           SLOT(slotRotateWindowsRequested(bool, QString)));
 
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("cycleWindowsInZoneRequested"), this,
+                                          SLOT(slotCycleWindowsInZoneRequested(QString, QString)));
+
     qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
@@ -1449,6 +1453,131 @@ void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString
     } else {
         emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"));
     }
+}
+
+void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused)
+{
+    Q_UNUSED(unused)
+    qCDebug(lcEffect) << "Cycle windows in zone requested -" << directive;
+
+    // Parse directive: "cycle:forward" or "cycle:backward"
+    static const QString CycleDirectivePrefix = QStringLiteral("cycle:");
+    if (!directive.startsWith(CycleDirectivePrefix)) {
+        qCWarning(lcEffect) << "Invalid cycle directive:" << directive;
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("invalid_directive"));
+        return;
+    }
+
+    QString direction = directive.mid(CycleDirectivePrefix.length());
+
+    // Explicitly validate direction - reject unknown values
+    bool forward;
+    if (direction == QStringLiteral("forward")) {
+        forward = true;
+    } else if (direction == QStringLiteral("backward")) {
+        forward = false;
+    } else {
+        qCWarning(lcEffect) << "Unknown cycle direction:" << direction;
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("invalid_direction"));
+        return;
+    }
+    qCDebug(lcEffect) << "Cycle direction:" << direction << "forward:" << forward;
+
+    // Get the active window
+    KWin::EffectWindow* activeWindow = getActiveWindow();
+    if (!activeWindow || !shouldHandleWindow(activeWindow)) {
+        qCDebug(lcEffect) << "No valid active window for cycle";
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("no_window"));
+        return;
+    }
+
+    QString windowId = getWindowId(activeWindow);
+
+    // Get the zone for the active window
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("dbus_error"));
+        return;
+    }
+
+    QDBusMessage zoneMsg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), windowId);
+    QString currentZoneId;
+    if (zoneMsg.type() == QDBusMessage::ReplyMessage && !zoneMsg.arguments().isEmpty()) {
+        currentZoneId = zoneMsg.arguments().at(0).toString();
+    }
+
+    if (currentZoneId.isEmpty()) {
+        qCDebug(lcEffect) << "Active window not snapped to any zone";
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("not_snapped"));
+        return;
+    }
+
+    // Get all windows in this zone from daemon (unordered set from QHash)
+    QDBusMessage windowsMsg = m_windowTrackingInterface->call(QStringLiteral("getWindowsInZone"), currentZoneId);
+    QStringList windowIdsInZone;
+    if (windowsMsg.type() == QDBusMessage::ReplyMessage && !windowsMsg.arguments().isEmpty()) {
+        windowIdsInZone = windowsMsg.arguments().at(0).toStringList();
+    }
+
+    if (windowIdsInZone.size() < 2) {
+        qCDebug(lcEffect) << "Only one window in zone, nothing to cycle";
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"));
+        return;
+    }
+
+    // Build a z-order sorted list of windows in this zone
+    // KWin's stackingOrder() returns windows from bottom to top, giving us a deterministic
+    // cycling order based on window stacking rather than arbitrary hash iteration order.
+    // This provides a more intuitive user experience where cycling follows visual layering.
+    QSet<QString> zoneWindowSet(windowIdsInZone.begin(), windowIdsInZone.end());
+    QVector<KWin::EffectWindow*> sortedWindowsInZone;
+
+    const auto stackingOrder = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : stackingOrder) {
+        if (w && zoneWindowSet.contains(getWindowId(w))) {
+            sortedWindowsInZone.append(w);
+        }
+    }
+
+    if (sortedWindowsInZone.size() < 2) {
+        // Some windows from daemon might have been closed
+        qCDebug(lcEffect) << "Less than 2 windows found in stacking order for zone";
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"));
+        return;
+    }
+
+    // Find the current window's index in the sorted list
+    int currentIndex = -1;
+    for (int i = 0; i < sortedWindowsInZone.size(); ++i) {
+        if (sortedWindowsInZone[i] == activeWindow) {
+            currentIndex = i;
+            break;
+        }
+    }
+
+    if (currentIndex < 0) {
+        qCDebug(lcEffect) << "Active window not found in zone's sorted window list";
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("window_stacking_mismatch"));
+        return;
+    }
+
+    // Calculate the next window index (wrap around)
+    int nextIndex;
+    if (forward) {
+        nextIndex = (currentIndex + 1) % sortedWindowsInZone.size();
+    } else {
+        nextIndex = (currentIndex - 1 + sortedWindowsInZone.size()) % sortedWindowsInZone.size();
+    }
+
+    KWin::EffectWindow* targetWindow = sortedWindowsInZone.at(nextIndex);
+    QString targetWindowId = getWindowId(targetWindow);
+    qCDebug(lcEffect) << "Cycling from window" << currentIndex << "to" << nextIndex
+                      << "- target:" << targetWindowId << "(z-order sorted)";
+
+    // Activate the target window
+    qCDebug(lcEffect) << "Activating window" << targetWindowId;
+    KWin::effects->activateWindow(targetWindow);
+    emitNavigationFeedback(true, QStringLiteral("cycle"));
 }
 
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)

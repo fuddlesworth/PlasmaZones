@@ -62,6 +62,7 @@ private Q_SLOTS:
     void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
                                   const QString& zoneGeometry);
     void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
+    void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
 
 private:
     // Window management

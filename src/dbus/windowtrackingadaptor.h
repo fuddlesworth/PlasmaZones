@@ -259,6 +259,15 @@ public Q_SLOTS:
     void rotateWindowsInLayout(bool clockwise);
 
     /**
+     * @brief Cycle focus between windows stacked in the same zone
+     * @param forward true to cycle to next window, false to cycle to previous
+     * @note This is useful for monocle-style workflows where multiple windows are snapped
+     *       to the same zone and the user wants to cycle through them without using Alt+Tab
+     * @note Emits cycleWindowsInZoneRequested signal for KWin effect to handle
+     */
+    void cycleWindowsInZone(bool forward);
+
+    /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
      * @return true if window is floating
@@ -383,6 +392,14 @@ Q_SIGNALS:
      * @param rotationData JSON array of window moves: [{windowId, targetZoneId, x, y, w, h}, ...]
      */
     void rotateWindowsRequested(bool clockwise, const QString& rotationData);
+
+    /**
+     * @brief Request to cycle focus within the same zone as the currently focused window
+     * @param directive Cycle directive (e.g., "cycle:forward", "cycle:backward")
+     * @param unused Reserved for future use (currently empty)
+     * @note The KWin effect will determine the active window and cycle within its zone
+     */
+    void cycleWindowsInZoneRequested(const QString& directive, const QString& unused);
 
 private Q_SLOTS:
     /**
