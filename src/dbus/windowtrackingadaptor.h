@@ -394,12 +394,12 @@ Q_SIGNALS:
     void rotateWindowsRequested(bool clockwise, const QString& rotationData);
 
     /**
-     * @brief Request to cycle focus to another window in the same zone
-     * @param targetWindowId Window ID to focus
-     * @param targetZoneId Zone ID where the window is located
-     * @note The KWin effect will use this to activate the target window
+     * @brief Request to cycle focus within the same zone as the currently focused window
+     * @param directive Cycle directive (e.g., "cycle:forward", "cycle:backward")
+     * @param unused Reserved for future use (currently empty)
+     * @note The KWin effect will determine the active window and cycle within its zone
      */
-    void cycleWindowsInZoneRequested(const QString& targetWindowId, const QString& targetZoneId);
+    void cycleWindowsInZoneRequested(const QString& directive, const QString& unused);
 
 private Q_SLOTS:
     /**

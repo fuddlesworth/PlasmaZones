@@ -1557,7 +1557,7 @@ void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive
 
     if (currentIndex < 0) {
         qCDebug(lcEffect) << "Active window not found in zone's sorted window list";
-        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("window_not_in_zone"));
+        emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("window_stacking_mismatch"));
         return;
     }
 
