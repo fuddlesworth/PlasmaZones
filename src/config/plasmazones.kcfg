@@ -218,39 +218,81 @@
     </entry>
     <entry name="QuickLayout1Shortcut" type="String">
       <label>Shortcut to apply quick layout 1</label>
-      <default>Meta+Ctrl+Alt+1</default>
+      <default>Meta+Alt+1</default>
     </entry>
     <entry name="QuickLayout2Shortcut" type="String">
       <label>Shortcut to apply quick layout 2</label>
-      <default>Meta+Ctrl+Alt+2</default>
+      <default>Meta+Alt+2</default>
     </entry>
     <entry name="QuickLayout3Shortcut" type="String">
       <label>Shortcut to apply quick layout 3</label>
-      <default>Meta+Ctrl+Alt+3</default>
+      <default>Meta+Alt+3</default>
     </entry>
     <entry name="QuickLayout4Shortcut" type="String">
       <label>Shortcut to apply quick layout 4</label>
-      <default>Meta+Ctrl+Alt+4</default>
+      <default>Meta+Alt+4</default>
     </entry>
     <entry name="QuickLayout5Shortcut" type="String">
       <label>Shortcut to apply quick layout 5</label>
-      <default>Meta+Ctrl+Alt+5</default>
+      <default>Meta+Alt+5</default>
     </entry>
     <entry name="QuickLayout6Shortcut" type="String">
       <label>Shortcut to apply quick layout 6</label>
-      <default>Meta+Ctrl+Alt+6</default>
+      <default>Meta+Alt+6</default>
     </entry>
     <entry name="QuickLayout7Shortcut" type="String">
       <label>Shortcut to apply quick layout 7</label>
-      <default>Meta+Ctrl+Alt+7</default>
+      <default>Meta+Alt+7</default>
     </entry>
     <entry name="QuickLayout8Shortcut" type="String">
       <label>Shortcut to apply quick layout 8</label>
-      <default>Meta+Ctrl+Alt+8</default>
+      <default>Meta+Alt+8</default>
     </entry>
     <entry name="QuickLayout9Shortcut" type="String">
       <label>Shortcut to apply quick layout 9</label>
-      <default>Meta+Ctrl+Alt+9</default>
+      <default>Meta+Alt+9</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Navigation Shortcuts (keyboard navigation, snap to zone by number)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="NavigationShortcuts">
+    <entry name="SnapToZone1" type="String">
+      <label>Shortcut to snap active window to zone 1</label>
+      <default>Meta+Ctrl+1</default>
+    </entry>
+    <entry name="SnapToZone2" type="String">
+      <label>Shortcut to snap active window to zone 2</label>
+      <default>Meta+Ctrl+2</default>
+    </entry>
+    <entry name="SnapToZone3" type="String">
+      <label>Shortcut to snap active window to zone 3</label>
+      <default>Meta+Ctrl+3</default>
+    </entry>
+    <entry name="SnapToZone4" type="String">
+      <label>Shortcut to snap active window to zone 4</label>
+      <default>Meta+Ctrl+4</default>
+    </entry>
+    <entry name="SnapToZone5" type="String">
+      <label>Shortcut to snap active window to zone 5</label>
+      <default>Meta+Ctrl+5</default>
+    </entry>
+    <entry name="SnapToZone6" type="String">
+      <label>Shortcut to snap active window to zone 6</label>
+      <default>Meta+Ctrl+6</default>
+    </entry>
+    <entry name="SnapToZone7" type="String">
+      <label>Shortcut to snap active window to zone 7</label>
+      <default>Meta+Ctrl+7</default>
+    </entry>
+    <entry name="SnapToZone8" type="String">
+      <label>Shortcut to snap active window to zone 8</label>
+      <default>Meta+Ctrl+8</default>
+    </entry>
+    <entry name="SnapToZone9" type="String">
+      <label>Shortcut to snap active window to zone 9</label>
+      <default>Meta+Ctrl+9</default>
     </entry>
   </group>
 

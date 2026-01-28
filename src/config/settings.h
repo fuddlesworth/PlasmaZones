@@ -166,6 +166,26 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString toggleWindowFloatShortcut READ toggleWindowFloatShortcut WRITE setToggleWindowFloatShortcut
                    NOTIFY toggleWindowFloatShortcutChanged)
 
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    Q_PROPERTY(QString snapToZone1Shortcut READ snapToZone1Shortcut WRITE setSnapToZone1Shortcut NOTIFY
+                   snapToZone1ShortcutChanged)
+    Q_PROPERTY(QString snapToZone2Shortcut READ snapToZone2Shortcut WRITE setSnapToZone2Shortcut NOTIFY
+                   snapToZone2ShortcutChanged)
+    Q_PROPERTY(QString snapToZone3Shortcut READ snapToZone3Shortcut WRITE setSnapToZone3Shortcut NOTIFY
+                   snapToZone3ShortcutChanged)
+    Q_PROPERTY(QString snapToZone4Shortcut READ snapToZone4Shortcut WRITE setSnapToZone4Shortcut NOTIFY
+                   snapToZone4ShortcutChanged)
+    Q_PROPERTY(QString snapToZone5Shortcut READ snapToZone5Shortcut WRITE setSnapToZone5Shortcut NOTIFY
+                   snapToZone5ShortcutChanged)
+    Q_PROPERTY(QString snapToZone6Shortcut READ snapToZone6Shortcut WRITE setSnapToZone6Shortcut NOTIFY
+                   snapToZone6ShortcutChanged)
+    Q_PROPERTY(QString snapToZone7Shortcut READ snapToZone7Shortcut WRITE setSnapToZone7Shortcut NOTIFY
+                   snapToZone7ShortcutChanged)
+    Q_PROPERTY(QString snapToZone8Shortcut READ snapToZone8Shortcut WRITE setSnapToZone8Shortcut NOTIFY
+                   snapToZone8ShortcutChanged)
+    Q_PROPERTY(QString snapToZone9Shortcut READ snapToZone9Shortcut WRITE setSnapToZone9Shortcut NOTIFY
+                   snapToZone9ShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -603,6 +623,57 @@ public:
     }
     void setToggleWindowFloatShortcut(const QString& shortcut);
 
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    QString snapToZone1Shortcut() const
+    {
+        return m_snapToZoneShortcuts[0];
+    }
+    void setSnapToZone1Shortcut(const QString& shortcut);
+    QString snapToZone2Shortcut() const
+    {
+        return m_snapToZoneShortcuts[1];
+    }
+    void setSnapToZone2Shortcut(const QString& shortcut);
+    QString snapToZone3Shortcut() const
+    {
+        return m_snapToZoneShortcuts[2];
+    }
+    void setSnapToZone3Shortcut(const QString& shortcut);
+    QString snapToZone4Shortcut() const
+    {
+        return m_snapToZoneShortcuts[3];
+    }
+    void setSnapToZone4Shortcut(const QString& shortcut);
+    QString snapToZone5Shortcut() const
+    {
+        return m_snapToZoneShortcuts[4];
+    }
+    void setSnapToZone5Shortcut(const QString& shortcut);
+    QString snapToZone6Shortcut() const
+    {
+        return m_snapToZoneShortcuts[5];
+    }
+    void setSnapToZone6Shortcut(const QString& shortcut);
+    QString snapToZone7Shortcut() const
+    {
+        return m_snapToZoneShortcuts[6];
+    }
+    void setSnapToZone7Shortcut(const QString& shortcut);
+    QString snapToZone8Shortcut() const
+    {
+        return m_snapToZoneShortcuts[7];
+    }
+    void setSnapToZone8Shortcut(const QString& shortcut);
+    QString snapToZone9Shortcut() const
+    {
+        return m_snapToZoneShortcuts[8];
+    }
+    void setSnapToZone9Shortcut(const QString& shortcut);
+
+    // Helper to get snap-to-zone shortcut by index (0-8)
+    QString snapToZoneShortcut(int index) const;
+    void setSnapToZoneShortcut(int index, const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -706,6 +777,13 @@ private:
     QString m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Return");
     QString m_restoreWindowSizeShortcut = QStringLiteral("Meta+Escape");
     QString m_toggleWindowFloatShortcut = QStringLiteral("Meta+F");
+
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.
+    QString m_snapToZoneShortcuts[9] = {
+        QStringLiteral("Meta+Ctrl+1"), QStringLiteral("Meta+Ctrl+2"), QStringLiteral("Meta+Ctrl+3"),
+        QStringLiteral("Meta+Ctrl+4"), QStringLiteral("Meta+Ctrl+5"), QStringLiteral("Meta+Ctrl+6"),
+        QStringLiteral("Meta+Ctrl+7"), QStringLiteral("Meta+Ctrl+8"), QStringLiteral("Meta+Ctrl+9")};
 };
 
 } // namespace PlasmaZones

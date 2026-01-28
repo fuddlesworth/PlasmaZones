@@ -101,6 +101,12 @@ Q_SIGNALS:
      */
     void toggleWindowFloatRequested();
 
+    /**
+     * @brief Emitted when snap to zone by number is requested
+     * @param zoneNumber Zone number (1-9)
+     */
+    void snapToZoneRequested(int zoneNumber);
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -137,11 +143,16 @@ private Q_SLOTS:
     void updateRestoreWindowSizeShortcut();
     void updateToggleWindowFloatShortcut();
 
+    // Snap to Zone by Number
+    void onSnapToZone(int zoneNumber);
+    void updateSnapToZoneShortcut(int index);
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
     void setupQuickLayoutShortcuts();
     void setupNavigationShortcuts();
+    void setupSnapToZoneShortcuts();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -163,6 +174,9 @@ private:
     QAction* m_pushToEmptyZoneAction = nullptr;
     QAction* m_restoreWindowSizeAction = nullptr;
     QAction* m_toggleWindowFloatAction = nullptr;
+
+    // Snap to Zone by Number actions
+    QVector<QAction*> m_snapToZoneActions;
 };
 
 } // namespace PlasmaZones

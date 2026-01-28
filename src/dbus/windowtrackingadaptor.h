@@ -234,6 +234,13 @@ public Q_SLOTS:
     void toggleWindowFloat();
 
     /**
+     * @brief Snap the focused window to a zone by its number
+     * @param zoneNumber Zone number (1-9)
+     * @note Finds zone with matching zoneNumber property in current layout and snaps window to it
+     */
+    void snapToZoneByNumber(int zoneNumber);
+
+    /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
      * @return true if window is floating

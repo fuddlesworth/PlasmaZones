@@ -594,7 +594,7 @@ void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
 QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
 {
     if (slotNumber < 1 || slotNumber > 9) {
-        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber;
+        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-9)";
         return QString();
     }
 
@@ -608,7 +608,7 @@ QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
 void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
     if (slotNumber < 1 || slotNumber > 9) {
-        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber;
+        qCWarning(lcDbusLayout) << "Invalid quick layout slot number:" << slotNumber << "(must be 1-9)";
         return;
     }
 

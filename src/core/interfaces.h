@@ -316,6 +316,17 @@ Q_SIGNALS:
     void pushToEmptyZoneShortcutChanged();
     void restoreWindowSizeShortcutChanged();
     void toggleWindowFloatShortcutChanged();
+
+    // Snap to Zone by Number Shortcuts
+    void snapToZone1ShortcutChanged();
+    void snapToZone2ShortcutChanged();
+    void snapToZone3ShortcutChanged();
+    void snapToZone4ShortcutChanged();
+    void snapToZone5ShortcutChanged();
+    void snapToZone6ShortcutChanged();
+    void snapToZone7ShortcutChanged();
+    void snapToZone8ShortcutChanged();
+    void snapToZone9ShortcutChanged();
 };
 
 /**

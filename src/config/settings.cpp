@@ -732,6 +732,97 @@ void Settings::setToggleWindowFloatShortcut(const QString& shortcut)
     }
 }
 
+// Snap to Zone by Number Shortcuts
+QString Settings::snapToZoneShortcut(int index) const
+{
+    if (index >= 0 && index < 9) {
+        return m_snapToZoneShortcuts[index];
+    }
+    return QString();
+}
+
+void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
+{
+    if (index >= 0 && index < 9 && m_snapToZoneShortcuts[index] != shortcut) {
+        m_snapToZoneShortcuts[index] = shortcut;
+        switch (index) {
+        case 0:
+            Q_EMIT snapToZone1ShortcutChanged();
+            break;
+        case 1:
+            Q_EMIT snapToZone2ShortcutChanged();
+            break;
+        case 2:
+            Q_EMIT snapToZone3ShortcutChanged();
+            break;
+        case 3:
+            Q_EMIT snapToZone4ShortcutChanged();
+            break;
+        case 4:
+            Q_EMIT snapToZone5ShortcutChanged();
+            break;
+        case 5:
+            Q_EMIT snapToZone6ShortcutChanged();
+            break;
+        case 6:
+            Q_EMIT snapToZone7ShortcutChanged();
+            break;
+        case 7:
+            Q_EMIT snapToZone8ShortcutChanged();
+            break;
+        case 8:
+            Q_EMIT snapToZone9ShortcutChanged();
+            break;
+        }
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setSnapToZone1Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(0, shortcut);
+}
+
+void Settings::setSnapToZone2Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(1, shortcut);
+}
+
+void Settings::setSnapToZone3Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(2, shortcut);
+}
+
+void Settings::setSnapToZone4Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(3, shortcut);
+}
+
+void Settings::setSnapToZone5Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(4, shortcut);
+}
+
+void Settings::setSnapToZone6Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(5, shortcut);
+}
+
+void Settings::setSnapToZone7Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(6, shortcut);
+}
+
+void Settings::setSnapToZone8Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(7, shortcut);
+}
+
+void Settings::setSnapToZone9Shortcut(const QString& shortcut)
+{
+    setSnapToZoneShortcut(8, shortcut);
+}
+
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -1024,6 +1115,13 @@ void Settings::load()
     m_restoreWindowSizeShortcut = navigationShortcuts.readEntry("RestoreWindowSize", QStringLiteral("Meta+Escape"));
     m_toggleWindowFloatShortcut = navigationShortcuts.readEntry("ToggleWindowFloat", QStringLiteral("Meta+F"));
 
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    for (int i = 0; i < 9; ++i) {
+        QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
+        QString defaultShortcut = QStringLiteral("Meta+Ctrl+%1").arg(i + 1);
+        m_snapToZoneShortcuts[i] = navigationShortcuts.readEntry(key, defaultShortcut);
+    }
+
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1135,6 +1233,12 @@ void Settings::save()
     navigationShortcuts.writeEntry("RestoreWindowSize", m_restoreWindowSizeShortcut);
     navigationShortcuts.writeEntry("ToggleWindowFloat", m_toggleWindowFloatShortcut);
 
+    // Snap to Zone by Number Shortcuts
+    for (int i = 0; i < 9; ++i) {
+        QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
+        navigationShortcuts.writeEntry(key, m_snapToZoneShortcuts[i]);
+    }
+
     config->sync();
 }
 
@@ -1223,6 +1327,11 @@ void Settings::reset()
     m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Return");
     m_restoreWindowSizeShortcut = QStringLiteral("Meta+Escape");
     m_toggleWindowFloatShortcut = QStringLiteral("Meta+F");
+
+    // Snap to Zone by Number Shortcuts
+    for (int i = 0; i < 9; ++i) {
+        m_snapToZoneShortcuts[i] = QStringLiteral("Meta+Ctrl+%1").arg(i + 1);
+    }
 
     Q_EMIT settingsChanged();
 }

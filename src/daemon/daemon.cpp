@@ -433,6 +433,11 @@ void Daemon::start()
         m_windowTrackingAdaptor->toggleWindowFloat();
     });
 
+    // Snap to zone by number shortcut
+    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
+        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber);
+    });
+
     // Connect to KWin script
     connectToKWinScript();
 
