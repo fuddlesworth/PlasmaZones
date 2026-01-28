@@ -1116,7 +1116,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
         return;
     }
 
-    QString zoneId = targetZone->id().toString(QUuid::WithoutBraces);
+    // Use default toString() format (with braces) to match m_windowZoneAssignments
+    QString zoneId = targetZone->id().toString();
     QString geometry = getZoneGeometry(zoneId);
     if (geometry.isEmpty()) {
         qCWarning(lcDbusWindow) << "Could not get geometry for zone" << zoneNumber;
@@ -1127,6 +1128,146 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
     qCDebug(lcDbusWindow) << "Snapping to zone" << zoneNumber << "(" << zoneId << ") with geometry" << geometry;
     Q_EMIT moveWindowToZoneRequested(zoneId, geometry);
     Q_EMIT navigationFeedback(true, QStringLiteral("snap"), QString());
+}
+
+void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
+{
+    qCDebug(lcDbusWindow) << "rotateWindowsInLayout called, clockwise:" << clockwise;
+
+    if (!m_layoutManager) {
+        qCWarning(lcDbusWindow) << "No layout manager available";
+        Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_layout_manager"));
+        return;
+    }
+
+    auto* layout = m_layoutManager->activeLayout();
+    if (!layout) {
+        qCDebug(lcDbusWindow) << "No active layout";
+        Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"));
+        return;
+    }
+
+    const auto& zones = layout->zones();
+    if (zones.isEmpty()) {
+        qCDebug(lcDbusWindow) << "Layout has no zones";
+        Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_zones"));
+        return;
+    }
+
+    // Single zone layout - rotation is a no-op
+    if (zones.size() == 1) {
+        qCDebug(lcDbusWindow) << "Single zone layout, rotation is no-op";
+        Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("single_zone"));
+        return;
+    }
+
+    // Build zone order by zone number (1, 2, 3, ...)
+    QVector<Zone*> orderedZones;
+    for (int i = 1; i <= zones.size(); ++i) {
+        for (Zone* zone : zones) {
+            if (zone->zoneNumber() == i) {
+                orderedZones.append(zone);
+                break;
+            }
+        }
+    }
+
+    // If zone numbers are not sequential (shouldn't happen), fall back to vector order
+    if (orderedZones.size() != zones.size()) {
+        orderedZones = zones;
+    }
+
+    int numZones = orderedZones.size();
+
+    // Collect all non-floating windows and their current zone indices
+    // Also track which screen each window is on for multi-monitor support
+    struct WindowZoneInfo {
+        QString windowId;
+        int zoneIndex;
+        QString screenName;
+    };
+    QVector<WindowZoneInfo> windowZoneIndices;
+
+    for (int i = 0; i < numZones; ++i) {
+        // Use default toString() format (with braces) to match how zone IDs are stored
+        // in m_windowZoneAssignments when windows are snapped via drag
+        QString zoneId = orderedZones[i]->id().toString();
+        QStringList windowsInZone = getWindowsInZone(zoneId);
+        for (const QString& windowId : windowsInZone) {
+            // Skip floating windows - they should not participate in rotation
+            if (m_floatingWindows.contains(windowId)) {
+                qCDebug(lcDbusWindow) << "Skipping floating window:" << windowId;
+                continue;
+            }
+
+            // Get the screen this window is on for proper geometry calculation
+            QString screenName = m_windowScreenAssignments.value(windowId);
+
+            windowZoneIndices.append({windowId, i, screenName});
+        }
+    }
+
+    if (windowZoneIndices.isEmpty()) {
+        qCDebug(lcDbusWindow) << "No snapped windows to rotate";
+        Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_snapped_windows"));
+        return;
+    }
+
+    // Build rotation data: calculate destination zone for each window
+    QJsonArray rotationArray;
+    for (const auto& windowInfo : windowZoneIndices) {
+        const QString& windowId = windowInfo.windowId;
+        int currentIndex = windowInfo.zoneIndex;
+        const QString& screenName = windowInfo.screenName;
+
+        // Calculate destination index
+        int destIndex;
+        if (clockwise) {
+            destIndex = (currentIndex + 1) % numZones;
+        } else {
+            destIndex = (currentIndex - 1 + numZones) % numZones;
+        }
+
+        Zone* destZone = orderedZones[destIndex];
+        // Use default toString() format (with braces) to match m_windowZoneAssignments
+        QString destZoneId = destZone->id().toString();
+
+        // Get geometry for destination zone ON THE CORRECT SCREEN
+        // This fixes multi-monitor issues where windows could get wrong coordinates
+        QString geometry = screenName.isEmpty() ? getZoneGeometry(destZoneId)
+                                                 : getZoneGeometryForScreen(destZoneId, screenName);
+        if (geometry.isEmpty()) {
+            qCWarning(lcDbusWindow) << "Could not get geometry for zone" << destZone->zoneNumber();
+            continue;
+        }
+
+        QJsonDocument geomDoc = QJsonDocument::fromJson(geometry.toUtf8());
+        QJsonObject geomObj = geomDoc.object();
+
+        QJsonObject moveObj;
+        moveObj[QStringLiteral("windowId")] = windowId;
+        moveObj[QStringLiteral("targetZoneId")] = destZoneId;
+        moveObj[QStringLiteral("x")] = geomObj[QStringLiteral("x")];
+        moveObj[QStringLiteral("y")] = geomObj[QStringLiteral("y")];
+        moveObj[QStringLiteral("width")] = geomObj[QStringLiteral("width")];
+        moveObj[QStringLiteral("height")] = geomObj[QStringLiteral("height")];
+        rotationArray.append(moveObj);
+
+        qCDebug(lcDbusWindow) << "Window" << windowId << "rotating from zone"
+                              << (currentIndex + 1) << "to zone" << (destIndex + 1);
+    }
+
+    if (rotationArray.isEmpty()) {
+        qCWarning(lcDbusWindow) << "No valid rotation moves to execute";
+        Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("rotation_failed"));
+        return;
+    }
+
+    QString rotationData = QString::fromUtf8(QJsonDocument(rotationArray).toJson(QJsonDocument::Compact));
+    qCInfo(lcDbusWindow) << "Rotating" << rotationArray.size() << "windows"
+                         << (clockwise ? "clockwise" : "counterclockwise");
+    Q_EMIT rotateWindowsRequested(clockwise, rotationData);
+    Q_EMIT navigationFeedback(true, QStringLiteral("rotate"), QString());
 }
 
 bool WindowTrackingAdaptor::queryWindowFloating(const QString& windowId)

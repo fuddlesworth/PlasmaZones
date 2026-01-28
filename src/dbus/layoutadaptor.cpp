@@ -542,7 +542,8 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     m_layoutManager->saveLayouts();
 
     qCDebug(lcDbusLayout) << "Created layout from JSON:" << layout->id();
-    return layout->id().toString(QUuid::WithoutBraces);
+    // Use default toString() format (with braces) for consistency with other D-Bus methods
+    return layout->id().toString();
 }
 
 static QString findEditorExecutable()

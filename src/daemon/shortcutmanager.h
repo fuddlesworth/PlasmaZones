@@ -113,6 +113,12 @@ Q_SIGNALS:
      */
     void snapToZoneRequested(int zoneNumber);
 
+    /**
+     * @brief Emitted when rotate windows is requested
+     * @param clockwise true for clockwise, false for counterclockwise
+     */
+    void rotateWindowsRequested(bool clockwise);
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -165,6 +171,12 @@ private Q_SLOTS:
     void onSnapToZone(int zoneNumber);
     void updateSnapToZoneShortcut(int index);
 
+    // Rotate Windows
+    void onRotateWindowsClockwise();
+    void onRotateWindowsCounterclockwise();
+    void updateRotateWindowsClockwiseShortcut();
+    void updateRotateWindowsCounterclockwiseShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -172,6 +184,7 @@ private:
     void setupNavigationShortcuts();
     void setupSwapWindowShortcuts();
     void setupSnapToZoneShortcuts();
+    void setupRotateWindowsShortcuts();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -202,6 +215,10 @@ private:
 
     // Snap to Zone by Number actions
     QVector<QAction*> m_snapToZoneActions;
+
+    // Rotate Windows actions
+    QAction* m_rotateWindowsClockwiseAction = nullptr;
+    QAction* m_rotateWindowsCounterclockwiseAction = nullptr;
 };
 
 } // namespace PlasmaZones

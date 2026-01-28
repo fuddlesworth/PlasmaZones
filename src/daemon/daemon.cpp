@@ -457,6 +457,11 @@ void Daemon::start()
                 m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
             });
 
+    // Rotate windows in layout shortcuts
+    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool clockwise) {
+        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise);
+    });
+
     // Snap to zone by number shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
         m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber);

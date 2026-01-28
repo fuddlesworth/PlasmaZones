@@ -363,6 +363,16 @@
       <label>Shortcut to snap active window to zone 9</label>
       <default>Meta+Ctrl+9</default>
     </entry>
+
+    <!-- Rotate Windows Shortcuts -->
+    <entry name="RotateWindowsClockwise" type="String">
+      <label>Shortcut to rotate all windows clockwise through zones</label>
+      <default>Meta+Ctrl+]</default>
+    </entry>
+    <entry name="RotateWindowsCounterclockwise" type="String">
+      <label>Shortcut to rotate all windows counterclockwise through zones</label>
+      <default>Meta+Ctrl+[</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

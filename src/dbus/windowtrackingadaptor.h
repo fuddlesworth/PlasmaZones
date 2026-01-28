@@ -249,6 +249,15 @@ public Q_SLOTS:
     void snapToZoneByNumber(int zoneNumber);
 
     /**
+     * @brief Rotate all windows in the current layout clockwise or counterclockwise
+     * @param clockwise true for clockwise rotation, false for counterclockwise
+     * @note Windows in zone N move to zone N+1 (clockwise) or N-1 (counterclockwise)
+     * @note Last zone wraps around to first zone and vice versa
+     * @note Emits rotateWindowsRequested signal for KWin effect to handle
+     */
+    void rotateWindowsInLayout(bool clockwise);
+
+    /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
      * @return true if window is floating
@@ -366,6 +375,13 @@ Q_SIGNALS:
      * @param zoneGeometry JSON geometry {x, y, width, height} for the target zone
      */
     void swapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId, const QString& zoneGeometry);
+
+    /**
+     * @brief Request to rotate all windows in the layout
+     * @param clockwise true for clockwise rotation, false for counterclockwise
+     * @param rotationData JSON array of window moves: [{windowId, targetZoneId, x, y, w, h}, ...]
+     */
+    void rotateWindowsRequested(bool clockwise, const QString& rotationData);
 
 private Q_SLOTS:
     /**

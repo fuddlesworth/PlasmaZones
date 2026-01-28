@@ -105,6 +105,12 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
         updateSnapToZoneShortcut(8);
     });
 
+    // Rotate Windows shortcuts
+    connect(m_settings, &Settings::rotateWindowsClockwiseShortcutChanged, this,
+            &ShortcutManager::updateRotateWindowsClockwiseShortcut);
+    connect(m_settings, &Settings::rotateWindowsCounterclockwiseShortcutChanged, this,
+            &ShortcutManager::updateRotateWindowsCounterclockwiseShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -125,6 +131,7 @@ void ShortcutManager::registerShortcuts()
     setupNavigationShortcuts();
     setupSwapWindowShortcuts();
     setupSnapToZoneShortcuts();
+    setupRotateWindowsShortcuts();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -166,6 +173,10 @@ void ShortcutManager::updateShortcuts()
     for (int i = 0; i < 9; ++i) {
         updateSnapToZoneShortcut(i);
     }
+
+    // Rotate Windows shortcuts
+    updateRotateWindowsClockwiseShortcut();
+    updateRotateWindowsCounterclockwiseShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -237,6 +248,13 @@ void ShortcutManager::unregisterShortcuts()
     // Snap to Zone actions
     qDeleteAll(m_snapToZoneActions);
     m_snapToZoneActions.clear();
+
+    // Rotate Windows actions
+    delete m_rotateWindowsClockwiseAction;
+    m_rotateWindowsClockwiseAction = nullptr;
+
+    delete m_rotateWindowsCounterclockwiseAction;
+    m_rotateWindowsCounterclockwiseAction = nullptr;
 }
 
 void ShortcutManager::onOpenEditor()
@@ -701,6 +719,59 @@ void ShortcutManager::updateSnapToZoneShortcut(int index)
     if (index >= 0 && index < m_snapToZoneActions.size()) {
         KGlobalAccel::setGlobalShortcut(m_snapToZoneActions[index],
                                         QKeySequence(m_settings->snapToZoneShortcut(index)));
+    }
+}
+
+// Rotate Windows - Setup
+void ShortcutManager::setupRotateWindowsShortcuts()
+{
+    if (!m_rotateWindowsClockwiseAction) {
+        m_rotateWindowsClockwiseAction = new QAction(i18n("Rotate Windows Clockwise"), this);
+        m_rotateWindowsClockwiseAction->setObjectName(QStringLiteral("rotate_windows_clockwise"));
+        KGlobalAccel::setGlobalShortcut(m_rotateWindowsClockwiseAction,
+                                        QKeySequence(m_settings->rotateWindowsClockwiseShortcut()));
+        connect(m_rotateWindowsClockwiseAction, &QAction::triggered, this, &ShortcutManager::onRotateWindowsClockwise);
+    }
+
+    if (!m_rotateWindowsCounterclockwiseAction) {
+        m_rotateWindowsCounterclockwiseAction = new QAction(i18n("Rotate Windows Counterclockwise"), this);
+        m_rotateWindowsCounterclockwiseAction->setObjectName(QStringLiteral("rotate_windows_counterclockwise"));
+        KGlobalAccel::setGlobalShortcut(m_rotateWindowsCounterclockwiseAction,
+                                        QKeySequence(m_settings->rotateWindowsCounterclockwiseShortcut()));
+        connect(m_rotateWindowsCounterclockwiseAction, &QAction::triggered, this,
+                &ShortcutManager::onRotateWindowsCounterclockwise);
+    }
+
+    qCInfo(lcShortcuts) << "Rotate windows shortcuts registered (Meta+Ctrl+[ / Meta+Ctrl+])";
+}
+
+// Rotate Windows - Slot handlers
+void ShortcutManager::onRotateWindowsClockwise()
+{
+    qCDebug(lcShortcuts) << "Rotate windows clockwise triggered";
+    Q_EMIT rotateWindowsRequested(true);
+}
+
+void ShortcutManager::onRotateWindowsCounterclockwise()
+{
+    qCDebug(lcShortcuts) << "Rotate windows counterclockwise triggered";
+    Q_EMIT rotateWindowsRequested(false);
+}
+
+// Rotate Windows - Shortcut update handlers
+void ShortcutManager::updateRotateWindowsClockwiseShortcut()
+{
+    if (m_rotateWindowsClockwiseAction) {
+        KGlobalAccel::setGlobalShortcut(m_rotateWindowsClockwiseAction,
+                                        QKeySequence(m_settings->rotateWindowsClockwiseShortcut()));
+    }
+}
+
+void ShortcutManager::updateRotateWindowsCounterclockwiseShortcut()
+{
+    if (m_rotateWindowsCounterclockwiseAction) {
+        KGlobalAccel::setGlobalShortcut(m_rotateWindowsCounterclockwiseAction,
+                                        QKeySequence(m_settings->rotateWindowsCounterclockwiseShortcut()));
     }
 }
 

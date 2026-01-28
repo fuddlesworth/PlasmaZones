@@ -554,6 +554,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("swapWindowsRequested"), this,
                                           SLOT(slotSwapWindowsRequested(QString, QString, QString)));
 
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("rotateWindowsRequested"), this,
+                                          SLOT(slotRotateWindowsRequested(bool, QString)));
+
     qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
@@ -1249,6 +1253,111 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
         m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), targetWindowIdToSwap, currentZoneId);
 
         emitNavigationFeedback(true, QStringLiteral("swap"));
+    }
+}
+
+void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString& rotationData)
+{
+    qCDebug(lcEffect) << "Rotate windows requested, clockwise:" << clockwise;
+
+    // Parse rotation data JSON array
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(rotationData.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcEffect) << "Failed to parse rotation data:" << parseError.errorString();
+        emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("parse_error"));
+        return;
+    }
+
+    QJsonArray rotationArray = doc.array();
+    if (rotationArray.isEmpty()) {
+        qCDebug(lcEffect) << "No windows to rotate";
+        emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_windows"));
+        return;
+    }
+
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("dbus_error"));
+        return;
+    }
+
+    // Build a map of windowId -> EffectWindow* for efficient lookup
+    QHash<QString, KWin::EffectWindow*> windowMap;
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && shouldHandleWindow(w)) {
+            windowMap[getWindowId(w)] = w;
+        }
+    }
+
+    int successCount = 0;
+
+    // Process each window rotation
+    for (const QJsonValue& value : rotationArray) {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        QJsonObject moveObj = value.toObject();
+        QString windowId = moveObj[QStringLiteral("windowId")].toString();
+        QString targetZoneId = moveObj[QStringLiteral("targetZoneId")].toString();
+        int x = moveObj[QStringLiteral("x")].toInt();
+        int y = moveObj[QStringLiteral("y")].toInt();
+        int width = moveObj[QStringLiteral("width")].toInt();
+        int height = moveObj[QStringLiteral("height")].toInt();
+
+        if (windowId.isEmpty() || targetZoneId.isEmpty()) {
+            continue;
+        }
+
+        // Find the window
+        KWin::EffectWindow* window = windowMap.value(windowId);
+        if (!window) {
+            qCDebug(lcEffect) << "Window not found for rotation:" << windowId;
+            continue;
+        }
+
+        // Check if window is floating - skip if so (double-check, daemon should filter these)
+        QString stableId = extractStableId(windowId);
+        if (m_floatingWindows.contains(stableId)) {
+            qCDebug(lcEffect) << "Window is floating, skipping rotation:" << windowId;
+            continue;
+        }
+
+        // Ensure pre-snap geometry is preserved before rotation
+        // This is important so windows can be restored to original size later
+        QDBusMessage checkMsg = m_windowTrackingInterface->call(QStringLiteral("hasPreSnapGeometry"), windowId);
+        bool hasGeometry = false;
+        if (checkMsg.type() == QDBusMessage::ReplyMessage && !checkMsg.arguments().isEmpty()) {
+            hasGeometry = checkMsg.arguments().at(0).toBool();
+        }
+        if (!hasGeometry) {
+            QRectF currentGeom = window->frameGeometry();
+            m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), windowId,
+                                                 static_cast<int>(currentGeom.x()),
+                                                 static_cast<int>(currentGeom.y()),
+                                                 static_cast<int>(currentGeom.width()),
+                                                 static_cast<int>(currentGeom.height()));
+            qCDebug(lcEffect) << "Stored pre-snap geometry for window" << windowId << "before rotation";
+        }
+
+        // Apply the new geometry
+        QRect newGeom(x, y, width, height);
+        applySnapGeometry(window, newGeom);
+
+        // Update the window-zone assignment
+        m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), windowId, targetZoneId);
+
+        qCDebug(lcEffect) << "Rotated window" << windowId << "to zone" << targetZoneId;
+        ++successCount;
+    }
+
+    if (successCount > 0) {
+        qCInfo(lcEffect) << "Rotated" << successCount << "windows" << (clockwise ? "clockwise" : "counterclockwise");
+        emitNavigationFeedback(true, QStringLiteral("rotate"));
+    } else {
+        emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"));
     }
 }
 
