@@ -30,448 +30,436 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:29
+#: src/editor/main.cpp:29
 msgid "PlasmaZones Layout Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:30
+#: src/editor/main.cpp:30
 msgid "Visual layout editor for PlasmaZones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:31
+#: src/editor/main.cpp:31
 msgid "(c) 2026 fuddlesworth"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:32
+#: src/editor/main.cpp:32
 msgid "fuddlesworth"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:41
+#: src/editor/main.cpp:41
 msgid "Layout ID to edit"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:43
+#: src/editor/main.cpp:43
 msgid "Target screen name"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/main.cpp:45
+#: src/editor/main.cpp:45
 msgid "Create new layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:676
+#: src/editor/EditorController.cpp:676
 msgid "New Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:715
+#: src/editor/EditorController.cpp:715
 msgid "Layout ID cannot be empty"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:720
+#: src/editor/EditorController.cpp:720
 msgid "Layout service not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:732
+#: src/editor/EditorController.cpp:732
 msgid "Invalid layout data format"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:861
+#: src/editor/EditorController.cpp:861
 msgid "Services not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1076
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1144
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1180
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1262
+#: src/editor/EditorController.cpp:1076 src/editor/EditorController.cpp:1144
+#: src/editor/EditorController.cpp:1180 src/editor/EditorController.cpp:1262
 msgctxt "@info"
 msgid "Zone not found"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1129
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1165
+#: src/editor/EditorController.cpp:1129 src/editor/EditorController.cpp:1165
 msgctxt "@info"
 msgid "Services not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1424
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:154
+#: src/editor/EditorController.cpp:1424 src/editor/qml/ZoneContextMenu.qml:154
 msgctxt "@action"
 msgid "Bring to Front"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1447
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:178
+#: src/editor/EditorController.cpp:1447 src/editor/qml/ZoneContextMenu.qml:178
 msgctxt "@action"
 msgid "Send to Back"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1470
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:162
+#: src/editor/EditorController.cpp:1470 src/editor/qml/ZoneContextMenu.qml:162
 msgctxt "@action"
 msgid "Bring Forward"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1493
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:170
+#: src/editor/EditorController.cpp:1493 src/editor/qml/ZoneContextMenu.qml:170
 msgctxt "@action"
 msgid "Send Backward"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2150
+#: src/editor/EditorController.cpp:2150
 msgctxt "@action"
 msgid "Delete %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2183
+#: src/editor/EditorController.cpp:2183
 msgctxt "@action"
 msgid "Duplicate %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2271
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2470
+#: src/editor/EditorController.cpp:2271 src/editor/EditorController.cpp:2470
 msgctxt "@action"
 msgid "Move %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2317
+#: src/editor/EditorController.cpp:2317
 msgctxt "@action"
 msgid "Resize %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2593
+#: src/editor/EditorController.cpp:2593
 msgid "Zone name cannot exceed 100 characters"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2602
+#: src/editor/EditorController.cpp:2602
 msgid "Zone name contains invalid characters: < > \" ' \\"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2614
+#: src/editor/EditorController.cpp:2614
 msgid "A zone with this name already exists"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2633
+#: src/editor/EditorController.cpp:2633
 msgid "Zone number must be at least 1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2636
+#: src/editor/EditorController.cpp:2636
 msgid "Zone number cannot exceed 99"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2656
+#: src/editor/EditorController.cpp:2656
 msgid "Zone number %1 is already in use"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3130
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3208
+#: src/editor/EditorController.cpp:3130 src/editor/EditorController.cpp:3208
 msgctxt "@info"
 msgid "Zone manager not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3190
+#: src/editor/EditorController.cpp:3190
 msgctxt "@action"
 msgid "Cut %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3276
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/PasteZonesCommand.cpp:13
+#: src/editor/EditorController.cpp:3276
+#: src/editor/undo/commands/PasteZonesCommand.cpp:13
 msgctxt "@action"
 msgid "Paste %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3404
+#: src/editor/EditorController.cpp:3404
 msgctxt "@action"
 msgid "Reset Shader Parameters"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/AddZoneCommand.cpp:16
+#: src/editor/undo/commands/AddZoneCommand.cpp:16
 msgctxt "@action"
 msgid "Add Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/ApplyTemplateCommand.cpp:13
+#: src/editor/undo/commands/ApplyTemplateCommand.cpp:13
 msgctxt "@action"
 msgid "Apply Template: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/ChangeSelectionCommand.cpp:14
+#: src/editor/undo/commands/ChangeSelectionCommand.cpp:14
 msgctxt "@action"
 msgid "Change Selection"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/ChangeZOrderCommand.cpp:13
+#: src/editor/undo/commands/ChangeZOrderCommand.cpp:13
 msgctxt "@action"
 msgid "Change Z-Order"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/DividerResizeCommand.cpp:15
+#: src/editor/undo/commands/DividerResizeCommand.cpp:15
 msgctxt "@action"
 msgid "Resize at Divider"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/DuplicateZoneCommand.cpp:15
+#: src/editor/undo/commands/DuplicateZoneCommand.cpp:15
 msgctxt "@action"
 msgid "Duplicate Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/FillZoneCommand.cpp:13
+#: src/editor/undo/commands/FillZoneCommand.cpp:13
 msgctxt "@action"
 msgid "Fill Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/SplitZoneCommand.cpp:16
+#: src/editor/undo/commands/SplitZoneCommand.cpp:16
 msgctxt "@action"
 msgid "Split Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp:20
+#: src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp:20
 msgctxt "@action"
 msgid "Update Appearance for %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp:71
+#: src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp:71
 msgctxt "@action"
 msgid "Update Color for %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/ClearAllZonesCommand.cpp:12
+#: src/editor/undo/commands/ClearAllZonesCommand.cpp:12
 msgctxt "@action"
 msgid "Clear All Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/DeleteZoneCommand.cpp:14
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/DeleteZoneWithFillCommand.cpp:14
+#: src/editor/undo/commands/DeleteZoneCommand.cpp:14
+#: src/editor/undo/commands/DeleteZoneWithFillCommand.cpp:14
 msgctxt "@action"
 msgid "Delete Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/UpdateLayoutNameCommand.cpp:13
+#: src/editor/undo/commands/UpdateLayoutNameCommand.cpp:13
 msgctxt "@action"
 msgid "Rename Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/UpdateZoneAppearanceCommand.cpp:15
+#: src/editor/undo/commands/UpdateZoneAppearanceCommand.cpp:15
 msgctxt "@action"
 msgid "Change Zone Appearance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/UpdateZoneGeometryCommand.cpp:14
+#: src/editor/undo/commands/UpdateZoneGeometryCommand.cpp:14
 msgctxt "@action"
 msgid "Move Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/UpdateZoneNameCommand.cpp:14
+#: src/editor/undo/commands/UpdateZoneNameCommand.cpp:14
 msgctxt "@action"
 msgid "Rename Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/UpdateZoneNumberCommand.cpp:16
+#: src/editor/undo/commands/UpdateZoneNumberCommand.cpp:16
 msgctxt "@action"
 msgid "Update Zone Number"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:66
+#: src/editor/qml/ActionButtons.qml:66
 msgctxt "@action:button"
 msgid "Split horizontally"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:67
+#: src/editor/qml/ActionButtons.qml:67
 msgctxt "@info:tooltip"
 msgid "Split this zone into two horizontal sections"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:94
+#: src/editor/qml/ActionButtons.qml:94
 msgctxt "@tooltip"
 msgid "Split horizontally"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:126
+#: src/editor/qml/ActionButtons.qml:126
 msgctxt "@action:button"
 msgid "Split vertically"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:127
+#: src/editor/qml/ActionButtons.qml:127
 msgctxt "@info:tooltip"
 msgid "Split this zone into two vertical sections"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:154
+#: src/editor/qml/ActionButtons.qml:154
 msgctxt "@tooltip"
 msgid "Split vertically"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:186
+#: src/editor/qml/ActionButtons.qml:186
 msgctxt "@action:button"
 msgid "Fill available space"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:187
+#: src/editor/qml/ActionButtons.qml:187
 msgctxt "@info:tooltip"
 msgid "Expand zone to fill available empty space"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:214
+#: src/editor/qml/ActionButtons.qml:214
 msgctxt "@tooltip"
 msgid "Fill available space"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:246
+#: src/editor/qml/ActionButtons.qml:246
 msgctxt "@action:button"
 msgid "Duplicate zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:247
+#: src/editor/qml/ActionButtons.qml:247
 msgctxt "@info:tooltip"
 msgid "Create a copy of this zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:274
+#: src/editor/qml/ActionButtons.qml:274
 msgctxt "@tooltip"
 msgid "Duplicate zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:306
+#: src/editor/qml/ActionButtons.qml:306
 msgctxt "@action:button"
 msgid "Delete zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:307
+#: src/editor/qml/ActionButtons.qml:307
 msgctxt "@info:tooltip"
 msgid "Remove this zone from the layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ActionButtons.qml:334
+#: src/editor/qml/ActionButtons.qml:334
 msgctxt "@tooltip"
 msgid "Delete zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:45
+#: src/editor/qml/ControlBar.qml:45
 msgctxt "@action:button"
 msgid "Add Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:49
+#: src/editor/qml/ControlBar.qml:49
 msgctxt "@info"
 msgid "Click to add a new zone to the layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:51
+#: src/editor/qml/ControlBar.qml:51
 msgctxt "@tooltip"
 msgid ""
 "Add a new zone to the layout. The zone will be created centered on the "
 "canvas."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:74
+#: src/editor/qml/ControlBar.qml:74
 msgctxt "@item:inmenu"
 msgid "Apply Template..."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:81
+#: src/editor/qml/ControlBar.qml:81
 msgctxt "@item:inmenu"
 msgid "Grid 2×2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:86
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:93
+#: src/editor/qml/ControlBar.qml:86 src/editor/qml/ControlBar.qml:93
 msgctxt "@title:group"
 msgid "Grid Layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:88
+#: src/editor/qml/ControlBar.qml:88
 msgctxt "@item:inmenu"
 msgid "Grid 3×2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:95
+#: src/editor/qml/ControlBar.qml:95
 msgctxt "@item:inmenu"
 msgid "Columns 2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:100
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:107
+#: src/editor/qml/ControlBar.qml:100 src/editor/qml/ControlBar.qml:107
 msgctxt "@title:group"
 msgid "Column Layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:102
+#: src/editor/qml/ControlBar.qml:102
 msgctxt "@item:inmenu"
 msgid "Columns 3"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:109
+#: src/editor/qml/ControlBar.qml:109
 msgctxt "@item:inmenu"
 msgid "Rows 2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:114
+#: src/editor/qml/ControlBar.qml:114
 msgctxt "@title:group"
 msgid "Row Layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:116
+#: src/editor/qml/ControlBar.qml:116
 msgctxt "@item:inmenu"
 msgid "Priority Grid"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:121
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:128
+#: src/editor/qml/ControlBar.qml:121 src/editor/qml/ControlBar.qml:128
 msgctxt "@title:group"
 msgid "Special Layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:123
+#: src/editor/qml/ControlBar.qml:123
 msgctxt "@item:inmenu"
 msgid "Focus"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:132
+#: src/editor/qml/ControlBar.qml:132
 msgctxt "@label"
 msgid "Layout templates"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:133
+#: src/editor/qml/ControlBar.qml:133
 msgctxt "@info"
 msgid "Apply a predefined layout template"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:201
+#: src/editor/qml/ControlBar.qml:201
 msgctxt "@action:button"
 msgid "Snap to Edges"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:208
+#: src/editor/qml/ControlBar.qml:208
 msgctxt "@info"
 msgid ""
 "Toggle edge snapping. Zones will align with edges of other zones when "
 "enabled."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:210
+#: src/editor/qml/ControlBar.qml:210
 msgctxt "@tooltip"
 msgid ""
 "Edge snapping enabled. Zones align to edges of other zones. Click to disable."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:210
+#: src/editor/qml/ControlBar.qml:210
 msgctxt "@tooltip"
 msgid ""
 "Edge snapping disabled. Click to enable. Zones will align to edges of other "
 "zones."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:223
+#: src/editor/qml/ControlBar.qml:223
 msgctxt "@action:button"
 msgid "Snap to Grid"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:229
+#: src/editor/qml/ControlBar.qml:229
 msgctxt "@info"
 msgid ""
 "Toggle grid snapping. Zones will align to a grid when enabled. Use the "
 "dropdowns to change horizontal and vertical grid sizes."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:231
+#: src/editor/qml/ControlBar.qml:231
 #, javascript-format
 msgctxt "@tooltip"
 msgid ""
@@ -479,337 +467,334 @@ msgid ""
 "disable."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:231
+#: src/editor/qml/ControlBar.qml:231
 msgctxt "@tooltip"
 msgid ""
 "Grid snapping disabled. Click to enable. Zones will align to grid lines."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:248
+#: src/editor/qml/ControlBar.qml:248
 msgctxt "@label"
 msgid "H:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:249
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:261
+#: src/editor/qml/ControlBar.qml:249 src/editor/qml/ControlBar.qml:261
 msgctxt "@label"
 msgid "Horizontal grid interval"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:262
+#: src/editor/qml/ControlBar.qml:262
 msgctxt "@info"
 msgid "Adjust horizontal grid interval (1% to 50%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:291
+#: src/editor/qml/ControlBar.qml:291
 #, javascript-format
 msgctxt "@info"
 msgid "Horizontal interval: %1%"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:295
+#: src/editor/qml/ControlBar.qml:295
 msgctxt "@label"
 msgid "V:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:297
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:309
+#: src/editor/qml/ControlBar.qml:297 src/editor/qml/ControlBar.qml:309
 msgctxt "@label"
 msgid "Vertical grid interval"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:310
+#: src/editor/qml/ControlBar.qml:310
 msgctxt "@info"
 msgid "Adjust vertical grid interval (1% to 50%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:339
+#: src/editor/qml/ControlBar.qml:339
 #, javascript-format
 msgctxt "@info"
 msgid "Vertical interval: %1%"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:349
+#: src/editor/qml/ControlBar.qml:349
 msgctxt "@action:button"
 msgid "Show Grid"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:355
+#: src/editor/qml/ControlBar.qml:355
 msgctxt "@info"
 msgid ""
 "Toggle grid overlay visibility. Shows or hides the visual grid lines on the "
 "canvas."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:357
+#: src/editor/qml/ControlBar.qml:357
 msgctxt "@tooltip"
 msgid "Grid overlay visible. Click to hide grid lines."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:357
+#: src/editor/qml/ControlBar.qml:357
 msgctxt "@tooltip"
 msgid "Grid overlay hidden. Click to show grid lines."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:390
+#: src/editor/qml/ControlBar.qml:390
 msgctxt "@info"
 msgid "Unsaved changes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:415
+#: src/editor/qml/ControlBar.qml:415
 msgctxt "@action:button"
 msgid "Cancel"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:417
+#: src/editor/qml/ControlBar.qml:417
 msgctxt "@info"
 msgid "Discard changes and close editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:430
+#: src/editor/qml/ControlBar.qml:430
 msgctxt "@action:button"
 msgid "Save"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ControlBar.qml:435
+#: src/editor/qml/ControlBar.qml:435
 msgctxt "@info"
 msgid "Save layout and close editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DimensionTooltip.qml:53
+#: src/editor/qml/DimensionTooltip.qml:53
 msgctxt "@info:accessibility"
 msgid "Zone dimensions"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DimensionTooltip.qml:54
+#: src/editor/qml/DimensionTooltip.qml:54
 #, javascript-format
 msgctxt "@info:accessibility"
 msgid "Position: %1%, %2%  Size: %3% × %4%"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DimensionTooltip.qml:73
+#: src/editor/qml/DimensionTooltip.qml:73
 msgctxt "@label"
 msgid "Pos:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DimensionTooltip.qml:79
+#: src/editor/qml/DimensionTooltip.qml:79
 #, javascript-format
 msgctxt "@info Position as percentages"
 msgid "%1% × %2%"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DimensionTooltip.qml:87
+#: src/editor/qml/DimensionTooltip.qml:87
 msgctxt "@label"
 msgid "Size:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DimensionTooltip.qml:93
+#: src/editor/qml/DimensionTooltip.qml:93
 #, javascript-format
 msgctxt "@info Size as percentages"
 msgid "%1% × %2%"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DividerManager.qml:550
+#: src/editor/qml/DividerManager.qml:550
 msgctxt "@action:button"
 msgid "Vertical zone divider"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DividerManager.qml:550
+#: src/editor/qml/DividerManager.qml:550
 msgctxt "@action:button"
 msgid "Horizontal zone divider"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DividerManager.qml:551
+#: src/editor/qml/DividerManager.qml:551
 msgctxt "@info:tooltip"
 msgid "Drag horizontally to resize adjacent zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/DividerManager.qml:551
+#: src/editor/qml/DividerManager.qml:551
 msgctxt "@info:tooltip"
 msgid "Drag vertically to resize adjacent zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorNotifications.qml:62
+#: src/editor/qml/EditorNotifications.qml:62
 msgctxt "@info:accessibility"
 msgid "Success notification"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorNotifications.qml:139
+#: src/editor/qml/EditorNotifications.qml:139
 msgctxt "@info:accessibility"
 msgid "Error notification"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorNotifications.qml:176
+#: src/editor/qml/EditorNotifications.qml:176
 msgctxt "@tooltip"
 msgid "Dismiss"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorNotifications.qml:178
+#: src/editor/qml/EditorNotifications.qml:178
 msgctxt "@action:button"
 msgid "Dismiss notification"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:148
+#: src/editor/qml/EditorWindow.qml:148
 msgctxt "@title"
 msgid "Layout Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:536
+#: src/editor/qml/EditorWindow.qml:536
 msgid "Exit Fullscreen (F11)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:563
+#: src/editor/qml/EditorWindow.qml:563
 msgctxt "@title:window"
 msgid "Unsaved Changes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:564
+#: src/editor/qml/EditorWindow.qml:564
 msgctxt "@info"
 msgid "You have unsaved changes. What would you like to do?"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:582
+#: src/editor/qml/EditorWindow.qml:582
 msgctxt "@title:window"
 msgid "Import Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:583
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:597
+#: src/editor/qml/EditorWindow.qml:583 src/editor/qml/EditorWindow.qml:597
 msgctxt "@item:inlistbox"
 msgid "JSON files (*.json)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:583
+#: src/editor/qml/EditorWindow.qml:583
 msgctxt "@item:inlistbox"
 msgid "All files (*)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:596
+#: src/editor/qml/EditorWindow.qml:596
 msgctxt "@title:window"
 msgid "Export Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:626
+#: src/editor/qml/EditorWindow.qml:626
 msgctxt "@title:window"
 msgid "Layout Editor Help"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:643
+#: src/editor/qml/EditorWindow.qml:643
 msgctxt "@title:window"
 msgid "Shader Effect"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:742
+#: src/editor/qml/EditorWindow.qml:742
 msgctxt "@action:button"
 msgid "Defaults"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:750
+#: src/editor/qml/EditorWindow.qml:750
 msgctxt "@action:button"
 msgid "Apply"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:806
+#: src/editor/qml/EditorWindow.qml:806
 msgctxt "@title:group"
 msgid "General"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:848
+#: src/editor/qml/EditorWindow.qml:848
 msgctxt "@label"
 msgid "Enable effect:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:851
+#: src/editor/qml/EditorWindow.qml:851
 msgctxt "@label"
 msgid "Enable shader effect"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:852
+#: src/editor/qml/EditorWindow.qml:852
 msgctxt "@info"
 msgid "Turn the shader effect on or off for zone overlays"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:874
+#: src/editor/qml/EditorWindow.qml:874
 msgctxt "@info"
 msgid "The shader effect is disabled for this layout."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:886
+#: src/editor/qml/EditorWindow.qml:886
 msgctxt "@label:listbox"
 msgid "Effect:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:892
+#: src/editor/qml/EditorWindow.qml:892
 msgctxt "@label:listbox"
 msgid "Shader effect"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:893
+#: src/editor/qml/EditorWindow.qml:893
 msgctxt "@info"
 msgid "Select a visual effect for zone overlays"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:948
+#: src/editor/qml/EditorWindow.qml:948
 msgctxt "@info shader author"
 msgid "by %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:949
+#: src/editor/qml/EditorWindow.qml:949
 msgctxt "@info shader version"
 msgid "v%1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:950
+#: src/editor/qml/EditorWindow.qml:950
 msgctxt "@info user-installed shader"
 msgid "(User shader)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:976
+#: src/editor/qml/EditorWindow.qml:976
 msgctxt "@title:group"
 msgid "Parameters"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:988
+#: src/editor/qml/EditorWindow.qml:988
 msgctxt "@info"
 msgid "This effect has no configurable parameters."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1168
+#: src/editor/qml/EditorWindow.qml:1168
 msgctxt "@label"
 msgid "%1 color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1265
+#: src/editor/qml/EditorWindow.qml:1265
 msgctxt "@title:window"
 msgid "Choose %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1280
+#: src/editor/qml/EditorWindow.qml:1280
 msgctxt "@info"
 msgid "Layout saved successfully"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1285
+#: src/editor/qml/EditorWindow.qml:1285
 msgctxt "@info"
 msgid "Failed to load layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1290
+#: src/editor/qml/EditorWindow.qml:1290
 msgctxt "@info"
 msgid "Failed to save layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorZone.qml:397
+#: src/editor/qml/EditorZone.qml:397
 msgctxt "@info:accessibility"
 msgid "Zone %1: %2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorZone.qml:397
+#: src/editor/qml/EditorZone.qml:397
 msgctxt "@info:accessibility"
 msgid "Zone %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorZone.qml:398
+#: src/editor/qml/EditorZone.qml:398
 #, javascript-format
 msgctxt "@info:accessibility"
 msgid ""
@@ -817,1033 +802,1021 @@ msgid ""
 "to move, use handles to resize."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorZone.qml:398
+#: src/editor/qml/EditorZone.qml:398
 #, javascript-format
 msgctxt "@info:accessibility"
 msgid "Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:49
+#: src/editor/qml/HelpDialogContent.qml:49
 msgctxt "@title:group"
 msgid "Keyboard Shortcuts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:67
+#: src/editor/qml/HelpDialogContent.qml:67
 msgctxt "@label"
 msgid "Close editor:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:80
+#: src/editor/qml/HelpDialogContent.qml:80
 msgctxt "@label"
 msgid "Save layout:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:93
+#: src/editor/qml/HelpDialogContent.qml:93
 msgctxt "@label"
 msgid "Delete selected zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:106
+#: src/editor/qml/HelpDialogContent.qml:106
 msgctxt "@label"
 msgid "Undo last operation:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:112
+#: src/editor/qml/HelpDialogContent.qml:112
 msgid "Ctrl+Z"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:119
+#: src/editor/qml/HelpDialogContent.qml:119
 msgctxt "@label"
 msgid "Redo last undone operation:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:125
+#: src/editor/qml/HelpDialogContent.qml:125
 msgid "Ctrl+Shift+Z"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:132
+#: src/editor/qml/HelpDialogContent.qml:132
 msgctxt "@label"
 msgid "Duplicate zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:145
+#: src/editor/qml/HelpDialogContent.qml:145
 msgctxt "@label"
 msgid "Copy zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:151
+#: src/editor/qml/HelpDialogContent.qml:151
 msgid "Ctrl+C"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:158
+#: src/editor/qml/HelpDialogContent.qml:158
 msgctxt "@label"
 msgid "Cut zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:164
+#: src/editor/qml/HelpDialogContent.qml:164
 msgid "Ctrl+X"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:171
+#: src/editor/qml/HelpDialogContent.qml:171
 msgctxt "@label"
 msgid "Paste zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:177
+#: src/editor/qml/HelpDialogContent.qml:177
 msgid "Ctrl+V"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:184
+#: src/editor/qml/HelpDialogContent.qml:184
 msgctxt "@label"
 msgid "Paste with offset:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:190
+#: src/editor/qml/HelpDialogContent.qml:190
 msgid "Ctrl+Shift+V"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:197
+#: src/editor/qml/HelpDialogContent.qml:197
 msgctxt "@label"
 msgid "Split horizontally:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:210
+#: src/editor/qml/HelpDialogContent.qml:210
 msgctxt "@label"
 msgid "Split vertically:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:223
+#: src/editor/qml/HelpDialogContent.qml:223
 msgctxt "@label"
 msgid "Fill available space:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:236
+#: src/editor/qml/HelpDialogContent.qml:236
 msgctxt "@label"
 msgid "Fullscreen mode:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:242
+#: src/editor/qml/HelpDialogContent.qml:242
 msgid "F11"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:253
+#: src/editor/qml/HelpDialogContent.qml:253
 msgctxt "@title:group"
 msgid "Creating Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:268
+#: src/editor/qml/HelpDialogContent.qml:268
 msgctxt "@info"
 msgid ""
 "Click \"Add Zone\" in the bottom toolbar, then drag on the canvas to create "
 "a new zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:274
+#: src/editor/qml/HelpDialogContent.qml:274
 msgctxt "@info"
 msgid "Double-click the canvas to quickly add a zone at that location"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:280
+#: src/editor/qml/HelpDialogContent.qml:280
 msgctxt "@info"
 msgid "Use the Templates dropdown to apply predefined layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:290
+#: src/editor/qml/HelpDialogContent.qml:290
 msgctxt "@title:group"
 msgid "Editing Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:305
+#: src/editor/qml/HelpDialogContent.qml:305
 msgctxt "@info"
 msgid "Click a zone to select it"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:311
+#: src/editor/qml/HelpDialogContent.qml:311
 msgctxt "@info"
 msgid "Drag a zone to move it"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:317
+#: src/editor/qml/HelpDialogContent.qml:317
 msgctxt "@info"
 msgid "Drag corners or edges to resize a zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:323
+#: src/editor/qml/HelpDialogContent.qml:323
 msgctxt "@info"
 msgid ""
 "Hover over a selected zone to see action buttons (delete, duplicate, etc.)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:329
+#: src/editor/qml/HelpDialogContent.qml:329
 msgctxt "@info"
 msgid "Right-click a zone for the context menu with additional options"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:339
+#: src/editor/qml/HelpDialogContent.qml:339
 msgctxt "@title:group"
 msgid "Keyboard Navigation"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:354
+#: src/editor/qml/HelpDialogContent.qml:354
 msgctxt "@info"
 msgid "Arrow keys: Move selected zone by 1% per press"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:360
+#: src/editor/qml/HelpDialogContent.qml:360
 msgctxt "@info"
 msgid "Shift+Arrow keys: Resize selected zone by 1% per press"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:366
+#: src/editor/qml/HelpDialogContent.qml:366
 msgctxt "@info"
 msgid "Ctrl+Tab / Ctrl+Shift+Tab: Navigate between zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:373
+#: src/editor/qml/HelpDialogContent.qml:373
 msgctxt "@info"
 msgid "Note: Tab and Shift+Tab are reserved for standard keyboard navigation"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:385
+#: src/editor/qml/HelpDialogContent.qml:385
 msgctxt "@title:group"
 msgid "Accessibility"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/HelpDialogContent.qml:396
+#: src/editor/qml/HelpDialogContent.qml:396
 msgctxt "@info"
 msgid ""
 "Zone information is announced to screen readers when a zone is selected. All "
 "controls are keyboard accessible."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:157
+#: src/editor/qml/PropertyPanel.qml:157
 msgctxt "@title"
 msgid "Zone Properties"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:157
+#: src/editor/qml/PropertyPanel.qml:157
 msgctxt "@title"
 msgid "1 Zone Selected"
 msgid_plural "%1 Zones Selected"
 msgstr[0] ""
 msgstr[1] ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:171
+#: src/editor/qml/PropertyPanel.qml:171
 msgctxt "@tooltip"
 msgid "Close panel"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:173
+#: src/editor/qml/PropertyPanel.qml:173
 msgctxt "@info:accessibility"
 msgid "Close properties panel"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:201
+#: src/editor/qml/PropertyPanel.qml:201
 msgctxt "@title"
 msgid "Appearance (All Selected)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:209
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:643
+#: src/editor/qml/PropertyPanel.qml:209 src/editor/qml/PropertyPanel.qml:643
 msgctxt "@label"
 msgid "Custom colors:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:210
+#: src/editor/qml/PropertyPanel.qml:210
 msgctxt "@option:check"
 msgid "Enable for all selected"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:213
+#: src/editor/qml/PropertyPanel.qml:213
 msgctxt "@info:accessibility"
 msgid "Enable custom colors for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:214
+#: src/editor/qml/PropertyPanel.qml:214
 msgctxt "@info"
 msgid "Enable custom color settings for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:215
+#: src/editor/qml/PropertyPanel.qml:215
 msgctxt "@info:tooltip"
 msgid "Enable custom colors for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:225
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:661
+#: src/editor/qml/PropertyPanel.qml:225 src/editor/qml/PropertyPanel.qml:661
 msgctxt "@label"
 msgid "Highlight:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:239
+#: src/editor/qml/PropertyPanel.qml:239
 msgctxt "@label"
 msgid "Highlight color picker for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:240
+#: src/editor/qml/PropertyPanel.qml:240
 msgctxt "@info:tooltip"
 msgid "Choose highlight color for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:254
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:292
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:329
+#: src/editor/qml/PropertyPanel.qml:254 src/editor/qml/PropertyPanel.qml:292
+#: src/editor/qml/PropertyPanel.qml:329
 msgctxt "@info"
 msgid "Click to set for all"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:263
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:764
+#: src/editor/qml/PropertyPanel.qml:263 src/editor/qml/PropertyPanel.qml:764
 msgctxt "@label"
 msgid "Inactive:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:277
+#: src/editor/qml/PropertyPanel.qml:277
 msgctxt "@label"
 msgid "Inactive color picker for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:278
+#: src/editor/qml/PropertyPanel.qml:278
 msgctxt "@info:tooltip"
 msgid "Choose inactive color for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:301
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:867
+#: src/editor/qml/PropertyPanel.qml:301 src/editor/qml/PropertyPanel.qml:867
 msgctxt "@label"
 msgid "Border:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:314
+#: src/editor/qml/PropertyPanel.qml:314
 msgctxt "@label"
 msgid "Border color picker for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:315
+#: src/editor/qml/PropertyPanel.qml:315
 msgctxt "@info:tooltip"
 msgid "Choose border color for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:338
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:966
+#: src/editor/qml/PropertyPanel.qml:338 src/editor/qml/PropertyPanel.qml:966
 msgctxt "@label"
 msgid "Active opacity:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:351
+#: src/editor/qml/PropertyPanel.qml:351
 msgctxt "@label"
 msgid "Active opacity for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:352
+#: src/editor/qml/PropertyPanel.qml:352
 msgctxt "@info:tooltip"
 msgid "Set active opacity for all selected zones (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:374
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1006
+#: src/editor/qml/PropertyPanel.qml:374 src/editor/qml/PropertyPanel.qml:1006
 msgctxt "@label"
 msgid "Inactive opacity:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:387
+#: src/editor/qml/PropertyPanel.qml:387
 msgctxt "@label"
 msgid "Inactive opacity for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:388
+#: src/editor/qml/PropertyPanel.qml:388
 msgctxt "@info:tooltip"
 msgid "Set inactive opacity for all selected zones (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:412
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1048
+#: src/editor/qml/PropertyPanel.qml:412 src/editor/qml/PropertyPanel.qml:1048
 msgctxt "@label"
 msgid "Border width:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:418
+#: src/editor/qml/PropertyPanel.qml:418
 msgctxt "@label"
 msgid "Border width for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:419
+#: src/editor/qml/PropertyPanel.qml:419
 msgctxt "@info:tooltip"
 msgid "Set border width for all selected zones (0-20)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:431
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1069
+#: src/editor/qml/PropertyPanel.qml:431 src/editor/qml/PropertyPanel.qml:1069
 msgctxt "@label"
 msgid "Border radius:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:437
+#: src/editor/qml/PropertyPanel.qml:437
 msgctxt "@label"
 msgid "Border radius for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:438
+#: src/editor/qml/PropertyPanel.qml:438
 msgctxt "@info:tooltip"
 msgid "Set corner radius for all selected zones (0-50)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:452
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1092
+#: src/editor/qml/PropertyPanel.qml:452 src/editor/qml/PropertyPanel.qml:1092
 msgctxt "@title"
 msgid "Actions"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:458
+#: src/editor/qml/PropertyPanel.qml:458
 msgctxt "@info"
 msgid "Actions will apply to all selected zones."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:467
+#: src/editor/qml/PropertyPanel.qml:467
 msgctxt "@action:button"
 msgid "Delete Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:471
+#: src/editor/qml/PropertyPanel.qml:471
 msgctxt "@info"
 msgid "Delete 1 selected zone"
 msgid_plural "Delete %1 selected zones"
 msgstr[0] ""
 msgstr[1] ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:490
+#: src/editor/qml/PropertyPanel.qml:490
 msgctxt "@label"
 msgid "Name:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:493
+#: src/editor/qml/PropertyPanel.qml:493
 msgctxt "@label"
 msgid "Zone name"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:494
+#: src/editor/qml/PropertyPanel.qml:494
 msgctxt "@info"
 msgid "Enter name for the zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:592
+#: src/editor/qml/PropertyPanel.qml:592
 msgctxt "@label"
 msgid "Number:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:597
+#: src/editor/qml/PropertyPanel.qml:597
 msgctxt "@label"
 msgid "Zone number"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:598
+#: src/editor/qml/PropertyPanel.qml:598
 msgctxt "@info"
 msgid "Zone number (1-99)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:635
+#: src/editor/qml/PropertyPanel.qml:635
 msgctxt "@title"
 msgid "Appearance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:644
+#: src/editor/qml/PropertyPanel.qml:644
 msgctxt "@option:check"
 msgid "Use custom colors"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:648
+#: src/editor/qml/PropertyPanel.qml:648
 msgctxt "@info:accessibility"
 msgid "Enable custom colors for this zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:649
+#: src/editor/qml/PropertyPanel.qml:649
 msgctxt "@info"
 msgid "Enable custom color settings for this zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:650
+#: src/editor/qml/PropertyPanel.qml:650
 msgctxt "@info:tooltip"
 msgid "Enable custom colors, opacity, and border settings"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:689
+#: src/editor/qml/PropertyPanel.qml:689
 msgctxt "@label"
 msgid "Highlight color picker"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:690
+#: src/editor/qml/PropertyPanel.qml:690
 msgctxt "@info"
 msgid "Click to choose highlight color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:691
+#: src/editor/qml/PropertyPanel.qml:691
 msgctxt "@info:tooltip"
 msgid "Choose color for highlighted/active zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:757
+#: src/editor/qml/PropertyPanel.qml:757
 msgctxt "@info:accessibility"
 msgid "Highlight color hex code"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:792
+#: src/editor/qml/PropertyPanel.qml:792
 msgctxt "@label"
 msgid "Inactive color picker"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:793
+#: src/editor/qml/PropertyPanel.qml:793
 msgctxt "@info"
 msgid "Click to choose inactive zone color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:794
+#: src/editor/qml/PropertyPanel.qml:794
 msgctxt "@info:tooltip"
 msgid "Choose color for non-selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:860
+#: src/editor/qml/PropertyPanel.qml:860
 msgctxt "@info:accessibility"
 msgid "Inactive color hex code"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:891
+#: src/editor/qml/PropertyPanel.qml:891
 msgctxt "@label"
 msgid "Border color picker"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:892
+#: src/editor/qml/PropertyPanel.qml:892
 msgctxt "@info"
 msgid "Click to choose border color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:893
+#: src/editor/qml/PropertyPanel.qml:893
 msgctxt "@info:tooltip"
 msgid "Choose color for zone borders"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:959
+#: src/editor/qml/PropertyPanel.qml:959
 msgctxt "@info:accessibility"
 msgid "Border color hex code"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:980
+#: src/editor/qml/PropertyPanel.qml:980
 msgctxt "@label"
 msgid "Zone active opacity"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:981
+#: src/editor/qml/PropertyPanel.qml:981
 msgctxt "@info"
 msgid "Active/highlighted opacity percentage (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:982
+#: src/editor/qml/PropertyPanel.qml:982
 msgctxt "@info:tooltip"
 msgid "Adjust zone opacity when highlighted (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1020
+#: src/editor/qml/PropertyPanel.qml:1020
 msgctxt "@label"
 msgid "Zone inactive opacity"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1021
+#: src/editor/qml/PropertyPanel.qml:1021
 msgctxt "@info"
 msgid "Inactive/non-highlighted opacity percentage (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1022
+#: src/editor/qml/PropertyPanel.qml:1022
 msgctxt "@info:tooltip"
 msgid "Adjust zone opacity when not highlighted (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1055
+#: src/editor/qml/PropertyPanel.qml:1055
 msgctxt "@label"
 msgid "Border width in pixels"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1056
+#: src/editor/qml/PropertyPanel.qml:1056
 msgctxt "@info"
 msgid "Zone border width (0-20 pixels)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1057
+#: src/editor/qml/PropertyPanel.qml:1057
 msgctxt "@info:tooltip"
 msgid "Set zone border width in pixels (0-20)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1076
+#: src/editor/qml/PropertyPanel.qml:1076
 msgctxt "@label"
 msgid "Border radius in pixels"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1077
+#: src/editor/qml/PropertyPanel.qml:1077
 msgctxt "@info"
 msgid "Zone corner radius (0-50 pixels)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1078
+#: src/editor/qml/PropertyPanel.qml:1078
 msgctxt "@info:tooltip"
 msgid "Set zone corner radius in pixels (0-50)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1099
+#: src/editor/qml/PropertyPanel.qml:1099
 msgctxt "@action:button"
 msgid "Delete Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1103
+#: src/editor/qml/PropertyPanel.qml:1103
 msgctxt "@info"
 msgid "Delete the selected zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1168
+#: src/editor/qml/PropertyPanel.qml:1168
 msgctxt "@title:window"
 msgid "Zone Highlight Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1198
+#: src/editor/qml/PropertyPanel.qml:1198
 msgctxt "@title:window"
 msgid "Zone Inactive Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1228
+#: src/editor/qml/PropertyPanel.qml:1228
 msgctxt "@title:window"
 msgid "Zone Border Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1256
+#: src/editor/qml/PropertyPanel.qml:1256
 msgctxt "@title:window"
 msgid "Highlight Color for All Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1271
+#: src/editor/qml/PropertyPanel.qml:1271
 msgctxt "@title:window"
 msgid "Inactive Color for All Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1286
+#: src/editor/qml/PropertyPanel.qml:1286
 msgctxt "@title:window"
 msgid "Border Color for All Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:201
+#: src/editor/qml/ResizeHandles.qml:201
 msgctxt "@action:button"
 msgid "Northwest corner resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:202
+#: src/editor/qml/ResizeHandles.qml:202
 msgctxt "@action:button"
 msgid "North edge resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:203
+#: src/editor/qml/ResizeHandles.qml:203
 msgctxt "@action:button"
 msgid "Northeast corner resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:204
+#: src/editor/qml/ResizeHandles.qml:204
 msgctxt "@action:button"
 msgid "East edge resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:205
+#: src/editor/qml/ResizeHandles.qml:205
 msgctxt "@action:button"
 msgid "Southeast corner resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:206
+#: src/editor/qml/ResizeHandles.qml:206
 msgctxt "@action:button"
 msgid "South edge resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:207
+#: src/editor/qml/ResizeHandles.qml:207
 msgctxt "@action:button"
 msgid "Southwest corner resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:208
+#: src/editor/qml/ResizeHandles.qml:208
 msgctxt "@action:button"
 msgid "West edge resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:210
+#: src/editor/qml/ResizeHandles.qml:210
 msgctxt "@action:button"
 msgid "Resize handle"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:214
+#: src/editor/qml/ResizeHandles.qml:214
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from northwest corner"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:215
+#: src/editor/qml/ResizeHandles.qml:215
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from top edge"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:216
+#: src/editor/qml/ResizeHandles.qml:216
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from northeast corner"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:217
+#: src/editor/qml/ResizeHandles.qml:217
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from right edge"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:218
+#: src/editor/qml/ResizeHandles.qml:218
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from southeast corner"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:219
+#: src/editor/qml/ResizeHandles.qml:219
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from bottom edge"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:220
+#: src/editor/qml/ResizeHandles.qml:220
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from southwest corner"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:221
+#: src/editor/qml/ResizeHandles.qml:221
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from left edge"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ResizeHandles.qml:223
+#: src/editor/qml/ResizeHandles.qml:223
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ShaderParameterSection.qml:109
+#: src/editor/qml/ShaderParameterSection.qml:109
 msgctxt "@action"
 msgid "collapse"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ShaderParameterSection.qml:109
+#: src/editor/qml/ShaderParameterSection.qml:109
 msgctxt "@action"
 msgid "expand"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ShaderParameterSection.qml:107
+#: src/editor/qml/ShaderParameterSection.qml:107
 msgctxt "@info:tooltip"
 msgid "%1 parameters. Click to %2."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:54
+#: src/editor/qml/TopBar.qml:54
 msgctxt "@info"
 msgid "Select screen for layout editing"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:91
+#: src/editor/qml/TopBar.qml:91
 msgctxt "@label"
 msgid "Layout:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:105
+#: src/editor/qml/TopBar.qml:105
 msgctxt "@label"
 msgid "Layout name"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:106
+#: src/editor/qml/TopBar.qml:106
 msgctxt "@info"
 msgid "Enter name for the layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:125
+#: src/editor/qml/TopBar.qml:125
 msgctxt "@info"
 msgid "%1/%2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:129
+#: src/editor/qml/TopBar.qml:129
 msgctxt "@info"
 msgid "Character count: %1 of %2"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:130
+#: src/editor/qml/TopBar.qml:130
 msgctxt "@info"
 msgid "Shows how many characters are used in the layout name"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:210
+#: src/editor/qml/TopBar.qml:210
 msgctxt "@action:tooltip"
 msgid "Undo: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:210
+#: src/editor/qml/TopBar.qml:210
 msgctxt "@action:tooltip"
 msgid "Undo"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:212
+#: src/editor/qml/TopBar.qml:212
 msgctxt "@action"
 msgid "Undo"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:228
+#: src/editor/qml/TopBar.qml:228
 msgctxt "@action:tooltip"
 msgid "Redo: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:228
+#: src/editor/qml/TopBar.qml:228
 msgctxt "@action:tooltip"
 msgid "Redo"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:230
+#: src/editor/qml/TopBar.qml:230
 msgctxt "@action"
 msgid "Redo"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:252
+#: src/editor/qml/TopBar.qml:252
 msgctxt "@tooltip"
 msgid "Layout-specific settings (gaps)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:254
+#: src/editor/qml/TopBar.qml:254
 msgctxt "@action"
 msgid "Layout Settings"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:255
+#: src/editor/qml/TopBar.qml:255
 msgctxt "@info"
 msgid "Configure per-layout gap overrides"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:300
+#: src/editor/qml/TopBar.qml:300
 msgctxt "@title"
 msgid "Layout Gap Overrides"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:306
+#: src/editor/qml/TopBar.qml:306
 msgctxt "@info"
 msgid "Override global settings for this layout only."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:322
+#: src/editor/qml/TopBar.qml:322
 msgctxt "@option:check"
 msgid "Zone Padding"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:357
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:400
+#: src/editor/qml/TopBar.qml:357 src/editor/qml/TopBar.qml:400
 msgctxt "@label"
 msgid "px"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:358
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:401
+#: src/editor/qml/TopBar.qml:358 src/editor/qml/TopBar.qml:401
 msgctxt "@label showing global default"
 msgid "px (global)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:365
+#: src/editor/qml/TopBar.qml:365
 msgctxt "@option:check"
 msgid "Edge Gap"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:408
+#: src/editor/qml/TopBar.qml:408
 msgctxt "@info"
 msgid "Change global defaults in System Settings."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:434
+#: src/editor/qml/TopBar.qml:434
 msgctxt "@tooltip"
 msgid "Shader effect settings"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:436
+#: src/editor/qml/TopBar.qml:436
 msgctxt "@action"
 msgid "Shader Settings"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:437
+#: src/editor/qml/TopBar.qml:437
 msgctxt "@info"
 msgid "Configure visual shader effects for zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:460
+#: src/editor/qml/TopBar.qml:460
 msgctxt "@tooltip"
 msgid "Import layout from file"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:462
+#: src/editor/qml/TopBar.qml:462
 msgctxt "@action"
 msgid "Import Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:463
+#: src/editor/qml/TopBar.qml:463
 msgctxt "@info"
 msgid "Import a layout from a JSON file"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:471
+#: src/editor/qml/TopBar.qml:471
 msgctxt "@tooltip"
 msgid "Export layout to file"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:473
+#: src/editor/qml/TopBar.qml:473
 msgctxt "@action"
 msgid "Export Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:474
+#: src/editor/qml/TopBar.qml:474
 msgctxt "@info"
 msgid "Export the current layout to a JSON file"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:487
+#: src/editor/qml/TopBar.qml:487
 msgctxt "@tooltip"
 msgid "Exit fullscreen mode (F11)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:487
+#: src/editor/qml/TopBar.qml:487
 msgctxt "@tooltip"
 msgid "Enter fullscreen mode (F11)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:490
+#: src/editor/qml/TopBar.qml:490
 msgctxt "@action"
 msgid "Exit Fullscreen"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:490
+#: src/editor/qml/TopBar.qml:490
 msgctxt "@action"
 msgid "Fullscreen"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:491
+#: src/editor/qml/TopBar.qml:491
 msgctxt "@info"
 msgid "Toggle fullscreen editing mode"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:498
+#: src/editor/qml/TopBar.qml:498
 msgctxt "@tooltip"
 msgid "Keyboard shortcuts and usage guide (F1)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:500
+#: src/editor/qml/TopBar.qml:500
 msgctxt "@action"
 msgid "Help"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:501
+#: src/editor/qml/TopBar.qml:501
 msgctxt "@info"
 msgid "Open keyboard shortcuts and usage guide"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:513
+#: src/editor/qml/TopBar.qml:513
 msgctxt "@tooltip"
 msgid "Close editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:515
+#: src/editor/qml/TopBar.qml:515
 msgctxt "@action"
 msgid "Close"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/TopBar.qml:516
+#: src/editor/qml/TopBar.qml:516
 msgctxt "@info"
 msgid "Close the layout editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:34
+#: src/editor/qml/ZoneContextMenu.qml:34
 msgctxt "@action"
 msgid "Split Horizontally"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:42
+#: src/editor/qml/ZoneContextMenu.qml:42
 msgctxt "@action"
 msgid "Split Vertically"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:53
+#: src/editor/qml/ZoneContextMenu.qml:53
 msgctxt "@action"
 msgid "Copy"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:62
+#: src/editor/qml/ZoneContextMenu.qml:62
 msgctxt "@action"
 msgid "Copy zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:63
+#: src/editor/qml/ZoneContextMenu.qml:63
 msgctxt "@info"
 msgid "Copy the selected zone to clipboard"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:68
+#: src/editor/qml/ZoneContextMenu.qml:68
 msgctxt "@action"
 msgid "Cut"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:77
+#: src/editor/qml/ZoneContextMenu.qml:77
 msgctxt "@action"
 msgid "Cut zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:78
+#: src/editor/qml/ZoneContextMenu.qml:78
 msgctxt "@info"
 msgid "Cut the selected zone to clipboard"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:83
+#: src/editor/qml/ZoneContextMenu.qml:83
 msgctxt "@action"
 msgid "Duplicate"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:91
+#: src/editor/qml/ZoneContextMenu.qml:91
 msgctxt "@action"
 msgid "Delete"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:99
+#: src/editor/qml/ZoneContextMenu.qml:99
 msgctxt "@action"
 msgid "Delete and Fill"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:103
+#: src/editor/qml/ZoneContextMenu.qml:103
 msgctxt "@info:tooltip"
 msgid "Delete this zone and expand neighbors to fill the space"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:111
+#: src/editor/qml/ZoneContextMenu.qml:111
 msgctxt "@action"
 msgid "Paste"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:119
+#: src/editor/qml/ZoneContextMenu.qml:119
 msgctxt "@action"
 msgid "Paste zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:120
+#: src/editor/qml/ZoneContextMenu.qml:120
 msgctxt "@info"
 msgid "Paste zones from clipboard"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:125
+#: src/editor/qml/ZoneContextMenu.qml:125
 msgctxt "@action"
 msgid "Paste with Offset"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:133
+#: src/editor/qml/ZoneContextMenu.qml:133
 msgctxt "@action"
 msgid "Paste zone with offset"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:134
+#: src/editor/qml/ZoneContextMenu.qml:134
 msgctxt "@info"
 msgid "Paste zones from clipboard with offset to avoid overlap"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:142
+#: src/editor/qml/ZoneContextMenu.qml:142
 msgctxt "@action"
 msgid "Fill Available Space"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:146
+#: src/editor/qml/ZoneContextMenu.qml:146
 msgctxt "@info:tooltip"
 msgid "Expand zone to fill adjacent empty space"
 msgstr ""
