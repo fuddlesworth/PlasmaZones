@@ -8,9 +8,9 @@
 
 Define zones on your screen. Drag windows into them. Done.
 
-<!-- TODO: Hero GIF showing drag-and-snap workflow -->
-<!-- ![PlasmaZones Demo](docs/media/hero.gif) -->
-*[Hero GIF placeholder - drag window → zones appear → snap]*
+<!-- TODO: Hero WebM showing drag-and-snap workflow -->
+<!-- <video src="docs/media/videos/hero.webm" controls muted loop width="800"></video> -->
+*[Hero WebM placeholder - drag window → zones appear → snap]*
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
 [![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-blue.svg)](https://kde.org/plasma-desktop/)
@@ -23,9 +23,7 @@ Define zones on your screen. Drag windows into them. Done.
 
 Hold **Alt** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
-<!-- TODO: GIF of zones highlighted during drag -->
-<!-- ![Drag and Snap](docs/media/drag-snap.gif) -->
-*[GIF placeholder - window being dragged with zones highlighted]*
+<video src="docs/media/videos/drag-snap.webm" controls muted loop width="800" title="Drag and snap: window dragged with zones highlighted"></video>
 
 ---
 
@@ -79,9 +77,9 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Restore original size on unsnap
 - Per-window floating toggle
 
-<!-- TODO: GIF showing keyboard navigation between zones -->
-<!-- ![Keyboard Navigation](docs/media/keyboard-nav.gif) -->
-*[GIF placeholder - moving window between zones with Meta+Alt+Arrows]*
+<!-- TODO: WebM showing keyboard navigation between zones -->
+<!-- <video src="docs/media/videos/keyboard-nav.webm" controls muted loop width="800"></video> -->
+*[WebM placeholder - moving window between zones with Meta+Alt+Arrows]*
 
 ### Layout Editor
 
@@ -91,9 +89,7 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Grid and edge snapping
 - Per-zone colors and styling
 
-<!-- TODO: GIF of layout editor -->
-<!-- ![Layout Editor](docs/media/editor.gif) -->
-*[GIF placeholder - layout editor with zones being drawn]*
+<video src="docs/media/videos/editor.webm" controls muted loop width="800" title="Layout editor with zones being drawn"></video>
 
 ### Shader Effects
 
@@ -112,21 +108,23 @@ GPU-accelerated zone overlays with 8 built-in effects:
 
 ![Shader Effects](docs/media/screenshots/shaders-gallery.png)
 
+<video src="docs/media/videos/shaders.webm" controls muted loop width="800" title="Shader effects showcase"></video>
+
 Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
 ### Zone Selector
 
 Drag to screen edge to reveal a layout picker. Choose any layout and zone without cycling.
 
-<!-- TODO: GIF of zone selector in action -->
-<!-- ![Zone Selector](docs/media/zone-selector.gif) -->
-*[GIF placeholder - drag to edge → selector appears → pick zone]*
+<video src="docs/media/videos/zone-selector.webm" controls muted loop width="800" title="Zone selector: drag to edge → pick layout and zone"></video>
 
 ### Visual Layout OSD
 
 See a preview of the layout when switching, not just text.
 
 ![Layout OSD](docs/media/screenshots/layout-osd.png)
+
+<video src="docs/media/videos/layout-switch.webm" controls muted loop width="800" title="Cycling layouts with OSD feedback"></video>
 
 ### Multi-Monitor & Virtual Desktops
 
@@ -141,9 +139,6 @@ See a preview of the layout when switching, not just text.
 Full KCM module for configuration - no config file editing required.
 
 ![Settings](docs/media/screenshots/kcm-settings.png)
-
-<details>
-<summary><b>More Settings Screenshots</b></summary>
 
 #### Appearance
 Customize zone visuals: shader effects, colors, opacity, border styles, and highlight animations.
@@ -164,8 +159,6 @@ Set up the edge-triggered zone picker: trigger distance, display duration, and s
 Configure all keyboard shortcuts for layout switching, window navigation, and editor access.
 
 ![Shortcuts Settings](docs/media/screenshots/kcm-shortcuts.png)
-
-</details>
 
 ---
 
