@@ -8,6 +8,9 @@
 #include <QScreen>
 #include <QUuid>
 #include <QString>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <optional>
 
 namespace PlasmaZones {
@@ -114,6 +117,32 @@ inline std::optional<QUuid> parseUuid(const QString& uuidString)
 }
 
 /**
+ * @brief Parse a UUID string with warning on failure
+ * @param uuidString String to parse
+ * @param context Context string for warning message (e.g., "getLayout", "setActiveLayout")
+ * @return Optional QUuid, empty if invalid (logs warning on failure)
+ *
+ * Use this variant when you want to log a warning for invalid UUIDs.
+ * Consolidates the common pattern:
+ *   if (id.isEmpty()) { qCWarning() << "..."; return; }
+ *   auto uuid = QUuid::fromString(id);
+ *   if (uuid.isNull()) { qCWarning() << "..."; return; }
+ */
+inline std::optional<QUuid> parseUuidOrWarn(const QString& uuidString, const char* context)
+{
+    if (uuidString.isEmpty()) {
+        qWarning("PlasmaZones: %s - empty UUID string", context);
+        return std::nullopt;
+    }
+    QUuid uuid = QUuid::fromString(uuidString);
+    if (uuid.isNull()) {
+        qWarning("PlasmaZones: %s - invalid UUID format: %s", context, qUtf8Printable(uuidString));
+        return std::nullopt;
+    }
+    return uuid;
+}
+
+/**
  * @brief Check if a string is a valid UUID
  * @param uuidString String to check
  * @return true if valid UUID, false otherwise
@@ -124,6 +153,61 @@ inline bool isValidUuid(const QString& uuidString)
         return false;
     }
     return !QUuid::fromString(uuidString).isNull();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// JSON Parsing Utilities
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Parse a JSON string into a QJsonObject safely
+ * @param json JSON string to parse
+ * @return Optional QJsonObject, empty if invalid or not an object
+ */
+inline std::optional<QJsonObject> parseJsonObject(const QString& json)
+{
+    if (json.isEmpty()) {
+        return std::nullopt;
+    }
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        return std::nullopt;
+    }
+    return doc.object();
+}
+
+/**
+ * @brief Parse a JSON string into a QJsonObject with warning on failure
+ * @param json JSON string to parse
+ * @param context Context string for warning message (e.g., "updateLayout", "zoneGeometry")
+ * @return Optional QJsonObject, empty if invalid (logs warning on failure)
+ *
+ * Use this variant when you want to log a warning for invalid JSON.
+ * Consolidates the common pattern:
+ *   QJsonParseError parseError;
+ *   QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+ *   if (parseError.error != QJsonParseError::NoError) { qCWarning() << "..."; return; }
+ *   if (!doc.isObject()) { qCWarning() << "..."; return; }
+ */
+inline std::optional<QJsonObject> parseJsonObjectOrWarn(const QString& json, const char* context)
+{
+    if (json.isEmpty()) {
+        qWarning("PlasmaZones: %s - empty JSON string", context);
+        return std::nullopt;
+    }
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qWarning("PlasmaZones: %s - JSON parse error: %s at offset %d", context,
+                 qUtf8Printable(parseError.errorString()), static_cast<int>(parseError.offset));
+        return std::nullopt;
+    }
+    if (!doc.isObject()) {
+        qWarning("PlasmaZones: %s - JSON is not an object", context);
+        return std::nullopt;
+    }
+    return doc.object();
 }
 
 /**

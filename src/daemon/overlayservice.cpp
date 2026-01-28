@@ -491,11 +491,6 @@ void OverlayService::show()
         return;
     }
 
-    // Handle any pending shader error from previous session
-    if (m_shaderErrorPending) {
-        qCDebug(lcOverlay) << "Previous shader error (falling back to standard overlay):" << m_pendingShaderError;
-    }
-
     // Check if we should show on all monitors or just the cursor's screen
     bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
 
@@ -513,97 +508,13 @@ void OverlayService::show()
         }
     }
 
-    m_visible = true;
-
-    // Initialize shader timing (shared across all monitors for synchronized effects)
-    {
-        QMutexLocker locker(&m_shaderTimerMutex);
-        m_shaderTimer.start();
-        m_lastFrameTime.store(0);
-        m_frameCount.store(0);
-    }
-    m_zoneDataDirty = true; // Rebuild zone data on next frame
-
-    for (auto* screen : Utils::allScreens()) {
-        // Skip screens that aren't the cursor's screen when single-monitor mode is enabled
-        if (!showOnAllMonitors && screen != cursorScreen) {
-            continue;
-        }
-        // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
-            continue;
-        }
-
-        if (!m_overlayWindows.contains(screen)) {
-            createOverlayWindow(screen);
-        }
-        if (auto* window = m_overlayWindows.value(screen)) {
-            updateOverlayWindow(screen);
-            window->show();
-        }
-    }
-
-    // Check if we need to recreate windows - this handles the case where windows
-    // were created before shaders were ready (e.g., at startup after reboot)
-    const bool shouldUseShader = useShaderOverlay();
-    bool needsRecreate = false;
-
-    // Check if any existing windows are the wrong type
-    for (auto* screen : Utils::allScreens()) {
-        if (!m_overlayWindows.contains(screen)) {
-            continue;
-        }
-        auto* window = m_overlayWindows.value(screen);
-        if (!window) {
-            continue;
-        }
-
-        // Check if window type matches what we need
-        // Use isShaderOverlay property set at creation time (more reliable than shaderSource
-        // which can be set on non-shader windows by updateOverlayWindow())
-        const bool windowIsShader = window->property("isShaderOverlay").toBool();
-        if (windowIsShader != shouldUseShader) {
-            needsRecreate = true;
-            qCDebug(lcOverlay) << "Overlay window type mismatch detected, will recreate"
-                               << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
-            break;
-        }
-    }
-
-    // Recreate windows if type mismatch detected
-    if (needsRecreate) {
-        const auto screens = m_overlayWindows.keys();
-        for (QScreen* screen : screens) {
-            destroyOverlayWindow(screen);
-        }
-        for (QScreen* screen : screens) {
-            if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
-                createOverlayWindow(screen);
-                updateOverlayWindow(screen);
-                if (auto* window = m_overlayWindows.value(screen)) {
-                    window->show();
-                }
-            }
-        }
-    }
-
-    if (shouldUseShader) {
-        updateZonesForAllWindows(); // Push initial zone data
-        startShaderAnimation();
-    }
-
-    Q_EMIT visibilityChanged(true);
+    initializeOverlay(cursorScreen);
 }
 
 void OverlayService::showAtPosition(int cursorX, int cursorY)
 {
     if (m_visible) {
         return;
-    }
-
-    // Handle any pending shader error from previous session
-    if (m_shaderErrorPending) {
-        qCDebug(lcOverlay) << "Previous shader error (falling back to standard overlay):" << m_pendingShaderError;
     }
 
     // Check if we should show on all monitors or just the cursor's screen
@@ -623,6 +534,19 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             return;
         }
     }
+
+    initializeOverlay(cursorScreen);
+}
+
+void OverlayService::initializeOverlay(QScreen* cursorScreen)
+{
+    // Handle any pending shader error from previous session
+    if (m_shaderErrorPending) {
+        qCDebug(lcOverlay) << "Previous shader error (falling back to standard overlay):" << m_pendingShaderError;
+    }
+
+    // Determine if we should show on all monitors (cursorScreen == nullptr means all)
+    const bool showOnAllMonitors = (cursorScreen == nullptr);
 
     m_visible = true;
 

@@ -4,6 +4,7 @@
 #include "layoutadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layout.h"
+#include "../core/layoutfactory.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/virtualdesktopmanager.h"
@@ -210,22 +211,8 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         return QString();
     }
 
-    Layout* layout = nullptr;
-
-    if (type == QStringLiteral("columns")) {
-        layout = Layout::createColumnsLayout(3, m_layoutManager);
-    } else if (type == QStringLiteral("rows")) {
-        layout = Layout::createRowsLayout(3, m_layoutManager);
-    } else if (type == QStringLiteral("grid")) {
-        layout = Layout::createGridLayout(2, 2, m_layoutManager);
-    } else if (type == QStringLiteral("priority")) {
-        layout = Layout::createPriorityGridLayout(m_layoutManager);
-    } else if (type == QStringLiteral("focus")) {
-        layout = Layout::createFocusLayout(m_layoutManager);
-    } else {
-        // Custom layout with no zones
-        layout = new Layout(name, LayoutType::Custom, m_layoutManager);
-    }
+    // Use factory pattern to create layout (replaces if-else chain)
+    Layout* layout = LayoutFactory::create(type, m_layoutManager);
 
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout of type:" << type;

@@ -150,6 +150,15 @@ private:
     void updateShaderUniforms();
     void updateZonesForAllWindows();
 
+    /**
+     * @brief Initialize and show overlay for a given screen or cursor position
+     * @param cursorScreen Screen where cursor is located (nullptr = show on all monitors)
+     *
+     * This is the common implementation for show() and showAtPosition().
+     * Extracts ~100 lines of duplicate code from both methods.
+     */
+    void initializeOverlay(QScreen* cursorScreen);
+
 private Q_SLOTS:
     // System sleep/resume handler (connected to logind PrepareForSleep signal)
     void onPrepareForSleep(bool goingToSleep);

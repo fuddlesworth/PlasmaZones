@@ -36,6 +36,14 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     Q_ASSERT(zoneDetector);
     Q_ASSERT(settings);
 
+    // Create business logic service (SRP: separates tracking logic from D-Bus interface)
+    // Note: Service handles in-memory state; adaptor handles D-Bus + KConfig persistence
+    m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
+
+    // Forward service signals to D-Bus
+    connect(m_service, &WindowTrackingService::windowZoneChanged,
+            this, &WindowTrackingAdaptor::windowZoneChanged);
+
     // Setup debounced save timer (500ms delay to batch rapid state changes)
     m_saveTimer = new QTimer(this);
     m_saveTimer->setSingleShot(true);

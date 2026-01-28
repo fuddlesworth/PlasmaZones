@@ -30,6 +30,64 @@ Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 // Navigation directive prefix constant - used for keyboard navigation commands
 static const QString NavigateDirectivePrefix = QStringLiteral("navigate:");
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Template helpers to reduce code duplication (DRY principle)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Template to ensure a D-Bus interface is initialized and valid
+ * @tparam InterfacePtr unique_ptr<QDBusInterface> type
+ * @param interface Reference to the interface pointer to ensure
+ * @param interfaceName D-Bus interface name (e.g., DBus::Interface::WindowDrag)
+ * @param logName Human-readable name for logging
+ *
+ * Replaces the duplicate ensure*Interface() methods with a single template.
+ */
+template<typename InterfacePtr>
+static void ensureInterface(InterfacePtr& interface, const QString& interfaceName, const char* logName)
+{
+    if (interface && interface->isValid()) {
+        return;
+    }
+
+    interface = std::make_unique<QDBusInterface>(DBus::ServiceName, DBus::ObjectPath, interfaceName,
+                                                  QDBusConnection::sessionBus());
+
+    if (!interface->isValid()) {
+        qCWarning(lcEffect) << "Cannot connect to" << logName << "interface -" << interface->lastError().message();
+    }
+}
+
+/**
+ * @brief Load a setting from D-Bus with proper QDBusVariant unwrapping
+ * @tparam T The type to convert the setting to
+ * @param settingsInterface Reference to the settings D-Bus interface
+ * @param key The setting key name
+ * @param defaultValue Default value if the setting can't be loaded
+ * @return The setting value or defaultValue on failure
+ *
+ * Consolidates the repeated pattern of calling getSetting, checking the reply,
+ * and unwrapping QDBusVariant if needed.
+ */
+template<typename T>
+static T loadDBusSetting(QDBusInterface& settingsInterface, const QString& key, T defaultValue)
+{
+    if (!settingsInterface.isValid()) {
+        return defaultValue;
+    }
+
+    QDBusMessage reply = settingsInterface.call(QStringLiteral("getSetting"), key);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return defaultValue;
+    }
+
+    QVariant value = reply.arguments().at(0);
+    if (value.canConvert<QDBusVariant>()) {
+        return value.value<QDBusVariant>().variant().value<T>();
+    }
+    return value.value<T>();
+}
+
 PlasmaZonesEffect::PlasmaZonesEffect()
     : Effect()
 {
@@ -506,46 +564,17 @@ bool PlasmaZonesEffect::shouldAutoSnapWindow(KWin::EffectWindow* w) const
 
 void PlasmaZonesEffect::ensureDBusInterface()
 {
-    if (m_dbusInterface && m_dbusInterface->isValid()) {
-        return;
-    }
-
-    m_dbusInterface = std::make_unique<QDBusInterface>(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-                                                       QDBusConnection::sessionBus());
-
-    if (!m_dbusInterface->isValid()) {
-        qCWarning(lcEffect) << "Cannot connect to PlasmaZones daemon -" << m_dbusInterface->lastError().message();
-    }
+    ensureInterface(m_dbusInterface, DBus::Interface::WindowDrag, "WindowDrag");
 }
 
 void PlasmaZonesEffect::ensureWindowTrackingInterface()
 {
-    if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
-        return;
-    }
-
-    m_windowTrackingInterface = std::make_unique<QDBusInterface>(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking, QDBusConnection::sessionBus());
-
-    if (!m_windowTrackingInterface->isValid()) {
-        qCWarning(lcEffect) << "Cannot connect to WindowTracking interface -"
-                            << m_windowTrackingInterface->lastError().message();
-    }
+    ensureInterface(m_windowTrackingInterface, DBus::Interface::WindowTracking, "WindowTracking");
 }
 
 void PlasmaZonesEffect::ensureZoneDetectionInterface()
 {
-    if (m_zoneDetectionInterface && m_zoneDetectionInterface->isValid()) {
-        return;
-    }
-
-    m_zoneDetectionInterface = std::make_unique<QDBusInterface>(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::ZoneDetection, QDBusConnection::sessionBus());
-
-    if (!m_zoneDetectionInterface->isValid()) {
-        qCWarning(lcEffect) << "Cannot connect to ZoneDetection interface -"
-                            << m_zoneDetectionInterface->lastError().message();
-    }
+    ensureInterface(m_zoneDetectionInterface, DBus::Interface::ZoneDetection, "ZoneDetection");
 }
 
 void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
@@ -583,41 +612,10 @@ void PlasmaZonesEffect::loadExclusionSettings()
         return;
     }
 
-    // Load excludeTransientWindows
-    QDBusMessage excludeTransientReply =
-        settingsInterface.call(QStringLiteral("getSetting"), QStringLiteral("excludeTransientWindows"));
-    if (excludeTransientReply.type() == QDBusMessage::ReplyMessage && !excludeTransientReply.arguments().isEmpty()) {
-        QVariant value = excludeTransientReply.arguments().at(0);
-        if (value.canConvert<QDBusVariant>()) {
-            m_excludeTransientWindows = value.value<QDBusVariant>().variant().toBool();
-        } else {
-            m_excludeTransientWindows = value.toBool();
-        }
-    }
-
-    // Load minimumWindowWidth
-    QDBusMessage minWidthReply =
-        settingsInterface.call(QStringLiteral("getSetting"), QStringLiteral("minimumWindowWidth"));
-    if (minWidthReply.type() == QDBusMessage::ReplyMessage && !minWidthReply.arguments().isEmpty()) {
-        QVariant value = minWidthReply.arguments().at(0);
-        if (value.canConvert<QDBusVariant>()) {
-            m_minimumWindowWidth = value.value<QDBusVariant>().variant().toInt();
-        } else {
-            m_minimumWindowWidth = value.toInt();
-        }
-    }
-
-    // Load minimumWindowHeight
-    QDBusMessage minHeightReply =
-        settingsInterface.call(QStringLiteral("getSetting"), QStringLiteral("minimumWindowHeight"));
-    if (minHeightReply.type() == QDBusMessage::ReplyMessage && !minHeightReply.arguments().isEmpty()) {
-        QVariant value = minHeightReply.arguments().at(0);
-        if (value.canConvert<QDBusVariant>()) {
-            m_minimumWindowHeight = value.value<QDBusVariant>().variant().toInt();
-        } else {
-            m_minimumWindowHeight = value.toInt();
-        }
-    }
+    // Load all exclusion settings using the template helper
+    m_excludeTransientWindows = loadDBusSetting<bool>(settingsInterface, QStringLiteral("excludeTransientWindows"), true);
+    m_minimumWindowWidth = loadDBusSetting<int>(settingsInterface, QStringLiteral("minimumWindowWidth"), 200);
+    m_minimumWindowHeight = loadDBusSetting<int>(settingsInterface, QStringLiteral("minimumWindowHeight"), 150);
 
     qCDebug(lcEffect) << "Loaded exclusion settings: excludeTransient=" << m_excludeTransientWindows
                       << "minWidth=" << m_minimumWindowWidth << "minHeight=" << m_minimumWindowHeight;

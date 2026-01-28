@@ -26,6 +26,13 @@ set(plasmazones_core_SRCS
     core/logging.cpp
     core/interfaces.h
     core/interfaces.cpp
+    core/settings_interfaces.h
+    core/types.h
+    core/utils.h
+    core/layoutfactory.h
+    core/layoutfactory.cpp
+    core/windowtrackingservice.h
+    core/windowtrackingservice.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp

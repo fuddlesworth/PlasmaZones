@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "../core/windowtrackingservice.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -463,6 +464,9 @@ private:
     IZoneDetector* m_zoneDetector;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
+
+    // Business logic service (SRP: separates tracking logic from D-Bus interface)
+    WindowTrackingService* m_service = nullptr;
 
     // Debounced save timer to batch multiple state changes
     QTimer* m_saveTimer = nullptr;
