@@ -196,6 +196,13 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString snapToZone9Shortcut READ snapToZone9Shortcut WRITE setSnapToZone9Shortcut NOTIFY
                    snapToZone9ShortcutChanged)
 
+    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
+    // Rotates all windows in the current layout clockwise or counterclockwise
+    Q_PROPERTY(QString rotateWindowsClockwiseShortcut READ rotateWindowsClockwiseShortcut WRITE
+                   setRotateWindowsClockwiseShortcut NOTIFY rotateWindowsClockwiseShortcutChanged)
+    Q_PROPERTY(QString rotateWindowsCounterclockwiseShortcut READ rotateWindowsCounterclockwiseShortcut WRITE
+                   setRotateWindowsCounterclockwiseShortcut NOTIFY rotateWindowsCounterclockwiseShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -706,6 +713,18 @@ public:
     QString snapToZoneShortcut(int index) const;
     void setSnapToZoneShortcut(int index, const QString& shortcut);
 
+    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
+    QString rotateWindowsClockwiseShortcut() const
+    {
+        return m_rotateWindowsClockwiseShortcut;
+    }
+    void setRotateWindowsClockwiseShortcut(const QString& shortcut);
+    QString rotateWindowsCounterclockwiseShortcut() const
+    {
+        return m_rotateWindowsCounterclockwiseShortcut;
+    }
+    void setRotateWindowsCounterclockwiseShortcut(const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -825,6 +844,11 @@ private:
         QStringLiteral("Meta+Ctrl+1"), QStringLiteral("Meta+Ctrl+2"), QStringLiteral("Meta+Ctrl+3"),
         QStringLiteral("Meta+Ctrl+4"), QStringLiteral("Meta+Ctrl+5"), QStringLiteral("Meta+Ctrl+6"),
         QStringLiteral("Meta+Ctrl+7"), QStringLiteral("Meta+Ctrl+8"), QStringLiteral("Meta+Ctrl+9")};
+
+    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
+    // Rotates all windows in the current layout clockwise or counterclockwise
+    QString m_rotateWindowsClockwiseShortcut = QStringLiteral("Meta+Ctrl+]");
+    QString m_rotateWindowsCounterclockwiseShortcut = QStringLiteral("Meta+Ctrl+[");
 };
 
 } // namespace PlasmaZones

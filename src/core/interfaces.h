@@ -333,6 +333,10 @@ Q_SIGNALS:
     void snapToZone7ShortcutChanged();
     void snapToZone8ShortcutChanged();
     void snapToZone9ShortcutChanged();
+
+    // Rotate Windows Shortcuts
+    void rotateWindowsClockwiseShortcutChanged();
+    void rotateWindowsCounterclockwiseShortcutChanged();
 };
 
 /**

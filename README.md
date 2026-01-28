@@ -239,6 +239,8 @@ systemctl --user enable --now plasmazones.service
 | Swap window right | `Meta+Ctrl+Alt+Right` |
 | Swap window up | `Meta+Ctrl+Alt+Up` |
 | Swap window down | `Meta+Ctrl+Alt+Down` |
+| Rotate windows clockwise | `Meta+Ctrl+]` |
+| Rotate windows counterclockwise | `Meta+Ctrl+[` |
 | Focus zone left | `Alt+Shift+Left` |
 | Focus zone right | `Alt+Shift+Right` |
 | Focus zone up | `Alt+Shift+Up` |
@@ -251,6 +253,7 @@ systemctl --user enable --now plasmazones.service
 - `Meta+Alt+{key}` — Layout operations and actions
 - `Meta+Alt+Shift+Arrow` — Window zone movement (avoids KDE's `Meta+Shift+Arrow` screen movement)
 - `Meta+Ctrl+Alt+Arrow` — Swap windows between zones (avoids KDE's `Meta+Ctrl+Arrow` desktop switching)
+- `Meta+Ctrl+[/]` — Rotate all windows through zones (complements layout cycling `Meta+Alt+[/]`)
 - `Alt+Shift+Arrow` — Focus navigation (avoids KDE's `Meta+Arrow` quick tile)
 - `Meta+Ctrl+{1-9}` — Direct zone snapping
 

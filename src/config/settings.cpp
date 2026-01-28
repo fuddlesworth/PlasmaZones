@@ -860,6 +860,25 @@ void Settings::setSnapToZone9Shortcut(const QString& shortcut)
     setSnapToZoneShortcut(8, shortcut);
 }
 
+// Rotate Windows Shortcuts
+void Settings::setRotateWindowsClockwiseShortcut(const QString& shortcut)
+{
+    if (m_rotateWindowsClockwiseShortcut != shortcut) {
+        m_rotateWindowsClockwiseShortcut = shortcut;
+        Q_EMIT rotateWindowsClockwiseShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setRotateWindowsCounterclockwiseShortcut(const QString& shortcut)
+{
+    if (m_rotateWindowsCounterclockwiseShortcut != shortcut) {
+        m_rotateWindowsCounterclockwiseShortcut = shortcut;
+        Q_EMIT rotateWindowsCounterclockwiseShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -1174,6 +1193,13 @@ void Settings::load()
         m_snapToZoneShortcuts[i] = navigationShortcuts.readEntry(key, defaultShortcut);
     }
 
+    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
+    // Rotates all windows in the current layout clockwise or counterclockwise
+    m_rotateWindowsClockwiseShortcut =
+        navigationShortcuts.readEntry("RotateWindowsClockwise", QStringLiteral("Meta+Ctrl+]"));
+    m_rotateWindowsCounterclockwiseShortcut =
+        navigationShortcuts.readEntry("RotateWindowsCounterclockwise", QStringLiteral("Meta+Ctrl+["));
+
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1297,6 +1323,10 @@ void Settings::save()
         navigationShortcuts.writeEntry(key, m_snapToZoneShortcuts[i]);
     }
 
+    // Rotate Windows Shortcuts
+    navigationShortcuts.writeEntry("RotateWindowsClockwise", m_rotateWindowsClockwiseShortcut);
+    navigationShortcuts.writeEntry("RotateWindowsCounterclockwise", m_rotateWindowsCounterclockwiseShortcut);
+
     config->sync();
 }
 
@@ -1402,6 +1432,10 @@ void Settings::reset()
     for (int i = 0; i < 9; ++i) {
         m_snapToZoneShortcuts[i] = QStringLiteral("Meta+Ctrl+%1").arg(i + 1);
     }
+
+    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
+    m_rotateWindowsClockwiseShortcut = QStringLiteral("Meta+Ctrl+]");
+    m_rotateWindowsCounterclockwiseShortcut = QStringLiteral("Meta+Ctrl+[");
 
     Q_EMIT settingsChanged();
 }

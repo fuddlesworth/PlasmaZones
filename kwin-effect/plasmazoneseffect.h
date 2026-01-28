@@ -61,6 +61,7 @@ private Q_SLOTS:
     void slotToggleWindowFloatRequested(bool shouldFloat);
     void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
                                   const QString& zoneGeometry);
+    void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
 
 private:
     // Window management
