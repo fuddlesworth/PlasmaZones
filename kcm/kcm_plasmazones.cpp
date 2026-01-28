@@ -258,6 +258,18 @@ QStringList KCMPlasmaZones::excludedWindowClasses() const
 {
     return m_settings->excludedWindowClasses();
 }
+bool KCMPlasmaZones::excludeTransientWindows() const
+{
+    return m_settings->excludeTransientWindows();
+}
+int KCMPlasmaZones::minimumWindowWidth() const
+{
+    return m_settings->minimumWindowWidth();
+}
+int KCMPlasmaZones::minimumWindowHeight() const
+{
+    return m_settings->minimumWindowHeight();
+}
 
 // Zone selector getters
 bool KCMPlasmaZones::zoneSelectorEnabled() const
@@ -709,6 +721,33 @@ void KCMPlasmaZones::setExcludedWindowClasses(const QStringList& classes)
     if (m_settings->excludedWindowClasses() != classes) {
         m_settings->setExcludedWindowClasses(classes);
         Q_EMIT excludedWindowClassesChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setExcludeTransientWindows(bool exclude)
+{
+    if (m_settings->excludeTransientWindows() != exclude) {
+        m_settings->setExcludeTransientWindows(exclude);
+        Q_EMIT excludeTransientWindowsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setMinimumWindowWidth(int width)
+{
+    if (m_settings->minimumWindowWidth() != width) {
+        m_settings->setMinimumWindowWidth(width);
+        Q_EMIT minimumWindowWidthChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setMinimumWindowHeight(int height)
+{
+    if (m_settings->minimumWindowHeight() != height) {
+        m_settings->setMinimumWindowHeight(height);
+        Q_EMIT minimumWindowHeightChanged();
         setNeedsSave(true);
     }
 }

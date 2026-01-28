@@ -97,6 +97,12 @@ class KCMPlasmaZones : public KQuickConfigModule
                    excludedApplicationsChanged)
     Q_PROPERTY(QStringList excludedWindowClasses READ excludedWindowClasses WRITE setExcludedWindowClasses NOTIFY
                    excludedWindowClassesChanged)
+    Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
+                   excludeTransientWindowsChanged)
+    Q_PROPERTY(
+        int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY minimumWindowWidthChanged)
+    Q_PROPERTY(
+        int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
     // Zone selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -200,6 +206,9 @@ public:
     QString defaultLayoutId() const;
     QStringList excludedApplications() const;
     QStringList excludedWindowClasses() const;
+    bool excludeTransientWindows() const;
+    int minimumWindowWidth() const;
+    int minimumWindowHeight() const;
     bool zoneSelectorEnabled() const;
     int zoneSelectorTriggerDistance() const;
     int zoneSelectorPosition() const;
@@ -267,6 +276,9 @@ public:
     void setDefaultLayoutId(const QString& layoutId);
     void setExcludedApplications(const QStringList& apps);
     void setExcludedWindowClasses(const QStringList& classes);
+    void setExcludeTransientWindows(bool exclude);
+    void setMinimumWindowWidth(int width);
+    void setMinimumWindowHeight(int height);
     void setZoneSelectorEnabled(bool enabled);
     void setZoneSelectorTriggerDistance(int distance);
     void setZoneSelectorPosition(int position);
@@ -375,6 +387,9 @@ Q_SIGNALS:
     void defaultLayoutIdChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();
+    void excludeTransientWindowsChanged();
+    void minimumWindowWidthChanged();
+    void minimumWindowHeightChanged();
     void zoneSelectorEnabledChanged();
     void zoneSelectorTriggerDistanceChanged();
     void zoneSelectorPositionChanged();

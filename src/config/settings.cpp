@@ -384,6 +384,35 @@ void Settings::setExcludedWindowClasses(const QStringList& classes)
     }
 }
 
+void Settings::setExcludeTransientWindows(bool exclude)
+{
+    if (m_excludeTransientWindows != exclude) {
+        m_excludeTransientWindows = exclude;
+        Q_EMIT excludeTransientWindowsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setMinimumWindowWidth(int width)
+{
+    width = qBound(0, width, 1000); // Clamp to 0-1000 pixels (0 disables)
+    if (m_minimumWindowWidth != width) {
+        m_minimumWindowWidth = width;
+        Q_EMIT minimumWindowWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setMinimumWindowHeight(int height)
+{
+    height = qBound(0, height, 1000); // Clamp to 0-1000 pixels (0 disables)
+    if (m_minimumWindowHeight != height) {
+        m_minimumWindowHeight = height;
+        Q_EMIT minimumWindowHeightChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setZoneSelectorEnabled(bool enabled)
 {
     if (m_zoneSelectorEnabled != enabled) {
@@ -1083,6 +1112,11 @@ void Settings::load()
     // Exclusions
     m_excludedApplications = exclusions.readEntry("Applications", QStringList());
     m_excludedWindowClasses = exclusions.readEntry("WindowClasses", QStringList());
+    m_excludeTransientWindows = exclusions.readEntry("ExcludeTransientWindows", true);
+    int minWidth = exclusions.readEntry("MinimumWindowWidth", 200);
+    m_minimumWindowWidth = qBound(0, minWidth, 1000);
+    int minHeight = exclusions.readEntry("MinimumWindowHeight", 150);
+    m_minimumWindowHeight = qBound(0, minHeight, 1000);
 
     // Zone Selector
     KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
@@ -1268,6 +1302,9 @@ void Settings::save()
     // Exclusions
     exclusions.writeEntry("Applications", m_excludedApplications);
     exclusions.writeEntry("WindowClasses", m_excludedWindowClasses);
+    exclusions.writeEntry("ExcludeTransientWindows", m_excludeTransientWindows);
+    exclusions.writeEntry("MinimumWindowWidth", m_minimumWindowWidth);
+    exclusions.writeEntry("MinimumWindowHeight", m_minimumWindowHeight);
 
     // Zone Selector
     KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
@@ -1375,6 +1412,9 @@ void Settings::reset()
 
     m_excludedApplications.clear();
     m_excludedWindowClasses.clear();
+    m_excludeTransientWindows = true;
+    m_minimumWindowWidth = 200;
+    m_minimumWindowHeight = 150;
 
     // Zone Selector defaults
     m_zoneSelectorEnabled = true;

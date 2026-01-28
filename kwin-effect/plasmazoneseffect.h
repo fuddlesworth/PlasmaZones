@@ -150,6 +150,14 @@ private:
 
     // Apply debounced screen geometry change
     void applyScreenGeometryChange();
+
+    // Load exclusion settings from daemon
+    void loadExclusionSettings();
+
+    // Cached exclusion settings (loaded from daemon via D-Bus)
+    bool m_excludeTransientWindows = true;
+    int m_minimumWindowWidth = 200;
+    int m_minimumWindowHeight = 150;
 };
 
 } // namespace PlasmaZones

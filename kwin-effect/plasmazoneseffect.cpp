@@ -57,6 +57,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Sync floating window state from daemon's persisted state
     syncFloatingWindowsFromDaemon();
 
+    // Load exclusion settings from daemon
+    loadExclusionSettings();
+
     // Setup polling timer for detecting window moves
     // In KWin 6, we poll windows to check isUserMove() state
     m_pollTimer.setInterval(50); // 20 Hz update rate
@@ -328,7 +331,8 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
 
 void PlasmaZonesEffect::slotSettingsChanged()
 {
-    qCDebug(lcEffect) << "Daemon signaled settingsChanged";
+    qCDebug(lcEffect) << "Daemon signaled settingsChanged - reloading exclusion settings";
+    loadExclusionSettings();
 }
 
 void PlasmaZonesEffect::pollWindowMoves()
@@ -431,6 +435,43 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
         return false;
     }
 
+    // Skip transient/dialog windows if setting is enabled
+    // This excludes dialogs, utilities, tooltips, notifications, menus, etc.
+    if (m_excludeTransientWindows) {
+        if (w->isDialog()) {
+            return false;
+        }
+        if (w->isUtility()) {
+            return false;
+        }
+        if (w->isSplash()) {
+            return false;
+        }
+        if (w->isNotification()) {
+            return false;
+        }
+        if (w->isOnScreenDisplay()) {
+            return false;
+        }
+        if (w->isModal()) {
+            return false;
+        }
+        if (w->isPopupWindow()) {
+            return false;
+        }
+    }
+
+    // Skip windows smaller than minimum size (if size thresholds are enabled)
+    if (m_minimumWindowWidth > 0 || m_minimumWindowHeight > 0) {
+        QRectF geometry = w->frameGeometry();
+        if (m_minimumWindowWidth > 0 && geometry.width() < m_minimumWindowWidth) {
+            return false;
+        }
+        if (m_minimumWindowHeight > 0 && geometry.height() < m_minimumWindowHeight) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -529,6 +570,57 @@ void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
             qCDebug(lcEffect) << "Synced" << floatingWindows.size() << "floating windows from daemon (stable IDs)";
         }
     }
+}
+
+void PlasmaZonesEffect::loadExclusionSettings()
+{
+    // Query exclusion settings from daemon via D-Bus
+    QDBusInterface settingsInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                     QDBusConnection::sessionBus());
+
+    if (!settingsInterface.isValid()) {
+        qCDebug(lcEffect) << "Cannot load exclusion settings - daemon not available yet";
+        return;
+    }
+
+    // Load excludeTransientWindows
+    QDBusMessage excludeTransientReply =
+        settingsInterface.call(QStringLiteral("getSettingValue"), QStringLiteral("excludeTransientWindows"));
+    if (excludeTransientReply.type() == QDBusMessage::ReplyMessage && !excludeTransientReply.arguments().isEmpty()) {
+        QVariant value = excludeTransientReply.arguments().at(0);
+        if (value.canConvert<QDBusVariant>()) {
+            m_excludeTransientWindows = value.value<QDBusVariant>().variant().toBool();
+        } else {
+            m_excludeTransientWindows = value.toBool();
+        }
+    }
+
+    // Load minimumWindowWidth
+    QDBusMessage minWidthReply =
+        settingsInterface.call(QStringLiteral("getSettingValue"), QStringLiteral("minimumWindowWidth"));
+    if (minWidthReply.type() == QDBusMessage::ReplyMessage && !minWidthReply.arguments().isEmpty()) {
+        QVariant value = minWidthReply.arguments().at(0);
+        if (value.canConvert<QDBusVariant>()) {
+            m_minimumWindowWidth = value.value<QDBusVariant>().variant().toInt();
+        } else {
+            m_minimumWindowWidth = value.toInt();
+        }
+    }
+
+    // Load minimumWindowHeight
+    QDBusMessage minHeightReply =
+        settingsInterface.call(QStringLiteral("getSettingValue"), QStringLiteral("minimumWindowHeight"));
+    if (minHeightReply.type() == QDBusMessage::ReplyMessage && !minHeightReply.arguments().isEmpty()) {
+        QVariant value = minHeightReply.arguments().at(0);
+        if (value.canConvert<QDBusVariant>()) {
+            m_minimumWindowHeight = value.value<QDBusVariant>().variant().toInt();
+        } else {
+            m_minimumWindowHeight = value.toInt();
+        }
+    }
+
+    qCDebug(lcEffect) << "Loaded exclusion settings: excludeTransient=" << m_excludeTransientWindows
+                      << "minWidth=" << m_minimumWindowWidth << "minHeight=" << m_minimumWindowHeight;
 }
 
 void PlasmaZonesEffect::connectNavigationSignals()

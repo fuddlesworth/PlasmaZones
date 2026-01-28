@@ -197,6 +197,12 @@ public:
     virtual void setExcludedApplications(const QStringList& apps) = 0;
     virtual QStringList excludedWindowClasses() const = 0;
     virtual void setExcludedWindowClasses(const QStringList& classes) = 0;
+    virtual bool excludeTransientWindows() const = 0;
+    virtual void setExcludeTransientWindows(bool exclude) = 0;
+    virtual int minimumWindowWidth() const = 0;
+    virtual void setMinimumWindowWidth(int width) = 0;
+    virtual int minimumWindowHeight() const = 0;
+    virtual void setMinimumWindowHeight(int height) = 0;
     virtual bool isWindowExcluded(const QString& appName, const QString& windowClass) const = 0;
 
     // Zone Selector
@@ -277,6 +283,9 @@ Q_SIGNALS:
     void defaultLayoutIdChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();
+    void excludeTransientWindowsChanged();
+    void minimumWindowWidthChanged();
+    void minimumWindowHeightChanged();
     void zoneSelectorEnabledChanged();
     void zoneSelectorTriggerDistanceChanged();
     void zoneSelectorPositionChanged();

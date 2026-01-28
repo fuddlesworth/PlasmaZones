@@ -88,6 +88,12 @@ class PLASMAZONES_EXPORT Settings : public ISettings
                    excludedApplicationsChanged)
     Q_PROPERTY(QStringList excludedWindowClasses READ excludedWindowClasses WRITE setExcludedWindowClasses NOTIFY
                    excludedWindowClassesChanged)
+    Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
+                   excludeTransientWindowsChanged)
+    Q_PROPERTY(int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY
+                   minimumWindowWidthChanged)
+    Q_PROPERTY(int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY
+                   minimumWindowHeightChanged)
 
     // Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -438,6 +444,24 @@ public:
     }
     void setExcludedWindowClasses(const QStringList& classes) override;
 
+    bool excludeTransientWindows() const override
+    {
+        return m_excludeTransientWindows;
+    }
+    void setExcludeTransientWindows(bool exclude) override;
+
+    int minimumWindowWidth() const override
+    {
+        return m_minimumWindowWidth;
+    }
+    void setMinimumWindowWidth(int width) override;
+
+    int minimumWindowHeight() const override
+    {
+        return m_minimumWindowHeight;
+    }
+    void setMinimumWindowHeight(int height) override;
+
     // Zone Selector
     bool zoneSelectorEnabled() const override
     {
@@ -787,6 +811,9 @@ private:
     // Exclusions
     QStringList m_excludedApplications;
     QStringList m_excludedWindowClasses;
+    bool m_excludeTransientWindows = true;
+    int m_minimumWindowWidth = 200;
+    int m_minimumWindowHeight = 150;
 
     // Zone Selector
     bool m_zoneSelectorEnabled = true;
