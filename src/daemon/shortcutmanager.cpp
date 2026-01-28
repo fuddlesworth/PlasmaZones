@@ -69,6 +69,35 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::toggleWindowFloatShortcutChanged, this,
             &ShortcutManager::updateToggleWindowFloatShortcut);
 
+    // Snap to Zone by Number shortcuts
+    connect(m_settings, &Settings::snapToZone1ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(0);
+    });
+    connect(m_settings, &Settings::snapToZone2ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(1);
+    });
+    connect(m_settings, &Settings::snapToZone3ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(2);
+    });
+    connect(m_settings, &Settings::snapToZone4ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(3);
+    });
+    connect(m_settings, &Settings::snapToZone5ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(4);
+    });
+    connect(m_settings, &Settings::snapToZone6ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(5);
+    });
+    connect(m_settings, &Settings::snapToZone7ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(6);
+    });
+    connect(m_settings, &Settings::snapToZone8ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(7);
+    });
+    connect(m_settings, &Settings::snapToZone9ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(8);
+    });
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -87,6 +116,7 @@ void ShortcutManager::registerShortcuts()
     setupCyclingShortcuts();
     setupQuickLayoutShortcuts();
     setupNavigationShortcuts();
+    setupSnapToZoneShortcuts();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -100,7 +130,7 @@ void ShortcutManager::updateShortcuts()
     updatePreviousLayoutShortcut();
     updateNextLayoutShortcut();
 
-    // Quick layout shortcuts (0-8)
+    // Quick layout shortcuts (0-8 internally, 1-9 for users)
     for (int i = 0; i < 9; ++i) {
         updateQuickLayoutShortcut(i);
     }
@@ -117,6 +147,11 @@ void ShortcutManager::updateShortcuts()
     updatePushToEmptyZoneShortcut();
     updateRestoreWindowSizeShortcut();
     updateToggleWindowFloatShortcut();
+
+    // Snap to Zone shortcuts (0-8 internally, 1-9 for users)
+    for (int i = 0; i < 9; ++i) {
+        updateSnapToZoneShortcut(i);
+    }
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -171,6 +206,10 @@ void ShortcutManager::unregisterShortcuts()
 
     delete m_toggleWindowFloatAction;
     m_toggleWindowFloatAction = nullptr;
+
+    // Snap to Zone actions
+    qDeleteAll(m_snapToZoneActions);
+    m_snapToZoneActions.clear();
 }
 
 void ShortcutManager::onOpenEditor()
@@ -508,6 +547,45 @@ void ShortcutManager::updateToggleWindowFloatShortcut()
     if (m_toggleWindowFloatAction) {
         KGlobalAccel::setGlobalShortcut(m_toggleWindowFloatAction,
                                         QKeySequence(m_settings->toggleWindowFloatShortcut()));
+    }
+}
+
+// Snap to Zone by Number
+void ShortcutManager::setupSnapToZoneShortcuts()
+{
+    // Clear existing actions
+    qDeleteAll(m_snapToZoneActions);
+    m_snapToZoneActions.clear();
+
+    // Register snap-to-zone shortcuts (Meta+Ctrl+1-9)
+    for (int i = 0; i < 9; ++i) {
+        auto* snapAction = new QAction(i18n("Snap to Zone %1", i + 1), this);
+        snapAction->setObjectName(QStringLiteral("snap_to_zone_%1").arg(i + 1));
+        KGlobalAccel::setGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
+
+        // Use lambda to capture the zone number (1-based for user display)
+        const int zoneNumber = i + 1;
+        connect(snapAction, &QAction::triggered, this, [this, zoneNumber]() {
+            onSnapToZone(zoneNumber);
+        });
+
+        m_snapToZoneActions.append(snapAction);
+    }
+
+    qCInfo(lcShortcuts) << "Snap-to-zone shortcuts registered (Meta+Ctrl+1-9)";
+}
+
+void ShortcutManager::onSnapToZone(int zoneNumber)
+{
+    qCDebug(lcShortcuts) << "Snap to zone" << zoneNumber << "triggered";
+    Q_EMIT snapToZoneRequested(zoneNumber);
+}
+
+void ShortcutManager::updateSnapToZoneShortcut(int index)
+{
+    if (index >= 0 && index < m_snapToZoneActions.size()) {
+        KGlobalAccel::setGlobalShortcut(m_snapToZoneActions[index],
+                                        QKeySequence(m_settings->snapToZoneShortcut(index)));
     }
 }
 

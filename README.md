@@ -230,6 +230,7 @@ systemctl --user enable --now plasmazones.service
 | Previous layout | `Meta+Alt+[` |
 | Next layout | `Meta+Alt+]` |
 | Quick layout 1-9 | `Meta+Alt+1` through `Meta+Alt+9` |
+| Snap to zone 1-9 | `Meta+Ctrl+1` through `Meta+Ctrl+9` |
 | Move window left | `Meta+Alt+Shift+Left` |
 | Move window right | `Meta+Alt+Shift+Right` |
 | Move window up | `Meta+Alt+Shift+Up` |

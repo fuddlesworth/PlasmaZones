@@ -1052,6 +1052,57 @@ void WindowTrackingAdaptor::toggleWindowFloat()
     // Note: Success/failure feedback will be emitted by the KWin effect
 }
 
+void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
+{
+    qCDebug(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber;
+
+    if (zoneNumber < 1 || zoneNumber > 9) {
+        qCWarning(lcDbusWindow) << "Invalid zone number:" << zoneNumber << "(must be 1-9)";
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"));
+        return;
+    }
+
+    if (!m_layoutManager) {
+        qCWarning(lcDbusWindow) << "No layout manager available";
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_layout_manager"));
+        return;
+    }
+
+    auto* layout = m_layoutManager->activeLayout();
+    if (!layout) {
+        qCDebug(lcDbusWindow) << "No active layout";
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_active_layout"));
+        return;
+    }
+
+    // Find zone with matching zoneNumber
+    Zone* targetZone = nullptr;
+    for (Zone* zone : layout->zones()) {
+        if (zone->zoneNumber() == zoneNumber) {
+            targetZone = zone;
+            break;
+        }
+    }
+
+    if (!targetZone) {
+        qCDebug(lcDbusWindow) << "No zone with number" << zoneNumber << "in current layout";
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("zone_not_found"));
+        return;
+    }
+
+    QString zoneId = targetZone->id().toString(QUuid::WithoutBraces);
+    QString geometry = getZoneGeometry(zoneId);
+    if (geometry.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Could not get geometry for zone" << zoneNumber;
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("geometry_error"));
+        return;
+    }
+
+    qCDebug(lcDbusWindow) << "Snapping to zone" << zoneNumber << "(" << zoneId << ") with geometry" << geometry;
+    Q_EMIT moveWindowToZoneRequested(zoneId, geometry);
+    Q_EMIT navigationFeedback(true, QStringLiteral("snap"), QString());
+}
+
 bool WindowTrackingAdaptor::queryWindowFloating(const QString& windowId)
 {
     // Query if a window is floating - called by KWin effect to sync state
