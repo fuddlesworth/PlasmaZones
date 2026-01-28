@@ -732,6 +732,43 @@ void Settings::setToggleWindowFloatShortcut(const QString& shortcut)
     }
 }
 
+// Swap Window Shortcuts
+void Settings::setSwapWindowLeftShortcut(const QString& shortcut)
+{
+    if (m_swapWindowLeftShortcut != shortcut) {
+        m_swapWindowLeftShortcut = shortcut;
+        Q_EMIT swapWindowLeftShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setSwapWindowRightShortcut(const QString& shortcut)
+{
+    if (m_swapWindowRightShortcut != shortcut) {
+        m_swapWindowRightShortcut = shortcut;
+        Q_EMIT swapWindowRightShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setSwapWindowUpShortcut(const QString& shortcut)
+{
+    if (m_swapWindowUpShortcut != shortcut) {
+        m_swapWindowUpShortcut = shortcut;
+        Q_EMIT swapWindowUpShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setSwapWindowDownShortcut(const QString& shortcut)
+{
+    if (m_swapWindowDownShortcut != shortcut) {
+        m_swapWindowDownShortcut = shortcut;
+        Q_EMIT swapWindowDownShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 // Snap to Zone by Number Shortcuts
 QString Settings::snapToZoneShortcut(int index) const
 {
@@ -1120,6 +1157,16 @@ void Settings::load()
     m_restoreWindowSizeShortcut = navigationShortcuts.readEntry("RestoreWindowSize", QStringLiteral("Meta+Alt+Escape"));
     m_toggleWindowFloatShortcut = navigationShortcuts.readEntry("ToggleWindowFloat", QStringLiteral("Meta+Alt+F"));
 
+    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
+    // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
+    // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
+    m_swapWindowLeftShortcut =
+        navigationShortcuts.readEntry("SwapWindowLeft", QStringLiteral("Meta+Ctrl+Alt+Left"));
+    m_swapWindowRightShortcut =
+        navigationShortcuts.readEntry("SwapWindowRight", QStringLiteral("Meta+Ctrl+Alt+Right"));
+    m_swapWindowUpShortcut = navigationShortcuts.readEntry("SwapWindowUp", QStringLiteral("Meta+Ctrl+Alt+Up"));
+    m_swapWindowDownShortcut = navigationShortcuts.readEntry("SwapWindowDown", QStringLiteral("Meta+Ctrl+Alt+Down"));
+
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     for (int i = 0; i < 9; ++i) {
         QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
@@ -1238,6 +1285,12 @@ void Settings::save()
     navigationShortcuts.writeEntry("RestoreWindowSize", m_restoreWindowSizeShortcut);
     navigationShortcuts.writeEntry("ToggleWindowFloat", m_toggleWindowFloatShortcut);
 
+    // Swap Window Shortcuts
+    navigationShortcuts.writeEntry("SwapWindowLeft", m_swapWindowLeftShortcut);
+    navigationShortcuts.writeEntry("SwapWindowRight", m_swapWindowRightShortcut);
+    navigationShortcuts.writeEntry("SwapWindowUp", m_swapWindowUpShortcut);
+    navigationShortcuts.writeEntry("SwapWindowDown", m_swapWindowDownShortcut);
+
     // Snap to Zone by Number Shortcuts
     for (int i = 0; i < 9; ++i) {
         QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
@@ -1337,6 +1390,13 @@ void Settings::reset()
     m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Alt+Return");
     m_restoreWindowSizeShortcut = QStringLiteral("Meta+Alt+Escape");
     m_toggleWindowFloatShortcut = QStringLiteral("Meta+Alt+F");
+
+    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
+    // Swaps focused window with window in adjacent zone
+    m_swapWindowLeftShortcut = QStringLiteral("Meta+Ctrl+Alt+Left");
+    m_swapWindowRightShortcut = QStringLiteral("Meta+Ctrl+Alt+Right");
+    m_swapWindowUpShortcut = QStringLiteral("Meta+Ctrl+Alt+Up");
+    m_swapWindowDownShortcut = QStringLiteral("Meta+Ctrl+Alt+Down");
 
     // Snap to Zone by Number Shortcuts
     for (int i = 0; i < 9; ++i) {

@@ -59,6 +59,8 @@ private Q_SLOTS:
     void slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
     void slotRestoreWindowRequested();
     void slotToggleWindowFloatRequested(bool shouldFloat);
+    void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
+                                  const QString& zoneGeometry);
 
 private:
     // Window management

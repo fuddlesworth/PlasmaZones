@@ -235,6 +235,10 @@ systemctl --user enable --now plasmazones.service
 | Move window right | `Meta+Alt+Shift+Right` |
 | Move window up | `Meta+Alt+Shift+Up` |
 | Move window down | `Meta+Alt+Shift+Down` |
+| Swap window left | `Meta+Ctrl+Alt+Left` |
+| Swap window right | `Meta+Ctrl+Alt+Right` |
+| Swap window up | `Meta+Ctrl+Alt+Up` |
+| Swap window down | `Meta+Ctrl+Alt+Down` |
 | Focus zone left | `Alt+Shift+Left` |
 | Focus zone right | `Alt+Shift+Right` |
 | Focus zone up | `Alt+Shift+Up` |
@@ -246,6 +250,7 @@ systemctl --user enable --now plasmazones.service
 **Shortcut Pattern:** Shortcuts are designed to avoid conflicts with KDE defaults:
 - `Meta+Alt+{key}` — Layout operations and actions
 - `Meta+Alt+Shift+Arrow` — Window zone movement (avoids KDE's `Meta+Shift+Arrow` screen movement)
+- `Meta+Ctrl+Alt+Arrow` — Swap windows between zones (avoids KDE's `Meta+Ctrl+Arrow` desktop switching)
 - `Alt+Shift+Arrow` — Focus navigation (avoids KDE's `Meta+Arrow` quick tile)
 - `Meta+Ctrl+{1-9}` — Direct zone snapping
 

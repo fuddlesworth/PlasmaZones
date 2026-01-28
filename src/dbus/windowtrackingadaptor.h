@@ -234,6 +234,14 @@ public Q_SLOTS:
     void toggleWindowFloat();
 
     /**
+     * @brief Swap the focused window with the window in an adjacent zone
+     * @param direction Direction to swap ("left", "right", "up", "down")
+     * @note If target zone is empty, behaves like regular move
+     * @note Emits swapWindowsRequested signal for KWin script to handle
+     */
+    void swapWindowWithAdjacentZone(const QString& direction);
+
+    /**
      * @brief Snap the focused window to a zone by its number
      * @param zoneNumber Zone number (1-9)
      * @note Finds zone with matching zoneNumber property in current layout and snaps window to it
@@ -350,6 +358,14 @@ Q_SIGNALS:
      * @param shouldFloat true to float (exclude), false to unfloat
      */
     void toggleWindowFloatRequested(bool shouldFloat);
+
+    /**
+     * @brief Request to swap two windows between zones
+     * @param targetZoneId Zone ID containing target window
+     * @param targetWindowId Window ID to swap with (may be empty if zone is empty)
+     * @param zoneGeometry JSON geometry {x, y, width, height} for the target zone
+     */
+    void swapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId, const QString& zoneGeometry);
 
 private Q_SLOTS:
     /**
