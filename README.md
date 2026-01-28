@@ -179,7 +179,7 @@ Configure all keyboard shortcuts for layout switching, window navigation, and ed
 - C++20 compiler
 
 Optional:
-- KF6::Activities for activity-based layouts
+- PlasmaActivities (plasma-activities package) for activity-based layouts
 
 ### Building
 

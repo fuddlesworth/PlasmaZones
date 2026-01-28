@@ -9,7 +9,7 @@ msgstr ""
 "#-#-#-#-#  plasmazones-editor-cpp.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
 "Project-Id-Version: PlasmaZones 1.0.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-27 18:01-0600\n"
+"POT-Creation-Date: 2026-01-28 12:55-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: English\n"
@@ -20,7 +20,7 @@ msgstr ""
 "#-#-#-#-#  plasmazones-editor-qml.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
 "Project-Id-Version: PlasmaZones 1.0.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-27 18:01-0600\n"
+"POT-Creation-Date: 2026-01-28 12:55-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: English\n"
@@ -58,127 +58,127 @@ msgstr ""
 msgid "Create new layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:675
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:676
 msgid "New Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:713
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:715
 msgid "Layout ID cannot be empty"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:718
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:720
 msgid "Layout service not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:730
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:732
 msgid "Invalid layout data format"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:858
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:861
 msgid "Services not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1073
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1141
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1177
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1259
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1076
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1144
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1180
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1262
 msgctxt "@info"
 msgid "Zone not found"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1126
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1162
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1129
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1165
 msgctxt "@info"
 msgid "Services not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1421
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1424
 #: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:154
 msgctxt "@action"
 msgid "Bring to Front"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1444
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1447
 #: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:178
 msgctxt "@action"
 msgid "Send to Back"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1467
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1470
 #: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:162
 msgctxt "@action"
 msgid "Bring Forward"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1490
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:1493
 #: /home/nlavender/Documents/PlasmaZones/src/editor/qml/ZoneContextMenu.qml:170
 msgctxt "@action"
 msgid "Send Backward"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2084
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2150
 msgctxt "@action"
 msgid "Delete %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2117
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2183
 msgctxt "@action"
 msgid "Duplicate %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2205
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2404
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2271
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2470
 msgctxt "@action"
 msgid "Move %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2251
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2317
 msgctxt "@action"
 msgid "Resize %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2527
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2593
 msgid "Zone name cannot exceed 100 characters"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2536
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2602
 msgid "Zone name contains invalid characters: < > \" ' \\"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2548
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2614
 msgid "A zone with this name already exists"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2567
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2633
 msgid "Zone number must be at least 1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2570
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2636
 msgid "Zone number cannot exceed 99"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2590
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:2656
 msgid "Zone number %1 is already in use"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3056
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3134
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3130
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3208
 msgctxt "@info"
 msgid "Zone manager not initialized"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3116
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3190
 msgctxt "@action"
 msgid "Cut %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3202
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3276
 #: /home/nlavender/Documents/PlasmaZones/src/editor/undo/commands/PasteZonesCommand.cpp:13
 msgctxt "@action"
 msgid "Paste %1 Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3330
+#: /home/nlavender/Documents/PlasmaZones/src/editor/EditorController.cpp:3404
 msgctxt "@action"
 msgid "Reset Shader Parameters"
 msgstr ""
@@ -649,152 +649,152 @@ msgctxt "@action:button"
 msgid "Dismiss notification"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:161
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:148
 msgctxt "@title"
 msgid "Layout Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:549
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:536
 msgid "Exit Fullscreen (F11)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:576
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:563
 msgctxt "@title:window"
 msgid "Unsaved Changes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:577
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:564
 msgctxt "@info"
 msgid "You have unsaved changes. What would you like to do?"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:595
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:582
 msgctxt "@title:window"
 msgid "Import Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:596
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:610
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:583
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:597
 msgctxt "@item:inlistbox"
 msgid "JSON files (*.json)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:596
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:583
 msgctxt "@item:inlistbox"
 msgid "All files (*)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:609
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:596
 msgctxt "@title:window"
 msgid "Export Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:639
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:626
 msgctxt "@title:window"
 msgid "Layout Editor Help"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:656
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:643
 msgctxt "@title:window"
 msgid "Shader Effect"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:755
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:742
 msgctxt "@action:button"
 msgid "Defaults"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:763
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:750
 msgctxt "@action:button"
 msgid "Apply"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:819
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:806
 msgctxt "@title:group"
 msgid "General"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:861
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:848
 msgctxt "@label"
 msgid "Enable effect:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:864
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:851
 msgctxt "@label"
 msgid "Enable shader effect"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:865
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:852
 msgctxt "@info"
 msgid "Turn the shader effect on or off for zone overlays"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:887
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:874
 msgctxt "@info"
 msgid "The shader effect is disabled for this layout."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:899
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:886
 msgctxt "@label:listbox"
 msgid "Effect:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:905
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:892
 msgctxt "@label:listbox"
 msgid "Shader effect"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:906
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:893
 msgctxt "@info"
 msgid "Select a visual effect for zone overlays"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:961
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:948
 msgctxt "@info shader author"
 msgid "by %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:962
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:949
 msgctxt "@info shader version"
 msgid "v%1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:963
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:950
 msgctxt "@info user-installed shader"
 msgid "(User shader)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:989
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:976
 msgctxt "@title:group"
 msgid "Parameters"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1001
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:988
 msgctxt "@info"
 msgid "This effect has no configurable parameters."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1181
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1168
 msgctxt "@label"
 msgid "%1 color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1278
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1265
 msgctxt "@title:window"
 msgid "Choose %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1293
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1280
 msgctxt "@info"
 msgid "Layout saved successfully"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1298
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1285
 msgctxt "@info"
 msgid "Failed to load layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1303
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/EditorWindow.qml:1290
 msgctxt "@info"
 msgid "Failed to save layout: %1"
 msgstr ""
@@ -1016,412 +1016,412 @@ msgid ""
 "controls are keyboard accessible."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:172
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:157
 msgctxt "@title"
 msgid "Zone Properties"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:172
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:157
 msgctxt "@title"
 msgid "1 Zone Selected"
 msgid_plural "%1 Zones Selected"
 msgstr[0] ""
 msgstr[1] ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:186
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:171
 msgctxt "@tooltip"
 msgid "Close panel"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:188
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:173
 msgctxt "@info:accessibility"
 msgid "Close properties panel"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:216
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:201
 msgctxt "@title"
 msgid "Appearance (All Selected)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:224
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:658
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:209
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:643
 msgctxt "@label"
 msgid "Custom colors:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:225
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:210
 msgctxt "@option:check"
 msgid "Enable for all selected"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:228
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:213
 msgctxt "@info:accessibility"
 msgid "Enable custom colors for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:229
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:214
 msgctxt "@info"
 msgid "Enable custom color settings for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:230
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:215
 msgctxt "@info:tooltip"
 msgid "Enable custom colors for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:240
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:676
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:225
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:661
 msgctxt "@label"
 msgid "Highlight:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:254
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:239
 msgctxt "@label"
 msgid "Highlight color picker for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:255
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:240
 msgctxt "@info:tooltip"
 msgid "Choose highlight color for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:269
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:307
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:344
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:254
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:292
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:329
 msgctxt "@info"
 msgid "Click to set for all"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:278
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:798
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:263
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:764
 msgctxt "@label"
 msgid "Inactive:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:292
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:277
 msgctxt "@label"
 msgid "Inactive color picker for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:293
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:278
 msgctxt "@info:tooltip"
 msgid "Choose inactive color for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:316
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:920
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:301
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:867
 msgctxt "@label"
 msgid "Border:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:329
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:314
 msgctxt "@label"
 msgid "Border color picker for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:330
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:315
 msgctxt "@info:tooltip"
 msgid "Choose border color for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:353
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1046
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:338
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:966
 msgctxt "@label"
 msgid "Active opacity:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:366
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:351
 msgctxt "@label"
 msgid "Active opacity for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:367
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:352
 msgctxt "@info:tooltip"
 msgid "Set active opacity for all selected zones (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:389
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1086
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:374
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1006
 msgctxt "@label"
 msgid "Inactive opacity:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:402
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:387
 msgctxt "@label"
 msgid "Inactive opacity for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:403
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:388
 msgctxt "@info:tooltip"
 msgid "Set inactive opacity for all selected zones (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:427
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1128
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:412
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1048
 msgctxt "@label"
 msgid "Border width:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:433
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:418
 msgctxt "@label"
 msgid "Border width for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:434
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:419
 msgctxt "@info:tooltip"
 msgid "Set border width for all selected zones (0-20)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:446
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1149
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:431
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1069
 msgctxt "@label"
 msgid "Border radius:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:452
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:437
 msgctxt "@label"
 msgid "Border radius for all selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:453
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:438
 msgctxt "@info:tooltip"
 msgid "Set corner radius for all selected zones (0-50)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:467
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1172
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:452
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1092
 msgctxt "@title"
 msgid "Actions"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:473
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:458
 msgctxt "@info"
 msgid "Actions will apply to all selected zones."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:482
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:467
 msgctxt "@action:button"
 msgid "Delete Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:486
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:471
 msgctxt "@info"
 msgid "Delete 1 selected zone"
 msgid_plural "Delete %1 selected zones"
 msgstr[0] ""
 msgstr[1] ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:505
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:490
 msgctxt "@label"
 msgid "Name:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:508
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:493
 msgctxt "@label"
 msgid "Zone name"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:509
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:494
 msgctxt "@info"
 msgid "Enter name for the zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:607
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:592
 msgctxt "@label"
 msgid "Number:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:612
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:597
 msgctxt "@label"
 msgid "Zone number"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:613
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:598
 msgctxt "@info"
 msgid "Zone number (1-99)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:650
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:635
 msgctxt "@title"
 msgid "Appearance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:659
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:644
 msgctxt "@option:check"
 msgid "Use custom colors"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:663
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:648
 msgctxt "@info:accessibility"
 msgid "Enable custom colors for this zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:664
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:649
 msgctxt "@info"
 msgid "Enable custom color settings for this zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:665
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:650
 msgctxt "@info:tooltip"
 msgid "Enable custom colors, opacity, and border settings"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:712
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:689
 msgctxt "@label"
 msgid "Highlight color picker"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:713
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:690
 msgctxt "@info"
 msgid "Click to choose highlight color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:714
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:691
 msgctxt "@info:tooltip"
 msgid "Choose color for highlighted/active zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:791
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:757
 msgctxt "@info:accessibility"
 msgid "Highlight color hex code"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:834
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:792
 msgctxt "@label"
 msgid "Inactive color picker"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:835
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:793
 msgctxt "@info"
 msgid "Click to choose inactive zone color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:836
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:794
 msgctxt "@info:tooltip"
 msgid "Choose color for non-selected zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:913
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:860
 msgctxt "@info:accessibility"
 msgid "Inactive color hex code"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:953
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:891
 msgctxt "@label"
 msgid "Border color picker"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:954
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:892
 msgctxt "@info"
 msgid "Click to choose border color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:955
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:893
 msgctxt "@info:tooltip"
 msgid "Choose color for zone borders"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1039
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:959
 msgctxt "@info:accessibility"
 msgid "Border color hex code"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1060
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:980
 msgctxt "@label"
 msgid "Zone active opacity"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1061
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:981
 msgctxt "@info"
 msgid "Active/highlighted opacity percentage (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1062
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:982
 msgctxt "@info:tooltip"
 msgid "Adjust zone opacity when highlighted (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1100
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1020
 msgctxt "@label"
 msgid "Zone inactive opacity"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1101
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1021
 msgctxt "@info"
 msgid "Inactive/non-highlighted opacity percentage (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1102
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1022
 msgctxt "@info:tooltip"
 msgid "Adjust zone opacity when not highlighted (0-100%)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1135
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1055
 msgctxt "@label"
 msgid "Border width in pixels"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1136
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1056
 msgctxt "@info"
 msgid "Zone border width (0-20 pixels)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1137
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1057
 msgctxt "@info:tooltip"
 msgid "Set zone border width in pixels (0-20)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1156
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1076
 msgctxt "@label"
 msgid "Border radius in pixels"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1157
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1077
 msgctxt "@info"
 msgid "Zone corner radius (0-50 pixels)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1158
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1078
 msgctxt "@info:tooltip"
 msgid "Set zone corner radius in pixels (0-50)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1179
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1099
 msgctxt "@action:button"
 msgid "Delete Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1183
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1103
 msgctxt "@info"
 msgid "Delete the selected zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1248
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1168
 msgctxt "@title:window"
 msgid "Zone Highlight Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1278
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1198
 msgctxt "@title:window"
 msgid "Zone Inactive Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1308
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1228
 msgctxt "@title:window"
 msgid "Zone Border Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1336
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1256
 msgctxt "@title:window"
 msgid "Highlight Color for All Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1351
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1271
 msgctxt "@title:window"
 msgid "Inactive Color for All Selected Zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1366
+#: /home/nlavender/Documents/PlasmaZones/src/editor/qml/PropertyPanel.qml:1286
 msgctxt "@title:window"
 msgid "Border Color for All Selected Zones"
 msgstr ""

@@ -9,7 +9,7 @@ msgstr ""
 "#-#-#-#-#  plasmazonesd-cpp.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
 "Project-Id-Version: PlasmaZones 1.0.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-27 18:48-0600\n"
+"POT-Creation-Date: 2026-01-28 13:34-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: English\n"
@@ -49,72 +49,96 @@ msgstr ""
 msgid "Replace existing daemon instance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/daemon.cpp:531
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/daemon.cpp:563
 msgid "Zone Layout: %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:242
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:287
 msgid "Open Zone Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:255
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:300
 msgid "Previous Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:260
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:305
 msgid "Next Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:274
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:319
 msgid "Apply Layout %1"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:323
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:368
 msgid "Move Window Left"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:330
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:375
 msgid "Move Window Right"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:337
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:382
 msgid "Move Window Up"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:344
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:389
 msgid "Move Window Down"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:352
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:397
 msgid "Focus Zone Left"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:359
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:404
 msgid "Focus Zone Right"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:366
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:411
 msgid "Focus Zone Up"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:373
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:418
 msgid "Focus Zone Down"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:381
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:426
 msgid "Push to Empty Zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:388
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:433
 msgid "Restore Window Size"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:396
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:441
 msgid "Toggle Window Float"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:562
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:602
+msgid "Swap Window Left"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:609
+msgid "Swap Window Right"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:616
+msgid "Swap Window Up"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:623
+msgid "Swap Window Down"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:695
 msgid "Snap to Zone %1"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:729
+msgid "Rotate Windows Clockwise"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/src/daemon/shortcutmanager.cpp:737
+msgid "Rotate Windows Counterclockwise"
 msgstr ""
 
 #: /home/nlavender/Documents/PlasmaZones/src/ui/LayoutPreview.qml:59

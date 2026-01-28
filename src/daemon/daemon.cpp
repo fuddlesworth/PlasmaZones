@@ -141,6 +141,7 @@ bool Daemon::init()
     // Each adaptor has a single responsibility and its own D-Bus interface
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.
     m_layoutAdaptor = new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), this);
+    m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
 
     // Overlay adaptor - overlay visibility and highlighting (SRP - kept for backward compatibility)
@@ -265,6 +266,8 @@ void Daemon::start()
     m_overlayService->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
 
     // Initialize and start activity manager (SRP: activity handling)
+    // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
+    m_activityManager->setVirtualDesktopManager(m_virtualDesktopManager.get());
     m_activityManager->init();
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();

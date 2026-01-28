@@ -109,8 +109,19 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
         QStringLiteral("virtualDesktopCountChanged"), this, SLOT(refreshVirtualDesktops()));
 
+    // Listen for KDE Activities changes
+    QDBusConnection::sessionBus().connect(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
+        QStringLiteral("currentActivityChanged"), this, SLOT(onCurrentActivityChanged(QString)));
+    QDBusConnection::sessionBus().connect(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
+        QStringLiteral("activitiesChanged"), this, SLOT(onActivitiesChanged()));
+
     // Initial virtual desktop refresh
     refreshVirtualDesktops();
+
+    // Initial activities refresh
+    refreshActivities();
 }
 
 KCMPlasmaZones::~KCMPlasmaZones()
@@ -1055,6 +1066,41 @@ void KCMPlasmaZones::save()
     }
     m_pendingDesktopAssignments.clear();
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-Activity Assignments
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // First, process cleared activity assignments
+    for (const QString& key : std::as_const(m_clearedActivityAssignments)) {
+        QStringList parts = key.split(QLatin1Char(':'));
+        if (parts.size() == 2) {
+            QString screenName = parts[0];
+            QString activityId = parts[1];
+            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("clearAssignmentForScreenActivity"),
+                                            {screenName, activityId});
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                ++errorCount;
+            }
+        }
+    }
+    m_clearedActivityAssignments.clear();
+
+    // Then, apply pending activity assignments
+    for (auto it = m_pendingActivityAssignments.begin(); it != m_pendingActivityAssignments.end(); ++it) {
+        QStringList parts = it.key().split(QLatin1Char(':'));
+        if (parts.size() == 2) {
+            QString screenName = parts[0];
+            QString activityId = parts[1];
+            QString layoutId = it.value();
+            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("assignLayoutToScreenActivity"),
+                                            {screenName, activityId, layoutId});
+            if (reply.type() == QDBusMessage::ErrorMessage) {
+                ++errorCount;
+            }
+        }
+    }
+    m_pendingActivityAssignments.clear();
+
     if (errorCount > 0) {
         qCWarning(lcKcm) << "Save:" << errorCount
                          << "D-Bus call(s) failed - some settings may not have been saved to daemon";
@@ -1116,11 +1162,14 @@ void KCMPlasmaZones::load()
     }
     // If daemon not available, m_quickLayoutSlots stays empty (correct behavior)
 
-    // Clear pending per-desktop assignments (discard unsaved changes)
+    // Clear pending per-desktop and per-activity assignments (discard unsaved changes)
     m_pendingDesktopAssignments.clear();
     m_clearedDesktopAssignments.clear();
+    m_pendingActivityAssignments.clear();
+    m_clearedActivityAssignments.clear();
 
     Q_EMIT screenAssignmentsChanged();
+    Q_EMIT activityAssignmentsChanged();
     Q_EMIT quickLayoutSlotsRefreshed();
     setNeedsSave(false);
 }
@@ -1144,12 +1193,15 @@ void KCMPlasmaZones::defaults()
     // Clear quick layout slots
     m_quickLayoutSlots.clear();
 
-    // Clear pending per-desktop assignments
+    // Clear pending per-desktop and per-activity assignments
     m_pendingDesktopAssignments.clear();
     m_clearedDesktopAssignments.clear();
+    m_pendingActivityAssignments.clear();
+    m_clearedActivityAssignments.clear();
 
     // Emit all property change signals so UI updates
     Q_EMIT screenAssignmentsChanged();
+    Q_EMIT activityAssignmentsChanged();
     Q_EMIT shiftDragToActivateChanged();
     Q_EMIT dragActivationModifierChanged();
     Q_EMIT multiZoneModifierChanged();
@@ -1886,6 +1938,198 @@ void KCMPlasmaZones::refreshVirtualDesktops()
         m_virtualDesktopNames = newNames;
         Q_EMIT virtualDesktopNamesChanged();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// KDE Activities Support
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void KCMPlasmaZones::refreshActivities()
+{
+    bool wasAvailable = m_activitiesAvailable;
+    QVariantList oldActivities = m_activities;
+    QString oldCurrentActivity = m_currentActivity;
+
+    // Query daemon for activities availability
+    QDBusMessage availReply =
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("isActivitiesAvailable"));
+
+    if (availReply.type() == QDBusMessage::ReplyMessage && !availReply.arguments().isEmpty()) {
+        m_activitiesAvailable = availReply.arguments().first().toBool();
+    } else {
+        m_activitiesAvailable = false;
+    }
+
+    if (m_activitiesAvailable) {
+        // Query daemon for activities list (JSON array)
+        QDBusMessage activitiesReply =
+            callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getAllActivitiesInfo"));
+
+        if (activitiesReply.type() == QDBusMessage::ReplyMessage && !activitiesReply.arguments().isEmpty()) {
+            QString jsonStr = activitiesReply.arguments().first().toString();
+            QJsonDocument doc = QJsonDocument::fromJson(jsonStr.toUtf8());
+            if (doc.isArray()) {
+                m_activities.clear();
+                const QJsonArray arr = doc.array();
+                for (const QJsonValue& val : arr) {
+                    QJsonObject obj = val.toObject();
+                    QVariantMap activity;
+                    activity[QStringLiteral("id")] = obj[QLatin1String("id")].toString();
+                    activity[QStringLiteral("name")] = obj[QLatin1String("name")].toString();
+                    activity[QStringLiteral("icon")] = obj[QLatin1String("icon")].toString();
+                    m_activities.append(activity);
+                }
+            }
+        }
+
+        // Query current activity
+        QDBusMessage currentReply =
+            callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getCurrentActivity"));
+
+        if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
+            m_currentActivity = currentReply.arguments().first().toString();
+        }
+    } else {
+        m_activities.clear();
+        m_currentActivity.clear();
+    }
+
+    // Emit signals if changed
+    if (wasAvailable != m_activitiesAvailable) {
+        Q_EMIT activitiesAvailableChanged();
+    }
+    if (oldActivities != m_activities) {
+        Q_EMIT activitiesChanged();
+    }
+    if (oldCurrentActivity != m_currentActivity) {
+        Q_EMIT currentActivityChanged();
+    }
+}
+
+bool KCMPlasmaZones::activitiesAvailable() const
+{
+    return m_activitiesAvailable;
+}
+
+QVariantList KCMPlasmaZones::activities() const
+{
+    return m_activities;
+}
+
+QString KCMPlasmaZones::currentActivity() const
+{
+    return m_currentActivity;
+}
+
+void KCMPlasmaZones::onCurrentActivityChanged(const QString& activityId)
+{
+    if (m_currentActivity != activityId) {
+        m_currentActivity = activityId;
+        Q_EMIT currentActivityChanged();
+    }
+}
+
+void KCMPlasmaZones::onActivitiesChanged()
+{
+    refreshActivities();
+}
+
+QString KCMPlasmaZones::getActivityName(const QString& activityId) const
+{
+    for (const QVariant& v : m_activities) {
+        QVariantMap activity = v.toMap();
+        if (activity[QStringLiteral("id")].toString() == activityId) {
+            return activity[QStringLiteral("name")].toString();
+        }
+    }
+    return QString();
+}
+
+QString KCMPlasmaZones::getActivityIcon(const QString& activityId) const
+{
+    for (const QVariant& v : m_activities) {
+        QVariantMap activity = v.toMap();
+        if (activity[QStringLiteral("id")].toString() == activityId) {
+            return activity[QStringLiteral("icon")].toString();
+        }
+    }
+    return QString();
+}
+
+void KCMPlasmaZones::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                   const QString& layoutId)
+{
+    if (screenName.isEmpty() || activityId.isEmpty()) {
+        qCWarning(lcKcm) << "Cannot assign layout - empty screen name or activity ID";
+        return;
+    }
+
+    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+
+    // Track this assignment in pending cache
+    if (layoutId.isEmpty()) {
+        // Clearing assignment
+        m_pendingActivityAssignments.remove(key);
+        m_clearedActivityAssignments.insert(key);
+    } else {
+        m_pendingActivityAssignments[key] = layoutId;
+        m_clearedActivityAssignments.remove(key);
+    }
+
+    Q_EMIT activityAssignmentsChanged();
+    Q_EMIT screenAssignmentsChanged();
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
+{
+    assignLayoutToScreenActivity(screenName, activityId, QString());
+}
+
+QString KCMPlasmaZones::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
+{
+    // Check pending cache first (unsaved changes)
+    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    if (m_pendingActivityAssignments.contains(key)) {
+        return m_pendingActivityAssignments.value(key);
+    }
+
+    // Check if explicitly cleared
+    if (m_clearedActivityAssignments.contains(key)) {
+        return QString();
+    }
+
+    // Query daemon for the layout assigned to this screen/activity combination
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
+                                    QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
+
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toString();
+    }
+
+    return QString();
+}
+
+bool KCMPlasmaZones::hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const
+{
+    // Check pending cache first
+    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    if (m_pendingActivityAssignments.contains(key)) {
+        return true;
+    }
+    if (m_clearedActivityAssignments.contains(key)) {
+        return false;
+    }
+
+    // Query daemon
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
+                                    QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
+
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toBool();
+    }
+
+    return false;
 }
 
 void KCMPlasmaZones::assignLayoutToScreen(const QString& screenName, const QString& layoutId)

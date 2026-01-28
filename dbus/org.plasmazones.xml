@@ -84,6 +84,65 @@
         <method name="getAllScreenAssignments">
             <arg name="assignmentsJson" type="s" direction="out"/>
         </method>
+        <!-- KDE Activities Support -->
+        <method name="isActivitiesAvailable">
+            <arg name="available" type="b" direction="out"/>
+        </method>
+        <method name="getActivities">
+            <arg name="activityIds" type="as" direction="out"/>
+        </method>
+        <method name="getCurrentActivity">
+            <arg name="activityId" type="s" direction="out"/>
+        </method>
+        <method name="getActivityInfo">
+            <arg name="activityId" type="s" direction="in"/>
+            <arg name="activityJson" type="s" direction="out"/>
+        </method>
+        <method name="getAllActivitiesInfo">
+            <arg name="activitiesJson" type="s" direction="out"/>
+        </method>
+        <!-- Per-activity layout assignments (screen + activity, any desktop) -->
+        <method name="getLayoutForScreenActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="assignLayoutToScreenActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="in"/>
+        </method>
+        <method name="clearAssignmentForScreenActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+        </method>
+        <method name="hasExplicitAssignmentForScreenActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+            <arg name="hasAssignment" type="b" direction="out"/>
+        </method>
+        <!-- Full assignment (screen + desktop + activity) -->
+        <method name="getLayoutForScreenDesktopActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="out"/>
+        </method>
+        <method name="assignLayoutToScreenDesktopActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+            <arg name="layoutId" type="s" direction="in"/>
+        </method>
+        <method name="clearAssignmentForScreenDesktopActivity">
+            <arg name="screenName" type="s" direction="in"/>
+            <arg name="virtualDesktop" type="i" direction="in"/>
+            <arg name="activityId" type="s" direction="in"/>
+        </method>
+        <signal name="currentActivityChanged">
+            <arg name="activityId" type="s"/>
+        </signal>
+        <signal name="activitiesChanged"/>
         <signal name="virtualDesktopCountChanged">
             <arg name="count" type="i"/>
         </signal>

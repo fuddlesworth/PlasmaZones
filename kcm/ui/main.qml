@@ -1062,6 +1062,210 @@ KCM.AbstractKCM {
                     }
                 }
 
+                // ═══════════════════════════════════════════════════════════════════
+                // Activity Assignments Card
+                // ═══════════════════════════════════════════════════════════════════
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: false
+                    visible: kcm.activitiesAvailable
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Activity Assignments")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            Layout.fillWidth: true
+                            Layout.margins: Kirigami.Units.smallSpacing
+                            text: i18n("Assign different layouts to KDE Activities. When you switch activities, the layout will change automatically.")
+                            wrapMode: Text.WordWrap
+                            opacity: constants.labelSecondaryOpacity
+                        }
+
+                        // Activities list
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: contentHeight
+                            Layout.margins: Kirigami.Units.smallSpacing
+                            clip: true
+                            model: kcm.activities
+                            interactive: false
+
+                            delegate: Item {
+                                width: ListView.view.width
+                                height: activityRowLayout.implicitHeight + Kirigami.Units.smallSpacing * 2
+                                required property var modelData
+                                required property int index
+
+                                property string activityId: modelData.id || ""
+                                property string activityName: modelData.name || ""
+                                property string activityIcon: modelData.icon && modelData.icon !== "" ? modelData.icon : "activities"
+
+                                ColumnLayout {
+                                    id: activityRowLayout
+                                    anchors.fill: parent
+                                    anchors.margins: Kirigami.Units.smallSpacing
+                                    spacing: Kirigami.Units.smallSpacing
+
+                                    // Activity header row
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        Kirigami.Icon {
+                                            source: activityIcon
+                                            Layout.preferredWidth: Kirigami.Units.iconSizes.medium
+                                            Layout.preferredHeight: Kirigami.Units.iconSizes.medium
+                                        }
+
+                                        Label {
+                                            Layout.fillWidth: true
+                                            text: activityName
+                                            font.bold: activityId === kcm.currentActivity
+                                            elide: Text.ElideRight
+                                        }
+
+                                        // Show "Current" badge if this is the current activity
+                                        Label {
+                                            visible: activityId === kcm.currentActivity
+                                            text: i18n("Current")
+                                            font.italic: true
+                                            opacity: 0.7
+                                        }
+                                    }
+
+                                    // Per-screen layout assignments for this activity
+                                    Repeater {
+                                        model: kcm.screens
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            Layout.leftMargin: Kirigami.Units.gridUnit * 2
+                                            spacing: Kirigami.Units.smallSpacing
+
+                                            required property var modelData
+                                            property string screenName: modelData.name || ""
+
+                                            Kirigami.Icon {
+                                                source: "video-display"
+                                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                                opacity: 0.7
+                                            }
+
+                                            Label {
+                                                text: screenName
+                                                Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+                                                elide: Text.ElideRight
+                                            }
+
+                                            ComboBox {
+                                                id: activityLayoutCombo
+                                                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+
+                                                textRole: "text"
+                                                valueRole: "value"
+
+                                                model: {
+                                                    let items = [{text: i18n("Use default"), value: ""}]
+                                                    for (let i = 0; i < kcm.layouts.length; i++) {
+                                                        items.push({
+                                                            text: kcm.layouts[i].name,
+                                                            value: kcm.layouts[i].id
+                                                        })
+                                                    }
+                                                    return items
+                                                }
+
+                                                function updateFromAssignment() {
+                                                    let hasExplicit = kcm.hasExplicitAssignmentForScreenActivity(screenName, activityId)
+                                                    if (!hasExplicit) {
+                                                        currentIndex = 0
+                                                        return
+                                                    }
+                                                    let assignedId = kcm.getLayoutForScreenActivity(screenName, activityId)
+                                                    if (assignedId && assignedId !== "") {
+                                                        for (let i = 0; i < model.length; i++) {
+                                                            if (model[i].value === assignedId) {
+                                                                currentIndex = i
+                                                                return
+                                                            }
+                                                        }
+                                                    }
+                                                    currentIndex = 0
+                                                }
+
+                                                Component.onCompleted: updateFromAssignment()
+
+                                                Connections {
+                                                    target: kcm
+                                                    function onActivityAssignmentsChanged() {
+                                                        activityLayoutCombo.updateFromAssignment()
+                                                    }
+                                                }
+
+                                                onActivated: {
+                                                    let selectedValue = model[currentIndex].value
+                                                    if (selectedValue === "") {
+                                                        kcm.clearScreenActivityAssignment(screenName, activityId)
+                                                    } else {
+                                                        kcm.assignLayoutToScreenActivity(screenName, activityId, selectedValue)
+                                                    }
+                                                }
+                                            }
+
+                                            ToolButton {
+                                                icon.name: "edit-clear"
+                                                onClicked: {
+                                                    kcm.clearScreenActivityAssignment(screenName, activityId)
+                                                    activityLayoutCombo.currentIndex = 0
+                                                }
+                                                ToolTip.visible: hovered
+                                                ToolTip.text: i18n("Clear assignment")
+                                            }
+
+                                            // Spacer to push elements left (consistent with Monitor Assignments)
+                                            Item { Layout.fillWidth: true }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Message when no activities
+                        Kirigami.InlineMessage {
+                            Layout.fillWidth: true
+                            Layout.margins: Kirigami.Units.smallSpacing
+                            visible: kcm.activities.length === 0 && kcm.activitiesAvailable
+                            type: Kirigami.MessageType.Information
+                            text: i18n("No activities found. Create activities in System Settings → Activities.")
+                        }
+
+                        // Message when no screens
+                        Kirigami.InlineMessage {
+                            Layout.fillWidth: true
+                            Layout.margins: Kirigami.Units.smallSpacing
+                            visible: kcm.screens.length === 0 && kcm.activities.length > 0
+                            type: Kirigami.MessageType.Warning
+                            text: i18n("No screens detected. Make sure the PlasmaZones daemon is running.")
+                        }
+                    }
+                }
+
+                // Info message when Activities not available
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    Layout.margins: Kirigami.Units.smallSpacing
+                    visible: !kcm.activitiesAvailable
+                    type: Kirigami.MessageType.Information
+                    text: i18n("KDE Activities support is not available. Activity-based layout assignments require the KDE Activities service to be running.")
+                }
+
                 // Quick Layout Slots Card
                 Kirigami.Card {
                     Layout.fillWidth: true
