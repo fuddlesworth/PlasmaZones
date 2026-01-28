@@ -1254,6 +1254,12 @@ KCM.AbstractKCM {
                             type: Kirigami.MessageType.Warning
                             text: i18n("No screens detected. Make sure the PlasmaZones daemon is running.")
                         }
+
+                        // Bottom spacer for consistent padding with Monitor Assignments card
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: Kirigami.Units.smallSpacing
+                        }
                     }
                 }
 
