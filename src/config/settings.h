@@ -45,6 +45,8 @@ class PLASMAZONES_EXPORT Settings : public ISettings
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
+    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY
+                   showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
 
     // Appearance (ricer-friendly)
@@ -297,6 +299,12 @@ public:
         return m_showOsdOnLayoutSwitch;
     }
     void setShowOsdOnLayoutSwitch(bool show) override;
+
+    bool showNavigationOsd() const override
+    {
+        return m_showNavigationOsd;
+    }
+    void setShowNavigationOsd(bool show) override;
 
     OsdStyle osdStyle() const override
     {
@@ -794,6 +802,7 @@ private:
     bool m_showZoneNumbers = true;
     bool m_flashZonesOnSwitch = true;
     bool m_showOsdOnLayoutSwitch = true;
+    bool m_showNavigationOsd = true;
     OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
 
     // Appearance (DRY: use constants from Defaults namespace)

@@ -742,10 +742,13 @@ QString PlasmaZonesEffect::getWindowScreenName(KWin::EffectWindow* w) const
 
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason)
 {
-    QDBusMessage feedbackSignal = QDBusMessage::createSignal(DBus::ObjectPath, DBus::Interface::WindowTracking,
-                                                             QStringLiteral("navigationFeedback"));
-    feedbackSignal << success << action << reason;
-    QDBusConnection::sessionBus().send(feedbackSignal);
+    // Call D-Bus method on daemon to report navigation feedback (can't emit signals on another service's interface)
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        qCDebug(lcEffect) << "Cannot report navigation feedback - WindowTracking interface not available";
+        return;
+    }
+    m_windowTrackingInterface->asyncCall(QStringLiteral("reportNavigationFeedback"), success, action, reason);
 }
 
 void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry)

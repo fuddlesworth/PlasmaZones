@@ -142,6 +142,15 @@ void Settings::setShowOsdOnLayoutSwitch(bool show)
     }
 }
 
+void Settings::setShowNavigationOsd(bool show)
+{
+    if (m_showNavigationOsd != show) {
+        m_showNavigationOsd = show;
+        Q_EMIT showNavigationOsdChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setOsdStyle(OsdStyle style)
 {
     if (m_osdStyle != style) {
@@ -1002,6 +1011,7 @@ void Settings::load()
     m_showZoneNumbers = display.readEntry("ShowNumbers", true);
     m_flashZonesOnSwitch = display.readEntry("FlashOnSwitch", true);
     m_showOsdOnLayoutSwitch = display.readEntry("ShowOsdOnLayoutSwitch", true);
+    m_showNavigationOsd = display.readEntry("ShowNavigationOsd", true);
     int osdStyleInt = display.readEntry("OsdStyle", static_cast<int>(OsdStyle::Preview));
     if (osdStyleInt < 0 || osdStyleInt > 2) {
         osdStyleInt = static_cast<int>(OsdStyle::Preview);
@@ -1294,6 +1304,7 @@ void Settings::save()
     display.writeEntry("ShowNumbers", m_showZoneNumbers);
     display.writeEntry("FlashOnSwitch", m_flashZonesOnSwitch);
     display.writeEntry("ShowOsdOnLayoutSwitch", m_showOsdOnLayoutSwitch);
+    display.writeEntry("ShowNavigationOsd", m_showNavigationOsd);
     display.writeEntry("OsdStyle", static_cast<int>(m_osdStyle));
 
     // Appearance
@@ -1411,6 +1422,7 @@ void Settings::reset()
     m_showZoneNumbers = true;
     m_flashZonesOnSwitch = true;
     m_showOsdOnLayoutSwitch = true;
+    m_showNavigationOsd = true;
 
     // Appearance defaults from Defaults namespace (DRY)
     m_useSystemColors = true;

@@ -9,24 +9,28 @@ import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
 /**
- * Layout OSD Window - Shows visual layout preview when switching layouts
- * Auto-dismisses after a configurable duration
- * Provides visual feedback superior to text-only Plasma OSD
+ * Navigation OSD Window - Shows brief feedback when using keyboard navigation
+ * to move or focus windows between zones
+ * Auto-dismisses after ~1 second
  */
 Window {
     id: root
 
-    // Layout data
-    property string layoutId: ""
-    property string layoutName: ""
+    // Navigation feedback data
+    property bool success: true
+    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle"
+    property string reason: "" // Failure reason if !success
+
+    // Zone data for preview
     property var zones: []
+    property string highlightedZoneId: "" // Zone to highlight in preview
 
     // Screen info for aspect ratio (bounded to prevent layout issues)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: Math.max(0.5, Math.min(4.0, screenAspectRatio))
 
     // Timing
-    property int displayDuration: 1500 // ms before auto-hide
+    property int displayDuration: 1000 // ms before auto-hide (shorter than layout OSD)
     property int fadeInDuration: 150
     property int fadeOutDuration: 200
 
@@ -34,6 +38,43 @@ Window {
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
     property color highlightColor: Kirigami.Theme.highlightColor
+    property color errorColor: Kirigami.Theme.negativeTextColor
+
+    // Computed properties
+    readonly property string directionText: {
+        // Extract direction from reason or action context
+        // For now, we'll show action-based messages
+        if (action === "move") {
+            return success ? i18n("Moved") : i18n("No zone")
+        } else if (action === "focus") {
+            return success ? i18n("Focus") : i18n("No zone")
+        } else if (action === "push") {
+            return success ? i18n("Pushed") : i18n("No empty zone")
+        } else if (action === "snap") {
+            return success ? i18n("Snapped") : i18n("Failed")
+        } else if (action === "swap") {
+            return success ? i18n("Swapped") : i18n("Failed")
+        } else if (action === "rotate") {
+            return success ? i18n("Rotated") : i18n("Failed")
+        } else {
+            return success ? i18n("Done") : i18n("Failed")
+        }
+    }
+
+    readonly property string directionArrow: {
+        // Try to extract direction from reason (e.g., "no_adjacent_zone_left" -> "←")
+        if (reason.indexOf("left") >= 0) {
+            return "←"
+        } else if (reason.indexOf("right") >= 0) {
+            return "→"
+        } else if (reason.indexOf("up") >= 0) {
+            return "↑"
+        } else if (reason.indexOf("down") >= 0) {
+            return "↓"
+        }
+        // Default: no arrow
+        return ""
+    }
 
     // Signals
     signal dismissed()
@@ -42,7 +83,7 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
 
-    // Size based on preview
+    // Size based on preview (matches LayoutOsd)
     width: container.width + 40
     height: container.height + 40
 
@@ -154,27 +195,28 @@ Window {
         shadowHorizontalOffset: 0
     }
 
-    // Main container
+    // Main container - matches LayoutOsd format exactly
     Rectangle {
         id: container
 
         anchors.centerIn: parent
-        width: previewContainer.width + Kirigami.Units.gridUnit * 3
-        height: previewContainer.height + nameLabel.height + Kirigami.Units.gridUnit * 3
+        width: previewContainer.visible ? previewContainer.width + Kirigami.Units.gridUnit * 3 : Math.max(messageLabel.width + Kirigami.Units.gridUnit * 2, 200)
+        height: previewContainer.height + messageLabel.height + Kirigami.Units.gridUnit * 3
         color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.15)
         border.width: 1
 
-        // Layout preview
+        // Zone preview (matches LayoutOsd size and style)
         Item {
             id: previewContainer
 
             anchors.top: parent.top
             anchors.topMargin: Kirigami.Units.gridUnit * 1.5
             anchors.horizontalCenter: parent.horizontalCenter
-            width: 200
-            height: Math.round(200 / root.safeAspectRatio)
+            width: root.success && zones.length > 0 ? 200 : 0
+            height: root.success && zones.length > 0 ? Math.round(200 / root.safeAspectRatio) : 0
+            visible: root.success && zones.length > 0
 
             // Background for preview area
             Rectangle {
@@ -183,7 +225,7 @@ Window {
                 radius: Kirigami.Units.smallSpacing
             }
 
-            // Zone preview using shared component
+            // Zone preview using shared component (matches LayoutOsd settings)
             QFZCommon.ZonePreview {
                 anchors.fill: parent
                 anchors.margins: 4
@@ -201,18 +243,18 @@ Window {
 
         }
 
-        // Layout name label
+        // Message label (matches LayoutOsd nameLabel format)
         Label {
-            id: nameLabel
+            id: messageLabel
 
-            anchors.top: previewContainer.bottom
-            anchors.topMargin: Kirigami.Units.gridUnit
+            anchors.top: previewContainer.visible ? previewContainer.bottom : parent.top
+            anchors.topMargin: previewContainer.visible ? Kirigami.Units.gridUnit : Kirigami.Units.gridUnit * 1.5
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
-            text: root.layoutName
+            text: root.directionArrow !== "" ? (root.directionArrow + " " + root.directionText) : root.directionText
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
             font.weight: Font.Medium
-            color: textColor
+            color: root.success ? textColor : errorColor
             horizontalAlignment: Text.AlignHCenter
         }
 
@@ -223,8 +265,5 @@ Window {
         anchors.fill: parent
         onClicked: root.hide()
     }
-
-    // Note: Escape shortcut removed - window uses BypassWindowManagerHint
-    // and doesn't receive keyboard focus on Wayland
 
 }

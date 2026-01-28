@@ -70,6 +70,8 @@ public:
     virtual void setFlashZonesOnSwitch(bool flash) = 0;
     virtual bool showOsdOnLayoutSwitch() const = 0;
     virtual void setShowOsdOnLayoutSwitch(bool show) = 0;
+    virtual bool showNavigationOsd() const = 0;
+    virtual void setShowNavigationOsd(bool show) = 0;
     virtual OsdStyle osdStyle() const = 0;
     virtual void setOsdStyle(OsdStyle style) = 0;
 

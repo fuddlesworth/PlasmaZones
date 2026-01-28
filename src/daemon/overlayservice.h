@@ -101,8 +101,12 @@ public:
     // Layout OSD (visual preview when switching layouts)
     void showLayoutOsd(Layout* layout);
 
+    // Navigation OSD (feedback for keyboard navigation)
+    void showNavigationOsd(bool success, const QString& action, const QString& reason);
+
 public Q_SLOTS:
     void hideLayoutOsd();
+    void hideNavigationOsd();
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML
@@ -136,11 +140,22 @@ private:
     // Layout OSD windows
     QHash<QScreen*, QQuickWindow*> m_layoutOsdWindows;
 
+    // Navigation OSD windows
+    QHash<QScreen*, QQuickWindow*> m_navigationOsdWindows;
+    // Track screens with failed window creation to prevent log spam
+    QHash<QScreen*, bool> m_navigationOsdCreationFailed;
+    // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
+    QString m_lastNavigationAction;
+    QString m_lastNavigationReason;
+    QElapsedTimer m_lastNavigationTime;
+
     void createZoneSelectorWindow(QScreen* screen);
     void destroyZoneSelectorWindow(QScreen* screen);
     void updateZoneSelectorWindow(QScreen* screen);
     void createLayoutOsdWindow(QScreen* screen);
     void destroyLayoutOsdWindow(QScreen* screen);
+    void createNavigationOsdWindow(QScreen* screen);
+    void destroyNavigationOsdWindow(QScreen* screen);
 
     // Shader support methods
     bool useShaderOverlay() const;

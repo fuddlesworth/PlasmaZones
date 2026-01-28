@@ -114,6 +114,16 @@ public Q_SLOTS:
     void windowClosed(const QString& windowId);
 
     /**
+     * Report navigation feedback from KWin effect (D-Bus method)
+     * @param success Whether the navigation succeeded
+     * @param action Action attempted (e.g., "move", "focus", "swap")
+     * @param reason Failure reason if !success
+     * @note This method is called by KWin effect to report navigation results.
+     *       It emits the Qt navigationFeedback signal which triggers the OSD.
+     */
+    void reportNavigationFeedback(bool success, const QString& action, const QString& reason);
+
+    /**
      * Get validated pre-snap geometry, ensuring it's within visible screen bounds
      * @param windowId Window ID
      * @param x Output: X position (adjusted if off-screen)
