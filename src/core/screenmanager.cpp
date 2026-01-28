@@ -342,13 +342,35 @@ void ScreenManager::queryKdePlasmaPanels()
     }
 
     // JavaScript to get panel information from Plasma Shell
+    // We query the panel's actual geometry to calculate the real offset from the screen edge,
+    // which includes both thickness and any floating gap the theme defines.
     // p.height is the panel thickness (perpendicular dimension) in Plasma's API
     // p.location is one of: "top", "bottom", "left", "right"
     // p.screen is the screen index (0-based)
+    // p.floating is a boolean indicating if the panel is in floating mode (Plasma 6)
+    // screenGeometry(screenIndex) returns the screen's full geometry
     QString script = QStringLiteral(R"(
         panels().forEach(function(p,i){
             var thickness = Math.abs(p.height);
-            print("PANEL:" + p.screen + ":" + p.location + ":" + thickness + "\n");
+            var floating = p.floating ? 1 : 0;
+            var sg = screenGeometry(p.screen);
+            var loc = p.location;
+            var pg = p.geometry;
+            // Calculate the actual offset from the screen edge based on panel geometry
+            // This includes both the panel thickness AND any floating gap
+            var offset = thickness;
+            if (pg && sg) {
+                if (loc === "top") {
+                    offset = (pg.y + pg.height) - sg.y;
+                } else if (loc === "bottom") {
+                    offset = (sg.y + sg.height) - pg.y;
+                } else if (loc === "left") {
+                    offset = (pg.x + pg.width) - sg.x;
+                } else if (loc === "right") {
+                    offset = (sg.x + sg.width) - pg.x;
+                }
+            }
+            print("PANEL:" + p.screen + ":" + loc + ":" + offset + ":" + floating + "\n");
         });
     )");
 
@@ -366,17 +388,21 @@ void ScreenManager::queryKdePlasmaPanels()
             QString output = reply.value();
             qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply:" << output;
 
-            // Parse the output: PANEL:screenIndex:location:thickness
-            static QRegularExpression panelRegex(QStringLiteral("PANEL:(\\d+):(\\w+):(\\d+)"));
+            // Parse the output: PANEL:screenIndex:location:offset:floating
+            // The offset is calculated from actual panel geometry (includes thickness + floating gap)
+            // The floating field is included for diagnostic logging only
+            static QRegularExpression panelRegex(QStringLiteral("PANEL:(\\d+):(\\w+):(\\d+)(?::(\\d+))?"));
             QRegularExpressionMatchIterator it = panelRegex.globalMatch(output);
 
             while (it.hasNext()) {
                 QRegularExpressionMatch match = it.next();
                 int screenIndex = match.captured(1).toInt();
                 QString location = match.captured(2);
-                int thickness = match.captured(3).toInt();
+                int totalOffset = match.captured(3).toInt();
+                bool isFloating = !match.captured(4).isEmpty() && match.captured(4).toInt() != 0;
 
-                qCDebug(lcScreen) << "  Parsed panel: screen" << screenIndex << location << "thickness=" << thickness;
+                qCDebug(lcScreen) << "  Parsed panel: screen" << screenIndex << location
+                                  << "offset=" << totalOffset << "floating=" << isFloating;
 
                 if (!m_panelOffsets.contains(screenIndex)) {
                     m_panelOffsets.insert(screenIndex, ScreenPanelOffsets{});
@@ -384,13 +410,13 @@ void ScreenManager::queryKdePlasmaPanels()
 
                 ScreenPanelOffsets& offsets = m_panelOffsets[screenIndex];
                 if (location == QLatin1String("top")) {
-                    offsets.top = thickness;
+                    offsets.top = totalOffset;
                 } else if (location == QLatin1String("bottom")) {
-                    offsets.bottom = thickness;
+                    offsets.bottom = totalOffset;
                 } else if (location == QLatin1String("left")) {
-                    offsets.left = thickness;
+                    offsets.left = totalOffset;
                 } else if (location == QLatin1String("right")) {
-                    offsets.right = thickness;
+                    offsets.right = totalOffset;
                 }
             }
         } else {
