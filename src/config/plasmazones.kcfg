@@ -258,6 +258,75 @@
        Navigation Shortcuts (keyboard navigation, snap to zone by number)
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="NavigationShortcuts">
+    <!-- Move window to adjacent zone (Meta+Alt+Shift+Arrow) -->
+    <entry name="MoveWindowLeft" type="String">
+      <label>Shortcut to move active window to adjacent zone on the left</label>
+      <default>Meta+Alt+Shift+Left</default>
+    </entry>
+    <entry name="MoveWindowRight" type="String">
+      <label>Shortcut to move active window to adjacent zone on the right</label>
+      <default>Meta+Alt+Shift+Right</default>
+    </entry>
+    <entry name="MoveWindowUp" type="String">
+      <label>Shortcut to move active window to adjacent zone above</label>
+      <default>Meta+Alt+Shift+Up</default>
+    </entry>
+    <entry name="MoveWindowDown" type="String">
+      <label>Shortcut to move active window to adjacent zone below</label>
+      <default>Meta+Alt+Shift+Down</default>
+    </entry>
+
+    <!-- Swap windows between zones (Meta+Ctrl+Alt+Arrow) -->
+    <entry name="SwapWindowLeft" type="String">
+      <label>Shortcut to swap active window with window in adjacent zone on the left</label>
+      <default>Meta+Ctrl+Alt+Left</default>
+    </entry>
+    <entry name="SwapWindowRight" type="String">
+      <label>Shortcut to swap active window with window in adjacent zone on the right</label>
+      <default>Meta+Ctrl+Alt+Right</default>
+    </entry>
+    <entry name="SwapWindowUp" type="String">
+      <label>Shortcut to swap active window with window in adjacent zone above</label>
+      <default>Meta+Ctrl+Alt+Up</default>
+    </entry>
+    <entry name="SwapWindowDown" type="String">
+      <label>Shortcut to swap active window with window in adjacent zone below</label>
+      <default>Meta+Ctrl+Alt+Down</default>
+    </entry>
+
+    <!-- Focus window in adjacent zone (Alt+Shift+Arrow) -->
+    <entry name="FocusZoneLeft" type="String">
+      <label>Shortcut to focus window in adjacent zone on the left</label>
+      <default>Alt+Shift+Left</default>
+    </entry>
+    <entry name="FocusZoneRight" type="String">
+      <label>Shortcut to focus window in adjacent zone on the right</label>
+      <default>Alt+Shift+Right</default>
+    </entry>
+    <entry name="FocusZoneUp" type="String">
+      <label>Shortcut to focus window in adjacent zone above</label>
+      <default>Alt+Shift+Up</default>
+    </entry>
+    <entry name="FocusZoneDown" type="String">
+      <label>Shortcut to focus window in adjacent zone below</label>
+      <default>Alt+Shift+Down</default>
+    </entry>
+
+    <!-- Additional navigation actions (Meta+Alt+{key}) -->
+    <entry name="PushToEmptyZone" type="String">
+      <label>Shortcut to push active window to first empty zone</label>
+      <default>Meta+Alt+Return</default>
+    </entry>
+    <entry name="RestoreWindowSize" type="String">
+      <label>Shortcut to restore window to original size (unsnap)</label>
+      <default>Meta+Alt+Escape</default>
+    </entry>
+    <entry name="ToggleWindowFloat" type="String">
+      <label>Shortcut to toggle floating state for active window</label>
+      <default>Meta+Alt+F</default>
+    </entry>
+
+    <!-- Snap to zone by number (Meta+Ctrl+{1-9}) -->
     <entry name="SnapToZone1" type="String">
       <label>Shortcut to snap active window to zone 1</label>
       <default>Meta+Ctrl+1</default>

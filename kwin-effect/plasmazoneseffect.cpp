@@ -1147,6 +1147,7 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
     QJsonDocument targetDoc = QJsonDocument::fromJson(targetZoneGeometry.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !targetDoc.isObject()) {
         qCWarning(lcEffect) << "Failed to parse target zone geometry:" << parseError.errorString();
+        emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("parse_error"));
         return;
     }
     QJsonObject targetObj = targetDoc.object();
@@ -1157,6 +1158,7 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
     QJsonDocument currentDoc = QJsonDocument::fromJson(currentZoneGeometry.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !currentDoc.isObject()) {
         qCWarning(lcEffect) << "Failed to parse current zone geometry:" << parseError.errorString();
+        emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("parse_error"));
         return;
     }
     QJsonObject currentObj = currentDoc.object();
@@ -1193,8 +1195,49 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
             return;
         }
 
+        // Validate target window - skip excluded windows
+        if (!shouldHandleWindow(targetWindow)) {
+            qCDebug(lcEffect) << "Target window is excluded, performing regular move";
+            applySnapGeometry(activeWindow, targetGeom);
+            m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), windowId, targetZone);
+            emitNavigationFeedback(true, QStringLiteral("swap"), QStringLiteral("target_excluded"));
+            return;
+        }
+
+        // Check if target window is floating - skip if so
+        QString targetStableId = extractStableId(targetWindowIdToSwap);
+        if (m_floatingWindows.contains(targetStableId)) {
+            qCDebug(lcEffect) << "Target window is floating, performing regular move";
+            applySnapGeometry(activeWindow, targetGeom);
+            m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), windowId, targetZone);
+            emitNavigationFeedback(true, QStringLiteral("swap"), QStringLiteral("target_floating"));
+            return;
+        }
+
         // Swap the windows: each gets the other's zone geometry
         qCDebug(lcEffect) << "Swapping windows between zones" << currentZoneId << "and" << targetZone;
+
+        // Ensure both windows have pre-snap geometry preserved
+        // This handles edge cases where windows might have been placed in zones
+        // via external means without pre-snap geometry being stored
+        auto ensurePreSnapGeometry = [this](KWin::EffectWindow* w, const QString& wId) {
+            QDBusMessage checkMsg = m_windowTrackingInterface->call(QStringLiteral("hasPreSnapGeometry"), wId);
+            bool hasGeometry = false;
+            if (checkMsg.type() == QDBusMessage::ReplyMessage && !checkMsg.arguments().isEmpty()) {
+                hasGeometry = checkMsg.arguments().at(0).toBool();
+            }
+            if (!hasGeometry) {
+                QRectF currentGeom = w->frameGeometry();
+                m_windowTrackingInterface->asyncCall(
+                    QStringLiteral("storePreSnapGeometry"), wId, static_cast<int>(currentGeom.x()),
+                    static_cast<int>(currentGeom.y()), static_cast<int>(currentGeom.width()),
+                    static_cast<int>(currentGeom.height()));
+                qCDebug(lcEffect) << "Stored pre-snap geometry for window" << wId << "before swap";
+            }
+        };
+
+        ensurePreSnapGeometry(activeWindow, windowId);
+        ensurePreSnapGeometry(targetWindow, targetWindowIdToSwap);
 
         // Move active window to target zone
         applySnapGeometry(activeWindow, targetGeom);
