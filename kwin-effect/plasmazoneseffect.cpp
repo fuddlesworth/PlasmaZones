@@ -1088,6 +1088,7 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
     static const QString SwapDirectivePrefix = QStringLiteral("swap:");
     if (!targetZoneId.startsWith(SwapDirectivePrefix)) {
         qCWarning(lcEffect) << "Invalid swap directive:" << targetZoneId;
+        emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_directive"));
         return;
     }
 
