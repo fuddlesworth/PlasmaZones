@@ -585,7 +585,7 @@ void PlasmaZonesEffect::loadExclusionSettings()
 
     // Load excludeTransientWindows
     QDBusMessage excludeTransientReply =
-        settingsInterface.call(QStringLiteral("getSettingValue"), QStringLiteral("excludeTransientWindows"));
+        settingsInterface.call(QStringLiteral("getSetting"), QStringLiteral("excludeTransientWindows"));
     if (excludeTransientReply.type() == QDBusMessage::ReplyMessage && !excludeTransientReply.arguments().isEmpty()) {
         QVariant value = excludeTransientReply.arguments().at(0);
         if (value.canConvert<QDBusVariant>()) {
@@ -597,7 +597,7 @@ void PlasmaZonesEffect::loadExclusionSettings()
 
     // Load minimumWindowWidth
     QDBusMessage minWidthReply =
-        settingsInterface.call(QStringLiteral("getSettingValue"), QStringLiteral("minimumWindowWidth"));
+        settingsInterface.call(QStringLiteral("getSetting"), QStringLiteral("minimumWindowWidth"));
     if (minWidthReply.type() == QDBusMessage::ReplyMessage && !minWidthReply.arguments().isEmpty()) {
         QVariant value = minWidthReply.arguments().at(0);
         if (value.canConvert<QDBusVariant>()) {
@@ -609,7 +609,7 @@ void PlasmaZonesEffect::loadExclusionSettings()
 
     // Load minimumWindowHeight
     QDBusMessage minHeightReply =
-        settingsInterface.call(QStringLiteral("getSettingValue"), QStringLiteral("minimumWindowHeight"));
+        settingsInterface.call(QStringLiteral("getSetting"), QStringLiteral("minimumWindowHeight"));
     if (minHeightReply.type() == QDBusMessage::ReplyMessage && !minHeightReply.arguments().isEmpty()) {
         QVariant value = minHeightReply.arguments().at(0);
         if (value.canConvert<QDBusVariant>()) {

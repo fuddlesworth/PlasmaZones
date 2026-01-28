@@ -1181,6 +1181,9 @@ void KCMPlasmaZones::defaults()
     Q_EMIT defaultLayoutIdChanged();
     Q_EMIT excludedApplicationsChanged();
     Q_EMIT excludedWindowClassesChanged();
+    Q_EMIT excludeTransientWindowsChanged();
+    Q_EMIT minimumWindowWidthChanged();
+    Q_EMIT minimumWindowHeightChanged();
     Q_EMIT zoneSelectorEnabledChanged();
     Q_EMIT zoneSelectorTriggerDistanceChanged();
     Q_EMIT zoneSelectorPositionChanged();
