@@ -433,6 +433,30 @@ void Daemon::start()
         m_windowTrackingAdaptor->toggleWindowFloat();
     });
 
+    // Swap window with adjacent zone shortcuts
+    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this,
+            [this](NavigationDirection direction) {
+                QString dirStr;
+                switch (direction) {
+                case NavigationDirection::Left:
+                    dirStr = QStringLiteral("left");
+                    break;
+                case NavigationDirection::Right:
+                    dirStr = QStringLiteral("right");
+                    break;
+                case NavigationDirection::Up:
+                    dirStr = QStringLiteral("up");
+                    break;
+                case NavigationDirection::Down:
+                    dirStr = QStringLiteral("down");
+                    break;
+                default:
+                    qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
+                    return;
+                }
+                m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
+            });
+
     // Snap to zone by number shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
         m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber);

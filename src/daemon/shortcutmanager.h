@@ -102,6 +102,12 @@ Q_SIGNALS:
     void toggleWindowFloatRequested();
 
     /**
+     * @brief Emitted when swap window with adjacent zone is requested
+     * @param direction Navigation direction (Left, Right, Up, Down)
+     */
+    void swapWindowRequested(NavigationDirection direction);
+
+    /**
      * @brief Emitted when snap to zone by number is requested
      * @param zoneNumber Zone number (1-9)
      */
@@ -130,6 +136,12 @@ private Q_SLOTS:
     void onRestoreWindowSize();
     void onToggleWindowFloat();
 
+    // Swap window slots
+    void onSwapWindowLeft();
+    void onSwapWindowRight();
+    void onSwapWindowUp();
+    void onSwapWindowDown();
+
     // Update navigation shortcuts from settings
     void updateMoveWindowLeftShortcut();
     void updateMoveWindowRightShortcut();
@@ -143,6 +155,12 @@ private Q_SLOTS:
     void updateRestoreWindowSizeShortcut();
     void updateToggleWindowFloatShortcut();
 
+    // Update swap window shortcuts from settings
+    void updateSwapWindowLeftShortcut();
+    void updateSwapWindowRightShortcut();
+    void updateSwapWindowUpShortcut();
+    void updateSwapWindowDownShortcut();
+
     // Snap to Zone by Number
     void onSnapToZone(int zoneNumber);
     void updateSnapToZoneShortcut(int index);
@@ -152,6 +170,7 @@ private:
     void setupCyclingShortcuts();
     void setupQuickLayoutShortcuts();
     void setupNavigationShortcuts();
+    void setupSwapWindowShortcuts();
     void setupSnapToZoneShortcuts();
 
     Settings* m_settings = nullptr;
@@ -174,6 +193,12 @@ private:
     QAction* m_pushToEmptyZoneAction = nullptr;
     QAction* m_restoreWindowSizeAction = nullptr;
     QAction* m_toggleWindowFloatAction = nullptr;
+
+    // Swap window actions
+    QAction* m_swapWindowLeftAction = nullptr;
+    QAction* m_swapWindowRightAction = nullptr;
+    QAction* m_swapWindowUpAction = nullptr;
+    QAction* m_swapWindowDownAction = nullptr;
 
     // Snap to Zone by Number actions
     QVector<QAction*> m_snapToZoneActions;

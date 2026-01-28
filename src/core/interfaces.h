@@ -317,6 +317,12 @@ Q_SIGNALS:
     void restoreWindowSizeShortcutChanged();
     void toggleWindowFloatShortcutChanged();
 
+    // Swap Window Shortcuts
+    void swapWindowLeftShortcutChanged();
+    void swapWindowRightShortcutChanged();
+    void swapWindowUpShortcutChanged();
+    void swapWindowDownShortcutChanged();
+
     // Snap to Zone by Number Shortcuts
     void snapToZone1ShortcutChanged();
     void snapToZone2ShortcutChanged();

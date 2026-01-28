@@ -1052,6 +1052,32 @@ void WindowTrackingAdaptor::toggleWindowFloat()
     // Note: Success/failure feedback will be emitted by the KWin effect
 }
 
+void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
+{
+    qCDebug(lcDbusWindow) << "swapWindowWithAdjacentZone called with direction:" << direction;
+
+    if (direction.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Cannot swap - empty direction";
+        Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"));
+        return;
+    }
+
+    // This method is called by the daemon when a swap shortcut is pressed.
+    // We emit a signal that the KWin script listens to.
+    // The KWin script will:
+    //   1. Get the focused window ID and its current zone
+    //   2. Call ZoneDetectionAdaptor::getAdjacentZone() to find target zone
+    //   3. Find any window in the target zone
+    //   4. Swap the positions of both windows (each gets the other's zone geometry)
+    //   5. If target zone is empty, just move the window like regular navigation
+
+    // Emit the signal with the direction - KWin effect handles the swap logic
+    // We use "swap:" prefix to distinguish from regular "navigate:" moves
+    Q_EMIT swapWindowsRequested(QStringLiteral("swap:") + direction, QString(), QString());
+    // Note: Success/failure feedback will be emitted by the KWin effect after it
+    // attempts the swap, since only it knows if windows exist to swap
+}
+
 void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
 {
     qCDebug(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber;

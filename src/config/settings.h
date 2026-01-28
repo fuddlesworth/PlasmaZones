@@ -166,6 +166,16 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString toggleWindowFloatShortcut READ toggleWindowFloatShortcut WRITE setToggleWindowFloatShortcut
                    NOTIFY toggleWindowFloatShortcutChanged)
 
+    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
+    Q_PROPERTY(QString swapWindowLeftShortcut READ swapWindowLeftShortcut WRITE setSwapWindowLeftShortcut NOTIFY
+                   swapWindowLeftShortcutChanged)
+    Q_PROPERTY(QString swapWindowRightShortcut READ swapWindowRightShortcut WRITE setSwapWindowRightShortcut NOTIFY
+                   swapWindowRightShortcutChanged)
+    Q_PROPERTY(QString swapWindowUpShortcut READ swapWindowUpShortcut WRITE setSwapWindowUpShortcut NOTIFY
+                   swapWindowUpShortcutChanged)
+    Q_PROPERTY(QString swapWindowDownShortcut READ swapWindowDownShortcut WRITE setSwapWindowDownShortcut NOTIFY
+                   swapWindowDownShortcutChanged)
+
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     Q_PROPERTY(QString snapToZone1Shortcut READ snapToZone1Shortcut WRITE setSnapToZone1Shortcut NOTIFY
                    snapToZone1ShortcutChanged)
@@ -623,6 +633,28 @@ public:
     }
     void setToggleWindowFloatShortcut(const QString& shortcut);
 
+    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
+    QString swapWindowLeftShortcut() const
+    {
+        return m_swapWindowLeftShortcut;
+    }
+    void setSwapWindowLeftShortcut(const QString& shortcut);
+    QString swapWindowRightShortcut() const
+    {
+        return m_swapWindowRightShortcut;
+    }
+    void setSwapWindowRightShortcut(const QString& shortcut);
+    QString swapWindowUpShortcut() const
+    {
+        return m_swapWindowUpShortcut;
+    }
+    void setSwapWindowUpShortcut(const QString& shortcut);
+    QString swapWindowDownShortcut() const
+    {
+        return m_swapWindowDownShortcut;
+    }
+    void setSwapWindowDownShortcut(const QString& shortcut);
+
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     QString snapToZone1Shortcut() const
     {
@@ -774,9 +806,18 @@ private:
     QString m_focusZoneRightShortcut = QStringLiteral("Alt+Shift+Right");
     QString m_focusZoneUpShortcut = QStringLiteral("Alt+Shift+Up");
     QString m_focusZoneDownShortcut = QStringLiteral("Alt+Shift+Down");
-    QString m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Return");
-    QString m_restoreWindowSizeShortcut = QStringLiteral("Meta+Escape");
-    QString m_toggleWindowFloatShortcut = QStringLiteral("Meta+F");
+    QString m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Alt+Return");
+    QString m_restoreWindowSizeShortcut = QStringLiteral("Meta+Alt+Escape");
+    QString m_toggleWindowFloatShortcut = QStringLiteral("Meta+Alt+F");
+
+    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
+    // Swaps focused window with window in adjacent zone
+    // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
+    // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
+    QString m_swapWindowLeftShortcut = QStringLiteral("Meta+Ctrl+Alt+Left");
+    QString m_swapWindowRightShortcut = QStringLiteral("Meta+Ctrl+Alt+Right");
+    QString m_swapWindowUpShortcut = QStringLiteral("Meta+Ctrl+Alt+Up");
+    QString m_swapWindowDownShortcut = QStringLiteral("Meta+Ctrl+Alt+Down");
 
     // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
     // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.

@@ -69,6 +69,13 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::toggleWindowFloatShortcutChanged, this,
             &ShortcutManager::updateToggleWindowFloatShortcut);
 
+    // Swap window shortcuts
+    connect(m_settings, &Settings::swapWindowLeftShortcutChanged, this, &ShortcutManager::updateSwapWindowLeftShortcut);
+    connect(m_settings, &Settings::swapWindowRightShortcutChanged, this,
+            &ShortcutManager::updateSwapWindowRightShortcut);
+    connect(m_settings, &Settings::swapWindowUpShortcutChanged, this, &ShortcutManager::updateSwapWindowUpShortcut);
+    connect(m_settings, &Settings::swapWindowDownShortcutChanged, this, &ShortcutManager::updateSwapWindowDownShortcut);
+
     // Snap to Zone by Number shortcuts
     connect(m_settings, &Settings::snapToZone1ShortcutChanged, this, [this]() {
         updateSnapToZoneShortcut(0);
@@ -116,6 +123,7 @@ void ShortcutManager::registerShortcuts()
     setupCyclingShortcuts();
     setupQuickLayoutShortcuts();
     setupNavigationShortcuts();
+    setupSwapWindowShortcuts();
     setupSnapToZoneShortcuts();
 }
 
@@ -147,6 +155,12 @@ void ShortcutManager::updateShortcuts()
     updatePushToEmptyZoneShortcut();
     updateRestoreWindowSizeShortcut();
     updateToggleWindowFloatShortcut();
+
+    // Swap window shortcuts
+    updateSwapWindowLeftShortcut();
+    updateSwapWindowRightShortcut();
+    updateSwapWindowUpShortcut();
+    updateSwapWindowDownShortcut();
 
     // Snap to Zone shortcuts (0-8 internally, 1-9 for users)
     for (int i = 0; i < 9; ++i) {
@@ -206,6 +220,19 @@ void ShortcutManager::unregisterShortcuts()
 
     delete m_toggleWindowFloatAction;
     m_toggleWindowFloatAction = nullptr;
+
+    // Swap window actions
+    delete m_swapWindowLeftAction;
+    m_swapWindowLeftAction = nullptr;
+
+    delete m_swapWindowRightAction;
+    m_swapWindowRightAction = nullptr;
+
+    delete m_swapWindowUpAction;
+    m_swapWindowUpAction = nullptr;
+
+    delete m_swapWindowDownAction;
+    m_swapWindowDownAction = nullptr;
 
     // Snap to Zone actions
     qDeleteAll(m_snapToZoneActions);
@@ -547,6 +574,94 @@ void ShortcutManager::updateToggleWindowFloatShortcut()
     if (m_toggleWindowFloatAction) {
         KGlobalAccel::setGlobalShortcut(m_toggleWindowFloatAction,
                                         QKeySequence(m_settings->toggleWindowFloatShortcut()));
+    }
+}
+
+// Swap Window - Setup
+void ShortcutManager::setupSwapWindowShortcuts()
+{
+    if (!m_swapWindowLeftAction) {
+        m_swapWindowLeftAction = new QAction(i18n("Swap Window Left"), this);
+        m_swapWindowLeftAction->setObjectName(QStringLiteral("swap_window_left"));
+        KGlobalAccel::setGlobalShortcut(m_swapWindowLeftAction, QKeySequence(m_settings->swapWindowLeftShortcut()));
+        connect(m_swapWindowLeftAction, &QAction::triggered, this, &ShortcutManager::onSwapWindowLeft);
+    }
+
+    if (!m_swapWindowRightAction) {
+        m_swapWindowRightAction = new QAction(i18n("Swap Window Right"), this);
+        m_swapWindowRightAction->setObjectName(QStringLiteral("swap_window_right"));
+        KGlobalAccel::setGlobalShortcut(m_swapWindowRightAction, QKeySequence(m_settings->swapWindowRightShortcut()));
+        connect(m_swapWindowRightAction, &QAction::triggered, this, &ShortcutManager::onSwapWindowRight);
+    }
+
+    if (!m_swapWindowUpAction) {
+        m_swapWindowUpAction = new QAction(i18n("Swap Window Up"), this);
+        m_swapWindowUpAction->setObjectName(QStringLiteral("swap_window_up"));
+        KGlobalAccel::setGlobalShortcut(m_swapWindowUpAction, QKeySequence(m_settings->swapWindowUpShortcut()));
+        connect(m_swapWindowUpAction, &QAction::triggered, this, &ShortcutManager::onSwapWindowUp);
+    }
+
+    if (!m_swapWindowDownAction) {
+        m_swapWindowDownAction = new QAction(i18n("Swap Window Down"), this);
+        m_swapWindowDownAction->setObjectName(QStringLiteral("swap_window_down"));
+        KGlobalAccel::setGlobalShortcut(m_swapWindowDownAction, QKeySequence(m_settings->swapWindowDownShortcut()));
+        connect(m_swapWindowDownAction, &QAction::triggered, this, &ShortcutManager::onSwapWindowDown);
+    }
+
+    qCInfo(lcShortcuts) << "Swap window shortcuts registered (Meta+Ctrl+Alt+Arrow)";
+}
+
+// Swap Window - Slot handlers
+void ShortcutManager::onSwapWindowLeft()
+{
+    qCDebug(lcShortcuts) << "Swap window left triggered";
+    Q_EMIT swapWindowRequested(NavigationDirection::Left);
+}
+
+void ShortcutManager::onSwapWindowRight()
+{
+    qCDebug(lcShortcuts) << "Swap window right triggered";
+    Q_EMIT swapWindowRequested(NavigationDirection::Right);
+}
+
+void ShortcutManager::onSwapWindowUp()
+{
+    qCDebug(lcShortcuts) << "Swap window up triggered";
+    Q_EMIT swapWindowRequested(NavigationDirection::Up);
+}
+
+void ShortcutManager::onSwapWindowDown()
+{
+    qCDebug(lcShortcuts) << "Swap window down triggered";
+    Q_EMIT swapWindowRequested(NavigationDirection::Down);
+}
+
+// Swap Window - Shortcut update handlers
+void ShortcutManager::updateSwapWindowLeftShortcut()
+{
+    if (m_swapWindowLeftAction) {
+        KGlobalAccel::setGlobalShortcut(m_swapWindowLeftAction, QKeySequence(m_settings->swapWindowLeftShortcut()));
+    }
+}
+
+void ShortcutManager::updateSwapWindowRightShortcut()
+{
+    if (m_swapWindowRightAction) {
+        KGlobalAccel::setGlobalShortcut(m_swapWindowRightAction, QKeySequence(m_settings->swapWindowRightShortcut()));
+    }
+}
+
+void ShortcutManager::updateSwapWindowUpShortcut()
+{
+    if (m_swapWindowUpAction) {
+        KGlobalAccel::setGlobalShortcut(m_swapWindowUpAction, QKeySequence(m_settings->swapWindowUpShortcut()));
+    }
+}
+
+void ShortcutManager::updateSwapWindowDownShortcut()
+{
+    if (m_swapWindowDownAction) {
+        KGlobalAccel::setGlobalShortcut(m_swapWindowDownAction, QKeySequence(m_settings->swapWindowDownShortcut()));
     }
 }
 
