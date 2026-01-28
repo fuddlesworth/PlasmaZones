@@ -1116,7 +1116,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
         return;
     }
 
-    QString zoneId = targetZone->id().toString(QUuid::WithoutBraces);
+    // Use default toString() format (with braces) to match m_windowZoneAssignments
+    QString zoneId = targetZone->id().toString();
     QString geometry = getZoneGeometry(zoneId);
     if (geometry.isEmpty()) {
         qCWarning(lcDbusWindow) << "Could not get geometry for zone" << zoneNumber;
@@ -1188,7 +1189,9 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
     QVector<WindowZoneInfo> windowZoneIndices;
 
     for (int i = 0; i < numZones; ++i) {
-        QString zoneId = orderedZones[i]->id().toString(QUuid::WithoutBraces);
+        // Use default toString() format (with braces) to match how zone IDs are stored
+        // in m_windowZoneAssignments when windows are snapped via drag
+        QString zoneId = orderedZones[i]->id().toString();
         QStringList windowsInZone = getWindowsInZone(zoneId);
         for (const QString& windowId : windowsInZone) {
             // Skip floating windows - they should not participate in rotation
@@ -1226,7 +1229,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
         }
 
         Zone* destZone = orderedZones[destIndex];
-        QString destZoneId = destZone->id().toString(QUuid::WithoutBraces);
+        // Use default toString() format (with braces) to match m_windowZoneAssignments
+        QString destZoneId = destZone->id().toString();
 
         // Get geometry for destination zone ON THE CORRECT SCREEN
         // This fixes multi-monitor issues where windows could get wrong coordinates
