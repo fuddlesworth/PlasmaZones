@@ -56,6 +56,7 @@ Rectangle {
         zones: root.layout && root.layout.zones ? root.layout.zones : []
         isActive: root.isSelected
         zonePadding: 1 // Minimal padding for thumbnail
+        edgeGap: 1     // Minimal edge gap for thumbnail
         minZoneSize: 8
         showZoneNumbers: true
     }

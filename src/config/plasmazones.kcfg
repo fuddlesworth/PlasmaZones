@@ -129,7 +129,13 @@
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="Zones">
     <entry name="Padding" type="Int">
-      <label>Padding inside zones in pixels</label>
+      <label>Padding between adjacent zones in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="OuterGap" type="Int">
+      <label>Gap at screen edges in pixels</label>
       <default>8</default>
       <min>0</min>
       <max>50</max>

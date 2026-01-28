@@ -139,10 +139,11 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
             }
             if (layout) {
                 layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
-                int spacing = m_settings ? m_settings->zonePadding() : 8;
+                int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+                int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
 
                 for (auto* zone : layout->zones()) {
-                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithSpacing(zone, screen, spacing, true);
+                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
                     QRect zoneRect = zoneGeom.toRect();
 
                     // Use class constants for tolerances
@@ -241,13 +242,14 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
             m_currentAdjacentZoneIds = newAdjacentZoneIds;
             m_isMultiZoneMode = true;
 
-            // Calculate combined geometry with spacing
-            int multiZoneSpacing = m_settings ? m_settings->zonePadding() : 8;
+            // Calculate combined geometry with gaps
+            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+            int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
             QRectF combinedGeom =
-                GeometryUtils::getZoneGeometryWithSpacing(result.primaryZone, screen, multiZoneSpacing, true);
+                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, true);
             for (Zone* zone : result.adjacentZones) {
                 if (zone && zone != result.primaryZone) {
-                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithSpacing(zone, screen, multiZoneSpacing, true);
+                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
                     combinedGeom = combinedGeom.united(zoneGeom);
                 }
             }
@@ -280,9 +282,10 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            int singleZoneSpacing = m_settings ? m_settings->zonePadding() : 8;
+            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+            int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
             QRectF geom =
-                GeometryUtils::getZoneGeometryWithSpacing(result.primaryZone, screen, singleZoneSpacing, true);
+                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, true);
             m_currentZoneGeometry = geom.toRect();
             m_currentMultiZoneGeometry = QRect();
         }
@@ -355,8 +358,9 @@ void WindowDragAdaptor::handleSingleZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(foundZone);
             m_overlayService->highlightZone(zoneId);
 
-            int zoneSpacing = m_settings ? m_settings->zonePadding() : 8;
-            QRectF geom = GeometryUtils::getZoneGeometryWithSpacing(foundZone, screen, zoneSpacing, true);
+            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+            int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+            QRectF geom = GeometryUtils::getZoneGeometryWithGaps(foundZone, screen, zonePadding, outerGap, true);
             m_currentZoneGeometry = geom.toRect();
         }
     } else {

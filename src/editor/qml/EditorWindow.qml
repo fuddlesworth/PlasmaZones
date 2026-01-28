@@ -33,8 +33,20 @@ Window {
     property rect drawRect: Qt.rect(0, 0, 0, 0)
     // Fullscreen editing mode - hides all panels for distraction-free editing
     property bool fullscreenMode: false
-    // Zone spacing matches zone padding from settings
-    readonly property real zoneSpacing: editorWindow._editorController ? editorWindow._editorController.zonePadding : Kirigami.Units.gridUnit
+    // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
+    readonly property real zoneSpacing: {
+        if (!editorWindow._editorController) return Kirigami.Units.gridUnit;
+        return editorWindow._editorController.hasZonePaddingOverride
+            ? editorWindow._editorController.zonePadding
+            : editorWindow._editorController.globalZonePadding;
+    }
+    // Edge gap (at screen boundaries) - separate from zone spacing
+    readonly property real edgeGap: {
+        if (!editorWindow._editorController) return Kirigami.Units.gridUnit;
+        return editorWindow._editorController.hasOuterGapOverride
+            ? editorWindow._editorController.outerGap
+            : editorWindow._editorController.globalOuterGap;
+    }
     property var _zonesRepeater: null
     // Helper to get selected zone data - reactive to both selectedZoneId AND zones changes
     // Force re-evaluation by accessing zones in the binding
@@ -264,7 +276,7 @@ Window {
             Layout.preferredWidth: parent.width - (propertiesPanel.visible ? propertiesPanel.width : 0)
             Layout.minimumWidth: 400
 
-            // Actual drawing area (with margins matching zone padding from settings)
+            // Actual drawing area (zones handle their own gaps via edgeGap and zoneSpacing)
             Item {
                 // Allow Tab/Shift+Tab for standard focus navigation (accessibility requirement)
 
@@ -272,7 +284,7 @@ Window {
 
                 objectName: "drawingArea" // Required for focus restoration from child components
                 anchors.fill: parent
-                anchors.margins: editorWindow._editorController ? editorWindow._editorController.zonePadding : Kirigami.Units.gridUnit
+                // No margins here - zones apply their own gaps (edgeGap at screen edges, zoneSpacing/2 between zones)
                 focus: true // Enable keyboard focus for navigation
                 // Keyboard navigation - uses extracted KeyboardNavigation component
                 Keys.priority: Keys.AfterItem
@@ -316,7 +328,8 @@ Window {
                         isSelected: editorWindow.isZoneSelected(modelData.id)
                         isPartOfMultiSelection: isSelected && editorWindow.hasMultipleSelection
                         controller: editorWindow._editorController // Pass controller for snapping
-                        zoneSpacing: editorWindow.zoneSpacing // Pass spacing for gaps
+                        zoneSpacing: editorWindow.zoneSpacing // Pass spacing for gaps between zones
+                        edgeGap: editorWindow.edgeGap // Pass gap for screen edges
                         snapIndicator: snapIndicator // Pass snapIndicator for visual feedback
                         // Z-order: base of 60 (above DividerManager z:50) + zOrder from model
                         z: 60 + (modelData.zOrder !== undefined ? modelData.zOrder : 0)

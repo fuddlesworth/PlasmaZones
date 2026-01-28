@@ -38,7 +38,8 @@ Item {
     required property bool isSelected
     property bool isPartOfMultiSelection: false // True when zone is selected AND multiple zones are selected
     property var controller: null
-    property real zoneSpacing: 0
+    property real zoneSpacing: 0  // Gap between adjacent zones (applied as zoneSpacing/2 per side)
+    property real edgeGap: 0      // Gap at screen edges
     property var snapIndicator: null
     property int operationState: EditorZone.State.Idle
     // Track if this zone is part of an active divider operation
@@ -198,12 +199,24 @@ Item {
     }
 
     focus: false
-    // Apply spacing to create gaps between zones
-    // Ensure width/height are never negative
-    x: visualX + zoneSpacing / 2
-    y: visualY + zoneSpacing / 2
-    width: Math.max(0, visualWidth - zoneSpacing)
-    height: Math.max(0, visualHeight - zoneSpacing)
+    // Apply differentiated gaps: edgeGap at screen boundaries, zoneSpacing/2 between zones
+    // Detect screen boundaries using relative coordinates (tolerance 0.01)
+    readonly property real edgeTolerance: 0.01
+    // Zone data uses x, y, width, height (relative coordinates 0-1)
+    readonly property real relX: zoneData ? (zoneData.x || 0) : 0
+    readonly property real relY: zoneData ? (zoneData.y || 0) : 0
+    readonly property real relWidth: zoneData ? (zoneData.width || 0) : 0
+    readonly property real relHeight: zoneData ? (zoneData.height || 0) : 0
+    // Calculate gap for each edge: edgeGap if at screen boundary, zoneSpacing/2 otherwise
+    readonly property real leftGap: relX < edgeTolerance ? edgeGap : zoneSpacing / 2
+    readonly property real topGap: relY < edgeTolerance ? edgeGap : zoneSpacing / 2
+    readonly property real rightGap: (relX + relWidth) > (1.0 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    readonly property real bottomGap: (relY + relHeight) > (1.0 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    // Position with differentiated gaps
+    x: visualX + leftGap
+    y: visualY + topGap
+    width: Math.max(0, visualWidth - leftGap - rightGap)
+    height: Math.max(0, visualHeight - topGap - bottomGap)
     // Watch for canvas size changes - sync when dimensions become valid
     onCanvasWidthChanged: {
         Qt.callLater(ensureDimensionsInitialized);

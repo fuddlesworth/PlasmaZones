@@ -34,6 +34,7 @@ Layout::Layout(const Layout& other)
     , m_author(other.m_author)
     , m_shortcut(other.m_shortcut)
     , m_zonePadding(other.m_zonePadding)
+    , m_outerGap(other.m_outerGap)
     , m_showZoneNumbers(other.m_showZoneNumbers)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_defaultOrder(other.m_defaultOrder)
@@ -61,6 +62,7 @@ Layout& Layout::operator=(const Layout& other)
         m_author = other.m_author;
         m_shortcut = other.m_shortcut;
         m_zonePadding = other.m_zonePadding;
+        m_outerGap = other.m_outerGap;
         m_showZoneNumbers = other.m_showZoneNumbers;
         m_defaultOrder = other.m_defaultOrder;
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
@@ -127,12 +129,38 @@ void Layout::setShortcut(const QString& shortcut)
 
 void Layout::setZonePadding(int padding)
 {
-    padding = qMax(0, padding);
+    // Allow -1 (use global) or any non-negative value
+    if (padding < -1) {
+        padding = -1;
+    }
     if (m_zonePadding != padding) {
         m_zonePadding = padding;
         Q_EMIT zonePaddingChanged();
         Q_EMIT layoutModified();
     }
+}
+
+void Layout::clearZonePaddingOverride()
+{
+    setZonePadding(-1);
+}
+
+void Layout::setOuterGap(int gap)
+{
+    // Allow -1 (use global) or any non-negative value
+    if (gap < -1) {
+        gap = -1;
+    }
+    if (m_outerGap != gap) {
+        m_outerGap = gap;
+        Q_EMIT outerGapChanged();
+        Q_EMIT layoutModified();
+    }
+}
+
+void Layout::clearOuterGapOverride()
+{
+    setOuterGap(-1);
 }
 
 void Layout::setShowZoneNumbers(bool show)
@@ -354,7 +382,13 @@ QJsonObject Layout::toJson() const
     json[JsonKeys::Description] = m_description;
     json[JsonKeys::Author] = m_author;
     json[JsonKeys::Shortcut] = m_shortcut;
-    json[JsonKeys::ZonePadding] = m_zonePadding;
+    // Only serialize gap overrides if they're set (>= 0)
+    if (m_zonePadding >= 0) {
+        json[JsonKeys::ZonePadding] = m_zonePadding;
+    }
+    if (m_outerGap >= 0) {
+        json[JsonKeys::OuterGap] = m_outerGap;
+    }
     json[JsonKeys::ShowZoneNumbers] = m_showZoneNumbers;
     if (m_defaultOrder != 999) {
         json[JsonKeys::DefaultOrder] = m_defaultOrder;
@@ -392,7 +426,9 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_description = json[JsonKeys::Description].toString();
     layout->m_author = json[JsonKeys::Author].toString();
     layout->m_shortcut = json[JsonKeys::Shortcut].toString();
-    layout->m_zonePadding = json[JsonKeys::ZonePadding].toInt(Defaults::ZonePadding);
+    // Gap overrides: -1 means use global setting (key absent = no override)
+    layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;
+    layout->m_outerGap = json.contains(JsonKeys::OuterGap) ? json[JsonKeys::OuterGap].toInt(-1) : -1;
     layout->m_showZoneNumbers = json[JsonKeys::ShowZoneNumbers].toBool(true);
     layout->m_defaultOrder = json[JsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON

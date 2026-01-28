@@ -318,6 +318,120 @@ int EditorController::zonePadding() const
 {
     return m_zonePadding;
 }
+
+int EditorController::outerGap() const
+{
+    return m_outerGap;
+}
+
+bool EditorController::hasZonePaddingOverride() const
+{
+    return m_zonePadding >= 0;
+}
+
+bool EditorController::hasOuterGapOverride() const
+{
+    return m_outerGap >= 0;
+}
+
+int EditorController::globalZonePadding() const
+{
+    return m_cachedGlobalZonePadding;
+}
+
+int EditorController::globalOuterGap() const
+{
+    return m_cachedGlobalOuterGap;
+}
+
+void EditorController::setZonePadding(int padding)
+{
+    if (padding < -1) {
+        padding = -1;
+    }
+    if (m_zonePadding != padding) {
+        m_zonePadding = padding;
+        markUnsaved();
+        Q_EMIT zonePaddingChanged();
+    }
+}
+
+void EditorController::setOuterGap(int gap)
+{
+    if (gap < -1) {
+        gap = -1;
+    }
+    if (m_outerGap != gap) {
+        m_outerGap = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::clearZonePaddingOverride()
+{
+    setZonePadding(-1);
+}
+
+void EditorController::clearOuterGapOverride()
+{
+    setOuterGap(-1);
+}
+
+void EditorController::refreshGlobalZonePadding()
+{
+    int newValue = PlasmaZones::Defaults::ZonePadding;
+
+    QDBusInterface settingsIface(
+        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
+        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
+        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
+        QDBusConnection::sessionBus());
+
+    if (settingsIface.isValid()) {
+        QDBusReply<QDBusVariant> reply =
+            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("zonePadding"));
+        if (reply.isValid()) {
+            int value = reply.value().variant().toInt();
+            if (value >= 0) {
+                newValue = value;
+            }
+        }
+    }
+
+    if (m_cachedGlobalZonePadding != newValue) {
+        m_cachedGlobalZonePadding = newValue;
+        Q_EMIT globalZonePaddingChanged();
+    }
+}
+
+void EditorController::refreshGlobalOuterGap()
+{
+    int newValue = PlasmaZones::Defaults::OuterGap;
+
+    QDBusInterface settingsIface(
+        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
+        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
+        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
+        QDBusConnection::sessionBus());
+
+    if (settingsIface.isValid()) {
+        QDBusReply<QDBusVariant> reply =
+            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("outerGap"));
+        if (reply.isValid()) {
+            int value = reply.value().variant().toInt();
+            if (value >= 0) {
+                newValue = value;
+            }
+        }
+    }
+
+    if (m_cachedGlobalOuterGap != newValue) {
+        m_cachedGlobalOuterGap = newValue;
+        Q_EMIT globalOuterGapChanged();
+    }
+}
+
 UndoController* EditorController::undoController() const
 {
     return m_undoController;
@@ -572,6 +686,10 @@ void EditorController::createNewLayout()
     m_currentShaderParams.clear();
     m_cachedShaderParameters.clear();
 
+    // Reset per-layout gap overrides (-1 = use global)
+    m_zonePadding = -1;
+    m_outerGap = -1;
+
     // Refresh available shaders from daemon
     refreshAvailableShaders();
 
@@ -585,6 +703,8 @@ void EditorController::createNewLayout()
     Q_EMIT currentShaderIdChanged();
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
+    Q_EMIT zonePaddingChanged();
+    Q_EMIT outerGapChanged();
 }
 
 void EditorController::loadLayout(const QString& layoutId)
@@ -674,6 +794,16 @@ void EditorController::loadLayout(const QString& layoutId)
         m_currentShaderParams.clear();
     }
 
+    // Load per-layout gap overrides (-1 = use global setting)
+    int oldZonePadding = m_zonePadding;
+    int oldOuterGap = m_outerGap;
+    m_zonePadding = layoutObj.contains(QLatin1String(JsonKeys::ZonePadding))
+        ? layoutObj[QLatin1String(JsonKeys::ZonePadding)].toInt(-1)
+        : -1;
+    m_outerGap = layoutObj.contains(QLatin1String(JsonKeys::OuterGap))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGap)].toInt(-1)
+        : -1;
+
     m_selectedZoneId.clear();
     m_selectedZoneIds.clear();
     m_isNewLayout = false;
@@ -705,6 +835,14 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT currentShaderIdChanged();
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
+
+    // Emit gap change signals if values changed
+    if (m_zonePadding != oldZonePadding) {
+        Q_EMIT zonePaddingChanged();
+    }
+    if (m_outerGap != oldOuterGap) {
+        Q_EMIT outerGapChanged();
+    }
 }
 
 /**
@@ -776,6 +914,14 @@ void EditorController::saveLayout()
     }
     if (!m_currentShaderParams.isEmpty()) {
         layoutObj[QLatin1String(JsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(m_currentShaderParams);
+    }
+
+    // Include per-layout gap overrides (only if set, >= 0)
+    if (m_zonePadding >= 0) {
+        layoutObj[QLatin1String(JsonKeys::ZonePadding)] = m_zonePadding;
+    }
+    if (m_outerGap >= 0) {
+        layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
     }
 
     QJsonDocument doc(layoutObj);
@@ -2467,31 +2613,10 @@ void EditorController::loadEditorSettings()
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
 
-    // Load zone padding via D-Bus from daemon's Settings (single source of truth)
-    // This avoids duplication - zonePadding is owned by Settings class in daemon
-    QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName), QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings), QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QDBusVariant> reply =
-            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("zonePadding"));
-        if (reply.isValid()) {
-            int zonePadding = reply.value().variant().toInt();
-            if (zonePadding < 0) {
-                qCWarning(lcEditor) << "Invalid zone padding from D-Bus:" << zonePadding << "using default";
-                zonePadding = PlasmaZones::Defaults::ZonePadding;
-            }
-            if (m_zonePadding != zonePadding) {
-                m_zonePadding = zonePadding;
-                Q_EMIT zonePaddingChanged();
-            }
-        } else {
-            qCWarning(lcEditor) << "Failed to get zonePadding via D-Bus:" << reply.error().message();
-        }
-    } else {
-        qCWarning(lcEditor) << "Cannot connect to PlasmaZones Settings D-Bus interface for zonePadding";
-    }
+    // Note: Per-layout zonePadding/outerGap overrides are loaded from the layout JSON
+    // in loadLayout(). The global settings are cached here for performance (avoids D-Bus calls).
+    refreshGlobalZonePadding();
+    refreshGlobalOuterGap();
 
     // Load snapping settings (backward compatible with single SnapInterval)
     bool gridEnabled = editorGroup.readEntry("GridSnappingEnabled", true);

@@ -71,8 +71,13 @@ class EditorController : public QObject
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
 
-    // Zone settings (from global settings)
-    Q_PROPERTY(int zonePadding READ zonePadding NOTIFY zonePaddingChanged)
+    // Zone settings (per-layout override or global settings)
+    Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
+    Q_PROPERTY(bool hasOuterGapOverride READ hasOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(int globalZonePadding READ globalZonePadding NOTIFY globalZonePaddingChanged)
+    Q_PROPERTY(int globalOuterGap READ globalOuterGap NOTIFY globalOuterGapChanged)
 
     // Shader properties for current layout
     Q_PROPERTY(QString currentShaderId READ currentShaderId WRITE setCurrentShaderId NOTIFY currentShaderIdChanged)
@@ -117,6 +122,11 @@ public:
     int fillOnDropModifier() const;
     QString targetScreen() const;
     int zonePadding() const;
+    int outerGap() const;
+    bool hasZonePaddingOverride() const;
+    bool hasOuterGapOverride() const;
+    int globalZonePadding() const;
+    int globalOuterGap() const;
     bool canPaste() const;
     UndoController* undoController() const;
 
@@ -152,6 +162,12 @@ public:
     void setFillOnDropModifier(int modifier);
     void setTargetScreen(const QString& screenName);
     void setTargetScreenDirect(const QString& screenName); // Sets screen without loading layout (for initialization)
+    void setZonePadding(int padding);
+    void setOuterGap(int gap);
+    Q_INVOKABLE void clearZonePaddingOverride();
+    Q_INVOKABLE void clearOuterGapOverride();
+    Q_INVOKABLE void refreshGlobalZonePadding();
+    Q_INVOKABLE void refreshGlobalOuterGap();
 
     // Shader setters (create undo commands)
     void setCurrentShaderId(const QString& id);
@@ -339,6 +355,9 @@ Q_SIGNALS:
     void fillOnDropModifierChanged();
     void targetScreenChanged();
     void zonePaddingChanged();
+    void outerGapChanged();
+    void globalZonePaddingChanged();
+    void globalOuterGapChanged();
 
     // Shader signals
     void currentShaderIdChanged();
@@ -454,8 +473,11 @@ private:
     QString m_defaultInactiveColor;
     QString m_defaultBorderColor;
 
-    // Zone settings (from global settings)
-    int m_zonePadding = PlasmaZones::Defaults::ZonePadding;
+    // Zone settings (per-layout override, -1 = use global)
+    int m_zonePadding = -1;
+    int m_outerGap = -1;
+    int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
+    int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
 
     // Clipboard state
     bool m_canPaste = false;

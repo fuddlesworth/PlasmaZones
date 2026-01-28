@@ -42,8 +42,10 @@ Item {
     property bool isHovered: false
     /// Index of the currently selected zone (-1 for none)
     property int selectedZoneIndex: -1
-    /// Gap between zones in pixels
+    /// Gap between zones in pixels (applied as zonePadding/2 per side between adjacent zones)
     property real zonePadding: 1
+    /// Gap at screen edges in pixels
+    property real edgeGap: 1
     /// Minimum zone size in pixels
     property int minZoneSize: 8
     /// Whether to show zone numbers
@@ -75,8 +77,7 @@ Item {
             required property var modelData
             required property int index
             // Parse relative geometry
-            property var relGeo: modelData.relativeGeometry || {
-            }
+            property var relGeo: modelData.relativeGeometry || {}
             property real relX: relGeo.x || 0
             property real relY: relGeo.y || 0
             property real relWidth: relGeo.width || 0.25
@@ -84,11 +85,18 @@ Item {
             // Check if this zone is selected
             property bool isZoneSelected: root.selectedZoneIndex === index
 
-            // Position and size with gaps
-            x: relX * root.width + root.zonePadding
-            y: relY * root.height + root.zonePadding
-            width: Math.max(root.minZoneSize, relWidth * root.width - root.zonePadding * 2)
-            height: Math.max(root.minZoneSize, relHeight * root.height - root.zonePadding * 2)
+            // Detect screen boundaries (tolerance 0.01)
+            readonly property real edgeTolerance: 0.01
+            readonly property real leftGap: relX < edgeTolerance ? root.edgeGap : root.zonePadding / 2
+            readonly property real topGap: relY < edgeTolerance ? root.edgeGap : root.zonePadding / 2
+            readonly property real rightGap: (relX + relWidth) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
+            readonly property real bottomGap: (relY + relHeight) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
+
+            // Position and size with differentiated gaps
+            x: relX * root.width + leftGap
+            y: relY * root.height + topGap
+            width: Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+            height: Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
             // Zone fill color
             color: {
                 var baseColor = Kirigami.Theme.textColor;

@@ -45,6 +45,9 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(QString author READ author WRITE setAuthor NOTIFY authorChanged)
     Q_PROPERTY(QString shortcut READ shortcut WRITE setShortcut NOTIFY shortcutChanged)
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
+    Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
+    Q_PROPERTY(bool hasOuterGapOverride READ hasOuterGapOverride NOTIFY outerGapChanged)
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zonesChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
@@ -96,12 +99,28 @@ public:
     }
     void setShortcut(const QString& shortcut);
 
-    // Layout settings
+    // Layout settings (per-layout gap overrides, -1 = use global setting)
     int zonePadding() const
     {
         return m_zonePadding;
     }
     void setZonePadding(int padding);
+    bool hasZonePaddingOverride() const
+    {
+        return m_zonePadding >= 0;
+    }
+    void clearZonePaddingOverride();
+
+    int outerGap() const
+    {
+        return m_outerGap;
+    }
+    void setOuterGap(int gap);
+    bool hasOuterGapOverride() const
+    {
+        return m_outerGap >= 0;
+    }
+    void clearOuterGapOverride();
 
     bool showZoneNumbers() const
     {
@@ -185,6 +204,7 @@ Q_SIGNALS:
     void authorChanged();
     void shortcutChanged();
     void zonePaddingChanged();
+    void outerGapChanged();
     void showZoneNumbersChanged();
     void sourcePathChanged();
     void shaderIdChanged();
@@ -201,7 +221,8 @@ private:
     QString m_description;
     QString m_author;
     QString m_shortcut;
-    int m_zonePadding = 8;
+    int m_zonePadding = -1;  // -1 = use global setting
+    int m_outerGap = -1;     // -1 = use global setting
     bool m_showZoneNumbers = true;
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)

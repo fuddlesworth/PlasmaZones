@@ -165,6 +165,8 @@ public:
     // Zone settings
     virtual int zonePadding() const = 0;
     virtual void setZonePadding(int padding) = 0;
+    virtual int outerGap() const = 0;
+    virtual void setOuterGap(int gap) = 0;
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
 
@@ -263,6 +265,7 @@ Q_SIGNALS:
     void borderRadiusChanged();
     void enableBlurChanged();
     void zonePaddingChanged();
+    void outerGapChanged();
     void adjacentThresholdChanged();
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();

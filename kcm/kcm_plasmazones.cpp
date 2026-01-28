@@ -218,6 +218,10 @@ int KCMPlasmaZones::zonePadding() const
 {
     return m_settings->zonePadding();
 }
+int KCMPlasmaZones::outerGap() const
+{
+    return m_settings->outerGap();
+}
 int KCMPlasmaZones::adjacentThreshold() const
 {
     return m_settings->adjacentThreshold();
@@ -620,6 +624,15 @@ void KCMPlasmaZones::setZonePadding(int padding)
     if (m_settings->zonePadding() != padding) {
         m_settings->setZonePadding(padding);
         Q_EMIT zonePaddingChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGap(int gap)
+{
+    if (m_settings->outerGap() != gap) {
+        m_settings->setOuterGap(gap);
+        Q_EMIT outerGapChanged();
         setNeedsSave(true);
     }
 }
@@ -1120,6 +1133,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT enableShaderEffectsChanged();
     Q_EMIT shaderFrameRateChanged();
     Q_EMIT zonePaddingChanged();
+    Q_EMIT outerGapChanged();
     Q_EMIT adjacentThresholdChanged();
     Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
     Q_EMIT moveNewWindowsToLastZoneChanged();
@@ -1682,6 +1696,7 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT borderRadiusChanged();
         Q_EMIT enableBlurChanged();
         Q_EMIT zonePaddingChanged();
+        Q_EMIT outerGapChanged();
         Q_EMIT adjacentThresholdChanged();
         Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
         Q_EMIT moveNewWindowsToLastZoneChanged();

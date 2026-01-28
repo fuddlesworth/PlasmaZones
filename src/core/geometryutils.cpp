@@ -3,6 +3,8 @@
 
 #include "geometryutils.h"
 #include "zone.h"
+#include "layout.h"
+#include "interfaces.h"
 #include "constants.h"
 #include "screenmanager.h"
 #include <QScreen>
@@ -111,6 +113,73 @@ QRectF getZoneGeometryWithSpacing(Zone* zone, QScreen* screen, int spacing, bool
     }
 
     return geom;
+}
+
+QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap, bool useAvailableGeometry)
+{
+    if (!zone || !screen) {
+        return QRectF();
+    }
+
+    // Use available geometry (excludes panels/taskbars) or full screen geometry
+    QRectF geom;
+    if (useAvailableGeometry) {
+        geom = calculateZoneGeometryInAvailableArea(zone, screen);
+    } else {
+        geom = calculateZoneGeometry(zone, screen);
+    }
+
+    // Get relative geometry to determine which edges are at screen boundaries
+    QRectF relGeom = zone->relativeGeometry();
+
+    // Tolerance for floating point comparison (zones at edge should be within 0.01 of boundary)
+    constexpr qreal edgeTolerance = 0.01;
+
+    // Calculate adjustments for each edge
+    // Left edge: at boundary (0) -> outerGap, otherwise -> innerGap/2
+    qreal leftAdj = (relGeom.left() < edgeTolerance) ? outerGap : (innerGap / 2.0);
+
+    // Top edge: at boundary (0) -> outerGap, otherwise -> innerGap/2
+    qreal topAdj = (relGeom.top() < edgeTolerance) ? outerGap : (innerGap / 2.0);
+
+    // Right edge: at boundary (1) -> outerGap, otherwise -> innerGap/2
+    qreal rightAdj = (relGeom.right() > (1.0 - edgeTolerance)) ? outerGap : (innerGap / 2.0);
+
+    // Bottom edge: at boundary (1) -> outerGap, otherwise -> innerGap/2
+    qreal bottomAdj = (relGeom.bottom() > (1.0 - edgeTolerance)) ? outerGap : (innerGap / 2.0);
+
+    // Apply the adjustments (positive inset from edges)
+    geom = geom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
+
+    return geom;
+}
+
+int getEffectiveZonePadding(Layout* layout, ISettings* settings)
+{
+    // Check for layout-specific override first
+    if (layout && layout->hasZonePaddingOverride()) {
+        return layout->zonePadding();
+    }
+    // Fall back to global settings
+    if (settings) {
+        return settings->zonePadding();
+    }
+    // Last resort: use default constant
+    return Defaults::ZonePadding;
+}
+
+int getEffectiveOuterGap(Layout* layout, ISettings* settings)
+{
+    // Check for layout-specific override first
+    if (layout && layout->hasOuterGapOverride()) {
+        return layout->outerGap();
+    }
+    // Fall back to global outerGap setting
+    if (settings) {
+        return settings->outerGap();
+    }
+    // Last resort: use default constant
+    return Defaults::OuterGap;
 }
 
 } // namespace GeometryUtils

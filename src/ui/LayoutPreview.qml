@@ -80,6 +80,7 @@ Rectangle {
         isHovered: root.isHovered
         isActive: root.isActive
         zonePadding: 1
+        edgeGap: 1
         minZoneSize: 8
         showZoneNumbers: true
         inactiveOpacity: root.inactiveOpacity
