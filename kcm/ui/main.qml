@@ -1429,22 +1429,36 @@ KCM.AbstractKCM {
                 Kirigami.FormData.label: i18n("Border")
             }
 
-            SpinBox {
+            RowLayout {
                 Kirigami.FormData.label: i18n("Width:")
-                from: 0
-                to: constants.borderWidthMax
-                value: kcm.borderWidth
-                onValueModified: kcm.borderWidth = value
-                textFromValue: function(value) { return value + " px" }
+                spacing: Kirigami.Units.smallSpacing
+
+                SpinBox {
+                    from: 0
+                    to: constants.borderWidthMax
+                    value: kcm.borderWidth
+                    onValueModified: kcm.borderWidth = value
+                }
+
+                Label {
+                    text: i18n("px")
+                }
             }
 
-            SpinBox {
+            RowLayout {
                 Kirigami.FormData.label: i18n("Radius:")
-                from: 0
-                to: constants.borderRadiusMax
-                value: kcm.borderRadius
-                onValueModified: kcm.borderRadius = value
-                textFromValue: function(value) { return value + " px" }
+                spacing: Kirigami.Units.smallSpacing
+
+                SpinBox {
+                    from: 0
+                    to: constants.borderRadiusMax
+                    value: kcm.borderRadius
+                    onValueModified: kcm.borderRadius = value
+                }
+
+                Label {
+                    text: i18n("px")
+                }
             }
 
             // Effects section
@@ -1579,15 +1593,23 @@ KCM.AbstractKCM {
                 onToggled: kcm.middleClickMultiZone = checked
             }
 
-            SpinBox {
+            RowLayout {
                 Kirigami.FormData.label: i18n("Edge threshold:")
-                from: 0
-                to: constants.paddingMax
-                value: kcm.adjacentThreshold
-                onValueModified: kcm.adjacentThreshold = value
-                textFromValue: function(value) { return value + " px" }
+                spacing: Kirigami.Units.smallSpacing
 
-                ToolTip.visible: hovered && stackLayout.currentIndex === 4
+                SpinBox {
+                    id: adjacentThresholdSpinBox
+                    from: 0
+                    to: constants.thresholdMax
+                    value: kcm.adjacentThreshold
+                    onValueModified: kcm.adjacentThreshold = value
+                }
+
+                Label {
+                    text: i18n("px")
+                }
+
+                ToolTip.visible: adjacentThresholdSpinBox.hovered && stackLayout.currentIndex === 4
                 ToolTip.text: i18n("Distance from zone edge for multi-zone selection")
             }
 
@@ -1597,22 +1619,36 @@ KCM.AbstractKCM {
                 Kirigami.FormData.label: i18n("Zone Settings")
             }
 
-            SpinBox {
+            RowLayout {
                 Kirigami.FormData.label: i18n("Zone padding:")
-                from: 0
-                to: constants.thresholdMax
-                value: kcm.zonePadding
-                onValueModified: kcm.zonePadding = value
-                textFromValue: function(value) { return value + " px" }
+                spacing: Kirigami.Units.smallSpacing
+
+                SpinBox {
+                    from: 0
+                    to: constants.thresholdMax
+                    value: kcm.zonePadding
+                    onValueModified: kcm.zonePadding = value
+                }
+
+                Label {
+                    text: i18n("px")
+                }
             }
 
-            SpinBox {
+            RowLayout {
                 Kirigami.FormData.label: i18n("Edge gap:")
-                from: 0
-                to: constants.thresholdMax
-                value: kcm.outerGap
-                onValueModified: kcm.outerGap = value
-                textFromValue: function(value) { return value + " px" }
+                spacing: Kirigami.Units.smallSpacing
+
+                SpinBox {
+                    from: 0
+                    to: constants.thresholdMax
+                    value: kcm.outerGap
+                    onValueModified: kcm.outerGap = value
+                }
+
+                Label {
+                    text: i18n("px")
+                }
             }
 
             CheckBox {
