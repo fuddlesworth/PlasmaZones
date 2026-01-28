@@ -499,7 +499,7 @@
         <signal name="toggleWindowFloatRequested">
             <arg name="shouldFloat" type="b"/>
         </signal>
-        <!-- Navigation feedback signal (emitted by KWin effect, consumed by daemon) -->
+        <!-- Navigation feedback signal (emitted by daemon when KWin effect reports via reportNavigationFeedback) -->
         <signal name="navigationFeedback">
             <arg name="success" type="b"/>
             <arg name="action" type="s"/>

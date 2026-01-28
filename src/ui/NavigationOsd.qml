@@ -16,6 +16,9 @@ import org.plasmazones.common as QFZCommon
 Window {
     id: root
 
+    Accessible.name: i18n("Navigation feedback")
+    Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
+
     // Navigation feedback data
     property bool success: true
     property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle"
@@ -42,20 +45,25 @@ Window {
 
     // Computed properties
     readonly property string directionText: {
-        // Extract direction from reason or action context
-        // For now, we'll show action-based messages
+        // Action-based messages for keyboard navigation feedback
         if (action === "move") {
             return success ? i18n("Moved") : i18n("No zone")
         } else if (action === "focus") {
             return success ? i18n("Focus") : i18n("No zone")
         } else if (action === "push") {
             return success ? i18n("Pushed") : i18n("No empty zone")
+        } else if (action === "restore") {
+            return success ? i18n("Restored") : i18n("Failed")
+        } else if (action === "float") {
+            return success ? i18n("Floating") : i18n("Failed")
         } else if (action === "snap") {
             return success ? i18n("Snapped") : i18n("Failed")
         } else if (action === "swap") {
             return success ? i18n("Swapped") : i18n("Failed")
         } else if (action === "rotate") {
             return success ? i18n("Rotated") : i18n("Failed")
+        } else if (action === "cycle") {
+            return success ? i18n("Focus") : i18n("Failed")
         } else {
             return success ? i18n("Done") : i18n("Failed")
         }
@@ -246,6 +254,8 @@ Window {
         // Message label (matches LayoutOsd nameLabel format)
         Label {
             id: messageLabel
+
+            Accessible.name: root.directionArrow !== "" ? (root.directionArrow + " " + root.directionText) : root.directionText
 
             anchors.top: previewContainer.visible ? previewContainer.bottom : parent.top
             anchors.topMargin: previewContainer.visible ? Kirigami.Units.gridUnit : Kirigami.Units.gridUnit * 1.5

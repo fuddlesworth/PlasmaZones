@@ -212,6 +212,8 @@ set(PLASMAZONESD_QML
     ${CMAKE_SOURCE_DIR}/src/ui/ZoneSelectorWindow.qml
     ${CMAKE_SOURCE_DIR}/src/ui/LayoutPicker.qml
     ${CMAKE_SOURCE_DIR}/src/ui/ZoneEditor.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/LayoutOsd.qml
+    ${CMAKE_SOURCE_DIR}/src/ui/NavigationOsd.qml
 )
 set(PLASMAZONES_EDITOR_CPP
     ${CMAKE_SOURCE_DIR}/src/editor/main.cpp

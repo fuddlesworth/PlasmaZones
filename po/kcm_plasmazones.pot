@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PlasmaZones 1.0.0\n"
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-28 13:54-0600\n"
+"POT-Creation-Date: 2026-01-28 17:12-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: English\n"
@@ -126,7 +126,7 @@ msgid "System • %1"
 msgstr ""
 
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:460
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1428
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1434
 msgid "%1 zones"
 msgstr ""
 
@@ -362,509 +362,521 @@ msgstr ""
 msgid "No screens detected. Make sure the PlasmaZones daemon is running."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1266
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1272
 msgid ""
 "KDE Activities support is not available. Activity-based layout assignments "
 "require the KDE Activities service to be running."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1276
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1282
 msgid "Quick Layout Shortcuts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1286
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1292
 msgid "Assign layouts to keyboard shortcuts for instant switching."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1312
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1318
 msgid "Not assigned"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1328
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1334
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/ModifierCheckBoxes.qml:32
 msgid "None"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1428
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1434
 msgid "No shortcut assigned"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1475
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1481
 msgid "Clear shortcut"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1499
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1505
 msgid "Colors"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1504
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1510
 msgid "Color scheme:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1505
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1511
 msgid "Use system accent color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1511
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1517
 msgid "Highlight:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1530
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1536
 msgid "Inactive:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1549
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1555
 msgid "Border:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1569
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1575
 msgid "Import colors:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1574
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1580
 msgid "From pywal"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1580
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1586
 msgid "From file..."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1589
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1595
 msgid "Opacity"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1593
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1599
 msgid "Active zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1612
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1618
 msgid "Inactive zone:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1633
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1639
 msgid "Border"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1637
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2360
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1643
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2378
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/PreviewSizeControl.qml:122
 msgid "Width:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1648
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1664
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1813
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1838
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1854
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1654
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1670
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1831
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1856
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1872
 msgid "px"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1653
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1659
 msgid "Radius:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1671
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1677
 msgid "Effects"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1675
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1681
 msgid "Blur:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1676
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1682
 msgid "Enable blur behind zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1682
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1688
 msgid "Shaders:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1683
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1689
 msgid "Enable shader effects"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1689
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1695
 msgid "Shader FPS:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1710
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1716
 msgid "Numbers:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1711
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1717
 msgid "Show zone numbers"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1717
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1723
 msgid "Animation:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1718
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1724
 msgid "Flash zones when switching layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1725
-msgid "Notifications:"
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1731
+msgid "On-Screen Display"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1726
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1736
+msgid "Layout switch:"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1737
 msgid "Show OSD when switching layouts"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1732
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1743
+msgid "Keyboard navigation:"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1744
+msgid "Show OSD when using keyboard navigation"
+msgstr ""
+
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1750
 msgid "OSD style:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1739
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1757
 msgid "Text only"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1740
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1758
 msgid "Visual preview"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1763
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1781
 msgid "Activation"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1768
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1786
 msgid "Zone activation modifiers:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1779
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1797
 msgid "Multi-Zone Selection"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1784
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1802
 msgid "Multi-zone modifier:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1787
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1805
 msgid ""
 "Hold this modifier combination while dragging to span windows across "
 "multiple zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1794
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1812
 msgid "Middle click:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1795
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1813
 msgid "Use middle mouse button to select multiple zones"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1801
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1819
 msgid "Edge threshold:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1817
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1835
 msgid "Distance from zone edge for multi-zone selection"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1823
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1841
 msgid "Zone Settings"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1827
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1845
 msgid "Zone padding:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1843
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1861
 msgid "Edge gap:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1859
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1877
 msgid "Display:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1860
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1878
 msgid "Show zones on all monitors while dragging"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1868
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1886
 msgid "Window Behavior"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1872
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1890
 msgid "Resolution:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1873
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1891
 msgid "Keep windows in zones when resolution changes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1879
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1897
 msgid "New windows:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1880
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1898
 msgid "Move new windows to their last used zone"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1886
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1904
 msgid "Unsnapping:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1887
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1905
 msgid "Restore original window size when unsnapping"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1894
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1912
 msgid "Sticky windows:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1898
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1916
 msgid "Treat as normal"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1899
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1917
 msgid "Restore only"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1900
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1918
 msgid "Ignore all"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1913
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1931
 msgid ""
 "Sticky windows appear on all desktops. Choose how snapping should behave."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1934
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1952
 msgid ""
 "The zone selector popup appears when dragging windows to screen edges, "
 "allowing quick layout selection."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1941
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1959
 msgid "Enable zone selector popup"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1954
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1972
 msgid "Position"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1972
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1990
 msgid ""
 "Choose where the popup appears on screen. Edges and corners are supported."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1986
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2004
 msgid "Trigger & Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:1999
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2017
 msgid "Trigger distance"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2004
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2022
 msgid "How close to the edge before the popup appears"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2042
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2060
 msgid "Arrangement:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2046
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2064
 msgid "Grid"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2047
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2065
 msgid "Horizontal"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2048
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2066
 msgid "Vertical"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2062
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2080
 msgid "Grid columns:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2071
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2089
 msgid "Max visible rows:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2080
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2098
 msgid "Scrolling enabled when more rows exist"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2093
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2111
 msgid "Preview Size"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2184
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2202
 msgid "Auto"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2194
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2212
 #, javascript-format
 msgid "~10%% of screen width (120-280px)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2198
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2216
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/PreviewSizeControl.qml:31
 msgid "Small"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2210
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2228
 msgid "120px width"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2214
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2232
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/PreviewSizeControl.qml:35
 msgid "Medium"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2226
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2244
 msgid "180px width"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2230
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2248
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/PreviewSizeControl.qml:39
 msgid "Large"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2242
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2260
 msgid "260px width"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2246
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2264
 msgid "Custom"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2256
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2274
 msgid "Custom size with slider"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2269
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2287
 msgid "Size:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2301
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2319
 msgid "Preview size adjusts automatically based on your screen resolution."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2326
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2344
 msgid ""
 "Windows from excluded applications or with excluded window classes will not "
 "snap to zones."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2336
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2354
 msgid "Window Filtering"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2345
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2363
 msgid "Exclude transient windows (dialogs, utilities, tooltips)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2351
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2369
 msgid "Minimum window size for snapping:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2370
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2387
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2388
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2405
 msgid "Disabled"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2377
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2395
 #: /home/nlavender/Documents/PlasmaZones/kcm/ui/PreviewSizeControl.qml:199
 msgid "Height:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2394
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2412
 msgid ""
 "Windows smaller than these dimensions will not snap to zones. Set to 0 to "
 "disable."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2410
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2428
 msgid "Excluded Applications"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2424
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2442
 msgid "Application name (e.g., firefox, konsole)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2435
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2521
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2453
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2539
 msgid "Add"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2482
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2500
 msgid "No excluded applications"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2483
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2501
 msgid "Add application names above to exclude them from zone snapping"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2496
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2514
 msgid "Excluded Window Classes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2510
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2528
 msgid "Window class (use xprop to find)"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2569
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2587
 msgid "No excluded window classes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2570
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2588
 msgid "Use 'xprop | grep WM_CLASS' to find window classes"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2591
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2609
 msgid "Choose Highlight Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2597
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2615
 msgid "Choose Inactive Zone Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2603
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2621
 msgid "Choose Border Color"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2610
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2628
 msgid "Import Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2618
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2636
 msgid "Export Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2627
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2645
 msgid "Import Colors from File"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2636
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2654
 msgid "Delete Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2637
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2655
 msgid "Are you sure you want to delete '%1'?"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2654
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2672
 msgid "Edit Layout"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2667
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2685
 msgid "Use the visual editor to create and modify zone layouts."
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2673
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2691
 msgid "Open Layout Editor"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2687
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2705
 msgid "You can also edit layout JSON files directly:"
 msgstr ""
 
-#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2693
+#: /home/nlavender/Documents/PlasmaZones/kcm/ui/main.qml:2711
 msgid "Open Layouts Folder"
 msgstr ""
 
