@@ -155,6 +155,17 @@ private:
      */
     QString findAlgorithmId(TilingAlgorithm *algorithm) const;
 
+    /**
+     * @brief Remove algorithm from internal data structures
+     *
+     * Does NOT delete the algorithm or emit signals. Used by both
+     * registerAlgorithm (for replacement) and unregisterAlgorithm.
+     *
+     * @param id Algorithm ID to remove
+     * @return Pointer to removed algorithm, or nullptr if not found
+     */
+    TilingAlgorithm *removeAlgorithmInternal(const QString &id);
+
     QHash<QString, TilingAlgorithm *> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 };

@@ -40,27 +40,30 @@ AlgorithmRegistry *AlgorithmRegistry::instance()
 
 void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *algorithm)
 {
-    if (id.isEmpty() || !algorithm) {
+    // Validate inputs - take ownership and delete on failure to prevent leaks
+    if (id.isEmpty()) {
+        delete algorithm;
+        return;
+    }
+    if (!algorithm) {
         return;
     }
 
     // Check if this algorithm pointer is already registered under a different ID
-    // to prevent double-free issues
+    // to prevent double-free issues. Don't delete - it's still owned under the original ID.
     const QString existingId = findAlgorithmId(algorithm);
     if (!existingId.isEmpty() && existingId != id) {
         qWarning() << "AlgorithmRegistry: algorithm" << algorithm->name()
                    << "is already registered as" << existingId
                    << "- cannot register as" << id;
+        // Note: NOT deleting because it's still registered under existingId
         return;
     }
 
     // Remove existing algorithm with same ID (replacement case)
-    if (m_algorithms.contains(id)) {
-        auto *old = m_algorithms.take(id);
-        m_registrationOrder.removeOne(id);
-        if (old != algorithm) {
-            delete old;
-        }
+    auto *old = removeAlgorithmInternal(id);
+    if (old && old != algorithm) {
+        delete old;
     }
 
     // Take ownership
@@ -81,16 +84,24 @@ QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm *algorithm) const
     return QString();
 }
 
-bool AlgorithmRegistry::unregisterAlgorithm(const QString &id)
+TilingAlgorithm *AlgorithmRegistry::removeAlgorithmInternal(const QString &id)
 {
     if (!m_algorithms.contains(id)) {
+        return nullptr;
+    }
+    auto *algorithm = m_algorithms.take(id);
+    m_registrationOrder.removeOne(id);
+    return algorithm;
+}
+
+bool AlgorithmRegistry::unregisterAlgorithm(const QString &id)
+{
+    auto *algorithm = removeAlgorithmInternal(id);
+    if (!algorithm) {
         return false;
     }
 
-    auto *algorithm = m_algorithms.take(id);
-    m_registrationOrder.removeOne(id);
     delete algorithm;
-
     Q_EMIT algorithmUnregistered(id);
     return true;
 }

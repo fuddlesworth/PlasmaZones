@@ -201,6 +201,7 @@ private Q_SLOTS:
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        // Note: registry takes ownership and deletes on failure (no leak)
         registry->registerAlgorithm(QString(), new TestAlgorithm());
 
         // Should not register - count unchanged, no signal
@@ -260,6 +261,33 @@ private Q_SLOTS:
 
         // Cleanup
         registry->unregisterAlgorithm(testId);
+    }
+
+    void testRegister_doubleRegistrationRejected()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        const QString id1 = QStringLiteral("test-double-1");
+        const QString id2 = QStringLiteral("test-double-2");
+
+        // Register under first ID
+        auto *algo = new TestAlgorithm(QStringLiteral("Double Test"));
+        registry->registerAlgorithm(id1, algo);
+        QVERIFY(registry->hasAlgorithm(id1));
+
+        // Attempt to register same pointer under different ID
+        // Registry should reject and delete the passed pointer (but algo is same, so no delete)
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        registry->registerAlgorithm(id2, algo);
+
+        // Should be rejected - id2 not registered, no signal
+        QVERIFY(!registry->hasAlgorithm(id2));
+        QCOMPARE(spy.count(), 0);
+        // Original registration still valid
+        QVERIFY(registry->hasAlgorithm(id1));
+        QCOMPARE(registry->algorithm(id1), algo);
+
+        // Cleanup
+        registry->unregisterAlgorithm(id1);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
