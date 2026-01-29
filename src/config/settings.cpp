@@ -936,6 +936,202 @@ void Settings::setCycleWindowBackwardShortcut(const QString& shortcut)
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Autotiling Settings
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void Settings::setAutotileEnabled(bool enabled)
+{
+    if (m_autotileEnabled != enabled) {
+        m_autotileEnabled = enabled;
+        Q_EMIT autotileEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileAlgorithm(const QString& algorithm)
+{
+    // Validate against known algorithms
+    static const QStringList validAlgorithms = {
+        DBus::AutotileAlgorithm::MasterStack,
+        DBus::AutotileAlgorithm::BSP,
+        DBus::AutotileAlgorithm::Columns,
+        DBus::AutotileAlgorithm::Rows,
+        DBus::AutotileAlgorithm::Fibonacci,
+        DBus::AutotileAlgorithm::Monocle,
+        DBus::AutotileAlgorithm::ThreeColumn
+    };
+
+    QString validatedAlgorithm = algorithm;
+    if (!validAlgorithms.contains(algorithm)) {
+        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
+                            << "- defaulting to master-stack";
+        validatedAlgorithm = DBus::AutotileAlgorithm::MasterStack;
+    }
+
+    if (m_autotileAlgorithm != validatedAlgorithm) {
+        m_autotileAlgorithm = validatedAlgorithm;
+        Q_EMIT autotileAlgorithmChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileSplitRatio(qreal ratio)
+{
+    ratio = qBound(AutotileDefaults::MinSplitRatio, ratio, AutotileDefaults::MaxSplitRatio);
+    // Use qFuzzyCompare properly for values that could be near zero
+    if (!qFuzzyCompare(1.0 + m_autotileSplitRatio, 1.0 + ratio)) {
+        m_autotileSplitRatio = ratio;
+        Q_EMIT autotileSplitRatioChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileMasterCount(int count)
+{
+    count = qBound(AutotileDefaults::MinMasterCount, count, AutotileDefaults::MaxMasterCount);
+    if (m_autotileMasterCount != count) {
+        m_autotileMasterCount = count;
+        Q_EMIT autotileMasterCountChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileInnerGap(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileInnerGap != gap) {
+        m_autotileInnerGap = gap;
+        Q_EMIT autotileInnerGapChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileOuterGap(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileOuterGap != gap) {
+        m_autotileOuterGap = gap;
+        Q_EMIT autotileOuterGapChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileFocusNewWindows(bool focus)
+{
+    if (m_autotileFocusNewWindows != focus) {
+        m_autotileFocusNewWindows = focus;
+        Q_EMIT autotileFocusNewWindowsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileSmartGaps(bool smart)
+{
+    if (m_autotileSmartGaps != smart) {
+        m_autotileSmartGaps = smart;
+        Q_EMIT autotileSmartGapsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileInsertPosition(AutotileInsertPosition position)
+{
+    if (m_autotileInsertPosition != position) {
+        m_autotileInsertPosition = position;
+        Q_EMIT autotileInsertPositionChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileInsertPositionInt(int position)
+{
+    if (position >= 0 && position <= 2) {
+        setAutotileInsertPosition(static_cast<AutotileInsertPosition>(position));
+    }
+}
+
+void Settings::setAutotileToggleShortcut(const QString& shortcut)
+{
+    if (m_autotileToggleShortcut != shortcut) {
+        m_autotileToggleShortcut = shortcut;
+        Q_EMIT autotileToggleShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileCycleAlgorithmShortcut(const QString& shortcut)
+{
+    if (m_autotileCycleAlgorithmShortcut != shortcut) {
+        m_autotileCycleAlgorithmShortcut = shortcut;
+        Q_EMIT autotileCycleAlgorithmShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileFocusMasterShortcut(const QString& shortcut)
+{
+    if (m_autotileFocusMasterShortcut != shortcut) {
+        m_autotileFocusMasterShortcut = shortcut;
+        Q_EMIT autotileFocusMasterShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileSwapMasterShortcut(const QString& shortcut)
+{
+    if (m_autotileSwapMasterShortcut != shortcut) {
+        m_autotileSwapMasterShortcut = shortcut;
+        Q_EMIT autotileSwapMasterShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileIncMasterRatioShortcut(const QString& shortcut)
+{
+    if (m_autotileIncMasterRatioShortcut != shortcut) {
+        m_autotileIncMasterRatioShortcut = shortcut;
+        Q_EMIT autotileIncMasterRatioShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileDecMasterRatioShortcut(const QString& shortcut)
+{
+    if (m_autotileDecMasterRatioShortcut != shortcut) {
+        m_autotileDecMasterRatioShortcut = shortcut;
+        Q_EMIT autotileDecMasterRatioShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileIncMasterCountShortcut(const QString& shortcut)
+{
+    if (m_autotileIncMasterCountShortcut != shortcut) {
+        m_autotileIncMasterCountShortcut = shortcut;
+        Q_EMIT autotileIncMasterCountShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileDecMasterCountShortcut(const QString& shortcut)
+{
+    if (m_autotileDecMasterCountShortcut != shortcut) {
+        m_autotileDecMasterCountShortcut = shortcut;
+        Q_EMIT autotileDecMasterCountShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileRetileShortcut(const QString& shortcut)
+{
+    if (m_autotileRetileShortcut != shortcut) {
+        m_autotileRetileShortcut = shortcut;
+        Q_EMIT autotileRetileShortcutChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -1270,6 +1466,64 @@ void Settings::load()
     m_cycleWindowBackwardShortcut =
         navigationShortcuts.readEntry("CycleWindowBackward", QStringLiteral("Meta+Alt+,"));
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings (using AutotileDefaults from constants.h)
+    // ═══════════════════════════════════════════════════════════════════════════
+    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
+
+    m_autotileEnabled = autotiling.readEntry("AutotileEnabled", false);
+    m_autotileAlgorithm = autotiling.readEntry("AutotileAlgorithm", QString(DBus::AutotileAlgorithm::MasterStack));
+
+    qreal splitRatio = autotiling.readEntry("AutotileSplitRatio", AutotileDefaults::DefaultSplitRatio);
+    if (splitRatio < AutotileDefaults::MinSplitRatio || splitRatio > AutotileDefaults::MaxSplitRatio) {
+        qCWarning(lcConfig) << "Invalid autotile split ratio:" << splitRatio << "clamping to valid range";
+        splitRatio = qBound(AutotileDefaults::MinSplitRatio, splitRatio, AutotileDefaults::MaxSplitRatio);
+    }
+    m_autotileSplitRatio = splitRatio;
+
+    int masterCount = autotiling.readEntry("AutotileMasterCount", AutotileDefaults::DefaultMasterCount);
+    if (masterCount < AutotileDefaults::MinMasterCount || masterCount > AutotileDefaults::MaxMasterCount) {
+        qCWarning(lcConfig) << "Invalid autotile master count:" << masterCount << "clamping to valid range";
+        masterCount = qBound(AutotileDefaults::MinMasterCount, masterCount, AutotileDefaults::MaxMasterCount);
+    }
+    m_autotileMasterCount = masterCount;
+
+    int innerGap = autotiling.readEntry("AutotileInnerGap", AutotileDefaults::DefaultGap);
+    if (innerGap < AutotileDefaults::MinGap || innerGap > AutotileDefaults::MaxGap) {
+        qCWarning(lcConfig) << "Invalid autotile inner gap:" << innerGap << "clamping to valid range";
+        innerGap = qBound(AutotileDefaults::MinGap, innerGap, AutotileDefaults::MaxGap);
+    }
+    m_autotileInnerGap = innerGap;
+
+    int autotileOuterGap = autotiling.readEntry("AutotileOuterGap", AutotileDefaults::DefaultGap);
+    if (autotileOuterGap < AutotileDefaults::MinGap || autotileOuterGap > AutotileDefaults::MaxGap) {
+        qCWarning(lcConfig) << "Invalid autotile outer gap:" << autotileOuterGap << "clamping to valid range";
+        autotileOuterGap = qBound(AutotileDefaults::MinGap, autotileOuterGap, AutotileDefaults::MaxGap);
+    }
+    m_autotileOuterGap = autotileOuterGap;
+
+    m_autotileFocusNewWindows = autotiling.readEntry("AutotileFocusNewWindows", true);
+    m_autotileSmartGaps = autotiling.readEntry("AutotileSmartGaps", true);
+
+    int insertPos = autotiling.readEntry("AutotileInsertPosition", 0);
+    if (insertPos < 0 || insertPos > 2) {
+        qCWarning(lcConfig) << "Invalid autotile insert position:" << insertPos << "using default";
+        insertPos = 0;
+    }
+    m_autotileInsertPosition = static_cast<AutotileInsertPosition>(insertPos);
+
+    // Autotiling Shortcuts (Bismuth-compatible defaults)
+    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
+    m_autotileToggleShortcut = autotileShortcuts.readEntry("ToggleShortcut", QStringLiteral("Meta+T"));
+    m_autotileCycleAlgorithmShortcut = autotileShortcuts.readEntry("CycleAlgorithmShortcut", QStringLiteral("Meta+Space"));
+    m_autotileFocusMasterShortcut = autotileShortcuts.readEntry("FocusMasterShortcut", QStringLiteral("Meta+M"));
+    m_autotileSwapMasterShortcut = autotileShortcuts.readEntry("SwapMasterShortcut", QStringLiteral("Meta+Return"));
+    m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry("IncMasterRatioShortcut", QStringLiteral("Meta+Shift+="));
+    m_autotileDecMasterRatioShortcut = autotileShortcuts.readEntry("DecMasterRatioShortcut", QStringLiteral("Meta+Shift+-"));
+    m_autotileIncMasterCountShortcut = autotileShortcuts.readEntry("IncMasterCountShortcut", QStringLiteral("Meta+Shift+I"));
+    m_autotileDecMasterCountShortcut = autotileShortcuts.readEntry("DecMasterCountShortcut", QStringLiteral("Meta+Shift+D"));
+    m_autotileRetileShortcut = autotileShortcuts.readEntry("RetileShortcut", QStringLiteral("Meta+Shift+R"));
+
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1405,6 +1659,32 @@ void Settings::save()
     navigationShortcuts.writeEntry("CycleWindowForward", m_cycleWindowForwardShortcut);
     navigationShortcuts.writeEntry("CycleWindowBackward", m_cycleWindowBackwardShortcut);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
+    autotiling.writeEntry("AutotileEnabled", m_autotileEnabled);
+    autotiling.writeEntry("AutotileAlgorithm", m_autotileAlgorithm);
+    autotiling.writeEntry("AutotileSplitRatio", m_autotileSplitRatio);
+    autotiling.writeEntry("AutotileMasterCount", m_autotileMasterCount);
+    autotiling.writeEntry("AutotileInnerGap", m_autotileInnerGap);
+    autotiling.writeEntry("AutotileOuterGap", m_autotileOuterGap);
+    autotiling.writeEntry("AutotileFocusNewWindows", m_autotileFocusNewWindows);
+    autotiling.writeEntry("AutotileSmartGaps", m_autotileSmartGaps);
+    autotiling.writeEntry("AutotileInsertPosition", static_cast<int>(m_autotileInsertPosition));
+
+    // Autotiling Shortcuts
+    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
+    autotileShortcuts.writeEntry("ToggleShortcut", m_autotileToggleShortcut);
+    autotileShortcuts.writeEntry("CycleAlgorithmShortcut", m_autotileCycleAlgorithmShortcut);
+    autotileShortcuts.writeEntry("FocusMasterShortcut", m_autotileFocusMasterShortcut);
+    autotileShortcuts.writeEntry("SwapMasterShortcut", m_autotileSwapMasterShortcut);
+    autotileShortcuts.writeEntry("IncMasterRatioShortcut", m_autotileIncMasterRatioShortcut);
+    autotileShortcuts.writeEntry("DecMasterRatioShortcut", m_autotileDecMasterRatioShortcut);
+    autotileShortcuts.writeEntry("IncMasterCountShortcut", m_autotileIncMasterCountShortcut);
+    autotileShortcuts.writeEntry("DecMasterCountShortcut", m_autotileDecMasterCountShortcut);
+    autotileShortcuts.writeEntry("RetileShortcut", m_autotileRetileShortcut);
+
     config->sync();
 }
 
@@ -1522,6 +1802,30 @@ void Settings::reset()
     // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
     m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
     m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings (using AutotileDefaults from constants.h)
+    // ═══════════════════════════════════════════════════════════════════════════
+    m_autotileEnabled = false;
+    m_autotileAlgorithm = DBus::AutotileAlgorithm::MasterStack;
+    m_autotileSplitRatio = AutotileDefaults::DefaultSplitRatio;
+    m_autotileMasterCount = AutotileDefaults::DefaultMasterCount;
+    m_autotileInnerGap = AutotileDefaults::DefaultGap;
+    m_autotileOuterGap = AutotileDefaults::DefaultGap;
+    m_autotileFocusNewWindows = true;
+    m_autotileSmartGaps = true;
+    m_autotileInsertPosition = AutotileInsertPosition::End;
+
+    // Autotiling Shortcuts (Bismuth-compatible defaults)
+    m_autotileToggleShortcut = QStringLiteral("Meta+T");
+    m_autotileCycleAlgorithmShortcut = QStringLiteral("Meta+Space");
+    m_autotileFocusMasterShortcut = QStringLiteral("Meta+M");
+    m_autotileSwapMasterShortcut = QStringLiteral("Meta+Return");
+    m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+=");
+    m_autotileDecMasterRatioShortcut = QStringLiteral("Meta+Shift+-");
+    m_autotileIncMasterCountShortcut = QStringLiteral("Meta+Shift+I");
+    m_autotileDecMasterCountShortcut = QStringLiteral("Meta+Shift+D");
+    m_autotileRetileShortcut = QStringLiteral("Meta+Shift+R");
 
     Q_EMIT settingsChanged();
 }

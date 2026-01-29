@@ -218,6 +218,31 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString cycleWindowBackwardShortcut READ cycleWindowBackwardShortcut WRITE setCycleWindowBackwardShortcut
                    NOTIFY cycleWindowBackwardShortcutChanged)
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings (Bismuth-compatible automatic window tiling)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
+    Q_PROPERTY(QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
+    Q_PROPERTY(int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
+    Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
+    Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
+    Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY autotileFocusNewWindowsChanged)
+    Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
+    Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY autotileInsertPositionChanged)
+
+    // Autotiling Keyboard Shortcuts (Bismuth-compatible)
+    Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
+    Q_PROPERTY(QString autotileCycleAlgorithmShortcut READ autotileCycleAlgorithmShortcut WRITE setAutotileCycleAlgorithmShortcut NOTIFY autotileCycleAlgorithmShortcutChanged)
+    Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut NOTIFY autotileFocusMasterShortcutChanged)
+    Q_PROPERTY(QString autotileSwapMasterShortcut READ autotileSwapMasterShortcut WRITE setAutotileSwapMasterShortcut NOTIFY autotileSwapMasterShortcutChanged)
+    Q_PROPERTY(QString autotileIncMasterRatioShortcut READ autotileIncMasterRatioShortcut WRITE setAutotileIncMasterRatioShortcut NOTIFY autotileIncMasterRatioShortcutChanged)
+    Q_PROPERTY(QString autotileDecMasterRatioShortcut READ autotileDecMasterRatioShortcut WRITE setAutotileDecMasterRatioShortcut NOTIFY autotileDecMasterRatioShortcutChanged)
+    Q_PROPERTY(QString autotileIncMasterCountShortcut READ autotileIncMasterCountShortcut WRITE setAutotileIncMasterCountShortcut NOTIFY autotileIncMasterCountShortcutChanged)
+    Q_PROPERTY(QString autotileDecMasterCountShortcut READ autotileDecMasterCountShortcut WRITE setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
+    Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY autotileRetileShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -776,6 +801,68 @@ public:
     }
     void setCycleWindowBackwardShortcut(const QString& shortcut);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    bool autotileEnabled() const { return m_autotileEnabled; }
+    void setAutotileEnabled(bool enabled);
+
+    QString autotileAlgorithm() const { return m_autotileAlgorithm; }
+    void setAutotileAlgorithm(const QString& algorithm);
+
+    qreal autotileSplitRatio() const { return m_autotileSplitRatio; }
+    void setAutotileSplitRatio(qreal ratio);
+
+    int autotileMasterCount() const { return m_autotileMasterCount; }
+    void setAutotileMasterCount(int count);
+
+    int autotileInnerGap() const { return m_autotileInnerGap; }
+    void setAutotileInnerGap(int gap);
+
+    int autotileOuterGap() const { return m_autotileOuterGap; }
+    void setAutotileOuterGap(int gap);
+
+    bool autotileFocusNewWindows() const { return m_autotileFocusNewWindows; }
+    void setAutotileFocusNewWindows(bool focus);
+
+    bool autotileSmartGaps() const { return m_autotileSmartGaps; }
+    void setAutotileSmartGaps(bool smart);
+
+    enum class AutotileInsertPosition { End = 0, AfterFocused = 1, AsMaster = 2 };
+    AutotileInsertPosition autotileInsertPosition() const { return m_autotileInsertPosition; }
+    void setAutotileInsertPosition(AutotileInsertPosition position);
+    int autotileInsertPositionInt() const { return static_cast<int>(m_autotileInsertPosition); }
+    void setAutotileInsertPositionInt(int position);
+
+    // Autotiling Shortcuts
+    QString autotileToggleShortcut() const { return m_autotileToggleShortcut; }
+    void setAutotileToggleShortcut(const QString& shortcut);
+
+    QString autotileCycleAlgorithmShortcut() const { return m_autotileCycleAlgorithmShortcut; }
+    void setAutotileCycleAlgorithmShortcut(const QString& shortcut);
+
+    QString autotileFocusMasterShortcut() const { return m_autotileFocusMasterShortcut; }
+    void setAutotileFocusMasterShortcut(const QString& shortcut);
+
+    QString autotileSwapMasterShortcut() const { return m_autotileSwapMasterShortcut; }
+    void setAutotileSwapMasterShortcut(const QString& shortcut);
+
+    QString autotileIncMasterRatioShortcut() const { return m_autotileIncMasterRatioShortcut; }
+    void setAutotileIncMasterRatioShortcut(const QString& shortcut);
+
+    QString autotileDecMasterRatioShortcut() const { return m_autotileDecMasterRatioShortcut; }
+    void setAutotileDecMasterRatioShortcut(const QString& shortcut);
+
+    QString autotileIncMasterCountShortcut() const { return m_autotileIncMasterCountShortcut; }
+    void setAutotileIncMasterCountShortcut(const QString& shortcut);
+
+    QString autotileDecMasterCountShortcut() const { return m_autotileDecMasterCountShortcut; }
+    void setAutotileDecMasterCountShortcut(const QString& shortcut);
+
+    QString autotileRetileShortcut() const { return m_autotileRetileShortcut; }
+    void setAutotileRetileShortcut(const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -909,6 +996,31 @@ private:
     // Cycles focus between windows stacked in the same zone (monocle-style navigation)
     QString m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
     QString m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings (Bismuth-compatible)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    bool m_autotileEnabled = false;
+    QString m_autotileAlgorithm = QStringLiteral("master-stack");
+    qreal m_autotileSplitRatio = 0.6;
+    int m_autotileMasterCount = 1;
+    int m_autotileInnerGap = 8;
+    int m_autotileOuterGap = 8;
+    bool m_autotileFocusNewWindows = true;
+    bool m_autotileSmartGaps = true;
+    AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
+
+    // Autotiling Keyboard Shortcuts (Bismuth-compatible defaults)
+    QString m_autotileToggleShortcut = QStringLiteral("Meta+T");
+    QString m_autotileCycleAlgorithmShortcut = QStringLiteral("Meta+Space");
+    QString m_autotileFocusMasterShortcut = QStringLiteral("Meta+M");
+    QString m_autotileSwapMasterShortcut = QStringLiteral("Meta+Return");
+    QString m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+=");
+    QString m_autotileDecMasterRatioShortcut = QStringLiteral("Meta+Shift+-");
+    QString m_autotileIncMasterCountShortcut = QStringLiteral("Meta+Shift+I");
+    QString m_autotileDecMasterCountShortcut = QStringLiteral("Meta+Shift+D");
+    QString m_autotileRetileShortcut = QStringLiteral("Meta+Shift+R");
 };
 
 } // namespace PlasmaZones

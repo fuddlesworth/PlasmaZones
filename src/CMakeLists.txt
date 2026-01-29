@@ -57,6 +57,13 @@ set(plasmazones_core_SRCS
     core/shaderregistry.h
     config/settings.cpp
     config/settings.h
+    # Autotiling support
+    autotile/TilingAlgorithm.h
+    autotile/TilingAlgorithm.cpp
+    autotile/TilingState.h
+    autotile/TilingState.cpp
+    autotile/AutotileConfig.h
+    autotile/AutotileConfig.cpp
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp

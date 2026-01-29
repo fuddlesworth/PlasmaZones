@@ -137,6 +137,66 @@ inline constexpr QLatin1String Colors{"colors"};
 }
 
 /**
+ * @brief Autotiling constants (DRY - used by TilingState, AutotileConfig, Settings)
+ */
+namespace AutotileDefaults {
+// Split ratio bounds (master area percentage)
+constexpr qreal MinSplitRatio = 0.1;
+constexpr qreal MaxSplitRatio = 0.9;
+constexpr qreal DefaultSplitRatio = 0.6;
+
+// Master count bounds
+constexpr int MinMasterCount = 1;
+constexpr int MaxMasterCount = 5;
+constexpr int DefaultMasterCount = 1;
+
+// Gap bounds (pixels)
+constexpr int MinGap = 0;
+constexpr int MaxGap = 50;
+constexpr int DefaultGap = 8;
+
+// Active border bounds
+constexpr int MinBorderWidth = 0;
+constexpr int MaxBorderWidth = 10;
+constexpr int DefaultBorderWidth = 2;
+}
+
+/**
+ * @brief Autotiling JSON keys (shared between TilingState and AutotileConfig)
+ */
+namespace AutotileJsonKeys {
+// TilingState keys
+inline constexpr QLatin1String ScreenName{"screenName"};
+inline constexpr QLatin1String WindowOrder{"windowOrder"};
+inline constexpr QLatin1String FloatingWindows{"floatingWindows"};
+inline constexpr QLatin1String FocusedWindow{"focusedWindow"};
+
+// Shared keys (TilingState and AutotileConfig)
+inline constexpr QLatin1String MasterCount{"masterCount"};
+inline constexpr QLatin1String SplitRatio{"splitRatio"};
+
+// AutotileConfig keys
+inline constexpr QLatin1String AlgorithmId{"algorithmId"};
+inline constexpr QLatin1String InnerGap{"innerGap"};
+inline constexpr QLatin1String OuterGap{"outerGap"};
+inline constexpr QLatin1String InsertPositionKey{"insertPosition"};
+inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};
+inline constexpr QLatin1String FocusNewWindows{"focusNewWindows"};
+inline constexpr QLatin1String ShowActiveBorder{"showActiveBorder"};
+inline constexpr QLatin1String ActiveBorderWidth{"activeBorderWidth"};
+inline constexpr QLatin1String ActiveBorderColor{"activeBorderColor"};
+inline constexpr QLatin1String MonocleHideOthers{"monocleHideOthers"};
+inline constexpr QLatin1String MonocleShowTabs{"monocleShowTabs"};
+inline constexpr QLatin1String SmartGaps{"smartGaps"};
+inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
+
+// InsertPosition string values
+inline constexpr QLatin1String InsertEnd{"end"};
+inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
+inline constexpr QLatin1String InsertAsMaster{"asMaster"};
+}
+
+/**
  * @brief D-Bus service constants
  */
 namespace DBus {
@@ -152,6 +212,20 @@ inline constexpr QLatin1String ScreenManager{"org.plasmazones.ScreenManager"};
 inline constexpr QLatin1String WindowDrag{"org.plasmazones.WindowDrag"};
 inline constexpr QLatin1String WindowTracking{"org.plasmazones.WindowTracking"};
 inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
+inline constexpr QLatin1String Autotile{"org.plasmazones.Autotile"};
+}
+
+/**
+ * @brief Autotiling algorithm identifiers
+ */
+namespace AutotileAlgorithm {
+inline constexpr QLatin1String MasterStack{"master-stack"};
+inline constexpr QLatin1String BSP{"bsp"};
+inline constexpr QLatin1String Columns{"columns"};
+inline constexpr QLatin1String Rows{"rows"};
+inline constexpr QLatin1String Fibonacci{"fibonacci"};
+inline constexpr QLatin1String Monocle{"monocle"};
+inline constexpr QLatin1String ThreeColumn{"three-column"};
 }
 }
 

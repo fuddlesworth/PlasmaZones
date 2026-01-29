@@ -249,6 +249,28 @@ Q_SIGNALS:
     // Cycle Windows in Zone Shortcuts
     void cycleWindowForwardShortcutChanged();
     void cycleWindowBackwardShortcutChanged();
+
+    // Autotiling Settings
+    void autotileEnabledChanged();
+    void autotileAlgorithmChanged();
+    void autotileSplitRatioChanged();
+    void autotileMasterCountChanged();
+    void autotileInnerGapChanged();
+    void autotileOuterGapChanged();
+    void autotileFocusNewWindowsChanged();
+    void autotileSmartGapsChanged();
+    void autotileInsertPositionChanged();
+
+    // Autotiling Shortcuts
+    void autotileToggleShortcutChanged();
+    void autotileCycleAlgorithmShortcutChanged();
+    void autotileFocusMasterShortcutChanged();
+    void autotileSwapMasterShortcutChanged();
+    void autotileIncMasterRatioShortcutChanged();
+    void autotileDecMasterRatioShortcutChanged();
+    void autotileIncMasterCountShortcutChanged();
+    void autotileDecMasterCountShortcutChanged();
+    void autotileRetileShortcutChanged();
 };
 
 /**
