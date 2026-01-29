@@ -115,6 +115,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Connect to keyboard navigation D-Bus signals (Phase 1)
     connectNavigationSignals();
 
+    // Connect to autotile D-Bus signals (Phase 2.3)
+    connectAutotileSignals();
+
     // Sync floating window state from daemon's persisted state
     syncFloatingWindowsFromDaemon();
 
@@ -217,6 +220,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     QString windowId = getWindowId(w);
     QString stableId = extractStableId(windowId);
     m_floatingWindows.remove(stableId);
+
+    // Phase 2.3: Clean up any pending autotile animations
+    m_autotileAnimations.remove(w);
 
     // Phase 2.1: Notify daemon for autotiling and cleanup
     notifyWindowClosed(w);
@@ -1925,6 +1931,170 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenName;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowActivated"), windowId, screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2.3: Autotile Window Geometry Application with Animation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void PlasmaZonesEffect::ensureAutotileInterface()
+{
+    ensureInterface(m_autotileInterface, DBus::Interface::Autotile, "Autotile");
+}
+
+void PlasmaZonesEffect::connectAutotileSignals()
+{
+    // Connect to Autotile D-Bus signals for window geometry and focus requests
+    QDBusConnection::sessionBus().connect(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+        QStringLiteral("windowTileRequested"), this,
+        SLOT(slotAutotileWindowRequested(QString, int, int, int, int)));
+
+    QDBusConnection::sessionBus().connect(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+        QStringLiteral("focusWindowRequested"), this,
+        SLOT(slotAutotileFocusWindowRequested(QString)));
+
+    qCDebug(lcEffect) << "Connected to autotile D-Bus signals";
+}
+
+KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const
+{
+    if (windowId.isEmpty()) {
+        return nullptr;
+    }
+
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && getWindowId(w) == windowId) {
+            return w;
+        }
+    }
+    return nullptr;
+}
+
+void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height)
+{
+    qCDebug(lcEffect) << "Autotile window requested:" << windowId << "geometry:" << QRect(x, y, width, height);
+
+    KWin::EffectWindow* window = findWindowById(windowId);
+    if (!window) {
+        qCDebug(lcEffect) << "Window not found for autotile:" << windowId;
+        return;
+    }
+
+    // Skip excluded windows (fullscreen, special, etc.)
+    if (!shouldHandleWindow(window)) {
+        qCDebug(lcEffect) << "Window excluded from autotile:" << windowId;
+        return;
+    }
+
+    QRect geometry(x, y, width, height);
+    applyAutotileGeometry(window, geometry, m_autotileAnimationsEnabled);
+}
+
+void PlasmaZonesEffect::slotAutotileFocusWindowRequested(const QString& windowId)
+{
+    qCDebug(lcEffect) << "Autotile focus requested:" << windowId;
+
+    KWin::EffectWindow* window = findWindowById(windowId);
+    if (!window) {
+        qCDebug(lcEffect) << "Window not found for focus:" << windowId;
+        return;
+    }
+
+    // Activate the window
+    KWin::effects->activateWindow(window);
+}
+
+void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const QRect& geometry, bool animate)
+{
+    if (!window || !geometry.isValid()) {
+        return;
+    }
+
+    // Don't animate fullscreen windows
+    if (window->isFullScreen()) {
+        qCDebug(lcEffect) << "Skipping autotile for fullscreen window";
+        return;
+    }
+
+    QRectF currentGeometry = window->frameGeometry();
+
+    // If not animating or geometry is the same, apply directly
+    if (!animate || currentGeometry.toRect() == geometry) {
+        // Remove any existing animation
+        m_autotileAnimations.remove(window);
+        applySnapGeometry(window, geometry);
+        return;
+    }
+
+    // Start animation
+    WindowAnimation anim;
+    anim.startGeometry = currentGeometry;
+    anim.endGeometry = QRectF(geometry);
+    anim.timer.start();
+    m_autotileAnimations[window] = anim;
+
+    // Request repaint to start animation
+    window->addRepaintFull();
+
+    qCDebug(lcEffect) << "Started autotile animation for window from" << currentGeometry << "to" << geometry;
+}
+
+void PlasmaZonesEffect::prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
+                                        std::chrono::milliseconds presentTime)
+{
+    if (m_autotileAnimations.contains(w)) {
+        // Mark window as transformed so paintWindow gets called
+        data.setTransformed();
+    }
+
+    KWin::effects->prePaintWindow(w, data, presentTime);
+}
+
+void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget,
+                                     const KWin::RenderViewport& viewport,
+                                     KWin::EffectWindow* w, int mask, QRegion region,
+                                     KWin::WindowPaintData& data)
+{
+    if (m_autotileAnimations.contains(w)) {
+        const WindowAnimation& anim = m_autotileAnimations[w];
+        QRectF current = anim.currentGeometry();
+        QRectF original = w->frameGeometry();
+
+        // Calculate translation offset
+        data += QPointF(current.x() - original.x(), current.y() - original.y());
+
+        // Calculate scale factors
+        if (original.width() > 0 && original.height() > 0) {
+            data.setXScale(current.width() / original.width());
+            data.setYScale(current.height() / original.height());
+        }
+    }
+
+    KWin::effects->paintWindow(renderTarget, viewport, w, mask, region, data);
+}
+
+void PlasmaZonesEffect::postPaintWindow(KWin::EffectWindow* w)
+{
+    if (m_autotileAnimations.contains(w)) {
+        WindowAnimation& anim = m_autotileAnimations[w];
+
+        if (anim.isComplete()) {
+            // Animation finished - apply final geometry and clean up
+            QRect finalGeometry = anim.endGeometry.toRect();
+            m_autotileAnimations.remove(w);
+
+            qCDebug(lcEffect) << "Autotile animation complete, applying final geometry:" << finalGeometry;
+            applySnapGeometry(w, finalGeometry);
+        } else {
+            // Animation still running - request another repaint
+            w->addRepaintFull();
+        }
+    }
+
+    KWin::effects->postPaintWindow(w);
 }
 
 } // namespace PlasmaZones

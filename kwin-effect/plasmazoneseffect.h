@@ -11,11 +11,49 @@
 #include <QObject>
 #include <QTimer>
 #include <QDBusInterface>
+#include <QElapsedTimer>
+#include <QHash>
 #include <QPoint>
 #include <QRect>
 #include <QSet>
 
 namespace PlasmaZones {
+
+/**
+ * @brief Animation data for autotile window geometry transitions
+ *
+ * Stores the start/end geometry and progress for smooth window animations
+ * when autotiling moves windows to their calculated positions.
+ */
+struct WindowAnimation {
+    QRectF startGeometry;   ///< Window geometry at animation start
+    QRectF endGeometry;     ///< Target window geometry
+    QElapsedTimer timer;    ///< Timer for animation progress calculation
+    qreal duration = 150.0; ///< Animation duration in milliseconds (default 150ms)
+
+    /// Calculate current progress (0.0 to 1.0) with OutQuad easing
+    qreal progress() const {
+        qreal t = qMin(1.0, timer.elapsed() / duration);
+        // OutQuad easing: fast start, smooth deceleration
+        return 1.0 - (1.0 - t) * (1.0 - t);
+    }
+
+    /// Check if animation is complete
+    bool isComplete() const {
+        return timer.elapsed() >= duration;
+    }
+
+    /// Interpolate geometry based on current progress
+    QRectF currentGeometry() const {
+        qreal p = progress();
+        return QRectF(
+            startGeometry.x() + (endGeometry.x() - startGeometry.x()) * p,
+            startGeometry.y() + (endGeometry.y() - startGeometry.y()) * p,
+            startGeometry.width() + (endGeometry.width() - startGeometry.width()) * p,
+            startGeometry.height() + (endGeometry.height() - startGeometry.height()) * p
+        );
+    }
+};
 
 /**
  * @brief KWin C++ Effect for PlasmaZones
@@ -44,6 +82,14 @@ public:
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
 
+    // Animation interface for autotiling
+    void prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
+                        std::chrono::milliseconds presentTime) override;
+    void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                     KWin::EffectWindow* w, int mask, QRegion region,
+                     KWin::WindowPaintData& data) override;
+    void postPaintWindow(KWin::EffectWindow* w) override;
+
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);
@@ -54,6 +100,10 @@ private Q_SLOTS:
                           Qt::KeyboardModifiers oldmodifiers);
     void slotScreenGeometryChanged();
     void slotSettingsChanged();
+
+    // Phase 2.3: Autotile geometry and focus handlers
+    void slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height);
+    void slotAutotileFocusWindowRequested(const QString& windowId);
 
     // Phase 1 Keyboard Navigation handlers
     void slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
@@ -99,6 +149,12 @@ private:
     void notifyWindowAdded(KWin::EffectWindow* w);
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
+
+    // Phase 2.3: Autotile geometry application
+    void ensureAutotileInterface();
+    void connectAutotileSignals();
+    KWin::EffectWindow* findWindowById(const QString& windowId) const;
+    void applyAutotileGeometry(KWin::EffectWindow* window, const QRect& geometry, bool animate = true);
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
@@ -148,6 +204,7 @@ private:
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
+    std::unique_ptr<QDBusInterface> m_autotileInterface; // Autotile interface
 
     // Float tracking (Phase 1 keyboard navigation)
     QSet<QString> m_floatingWindows;
@@ -155,6 +212,10 @@ private:
     // Phase 2.1: Track windows notified to daemon via windowAdded
     // Only send windowClosed for windows in this set (avoids D-Bus calls for untracked windows)
     QSet<QString> m_notifiedWindows;
+
+    // Phase 2.3: Autotile animations for smooth window geometry transitions
+    QHash<KWin::EffectWindow*, WindowAnimation> m_autotileAnimations;
+    bool m_autotileAnimationsEnabled = true; ///< Whether to animate autotile geometry changes
 
     // Polling timer for detecting window moves
     QTimer m_pollTimer;
