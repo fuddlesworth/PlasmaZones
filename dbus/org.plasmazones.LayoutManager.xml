@@ -1,0 +1,342 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Layout Management Interface -->
+    <interface name="org.plasmazones.LayoutManager">
+        <annotation name="org.gtk.GDBus.DocString" value="Layout management: CRUD, screen and virtual-desktop assignments, quick layout slots (1-9), KDE Activities, and editor launch."/>
+        <method name="getActiveLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the currently active layout as JSON (id, name, zones, etc.)."/>
+            <arg name="layoutJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON (id, name, zones, etc.)."/>
+            </arg>
+        </method>
+        <method name="getLayoutList">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns a list of all available layout IDs (or JSON array of layout objects, depending on implementation)."/>
+            <arg name="layouts" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of layout IDs or JSON array of layout objects."/>
+            </arg>
+        </method>
+        <method name="getLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns a specific layout by ID as JSON. Empty string if not found."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID."/>
+            </arg>
+            <arg name="layoutJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON, or empty if not found."/>
+            </arg>
+        </method>
+        <method name="setActiveLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Switch to the layout with the given UUID."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to activate."/>
+            </arg>
+        </method>
+        <method name="applyQuickLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Apply quick layout slot (1-9) to the given screen."/>
+            <arg name="number" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name (e.g. DP-1)."/>
+            </arg>
+        </method>
+        <method name="createLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Create a new empty layout. Returns the new layout UUID."/>
+            <arg name="name" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Display name for the layout."/>
+            </arg>
+            <arg name="type" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout type (e.g. custom)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the created layout."/>
+            </arg>
+        </method>
+        <method name="deleteLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Permanently delete the layout with the given ID."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to delete."/>
+            </arg>
+        </method>
+        <method name="duplicateLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Create a copy of an existing layout. Returns the new layout UUID."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to duplicate."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the new layout copy."/>
+            </arg>
+        </method>
+        <method name="importLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Import a layout from a JSON file. Returns the imported layout UUID."/>
+            <arg name="filePath" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Absolute path to the JSON file."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the imported layout."/>
+            </arg>
+        </method>
+        <method name="exportLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Export a layout to a JSON file at the given path."/>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to export."/>
+            </arg>
+            <arg name="filePath" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Destination file path."/>
+            </arg>
+        </method>
+        <method name="openEditor">
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the active layout."/>
+        </method>
+        <method name="openEditorForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the layout assigned to the given screen."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to edit layout for (e.g. DP-1)."/>
+            </arg>
+        </method>
+        <method name="getLayoutForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a screen (all virtual desktops)."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="assignLayoutToScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a screen for all virtual desktops."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+            </arg>
+        </method>
+        <method name="clearAssignment">
+            <annotation name="org.gtk.GDBus.DocString" value="Remove the layout assignment from a screen."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to clear assignment for."/>
+            </arg>
+        </method>
+        <!-- Per-virtual-desktop layout assignment methods -->
+        <method name="getLayoutForScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Get layout for a specific screen and virtual desktop (1-based)."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="assignLayoutToScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign layout to a specific screen and virtual desktop."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+            </arg>
+        </method>
+        <method name="clearAssignmentForScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear layout assignment for a screen/desktop combination."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+        </method>
+        <method name="hasExplicitAssignmentForScreenDesktop">
+            <annotation name="org.gtk.GDBus.DocString" value="True if there is an explicit assignment (not inherited) for this screen/desktop."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+            <arg name="hasAssignment" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if explicit assignment exists."/>
+            </arg>
+        </method>
+        <method name="getVirtualDesktopCount">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the number of virtual desktops."/>
+            <arg name="count" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Number of virtual desktops."/>
+            </arg>
+        </method>
+        <method name="getVirtualDesktopNames">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the names of all virtual desktops."/>
+            <arg name="names" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of desktop names."/>
+            </arg>
+        </method>
+        <method name="getAllScreenAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON."/>
+            <arg name="assignmentsJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object mapping screens to layout IDs."/>
+            </arg>
+        </method>
+        <!-- KDE Activities Support -->
+        <method name="isActivitiesAvailable">
+            <annotation name="org.gtk.GDBus.DocString" value="True if KDE Activities are available."/>
+            <arg name="available" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if Activities are available."/>
+            </arg>
+        </method>
+        <method name="getActivities">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the list of activity IDs."/>
+            <arg name="activityIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of activity IDs."/>
+            </arg>
+        </method>
+        <method name="getCurrentActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns the current activity ID."/>
+            <arg name="activityId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Current activity ID."/>
+            </arg>
+        </method>
+        <method name="getActivityInfo">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns activity metadata as JSON for the given activity ID."/>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Activity ID to query."/>
+            </arg>
+            <arg name="activityJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Activity metadata as JSON."/>
+            </arg>
+        </method>
+        <method name="getAllActivitiesInfo">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns metadata for all activities as JSON."/>
+            <arg name="activitiesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All activities metadata as JSON."/>
+            </arg>
+        </method>
+        <!-- Per-activity layout assignments (screen + activity, any desktop) -->
+        <method name="getLayoutForScreenActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Get layout for a screen and activity (any desktop)."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="assignLayoutToScreenActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign layout to a screen and activity."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+            </arg>
+        </method>
+        <method name="clearAssignmentForScreenActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear layout assignment for a screen/activity combination."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+        </method>
+        <method name="hasExplicitAssignmentForScreenActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="True if there is an explicit assignment for this screen/activity."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+            <arg name="hasAssignment" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if explicit assignment exists."/>
+            </arg>
+        </method>
+        <!-- Full assignment (screen + desktop + activity) -->
+        <method name="getLayoutForScreenDesktopActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Get layout for screen, virtual desktop, and activity."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="assignLayoutToScreenDesktopActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign layout to screen, desktop, and activity."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign."/>
+            </arg>
+        </method>
+        <method name="clearAssignmentForScreenDesktopActivity">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear layout assignment for screen/desktop/activity."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name."/>
+            </arg>
+            <arg name="virtualDesktop" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual desktop index (1-based)."/>
+            </arg>
+            <arg name="activityId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KDE Activity ID."/>
+            </arg>
+        </method>
+        <signal name="currentActivityChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the current KDE Activity changes."/>
+            <arg name="activityId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="New current activity ID."/>
+            </arg>
+        </signal>
+        <signal name="activitiesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the list of activities changes."/>
+        </signal>
+        <signal name="virtualDesktopCountChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the number of virtual desktops changes."/>
+            <arg name="count" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="New virtual desktop count."/>
+            </arg>
+        </signal>
+        <signal name="layoutChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the active layout is modified (full layout JSON)."/>
+            <arg name="layoutJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
+            </arg>
+        </signal>
+        <signal name="layoutListChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the list of layouts changes."/>
+        </signal>
+        <signal name="screenLayoutChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's layout assignment changes."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose assignment changed."/>
+            </arg>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Assigned layout UUID."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

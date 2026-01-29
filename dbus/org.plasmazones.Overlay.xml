@@ -1,0 +1,192 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Overlay Control Interface -->
+    <interface name="org.plasmazones.Overlay">
+        <annotation name="org.gtk.GDBus.DocString" value="Zone overlay visibility, highlighting, zone detection at cursor position, window snapping notifications from KWin, and Zone Selector popup control."/>
+        <method name="showOverlay">
+            <annotation name="org.gtk.GDBus.DocString" value="Show the zone overlay on all screens."/>
+        </method>
+        <method name="hideOverlay">
+            <annotation name="org.gtk.GDBus.DocString" value="Hide the zone overlay."/>
+        </method>
+        <method name="toggleOverlay">
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle overlay visibility."/>
+        </method>
+        <method name="isOverlayVisible">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns true if the overlay is currently visible."/>
+            <arg name="visible" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if overlay is visible."/>
+            </arg>
+        </method>
+
+        <method name="highlightZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Highlight a single zone by UUID."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID to highlight."/>
+            </arg>
+        </method>
+        <method name="highlightZones">
+            <annotation name="org.gtk.GDBus.DocString" value="Highlight multiple zones at once."/>
+            <arg name="zoneIds" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="List of zone UUIDs to highlight."/>
+            </arg>
+        </method>
+        <method name="clearHighlight">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear all zone highlights."/>
+        </method>
+
+        <method name="detectZoneAtPosition">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID at the given screen coordinates, or empty string if none."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen X coordinate."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen Y coordinate."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID at position, or empty string."/>
+            </arg>
+        </method>
+        <method name="detectMultiZoneAtPosition">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone UUIDs at the given position (for multi-zone snap)."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen X coordinate."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen Y coordinate."/>
+            </arg>
+            <arg name="zoneIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUIDs at position (multi-zone snap)."/>
+            </arg>
+        </method>
+        <method name="getZoneGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON (e.g. x, y, width, height) for the given zone ID."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="geometry" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON e.g. {x, y, width, height}."/>
+            </arg>
+        </method>
+
+        <method name="windowSnapped">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a window was snapped to a zone (called from KWin)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID the window was snapped to."/>
+            </arg>
+        </method>
+        <method name="setWindowSticky">
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+        </method>
+        <method name="windowUnsnapped">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify that a window was unsnapped from its zone."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+
+        <method name="getZoneForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID a window is snapped to, or empty string."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="getMultiZoneForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all zone UUIDs a window spans (multi-zone snap)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUIDs the window spans."/>
+            </arg>
+        </method>
+        <method name="getWindowsInZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Return window IDs currently snapped to the given zone."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="windowIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs snapped to the zone."/>
+            </arg>
+        </method>
+        <method name="getSnappedWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all window IDs that are currently snapped to any zone."/>
+            <arg name="windowIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All snapped window IDs."/>
+            </arg>
+        </method>
+
+        <signal name="overlayVisibilityChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when overlay show/hide state changes."/>
+            <arg name="visible" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True if overlay is visible."/>
+            </arg>
+        </signal>
+        <signal name="zoneHighlightChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the highlighted zone changes."/>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Currently highlighted zone UUID."/>
+            </arg>
+        </signal>
+        <signal name="windowZoneChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's zone assignment changes."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID (or empty if unsnapped)."/>
+            </arg>
+        </signal>
+
+        <method name="showZoneSelector">
+            <annotation name="org.gtk.GDBus.DocString" value="Show the Zone Selector popup (numeric zone picker)."/>
+        </method>
+        <method name="hideZoneSelector">
+            <annotation name="org.gtk.GDBus.DocString" value="Hide the Zone Selector popup."/>
+        </method>
+        <method name="isZoneSelectorVisible">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns true if the Zone Selector is visible."/>
+            <arg name="visible" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if Zone Selector is visible."/>
+            </arg>
+        </method>
+        <method name="setZoneSelectorActiveZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Set the currently selected zone index in the Zone Selector (1-based)."/>
+            <arg name="zoneIndex" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone index (1-based)."/>
+            </arg>
+        </method>
+        <method name="getZoneSelectorActiveZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the Zone Selector active zone index."/>
+            <arg name="zoneIndex" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Active zone index (1-based)."/>
+            </arg>
+        </method>
+
+        <signal name="zoneSelectorVisibilityChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Zone Selector visibility changes."/>
+            <arg name="visible" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True if Zone Selector is visible."/>
+            </arg>
+        </signal>
+        <signal name="zoneSelectorZoneSelected">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when user selects a zone from the Zone Selector."/>
+            <arg name="zoneIndex" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Selected zone index (1-based)."/>
+            </arg>
+        </signal>
+    </interface>
+</node>
