@@ -84,6 +84,8 @@ set(plasmazones_core_SRCS
     dbus/zonedetectionadaptor.h
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor.h
+    dbus/autotileadaptor.cpp
+    dbus/autotileadaptor.h
     dbus/screenadaptor.cpp
     dbus/screenadaptor.h
     dbus/windowdragadaptor.cpp

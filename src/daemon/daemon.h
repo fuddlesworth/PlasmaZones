@@ -28,6 +28,9 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class ScreenAdaptor;
 class WindowDragAdaptor;
+class AutotileAdaptor;
+class AutotileEngine;
+class WindowTrackingService;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -130,6 +133,11 @@ private:
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
+    AutotileAdaptor* m_autotileAdaptor = nullptr; // Autotiling control
+
+    // Autotiling engine and service
+    std::unique_ptr<WindowTrackingService> m_windowTrackingService;
+    std::unique_ptr<AutotileEngine> m_autotileEngine;
 
     bool m_running = false;
 

@@ -280,12 +280,12 @@ void AutotileEngine::focusNext()
     }
 
     // TODO: Get focused window from WindowTrackingService when API is added
-    const QString focused = QString(); // Placeholder
-    const int currentIndex = windows.indexOf(focused);
+    const QString focused = QString(); // Placeholder - will use actual focused window
+    const int currentIndex = qMax(0, windows.indexOf(focused));
     const int nextIndex = (currentIndex + 1) % windows.size();
 
-    // TODO: Actually focus the window via KWin script or D-Bus
-    Q_UNUSED(nextIndex)
+    // Emit signal for D-Bus adaptor to forward to KWin effect
+    Q_EMIT focusWindowRequested(windows.at(nextIndex));
 }
 
 void AutotileEngine::focusPrevious()
@@ -297,12 +297,12 @@ void AutotileEngine::focusPrevious()
     }
 
     // TODO: Get focused window from WindowTrackingService when API is added
-    const QString focused = QString(); // Placeholder
-    const int currentIndex = windows.indexOf(focused);
+    const QString focused = QString(); // Placeholder - will use actual focused window
+    const int currentIndex = qMax(0, windows.indexOf(focused));
     const int prevIndex = (currentIndex - 1 + windows.size()) % windows.size();
 
-    // TODO: Actually focus the window via KWin script or D-Bus
-    Q_UNUSED(prevIndex)
+    // Emit signal for D-Bus adaptor to forward to KWin effect
+    Q_EMIT focusWindowRequested(windows.at(prevIndex));
 }
 
 void AutotileEngine::focusMaster()
@@ -313,8 +313,8 @@ void AutotileEngine::focusMaster()
         return;
     }
 
-    // TODO: Actually focus the master window via KWin script or D-Bus
-    Q_UNUSED(windows.first())
+    // Emit signal for D-Bus adaptor to forward to KWin effect
+    Q_EMIT focusWindowRequested(windows.first());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

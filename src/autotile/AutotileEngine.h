@@ -262,6 +262,15 @@ Q_SIGNALS:
      */
     void windowTiled(const QString &windowId, const QRect &geometry);
 
+    /**
+     * @brief Emitted when a window should be focused
+     *
+     * The D-Bus adaptor forwards this signal to KWin effect for activation.
+     *
+     * @param windowId Window ID to focus
+     */
+    void focusWindowRequested(const QString &windowId);
+
 private Q_SLOTS:
     void onWindowAdded(const QString &windowId);
     void onWindowRemoved(const QString &windowId);
