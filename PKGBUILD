@@ -1,6 +1,6 @@
 # Maintainer: fuddlesworth
 pkgname=plasmazones-git
-pkgver=1.1.0.r0.g0000000
+pkgver=1.2.0.r0.g0000000
 pkgrel=1
 pkgdesc="FancyZones-style window tiling for KDE Plasma"
 arch=('x86_64')
@@ -38,7 +38,7 @@ install=plasmazones.install
 pkgver() {
     cd "$pkgname"
     git describe --long --tags 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' ||
-    printf "1.1.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+    printf "1.2.0.r%s.g%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
 }
 
 build() {

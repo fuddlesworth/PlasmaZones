@@ -10,7 +10,7 @@
             }
         ],
         "License": "GPL-3.0-or-later",
-        "Version": "1.1.0",
+        "Version": "1.2.0",
         "Website": "https://github.com/plasmazones/plasmazones",
         "Category": "Window Management",
         "EnabledByDefault": false

@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
     KLocalizedString::setApplicationDomain("plasmazones-editor");
 
     KAboutData aboutData(QStringLiteral("plasmazones-editor"), i18n("PlasmaZones Layout Editor"),
-                         QStringLiteral("1.1.0"), i18n("Visual layout editor for PlasmaZones"), KAboutLicense::GPL_V3,
+                         QStringLiteral("1.2.0"), i18n("Visual layout editor for PlasmaZones"), KAboutLicense::GPL_V3,
                          i18n("(c) 2026 fuddlesworth"));
     aboutData.addAuthor(i18n("fuddlesworth"));
     aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));

@@ -43,7 +43,7 @@ body:
     attributes:
       label: PlasmaZones Version
       description: Run `plasmazones-editor --version` or check git commit
-      placeholder: "1.1.0 or git commit hash"
+      placeholder: "1.2.0 or git commit hash"
     validations:
       required: true
 
