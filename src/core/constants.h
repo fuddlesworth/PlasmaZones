@@ -163,6 +163,10 @@ constexpr int GapEdgeThresholdPx = 5;   // Threshold for detecting screen edges 
 constexpr int MinBorderWidth = 0;
 constexpr int MaxBorderWidth = 10;
 constexpr int DefaultBorderWidth = 2;
+
+// Boolean defaults
+constexpr bool DefaultSmartGaps = true;
+constexpr bool DefaultFocusNewWindows = true;
 }
 
 /**

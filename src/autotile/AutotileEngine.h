@@ -310,15 +310,26 @@ private:
     void retileAfterOperation(const QString &screenName, bool operationSucceeded);
 
     /**
-     * @brief Helper to get tiled windows for focus operations
+     * @brief Helper to get tiled windows and state for focus operations
      *
      * Gets the focused window, validates screen, retrieves state and windows.
      * Returns empty list if any step fails.
      *
      * @param[out] outScreenName Screen name of the focused window
+     * @param[out] outState Pointer to the TilingState (may be nullptr)
      * @return List of tiled windows, or empty list if unavailable
      */
-    QStringList tiledWindowsForFocusedScreen(QString &outScreenName) const;
+    QStringList tiledWindowsForFocusedScreen(QString &outScreenName, TilingState *&outState) const;
+
+    /**
+     * @brief Helper to emit focus request for a window at calculated index
+     *
+     * Consolidates common focus operation logic: get windows, calculate index, emit signal.
+     *
+     * @param indexOffset Offset from current focus (-1 for previous, +1 for next, 0 for current)
+     * @param useFirst If true, always focus first window (for focusMaster)
+     */
+    void emitFocusRequestAtIndex(int indexOffset, bool useFirst = false);
 
     /**
      * @brief Helper to apply an operation to all screen states

@@ -71,7 +71,10 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine *engine, QObject *parent)
 
 bool AutotileAdaptor::enabled() const
 {
-    return m_engine ? m_engine->isEnabled() : false;
+    if (!m_engine) {
+        return false;
+    }
+    return m_engine->isEnabled();
 }
 
 void AutotileAdaptor::setEnabled(bool enabled)
@@ -84,7 +87,10 @@ void AutotileAdaptor::setEnabled(bool enabled)
 
 QString AutotileAdaptor::algorithm() const
 {
-    return m_engine ? m_engine->algorithm() : QString();
+    if (!m_engine) {
+        return QString();
+    }
+    return m_engine->algorithm();
 }
 
 void AutotileAdaptor::setAlgorithm(const QString &algorithmId)
@@ -108,12 +114,11 @@ void AutotileAdaptor::setMasterRatio(double ratio)
     if (!ensureEngineAndConfig("setMasterRatio")) {
         return;
     }
-    // Clamp ratio to valid range using constants
     ratio = qBound(AutotileDefaults::MinSplitRatio, ratio, AutotileDefaults::MaxSplitRatio);
     if (!qFuzzyCompare(m_engine->config()->splitRatio, ratio)) {
         m_engine->config()->splitRatio = ratio;
         Q_EMIT configChanged();
-        m_engine->retile(QString()); // Retile all screens
+        m_engine->retile(QString());
     }
 }
 
@@ -130,12 +135,11 @@ void AutotileAdaptor::setMasterCount(int count)
     if (!ensureEngineAndConfig("setMasterCount")) {
         return;
     }
-    // Clamp count to valid range using constants
     count = qBound(AutotileDefaults::MinMasterCount, count, AutotileDefaults::MaxMasterCount);
     if (m_engine->config()->masterCount != count) {
         m_engine->config()->masterCount = count;
         Q_EMIT configChanged();
-        m_engine->retile(QString()); // Retile all screens
+        m_engine->retile(QString());
     }
 }
 
@@ -184,7 +188,7 @@ void AutotileAdaptor::setOuterGap(int gap)
 bool AutotileAdaptor::smartGaps() const
 {
     if (!m_engine || !m_engine->config()) {
-        return true; // Default: smart gaps enabled
+        return AutotileDefaults::DefaultSmartGaps;
     }
     return m_engine->config()->smartGaps;
 }
@@ -204,7 +208,7 @@ void AutotileAdaptor::setSmartGaps(bool enabled)
 bool AutotileAdaptor::focusNewWindows() const
 {
     if (!m_engine || !m_engine->config()) {
-        return true; // Default: focus new windows
+        return AutotileDefaults::DefaultFocusNewWindows;
     }
     return m_engine->config()->focusNewWindows;
 }
@@ -336,8 +340,9 @@ void AutotileAdaptor::increaseMasterRatio(double delta)
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus increaseMasterRatio:" << delta;
+    // Note: This modifies per-screen TilingState, not global config.
+    // tilingChanged signal is emitted by engine after retile.
     m_engine->increaseMasterRatio(delta);
-    Q_EMIT configChanged();
 }
 
 void AutotileAdaptor::decreaseMasterRatio(double delta)
@@ -351,8 +356,9 @@ void AutotileAdaptor::decreaseMasterRatio(double delta)
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus decreaseMasterRatio:" << delta;
+    // Note: This modifies per-screen TilingState, not global config.
+    // tilingChanged signal is emitted by engine after retile.
     m_engine->decreaseMasterRatio(delta);
-    Q_EMIT configChanged();
 }
 
 void AutotileAdaptor::increaseMasterCount()
@@ -361,8 +367,9 @@ void AutotileAdaptor::increaseMasterCount()
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus increaseMasterCount";
+    // Note: This modifies per-screen TilingState, not global config.
+    // tilingChanged signal is emitted by engine after retile.
     m_engine->increaseMasterCount();
-    Q_EMIT configChanged();
 }
 
 void AutotileAdaptor::decreaseMasterCount()
@@ -371,8 +378,9 @@ void AutotileAdaptor::decreaseMasterCount()
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus decreaseMasterCount";
+    // Note: This modifies per-screen TilingState, not global config.
+    // tilingChanged signal is emitted by engine after retile.
     m_engine->decreaseMasterCount();
-    Q_EMIT configChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
