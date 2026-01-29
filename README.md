@@ -76,7 +76,7 @@ GPU-accelerated zone overlays with 8 built-in effects:
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
 </p>
 
-Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
+Custom shaders supported - see the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
 
 ### Zone Selector
 
