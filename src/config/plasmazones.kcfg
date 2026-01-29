@@ -596,6 +596,40 @@
       <min>0</min>
       <max>2</max>
     </entry>
+    <entry name="AutotileFocusFollowsMouse" type="Bool">
+      <label>Focus follows mouse pointer (hover to focus)</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileRespectMinimumSize" type="Bool">
+      <label>Respect window minimum size constraints (may leave gaps)</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileShowActiveBorder" type="Bool">
+      <label>Show border around focused/active tiled window</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileActiveBorderWidth" type="Int">
+      <label>Width of active window border in pixels</label>
+      <default>2</default>
+      <min>1</min>
+      <max>10</max>
+    </entry>
+    <entry name="AutotileUseSystemBorderColor" type="Bool">
+      <label>Use system highlight color for active window border</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileActiveBorderColor" type="Color">
+      <label>Custom color for active window border (when not using system color)</label>
+      <!-- No default - initialized from system highlight color in code -->
+    </entry>
+    <entry name="AutotileMonocleHideOthers" type="Bool">
+      <label>Minimize non-focused windows in monocle mode</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileMonocleShowTabs" type="Bool">
+      <label>Show tab bar for window switching in monocle mode</label>
+      <default>true</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

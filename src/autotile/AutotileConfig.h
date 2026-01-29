@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <KColorScheme>
 #include <QColor>
 #include <QJsonObject>
 #include <QString>
@@ -127,8 +128,11 @@ struct PLASMAZONES_EXPORT AutotileConfig
 
     /**
      * @brief Color of active window border
+     *
+     * Default is empty/invalid. Use systemHighlightColor() or defaults() for proper
+     * KDE system color. At runtime, this is set from Settings which reads from KColorScheme.
      */
-    QColor activeBorderColor = QColor(0x3d, 0xae, 0xe9); // KDE blue
+    QColor activeBorderColor;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Monocle Mode Settings
@@ -186,9 +190,22 @@ struct PLASMAZONES_EXPORT AutotileConfig
     static AutotileConfig fromJson(const QJsonObject &json);
 
     /**
-     * @brief Get default configuration
+     * @brief Get default configuration with KDE system colors
+     *
+     * Returns a config with all default values, including the system highlight
+     * color from KColorScheme for activeBorderColor.
      */
     static AutotileConfig defaults();
+
+    /**
+     * @brief Get the KDE system highlight color
+     *
+     * Uses KColorScheme to retrieve the current system highlight/selection color.
+     * This respects the user's color scheme (light/dark themes, custom colors).
+     *
+     * @return System highlight color from KColorScheme
+     */
+    static QColor systemHighlightColor();
 };
 
 } // namespace PlasmaZones

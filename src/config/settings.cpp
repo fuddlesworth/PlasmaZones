@@ -1132,6 +1132,79 @@ void Settings::setAutotileRetileShortcut(const QString& shortcut)
     }
 }
 
+void Settings::setAutotileFocusFollowsMouse(bool focus)
+{
+    if (m_autotileFocusFollowsMouse != focus) {
+        m_autotileFocusFollowsMouse = focus;
+        Q_EMIT autotileFocusFollowsMouseChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileRespectMinimumSize(bool respect)
+{
+    if (m_autotileRespectMinimumSize != respect) {
+        m_autotileRespectMinimumSize = respect;
+        Q_EMIT autotileRespectMinimumSizeChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileShowActiveBorder(bool show)
+{
+    if (m_autotileShowActiveBorder != show) {
+        m_autotileShowActiveBorder = show;
+        Q_EMIT autotileShowActiveBorderChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileActiveBorderWidth(int width)
+{
+    width = qBound(1, width, 10);
+    if (m_autotileActiveBorderWidth != width) {
+        m_autotileActiveBorderWidth = width;
+        Q_EMIT autotileActiveBorderWidthChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileUseSystemBorderColor(bool use)
+{
+    if (m_autotileUseSystemBorderColor != use) {
+        m_autotileUseSystemBorderColor = use;
+        Q_EMIT autotileUseSystemBorderColorChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileActiveBorderColor(const QColor& color)
+{
+    if (m_autotileActiveBorderColor != color) {
+        m_autotileActiveBorderColor = color;
+        Q_EMIT autotileActiveBorderColorChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileMonocleHideOthers(bool hide)
+{
+    if (m_autotileMonocleHideOthers != hide) {
+        m_autotileMonocleHideOthers = hide;
+        Q_EMIT autotileMonocleHideOthersChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileMonocleShowTabs(bool show)
+{
+    if (m_autotileMonocleShowTabs != show) {
+        m_autotileMonocleShowTabs = show;
+        Q_EMIT autotileMonocleShowTabsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -1512,6 +1585,34 @@ void Settings::load()
     }
     m_autotileInsertPosition = static_cast<AutotileInsertPosition>(insertPos);
 
+    // Additional Autotiling Settings
+    m_autotileFocusFollowsMouse = autotiling.readEntry("AutotileFocusFollowsMouse", false);
+    m_autotileRespectMinimumSize = autotiling.readEntry("AutotileRespectMinimumSize", false);
+    m_autotileShowActiveBorder = autotiling.readEntry("AutotileShowActiveBorder", true);
+
+    int activeBorderWidth = autotiling.readEntry("AutotileActiveBorderWidth", 2);
+    if (activeBorderWidth < 1 || activeBorderWidth > 10) {
+        qCWarning(lcConfig) << "Invalid autotile active border width:" << activeBorderWidth << "clamping to valid range";
+        activeBorderWidth = qBound(1, activeBorderWidth, 10);
+    }
+    m_autotileActiveBorderWidth = activeBorderWidth;
+
+    m_autotileUseSystemBorderColor = autotiling.readEntry("AutotileUseSystemBorderColor", true);
+
+    // Get system highlight color as default for custom border color
+    KColorScheme borderScheme(QPalette::Active, KColorScheme::Selection);
+    QColor systemHighlight = borderScheme.background(KColorScheme::ActiveBackground).color();
+
+    QColor activeBorderColor = autotiling.readEntry("AutotileActiveBorderColor", systemHighlight);
+    if (!activeBorderColor.isValid()) {
+        qCWarning(lcConfig) << "Invalid autotile active border color, using system highlight";
+        activeBorderColor = systemHighlight;
+    }
+    m_autotileActiveBorderColor = activeBorderColor;
+
+    m_autotileMonocleHideOthers = autotiling.readEntry("AutotileMonocleHideOthers", false);
+    m_autotileMonocleShowTabs = autotiling.readEntry("AutotileMonocleShowTabs", true);
+
     // Autotiling Shortcuts (Bismuth-compatible defaults)
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
     m_autotileToggleShortcut = autotileShortcuts.readEntry("ToggleShortcut", QStringLiteral("Meta+T"));
@@ -1673,6 +1774,16 @@ void Settings::save()
     autotiling.writeEntry("AutotileSmartGaps", m_autotileSmartGaps);
     autotiling.writeEntry("AutotileInsertPosition", static_cast<int>(m_autotileInsertPosition));
 
+    // Additional Autotiling Settings
+    autotiling.writeEntry("AutotileFocusFollowsMouse", m_autotileFocusFollowsMouse);
+    autotiling.writeEntry("AutotileRespectMinimumSize", m_autotileRespectMinimumSize);
+    autotiling.writeEntry("AutotileShowActiveBorder", m_autotileShowActiveBorder);
+    autotiling.writeEntry("AutotileActiveBorderWidth", m_autotileActiveBorderWidth);
+    autotiling.writeEntry("AutotileUseSystemBorderColor", m_autotileUseSystemBorderColor);
+    autotiling.writeEntry("AutotileActiveBorderColor", m_autotileActiveBorderColor);
+    autotiling.writeEntry("AutotileMonocleHideOthers", m_autotileMonocleHideOthers);
+    autotiling.writeEntry("AutotileMonocleShowTabs", m_autotileMonocleShowTabs);
+
     // Autotiling Shortcuts
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
     autotileShortcuts.writeEntry("ToggleShortcut", m_autotileToggleShortcut);
@@ -1815,6 +1926,18 @@ void Settings::reset()
     m_autotileFocusNewWindows = true;
     m_autotileSmartGaps = true;
     m_autotileInsertPosition = AutotileInsertPosition::End;
+
+    // Additional Autotiling Settings
+    m_autotileFocusFollowsMouse = false;
+    m_autotileRespectMinimumSize = false;
+    m_autotileShowActiveBorder = true;
+    m_autotileActiveBorderWidth = 2;
+    m_autotileUseSystemBorderColor = true;
+    // Get system highlight color as default for custom border color
+    KColorScheme resetBorderScheme(QPalette::Active, KColorScheme::Selection);
+    m_autotileActiveBorderColor = resetBorderScheme.background(KColorScheme::ActiveBackground).color();
+    m_autotileMonocleHideOthers = false;
+    m_autotileMonocleShowTabs = true;
 
     // Autotiling Shortcuts (Bismuth-compatible defaults)
     m_autotileToggleShortcut = QStringLiteral("Meta+T");

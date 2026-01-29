@@ -60,6 +60,7 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setSingleShot(true);
     m_geometryUpdateTimer.setInterval(50); // 50ms debounce - fast enough to feel responsive
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
+
 }
 
 Daemon::~Daemon()
@@ -492,6 +493,18 @@ void Daemon::start()
     connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool forward) {
         m_windowTrackingAdaptor->cycleWindowsInZone(forward);
     });
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Phase 3.2: Autotile settings initialization (SRP: engine owns settings sync)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Initialize autotile engine from settings and connect for live updates
+    // The engine internally handles debouncing for rapid settings changes
+    if (m_autotileEngine && m_settings) {
+        m_autotileEngine->syncFromSettings(m_settings.get());
+        m_autotileEngine->connectToSettings(m_settings.get());
+        qCInfo(lcDaemon) << "Autotile engine connected to settings";
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Phase 3.1: Autotile shortcut connections

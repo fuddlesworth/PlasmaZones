@@ -261,6 +261,16 @@ Q_SIGNALS:
     void autotileSmartGapsChanged();
     void autotileInsertPositionChanged();
 
+    // Additional Autotiling Settings
+    void autotileFocusFollowsMouseChanged();
+    void autotileRespectMinimumSizeChanged();
+    void autotileShowActiveBorderChanged();
+    void autotileActiveBorderWidthChanged();
+    void autotileUseSystemBorderColorChanged();
+    void autotileActiveBorderColorChanged();
+    void autotileMonocleHideOthersChanged();
+    void autotileMonocleShowTabsChanged();
+
     // Autotiling Shortcuts
     void autotileToggleShortcutChanged();
     void autotileCycleAlgorithmShortcutChanged();

@@ -11,9 +11,11 @@
 #include "AutotileConfig.h"
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
+#include "config/settings.h"
 #include "core/constants.h"
 #include "core/layout.h"
 #include "core/layoutmanager.h"
+#include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/windowtrackingservice.h"
 #include "core/zone.h"
@@ -32,6 +34,12 @@ AutotileEngine::AutotileEngine(LayoutManager *layoutManager,
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
     connectSignals();
+
+    // Configure settings retile debounce timer
+    // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
+    m_settingsRetileTimer.setSingleShot(true);
+    m_settingsRetileTimer.setInterval(100); // 100ms debounce
+    connect(&m_settingsRetileTimer, &QTimer::timeout, this, &AutotileEngine::processSettingsRetile);
 }
 
 AutotileEngine::~AutotileEngine() = default;
@@ -172,6 +180,238 @@ TilingState *AutotileEngine::stateForScreen(const QString &screenName)
 AutotileConfig *AutotileEngine::config() const noexcept
 {
     return m_config.get();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Settings synchronization
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::syncFromSettings(Settings *settings)
+{
+    if (!settings) {
+        return;
+    }
+
+    m_settings = settings;
+
+    // Store target enabled state and temporarily disable to prevent double-retile
+    // during configuration. setAlgorithm() and setEnabled() both trigger retile(),
+    // so we configure everything first, then enable once at the end.
+    const bool targetEnabled = settings->autotileEnabled();
+    const bool wasEnabled = m_enabled;
+    if (wasEnabled) {
+        m_enabled = false; // Bypass setEnabled() to avoid emitting signal
+    }
+
+    // Apply all settings to config (single source of truth for mapping)
+    m_config->algorithmId = settings->autotileAlgorithm();
+    m_config->splitRatio = settings->autotileSplitRatio();
+    m_config->masterCount = settings->autotileMasterCount();
+    m_config->innerGap = settings->autotileInnerGap();
+    m_config->outerGap = settings->autotileOuterGap();
+    m_config->focusNewWindows = settings->autotileFocusNewWindows();
+    m_config->smartGaps = settings->autotileSmartGaps();
+    m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
+        settings->autotileInsertPositionInt());
+
+    // Additional settings
+    m_config->focusFollowsMouse = settings->autotileFocusFollowsMouse();
+    m_config->respectMinimumSize = settings->autotileRespectMinimumSize();
+    m_config->showActiveBorder = settings->autotileShowActiveBorder();
+    m_config->activeBorderWidth = settings->autotileActiveBorderWidth();
+    m_config->monocleHideOthers = settings->autotileMonocleHideOthers();
+    m_config->monocleShowTabs = settings->autotileMonocleShowTabs();
+
+    // Active border color: use system highlight color if enabled, else custom color
+    if (settings->autotileUseSystemBorderColor()) {
+        m_config->activeBorderColor = settings->highlightColor();
+    } else {
+        m_config->activeBorderColor = settings->autotileActiveBorderColor();
+    }
+
+    // Set algorithm on engine (won't retile since m_enabled is false)
+    m_algorithmId = settings->autotileAlgorithm();
+    // Validate algorithm exists
+    auto *registry = AlgorithmRegistry::instance();
+    if (!registry->hasAlgorithm(m_algorithmId)) {
+        qCWarning(lcAutotile) << "Unknown algorithm" << m_algorithmId << "- using default";
+        m_algorithmId = AlgorithmRegistry::defaultAlgorithmId();
+    }
+
+    // Now set enabled state (will trigger single retile if enabling)
+    setEnabled(targetEnabled);
+
+    qCInfo(lcAutotile) << "Settings synced - enabled:" << targetEnabled
+                       << "algorithm:" << m_algorithmId;
+}
+
+void AutotileEngine::connectToSettings(Settings *settings)
+{
+    if (!settings) {
+        return;
+    }
+
+    // Guard against double-connection
+    if (m_settings == settings) {
+        qCDebug(lcAutotile) << "Already connected to settings, skipping";
+        return;
+    }
+
+    // Disconnect from previous settings if any
+    if (m_settings) {
+        disconnect(m_settings, nullptr, this, nullptr);
+        qCDebug(lcAutotile) << "Disconnected from previous settings";
+    }
+
+    m_settings = settings;
+
+    // Enabled state - immediate effect, no debounce needed
+    connect(settings, &Settings::autotileEnabledChanged, this, [this]() {
+        if (m_settings) {
+            setEnabled(m_settings->autotileEnabled());
+        }
+    });
+
+    // Algorithm change - immediate effect
+    connect(settings, &Settings::autotileAlgorithmChanged, this, [this]() {
+        if (m_settings) {
+            m_config->algorithmId = m_settings->autotileAlgorithm();
+            setAlgorithm(m_settings->autotileAlgorithm());
+        }
+    });
+
+    // Settings that require retile - use debounced timer
+    connect(settings, &Settings::autotileSplitRatioChanged, this, [this]() {
+        if (m_settings) {
+            m_config->splitRatio = m_settings->autotileSplitRatio();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileMasterCountChanged, this, [this]() {
+        if (m_settings) {
+            m_config->masterCount = m_settings->autotileMasterCount();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileInnerGapChanged, this, [this]() {
+        if (m_settings) {
+            m_config->innerGap = m_settings->autotileInnerGap();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileOuterGapChanged, this, [this]() {
+        if (m_settings) {
+            m_config->outerGap = m_settings->autotileOuterGap();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileSmartGapsChanged, this, [this]() {
+        if (m_settings) {
+            m_config->smartGaps = m_settings->autotileSmartGaps();
+            scheduleSettingsRetile();
+        }
+    });
+
+    // Settings that don't require retile - just update config
+    connect(settings, &Settings::autotileFocusNewWindowsChanged, this, [this]() {
+        if (m_settings) {
+            m_config->focusNewWindows = m_settings->autotileFocusNewWindows();
+        }
+    });
+
+    connect(settings, &Settings::autotileInsertPositionChanged, this, [this]() {
+        if (m_settings) {
+            m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
+                m_settings->autotileInsertPositionInt());
+        }
+    });
+
+    // Additional settings that don't require retile
+    connect(settings, &Settings::autotileFocusFollowsMouseChanged, this, [this]() {
+        if (m_settings) {
+            m_config->focusFollowsMouse = m_settings->autotileFocusFollowsMouse();
+        }
+    });
+
+    connect(settings, &Settings::autotileRespectMinimumSizeChanged, this, [this]() {
+        if (m_settings) {
+            m_config->respectMinimumSize = m_settings->autotileRespectMinimumSize();
+            scheduleSettingsRetile(); // May affect layout calculations
+        }
+    });
+
+    connect(settings, &Settings::autotileShowActiveBorderChanged, this, [this]() {
+        if (m_settings) {
+            m_config->showActiveBorder = m_settings->autotileShowActiveBorder();
+        }
+    });
+
+    connect(settings, &Settings::autotileActiveBorderWidthChanged, this, [this]() {
+        if (m_settings) {
+            m_config->activeBorderWidth = m_settings->autotileActiveBorderWidth();
+        }
+    });
+
+    connect(settings, &Settings::autotileUseSystemBorderColorChanged, this, [this]() {
+        if (m_settings) {
+            // Re-apply border color based on setting
+            if (m_settings->autotileUseSystemBorderColor()) {
+                m_config->activeBorderColor = m_settings->highlightColor();
+            } else {
+                m_config->activeBorderColor = m_settings->autotileActiveBorderColor();
+            }
+        }
+    });
+
+    connect(settings, &Settings::autotileActiveBorderColorChanged, this, [this]() {
+        if (m_settings && !m_settings->autotileUseSystemBorderColor()) {
+            m_config->activeBorderColor = m_settings->autotileActiveBorderColor();
+        }
+    });
+
+    // Also update border color when system highlight changes (if using system color)
+    connect(settings, &Settings::highlightColorChanged, this, [this]() {
+        if (m_settings && m_settings->autotileUseSystemBorderColor()) {
+            m_config->activeBorderColor = m_settings->highlightColor();
+        }
+    });
+
+    connect(settings, &Settings::autotileMonocleHideOthersChanged, this, [this]() {
+        if (m_settings) {
+            m_config->monocleHideOthers = m_settings->autotileMonocleHideOthers();
+        }
+    });
+
+    connect(settings, &Settings::autotileMonocleShowTabsChanged, this, [this]() {
+        if (m_settings) {
+            m_config->monocleShowTabs = m_settings->autotileMonocleShowTabs();
+        }
+    });
+}
+
+void AutotileEngine::scheduleSettingsRetile()
+{
+    m_pendingSettingsRetile = true;
+    m_settingsRetileTimer.start();
+}
+
+void AutotileEngine::processSettingsRetile()
+{
+    if (!m_pendingSettingsRetile) {
+        return;
+    }
+
+    m_pendingSettingsRetile = false;
+
+    // Only retile if autotiling is enabled
+    if (m_enabled) {
+        retile();
+        qCDebug(lcAutotile) << "Settings changed - retiled windows";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
