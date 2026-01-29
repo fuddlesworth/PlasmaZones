@@ -360,5 +360,45 @@ add_custom_target(uninstall
     COMMENT "Uninstalling PlasmaZones..."
 )
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Post-install: Refresh KDE sycoca cache and show helpful message
+# ═══════════════════════════════════════════════════════════════════════════════
+install(CODE "
+    # Try to refresh sycoca cache for the installing user
+    # This makes the KCM immediately visible in System Settings
+    set(SYCOCA_REFRESHED FALSE)
+    find_program(KBUILDSYCOCA kbuildsycoca6)
+    if(KBUILDSYCOCA)
+        message(STATUS \"Refreshing KDE service cache...\")
+        execute_process(
+            COMMAND \${KBUILDSYCOCA} --noincremental
+            RESULT_VARIABLE SYCOCA_RESULT
+            OUTPUT_QUIET
+            ERROR_QUIET
+        )
+        if(SYCOCA_RESULT EQUAL 0)
+            set(SYCOCA_REFRESHED TRUE)
+        endif()
+    endif()
+
+    message(STATUS \"\")
+    message(STATUS \"══════════════════════════════════════════════════════════════════\")
+    message(STATUS \"  PlasmaZones installed successfully!\")
+    message(STATUS \"══════════════════════════════════════════════════════════════════\")
+    message(STATUS \"\")
+    message(STATUS \"  Settings: System Settings → Window Management → PlasmaZones\")
+    message(STATUS \"  Direct:   systemsettings kcm_plasmazones\")
+    message(STATUS \"\")
+    message(STATUS \"  Enable daemon:\")
+    message(STATUS \"      systemctl --user enable --now plasmazones.service\")
+    message(STATUS \"\")
+    if(NOT SYCOCA_REFRESHED)
+        message(STATUS \"  ⚠ KDE cache not refreshed. If PlasmaZones doesn't appear:\")
+        message(STATUS \"      kbuildsycoca6 --noincremental\")
+        message(STATUS \"    or log out and back in.\")
+        message(STATUS \"\")
+    endif()
+")
+
 # Feature summary
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

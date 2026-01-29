@@ -30,7 +30,7 @@ ifneq ($(TERM),)
   endif
 endif
 
-.PHONY: all configure build release install uninstall clean test \
+.PHONY: all configure build release install post-install uninstall clean test \
         editor daemon run-editor run-daemon help format format-cpp format-qml
 
 # Default target
@@ -61,6 +61,17 @@ install: build
 	@echo "$(YELLOW)>>> Installing (may require sudo)...$(NC)"
 	@cmake --install $(BUILD_DIR)
 	@echo "$(GREEN)>>> Installation complete$(NC)"
+	@echo ""
+	@echo "$(BLUE)>>> Next steps:$(NC)"
+	@echo "    1. Enable daemon: systemctl --user enable --now plasmazones.service"
+	@echo "    2. Open settings: System Settings → Window Management → PlasmaZones"
+	@echo ""
+
+# Refresh KDE service cache (run after install if KCM not visible)
+post-install:
+	@echo "$(BLUE)>>> Refreshing KDE service cache...$(NC)"
+	@kbuildsycoca6 --noincremental 2>/dev/null || echo "$(YELLOW)kbuildsycoca6 not found - log out and back in instead$(NC)"
+	@echo "$(GREEN)>>> Done. PlasmaZones should now appear in System Settings.$(NC)"
 
 # Uninstall from system (uses full CMake uninstall: manifest + all known /usr paths)
 uninstall:
@@ -151,6 +162,7 @@ help:
 	@echo ""
 	@echo "$(GREEN)Install targets:$(NC)"
 	@echo "  make install      - Install to system (may need sudo)"
+	@echo "  make post-install - Refresh KDE cache (if KCM not visible)"
 	@echo "  make uninstall    - Uninstall from system (may need sudo)"
 	@echo ""
 	@echo "$(GREEN)Other targets:$(NC)"
