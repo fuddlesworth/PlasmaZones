@@ -61,6 +61,12 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setSingleShot(true);
     m_geometryUpdateTimer.setInterval(50); // 50ms debounce - fast enough to feel responsive
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
+
+    // Configure autotile settings debounce timer
+    // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
+    m_autotileRetileTimer.setSingleShot(true);
+    m_autotileRetileTimer.setInterval(100); // 100ms debounce - slightly longer for user input
+    connect(&m_autotileRetileTimer, &QTimer::timeout, this, &Daemon::processAutotileRetile);
 }
 
 Daemon::~Daemon()
@@ -537,34 +543,40 @@ void Daemon::start()
         }
     });
 
+    // Settings that require retile use debounced timer to coalesce rapid changes
     connect(m_settings.get(), &Settings::autotileSplitRatioChanged, this, [this]() {
         if (m_autotileEngine && m_settings) {
             m_autotileEngine->config()->splitRatio = m_settings->autotileSplitRatio();
-            m_autotileEngine->retile(); // Retile with new ratio
+            m_pendingAutotileRetile = true;
+            m_autotileRetileTimer.start();
         }
     });
 
     connect(m_settings.get(), &Settings::autotileMasterCountChanged, this, [this]() {
         if (m_autotileEngine && m_settings) {
             m_autotileEngine->config()->masterCount = m_settings->autotileMasterCount();
-            m_autotileEngine->retile(); // Retile with new count
+            m_pendingAutotileRetile = true;
+            m_autotileRetileTimer.start();
         }
     });
 
     connect(m_settings.get(), &Settings::autotileInnerGapChanged, this, [this]() {
         if (m_autotileEngine && m_settings) {
             m_autotileEngine->config()->innerGap = m_settings->autotileInnerGap();
-            m_autotileEngine->retile(); // Retile with new gaps
+            m_pendingAutotileRetile = true;
+            m_autotileRetileTimer.start();
         }
     });
 
     connect(m_settings.get(), &Settings::autotileOuterGapChanged, this, [this]() {
         if (m_autotileEngine && m_settings) {
             m_autotileEngine->config()->outerGap = m_settings->autotileOuterGap();
-            m_autotileEngine->retile(); // Retile with new gaps
+            m_pendingAutotileRetile = true;
+            m_autotileRetileTimer.start();
         }
     });
 
+    // Settings that don't require retile - just update config
     connect(m_settings.get(), &Settings::autotileFocusNewWindowsChanged, this, [this]() {
         if (m_autotileEngine && m_settings) {
             m_autotileEngine->config()->focusNewWindows = m_settings->autotileFocusNewWindows();
@@ -574,7 +586,8 @@ void Daemon::start()
     connect(m_settings.get(), &Settings::autotileSmartGapsChanged, this, [this]() {
         if (m_autotileEngine && m_settings) {
             m_autotileEngine->config()->smartGaps = m_settings->autotileSmartGaps();
-            m_autotileEngine->retile(); // Retile with new smart gaps setting
+            m_pendingAutotileRetile = true;
+            m_autotileRetileTimer.start();
         }
     });
 
@@ -872,6 +885,21 @@ void Daemon::processPendingGeometryUpdates()
 
     // Single overlay update after all geometry recalculations
     m_overlayService->updateGeometries();
+}
+
+void Daemon::processAutotileRetile()
+{
+    if (!m_pendingAutotileRetile) {
+        return;
+    }
+
+    m_pendingAutotileRetile = false;
+
+    // Only retile if autotiling is enabled
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        m_autotileEngine->retile();
+        qCDebug(lcDaemon) << "Autotile settings changed - retiled windows";
+    }
 }
 
 } // namespace PlasmaZones

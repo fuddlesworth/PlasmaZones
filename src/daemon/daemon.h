@@ -145,6 +145,11 @@ private:
     QTimer m_geometryUpdateTimer;
     QHash<QString, QRect> m_pendingGeometryUpdates;
     void processPendingGeometryUpdates();
+
+    // Autotile settings debouncing to coalesce rapid changes (e.g., slider adjustments)
+    QTimer m_autotileRetileTimer;
+    bool m_pendingAutotileRetile = false;
+    void processAutotileRetile();
 };
 
 } // namespace PlasmaZones
