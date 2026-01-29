@@ -2774,6 +2774,7 @@ KCM.AbstractKCM {
                         }
 
                         CheckBox {
+                            id: smartGapsCheck
                             Kirigami.FormData.label: i18n("Smart gaps:")
                             text: i18n("Hide gaps when only one window")
                             checked: kcm.autotileSmartGaps
@@ -2809,6 +2810,7 @@ KCM.AbstractKCM {
                         }
 
                         CheckBox {
+                            id: focusNewWindowsCheck
                             Kirigami.FormData.label: i18n("Focus:")
                             text: i18n("Focus new windows when they open")
                             checked: kcm.autotileFocusNewWindows
@@ -2816,12 +2818,14 @@ KCM.AbstractKCM {
                         }
 
                         CheckBox {
+                            id: focusFollowsMouseCheck
                             text: i18n("Focus follows mouse")
                             checked: kcm.autotileFocusFollowsMouse
                             onToggled: kcm.autotileFocusFollowsMouse = checked
                         }
 
                         CheckBox {
+                            id: respectMinimumSizeCheck
                             Kirigami.FormData.label: i18n("Size:")
                             text: i18n("Respect minimum window sizes")
                             checked: kcm.autotileRespectMinimumSize
@@ -2856,6 +2860,7 @@ KCM.AbstractKCM {
                             spacing: Kirigami.Units.smallSpacing
 
                             SpinBox {
+                                id: activeBorderWidthSpinBox
                                 from: 1
                                 to: 10
                                 value: kcm.autotileActiveBorderWidth
@@ -2882,6 +2887,7 @@ KCM.AbstractKCM {
                             spacing: Kirigami.Units.smallSpacing
 
                             Rectangle {
+                                id: activeBorderColorRect
                                 width: constants.colorButtonSize
                                 height: constants.colorButtonSize
                                 radius: Kirigami.Units.smallSpacing
@@ -2923,6 +2929,7 @@ KCM.AbstractKCM {
                         }
 
                         CheckBox {
+                            id: monocleHideOthersCheck
                             Kirigami.FormData.label: i18n("Display:")
                             text: i18n("Hide other windows in monocle mode")
                             checked: kcm.autotileMonocleHideOthers
@@ -2930,6 +2937,7 @@ KCM.AbstractKCM {
                         }
 
                         CheckBox {
+                            id: monocleShowTabsCheck
                             text: i18n("Show window tabs for switching")
                             checked: kcm.autotileMonocleShowTabs
                             onToggled: kcm.autotileMonocleShowTabs = checked
@@ -3088,6 +3096,42 @@ KCM.AbstractKCM {
                     }
                     function onAutotileInsertPositionChanged() {
                         insertPositionCombo.currentIndex = kcm.autotileInsertPosition
+                    }
+
+                    // Behavior settings
+                    function onAutotileFocusNewWindowsChanged() {
+                        focusNewWindowsCheck.checked = kcm.autotileFocusNewWindows
+                    }
+                    function onAutotileSmartGapsChanged() {
+                        smartGapsCheck.checked = kcm.autotileSmartGaps
+                    }
+                    function onAutotileFocusFollowsMouseChanged() {
+                        focusFollowsMouseCheck.checked = kcm.autotileFocusFollowsMouse
+                    }
+                    function onAutotileRespectMinimumSizeChanged() {
+                        respectMinimumSizeCheck.checked = kcm.autotileRespectMinimumSize
+                    }
+
+                    // Active border settings
+                    function onAutotileShowActiveBorderChanged() {
+                        showActiveBorderCheck.checked = kcm.autotileShowActiveBorder
+                    }
+                    function onAutotileActiveBorderWidthChanged() {
+                        activeBorderWidthSpinBox.value = kcm.autotileActiveBorderWidth
+                    }
+                    function onAutotileUseSystemBorderColorChanged() {
+                        useSystemBorderColorCheck.checked = kcm.autotileUseSystemBorderColor
+                    }
+                    function onAutotileActiveBorderColorChanged() {
+                        activeBorderColorRect.color = kcm.autotileActiveBorderColor
+                    }
+
+                    // Monocle settings
+                    function onAutotileMonocleHideOthersChanged() {
+                        monocleHideOthersCheck.checked = kcm.autotileMonocleHideOthers
+                    }
+                    function onAutotileMonocleShowTabsChanged() {
+                        monocleShowTabsCheck.checked = kcm.autotileMonocleShowTabs
                     }
 
                     // Shortcut fields
