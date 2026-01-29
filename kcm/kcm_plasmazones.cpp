@@ -1260,6 +1260,34 @@ void KCMPlasmaZones::defaults()
     Q_EMIT zoneSelectorSizeModeChanged();
     Q_EMIT zoneSelectorMaxRowsChanged();
 
+    // Autotiling signals
+    Q_EMIT autotileEnabledChanged();
+    Q_EMIT autotileAlgorithmChanged();
+    Q_EMIT autotileSplitRatioChanged();
+    Q_EMIT autotileMasterCountChanged();
+    Q_EMIT autotileInnerGapChanged();
+    Q_EMIT autotileOuterGapChanged();
+    Q_EMIT autotileFocusNewWindowsChanged();
+    Q_EMIT autotileSmartGapsChanged();
+    Q_EMIT autotileInsertPositionChanged();
+    Q_EMIT autotileFocusFollowsMouseChanged();
+    Q_EMIT autotileRespectMinimumSizeChanged();
+    Q_EMIT autotileShowActiveBorderChanged();
+    Q_EMIT autotileActiveBorderWidthChanged();
+    Q_EMIT autotileUseSystemBorderColorChanged();
+    Q_EMIT autotileActiveBorderColorChanged();
+    Q_EMIT autotileMonocleHideOthersChanged();
+    Q_EMIT autotileMonocleShowTabsChanged();
+    Q_EMIT autotileToggleShortcutChanged();
+    Q_EMIT autotileCycleAlgorithmShortcutChanged();
+    Q_EMIT autotileFocusMasterShortcutChanged();
+    Q_EMIT autotileSwapMasterShortcutChanged();
+    Q_EMIT autotileIncMasterRatioShortcutChanged();
+    Q_EMIT autotileDecMasterRatioShortcutChanged();
+    Q_EMIT autotileIncMasterCountShortcutChanged();
+    Q_EMIT autotileDecMasterCountShortcutChanged();
+    Q_EMIT autotileRetileShortcutChanged();
+
     // Reset editor shortcuts to defaults
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));

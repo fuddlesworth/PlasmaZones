@@ -34,6 +34,14 @@ Rectangle {
     border.color: Kirigami.Theme.separatorColor
     border.width: 1
 
+    // Computed zone model - regenerates when any input property changes
+    property var zoneModel: {
+        // Depend on all relevant properties to trigger recalculation
+        const _ = [root.algorithm, root.masterCount, root.splitRatio,
+                   root.windowCount, root.innerGap, previewArea.width, previewArea.height]
+        return generateZones()
+    }
+
     // Preview area with gaps
     Item {
         id: previewArea
@@ -43,7 +51,7 @@ Rectangle {
         // Generate zones based on algorithm
         Repeater {
             id: zoneRepeater
-            model: generateZones()
+            model: root.zoneModel
 
             Rectangle {
                 required property var modelData

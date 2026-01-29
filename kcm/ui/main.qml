@@ -3054,6 +3054,89 @@ KCM.AbstractKCM {
                 Item {
                     Layout.fillHeight: true
                 }
+
+                // Keep autotile controls in sync with KCM properties (for defaults/load)
+                Connections {
+                    target: kcm
+
+                    // Basic settings
+                    function onAutotileEnabledChanged() {
+                        autotileEnabledCheck.checked = kcm.autotileEnabled
+                    }
+                    function onAutotileAlgorithmChanged() {
+                        // Update combobox selection
+                        for (let i = 0; i < algorithmCombo.model.length; i++) {
+                            if (algorithmCombo.model[i].id === kcm.autotileAlgorithm) {
+                                algorithmCombo.currentIndex = i
+                                break
+                            }
+                        }
+                    }
+                    function onAutotileSplitRatioChanged() {
+                        if (!splitRatioSlider.pressed) {
+                            splitRatioSlider.value = kcm.autotileSplitRatio
+                        }
+                    }
+                    function onAutotileMasterCountChanged() {
+                        masterCountSpinBox.value = kcm.autotileMasterCount
+                    }
+                    function onAutotileInnerGapChanged() {
+                        innerGapSpinBox.value = kcm.autotileInnerGap
+                    }
+                    function onAutotileOuterGapChanged() {
+                        outerGapSpinBox.value = kcm.autotileOuterGap
+                    }
+                    function onAutotileInsertPositionChanged() {
+                        insertPositionCombo.currentIndex = kcm.autotileInsertPosition
+                    }
+
+                    // Shortcut fields
+                    function onAutotileToggleShortcutChanged() {
+                        if (!autotileToggleShortcutField.capturing) {
+                            autotileToggleShortcutField.keySequence = kcm.autotileToggleShortcut
+                        }
+                    }
+                    function onAutotileCycleAlgorithmShortcutChanged() {
+                        if (!autotileCycleAlgorithmShortcutField.capturing) {
+                            autotileCycleAlgorithmShortcutField.keySequence = kcm.autotileCycleAlgorithmShortcut
+                        }
+                    }
+                    function onAutotileFocusMasterShortcutChanged() {
+                        if (!autotileFocusMasterShortcutField.capturing) {
+                            autotileFocusMasterShortcutField.keySequence = kcm.autotileFocusMasterShortcut
+                        }
+                    }
+                    function onAutotileSwapMasterShortcutChanged() {
+                        if (!autotileSwapMasterShortcutField.capturing) {
+                            autotileSwapMasterShortcutField.keySequence = kcm.autotileSwapMasterShortcut
+                        }
+                    }
+                    function onAutotileIncMasterRatioShortcutChanged() {
+                        if (!autotileIncMasterRatioShortcutField.capturing) {
+                            autotileIncMasterRatioShortcutField.keySequence = kcm.autotileIncMasterRatioShortcut
+                        }
+                    }
+                    function onAutotileDecMasterRatioShortcutChanged() {
+                        if (!autotileDecMasterRatioShortcutField.capturing) {
+                            autotileDecMasterRatioShortcutField.keySequence = kcm.autotileDecMasterRatioShortcut
+                        }
+                    }
+                    function onAutotileIncMasterCountShortcutChanged() {
+                        if (!autotileIncMasterCountShortcutField.capturing) {
+                            autotileIncMasterCountShortcutField.keySequence = kcm.autotileIncMasterCountShortcut
+                        }
+                    }
+                    function onAutotileDecMasterCountShortcutChanged() {
+                        if (!autotileDecMasterCountShortcutField.capturing) {
+                            autotileDecMasterCountShortcutField.keySequence = kcm.autotileDecMasterCountShortcut
+                        }
+                    }
+                    function onAutotileRetileShortcutChanged() {
+                        if (!autotileRetileShortcutField.capturing) {
+                            autotileRetileShortcutField.keySequence = kcm.autotileRetileShortcut
+                        }
+                    }
+                }
             }
         }
 
