@@ -9,7 +9,12 @@
 Define zones on your screen. Drag windows into them. Done.
 
 <!-- TODO: Hero MP4 showing drag-and-snap workflow -->
-<!-- <video src="docs/media/videos/hero.mp4" controls muted loop width="800"></video> -->
+<!--
+<video controls muted loop playsinline width="800" title="Drag-and-snap workflow">
+  <source src="docs/media/videos/hero.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+-->
 *[Hero MP4 placeholder - drag window → zones appear → snap]*
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
@@ -23,7 +28,10 @@ Define zones on your screen. Drag windows into them. Done.
 
 Hold **Alt** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
-<video src="docs/media/videos/drag-snap.mp4" controls muted loop width="800" title="Drag and snap: window dragged with zones highlighted"></video>
+<video controls muted loop playsinline width="800" title="Drag and snap: window dragged with zones highlighted">
+  <source src="docs/media/videos/drag-snap.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ---
 
@@ -78,7 +86,12 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Per-window floating toggle
 
 <!-- TODO: MP4 showing keyboard navigation between zones -->
-<!-- <video src="docs/media/videos/keyboard-nav.mp4" controls muted loop width="800"></video> -->
+<!--
+<video controls muted loop playsinline width="800" title="Keyboard navigation between zones">
+  <source src="docs/media/videos/keyboard-nav.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+-->
 *[MP4 placeholder - moving window between zones with Meta+Alt+Arrows]*
 
 ### Layout Editor
@@ -89,7 +102,10 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Grid and edge snapping
 - Per-zone colors and styling
 
-<video src="docs/media/videos/editor.mp4" controls muted loop width="800" title="Layout editor with zones being drawn"></video>
+<video controls muted loop playsinline width="800" title="Layout editor with zones being drawn">
+  <source src="docs/media/videos/editor.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ### Shader Effects
 
@@ -108,7 +124,10 @@ GPU-accelerated zone overlays with 8 built-in effects:
 
 ![Shader Effects](docs/media/screenshots/shaders-gallery.png)
 
-<video src="docs/media/videos/shaders.mp4" controls muted loop width="800" title="Shader effects showcase"></video>
+<video controls muted loop playsinline width="800" title="Shader effects showcase">
+  <source src="docs/media/videos/shaders.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
@@ -116,7 +135,10 @@ Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
 Drag to screen edge to reveal a layout picker. Choose any layout and zone without cycling.
 
-<video src="docs/media/videos/zone-selector.mp4" controls muted loop width="800" title="Zone selector: drag to edge → pick layout and zone"></video>
+<video controls muted loop playsinline width="800" title="Zone selector: drag to edge → pick layout and zone">
+  <source src="docs/media/videos/zone-selector.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ### Visual Layout OSD
 
@@ -124,7 +146,10 @@ See a preview of the layout when switching, not just text.
 
 ![Layout OSD](docs/media/screenshots/layout-osd.png)
 
-<video src="docs/media/videos/layout-switch.mp4" controls muted loop width="800" title="Cycling layouts with OSD feedback"></video>
+<video controls muted loop playsinline width="800" title="Cycling layouts with OSD feedback">
+  <source src="docs/media/videos/layout-switch.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
 
 ### Multi-Monitor & Virtual Desktops
 
