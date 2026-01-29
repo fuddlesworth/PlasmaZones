@@ -254,6 +254,44 @@ bool TilingState::promoteToMaster(const QString &windowId)
     return true;
 }
 
+bool TilingState::moveToFront(const QString &windowId)
+{
+    return promoteToMaster(windowId);
+}
+
+bool TilingState::insertAfterFocused(const QString &windowId)
+{
+    if (windowId.isEmpty() || m_windowOrder.contains(windowId)) {
+        return false; // Already tracked or invalid
+    }
+
+    // Find position after focused window
+    int insertPos = -1; // Default to end
+    if (!m_focusedWindow.isEmpty()) {
+        const int focusedIndex = m_windowOrder.indexOf(m_focusedWindow);
+        if (focusedIndex >= 0) {
+            insertPos = focusedIndex + 1;
+        }
+    }
+
+    return addWindow(windowId, insertPos);
+}
+
+bool TilingState::moveToPosition(const QString &windowId, int position)
+{
+    const int fromIndex = m_windowOrder.indexOf(windowId);
+    if (fromIndex < 0) {
+        return false;
+    }
+
+    return moveWindow(fromIndex, position);
+}
+
+int TilingState::windowPosition(const QString &windowId) const
+{
+    return windowIndex(windowId);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Split Ratio
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -466,6 +504,20 @@ void TilingState::clear()
 void TilingState::notifyStateChanged()
 {
     Q_EMIT stateChanged();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Calculated Zone Storage
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void TilingState::setCalculatedZones(const QVector<QRect> &zones)
+{
+    m_calculatedZones = zones;
+}
+
+QVector<QRect> TilingState::calculatedZones() const
+{
+    return m_calculatedZones;
 }
 
 } // namespace PlasmaZones
