@@ -15,7 +15,7 @@ MasterStackAlgorithm::MasterStackAlgorithm(QObject *parent)
 {
 }
 
-QString MasterStackAlgorithm::name() const
+QString MasterStackAlgorithm::name() const noexcept
 {
     return QStringLiteral("Master + Stack");
 }
@@ -25,27 +25,27 @@ QString MasterStackAlgorithm::description() const
     return tr("Large master area with stacked secondary windows");
 }
 
-QString MasterStackAlgorithm::icon() const
+QString MasterStackAlgorithm::icon() const noexcept
 {
     return QStringLiteral("view-split-left-right");
 }
 
-int MasterStackAlgorithm::masterZoneIndex() const
+int MasterStackAlgorithm::masterZoneIndex() const noexcept
 {
     return 0; // First zone is always master
 }
 
-bool MasterStackAlgorithm::supportsMasterCount() const
+bool MasterStackAlgorithm::supportsMasterCount() const noexcept
 {
     return true;
 }
 
-bool MasterStackAlgorithm::supportsSplitRatio() const
+bool MasterStackAlgorithm::supportsSplitRatio() const noexcept
 {
     return true;
 }
 
-qreal MasterStackAlgorithm::defaultSplitRatio() const
+qreal MasterStackAlgorithm::defaultSplitRatio() const noexcept
 {
     return DefaultSplitRatio; // 0.6 (60% master)
 }
@@ -88,41 +88,25 @@ QVector<QRect> MasterStackAlgorithm::calculateZones(int windowCount, const QRect
         stackWidth = screenWidth - masterWidth;
     }
 
-    // Calculate master zone heights (divide evenly)
-    const int masterHeight = screenHeight / masterCount;
-    int masterRemainder = screenHeight % masterCount;
+    // Calculate zone heights using helper for pixel-perfect distribution
+    const QVector<int> masterHeights = distributeEvenly(screenHeight, masterCount);
 
     // Generate master zones (left side, stacked vertically)
     int currentY = screenY;
     for (int i = 0; i < masterCount; ++i) {
-        int zoneHeight = masterHeight;
-        // Distribute remainder pixels to first zones
-        if (masterRemainder > 0) {
-            ++zoneHeight;
-            --masterRemainder;
-        }
-
-        zones.append(QRect(screenX, currentY, masterWidth, zoneHeight));
-        currentY += zoneHeight;
+        zones.append(QRect(screenX, currentY, masterWidth, masterHeights[i]));
+        currentY += masterHeights[i];
     }
 
     // Generate stack zones (right side, stacked vertically)
     if (stackCount > 0) {
-        const int stackHeight = screenHeight / stackCount;
-        int stackRemainder = screenHeight % stackCount;
+        const QVector<int> stackHeights = distributeEvenly(screenHeight, stackCount);
         const int stackX = screenX + masterWidth;
 
         currentY = screenY;
         for (int i = 0; i < stackCount; ++i) {
-            int zoneHeight = stackHeight;
-            // Distribute remainder pixels to first zones
-            if (stackRemainder > 0) {
-                ++zoneHeight;
-                --stackRemainder;
-            }
-
-            zones.append(QRect(stackX, currentY, stackWidth, zoneHeight));
-            currentY += zoneHeight;
+            zones.append(QRect(stackX, currentY, stackWidth, stackHeights[i]));
+            currentY += stackHeights[i];
         }
     }
 

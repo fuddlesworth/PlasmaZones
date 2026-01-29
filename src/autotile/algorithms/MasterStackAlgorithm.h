@@ -40,17 +40,17 @@ public:
     ~MasterStackAlgorithm() override = default;
 
     // TilingAlgorithm interface
-    QString name() const override;
+    QString name() const noexcept override;
     QString description() const override;
-    QString icon() const override;
+    QString icon() const noexcept override;
 
     QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
                                   const TilingState &state) const override;
 
-    int masterZoneIndex() const override;
-    bool supportsMasterCount() const override;
-    bool supportsSplitRatio() const override;
-    qreal defaultSplitRatio() const override;
+    int masterZoneIndex() const noexcept override;
+    bool supportsMasterCount() const noexcept override;
+    bool supportsSplitRatio() const noexcept override;
+    qreal defaultSplitRatio() const noexcept override;
 };
 
 } // namespace PlasmaZones

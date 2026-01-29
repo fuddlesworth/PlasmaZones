@@ -11,7 +11,7 @@ ColumnsAlgorithm::ColumnsAlgorithm(QObject *parent)
 {
 }
 
-QString ColumnsAlgorithm::name() const
+QString ColumnsAlgorithm::name() const noexcept
 {
     return QStringLiteral("Columns");
 }
@@ -21,7 +21,7 @@ QString ColumnsAlgorithm::description() const
     return tr("Equal-width vertical columns");
 }
 
-QString ColumnsAlgorithm::icon() const
+QString ColumnsAlgorithm::icon() const noexcept
 {
     return QStringLiteral("view-split-left-right");
 }
@@ -46,21 +46,13 @@ QVector<QRect> ColumnsAlgorithm::calculateZones(int windowCount, const QRect &sc
         return zones;
     }
 
-    // Calculate column width with remainder distribution
-    const int columnWidth = screenWidth / windowCount;
-    int remainder = screenWidth % windowCount;
+    // Calculate column widths using helper for pixel-perfect distribution
+    const QVector<int> columnWidths = distributeEvenly(screenWidth, windowCount);
 
     int currentX = screenX;
     for (int i = 0; i < windowCount; ++i) {
-        int width = columnWidth;
-        // Distribute remainder pixels to first columns
-        if (remainder > 0) {
-            ++width;
-            --remainder;
-        }
-
-        zones.append(QRect(currentX, screenY, width, screenHeight));
-        currentX += width;
+        zones.append(QRect(currentX, screenY, columnWidths[i], screenHeight));
+        currentX += columnWidths[i];
     }
 
     return zones;

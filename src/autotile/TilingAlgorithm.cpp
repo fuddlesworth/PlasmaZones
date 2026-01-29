@@ -14,29 +14,53 @@ TilingAlgorithm::TilingAlgorithm(QObject *parent)
 {
 }
 
-int TilingAlgorithm::masterZoneIndex() const
+int TilingAlgorithm::masterZoneIndex() const noexcept
 {
     return -1; // Default: no master concept (subclasses override if they have one)
 }
 
-bool TilingAlgorithm::supportsMasterCount() const
+bool TilingAlgorithm::supportsMasterCount() const noexcept
 {
     return false;
 }
 
-bool TilingAlgorithm::supportsSplitRatio() const
+bool TilingAlgorithm::supportsSplitRatio() const noexcept
 {
     return false;
 }
 
-qreal TilingAlgorithm::defaultSplitRatio() const
+qreal TilingAlgorithm::defaultSplitRatio() const noexcept
 {
     return DefaultSplitRatio;
 }
 
-int TilingAlgorithm::minimumWindows() const
+int TilingAlgorithm::minimumWindows() const noexcept
 {
     return 1;
+}
+
+QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
+{
+    QVector<int> sizes;
+    if (count <= 0) {
+        return sizes;
+    }
+
+    sizes.reserve(count);
+    const int base = total / count;
+    int remainder = total % count;
+
+    for (int i = 0; i < count; ++i) {
+        int size = base;
+        // Distribute remainder pixels to first parts
+        if (remainder > 0) {
+            ++size;
+            --remainder;
+        }
+        sizes.append(size);
+    }
+
+    return sizes;
 }
 
 void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeometry, int innerGap, int outerGap)
@@ -77,9 +101,10 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
     }
 
     // For multiple zones, determine adjacency and apply appropriate gaps
-    // Handle odd inner gaps by alternating which side gets the extra pixel
-    const int halfInnerLow = innerGap / 2;
-    const int halfInnerHigh = innerGap - halfInnerLow; // Gets extra pixel if odd
+    // For odd inner gaps, use ceiling for left/top offsets and floor for right/bottom
+    // This ensures adjacent zones always have exactly innerGap between them
+    const int halfInnerFloor = innerGap / 2;
+    const int halfInnerCeil = innerGap - halfInnerFloor; // Gets extra pixel if odd
 
     for (int i = 0; i < zones.size(); ++i) {
         QRect &zone = zones[i];
@@ -91,35 +116,35 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
         int bottom = zone.bottom();
 
         // Check if zone is at screen edge (outer gap) or interior (inner gap)
-        // Use alternating halves for interior edges to handle odd gaps correctly
-        const bool useHighHalf = (i % 2 == 0);
+        // Interior edges: left/top get ceiling half, right/bottom get floor half
+        // This ensures: zone[i].right + halfInnerFloor + halfInnerCeil + zone[i+1].left = innerGap
 
         // Left edge
         if (std::abs(left - screenLeft) <= GapEdgeThresholdPx) {
             left = screenLeft + outerGap;
         } else {
-            left += useHighHalf ? halfInnerHigh : halfInnerLow;
+            left += halfInnerCeil;
         }
 
         // Top edge
         if (std::abs(top - screenTop) <= GapEdgeThresholdPx) {
             top = screenTop + outerGap;
         } else {
-            top += useHighHalf ? halfInnerHigh : halfInnerLow;
+            top += halfInnerCeil;
         }
 
         // Right edge
         if (std::abs(right - screenRight) <= GapEdgeThresholdPx) {
             right = screenRight - outerGap;
         } else {
-            right -= useHighHalf ? halfInnerLow : halfInnerHigh;
+            right -= halfInnerFloor;
         }
 
         // Bottom edge
         if (std::abs(bottom - screenBottom) <= GapEdgeThresholdPx) {
             bottom = screenBottom - outerGap;
         } else {
-            bottom -= useHighHalf ? halfInnerLow : halfInnerHigh;
+            bottom -= halfInnerFloor;
         }
 
         // Ensure valid bounds while preventing overlap with original zone boundaries

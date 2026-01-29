@@ -15,7 +15,7 @@ BSPAlgorithm::BSPAlgorithm(QObject *parent)
 {
 }
 
-QString BSPAlgorithm::name() const
+QString BSPAlgorithm::name() const noexcept
 {
     return QStringLiteral("BSP");
 }
@@ -25,7 +25,7 @@ QString BSPAlgorithm::description() const
     return tr("Binary space partitioning - recursive split layout");
 }
 
-QString BSPAlgorithm::icon() const
+QString BSPAlgorithm::icon() const noexcept
 {
     return QStringLiteral("view-grid-symbolic");
 }

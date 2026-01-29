@@ -44,16 +44,16 @@ public:
     ~BSPAlgorithm() override = default;
 
     // TilingAlgorithm interface
-    QString name() const override;
+    QString name() const noexcept override;
     QString description() const override;
-    QString icon() const override;
+    QString icon() const noexcept override;
 
     QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
                                   const TilingState &state) const override;
 
-    bool supportsMasterCount() const override { return false; }
-    bool supportsSplitRatio() const override { return true; }
-    qreal defaultSplitRatio() const override { return 0.5; }
+    bool supportsMasterCount() const noexcept override { return false; }
+    bool supportsSplitRatio() const noexcept override { return true; }
+    qreal defaultSplitRatio() const noexcept override { return 0.5; }
 
 private:
     /**
