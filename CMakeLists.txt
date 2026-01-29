@@ -309,9 +309,15 @@ if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()
 
-# Install D-Bus service
+# Install D-Bus interface XMLs (one per interface)
 install(FILES
-    dbus/org.plasmazones.xml
+    dbus/org.plasmazones.Autotile.xml
+    dbus/org.plasmazones.LayoutManager.xml
+    dbus/org.plasmazones.Overlay.xml
+    dbus/org.plasmazones.Screen.xml
+    dbus/org.plasmazones.Settings.xml
+    dbus/org.plasmazones.WindowDrag.xml
+    dbus/org.plasmazones.WindowTracking.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}
 )
 

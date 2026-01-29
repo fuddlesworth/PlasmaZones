@@ -31,7 +31,8 @@ ifneq ($(TERM),)
 endif
 
 .PHONY: all configure build release install uninstall clean test \
-        editor daemon run-editor run-daemon help format format-cpp format-qml
+        editor daemon run-editor run-daemon help format format-cpp format-qml \
+        dbus-docs wiki-dbus-docs
 
 # Default target
 all: build
@@ -134,6 +135,24 @@ format-qml: configure
 	@cmake --build $(BUILD_DIR) --target format-qml
 	@echo "$(GREEN)>>> QML format complete$(NC)"
 
+# Generate D-Bus API docs from dbus/org.plasmazones.*.xml (requires gdbus-codegen, e.g. glib2)
+DBUS_XML := $(wildcard dbus/org.plasmazones.*.xml)
+dbus-docs:
+	@command -v gdbus-codegen >/dev/null 2>&1 || { echo "$(RED)>>> gdbus-codegen not found. Install glib2 (Arch) or libglib2.0-dev (Debian).$(NC)"; exit 1; }
+	@echo "$(BLUE)>>> Generating D-Bus API docs...$(NC)"
+	@mkdir -p docs
+	@for f in $(DBUS_XML); do \
+		echo "  $$f"; \
+		gdbus-codegen --generate-md dbus-api --output-directory docs "$$f"; \
+	done
+	@echo "$(GREEN)>>> D-Bus docs written to docs/$(NC)"
+
+# Generate D-Bus API docs and copy to PlasmaZones.wiki/
+wiki-dbus-docs: dbus-docs
+	@echo "$(BLUE)>>> Copying D-Bus docs to PlasmaZones.wiki/...$(NC)"
+	@cp docs/dbus-api-org.plasmazones.*.md PlasmaZones.wiki/ 2>/dev/null || true
+	@echo "$(GREEN)>>> Wiki D-Bus docs updated. Commit and push in PlasmaZones.wiki/.$(NC)"
+
 # Help
 help:
 	@echo "$(BLUE)PlasmaZones Build System$(NC)"
@@ -158,6 +177,8 @@ help:
 	@echo "  make format       - Format C++ and QML (clang-format, qmlformat)"
 	@echo "  make format-cpp   - Format C++ only"
 	@echo "  make format-qml   - Format QML only (needs qt6-tools)"
+	@echo "  make dbus-docs    - Generate D-Bus API Markdown from dbus/*.xml (gdbus-codegen) into docs/"
+	@echo "  make wiki-dbus-docs - Generate D-Bus docs and copy to PlasmaZones.wiki/"
 	@echo "  make clean        - Remove build directory"
 	@echo "  make help         - Show this help"
 	@echo ""
