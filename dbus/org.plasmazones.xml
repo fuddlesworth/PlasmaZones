@@ -1038,5 +1038,64 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Reason string (e.g. no adjacent zone)."/>
             </arg>
         </signal>
+
+        <!-- Phase 2.1: Window Event Methods and Signals for Autotiling -->
+        <method name="windowAdded">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a new window was added (for autotiling)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window appeared."/>
+            </arg>
+        </method>
+        <method name="windowClosed">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (for cleanup and autotiling)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="windowActivated">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was activated/focused (for autotiling focus tracking)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+        </method>
+        <method name="setWindowSticky">
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+        </method>
+        <signal name="windowAddedEvent">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new window is added (for autotiling consumers)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window appeared."/>
+            </arg>
+        </signal>
+        <signal name="windowRemovedEvent">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window is closed (for autotiling consumers)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </signal>
+        <signal name="windowActivatedEvent">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window is activated/focused (for autotiling focus tracking)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+        </signal>
     </interface>
 </node>

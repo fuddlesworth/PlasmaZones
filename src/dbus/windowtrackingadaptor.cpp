@@ -382,6 +382,62 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         // Schedule debounced state save
         scheduleSaveState();
     }
+
+    // Phase 2.1: Emit window removed event for autotiling consumers
+    Q_EMIT windowRemovedEvent(windowId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2.1: Window Event Methods for Autotiling
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingAdaptor::windowAdded(const QString& windowId, const QString& screenName)
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Cannot process windowAdded - empty window ID";
+        return;
+    }
+
+    qCDebug(lcDbusWindow) << "Window added:" << windowId << "on screen" << screenName;
+
+    // Emit signal for autotiling consumers (AutotileEngine)
+    Q_EMIT windowAddedEvent(windowId, screenName);
+}
+
+void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenName)
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "Cannot process windowActivated - empty window ID";
+        return;
+    }
+
+    qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenName;
+
+    // Update last-used zone when focusing a snapped window
+    // This makes "move new windows to last zone" more intuitive - clicking a window
+    // in zone 3 means new windows of that class will go to zone 3
+    QString zoneId = m_windowZoneAssignments.value(windowId);
+    if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()) {
+        // Only update from user-focused windows, not auto-snapped ones
+        if (!m_autoSnappedWindows.contains(windowId)) {
+            QString windowClass = Utils::extractWindowClass(windowId);
+            int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+
+            m_lastUsedZoneId = zoneId;
+            m_lastUsedScreenName = screenName;
+            m_lastUsedZoneClass = windowClass;
+            if (currentDesktop > 0) {
+                m_lastUsedDesktop = currentDesktop;
+            }
+
+            qCDebug(lcDbusWindow) << "Updated last-used zone to" << zoneId
+                                  << "from focus on" << windowClass
+                                  << "screen" << screenName;
+        }
+    }
+
+    // Emit signal for autotiling consumers (AutotileEngine)
+    Q_EMIT windowActivatedEvent(windowId, screenName);
 }
 
 bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int height) const
