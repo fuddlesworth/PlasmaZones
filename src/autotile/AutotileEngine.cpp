@@ -11,6 +11,7 @@
 #include "AutotileConfig.h"
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
+#include "config/settings.h"
 #include "core/constants.h"
 #include "core/layout.h"
 #include "core/layoutmanager.h"
@@ -32,6 +33,12 @@ AutotileEngine::AutotileEngine(LayoutManager *layoutManager,
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
     connectSignals();
+
+    // Configure settings retile debounce timer
+    // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
+    m_settingsRetileTimer.setSingleShot(true);
+    m_settingsRetileTimer.setInterval(100); // 100ms debounce
+    connect(&m_settingsRetileTimer, &QTimer::timeout, this, &AutotileEngine::processSettingsRetile);
 }
 
 AutotileEngine::~AutotileEngine() = default;
@@ -172,6 +179,134 @@ TilingState *AutotileEngine::stateForScreen(const QString &screenName)
 AutotileConfig *AutotileEngine::config() const noexcept
 {
     return m_config.get();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Settings synchronization
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::syncFromSettings(Settings *settings)
+{
+    if (!settings) {
+        return;
+    }
+
+    m_settings = settings;
+
+    // Apply all settings to config (single source of truth for mapping)
+    m_config->algorithmId = settings->autotileAlgorithm();
+    m_config->splitRatio = settings->autotileSplitRatio();
+    m_config->masterCount = settings->autotileMasterCount();
+    m_config->innerGap = settings->autotileInnerGap();
+    m_config->outerGap = settings->autotileOuterGap();
+    m_config->focusNewWindows = settings->autotileFocusNewWindows();
+    m_config->smartGaps = settings->autotileSmartGaps();
+    m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
+        settings->autotileInsertPositionInt());
+
+    // Set algorithm on engine (handles registry lookup)
+    setAlgorithm(settings->autotileAlgorithm());
+
+    // Set enabled state last (may trigger tiling)
+    setEnabled(settings->autotileEnabled());
+
+    qDebug() << "AutotileEngine: Settings synced - enabled:" << settings->autotileEnabled()
+             << "algorithm:" << settings->autotileAlgorithm();
+}
+
+void AutotileEngine::connectToSettings(Settings *settings)
+{
+    if (!settings) {
+        return;
+    }
+
+    m_settings = settings;
+
+    // Enabled state - immediate effect, no debounce needed
+    connect(settings, &Settings::autotileEnabledChanged, this, [this]() {
+        if (m_settings) {
+            setEnabled(m_settings->autotileEnabled());
+        }
+    });
+
+    // Algorithm change - immediate effect
+    connect(settings, &Settings::autotileAlgorithmChanged, this, [this]() {
+        if (m_settings) {
+            m_config->algorithmId = m_settings->autotileAlgorithm();
+            setAlgorithm(m_settings->autotileAlgorithm());
+        }
+    });
+
+    // Settings that require retile - use debounced timer
+    connect(settings, &Settings::autotileSplitRatioChanged, this, [this]() {
+        if (m_settings) {
+            m_config->splitRatio = m_settings->autotileSplitRatio();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileMasterCountChanged, this, [this]() {
+        if (m_settings) {
+            m_config->masterCount = m_settings->autotileMasterCount();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileInnerGapChanged, this, [this]() {
+        if (m_settings) {
+            m_config->innerGap = m_settings->autotileInnerGap();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileOuterGapChanged, this, [this]() {
+        if (m_settings) {
+            m_config->outerGap = m_settings->autotileOuterGap();
+            scheduleSettingsRetile();
+        }
+    });
+
+    connect(settings, &Settings::autotileSmartGapsChanged, this, [this]() {
+        if (m_settings) {
+            m_config->smartGaps = m_settings->autotileSmartGaps();
+            scheduleSettingsRetile();
+        }
+    });
+
+    // Settings that don't require retile - just update config
+    connect(settings, &Settings::autotileFocusNewWindowsChanged, this, [this]() {
+        if (m_settings) {
+            m_config->focusNewWindows = m_settings->autotileFocusNewWindows();
+        }
+    });
+
+    connect(settings, &Settings::autotileInsertPositionChanged, this, [this]() {
+        if (m_settings) {
+            m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
+                m_settings->autotileInsertPositionInt());
+        }
+    });
+}
+
+void AutotileEngine::scheduleSettingsRetile()
+{
+    m_pendingSettingsRetile = true;
+    m_settingsRetileTimer.start();
+}
+
+void AutotileEngine::processSettingsRetile()
+{
+    if (!m_pendingSettingsRetile) {
+        return;
+    }
+
+    m_pendingSettingsRetile = false;
+
+    // Only retile if autotiling is enabled
+    if (m_enabled) {
+        retile();
+        qDebug() << "AutotileEngine: Settings changed - retiled windows";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -22,7 +22,6 @@
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
 #include "../autotile/AutotileEngine.h"
-#include "../autotile/AutotileConfig.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
@@ -62,11 +61,6 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setInterval(50); // 50ms debounce - fast enough to feel responsive
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
 
-    // Configure autotile settings debounce timer
-    // Coalesces rapid settings changes (e.g., slider adjustments) into single retile
-    m_autotileRetileTimer.setSingleShot(true);
-    m_autotileRetileTimer.setInterval(100); // 100ms debounce - slightly longer for user input
-    connect(&m_autotileRetileTimer, &QTimer::timeout, this, &Daemon::processAutotileRetile);
 }
 
 Daemon::~Daemon()
@@ -501,102 +495,16 @@ void Daemon::start()
     });
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Phase 3.2: Autotile settings initialization and change handlers
+    // Phase 3.2: Autotile settings initialization (SRP: engine owns settings sync)
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    // Apply initial autotile settings from configuration
+    // Initialize autotile engine from settings and connect for live updates
+    // The engine internally handles debouncing for rapid settings changes
     if (m_autotileEngine && m_settings) {
-        auto *config = m_autotileEngine->config();
-
-        // Apply initial settings to engine config
-        config->algorithmId = m_settings->autotileAlgorithm();
-        config->splitRatio = m_settings->autotileSplitRatio();
-        config->masterCount = m_settings->autotileMasterCount();
-        config->innerGap = m_settings->autotileInnerGap();
-        config->outerGap = m_settings->autotileOuterGap();
-        config->focusNewWindows = m_settings->autotileFocusNewWindows();
-        config->smartGaps = m_settings->autotileSmartGaps();
-        config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
-            m_settings->autotileInsertPositionInt());
-
-        // Set algorithm on engine (handles registry lookup)
-        m_autotileEngine->setAlgorithm(m_settings->autotileAlgorithm());
-
-        // Set enabled state last (may trigger tiling)
-        m_autotileEngine->setEnabled(m_settings->autotileEnabled());
-
-        qCInfo(lcDaemon) << "Autotile settings applied - enabled:" << m_settings->autotileEnabled()
-                         << "algorithm:" << m_settings->autotileAlgorithm();
+        m_autotileEngine->syncFromSettings(m_settings.get());
+        m_autotileEngine->connectToSettings(m_settings.get());
+        qCInfo(lcDaemon) << "Autotile engine connected to settings";
     }
-
-    // Connect settings change signals to update engine dynamically
-    connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->setEnabled(m_settings->autotileEnabled());
-        }
-    });
-
-    connect(m_settings.get(), &Settings::autotileAlgorithmChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->algorithmId = m_settings->autotileAlgorithm();
-            m_autotileEngine->setAlgorithm(m_settings->autotileAlgorithm());
-        }
-    });
-
-    // Settings that require retile use debounced timer to coalesce rapid changes
-    connect(m_settings.get(), &Settings::autotileSplitRatioChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->splitRatio = m_settings->autotileSplitRatio();
-            m_pendingAutotileRetile = true;
-            m_autotileRetileTimer.start();
-        }
-    });
-
-    connect(m_settings.get(), &Settings::autotileMasterCountChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->masterCount = m_settings->autotileMasterCount();
-            m_pendingAutotileRetile = true;
-            m_autotileRetileTimer.start();
-        }
-    });
-
-    connect(m_settings.get(), &Settings::autotileInnerGapChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->innerGap = m_settings->autotileInnerGap();
-            m_pendingAutotileRetile = true;
-            m_autotileRetileTimer.start();
-        }
-    });
-
-    connect(m_settings.get(), &Settings::autotileOuterGapChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->outerGap = m_settings->autotileOuterGap();
-            m_pendingAutotileRetile = true;
-            m_autotileRetileTimer.start();
-        }
-    });
-
-    // Settings that don't require retile - just update config
-    connect(m_settings.get(), &Settings::autotileFocusNewWindowsChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->focusNewWindows = m_settings->autotileFocusNewWindows();
-        }
-    });
-
-    connect(m_settings.get(), &Settings::autotileSmartGapsChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->smartGaps = m_settings->autotileSmartGaps();
-            m_pendingAutotileRetile = true;
-            m_autotileRetileTimer.start();
-        }
-    });
-
-    connect(m_settings.get(), &Settings::autotileInsertPositionChanged, this, [this]() {
-        if (m_autotileEngine && m_settings) {
-            m_autotileEngine->config()->insertPosition = static_cast<AutotileConfig::InsertPosition>(
-                m_settings->autotileInsertPositionInt());
-        }
-    });
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Phase 3.1: Autotile shortcut connections
@@ -885,21 +793,6 @@ void Daemon::processPendingGeometryUpdates()
 
     // Single overlay update after all geometry recalculations
     m_overlayService->updateGeometries();
-}
-
-void Daemon::processAutotileRetile()
-{
-    if (!m_pendingAutotileRetile) {
-        return;
-    }
-
-    m_pendingAutotileRetile = false;
-
-    // Only retile if autotiling is enabled
-    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
-        m_autotileEngine->retile();
-        qCDebug(lcDaemon) << "Autotile settings changed - retiled windows";
-    }
 }
 
 } // namespace PlasmaZones

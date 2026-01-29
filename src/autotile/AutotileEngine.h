@@ -9,6 +9,7 @@
 #include <QRect>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <functional>
 #include <memory>
 
@@ -18,6 +19,7 @@ class AutotileConfig;
 class Layout;
 class LayoutManager;
 class ScreenManager;
+class Settings;
 class TilingAlgorithm;
 class TilingState;
 class WindowTrackingService;
@@ -133,6 +135,32 @@ public:
      * @return Pointer to configuration
      */
     AutotileConfig *config() const noexcept;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Settings synchronization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Apply all settings from Settings to internal config
+     *
+     * Copies all autotile-related settings from the Settings object to the
+     * internal AutotileConfig. Also sets the algorithm and enabled state.
+     * Call this once during initialization.
+     *
+     * @param settings Settings object to read from (not owned)
+     */
+    void syncFromSettings(Settings *settings);
+
+    /**
+     * @brief Connect to Settings change signals for live updates
+     *
+     * Connects to all autotile-related Settings signals and updates the
+     * internal config when they change. Uses debouncing to coalesce rapid
+     * changes (e.g., slider adjustments) into a single retile operation.
+     *
+     * @param settings Settings object to connect to (not owned, must outlive engine)
+     */
+    void connectToSettings(Settings *settings);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
@@ -357,6 +385,24 @@ private:
     QString m_algorithmId;
     QHash<QString, TilingState *> m_screenStates; // Owned via Qt parent (this)
     QHash<QString, QString> m_windowToScreen;     // windowId -> screenName
+
+    // Settings synchronization (SRP: engine owns its settings sync)
+    Settings *m_settings = nullptr; // Not owned, must outlive engine
+    QTimer m_settingsRetileTimer;   // Debounce timer for settings changes
+    bool m_pendingSettingsRetile = false;
+
+    /**
+     * @brief Schedule a debounced retile after settings change
+     *
+     * Sets pending flag and starts/restarts the debounce timer.
+     * When timer fires, retile() is called if enabled.
+     */
+    void scheduleSettingsRetile();
+
+    /**
+     * @brief Process pending settings retile after debounce timeout
+     */
+    void processSettingsRetile();
 };
 
 } // namespace PlasmaZones
