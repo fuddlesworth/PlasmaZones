@@ -1,0 +1,108 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Settings Interface -->
+    <interface name="org.plasmazones.Settings">
+        <annotation name="org.gtk.GDBus.DocString" value="Configuration: load/save/reset, get/set by key, and Zone Selector-specific settings."/>
+        <method name="reloadSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Reload settings from disk."/>
+        </method>
+        <method name="saveSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Save current settings to disk."/>
+        </method>
+        <method name="resetToDefaults">
+            <annotation name="org.gtk.GDBus.DocString" value="Reset all settings to their defaults."/>
+        </method>
+        <method name="getAllSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all settings as a JSON object."/>
+            <arg name="settingsJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All settings as JSON."/>
+            </arg>
+        </method>
+        <method name="getSetting">
+            <annotation name="org.gtk.GDBus.DocString" value="Get a single setting value by key (variant type)."/>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
+            </arg>
+            <arg name="value" type="v" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting value (variant)."/>
+            </arg>
+        </method>
+        <method name="setSetting">
+            <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if updated."/>
+            <arg name="key" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Setting key name."/>
+            </arg>
+            <arg name="value" type="v" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New value (variant)."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if setting was updated."/>
+            </arg>
+        </method>
+        <method name="getSettingKeys">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the list of all setting key names."/>
+            <arg name="keys" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All setting key names."/>
+            </arg>
+        </method>
+        <signal name="settingsChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any setting is modified."/>
+        </signal>
+
+        <method name="isZoneSelectorEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns true if the Zone Selector feature is enabled."/>
+            <arg name="enabled" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if Zone Selector is enabled."/>
+            </arg>
+        </method>
+        <method name="setZoneSelectorEnabled">
+            <annotation name="org.gtk.GDBus.DocString" value="Enable or disable the Zone Selector."/>
+            <arg name="enabled" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to enable."/>
+            </arg>
+        </method>
+        <method name="getZoneSelectorTriggerDistance">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the trigger distance (pixels) for showing Zone Selector."/>
+            <arg name="distance" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Trigger distance in pixels."/>
+            </arg>
+        </method>
+        <method name="setZoneSelectorTriggerDistance">
+            <annotation name="org.gtk.GDBus.DocString" value="Set the Zone Selector trigger distance."/>
+            <arg name="distance" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Trigger distance in pixels."/>
+            </arg>
+        </method>
+        <method name="getZoneSelectorPosition">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the Zone Selector position (e.g. edge/side)."/>
+            <arg name="position" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Position enum value (e.g. edge/side)."/>
+            </arg>
+        </method>
+        <method name="setZoneSelectorPosition">
+            <annotation name="org.gtk.GDBus.DocString" value="Set the Zone Selector position."/>
+            <arg name="position" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Position enum value."/>
+            </arg>
+        </method>
+        <signal name="zoneSelectorEnabledChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Zone Selector enabled state changes."/>
+            <arg name="enabled" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="New enabled state."/>
+            </arg>
+        </signal>
+        <signal name="zoneSelectorTriggerDistanceChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when trigger distance changes."/>
+            <arg name="distance" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="New trigger distance in pixels."/>
+            </arg>
+        </signal>
+        <signal name="zoneSelectorPositionChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Zone Selector position changes."/>
+            <arg name="position" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="New position enum value."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

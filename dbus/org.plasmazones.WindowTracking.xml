@@ -1,0 +1,343 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Window Tracking Interface -->
+    <interface name="org.plasmazones.WindowTracking">
+        <annotation name="org.gtk.GDBus.DocString" value="Window-to-zone tracking: snap/unsnap notifications, pre-snap geometry for restore, floating state, zone geometry, auto-snap to last zone, restore to persisted zone, resolution-change handling, and keyboard-navigation feedback."/>
+        <method name="windowSnapped">
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window was snapped to a zone."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+        </method>
+        <method name="windowUnsnapped">
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window was unsnapped."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="getZoneForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the zone UUID a window is snapped to, or empty string."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="getMultiZoneForWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all zone UUIDs a window spans (multi-zone snap)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUIDs the window spans."/>
+            </arg>
+        </method>
+        <method name="getWindowsInZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Return window IDs currently snapped to the given zone."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="windowIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs snapped to the zone."/>
+            </arg>
+        </method>
+        <method name="getSnappedWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all window IDs that are snapped to any zone."/>
+            <arg name="windowIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="All snapped window IDs."/>
+            </arg>
+        </method>
+        <method name="getLastUsedZoneId">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the last zone a window was snapped to (for auto-snap)."/>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Last used zone UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="storePreSnapGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Store window geometry before snapping (for unsnap restore). Only stores on first snap."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window X position."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window Y position."/>
+            </arg>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window width."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window height."/>
+            </arg>
+        </method>
+        <method name="hasPreSnapGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return true if pre-snap geometry is stored for the window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="hasGeometry" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if pre-snap geometry exists."/>
+            </arg>
+        </method>
+        <method name="getValidatedPreSnapGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return pre-snap geometry validated against current screen bounds (adjusts off-screen). Returns found, x, y, width, height."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="found" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if geometry was found and validated."/>
+            </arg>
+            <arg name="x" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="X position (if found)."/>
+            </arg>
+            <arg name="y" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Y position (if found)."/>
+            </arg>
+            <arg name="width" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Width (if found)."/>
+            </arg>
+            <arg name="height" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Height (if found)."/>
+            </arg>
+        </method>
+        <method name="clearPreSnapGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear stored pre-snap geometry for the window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="setWindowFloating">
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is floating (not snapped)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="floating" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to float."/>
+            </arg>
+        </method>
+        <method name="isWindowFloating">
+            <annotation name="org.gtk.GDBus.DocString" value="Return true if the window is floating."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="floating" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if floating."/>
+            </arg>
+        </method>
+        <method name="getFloatingWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Return all window IDs that are floating."/>
+            <arg name="windowIds" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Floating window IDs."/>
+            </arg>
+        </method>
+        <method name="windowUnsnappedForFloat">
+            <annotation name="org.gtk.GDBus.DocString" value="Unsnap for float toggle; saves zone for later restore."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="getPreFloatZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the zone to restore to when unfloating (if any)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="found" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if a pre-float zone was stored."/>
+            </arg>
+            <arg name="zoneId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone to restore to (if found)."/>
+            </arg>
+        </method>
+        <method name="clearPreFloatZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear saved pre-float zone for the window."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="getZoneGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON for the given zone (primary screen)."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="geometryJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON e.g. {x, y, width, height}."/>
+            </arg>
+        </method>
+        <method name="getZoneGeometryForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Return zone geometry as JSON for the given zone on the given screen."/>
+            <arg name="zoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="geometryJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON e.g. {x, y, width, height}."/>
+            </arg>
+        </method>
+        <method name="snapToLastZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Compute snap geometry for auto-snap to last used zone. Respects moveNewWindowsToLastZone setting. Returns geometry and shouldSnap."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
+            </arg>
+            <arg name="windowScreenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
+            </arg>
+            <arg name="shouldSnap" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
+            </arg>
+        </method>
+        <method name="restoreToPersistedZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Restore window to its zone from the previous session. Returns geometry and shouldRestore."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's screen (e.g. DP-1)."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Restore X (if shouldRestore)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Restore Y (if shouldRestore)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Restore width (if shouldRestore)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Restore height (if shouldRestore)."/>
+            </arg>
+            <arg name="shouldRestore" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
+            </arg>
+        </method>
+        <method name="getUpdatedWindowGeometries">
+            <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change (respects keepWindowsInZonesOnResolutionChange)."/>
+            <arg name="geometriesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, x, y, width, height}."/>
+            </arg>
+        </method>
+        <method name="reportNavigationFeedback">
+            <annotation name="org.gtk.GDBus.DocString" value="Report keyboard-navigation result from KWin effect; daemon emits navigationFeedback for OSD."/>
+            <arg name="success" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if navigation succeeded."/>
+            </arg>
+            <arg name="action" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Action name (e.g. move, focus)."/>
+            </arg>
+            <arg name="reason" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Reason string (e.g. no adjacent zone)."/>
+            </arg>
+        </method>
+        <signal name="windowZoneChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's zone assignment changes."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID (or empty if unsnapped)."/>
+            </arg>
+        </signal>
+        <signal name="toggleWindowFloatRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when keyboard shortcut requests float toggle (KWin effect reacts)."/>
+            <arg name="shouldFloat" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True to float, false to unfloat."/>
+            </arg>
+        </signal>
+        <signal name="navigationFeedback">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when KWin effect reports navigation result via reportNavigationFeedback (for OSD)."/>
+            <arg name="success" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="True if navigation succeeded."/>
+            </arg>
+            <arg name="action" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Action name (e.g. move, focus)."/>
+            </arg>
+            <arg name="reason" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Reason string (e.g. no adjacent zone)."/>
+            </arg>
+        </signal>
+
+        <!-- Phase 2.1: Window Event Methods and Signals for Autotiling -->
+        <method name="windowAdded">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a new window was added (for autotiling)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window appeared."/>
+            </arg>
+        </method>
+        <method name="windowClosed">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (for cleanup and autotiling)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="windowActivated">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was activated/focused (for autotiling focus tracking)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+        </method>
+        <method name="setWindowSticky">
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+        </method>
+        <signal name="windowAddedEvent">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new window is added (for autotiling consumers)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window appeared."/>
+            </arg>
+        </signal>
+        <signal name="windowRemovedEvent">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window is closed (for autotiling consumers)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </signal>
+        <signal name="windowActivatedEvent">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window is activated/focused (for autotiling focus tracking)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

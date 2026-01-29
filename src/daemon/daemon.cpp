@@ -20,6 +20,9 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
+#include "../dbus/autotileadaptor.h"
+#include "../autotile/AutotileEngine.h"
+#include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
 
 #include <QGuiApplication>
@@ -165,6 +168,19 @@ bool Daemon::init()
 
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
+
+    // Window tracking service - business logic for zone assignments (SRP)
+    m_windowTrackingService = std::make_unique<WindowTrackingService>(
+        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
+        m_virtualDesktopManager.get(), this);
+
+    // Autotiling engine - automatic window tiling
+    m_autotileEngine = std::make_unique<AutotileEngine>(
+        m_layoutManager.get(), m_windowTrackingService.get(),
+        m_screenManager.get(), this);
+
+    // Autotile adaptor - D-Bus interface for autotiling control
+    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();

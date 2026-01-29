@@ -1,0 +1,90 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Window Drag Interface (KWin script -> Daemon) -->
+    <interface name="org.plasmazones.WindowDrag">
+        <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin script calls dragStarted/dragMoved/dragStopped; daemon returns snap geometry. Uses double for window rect (KWin QML) and int for cursor/modifiers."/>
+        <method name="dragStarted">
+            <annotation name="org.gtk.GDBus.DocString" value="Called when a window drag begins. Window rect and app/window class for exclusion checks. Coordinates are double (KWin QML)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="x" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window X position (double, KWin QML)."/>
+            </arg>
+            <arg name="y" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window Y position (double)."/>
+            </arg>
+            <arg name="width" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window width (double)."/>
+            </arg>
+            <arg name="height" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window height (double)."/>
+            </arg>
+            <arg name="appName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Application name (for exclusions)."/>
+            </arg>
+            <arg name="windowClass" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window class (for exclusions)."/>
+            </arg>
+        </method>
+
+        <method name="dragMoved">
+            <annotation name="org.gtk.GDBus.DocString" value="Called while the window is being dragged. Cursor position (int) and keyboard modifiers (Qt flags)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="cursorX" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Cursor X position."/>
+            </arg>
+            <arg name="cursorY" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Cursor Y position."/>
+            </arg>
+            <arg name="modifiers" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers flags."/>
+            </arg>
+        </method>
+
+        <method name="dragStopped">
+            <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap X position (if shouldSnap)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap Y position (if shouldSnap)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
+            </arg>
+            <arg name="shouldSnap" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if KWin should apply the snap geometry."/>
+            </arg>
+        </method>
+
+        <method name="cancelSnap">
+            <annotation name="org.gtk.GDBus.DocString" value="Cancel the current snap operation (e.g. user pressed Escape)."/>
+        </method>
+
+        <signal name="windowSnapped">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window is snapped to a zone after drag."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
+            </arg>
+        </signal>
+        <signal name="snapCancelled">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the snap was cancelled."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </signal>
+    </interface>
+</node>

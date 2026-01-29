@@ -1,0 +1,41 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Screen Management Interface -->
+    <interface name="org.plasmazones.Screen">
+        <annotation name="org.gtk.GDBus.DocString" value="Screen enumeration and metadata (geometry, scale, refresh). Notifications when screens are added, removed, or geometry changes."/>
+        <method name="getScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the list of screen names (e.g. DP-1, HDMI-1)."/>
+            <arg name="screens" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of screen names."/>
+            </arg>
+        </method>
+        <method name="getScreenInfo">
+            <annotation name="org.gtk.GDBus.DocString" value="Return detailed info for a screen as JSON (geometry, scale, refresh rate, etc.)."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="screenJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen info as JSON."/>
+            </arg>
+        </method>
+        <signal name="screenAdded">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new screen is connected."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+        </signal>
+        <signal name="screenRemoved">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen is disconnected."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+        </signal>
+        <signal name="screenGeometryChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's resolution or position changes."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen whose geometry changed."/>
+            </arg>
+        </signal>
+    </interface>
+</node>
