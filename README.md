@@ -8,10 +8,6 @@
 
 Define zones on your screen. Drag windows into them. Done.
 
-<!-- TODO: Hero GIF showing drag-and-snap workflow -->
-<!-- ![PlasmaZones Demo](docs/media/videos/hero.gif) -->
-*[Hero GIF placeholder - drag window → zones appear → snap]*
-
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
 [![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-blue.svg)](https://kde.org/plasma-desktop/)
 
