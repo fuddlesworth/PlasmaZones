@@ -27,10 +27,8 @@ QString ColumnsAlgorithm::icon() const
 }
 
 QVector<QRect> ColumnsAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,
-                                                const TilingState &state) const
+                                                const TilingState & /*state*/) const
 {
-    Q_UNUSED(state) // Columns doesn't use master count or split ratio
-
     QVector<QRect> zones;
 
     if (windowCount <= 0 || !screenGeometry.isValid()) {

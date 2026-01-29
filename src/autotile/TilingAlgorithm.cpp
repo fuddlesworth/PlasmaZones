@@ -16,7 +16,7 @@ TilingAlgorithm::TilingAlgorithm(QObject *parent)
 
 int TilingAlgorithm::masterZoneIndex() const
 {
-    return 0; // Default: first zone is master
+    return -1; // Default: no master concept (subclasses override if they have one)
 }
 
 bool TilingAlgorithm::supportsMasterCount() const
@@ -54,9 +54,6 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
     const int screenRight = screenGeometry.right();
     const int screenBottom = screenGeometry.bottom();
 
-    // Minimum zone size in pixels
-    constexpr int minZoneSizePx = 50;
-
     // For a single zone, only apply outer gaps
     if (zones.size() == 1) {
         QRect &zone = zones[0];
@@ -65,63 +62,79 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
         zone.setRight(zone.right() - outerGap);
         zone.setBottom(zone.bottom() - outerGap);
 
-        // Ensure minimum size
-        if (zone.width() < minZoneSizePx) {
-            zone.setWidth(minZoneSizePx);
+        // Ensure minimum size while staying within screen bounds
+        if (zone.width() < MinZoneSizePx) {
+            const int center = zone.left() + zone.width() / 2;
+            zone.setLeft(std::max(screenLeft + outerGap, center - MinZoneSizePx / 2));
+            zone.setRight(std::min(screenRight - outerGap, zone.left() + MinZoneSizePx - 1));
         }
-        if (zone.height() < minZoneSizePx) {
-            zone.setHeight(minZoneSizePx);
+        if (zone.height() < MinZoneSizePx) {
+            const int center = zone.top() + zone.height() / 2;
+            zone.setTop(std::max(screenTop + outerGap, center - MinZoneSizePx / 2));
+            zone.setBottom(std::min(screenBottom - outerGap, zone.top() + MinZoneSizePx - 1));
         }
         return;
     }
 
     // For multiple zones, determine adjacency and apply appropriate gaps
-    const int halfInner = innerGap / 2;
+    // Handle odd inner gaps by alternating which side gets the extra pixel
+    const int halfInnerLow = innerGap / 2;
+    const int halfInnerHigh = innerGap - halfInnerLow; // Gets extra pixel if odd
 
-    // Edge detection threshold (pixels)
-    constexpr int edgeThreshold = 5;
+    for (int i = 0; i < zones.size(); ++i) {
+        QRect &zone = zones[i];
+        const QRect originalZone = zone; // Store original for bounds checking
 
-    for (QRect &zone : zones) {
         int left = zone.left();
         int top = zone.top();
         int right = zone.right();
         int bottom = zone.bottom();
 
         // Check if zone is at screen edge (outer gap) or interior (inner gap)
+        // Use alternating halves for interior edges to handle odd gaps correctly
+        const bool useHighHalf = (i % 2 == 0);
+
         // Left edge
-        if (std::abs(left - screenLeft) <= edgeThreshold) {
+        if (std::abs(left - screenLeft) <= GapEdgeThresholdPx) {
             left = screenLeft + outerGap;
         } else {
-            left += halfInner;
+            left += useHighHalf ? halfInnerHigh : halfInnerLow;
         }
 
         // Top edge
-        if (std::abs(top - screenTop) <= edgeThreshold) {
+        if (std::abs(top - screenTop) <= GapEdgeThresholdPx) {
             top = screenTop + outerGap;
         } else {
-            top += halfInner;
+            top += useHighHalf ? halfInnerHigh : halfInnerLow;
         }
 
         // Right edge
-        if (std::abs(right - screenRight) <= edgeThreshold) {
+        if (std::abs(right - screenRight) <= GapEdgeThresholdPx) {
             right = screenRight - outerGap;
         } else {
-            right -= halfInner;
+            right -= useHighHalf ? halfInnerLow : halfInnerHigh;
         }
 
         // Bottom edge
-        if (std::abs(bottom - screenBottom) <= edgeThreshold) {
+        if (std::abs(bottom - screenBottom) <= GapEdgeThresholdPx) {
             bottom = screenBottom - outerGap;
         } else {
-            bottom -= halfInner;
+            bottom -= useHighHalf ? halfInnerLow : halfInnerHigh;
         }
 
-        // Ensure valid bounds (left < right, top < bottom)
+        // Ensure valid bounds while preventing overlap with original zone boundaries
+        // This prevents zones from expanding beyond their allocated space
         if (right <= left) {
-            right = left + minZoneSizePx;
+            // Zone too narrow - center the minimum size within original bounds
+            const int center = originalZone.left() + originalZone.width() / 2;
+            left = std::max(originalZone.left(), center - MinZoneSizePx / 2);
+            right = std::min(originalZone.right(), left + MinZoneSizePx - 1);
         }
         if (bottom <= top) {
-            bottom = top + minZoneSizePx;
+            // Zone too short - center the minimum size within original bounds
+            const int center = originalZone.top() + originalZone.height() / 2;
+            top = std::max(originalZone.top(), center - MinZoneSizePx / 2);
+            bottom = std::min(originalZone.bottom(), top + MinZoneSizePx - 1);
         }
 
         // Apply adjusted bounds

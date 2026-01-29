@@ -68,6 +68,11 @@ private:
 
     /**
      * @brief Recursively partition space for N windows
+     *
+     * @note The user's splitRatio is only applied to the first (root) split.
+     *       All subsequent splits use a fixed 0.5 ratio to ensure balanced
+     *       distribution of space. This matches typical BSP tiling behavior.
+     *
      * @param node Current node to potentially split
      * @param windowsRemaining Number of windows still needing space
      * @param splitRatio Ratio for splitting (0.0-1.0)

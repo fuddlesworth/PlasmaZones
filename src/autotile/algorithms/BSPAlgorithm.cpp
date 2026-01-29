@@ -96,10 +96,12 @@ void BSPAlgorithm::partition(BSPNode *node, int windowsRemaining, qreal splitRat
         node->second->geometry = QRect(splitX, geo.y(), geo.right() - splitX + 1, geo.height());
     }
 
-    // Recursively partition children
-    // Use 0.5 ratio for subsequent splits (only first split uses user ratio)
-    partition(node->first.get(), firstCount, 0.5);
-    partition(node->second.get(), secondCount, 0.5);
+    // Recursively partition children with balanced 0.5 ratio
+    // Only the root split uses the user's splitRatio; subsequent splits
+    // use 0.5 to ensure even distribution (standard BSP behavior)
+    constexpr qreal balancedRatio = 0.5;
+    partition(node->first.get(), firstCount, balancedRatio);
+    partition(node->second.get(), secondCount, balancedRatio);
 }
 
 void BSPAlgorithm::collectLeaves(const BSPNode *node, QVector<QRect> &zones) const
