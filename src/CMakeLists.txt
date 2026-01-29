@@ -70,6 +70,8 @@ set(plasmazones_core_SRCS
     autotile/algorithms/ColumnsAlgorithm.cpp
     autotile/algorithms/BSPAlgorithm.h
     autotile/algorithms/BSPAlgorithm.cpp
+    autotile/AlgorithmRegistry.h
+    autotile/AlgorithmRegistry.cpp
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp

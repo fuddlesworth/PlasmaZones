@@ -72,3 +72,20 @@ target_link_libraries(test_tiling_algorithms
 )
 
 add_test(NAME TilingAlgorithms COMMAND test_tiling_algorithms)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Algorithm Registry Tests
+# Tests for AlgorithmRegistry singleton and algorithm discovery
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_algorithm_registry
+    test_algorithm_registry.cpp
+)
+
+target_link_libraries(test_algorithm_registry
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME AlgorithmRegistry COMMAND test_algorithm_registry)
