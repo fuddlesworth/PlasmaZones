@@ -22,6 +22,7 @@
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/AlgorithmRegistry.h"
 #include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
 
@@ -499,29 +500,42 @@ void Daemon::start()
     // Toggle autotiling on/off
     connect(m_shortcutManager.get(), &ShortcutManager::toggleAutotileRequested, this, [this]() {
         if (m_autotileEngine) {
-            m_autotileEngine->setEnabled(!m_autotileEngine->isEnabled());
-            qCInfo(lcDaemon) << "Autotiling toggled:" << m_autotileEngine->isEnabled();
+            bool newState = !m_autotileEngine->isEnabled();
+            m_autotileEngine->setEnabled(newState);
+            qCInfo(lcDaemon) << "Autotiling toggled:" << newState;
+
+            // Show OSD feedback
+            if (m_settings && m_settings->showNavigationOsd()) {
+                QString reason = newState ? QStringLiteral("enabled") : QStringLiteral("disabled");
+                m_overlayService->showNavigationOsd(true, QStringLiteral("autotile"), reason);
+            }
         }
     });
 
     // Cycle through tiling algorithms
     connect(m_shortcutManager.get(), &ShortcutManager::cycleAlgorithmRequested, this, [this]() {
         if (m_autotileEngine) {
-            // Get list of available algorithms and cycle to next one
-            static const QStringList algorithms = {
-                QStringLiteral("master-stack"),
-                QStringLiteral("columns"),
-                QStringLiteral("rows"),
-                QStringLiteral("bsp"),
-                QStringLiteral("fibonacci"),
-                QStringLiteral("monocle"),
-                QStringLiteral("three-column")
-            };
+            // Query available algorithms from registry (DRY - single source of truth)
+            const QStringList algorithms = AlgorithmRegistry::instance()->availableAlgorithms();
+            if (algorithms.isEmpty()) {
+                qCWarning(lcDaemon) << "No algorithms available in registry";
+                return;
+            }
+
             QString current = m_autotileEngine->algorithm();
             int index = algorithms.indexOf(current);
-            int nextIndex = (index + 1) % algorithms.size();
-            m_autotileEngine->setAlgorithm(algorithms[nextIndex]);
-            qCInfo(lcDaemon) << "Algorithm cycled to:" << algorithms[nextIndex];
+
+            // Handle unknown algorithm: if not found (-1), start from first algorithm
+            int nextIndex = (index < 0) ? 0 : ((index + 1) % algorithms.size());
+
+            QString nextAlgorithm = algorithms[nextIndex];
+            m_autotileEngine->setAlgorithm(nextAlgorithm);
+            qCInfo(lcDaemon) << "Algorithm cycled to:" << nextAlgorithm;
+
+            // Show OSD feedback
+            if (m_settings && m_settings->showNavigationOsd()) {
+                m_overlayService->showNavigationOsd(true, QStringLiteral("algorithm"), nextAlgorithm);
+            }
         }
     });
 
