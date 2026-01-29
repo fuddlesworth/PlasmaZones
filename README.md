@@ -23,13 +23,17 @@ Define zones on your screen. Drag windows into them. Done.
 
 Hold **Alt** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
-![Drag and Snap](docs/media/videos/drag-snap.gif)
+<p align="center">
+  <img src="docs/media/videos/drag-snap.gif" alt="Drag and Snap" />
+</p>
 
 ---
 
 ## Why PlasmaZones?
 
 There are several window tiling options for KDE Plasma. Here's how PlasmaZones compares:
+
+<p align="center">
 
 | Feature | PlasmaZones | KZones | MouseTiler | Polonium | Built-in Plasma |
 |---------|:-----------:|:------:|:----------:|:--------:|:---------------:|
@@ -50,6 +54,8 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 | Touch/stylus support | ❌ | ❌ | ✅ | ❌ | ❌ |
 | Zone overlay | ✅ | ✅ | ✅ | ❌ | ✅ (Shift+drag) |
 | Zone selector widget | ✅ | ✅ | ❌ | ❌ | ❌ |
+
+</p>
 
 *MouseTiler works with separate "Remember Window Positions" script for persistence
 
@@ -89,11 +95,15 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Grid and edge snapping
 - Per-zone colors and styling
 
-![Layout Editor](docs/media/videos/editor.gif)
+<p align="center">
+  <img src="docs/media/videos/editor.gif" alt="Layout Editor" />
+</p>
 
 ### Shader Effects
 
 GPU-accelerated zone overlays with 8 built-in effects:
+
+<p align="center">
 
 | Effect | Description |
 |--------|-------------|
@@ -106,9 +116,11 @@ GPU-accelerated zone overlays with 8 built-in effects:
 | Magnetic Field | Energy field lines |
 | Particle Field | Floating particles |
 
-![Shader Effects](docs/media/screenshots/shaders-gallery.png)
+</p>
 
-![Shader effects showcase](docs/media/videos/shaders.gif)
+<p align="center">
+  <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
+</p>
 
 Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
@@ -116,15 +128,21 @@ Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
 Drag to screen edge to reveal a layout picker. Choose any layout and zone without cycling.
 
-![Zone Selector](docs/media/videos/zone-selector.gif)
+<p align="center">
+  <img src="docs/media/videos/zone-selector.gif" alt="Zone Selector" />
+</p>
 
 ### Visual Layout OSD
 
 See a preview of the layout when switching, not just text.
 
-![Layout OSD](docs/media/screenshots/layout-osd.png)
+<p align="center">
+  <img src="docs/media/screenshots/layout-osd.png" alt="Layout OSD" />
+</p>
 
-![Cycling layouts with OSD](docs/media/videos/layout-switch.gif)
+<p align="center">
+  <img src="docs/media/videos/layout-switch.gif" alt="Cycling layouts with OSD" />
+</p>
 
 ### Multi-Monitor & Virtual Desktops
 
@@ -132,33 +150,45 @@ See a preview of the layout when switching, not just text.
 - Per-virtual-desktop layouts
 - Per-activity layouts (optional, requires KActivities)
 
-![Multi-Monitor](docs/media/screenshots/multi-monitor.png)
+<p align="center">
+  <img src="docs/media/screenshots/multi-monitor.png" alt="Multi-Monitor" />
+</p>
 
 ### System Settings Integration
 
 Full KCM module for configuration - no config file editing required.
 
-![Settings](docs/media/screenshots/kcm-settings.png)
+<p align="center">
+  <img src="docs/media/screenshots/kcm-settings.png" alt="Settings" />
+</p>
 
 #### Appearance
 Customize zone visuals: shader effects, colors, opacity, border styles, and highlight animations.
 
-![Appearance Settings](docs/media/screenshots/kcm-appearance.png)
+<p align="center">
+  <img src="docs/media/screenshots/kcm-appearance.png" alt="Appearance Settings" />
+</p>
 
 #### Behavior
 Configure drag modifiers, snap thresholds, auto-snap for new windows, and session persistence options.
 
-![Behavior Settings](docs/media/screenshots/kcm-behavior.png)
+<p align="center">
+  <img src="docs/media/screenshots/kcm-behavior.png" alt="Behavior Settings" />
+</p>
 
 #### Zone Selector
 Set up the edge-triggered zone picker: trigger distance, display duration, and selector appearance.
 
-![Zone Selector Settings](docs/media/screenshots/kcm-zoneselector.png)
+<p align="center">
+  <img src="docs/media/screenshots/kcm-zoneselector.png" alt="Zone Selector Settings" />
+</p>
 
 #### Shortcuts
 Configure all keyboard shortcuts for layout switching, window navigation, and editor access.
 
-![Shortcuts Settings](docs/media/screenshots/kcm-shortcuts.png)
+<p align="center">
+  <img src="docs/media/screenshots/kcm-shortcuts.png" alt="Shortcuts Settings" />
+</p>
 
 ---
 
@@ -218,6 +248,8 @@ systemctl --user enable --now plasmazones.service
 
 ### Global Shortcuts
 
+<p align="center">
+
 | Action | Default Shortcut |
 |--------|------------------|
 | Open editor | `Meta+Shift+E` |
@@ -245,6 +277,8 @@ systemctl --user enable --now plasmazones.service
 | Cycle window forward | `Meta+Alt+.` |
 | Cycle window backward | `Meta+Alt+,` |
 
+</p>
+
 **Shortcut Pattern:** Shortcuts are designed to avoid conflicts with KDE defaults:
 - `Meta+Alt+{key}` — Layout operations and actions
 - `Meta+Alt+Shift+Arrow` — Window zone movement (avoids KDE's `Meta+Shift+Arrow` screen movement)
@@ -258,6 +292,8 @@ All shortcuts configurable in System Settings → Shortcuts → PlasmaZones.
 
 ### Editor Shortcuts
 
+<p align="center">
+
 | Action | Shortcut |
 |--------|----------|
 | Save | `Ctrl+S` |
@@ -269,6 +305,8 @@ All shortcuts configurable in System Settings → Shortcuts → PlasmaZones.
 | Split vertical | `Ctrl+Alt+V` |
 | Move zone | `Arrow keys` |
 | Resize zone | `Shift+Arrow keys` |
+
+</p>
 
 ---
 
