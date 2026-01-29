@@ -22,6 +22,7 @@
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/AutotileConfig.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
@@ -491,6 +492,97 @@ void Daemon::start()
     // Cycle windows within zone shortcut (monocle-style navigation)
     connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool forward) {
         m_windowTrackingAdaptor->cycleWindowsInZone(forward);
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Phase 3.2: Autotile settings initialization and change handlers
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Apply initial autotile settings from configuration
+    if (m_autotileEngine && m_settings) {
+        auto *config = m_autotileEngine->config();
+
+        // Apply initial settings to engine config
+        config->algorithmId = m_settings->autotileAlgorithm();
+        config->splitRatio = m_settings->autotileSplitRatio();
+        config->masterCount = m_settings->autotileMasterCount();
+        config->innerGap = m_settings->autotileInnerGap();
+        config->outerGap = m_settings->autotileOuterGap();
+        config->focusNewWindows = m_settings->autotileFocusNewWindows();
+        config->smartGaps = m_settings->autotileSmartGaps();
+        config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
+            m_settings->autotileInsertPositionInt());
+
+        // Set algorithm on engine (handles registry lookup)
+        m_autotileEngine->setAlgorithm(m_settings->autotileAlgorithm());
+
+        // Set enabled state last (may trigger tiling)
+        m_autotileEngine->setEnabled(m_settings->autotileEnabled());
+
+        qCInfo(lcDaemon) << "Autotile settings applied - enabled:" << m_settings->autotileEnabled()
+                         << "algorithm:" << m_settings->autotileAlgorithm();
+    }
+
+    // Connect settings change signals to update engine dynamically
+    connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->setEnabled(m_settings->autotileEnabled());
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileAlgorithmChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->algorithmId = m_settings->autotileAlgorithm();
+            m_autotileEngine->setAlgorithm(m_settings->autotileAlgorithm());
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileSplitRatioChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->splitRatio = m_settings->autotileSplitRatio();
+            m_autotileEngine->retile(); // Retile with new ratio
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileMasterCountChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->masterCount = m_settings->autotileMasterCount();
+            m_autotileEngine->retile(); // Retile with new count
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileInnerGapChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->innerGap = m_settings->autotileInnerGap();
+            m_autotileEngine->retile(); // Retile with new gaps
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileOuterGapChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->outerGap = m_settings->autotileOuterGap();
+            m_autotileEngine->retile(); // Retile with new gaps
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileFocusNewWindowsChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->focusNewWindows = m_settings->autotileFocusNewWindows();
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileSmartGapsChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->smartGaps = m_settings->autotileSmartGaps();
+            m_autotileEngine->retile(); // Retile with new smart gaps setting
+        }
+    });
+
+    connect(m_settings.get(), &Settings::autotileInsertPositionChanged, this, [this]() {
+        if (m_autotileEngine && m_settings) {
+            m_autotileEngine->config()->insertPosition = static_cast<AutotileConfig::InsertPosition>(
+                m_settings->autotileInsertPositionInt());
+        }
     });
 
     // ═══════════════════════════════════════════════════════════════════════════════
