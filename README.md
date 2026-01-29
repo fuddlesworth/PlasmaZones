@@ -79,9 +79,9 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Restore original size on unsnap
 - Per-window floating toggle
 
-<!-- TODO: GIF showing keyboard navigation between zones -->
-<!-- ![Keyboard Navigation](docs/media/videos/keyboard-nav.gif) -->
-*[GIF placeholder - moving window between zones with Meta+Alt+Arrows]*
+<p align="center">
+  <img src="docs/media/videos/keyboard-nav.gif" alt="Keyboard Navigation" />
+</p>
 
 ### Layout Editor
 
