@@ -953,6 +953,33 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
                 updateZoneSelectorWindow(screen);
             }
         }
+        // Also refresh overlay windows when visible (symmetry with activity; overlay shows per-desktop layout)
+        if (m_visible && !m_overlayWindows.isEmpty()) {
+            for (auto* screen : m_overlayWindows.keys()) {
+                updateOverlayWindow(screen);
+            }
+        }
+    }
+}
+
+void OverlayService::setCurrentActivity(const QString& activityId)
+{
+    if (m_currentActivity != activityId) {
+        m_currentActivity = activityId;
+        qCDebug(lcOverlay) << "Activity changed to" << activityId;
+
+        // Update zone selector windows with the new active layout for this activity
+        if (!m_zoneSelectorWindows.isEmpty()) {
+            for (auto* screen : m_zoneSelectorWindows.keys()) {
+                updateZoneSelectorWindow(screen);
+            }
+        }
+        // Also refresh overlay windows when visible (symmetry with desktop; overlay shows per-activity layout)
+        if (m_visible && !m_overlayWindows.isEmpty()) {
+            for (auto* screen : m_overlayWindows.keys()) {
+                updateOverlayWindow(screen);
+            }
+        }
     }
 }
 
@@ -1364,10 +1391,11 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Set active layout ID - use screen-specific layout if assigned
-    // Pass current virtual desktop to get per-desktop assignments
+    // Pass current virtual desktop and activity for per-desktop and per-activity assignments
     QString activeLayoutId;
     if (m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, QString());
+        Layout* screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             activeLayoutId = screenLayout->id().toString();
         } else if (m_layout) {
@@ -1636,7 +1664,8 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     // Get the layout for this screen to use layout-specific settings
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, QString());
+        screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
     }
     if (!screenLayout) {
         screenLayout = m_layout;
@@ -1709,11 +1738,12 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
         return zonesList;
     }
 
-    // Get the layout assigned to this specific screen and current desktop
-    // This allows different monitors and virtual desktops to have different layouts
+    // Get the layout assigned to this specific screen, desktop, and activity
+    // This allows different monitors, virtual desktops, and activities to have different layouts
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, QString());
+        screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
     }
 
     // Fall back to the global active layout if no screen-specific assignment

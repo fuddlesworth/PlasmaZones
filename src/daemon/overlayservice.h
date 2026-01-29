@@ -3,15 +3,17 @@
 
 #pragma once
 
+#include <QElapsedTimer>
+#include <QHash>
+#include <QMutex>
+#include <QObject>
+#include <QPointer>
+#include <QString>
+#include <atomic>
+#include <memory>
+
 #include "../core/interfaces.h"
 #include "../core/layout.h"
-#include <QObject>
-#include <QHash>
-#include <QPointer>
-#include <QElapsedTimer>
-#include <QMutex>
-#include <memory>
-#include <atomic>
 
 class QQmlEngine;
 class QQuickWindow;
@@ -69,6 +71,7 @@ public:
     void setSettings(ISettings* settings);
     void setLayoutManager(ILayoutManager* layoutManager);
     void setCurrentVirtualDesktop(int desktop);
+    void setCurrentActivity(const QString& activityId);
 
     // Screen management
     void setupForScreen(QScreen* screen);
@@ -129,6 +132,7 @@ private:
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
+    QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
 

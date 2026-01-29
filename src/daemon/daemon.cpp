@@ -272,12 +272,13 @@ void Daemon::start()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
-        // Connect activity changes to layout switching
+        // Set initial activity on overlay for per-activity layout resolution
+        m_overlayService->setCurrentActivity(m_activityManager->currentActivity());
+
+        // Connect activity changes: update overlay's activity and refresh layout resolution
         connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
-                    Q_UNUSED(activityId)
-                    // Layout switching is handled automatically by ActivityManager
-                    // Just ensure overlay is updated
+                    m_overlayService->setCurrentActivity(activityId);
                     if (m_overlayService->isVisible()) {
                         m_overlayService->updateGeometries();
                     }
@@ -618,8 +619,27 @@ void Daemon::processPendingGeometryUpdates()
         return;
     }
 
+    // Use current desktop and activity so per-desktop/per-activity assignments are respected
+    const int currentDesktop = m_virtualDesktopManager->currentDesktop();
+    const QString currentActivity = m_activityManager && ActivityManager::isAvailable()
+        ? m_activityManager->currentActivity()
+        : QString();
+
+    // Choose geometry for active layout recalc: prefer primary screen when in batch, else first
+    const QString primaryName = [this]() {
+        QScreen* p = Utils::primaryScreen();
+        return p ? p->name() : QString();
+    }();
+    QRect activeLayoutGeometry;
+    if (!primaryName.isEmpty() && m_pendingGeometryUpdates.contains(primaryName)) {
+        activeLayoutGeometry = m_pendingGeometryUpdates.value(primaryName);
+    } else {
+        activeLayoutGeometry = m_pendingGeometryUpdates.constBegin().value();
+    }
+
     // Process all pending geometry updates in a single batch
     // This prevents N×M work when multiple screens change simultaneously
+    bool activeLayoutRecalcDone = false;
     for (auto it = m_pendingGeometryUpdates.constBegin(); it != m_pendingGeometryUpdates.constEnd(); ++it) {
         const QString& screenName = it.key();
         const QRect& availableGeometry = it.value();
@@ -627,13 +647,16 @@ void Daemon::processPendingGeometryUpdates()
         qCDebug(lcDaemon) << "Processing geometry update for" << screenName
                           << "availableGeometry:" << availableGeometry;
 
-        // Recalculate zone geometries for active layout
-        if (m_layoutManager->activeLayout()) {
-            m_layoutManager->activeLayout()->recalculateZoneGeometries(availableGeometry);
+        // Recalculate zone geometries for active layout at most once (primary screen, or first).
+        // Active layout is global; recalc'ing per-screen overwrites each time (last-wins bug).
+        if (m_layoutManager->activeLayout() && !activeLayoutRecalcDone) {
+            m_layoutManager->activeLayout()->recalculateZoneGeometries(activeLayoutGeometry);
+            activeLayoutRecalcDone = true;
         }
 
-        // Also update screen-specific layout if different from active
-        if (Layout* screenLayout = m_layoutManager->layoutForScreen(screenName)) {
+        // Update screen-specific layout if different from active
+        if (Layout* screenLayout =
+                m_layoutManager->layoutForScreen(screenName, currentDesktop, currentActivity)) {
             if (screenLayout != m_layoutManager->activeLayout()) {
                 screenLayout->recalculateZoneGeometries(availableGeometry);
             }
