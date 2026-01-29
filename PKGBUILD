@@ -31,8 +31,16 @@ optdepends=(
 )
 provides=('plasmazones')
 conflicts=('plasmazones')
-source=("${pkgname}::git+${url}.git")
-sha256sums=('SKIP')
+source=(
+    "${pkgname}::git+${url}.git"
+    "kbuildsycoca.hook"
+    "plasmazones-refresh-sycoca"
+)
+sha256sums=(
+    'SKIP'
+    'SKIP'
+    'SKIP'
+)
 install=plasmazones.install
 
 pkgver() {
@@ -52,4 +60,10 @@ build() {
 
 package() {
     DESTDIR="$pkgdir" cmake --install build
+
+    # Install pacman hook to auto-refresh sycoca cache
+    install -Dm644 kbuildsycoca.hook \
+        "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
+    install -Dm755 plasmazones-refresh-sycoca \
+        "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
 }
