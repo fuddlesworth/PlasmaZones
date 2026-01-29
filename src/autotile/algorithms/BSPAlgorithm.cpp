@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "BSPAlgorithm.h"
+#include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
 #include <cmath>
@@ -9,6 +10,11 @@
 namespace PlasmaZones {
 
 using namespace AutotileDefaults;
+
+// Self-registration: BSP provides balanced recursive splitting (priority 30)
+namespace {
+AlgorithmRegistrar<BSPAlgorithm> s_bspRegistrar(DBus::AutotileAlgorithm::BSP, 30);
+}
 
 BSPAlgorithm::BSPAlgorithm(QObject *parent)
     : TilingAlgorithm(parent)

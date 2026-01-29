@@ -2,9 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ColumnsAlgorithm.h"
+#include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
+#include "core/constants.h"
 
 namespace PlasmaZones {
+
+// Self-registration: Columns is the simplest layout (priority 20)
+namespace {
+AlgorithmRegistrar<ColumnsAlgorithm> s_columnsRegistrar(DBus::AutotileAlgorithm::Columns, 20);
+}
 
 ColumnsAlgorithm::ColumnsAlgorithm(QObject *parent)
     : TilingAlgorithm(parent)
