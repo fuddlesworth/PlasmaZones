@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "MasterStackAlgorithm.h"
+#include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
 #include <algorithm>
@@ -9,6 +10,11 @@
 namespace PlasmaZones {
 
 using namespace AutotileDefaults;
+
+// Self-registration: MasterStack is the default algorithm (priority 10)
+namespace {
+AlgorithmRegistrar<MasterStackAlgorithm> s_masterStackRegistrar(DBus::AutotileAlgorithm::MasterStack, 10);
+}
 
 MasterStackAlgorithm::MasterStackAlgorithm(QObject *parent)
     : TilingAlgorithm(parent)

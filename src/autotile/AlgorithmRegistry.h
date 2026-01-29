@@ -5,8 +5,11 @@
 
 #include "plasmazones_export.h"
 #include <QHash>
+#include <QList>
 #include <QObject>
+#include <QString>
 #include <QStringList>
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -168,6 +171,57 @@ private:
 
     QHash<QString, TilingAlgorithm *> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
+};
+
+/**
+ * @brief Pending algorithm registration data
+ */
+struct PLASMAZONES_EXPORT PendingAlgorithmRegistration {
+    QString id;
+    int priority;
+    std::function<TilingAlgorithm*()> factory;
+};
+
+/**
+ * @brief Global list of pending algorithm registrations
+ *
+ * This is separate from the template to ensure all registrations go to the
+ * same list regardless of template instantiation.
+ */
+PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration> &pendingAlgorithmRegistrations();
+
+/**
+ * @brief Helper for static self-registration of built-in algorithms
+ *
+ * Use this in algorithm .cpp files to register at static initialization time.
+ * This follows the Open/Closed Principle - new algorithms can be added without
+ * modifying AlgorithmRegistry.
+ *
+ * Usage in algorithm .cpp file:
+ * @code
+ * namespace {
+ * PlasmaZones::AlgorithmRegistrar<MyAlgorithm> registrar(
+ *     DBus::AutotileAlgorithm::MyAlgo, 10);  // priority 10
+ * }
+ * @endcode
+ *
+ * @tparam T Algorithm class (must inherit from TilingAlgorithm)
+ */
+template<typename T>
+class AlgorithmRegistrar
+{
+public:
+    /**
+     * @brief Register an algorithm at static initialization time
+     *
+     * @param id Algorithm identifier (use DBus::AutotileAlgorithm constants)
+     * @param priority Registration order (lower = registered first, default 100)
+     */
+    explicit AlgorithmRegistrar(const QString &id, int priority = 100)
+    {
+        // Store in the global (non-template) pending list
+        pendingAlgorithmRegistrations().append({id, priority, []() { return new T(); }});
+    }
 };
 
 } // namespace PlasmaZones

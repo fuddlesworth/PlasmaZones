@@ -3,16 +3,21 @@
 
 #include "AlgorithmRegistry.h"
 #include "TilingAlgorithm.h"
-#include "algorithms/MasterStackAlgorithm.h"
-#include "algorithms/ColumnsAlgorithm.h"
-#include "algorithms/BSPAlgorithm.h"
 #include "core/constants.h"
 
 #include <QDebug>
+#include <algorithm>
 
 namespace PlasmaZones {
 
 using namespace DBus::AutotileAlgorithm;
+
+// Global pending registrations list - shared by all AlgorithmRegistrar instantiations
+QList<PendingAlgorithmRegistration> &pendingAlgorithmRegistrations()
+{
+    static QList<PendingAlgorithmRegistration> s_pending;
+    return s_pending;
+}
 
 AlgorithmRegistry::AlgorithmRegistry(QObject *parent)
     : QObject(parent)
@@ -145,21 +150,20 @@ TilingAlgorithm *AlgorithmRegistry::defaultAlgorithm() const
 
 void AlgorithmRegistry::registerBuiltInAlgorithms()
 {
-    // Register in order of typical user preference
-    // Master-Stack is the classic tiling WM default (dwm, Bismuth, etc.)
-    registerAlgorithm(MasterStack, new MasterStackAlgorithm());
+    // Process all pending registrations from AlgorithmRegistrar instances
+    // Each algorithm registers itself via static initialization in its .cpp file
+    auto &pending = pendingAlgorithmRegistrations();
 
-    // Columns is the simplest layout
-    registerAlgorithm(Columns, new ColumnsAlgorithm());
+    // Sort by priority (lower = first) for deterministic registration order
+    std::sort(pending.begin(), pending.end(),
+              [](const auto &a, const auto &b) { return a.priority < b.priority; });
 
-    // BSP provides balanced recursive splitting
-    registerAlgorithm(BSP, new BSPAlgorithm());
+    for (const auto &reg : pending) {
+        registerAlgorithm(reg.id, reg.factory());
+    }
 
-    // Future algorithms will be added here:
-    // registerAlgorithm(Rows, new RowsAlgorithm());
-    // registerAlgorithm(Monocle, new MonocleAlgorithm());
-    // registerAlgorithm(Fibonacci, new FibonacciAlgorithm());
-    // registerAlgorithm(ThreeColumn, new ThreeColumnAlgorithm());
+    // Clear pending list (registrations are now complete)
+    pending.clear();
 }
 
 } // namespace PlasmaZones
