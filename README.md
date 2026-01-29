@@ -133,10 +133,6 @@ Drag to screen edge to reveal a layout picker. Choose any layout and zone withou
 See a preview of the layout when switching, not just text.
 
 <p align="center">
-  <img src="docs/media/screenshots/layout-osd.png" alt="Layout OSD" />
-</p>
-
-<p align="center">
   <img src="docs/media/videos/layout-switch.gif" alt="Cycling layouts with OSD" />
 </p>
 
