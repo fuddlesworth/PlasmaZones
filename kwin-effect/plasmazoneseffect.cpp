@@ -95,6 +95,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
 
+    // Phase 2.1: Connect to window activation for autotiling focus tracking
+    connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
+
     // mouseChanged is the only reliable way to get modifier state in a KWin effect on Wayland;
     // QGuiApplication::queryKeyboardModifiers() doesn't work since effects run in the compositor.
     connect(KWin::effects, &KWin::EffectsHandler::mouseChanged, this, &PlasmaZonesEffect::slotMouseChanged);
@@ -185,6 +188,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // Phase 2.1: Notify daemon for autotiling (before auto-snap logic)
+    notifyWindowAdded(w);
+
     // Check if we should auto-snap new windows to last used zone
     // Use stricter filter - only normal application windows, NOT dialogs/utilities
     if (shouldAutoSnapWindow(w) && !w->isMinimized()) {
@@ -212,13 +218,15 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     QString stableId = extractStableId(windowId);
     m_floatingWindows.remove(stableId);
 
-    // Notify daemon to clean up tracking data for this window
-    // This prevents memory leaks in m_windowZoneAssignments for windows
-    // that were snapped but not dragged (e.g., keyboard navigation, auto-snap)
-    ensureWindowTrackingInterface();
-    if (m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
-        m_windowTrackingInterface->asyncCall(QStringLiteral("windowClosed"), windowId);
-    }
+    // Phase 2.1: Notify daemon for autotiling and cleanup
+    notifyWindowClosed(w);
+}
+
+void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
+{
+    // Phase 2.1: Notify daemon of window activation for autotiling focus tracking
+    // Filtering is handled internally by notifyWindowActivated (SRP)
+    notifyWindowActivated(w);
 }
 
 void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
@@ -318,9 +326,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
     m_lastVirtualScreenGeometry = currentGeometry;
 
     // Call daemon to get updated window geometries
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
-        qCDebug(lcEffect) << "WindowTracking interface not available";
+    if (!ensureWindowTrackingReady("get updated window geometries")) {
         return;
     }
 
@@ -577,14 +583,22 @@ void PlasmaZonesEffect::ensureZoneDetectionInterface()
     ensureInterface(m_zoneDetectionInterface, DBus::Interface::ZoneDetection, "ZoneDetection");
 }
 
+bool PlasmaZonesEffect::ensureWindowTrackingReady(const char* methodName)
+{
+    ensureWindowTrackingInterface();
+    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        qCDebug(lcEffect) << "Cannot" << methodName << "- WindowTracking interface not available";
+        return false;
+    }
+    return true;
+}
+
 void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
 {
     // Sync floating window state from daemon's persisted state on startup
     // Note: The daemon now stores floating windows by STABLE ID (without pointer address)
     // so we can directly use those IDs for comparison
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
-        qCDebug(lcEffect) << "Cannot sync floating windows - daemon not available yet";
+    if (!ensureWindowTrackingReady("sync floating windows")) {
         return;
     }
 
@@ -712,8 +726,7 @@ QString PlasmaZonesEffect::queryZoneGeometry(const QString& zoneId)
 
 QString PlasmaZonesEffect::queryZoneGeometryForScreen(const QString& zoneId, const QString& screenName)
 {
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("query zone geometry")) {
         return QString();
     }
 
@@ -743,9 +756,7 @@ QString PlasmaZonesEffect::getWindowScreenName(KWin::EffectWindow* w) const
 void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason)
 {
     // Call D-Bus method on daemon to report navigation feedback (can't emit signals on another service's interface)
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
-        qCDebug(lcEffect) << "Cannot report navigation feedback - WindowTracking interface not available";
+    if (!ensureWindowTrackingReady("report navigation feedback")) {
         return;
     }
     m_windowTrackingInterface->asyncCall(QStringLiteral("reportNavigationFeedback"), success, action, reason);
@@ -778,8 +789,7 @@ void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneI
         qCDebug(lcEffect) << "Navigation direction:" << direction;
 
         // Get current zone for this window
-        ensureWindowTrackingInterface();
-        if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        if (!ensureWindowTrackingReady("get zone for window")) {
             return;
         }
 
@@ -946,8 +956,7 @@ void PlasmaZonesEffect::slotFocusWindowInZoneRequested(const QString& targetZone
         }
 
         QString activeWindowId = getWindowId(activeWindow);
-        ensureWindowTrackingInterface();
-        if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+        if (!ensureWindowTrackingReady("get zone for window")) {
             return;
         }
 
@@ -975,8 +984,7 @@ void PlasmaZonesEffect::slotFocusWindowInZoneRequested(const QString& targetZone
     }
 
     // Get windows in the target zone
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("get windows in zone")) {
         return;
     }
 
@@ -1023,8 +1031,7 @@ void PlasmaZonesEffect::slotRestoreWindowRequested()
     QString windowId = getWindowId(activeWindow);
 
     // Get pre-snap geometry from daemon
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("get pre-snap geometry")) {
         emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("dbus_error"));
         return;
     }
@@ -1197,8 +1204,7 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
     qCDebug(lcEffect) << "Swap direction:" << direction;
 
     // Get current zone for this window
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("get zone for swap")) {
         emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"));
         return;
     }
@@ -1373,8 +1379,7 @@ void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString
         return;
     }
 
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("rotate windows")) {
         emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("dbus_error"));
         return;
     }
@@ -1497,8 +1502,7 @@ void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive
     QString windowId = getWindowId(activeWindow);
 
     // Get the zone for the active window
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("get zone for cycle")) {
         emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("dbus_error"));
         return;
     }
@@ -1597,8 +1601,7 @@ void PlasmaZonesEffect::callSnapToLastZone(KWin::EffectWindow* window)
         return;
     }
 
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
+    if (!ensureWindowTrackingReady("snap to last zone")) {
         return;
     }
 
@@ -1706,8 +1709,7 @@ bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 
 void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
 {
-    ensureWindowTrackingInterface();
-    if (!m_windowTrackingInterface || !m_windowTrackingInterface->isValid() || !w) {
+    if (!w || !ensureWindowTrackingReady("update sticky state")) {
         return;
     }
 
@@ -1859,6 +1861,70 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
 
     // Not a pointer format, return as-is
     return windowId;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Phase 2.1: Window Event Notifications for Autotiling
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
+{
+    if (!w || !shouldHandleWindow(w)) {
+        return;
+    }
+
+    if (!ensureWindowTrackingReady("notify windowAdded")) {
+        return;
+    }
+
+    QString windowId = getWindowId(w);
+    QString screenName = getWindowScreenName(w);
+
+    // Track this window so we only send windowClosed for windows we've notified about
+    m_notifiedWindows.insert(windowId);
+
+    qCDebug(lcEffect) << "Notifying daemon: windowAdded" << windowId << "on screen" << screenName;
+    m_windowTrackingInterface->asyncCall(QStringLiteral("windowAdded"), windowId, screenName);
+}
+
+void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+
+    QString windowId = getWindowId(w);
+
+    // Only notify for windows we previously notified via windowAdded
+    // This avoids unnecessary D-Bus calls for special windows (tooltips, popups, etc.)
+    if (!m_notifiedWindows.remove(windowId)) {
+        return;
+    }
+
+    if (!ensureWindowTrackingReady("notify windowClosed")) {
+        return;
+    }
+
+    qCDebug(lcEffect) << "Notifying daemon: windowClosed" << windowId;
+    m_windowTrackingInterface->asyncCall(QStringLiteral("windowClosed"), windowId);
+}
+
+void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
+{
+    // Consistent filtering with notifyWindowAdded (SRP: filtering responsibility in notify method)
+    if (!w || !shouldHandleWindow(w)) {
+        return;
+    }
+
+    if (!ensureWindowTrackingReady("notify windowActivated")) {
+        return;
+    }
+
+    QString windowId = getWindowId(w);
+    QString screenName = getWindowScreenName(w);
+
+    qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenName;
+    m_windowTrackingInterface->asyncCall(QStringLiteral("windowActivated"), windowId, screenName);
 }
 
 } // namespace PlasmaZones

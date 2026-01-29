@@ -47,6 +47,7 @@ public:
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);
+    void slotWindowActivated(KWin::EffectWindow* w);
     void pollWindowMoves();
     void slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
                           Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
@@ -85,6 +86,19 @@ private:
     void ensureZoneDetectionInterface();
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
+
+    /**
+     * @brief Ensure WindowTracking D-Bus interface is ready for use
+     * @param methodName Name of the calling method (for debug logging)
+     * @return true if interface is valid and ready, false otherwise
+     * @note DRY helper - consolidates repeated interface validation pattern
+     */
+    bool ensureWindowTrackingReady(const char* methodName);
+
+    // Phase 2.1: Window event notifications for autotiling
+    void notifyWindowAdded(KWin::EffectWindow* w);
+    void notifyWindowClosed(KWin::EffectWindow* w);
+    void notifyWindowActivated(KWin::EffectWindow* w);
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
@@ -137,6 +151,10 @@ private:
 
     // Float tracking (Phase 1 keyboard navigation)
     QSet<QString> m_floatingWindows;
+
+    // Phase 2.1: Track windows notified to daemon via windowAdded
+    // Only send windowClosed for windows in this set (avoids D-Bus calls for untracked windows)
+    QSet<QString> m_notifiedWindows;
 
     // Polling timer for detecting window moves
     QTimer m_pollTimer;
