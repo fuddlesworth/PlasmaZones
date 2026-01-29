@@ -15,6 +15,43 @@
 using namespace PlasmaZones;
 
 /**
+ * @brief Simple test algorithm for registration/unregistration tests
+ */
+class TestAlgorithm : public TilingAlgorithm
+{
+    Q_OBJECT
+public:
+    explicit TestAlgorithm(const QString &name = QStringLiteral("Test Algorithm"))
+        : m_name(name)
+    {
+    }
+
+    QString name() const noexcept override { return m_name; }
+    QString description() const override { return QStringLiteral("Test algorithm for unit tests"); }
+    QString icon() const noexcept override { return QStringLiteral("test-icon"); }
+
+    QVector<QRect> calculateZones(int windowCount, const QRect &screen,
+                                  const TilingState &state) const override
+    {
+        Q_UNUSED(state)
+        QVector<QRect> zones;
+        if (windowCount <= 0) {
+            return zones;
+        }
+        // Simple equal columns
+        const int width = screen.width() / windowCount;
+        for (int i = 0; i < windowCount; ++i) {
+            zones.append(QRect(screen.x() + i * width, screen.y(),
+                               width, screen.height()));
+        }
+        return zones;
+    }
+
+private:
+    QString m_name;
+};
+
+/**
  * @brief Unit tests for AlgorithmRegistry
  *
  * Tests cover:
@@ -152,6 +189,123 @@ private Q_SLOTS:
             QVERIFY(algo != nullptr);
             QVERIFY(!algo->name().isEmpty());
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Registration edge case tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testRegister_emptyIdIgnored()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        int countBefore = registry->availableAlgorithms().size();
+
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        registry->registerAlgorithm(QString(), new TestAlgorithm());
+
+        // Should not register - count unchanged, no signal
+        QCOMPARE(registry->availableAlgorithms().size(), countBefore);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testRegister_nullptrIgnored()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        int countBefore = registry->availableAlgorithms().size();
+
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        registry->registerAlgorithm(QStringLiteral("test-null"), nullptr);
+
+        // Should not register
+        QCOMPARE(registry->availableAlgorithms().size(), countBefore);
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(!registry->hasAlgorithm(QStringLiteral("test-null")));
+    }
+
+    void testRegister_replacesExisting()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        const QString testId = QStringLiteral("test-replace");
+
+        // Register first algorithm
+        auto *algo1 = new TestAlgorithm(QStringLiteral("First"));
+        registry->registerAlgorithm(testId, algo1);
+        QVERIFY(registry->hasAlgorithm(testId));
+        QCOMPARE(registry->algorithm(testId)->name(), QStringLiteral("First"));
+
+        // Register replacement with same ID
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        auto *algo2 = new TestAlgorithm(QStringLiteral("Second"));
+        registry->registerAlgorithm(testId, algo2);
+
+        // Should replace - signal emitted, new algorithm returned
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), testId);
+        QCOMPARE(registry->algorithm(testId)->name(), QStringLiteral("Second"));
+
+        // Cleanup
+        registry->unregisterAlgorithm(testId);
+    }
+
+    void testRegister_signalEmitted()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        const QString testId = QStringLiteral("test-signal");
+
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
+        registry->registerAlgorithm(testId, new TestAlgorithm());
+
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), testId);
+
+        // Cleanup
+        registry->unregisterAlgorithm(testId);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Unregistration tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testUnregister_success()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        const QString testId = QStringLiteral("test-unregister");
+
+        // Register first
+        registry->registerAlgorithm(testId, new TestAlgorithm());
+        QVERIFY(registry->hasAlgorithm(testId));
+
+        // Unregister
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmUnregistered);
+        bool result = registry->unregisterAlgorithm(testId);
+
+        QVERIFY(result);
+        QVERIFY(!registry->hasAlgorithm(testId));
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), testId);
+    }
+
+    void testUnregister_nonexistentReturnsFalse()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+
+        QSignalSpy spy(registry, &AlgorithmRegistry::algorithmUnregistered);
+        bool result = registry->unregisterAlgorithm(QStringLiteral("nonexistent-id"));
+
+        QVERIFY(!result);
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testUnregister_removesFromOrder()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        const QString testId = QStringLiteral("test-order-remove");
+
+        registry->registerAlgorithm(testId, new TestAlgorithm());
+        QVERIFY(registry->availableAlgorithms().contains(testId));
+
+        registry->unregisterAlgorithm(testId);
+        QVERIFY(!registry->availableAlgorithms().contains(testId));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

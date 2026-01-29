@@ -34,9 +34,11 @@ class TilingAlgorithm;
  * }
  * @endcode
  *
- * @note Thread Safety: The registry is created on first access. After that,
- *       read operations (algorithm(), availableAlgorithms()) are thread-safe.
- *       Registration should only occur during initialization.
+ * @note Thread Safety: The singleton instance() method uses Meyer's singleton
+ *       pattern (C++11 static local), which is thread-safe. Read operations
+ *       (algorithm(), availableAlgorithms(), hasAlgorithm()) are thread-safe.
+ *       Registration/unregistration should only occur during initialization
+ *       or from the main thread.
  *
  * @see TilingAlgorithm for the algorithm interface
  * @see DBus::AutotileAlgorithm in constants.h for algorithm ID constants
@@ -44,6 +46,7 @@ class TilingAlgorithm;
 class PLASMAZONES_EXPORT AlgorithmRegistry : public QObject
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(AlgorithmRegistry)
 
 public:
     /**
@@ -87,7 +90,7 @@ public:
      *
      * @return List of algorithm IDs in registration order
      */
-    QStringList availableAlgorithms() const;
+    QStringList availableAlgorithms() const noexcept;
 
     /**
      * @brief Get all registered algorithm instances
@@ -102,14 +105,14 @@ public:
      * @param id Algorithm identifier
      * @return true if algorithm exists
      */
-    bool hasAlgorithm(const QString &id) const;
+    bool hasAlgorithm(const QString &id) const noexcept;
 
     /**
      * @brief Get the default algorithm ID
      *
      * @return "master-stack" (the traditional tiling WM default)
      */
-    static QString defaultAlgorithmId();
+    static QString defaultAlgorithmId() noexcept;
 
     /**
      * @brief Get the default algorithm instance
@@ -137,10 +140,6 @@ private:
     explicit AlgorithmRegistry(QObject *parent = nullptr);
     ~AlgorithmRegistry() override;
 
-    // Prevent copying
-    AlgorithmRegistry(const AlgorithmRegistry &) = delete;
-    AlgorithmRegistry &operator=(const AlgorithmRegistry &) = delete;
-
     /**
      * @brief Register all built-in algorithms
      *
@@ -148,10 +147,16 @@ private:
      */
     void registerBuiltInAlgorithms();
 
-    QHash<QString, TilingAlgorithm *> m_algorithms;
-    QStringList m_registrationOrder; // Preserve order for UI
+    /**
+     * @brief Find if an algorithm pointer is already registered
+     *
+     * @param algorithm Pointer to check
+     * @return ID of existing registration, or empty string if not found
+     */
+    QString findAlgorithmId(TilingAlgorithm *algorithm) const;
 
-    static AlgorithmRegistry *s_instance;
+    QHash<QString, TilingAlgorithm *> m_algorithms;
+    QStringList m_registrationOrder; ///< Preserve order for UI
 };
 
 } // namespace PlasmaZones

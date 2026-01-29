@@ -8,11 +8,11 @@
 #include "algorithms/BSPAlgorithm.h"
 #include "core/constants.h"
 
+#include <QDebug>
+
 namespace PlasmaZones {
 
 using namespace DBus::AutotileAlgorithm;
-
-AlgorithmRegistry *AlgorithmRegistry::s_instance = nullptr;
 
 AlgorithmRegistry::AlgorithmRegistry(QObject *parent)
     : QObject(parent)
@@ -22,17 +22,20 @@ AlgorithmRegistry::AlgorithmRegistry(QObject *parent)
 
 AlgorithmRegistry::~AlgorithmRegistry()
 {
-    // Algorithms are QObjects parented to this, so they'll be deleted automatically
-    // But clear the hash to be explicit
+    // Clear the hash first. The TilingAlgorithm objects are QObject children
+    // of this registry, so they will be deleted by ~QObject() after this
+    // destructor completes. We clear the hash to prevent any accidental
+    // access to stale pointers during destruction.
     m_algorithms.clear();
+    m_registrationOrder.clear();
 }
 
 AlgorithmRegistry *AlgorithmRegistry::instance()
 {
-    if (!s_instance) {
-        s_instance = new AlgorithmRegistry();
-    }
-    return s_instance;
+    // Meyer's singleton: C++11 guarantees thread-safe initialization
+    // of static local variables (§6.7 [stmt.dcl] p4)
+    static AlgorithmRegistry s_instance;
+    return &s_instance;
 }
 
 void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *algorithm)
@@ -41,11 +44,23 @@ void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *al
         return;
     }
 
-    // Remove existing algorithm with same ID
+    // Check if this algorithm pointer is already registered under a different ID
+    // to prevent double-free issues
+    const QString existingId = findAlgorithmId(algorithm);
+    if (!existingId.isEmpty() && existingId != id) {
+        qWarning() << "AlgorithmRegistry: algorithm" << algorithm->name()
+                   << "is already registered as" << existingId
+                   << "- cannot register as" << id;
+        return;
+    }
+
+    // Remove existing algorithm with same ID (replacement case)
     if (m_algorithms.contains(id)) {
         auto *old = m_algorithms.take(id);
         m_registrationOrder.removeOne(id);
-        delete old;
+        if (old != algorithm) {
+            delete old;
+        }
     }
 
     // Take ownership
@@ -54,6 +69,16 @@ void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *al
     m_registrationOrder.append(id);
 
     Q_EMIT algorithmRegistered(id);
+}
+
+QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm *algorithm) const
+{
+    for (auto it = m_algorithms.constBegin(); it != m_algorithms.constEnd(); ++it) {
+        if (it.value() == algorithm) {
+            return it.key();
+        }
+    }
+    return QString();
 }
 
 bool AlgorithmRegistry::unregisterAlgorithm(const QString &id)
@@ -75,7 +100,7 @@ TilingAlgorithm *AlgorithmRegistry::algorithm(const QString &id) const
     return m_algorithms.value(id, nullptr);
 }
 
-QStringList AlgorithmRegistry::availableAlgorithms() const
+QStringList AlgorithmRegistry::availableAlgorithms() const noexcept
 {
     return m_registrationOrder;
 }
@@ -92,12 +117,12 @@ QList<TilingAlgorithm *> AlgorithmRegistry::allAlgorithms() const
     return result;
 }
 
-bool AlgorithmRegistry::hasAlgorithm(const QString &id) const
+bool AlgorithmRegistry::hasAlgorithm(const QString &id) const noexcept
 {
     return m_algorithms.contains(id);
 }
 
-QString AlgorithmRegistry::defaultAlgorithmId()
+QString AlgorithmRegistry::defaultAlgorithmId() noexcept
 {
     return MasterStack;
 }
