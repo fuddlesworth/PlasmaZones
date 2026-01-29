@@ -31,6 +31,11 @@ class TilingState;
  * Optionally override capability methods to indicate support for:
  * - Master count adjustment
  * - Split ratio adjustment
+ *
+ * @note Thread Safety: Algorithm instances are stateless and all public methods
+ *       are const (except QObject infrastructure). Multiple threads can safely
+ *       call calculateZones() on the same instance concurrently. However, the
+ *       TilingState parameter must not be modified during the call.
  */
 class PLASMAZONES_EXPORT TilingAlgorithm : public QObject
 {
@@ -54,7 +59,7 @@ public:
      * @brief Human-readable name of the algorithm
      * @return Algorithm name (e.g., "Master + Stack", "BSP")
      */
-    virtual QString name() const = 0;
+    virtual QString name() const noexcept = 0;
 
     /**
      * @brief Description of the algorithm behavior
@@ -66,7 +71,7 @@ public:
      * @brief Icon name for UI display
      * @return KDE icon name (e.g., "view-grid-symbolic")
      */
-    virtual QString icon() const = 0;
+    virtual QString icon() const noexcept = 0;
 
     /**
      * @brief Calculate zone geometries for N windows
@@ -94,7 +99,7 @@ public:
      *
      * @return Master zone index (0-based), or -1 if no master concept
      */
-    virtual int masterZoneIndex() const;
+    virtual int masterZoneIndex() const noexcept;
 
     /**
      * @brief Check if algorithm supports variable master count
@@ -103,7 +108,7 @@ public:
      *
      * @return true if master count can be adjusted
      */
-    virtual bool supportsMasterCount() const;
+    virtual bool supportsMasterCount() const noexcept;
 
     /**
      * @brief Check if algorithm supports split ratio adjustment
@@ -112,7 +117,7 @@ public:
      *
      * @return true if split ratio can be adjusted
      */
-    virtual bool supportsSplitRatio() const;
+    virtual bool supportsSplitRatio() const noexcept;
 
     /**
      * @brief Get default split ratio for this algorithm
@@ -121,7 +126,7 @@ public:
      *
      * @return Default ratio (0.0-1.0), typically 0.5-0.6
      */
-    virtual qreal defaultSplitRatio() const;
+    virtual qreal defaultSplitRatio() const noexcept;
 
     /**
      * @brief Get minimum number of windows for meaningful tiling
@@ -131,7 +136,7 @@ public:
      *
      * @return Minimum window count (typically 1)
      */
-    virtual int minimumWindows() const;
+    virtual int minimumWindows() const noexcept;
 
     /**
      * @brief Apply gaps to zone geometries
@@ -145,6 +150,21 @@ public:
      * @param outerGap Gap at screen edges in pixels
      */
     static void applyGaps(QVector<QRect> &zones, const QRect &screenGeometry, int innerGap, int outerGap);
+
+protected:
+    /**
+     * @brief Distribute a total evenly among N parts with pixel-perfect remainder handling
+     *
+     * Helper for algorithms that need to divide screen space evenly. Distributes
+     * remainder pixels to the first parts to ensure the sum equals the total exactly.
+     *
+     * Example: distributeEvenly(100, 3) returns {34, 33, 33}
+     *
+     * @param total Total pixels to distribute
+     * @param count Number of parts to divide into (must be > 0)
+     * @return Vector of sizes, one per part
+     */
+    static QVector<int> distributeEvenly(int total, int count);
 
 Q_SIGNALS:
     /**

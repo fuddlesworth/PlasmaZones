@@ -155,6 +155,10 @@ constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
 constexpr int DefaultGap = 8;
 
+// Zone size constraints (pixels)
+constexpr int MinZoneSizePx = 50;       // Minimum zone size after gap application
+constexpr int GapEdgeThresholdPx = 5;   // Threshold for detecting screen edges in gap application
+
 // Active border bounds
 constexpr int MinBorderWidth = 0;
 constexpr int MaxBorderWidth = 10;
