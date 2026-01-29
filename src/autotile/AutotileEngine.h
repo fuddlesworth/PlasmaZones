@@ -9,7 +9,6 @@
 #include <QRect>
 #include <QString>
 #include <memory>
-#include <unordered_map>
 
 namespace PlasmaZones {
 
@@ -278,6 +277,17 @@ private:
     QString screenForWindow(const QString &windowId) const;
     QRect screenGeometry(const QString &screenName) const;
 
+    /**
+     * @brief Helper to retile a screen after a window operation
+     *
+     * Recalculates layout and applies tiling if enabled, then emits tilingChanged.
+     * Only emits signal if operationSucceeded is true.
+     *
+     * @param screenName Screen to retile
+     * @param operationSucceeded Whether the triggering operation actually changed something
+     */
+    void retileAfterOperation(const QString &screenName, bool operationSucceeded);
+
     LayoutManager *m_layoutManager = nullptr;
     WindowTrackingService *m_windowTracker = nullptr;
     ScreenManager *m_screenManager = nullptr;
@@ -285,8 +295,8 @@ private:
 
     bool m_enabled = false;
     QString m_algorithmId;
-    std::unordered_map<QString, std::unique_ptr<TilingState>> m_screenStates;
-    QHash<QString, QString> m_windowToScreen; // windowId -> screenName
+    QHash<QString, TilingState *> m_screenStates; // Owned via Qt parent (this)
+    QHash<QString, QString> m_windowToScreen;     // windowId -> screenName
 };
 
 } // namespace PlasmaZones
