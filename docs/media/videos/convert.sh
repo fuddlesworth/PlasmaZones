@@ -3,6 +3,12 @@
 
 INPUT="$1"
 OUTPUT="$(basename "${INPUT%.*}")"
-ffmpeg -i "${INPUT}" \
-        -vf "scale=800:-2" \
-        "${OUTPUT}-scaled.webm"
+#ffmpeg -i "${INPUT}" \
+#        -vf "scale=800:-2" \
+#        "${OUTPUT}-scaled.webm"
+
+ffmpeg -i "${OUTPUT}.webm" \
+        -c:v "libx264" \
+        -c:a aac \
+        -movflags faststart \
+        "${OUTPUT}.mp4"

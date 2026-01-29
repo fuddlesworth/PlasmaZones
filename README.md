@@ -8,9 +8,9 @@
 
 Define zones on your screen. Drag windows into them. Done.
 
-<!-- TODO: Hero WebM showing drag-and-snap workflow -->
-<!-- <video src="docs/media/videos/hero.webm" controls muted loop width="800"></video> -->
-*[Hero WebM placeholder - drag window → zones appear → snap]*
+<!-- TODO: Hero MP4 showing drag-and-snap workflow -->
+<!-- <video src="docs/media/videos/hero.mp4" controls muted loop width="800"></video> -->
+*[Hero MP4 placeholder - drag window → zones appear → snap]*
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
 [![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-blue.svg)](https://kde.org/plasma-desktop/)
@@ -23,7 +23,7 @@ Define zones on your screen. Drag windows into them. Done.
 
 Hold **Alt** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
-<video src="docs/media/videos/drag-snap.webm" controls muted loop width="800" title="Drag and snap: window dragged with zones highlighted"></video>
+<video src="docs/media/videos/drag-snap.mp4" controls muted loop width="800" title="Drag and snap: window dragged with zones highlighted"></video>
 
 ---
 
@@ -77,9 +77,9 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Restore original size on unsnap
 - Per-window floating toggle
 
-<!-- TODO: WebM showing keyboard navigation between zones -->
-<!-- <video src="docs/media/videos/keyboard-nav.webm" controls muted loop width="800"></video> -->
-*[WebM placeholder - moving window between zones with Meta+Alt+Arrows]*
+<!-- TODO: MP4 showing keyboard navigation between zones -->
+<!-- <video src="docs/media/videos/keyboard-nav.mp4" controls muted loop width="800"></video> -->
+*[MP4 placeholder - moving window between zones with Meta+Alt+Arrows]*
 
 ### Layout Editor
 
@@ -89,7 +89,7 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Grid and edge snapping
 - Per-zone colors and styling
 
-<video src="docs/media/videos/editor.webm" controls muted loop width="800" title="Layout editor with zones being drawn"></video>
+<video src="docs/media/videos/editor.mp4" controls muted loop width="800" title="Layout editor with zones being drawn"></video>
 
 ### Shader Effects
 
@@ -108,7 +108,7 @@ GPU-accelerated zone overlays with 8 built-in effects:
 
 ![Shader Effects](docs/media/screenshots/shaders-gallery.png)
 
-<video src="docs/media/videos/shaders.webm" controls muted loop width="800" title="Shader effects showcase"></video>
+<video src="docs/media/videos/shaders.mp4" controls muted loop width="800" title="Shader effects showcase"></video>
 
 Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
@@ -116,7 +116,7 @@ Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
 Drag to screen edge to reveal a layout picker. Choose any layout and zone without cycling.
 
-<video src="docs/media/videos/zone-selector.webm" controls muted loop width="800" title="Zone selector: drag to edge → pick layout and zone"></video>
+<video src="docs/media/videos/zone-selector.mp4" controls muted loop width="800" title="Zone selector: drag to edge → pick layout and zone"></video>
 
 ### Visual Layout OSD
 
@@ -124,7 +124,7 @@ See a preview of the layout when switching, not just text.
 
 ![Layout OSD](docs/media/screenshots/layout-osd.png)
 
-<video src="docs/media/videos/layout-switch.webm" controls muted loop width="800" title="Cycling layouts with OSD feedback"></video>
+<video src="docs/media/videos/layout-switch.mp4" controls muted loop width="800" title="Cycling layouts with OSD feedback"></video>
 
 ### Multi-Monitor & Virtual Desktops
 
