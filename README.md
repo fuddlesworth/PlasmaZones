@@ -166,11 +166,21 @@ cmake --build . -j$(nproc)
 sudo cmake --install .
 ```
 
+**Important:** After installation, refresh the KDE service cache:
+
+```bash
+kbuildsycoca6 --noincremental
+```
+
+Or log out and back in. This makes the settings module visible in System Settings.
+
 Enable the daemon:
 
 ```bash
 systemctl --user enable --now plasmazones.service
 ```
+
+**Settings location:** System Settings → **Window Management** → PlasmaZones
 
 ### Local Install (No Root)
 
@@ -178,6 +188,21 @@ systemctl --user enable --now plasmazones.service
 cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$HOME/.local
 cmake --build . -j$(nproc)
 cmake --install .
+```
+
+**Required for local installs:** Add these to your `~/.bashrc` or `~/.zshrc`:
+
+```bash
+export QT_PLUGIN_PATH=$HOME/.local/lib/qt6/plugins:$QT_PLUGIN_PATH
+export QML2_IMPORT_PATH=$HOME/.local/lib/qt6/qml:$QML2_IMPORT_PATH
+export XDG_DATA_DIRS=$HOME/.local/share:$XDG_DATA_DIRS
+```
+
+Then reload your shell and refresh the cache:
+
+```bash
+source ~/.bashrc  # or ~/.zshrc
+kbuildsycoca6 --noincremental
 systemctl --user enable --now plasmazones.service
 ```
 
@@ -185,12 +210,14 @@ systemctl --user enable --now plasmazones.service
 
 ## Quick Start
 
-1. Open **System Settings → PlasmaZones**
+1. Open **System Settings → Window Management → PlasmaZones**
 2. Enable the daemon (or run `systemctl --user enable --now plasmazones.service`)
 3. Click **Open Editor** to create a layout
 4. Draw zones or pick a template
 5. Save with **Ctrl+S**
 6. **Drag any window while holding Alt** - zones appear, drop to snap
+
+> **Can't find PlasmaZones in System Settings?** See [Troubleshooting](#troubleshooting) below.
 
 ---
 
@@ -262,13 +289,81 @@ All shortcuts configurable in System Settings → Shortcuts → PlasmaZones.
 
 ## Configuration
 
-Settings available in **System Settings → PlasmaZones** or via:
+Settings available in **System Settings → Window Management → PlasmaZones** or directly via:
 
 ```bash
 systemsettings kcm_plasmazones
 ```
 
 Layouts stored as JSON in `~/.local/share/plasmazones/layouts/`.
+
+---
+
+## Troubleshooting
+
+### PlasmaZones not appearing in System Settings
+
+After installing from source, you must refresh the KDE service cache:
+
+```bash
+kbuildsycoca6 --noincremental
+```
+
+Or simply log out and back in.
+
+**Verify installation:**
+
+```bash
+# Check if KCM is registered
+kcmshell6 --list | grep plasmazones
+
+# Should output:
+# kcm_plasmazones - Configure window zone snapping
+```
+
+If the KCM is registered but not visible in System Settings, try:
+
+```bash
+# Open directly
+systemsettings kcm_plasmazones
+```
+
+### Local install (`~/.local`) not working
+
+For local installs, KDE needs to know where to find the plugins. Add to `~/.bashrc` or `~/.zshrc`:
+
+```bash
+export QT_PLUGIN_PATH=$HOME/.local/lib/qt6/plugins:$QT_PLUGIN_PATH
+export QML2_IMPORT_PATH=$HOME/.local/lib/qt6/qml:$QML2_IMPORT_PATH
+export XDG_DATA_DIRS=$HOME/.local/share:$XDG_DATA_DIRS
+```
+
+Then:
+
+```bash
+source ~/.bashrc  # reload shell config
+kbuildsycoca6 --noincremental
+```
+
+### Daemon not starting
+
+```bash
+# Check status
+systemctl --user status plasmazones.service
+
+# View logs
+journalctl --user -u plasmazones.service -f
+
+# Restart
+systemctl --user restart plasmazones.service
+```
+
+### Zones not appearing when dragging
+
+1. Ensure daemon is running: `systemctl --user status plasmazones.service`
+2. Check drag modifier in settings (default: Alt)
+3. Verify you have at least one layout with zones
+4. Check if the application is excluded in settings
 
 ### D-Bus API
 
