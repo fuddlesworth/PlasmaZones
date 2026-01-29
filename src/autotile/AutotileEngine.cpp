@@ -15,6 +15,7 @@
 #include "core/constants.h"
 #include "core/layout.h"
 #include "core/layoutmanager.h"
+#include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/windowtrackingservice.h"
 #include "core/zone.h"
@@ -210,14 +211,26 @@ void AutotileEngine::syncFromSettings(Settings *settings)
     // Set enabled state last (may trigger tiling)
     setEnabled(settings->autotileEnabled());
 
-    qDebug() << "AutotileEngine: Settings synced - enabled:" << settings->autotileEnabled()
-             << "algorithm:" << settings->autotileAlgorithm();
+    qCInfo(lcAutotile) << "Settings synced - enabled:" << settings->autotileEnabled()
+                       << "algorithm:" << settings->autotileAlgorithm();
 }
 
 void AutotileEngine::connectToSettings(Settings *settings)
 {
     if (!settings) {
         return;
+    }
+
+    // Guard against double-connection
+    if (m_settings == settings) {
+        qCDebug(lcAutotile) << "Already connected to settings, skipping";
+        return;
+    }
+
+    // Disconnect from previous settings if any
+    if (m_settings) {
+        disconnect(m_settings, nullptr, this, nullptr);
+        qCDebug(lcAutotile) << "Disconnected from previous settings";
     }
 
     m_settings = settings;
@@ -305,7 +318,7 @@ void AutotileEngine::processSettingsRetile()
     // Only retile if autotiling is enabled
     if (m_enabled) {
         retile();
-        qDebug() << "AutotileEngine: Settings changed - retiled windows";
+        qCDebug(lcAutotile) << "Settings changed - retiled windows";
     }
 }
 
