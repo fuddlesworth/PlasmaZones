@@ -1,0 +1,191 @@
+# PlasmaZones Comprehensive Uninstall Script
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# This script removes all installed files under the install prefix (e.g. /usr):
+# - Files from install manifest
+# - All known install locations (bin, lib, share, plugins, etc.)
+# - Empty parent directories, icon/desktop/ldconfig/KDE caches
+
+cmake_policy(VERSION 3.16)
+
+message(STATUS "")
+message(STATUS "═══════════════════════════════════════════════════════════════")
+message(STATUS "  PlasmaZones Uninstaller")
+message(STATUS "═══════════════════════════════════════════════════════════════")
+message(STATUS "")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 1: Remove files from install manifest (standard behavior)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(EXISTS "@CMAKE_BINARY_DIR@/install_manifest.txt")
+    message(STATUS "[1/5] Removing installed files from manifest...")
+    file(READ "@CMAKE_BINARY_DIR@/install_manifest.txt" files)
+    string(REGEX REPLACE "\n" ";" files "${files}")
+    foreach(file ${files})
+        message(STATUS "  Removing: $ENV{DESTDIR}${file}")
+        if(IS_SYMLINK "$ENV{DESTDIR}${file}" OR EXISTS "$ENV{DESTDIR}${file}")
+            execute_process(
+                COMMAND "@CMAKE_COMMAND@" -E remove "$ENV{DESTDIR}${file}"
+                RESULT_VARIABLE rm_retval
+            )
+            if(NOT "${rm_retval}" STREQUAL 0)
+                message(WARNING "  Problem removing: $ENV{DESTDIR}${file}")
+            endif()
+        endif()
+    endforeach()
+else()
+    message(STATUS "[1/5] No install manifest found, using known paths only")
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 2: Remove all known PlasmaZones files (full /usr prefix coverage)
+# Covers: bin, lib, share/applications, share/autostart, share/dbus-1/interfaces,
+# share/config.kcfg, share/icons, share/plasmazones, lib/.../qml, lib/.../plugins
+# ═══════════════════════════════════════════════════════════════════════════════
+
+message(STATUS "")
+message(STATUS "[2/5] Removing all known PlasmaZones files and directories...")
+
+set(KNOWN_FILES
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazonesd"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-editor"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_AUTOSTARTDIR@/org.plasmazones.daemon.desktop"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_KCFGDIR@/plasmazones.kcfg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones-editor.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects/plugins/kwin_effect_plasmazones.so"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kcm_plasmazones.so"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones.so"
+)
+
+foreach(f ${KNOWN_FILES})
+    if(EXISTS "${f}" OR IS_SYMLINK "${f}")
+        message(STATUS "  Removing: ${f}")
+        execute_process(COMMAND "@CMAKE_COMMAND@" -E remove "${f}" ERROR_QUIET)
+    endif()
+endforeach()
+
+# Core library (libplasmazones_core.so, .so.1, .so.1.0, etc.)
+file(GLOB CORE_LIBS "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/libplasmazones_core.so*")
+foreach(f ${CORE_LIBS})
+    message(STATUS "  Removing: ${f}")
+    execute_process(COMMAND "@CMAKE_COMMAND@" -E remove "${f}" ERROR_QUIET)
+endforeach()
+
+# Known directories (entire trees)
+set(KNOWN_DIRS
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DATADIR@/plasmazones"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/kde/kcms/plasmazones"
+)
+
+foreach(dir ${KNOWN_DIRS})
+    if(EXISTS "${dir}")
+        message(STATUS "  Removing directory: ${dir}")
+        execute_process(
+            COMMAND "@CMAKE_COMMAND@" -E remove_directory "${dir}"
+            RESULT_VARIABLE rm_retval
+        )
+        if(NOT "${rm_retval}" STREQUAL 0)
+            message(WARNING "  Problem removing directory: ${dir}")
+        endif()
+    endif()
+endforeach()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 3: Clean up empty parent directories
+# ═══════════════════════════════════════════════════════════════════════════════
+
+message(STATUS "")
+message(STATUS "[3/5] Removing empty parent directories...")
+
+set(PARENT_DIRS
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/kde/kcms"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org/kde"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_QMLDIR@/org"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects/plugins"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma"
+)
+
+foreach(dir ${PARENT_DIRS})
+    if(IS_DIRECTORY "${dir}")
+        file(GLOB dir_contents "${dir}/*")
+        list(LENGTH dir_contents num_files)
+        if(num_files EQUAL 0)
+            message(STATUS "  Removing empty parent: ${dir}")
+            execute_process(COMMAND "@CMAKE_COMMAND@" -E remove_directory "${dir}" ERROR_QUIET)
+        endif()
+    endif()
+endforeach()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 4: Update system caches
+# ═══════════════════════════════════════════════════════════════════════════════
+
+message(STATUS "")
+message(STATUS "[4/5] Updating system caches...")
+
+# Update icon cache
+find_program(GTK_UPDATE_ICON_CACHE gtk-update-icon-cache)
+if(GTK_UPDATE_ICON_CACHE)
+    message(STATUS "  Updating icon cache...")
+    execute_process(
+        COMMAND "${GTK_UPDATE_ICON_CACHE}" -f -t "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor"
+        ERROR_QUIET
+    )
+endif()
+
+# Update desktop database
+find_program(UPDATE_DESKTOP_DATABASE update-desktop-database)
+if(UPDATE_DESKTOP_DATABASE)
+    message(STATUS "  Updating desktop database...")
+    execute_process(
+        COMMAND "${UPDATE_DESKTOP_DATABASE}" "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@"
+        ERROR_QUIET
+    )
+endif()
+
+# Update shared library cache (only if not using DESTDIR)
+if(NOT DEFINED ENV{DESTDIR} OR "$ENV{DESTDIR}" STREQUAL "")
+    find_program(LDCONFIG ldconfig)
+    if(LDCONFIG)
+        message(STATUS "  Updating library cache...")
+        execute_process(COMMAND "${LDCONFIG}" ERROR_QUIET)
+    endif()
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Step 5: Clean up KDE/KWin caches
+# ═══════════════════════════════════════════════════════════════════════════════
+
+message(STATUS "")
+message(STATUS "[5/5] Cleaning up KDE caches...")
+
+# Find kbuildsycoca6 to rebuild system configuration cache
+find_program(KBUILDSYCOCA kbuildsycoca6)
+if(KBUILDSYCOCA AND NOT DEFINED ENV{DESTDIR})
+    message(STATUS "  Rebuilding KDE system configuration cache...")
+    execute_process(COMMAND "${KBUILDSYCOCA}" --noincremental ERROR_QUIET)
+endif()
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Done
+# ═══════════════════════════════════════════════════════════════════════════════
+
+message(STATUS "")
+message(STATUS "═══════════════════════════════════════════════════════════════")
+message(STATUS "  Uninstall complete!")
+message(STATUS "═══════════════════════════════════════════════════════════════")
+message(STATUS "")
+message(STATUS "Post-uninstall steps (if PlasmaZones was running):")
+message(STATUS "  1. Log out and log back in, OR")
+message(STATUS "  2. Run: qdbus6 org.kde.KWin /KWin reconfigure")
+message(STATUS "  3. Run: kquitapp6 plasmazonesd (if daemon is still running)")
+message(STATUS "")
