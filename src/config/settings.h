@@ -232,6 +232,16 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
     Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY autotileInsertPositionChanged)
 
+    // Additional Autotiling Settings (focus, visual feedback, monocle mode)
+    Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY autotileFocusFollowsMouseChanged)
+    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY autotileRespectMinimumSizeChanged)
+    Q_PROPERTY(bool autotileShowActiveBorder READ autotileShowActiveBorder WRITE setAutotileShowActiveBorder NOTIFY autotileShowActiveBorderChanged)
+    Q_PROPERTY(int autotileActiveBorderWidth READ autotileActiveBorderWidth WRITE setAutotileActiveBorderWidth NOTIFY autotileActiveBorderWidthChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColor READ autotileUseSystemBorderColor WRITE setAutotileUseSystemBorderColor NOTIFY autotileUseSystemBorderColorChanged)
+    Q_PROPERTY(QColor autotileActiveBorderColor READ autotileActiveBorderColor WRITE setAutotileActiveBorderColor NOTIFY autotileActiveBorderColorChanged)
+    Q_PROPERTY(bool autotileMonocleHideOthers READ autotileMonocleHideOthers WRITE setAutotileMonocleHideOthers NOTIFY autotileMonocleHideOthersChanged)
+    Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY autotileMonocleShowTabsChanged)
+
     // Autotiling Keyboard Shortcuts (Bismuth-compatible)
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
     Q_PROPERTY(QString autotileCycleAlgorithmShortcut READ autotileCycleAlgorithmShortcut WRITE setAutotileCycleAlgorithmShortcut NOTIFY autotileCycleAlgorithmShortcutChanged)
@@ -863,6 +873,31 @@ public:
     QString autotileRetileShortcut() const { return m_autotileRetileShortcut; }
     void setAutotileRetileShortcut(const QString& shortcut);
 
+    // Additional Autotiling Settings
+    bool autotileFocusFollowsMouse() const { return m_autotileFocusFollowsMouse; }
+    void setAutotileFocusFollowsMouse(bool focus);
+
+    bool autotileRespectMinimumSize() const { return m_autotileRespectMinimumSize; }
+    void setAutotileRespectMinimumSize(bool respect);
+
+    bool autotileShowActiveBorder() const { return m_autotileShowActiveBorder; }
+    void setAutotileShowActiveBorder(bool show);
+
+    int autotileActiveBorderWidth() const { return m_autotileActiveBorderWidth; }
+    void setAutotileActiveBorderWidth(int width);
+
+    bool autotileUseSystemBorderColor() const { return m_autotileUseSystemBorderColor; }
+    void setAutotileUseSystemBorderColor(bool use);
+
+    QColor autotileActiveBorderColor() const { return m_autotileActiveBorderColor; }
+    void setAutotileActiveBorderColor(const QColor& color);
+
+    bool autotileMonocleHideOthers() const { return m_autotileMonocleHideOthers; }
+    void setAutotileMonocleHideOthers(bool hide);
+
+    bool autotileMonocleShowTabs() const { return m_autotileMonocleShowTabs; }
+    void setAutotileMonocleShowTabs(bool show);
+
     // Persistence
     void load() override;
     void save() override;
@@ -1010,6 +1045,16 @@ private:
     bool m_autotileFocusNewWindows = true;
     bool m_autotileSmartGaps = true;
     AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
+
+    // Additional Autotiling Settings
+    bool m_autotileFocusFollowsMouse = false;
+    bool m_autotileRespectMinimumSize = false;
+    bool m_autotileShowActiveBorder = true;
+    int m_autotileActiveBorderWidth = 2;
+    bool m_autotileUseSystemBorderColor = true;
+    QColor m_autotileActiveBorderColor = Defaults::HighlightColor; // Initialized from system in load()
+    bool m_autotileMonocleHideOthers = false;
+    bool m_autotileMonocleShowTabs = true;
 
     // Autotiling Keyboard Shortcuts (Bismuth-compatible defaults)
     QString m_autotileToggleShortcut = QStringLiteral("Meta+T");

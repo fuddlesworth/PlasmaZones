@@ -205,6 +205,21 @@ void AutotileEngine::syncFromSettings(Settings *settings)
     m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
         settings->autotileInsertPositionInt());
 
+    // Additional settings
+    m_config->focusFollowsMouse = settings->autotileFocusFollowsMouse();
+    m_config->respectMinimumSize = settings->autotileRespectMinimumSize();
+    m_config->showActiveBorder = settings->autotileShowActiveBorder();
+    m_config->activeBorderWidth = settings->autotileActiveBorderWidth();
+    m_config->monocleHideOthers = settings->autotileMonocleHideOthers();
+    m_config->monocleShowTabs = settings->autotileMonocleShowTabs();
+
+    // Active border color: use system highlight color if enabled, else custom color
+    if (settings->autotileUseSystemBorderColor()) {
+        m_config->activeBorderColor = settings->highlightColor();
+    } else {
+        m_config->activeBorderColor = settings->autotileActiveBorderColor();
+    }
+
     // Set algorithm on engine (handles registry lookup)
     setAlgorithm(settings->autotileAlgorithm());
 
@@ -297,6 +312,68 @@ void AutotileEngine::connectToSettings(Settings *settings)
         if (m_settings) {
             m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
                 m_settings->autotileInsertPositionInt());
+        }
+    });
+
+    // Additional settings that don't require retile
+    connect(settings, &Settings::autotileFocusFollowsMouseChanged, this, [this]() {
+        if (m_settings) {
+            m_config->focusFollowsMouse = m_settings->autotileFocusFollowsMouse();
+        }
+    });
+
+    connect(settings, &Settings::autotileRespectMinimumSizeChanged, this, [this]() {
+        if (m_settings) {
+            m_config->respectMinimumSize = m_settings->autotileRespectMinimumSize();
+            scheduleSettingsRetile(); // May affect layout calculations
+        }
+    });
+
+    connect(settings, &Settings::autotileShowActiveBorderChanged, this, [this]() {
+        if (m_settings) {
+            m_config->showActiveBorder = m_settings->autotileShowActiveBorder();
+        }
+    });
+
+    connect(settings, &Settings::autotileActiveBorderWidthChanged, this, [this]() {
+        if (m_settings) {
+            m_config->activeBorderWidth = m_settings->autotileActiveBorderWidth();
+        }
+    });
+
+    connect(settings, &Settings::autotileUseSystemBorderColorChanged, this, [this]() {
+        if (m_settings) {
+            // Re-apply border color based on setting
+            if (m_settings->autotileUseSystemBorderColor()) {
+                m_config->activeBorderColor = m_settings->highlightColor();
+            } else {
+                m_config->activeBorderColor = m_settings->autotileActiveBorderColor();
+            }
+        }
+    });
+
+    connect(settings, &Settings::autotileActiveBorderColorChanged, this, [this]() {
+        if (m_settings && !m_settings->autotileUseSystemBorderColor()) {
+            m_config->activeBorderColor = m_settings->autotileActiveBorderColor();
+        }
+    });
+
+    // Also update border color when system highlight changes (if using system color)
+    connect(settings, &Settings::highlightColorChanged, this, [this]() {
+        if (m_settings && m_settings->autotileUseSystemBorderColor()) {
+            m_config->activeBorderColor = m_settings->highlightColor();
+        }
+    });
+
+    connect(settings, &Settings::autotileMonocleHideOthersChanged, this, [this]() {
+        if (m_settings) {
+            m_config->monocleHideOthers = m_settings->autotileMonocleHideOthers();
+        }
+    });
+
+    connect(settings, &Settings::autotileMonocleShowTabsChanged, this, [this]() {
+        if (m_settings) {
+            m_config->monocleShowTabs = m_settings->autotileMonocleShowTabs();
         }
     });
 }
