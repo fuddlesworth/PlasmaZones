@@ -25,48 +25,6 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ---
 
-## Why PlasmaZones?
-
-There are several window tiling options for KDE Plasma. Here's how PlasmaZones compares:
-
-<p align="center">
-
-| Feature | PlasmaZones | KZones | MouseTiler | Polonium | Built-in Plasma |
-|---------|:-----------:|:------:|:----------:|:--------:|:---------------:|
-| Multiple saved layouts | ✅ | ✅ (JSON) | ❌ | ❌ | ❌ |
-| Visual layout editor | ✅ | ❌ | ❌ | ❌ | ✅ (Meta+T) |
-| GPU shader effects | ✅ (10+) | ❌ | ❌ | ❌ | ❌ |
-| Full KCM integration | ✅ | ❌ | ❌ | ❌ | Partial |
-| Per-virtual-desktop layouts | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Per-activity layouts | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Window session persistence | ✅ | ❌ | ❌* | ❌ | ❌ |
-| Visual layout OSD | ✅ | OSD text | ❌ | ❌ | ❌ |
-| Multi-zone spanning | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Keyboard navigation | ✅ | ✅ (14+) | Basic | ✅ | ✅ (6.3+) |
-| Quick layout slots (1-9) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| D-Bus API | ✅ (80+) | ❌ | ❌ | ❌ | ❌ |
-| Multi-monitor | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Native C++ performance | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Touch/stylus support | ❌ | ❌ | ✅ | ❌ | ❌ |
-| Zone overlay | ✅ | ✅ | ✅ | ❌ | ✅ (Shift+drag) |
-| Zone selector widget | ✅ | ✅ | ❌ | ❌ | ❌ |
-
-</p>
-
-*MouseTiler works with separate "Remember Window Positions" script for persistence
-
-### Key Advantages
-
-**vs KZones** — PlasmaZones is a native KWin effect (C++), not a JavaScript script. This means better performance, GPU-accelerated visuals, and deeper system integration. KZones requires manual JSON editing for layouts; PlasmaZones has a full visual editor. PlasmaZones also offers session persistence (windows restore to their zones after reboot), per-desktop layouts, and a complete D-Bus API.
-
-**vs MouseTiler** — MouseTiler uses dynamic mouse-based tiling without predefined zones. PlasmaZones uses fixed zone layouts that you design once and reuse. MouseTiler is great for quick ad-hoc arrangements; PlasmaZones is better for consistent, repeatable workflows. MouseTiler has touch/stylus support; PlasmaZones has visual polish and advanced features.
-
-**vs Polonium/Bismuth** — These are *automatic* tiling managers (like i3). PlasmaZones is *manual* zone-based snapping (like FancyZones). Different philosophies for different workflows. If you want windows to auto-arrange, use Polonium. If you want to define zones and drag windows into them, use PlasmaZones.
-
-**vs Built-in Plasma Tiling** — Plasma 5.27+ introduced a visual tiling editor (Meta+T) with Shift+drag snapping. However, it only supports one layout per screen with no way to save/switch between multiple layouts. It also lacks window session persistence (windows don't restore to zones after reboot), per-desktop layouts, shader effects, and a zone selector. PlasmaZones fills these gaps while integrating seamlessly with the Plasma experience.
-
----
-
 ## Features
 
 ### Window Snapping
