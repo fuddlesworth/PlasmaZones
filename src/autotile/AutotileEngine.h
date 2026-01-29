@@ -175,6 +175,14 @@ public:
      */
     Q_INVOKABLE void demoteFromMaster(const QString &windowId);
 
+    /**
+     * @brief Swap the currently focused window with the master window
+     *
+     * Convenience method that promotes the focused window to master position.
+     * If the focused window is already master, this is a no-op.
+     */
+    Q_INVOKABLE void swapFocusedWithMaster();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Focus/window cycling
     // ═══════════════════════════════════════════════════════════════════════════

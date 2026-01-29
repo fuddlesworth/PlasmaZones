@@ -492,6 +492,89 @@ void Daemon::start()
         m_windowTrackingAdaptor->cycleWindowsInZone(forward);
     });
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Phase 3.1: Autotile shortcut connections
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Toggle autotiling on/off
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleAutotileRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->setEnabled(!m_autotileEngine->isEnabled());
+            qCInfo(lcDaemon) << "Autotiling toggled:" << m_autotileEngine->isEnabled();
+        }
+    });
+
+    // Cycle through tiling algorithms
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleAlgorithmRequested, this, [this]() {
+        if (m_autotileEngine) {
+            // Get list of available algorithms and cycle to next one
+            static const QStringList algorithms = {
+                QStringLiteral("master-stack"),
+                QStringLiteral("columns"),
+                QStringLiteral("rows"),
+                QStringLiteral("bsp"),
+                QStringLiteral("fibonacci"),
+                QStringLiteral("monocle"),
+                QStringLiteral("three-column")
+            };
+            QString current = m_autotileEngine->algorithm();
+            int index = algorithms.indexOf(current);
+            int nextIndex = (index + 1) % algorithms.size();
+            m_autotileEngine->setAlgorithm(algorithms[nextIndex]);
+            qCInfo(lcDaemon) << "Algorithm cycled to:" << algorithms[nextIndex];
+        }
+    });
+
+    // Focus master window
+    connect(m_shortcutManager.get(), &ShortcutManager::focusMasterRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->focusMaster();
+        }
+    });
+
+    // Swap focused window with master
+    connect(m_shortcutManager.get(), &ShortcutManager::swapMasterRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->swapFocusedWithMaster();
+        }
+    });
+
+    // Increase master area ratio
+    connect(m_shortcutManager.get(), &ShortcutManager::incMasterRatioRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->increaseMasterRatio();
+        }
+    });
+
+    // Decrease master area ratio
+    connect(m_shortcutManager.get(), &ShortcutManager::decMasterRatioRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->decreaseMasterRatio();
+        }
+    });
+
+    // Increase master window count
+    connect(m_shortcutManager.get(), &ShortcutManager::incMasterCountRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->increaseMasterCount();
+        }
+    });
+
+    // Decrease master window count
+    connect(m_shortcutManager.get(), &ShortcutManager::decMasterCountRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->decreaseMasterCount();
+        }
+    });
+
+    // Force retile all windows
+    connect(m_shortcutManager.get(), &ShortcutManager::retileRequested, this, [this]() {
+        if (m_autotileEngine) {
+            m_autotileEngine->retile();
+            qCInfo(lcDaemon) << "Manual retile triggered";
+        }
+    });
+
     // Connect navigation feedback signal to show OSD (Qt signal from WindowTrackingAdaptor)
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
             [this](bool success, const QString& action, const QString& reason) {

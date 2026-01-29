@@ -267,6 +267,26 @@ void AutotileEngine::demoteFromMaster(const QString &windowId)
     retileAfterOperation(screenName, demoted);
 }
 
+void AutotileEngine::swapFocusedWithMaster()
+{
+    // Find the screen with a focused window
+    QString screenName;
+    TilingState *state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.isEmpty() || !state) {
+        return;
+    }
+
+    const QString focused = state->focusedWindow();
+    if (focused.isEmpty()) {
+        return;
+    }
+
+    // Promote the focused window to master position
+    promoteToMaster(focused);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Focus/window cycling
 // ═══════════════════════════════════════════════════════════════════════════════
