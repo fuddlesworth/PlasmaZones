@@ -273,30 +273,16 @@ void AutotileEngine::demoteFromMaster(const QString &windowId)
 
 void AutotileEngine::focusNext()
 {
-    // Get currently focused window's screen
-    // TODO: Get focused window from WindowTrackingService when API is added
-    const QString focused = QString(); // Placeholder until WindowTrackingService supports focusedWindow()
-    if (focused.isEmpty()) {
-        return;
-    }
-
-    const QString screenName = m_windowToScreen.value(focused);
-    if (screenName.isEmpty()) {
-        return;
-    }
-
-    TilingState *state = stateForScreen(screenName);
-    if (!state) {
-        return;
-    }
-
-    const QStringList windows = state->tiledWindows();
+    QString screenName;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName);
     if (windows.isEmpty()) {
         return;
     }
 
-    int currentIndex = windows.indexOf(focused);
-    int nextIndex = (currentIndex + 1) % windows.size();
+    // TODO: Get focused window from WindowTrackingService when API is added
+    const QString focused = QString(); // Placeholder
+    const int currentIndex = windows.indexOf(focused);
+    const int nextIndex = (currentIndex + 1) % windows.size();
 
     // TODO: Actually focus the window via KWin script or D-Bus
     Q_UNUSED(nextIndex)
@@ -304,29 +290,16 @@ void AutotileEngine::focusNext()
 
 void AutotileEngine::focusPrevious()
 {
-    // TODO: Get focused window from WindowTrackingService when API is added
-    const QString focused = QString(); // Placeholder until WindowTrackingService supports focusedWindow()
-    if (focused.isEmpty()) {
-        return;
-    }
-
-    const QString screenName = m_windowToScreen.value(focused);
-    if (screenName.isEmpty()) {
-        return;
-    }
-
-    TilingState *state = stateForScreen(screenName);
-    if (!state) {
-        return;
-    }
-
-    const QStringList windows = state->tiledWindows();
+    QString screenName;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName);
     if (windows.isEmpty()) {
         return;
     }
 
-    int currentIndex = windows.indexOf(focused);
-    int prevIndex = (currentIndex - 1 + windows.size()) % windows.size();
+    // TODO: Get focused window from WindowTrackingService when API is added
+    const QString focused = QString(); // Placeholder
+    const int currentIndex = windows.indexOf(focused);
+    const int prevIndex = (currentIndex - 1 + windows.size()) % windows.size();
 
     // TODO: Actually focus the window via KWin script or D-Bus
     Q_UNUSED(prevIndex)
@@ -334,25 +307,14 @@ void AutotileEngine::focusPrevious()
 
 void AutotileEngine::focusMaster()
 {
-    // Focus the first window in the tiling order (master)
-    // TODO: Get focused window from WindowTrackingService when API is added
-    const QString focused = QString(); // Placeholder until WindowTrackingService supports focusedWindow()
-    const QString screenName = focused.isEmpty() ? QString() : m_windowToScreen.value(focused);
-
-    if (screenName.isEmpty()) {
+    QString screenName;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName);
+    if (windows.isEmpty()) {
         return;
     }
 
-    TilingState *state = stateForScreen(screenName);
-    if (!state) {
-        return;
-    }
-
-    const QStringList windows = state->tiledWindows();
-    if (!windows.isEmpty()) {
-        // TODO: Actually focus the window via KWin script or D-Bus
-        Q_UNUSED(windows.first())
-    }
+    // TODO: Actually focus the master window via KWin script or D-Bus
+    Q_UNUSED(windows.first())
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -361,17 +323,10 @@ void AutotileEngine::focusMaster()
 
 void AutotileEngine::increaseMasterRatio(qreal delta)
 {
-    // Adjust for all screens (or could be per-focused-screen)
-    for (TilingState *state : m_screenStates) {
-        if (state) {
-            // setSplitRatio handles clamping internally
-            state->setSplitRatio(state->splitRatio() + delta);
-        }
-    }
-
-    if (m_enabled) {
-        retile();
-    }
+    applyToAllStates([delta](TilingState *state) {
+        // setSplitRatio handles clamping internally
+        state->setSplitRatio(state->splitRatio() + delta);
+    });
 }
 
 void AutotileEngine::decreaseMasterRatio(qreal delta)
@@ -385,28 +340,18 @@ void AutotileEngine::decreaseMasterRatio(qreal delta)
 
 void AutotileEngine::increaseMasterCount()
 {
-    for (TilingState *state : m_screenStates) {
-        if (state) {
-            state->setMasterCount(state->masterCount() + 1);
-        }
-    }
-
-    if (m_enabled) {
-        retile();
-    }
+    applyToAllStates([](TilingState *state) {
+        state->setMasterCount(state->masterCount() + 1);
+    });
 }
 
 void AutotileEngine::decreaseMasterCount()
 {
-    for (TilingState *state : m_screenStates) {
-        if (state && state->masterCount() > 1) {
+    applyToAllStates([](TilingState *state) {
+        if (state->masterCount() > 1) {
             state->setMasterCount(state->masterCount() - 1);
         }
-    }
-
-    if (m_enabled) {
-        retile();
-    }
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -424,11 +369,8 @@ void AutotileEngine::onWindowAdded(const QString &windowId)
         return;
     }
 
-    insertWindow(windowId, screenName);
-    recalculateLayout(screenName);
-    applyTiling(screenName);
-
-    Q_EMIT tilingChanged(screenName);
+    const bool inserted = insertWindow(windowId, screenName);
+    retileAfterOperation(screenName, inserted);
 }
 
 void AutotileEngine::onWindowRemoved(const QString &windowId)
@@ -439,12 +381,7 @@ void AutotileEngine::onWindowRemoved(const QString &windowId)
     }
 
     removeWindow(windowId);
-
-    if (m_enabled) {
-        recalculateLayout(screenName);
-        applyTiling(screenName);
-        Q_EMIT tilingChanged(screenName);
-    }
+    retileAfterOperation(screenName, true);
 }
 
 void AutotileEngine::onWindowFocused(const QString &windowId)
@@ -463,15 +400,11 @@ void AutotileEngine::onWindowFocused(const QString &windowId)
 
 void AutotileEngine::onScreenGeometryChanged(const QString &screenName)
 {
-    if (!m_enabled) {
+    if (!m_enabled || !m_screenStates.contains(screenName)) {
         return;
     }
 
-    if (m_screenStates.contains(screenName)) {
-        recalculateLayout(screenName);
-        applyTiling(screenName);
-        Q_EMIT tilingChanged(screenName);
-    }
+    retileAfterOperation(screenName, true);
 }
 
 void AutotileEngine::onLayoutChanged(Layout *layout)
@@ -488,12 +421,17 @@ void AutotileEngine::onLayoutChanged(Layout *layout)
 // Internal implementation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::insertWindow(const QString &windowId, const QString &screenName)
+bool AutotileEngine::insertWindow(const QString &windowId, const QString &screenName)
 {
     TilingState *state = stateForScreen(screenName);
     if (!state) {
         qWarning() << "AutotileEngine::insertWindow: failed to get state for screen" << screenName;
-        return;
+        return false;
+    }
+
+    // Check if window already tracked
+    if (m_windowToScreen.contains(windowId)) {
+        return false;
     }
 
     // Insert based on config preference
@@ -511,6 +449,7 @@ void AutotileEngine::insertWindow(const QString &windowId, const QString &screen
     }
 
     m_windowToScreen.insert(windowId, screenName);
+    return true;
 }
 
 void AutotileEngine::removeWindow(const QString &windowId)
@@ -657,6 +596,42 @@ void AutotileEngine::retileAfterOperation(const QString &screenName, bool operat
     }
 
     Q_EMIT tilingChanged(screenName);
+}
+
+QStringList AutotileEngine::tiledWindowsForFocusedScreen(QString &outScreenName) const
+{
+    // TODO: Get focused window from WindowTrackingService when API is added
+    const QString focused = QString(); // Placeholder until WindowTrackingService supports focusedWindow()
+    if (focused.isEmpty()) {
+        return {};
+    }
+
+    outScreenName = m_windowToScreen.value(focused);
+    if (outScreenName.isEmpty()) {
+        return {};
+    }
+
+    // Use const_cast since stateForScreen may create state, but we only read here
+    auto *self = const_cast<AutotileEngine *>(this);
+    TilingState *state = self->stateForScreen(outScreenName);
+    if (!state) {
+        return {};
+    }
+
+    return state->tiledWindows();
+}
+
+void AutotileEngine::applyToAllStates(const std::function<void(TilingState *)> &operation)
+{
+    for (TilingState *state : m_screenStates) {
+        if (state) {
+            operation(state);
+        }
+    }
+
+    if (m_enabled) {
+        retile();
+    }
 }
 
 } // namespace PlasmaZones

@@ -8,6 +8,8 @@
 #include <QObject>
 #include <QRect>
 #include <QString>
+#include <QStringList>
+#include <functional>
 #include <memory>
 
 namespace PlasmaZones {
@@ -269,7 +271,7 @@ private Q_SLOTS:
 
 private:
     void connectSignals();
-    void insertWindow(const QString &windowId, const QString &screenName);
+    bool insertWindow(const QString &windowId, const QString &screenName);
     void removeWindow(const QString &windowId);
     void recalculateLayout(const QString &screenName);
     void applyTiling(const QString &screenName);
@@ -287,6 +289,26 @@ private:
      * @param operationSucceeded Whether the triggering operation actually changed something
      */
     void retileAfterOperation(const QString &screenName, bool operationSucceeded);
+
+    /**
+     * @brief Helper to get tiled windows for focus operations
+     *
+     * Gets the focused window, validates screen, retrieves state and windows.
+     * Returns empty list if any step fails.
+     *
+     * @param[out] outScreenName Screen name of the focused window
+     * @return List of tiled windows, or empty list if unavailable
+     */
+    QStringList tiledWindowsForFocusedScreen(QString &outScreenName) const;
+
+    /**
+     * @brief Helper to apply an operation to all screen states
+     *
+     * Iterates all screen states and applies the given operation, then retiles if enabled.
+     *
+     * @param operation Function to apply to each TilingState
+     */
+    void applyToAllStates(const std::function<void(TilingState *)> &operation);
 
     LayoutManager *m_layoutManager = nullptr;
     WindowTrackingService *m_windowTracker = nullptr;
