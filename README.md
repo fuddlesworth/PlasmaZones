@@ -290,7 +290,7 @@ qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.hideOverlay
 qdbus org.plasmazones /PlasmaZones org.plasmazones.ScreenManager.getScreens
 ```
 
-Full API documentation in [docs/dbus-api.md](docs/dbus-api.md) covering all 7 interfaces and 80+ methods.
+Full API documentation on the [wiki D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API) (generated from `dbus/org.plasmazones.xml`) covering all interfaces and methods.
 
 ---
 
