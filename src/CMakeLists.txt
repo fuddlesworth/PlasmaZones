@@ -64,6 +64,12 @@ set(plasmazones_core_SRCS
     autotile/TilingState.cpp
     autotile/AutotileConfig.h
     autotile/AutotileConfig.cpp
+    autotile/algorithms/MasterStackAlgorithm.h
+    autotile/algorithms/MasterStackAlgorithm.cpp
+    autotile/algorithms/ColumnsAlgorithm.h
+    autotile/algorithms/ColumnsAlgorithm.cpp
+    autotile/algorithms/BSPAlgorithm.h
+    autotile/algorithms/BSPAlgorithm.cpp
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp
