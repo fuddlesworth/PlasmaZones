@@ -200,6 +200,16 @@ public:
      */
     Q_INVOKABLE void focusMaster();
 
+    /**
+     * @brief Notify the engine that a window has been focused
+     *
+     * Called by D-Bus adaptor when KWin reports a window focus change.
+     * Updates the focused window in the appropriate TilingState.
+     *
+     * @param windowId Window ID that gained focus
+     */
+    void setFocusedWindow(const QString &windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Split ratio adjustment
     // ═══════════════════════════════════════════════════════════════════════════

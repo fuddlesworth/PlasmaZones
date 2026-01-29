@@ -7,6 +7,7 @@
 #include "autotile/AutotileConfig.h"
 #include "autotile/AutotileEngine.h"
 #include "autotile/TilingAlgorithm.h"
+#include "core/constants.h"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -15,6 +16,32 @@
 Q_LOGGING_CATEGORY(lcDbusAutotile, "plasmazones.dbus.autotile", QtInfoMsg)
 
 namespace PlasmaZones {
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Helper Methods
+// ═══════════════════════════════════════════════════════════════════════════
+
+bool AutotileAdaptor::ensureEngine(const char *methodName) const
+{
+    if (!m_engine) {
+        qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- engine not available";
+        return false;
+    }
+    return true;
+}
+
+bool AutotileAdaptor::ensureEngineAndConfig(const char *methodName) const
+{
+    if (!m_engine) {
+        qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- engine not available";
+        return false;
+    }
+    if (!m_engine->config()) {
+        qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- config not available";
+        return false;
+    }
+    return true;
+}
 
 AutotileAdaptor::AutotileAdaptor(AutotileEngine *engine, QObject *parent)
     : QDBusAbstractAdaptor(parent)
@@ -49,8 +76,7 @@ bool AutotileAdaptor::enabled() const
 
 void AutotileAdaptor::setEnabled(bool enabled)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot setEnabled - engine not available";
+    if (!ensureEngine("setEnabled")) {
         return;
     }
     m_engine->setEnabled(enabled);
@@ -63,8 +89,7 @@ QString AutotileAdaptor::algorithm() const
 
 void AutotileAdaptor::setAlgorithm(const QString &algorithmId)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot setAlgorithm - engine not available";
+    if (!ensureEngine("setAlgorithm")) {
         return;
     }
     m_engine->setAlgorithm(algorithmId);
@@ -73,19 +98,18 @@ void AutotileAdaptor::setAlgorithm(const QString &algorithmId)
 double AutotileAdaptor::masterRatio() const
 {
     if (!m_engine || !m_engine->config()) {
-        return 0.6; // Default
+        return AutotileDefaults::DefaultSplitRatio;
     }
     return m_engine->config()->splitRatio;
 }
 
 void AutotileAdaptor::setMasterRatio(double ratio)
 {
-    if (!m_engine || !m_engine->config()) {
-        qCWarning(lcDbusAutotile) << "Cannot setMasterRatio - engine/config not available";
+    if (!ensureEngineAndConfig("setMasterRatio")) {
         return;
     }
-    // Clamp ratio to valid range
-    ratio = qBound(0.1, ratio, 0.9);
+    // Clamp ratio to valid range using constants
+    ratio = qBound(AutotileDefaults::MinSplitRatio, ratio, AutotileDefaults::MaxSplitRatio);
     if (!qFuzzyCompare(m_engine->config()->splitRatio, ratio)) {
         m_engine->config()->splitRatio = ratio;
         Q_EMIT configChanged();
@@ -96,19 +120,18 @@ void AutotileAdaptor::setMasterRatio(double ratio)
 int AutotileAdaptor::masterCount() const
 {
     if (!m_engine || !m_engine->config()) {
-        return 1; // Default
+        return AutotileDefaults::DefaultMasterCount;
     }
     return m_engine->config()->masterCount;
 }
 
 void AutotileAdaptor::setMasterCount(int count)
 {
-    if (!m_engine || !m_engine->config()) {
-        qCWarning(lcDbusAutotile) << "Cannot setMasterCount - engine/config not available";
+    if (!ensureEngineAndConfig("setMasterCount")) {
         return;
     }
-    // Clamp count to valid range
-    count = qBound(1, count, 5);
+    // Clamp count to valid range using constants
+    count = qBound(AutotileDefaults::MinMasterCount, count, AutotileDefaults::MaxMasterCount);
     if (m_engine->config()->masterCount != count) {
         m_engine->config()->masterCount = count;
         Q_EMIT configChanged();
@@ -119,18 +142,17 @@ void AutotileAdaptor::setMasterCount(int count)
 int AutotileAdaptor::innerGap() const
 {
     if (!m_engine || !m_engine->config()) {
-        return 8; // Default
+        return AutotileDefaults::DefaultGap;
     }
     return m_engine->config()->innerGap;
 }
 
 void AutotileAdaptor::setInnerGap(int gap)
 {
-    if (!m_engine || !m_engine->config()) {
-        qCWarning(lcDbusAutotile) << "Cannot setInnerGap - engine/config not available";
+    if (!ensureEngineAndConfig("setInnerGap")) {
         return;
     }
-    gap = qBound(0, gap, 50);
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
     if (m_engine->config()->innerGap != gap) {
         m_engine->config()->innerGap = gap;
         Q_EMIT configChanged();
@@ -141,18 +163,17 @@ void AutotileAdaptor::setInnerGap(int gap)
 int AutotileAdaptor::outerGap() const
 {
     if (!m_engine || !m_engine->config()) {
-        return 8; // Default
+        return AutotileDefaults::DefaultGap;
     }
     return m_engine->config()->outerGap;
 }
 
 void AutotileAdaptor::setOuterGap(int gap)
 {
-    if (!m_engine || !m_engine->config()) {
-        qCWarning(lcDbusAutotile) << "Cannot setOuterGap - engine/config not available";
+    if (!ensureEngineAndConfig("setOuterGap")) {
         return;
     }
-    gap = qBound(0, gap, 50);
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
     if (m_engine->config()->outerGap != gap) {
         m_engine->config()->outerGap = gap;
         Q_EMIT configChanged();
@@ -163,15 +184,14 @@ void AutotileAdaptor::setOuterGap(int gap)
 bool AutotileAdaptor::smartGaps() const
 {
     if (!m_engine || !m_engine->config()) {
-        return true; // Default
+        return true; // Default: smart gaps enabled
     }
     return m_engine->config()->smartGaps;
 }
 
 void AutotileAdaptor::setSmartGaps(bool enabled)
 {
-    if (!m_engine || !m_engine->config()) {
-        qCWarning(lcDbusAutotile) << "Cannot setSmartGaps - engine/config not available";
+    if (!ensureEngineAndConfig("setSmartGaps")) {
         return;
     }
     if (m_engine->config()->smartGaps != enabled) {
@@ -184,15 +204,14 @@ void AutotileAdaptor::setSmartGaps(bool enabled)
 bool AutotileAdaptor::focusNewWindows() const
 {
     if (!m_engine || !m_engine->config()) {
-        return true; // Default
+        return true; // Default: focus new windows
     }
     return m_engine->config()->focusNewWindows;
 }
 
 void AutotileAdaptor::setFocusNewWindows(bool enabled)
 {
-    if (!m_engine || !m_engine->config()) {
-        qCWarning(lcDbusAutotile) << "Cannot setFocusNewWindows - engine/config not available";
+    if (!ensureEngineAndConfig("setFocusNewWindows")) {
         return;
     }
     if (m_engine->config()->focusNewWindows != enabled) {
@@ -207,8 +226,7 @@ void AutotileAdaptor::setFocusNewWindows(bool enabled)
 
 void AutotileAdaptor::retile(const QString &screenName)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot retile - engine not available";
+    if (!ensureEngine("retile")) {
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus retile request for screen:" << (screenName.isEmpty() ? QStringLiteral("all") : screenName);
@@ -217,12 +235,16 @@ void AutotileAdaptor::retile(const QString &screenName)
 
 void AutotileAdaptor::swapWindows(const QString &windowId1, const QString &windowId2)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot swapWindows - engine not available";
+    if (!ensureEngine("swapWindows")) {
         return;
     }
     if (windowId1.isEmpty() || windowId2.isEmpty()) {
         qCWarning(lcDbusAutotile) << "Cannot swapWindows - empty window ID(s)";
+        return;
+    }
+    // Early return for same window (no-op, but worth logging)
+    if (windowId1 == windowId2) {
+        qCDebug(lcDbusAutotile) << "swapWindows called with same window ID - no-op";
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus swap request:" << windowId1 << "<->" << windowId2;
@@ -231,8 +253,7 @@ void AutotileAdaptor::swapWindows(const QString &windowId1, const QString &windo
 
 void AutotileAdaptor::promoteToMaster(const QString &windowId)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot promoteToMaster - engine not available";
+    if (!ensureEngine("promoteToMaster")) {
         return;
     }
     if (windowId.isEmpty()) {
@@ -245,8 +266,7 @@ void AutotileAdaptor::promoteToMaster(const QString &windowId)
 
 void AutotileAdaptor::demoteFromMaster(const QString &windowId)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot demoteFromMaster - engine not available";
+    if (!ensureEngine("demoteFromMaster")) {
         return;
     }
     if (windowId.isEmpty()) {
@@ -263,8 +283,7 @@ void AutotileAdaptor::demoteFromMaster(const QString &windowId)
 
 void AutotileAdaptor::focusMaster()
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot focusMaster - engine not available";
+    if (!ensureEngine("focusMaster")) {
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus focusMaster request";
@@ -273,8 +292,7 @@ void AutotileAdaptor::focusMaster()
 
 void AutotileAdaptor::focusNext()
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot focusNext - engine not available";
+    if (!ensureEngine("focusNext")) {
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus focusNext request";
@@ -283,12 +301,24 @@ void AutotileAdaptor::focusNext()
 
 void AutotileAdaptor::focusPrevious()
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot focusPrevious - engine not available";
+    if (!ensureEngine("focusPrevious")) {
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus focusPrevious request";
     m_engine->focusPrevious();
+}
+
+void AutotileAdaptor::notifyWindowFocused(const QString &windowId)
+{
+    if (!ensureEngine("notifyWindowFocused")) {
+        return;
+    }
+    if (windowId.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty window ID (focus cleared)";
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "D-Bus notifyWindowFocused:" << windowId;
+    m_engine->setFocusedWindow(windowId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -297,8 +327,12 @@ void AutotileAdaptor::focusPrevious()
 
 void AutotileAdaptor::increaseMasterRatio(double delta)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot increaseMasterRatio - engine not available";
+    if (!ensureEngine("increaseMasterRatio")) {
+        return;
+    }
+    // Validate delta is positive and reasonable
+    if (delta <= 0.0 || delta > 1.0) {
+        qCWarning(lcDbusAutotile) << "increaseMasterRatio: invalid delta" << delta << "(must be > 0 and <= 1.0)";
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus increaseMasterRatio:" << delta;
@@ -308,8 +342,12 @@ void AutotileAdaptor::increaseMasterRatio(double delta)
 
 void AutotileAdaptor::decreaseMasterRatio(double delta)
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot decreaseMasterRatio - engine not available";
+    if (!ensureEngine("decreaseMasterRatio")) {
+        return;
+    }
+    // Validate delta is positive and reasonable
+    if (delta <= 0.0 || delta > 1.0) {
+        qCWarning(lcDbusAutotile) << "decreaseMasterRatio: invalid delta" << delta << "(must be > 0 and <= 1.0)";
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus decreaseMasterRatio:" << delta;
@@ -319,8 +357,7 @@ void AutotileAdaptor::decreaseMasterRatio(double delta)
 
 void AutotileAdaptor::increaseMasterCount()
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot increaseMasterCount - engine not available";
+    if (!ensureEngine("increaseMasterCount")) {
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus increaseMasterCount";
@@ -330,8 +367,7 @@ void AutotileAdaptor::increaseMasterCount()
 
 void AutotileAdaptor::decreaseMasterCount()
 {
-    if (!m_engine) {
-        qCWarning(lcDbusAutotile) << "Cannot decreaseMasterCount - engine not available";
+    if (!ensureEngine("decreaseMasterCount")) {
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus decreaseMasterCount";

@@ -137,6 +137,16 @@ public Q_SLOTS:
      */
     void focusPrevious();
 
+    /**
+     * @brief Notify the daemon that a window has been focused
+     *
+     * Called by KWin effect when a window gains focus. This allows the
+     * autotile engine to track the focused window for focus cycling.
+     *
+     * @param windowId Window ID that gained focus
+     */
+    void notifyWindowFocused(const QString &windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment
     // ═══════════════════════════════════════════════════════════════════════════
@@ -235,6 +245,20 @@ private Q_SLOTS:
     void onWindowTiled(const QString &windowId, const QRect &geometry);
 
 private:
+    /**
+     * @brief Check if engine is available, logging warning if not
+     * @param methodName Name of the calling method for logging
+     * @return true if engine is available
+     */
+    bool ensureEngine(const char *methodName) const;
+
+    /**
+     * @brief Check if engine and config are available, logging warning if not
+     * @param methodName Name of the calling method for logging
+     * @return true if both engine and config are available
+     */
+    bool ensureEngineAndConfig(const char *methodName) const;
+
     AutotileEngine *m_engine = nullptr;
 };
 

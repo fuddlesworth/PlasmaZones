@@ -85,6 +85,13 @@
             <annotation name="org.gtk.GDBus.DocString" value="Cycle focus to the previous tiled window."/>
         </method>
 
+        <method name="notifyWindowFocused">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
+            </arg>
+        </method>
+
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Ratio/Count Adjustment
              ═══════════════════════════════════════════════════════════════════════════ -->
