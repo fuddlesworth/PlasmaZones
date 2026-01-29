@@ -31,8 +31,16 @@ struct WindowAnimation {
     QElapsedTimer timer;    ///< Timer for animation progress calculation
     qreal duration = 150.0; ///< Animation duration in milliseconds (default 150ms)
 
+    /// Check if the animation timer has been started
+    bool isValid() const {
+        return timer.isValid();
+    }
+
     /// Calculate current progress (0.0 to 1.0) with OutQuad easing
     qreal progress() const {
+        if (!timer.isValid()) {
+            return 0.0;
+        }
         qreal t = qMin(1.0, timer.elapsed() / duration);
         // OutQuad easing: fast start, smooth deceleration
         return 1.0 - (1.0 - t) * (1.0 - t);
@@ -40,6 +48,9 @@ struct WindowAnimation {
 
     /// Check if animation is complete
     bool isComplete() const {
+        if (!timer.isValid()) {
+            return true; // Invalid animation is considered complete
+        }
         return timer.elapsed() >= duration;
     }
 
@@ -151,8 +162,8 @@ private:
     void notifyWindowActivated(KWin::EffectWindow* w);
 
     // Phase 2.3: Autotile geometry application
-    void ensureAutotileInterface();
     void connectAutotileSignals();
+    void loadAutotileSettings();
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
     void applyAutotileGeometry(KWin::EffectWindow* window, const QRect& geometry, bool animate = true);
 
@@ -204,7 +215,6 @@ private:
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
-    std::unique_ptr<QDBusInterface> m_autotileInterface; // Autotile interface
 
     // Float tracking (Phase 1 keyboard navigation)
     QSet<QString> m_floatingWindows;
