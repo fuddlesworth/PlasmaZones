@@ -1972,7 +1972,12 @@ void PlasmaZonesEffect::loadAutotileSettings()
     m_autotileAnimationsEnabled = loadDBusSetting<bool>(
         settingsInterface, QStringLiteral("autotileAnimationsEnabled"), true);
 
-    qCDebug(lcEffect) << "Loaded autotile settings: animationsEnabled=" << m_autotileAnimationsEnabled;
+    // Load animation duration setting (default 150ms)
+    m_autotileAnimationDuration = loadDBusSetting<int>(
+        settingsInterface, QStringLiteral("autotileAnimationDuration"), 150);
+
+    qCDebug(lcEffect) << "Loaded autotile settings: animationsEnabled=" << m_autotileAnimationsEnabled
+                      << "animationDuration=" << m_autotileAnimationDuration << "ms";
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const
@@ -2063,6 +2068,7 @@ void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const 
         WindowAnimation anim;
         anim.startGeometry = existing.currentGeometry();
         anim.endGeometry = QRectF(geometry);
+        anim.duration = m_autotileAnimationDuration;
         anim.timer.start();
         m_autotileAnimations[window] = anim;
 
@@ -2074,6 +2080,7 @@ void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const 
     WindowAnimation anim;
     anim.startGeometry = currentGeometry;
     anim.endGeometry = QRectF(geometry);
+    anim.duration = m_autotileAnimationDuration;
     anim.timer.start();
     m_autotileAnimations[window] = anim;
 

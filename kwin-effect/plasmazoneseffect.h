@@ -225,7 +225,8 @@ private:
 
     // Phase 2.3: Autotile animations for smooth window geometry transitions
     QHash<KWin::EffectWindow*, WindowAnimation> m_autotileAnimations;
-    bool m_autotileAnimationsEnabled = true; ///< Whether to animate autotile geometry changes
+    bool m_autotileAnimationsEnabled = true;   ///< Whether to animate autotile geometry changes
+    qreal m_autotileAnimationDuration = 150.0; ///< Animation duration in milliseconds
 
     // Polling timer for detecting window moves
     QTimer m_pollTimer;
