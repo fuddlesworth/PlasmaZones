@@ -6,9 +6,11 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QJsonObject>
+#include <QRect>
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 namespace PlasmaZones {
 
@@ -167,6 +169,35 @@ public:
      */
     bool promoteToMaster(const QString &windowId);
 
+    /**
+     * @brief Move a window to the front (alias for promoteToMaster)
+     * @param windowId Window to move
+     * @return true if window found and moved
+     */
+    bool moveToFront(const QString &windowId);
+
+    /**
+     * @brief Insert a window after the currently focused window
+     * @param windowId Window to insert
+     * @return true if inserted successfully
+     */
+    bool insertAfterFocused(const QString &windowId);
+
+    /**
+     * @brief Move a window to a specific position by its ID
+     * @param windowId Window to move
+     * @param position Target position
+     * @return true if move was successful
+     */
+    bool moveToPosition(const QString &windowId, int position);
+
+    /**
+     * @brief Get the position of a window (alias for windowIndex)
+     * @param windowId Window to find
+     * @return Position in tiled list, or -1 if not found
+     */
+    int windowPosition(const QString &windowId) const;
+
     // ═══════════════════════════════════════════════════════════════════════
     // Split Ratio
     // ═══════════════════════════════════════════════════════════════════════
@@ -266,6 +297,26 @@ public:
      */
     void clear();
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Calculated Zone Storage
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Store calculated zone geometries
+     *
+     * Called by AutotileEngine after algorithm computes zones.
+     * Stored for later application to windows.
+     *
+     * @param zones Calculated zone geometries (one per tiled window)
+     */
+    void setCalculatedZones(const QVector<QRect> &zones);
+
+    /**
+     * @brief Get stored calculated zone geometries
+     * @return Zone geometries from last calculation
+     */
+    QVector<QRect> calculatedZones() const;
+
 Q_SIGNALS:
     /**
      * @brief Emitted when window count changes (add/remove)
@@ -311,6 +362,7 @@ private:
     QString m_focusedWindow;
     int m_masterCount = 1;
     qreal m_splitRatio = 0.6;
+    QVector<QRect> m_calculatedZones;
 
     // Helper to emit stateChanged after other signals
     void notifyStateChanged();

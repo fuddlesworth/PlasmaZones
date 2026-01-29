@@ -89,3 +89,20 @@ target_link_libraries(test_algorithm_registry
 )
 
 add_test(NAME AlgorithmRegistry COMMAND test_algorithm_registry)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# AutotileEngine Tests
+# Tests for AutotileEngine core functionality
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_autotile_engine
+    test_autotile_engine.cpp
+)
+
+target_link_libraries(test_autotile_engine
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME AutotileEngine COMMAND test_autotile_engine)
