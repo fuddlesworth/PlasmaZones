@@ -9,7 +9,7 @@
 Define zones on your screen. Drag windows into them. Done.
 
 <!-- TODO: Hero GIF showing drag-and-snap workflow -->
-<!-- ![PlasmaZones Demo](docs/media/hero.gif) -->
+<!-- ![PlasmaZones Demo](docs/media/videos/hero.gif) -->
 *[Hero GIF placeholder - drag window → zones appear → snap]*
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL%203.0-blue.svg)](LICENSE)
@@ -23,7 +23,7 @@ Define zones on your screen. Drag windows into them. Done.
 
 Hold **Alt** (or your configured modifier) while dragging a window. Zones light up. Drop the window into one and it resizes to fill that zone.
 
-![Drag and Snap](docs/media/drag-snap.gif)
+![Drag and Snap](docs/media/videos/drag-snap.gif)
 
 ---
 
@@ -78,7 +78,7 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Per-window floating toggle
 
 <!-- TODO: GIF showing keyboard navigation between zones -->
-<!-- ![Keyboard Navigation](docs/media/keyboard-nav.gif) -->
+<!-- ![Keyboard Navigation](docs/media/videos/keyboard-nav.gif) -->
 *[GIF placeholder - moving window between zones with Meta+Alt+Arrows]*
 
 ### Layout Editor
@@ -89,7 +89,7 @@ There are several window tiling options for KDE Plasma. Here's how PlasmaZones c
 - Grid and edge snapping
 - Per-zone colors and styling
 
-![Layout Editor](docs/media/editor.gif)
+![Layout Editor](docs/media/videos/editor.gif)
 
 ### Shader Effects
 
@@ -108,7 +108,7 @@ GPU-accelerated zone overlays with 8 built-in effects:
 
 ![Shader Effects](docs/media/screenshots/shaders-gallery.png)
 
-![Shader effects showcase](docs/media/shaders.gif)
+![Shader effects showcase](docs/media/videos/shaders.gif)
 
 Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
@@ -116,7 +116,7 @@ Custom shaders supported - see [docs/shaders.md](docs/shaders.md).
 
 Drag to screen edge to reveal a layout picker. Choose any layout and zone without cycling.
 
-![Zone Selector](docs/media/zone-selector.gif)
+![Zone Selector](docs/media/videos/zone-selector.gif)
 
 ### Visual Layout OSD
 
@@ -124,7 +124,7 @@ See a preview of the layout when switching, not just text.
 
 ![Layout OSD](docs/media/screenshots/layout-osd.png)
 
-![Cycling layouts with OSD](docs/media/layout-switch.gif)
+![Cycling layouts with OSD](docs/media/videos/layout-switch.gif)
 
 ### Multi-Monitor & Virtual Desktops
 
