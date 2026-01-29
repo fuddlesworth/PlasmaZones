@@ -128,9 +128,12 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
         if (!colorStr.isEmpty()) {
             config.activeBorderColor = QColor(colorStr);
             if (!config.activeBorderColor.isValid()) {
-                config.activeBorderColor = QColor(0x3d, 0xae, 0xe9); // KDE blue fallback
+                config.activeBorderColor = AutotileConfig::systemHighlightColor();
             }
         }
+    } else {
+        // No color specified in JSON, use system default
+        config.activeBorderColor = AutotileConfig::systemHighlightColor();
     }
     if (json.contains(MonocleHideOthers)) {
         config.monocleHideOthers = json[MonocleHideOthers].toBool(config.monocleHideOthers);
@@ -150,7 +153,18 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
 
 AutotileConfig AutotileConfig::defaults()
 {
-    return AutotileConfig{};
+    AutotileConfig config;
+    // Set system highlight color (member default is invalid/empty)
+    config.activeBorderColor = systemHighlightColor();
+    return config;
+}
+
+QColor AutotileConfig::systemHighlightColor()
+{
+    // Use KColorScheme to get the system highlight/selection color
+    // This respects user's color scheme (Breeze, Breeze Dark, custom themes)
+    KColorScheme scheme(QPalette::Active, KColorScheme::Selection);
+    return scheme.background(KColorScheme::ActiveBackground).color();
 }
 
 } // namespace PlasmaZones

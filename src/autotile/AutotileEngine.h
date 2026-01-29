@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -387,7 +388,7 @@ private:
     QHash<QString, QString> m_windowToScreen;     // windowId -> screenName
 
     // Settings synchronization (SRP: engine owns its settings sync)
-    Settings *m_settings = nullptr; // Not owned, must outlive engine
+    QPointer<Settings> m_settings;  // QPointer for safe access if Settings destroyed
     QTimer m_settingsRetileTimer;   // Debounce timer for settings changes
     bool m_pendingSettingsRetile = false;
 

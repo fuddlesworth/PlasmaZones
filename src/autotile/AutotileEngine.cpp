@@ -194,6 +194,15 @@ void AutotileEngine::syncFromSettings(Settings *settings)
 
     m_settings = settings;
 
+    // Store target enabled state and temporarily disable to prevent double-retile
+    // during configuration. setAlgorithm() and setEnabled() both trigger retile(),
+    // so we configure everything first, then enable once at the end.
+    const bool targetEnabled = settings->autotileEnabled();
+    const bool wasEnabled = m_enabled;
+    if (wasEnabled) {
+        m_enabled = false; // Bypass setEnabled() to avoid emitting signal
+    }
+
     // Apply all settings to config (single source of truth for mapping)
     m_config->algorithmId = settings->autotileAlgorithm();
     m_config->splitRatio = settings->autotileSplitRatio();
@@ -220,14 +229,20 @@ void AutotileEngine::syncFromSettings(Settings *settings)
         m_config->activeBorderColor = settings->autotileActiveBorderColor();
     }
 
-    // Set algorithm on engine (handles registry lookup)
-    setAlgorithm(settings->autotileAlgorithm());
+    // Set algorithm on engine (won't retile since m_enabled is false)
+    m_algorithmId = settings->autotileAlgorithm();
+    // Validate algorithm exists
+    auto *registry = AlgorithmRegistry::instance();
+    if (!registry->hasAlgorithm(m_algorithmId)) {
+        qCWarning(lcAutotile) << "Unknown algorithm" << m_algorithmId << "- using default";
+        m_algorithmId = AlgorithmRegistry::defaultAlgorithmId();
+    }
 
-    // Set enabled state last (may trigger tiling)
-    setEnabled(settings->autotileEnabled());
+    // Now set enabled state (will trigger single retile if enabling)
+    setEnabled(targetEnabled);
 
-    qCInfo(lcAutotile) << "Settings synced - enabled:" << settings->autotileEnabled()
-                       << "algorithm:" << settings->autotileAlgorithm();
+    qCInfo(lcAutotile) << "Settings synced - enabled:" << targetEnabled
+                       << "algorithm:" << m_algorithmId;
 }
 
 void AutotileEngine::connectToSettings(Settings *settings)

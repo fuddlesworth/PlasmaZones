@@ -1052,7 +1052,7 @@ private:
     bool m_autotileShowActiveBorder = true;
     int m_autotileActiveBorderWidth = 2;
     bool m_autotileUseSystemBorderColor = true;
-    QColor m_autotileActiveBorderColor = Defaults::HighlightColor; // Initialized from system in load()
+    QColor m_autotileActiveBorderColor; // Initialized from KColorScheme in load()/reset()
     bool m_autotileMonocleHideOthers = false;
     bool m_autotileMonocleShowTabs = true;
 
