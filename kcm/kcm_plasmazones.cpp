@@ -113,9 +113,9 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
         QStringLiteral("currentActivityChanged"), this, SLOT(onCurrentActivityChanged(QString)));
-    QDBusConnection::sessionBus().connect(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("activitiesChanged"), this, SLOT(onActivitiesChanged()));
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager), QStringLiteral("activitiesChanged"),
+                                          this, SLOT(onActivitiesChanged()));
 
     // Initial virtual desktop refresh
     refreshVirtualDesktops();
@@ -1822,6 +1822,34 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT zoneSelectorGridColumnsChanged();
         Q_EMIT zoneSelectorSizeModeChanged();
         Q_EMIT zoneSelectorMaxRowsChanged();
+
+        // Autotiling signals
+        Q_EMIT autotileEnabledChanged();
+        Q_EMIT autotileAlgorithmChanged();
+        Q_EMIT autotileSplitRatioChanged();
+        Q_EMIT autotileMasterCountChanged();
+        Q_EMIT autotileInnerGapChanged();
+        Q_EMIT autotileOuterGapChanged();
+        Q_EMIT autotileFocusNewWindowsChanged();
+        Q_EMIT autotileSmartGapsChanged();
+        Q_EMIT autotileInsertPositionChanged();
+        Q_EMIT autotileFocusFollowsMouseChanged();
+        Q_EMIT autotileRespectMinimumSizeChanged();
+        Q_EMIT autotileShowActiveBorderChanged();
+        Q_EMIT autotileActiveBorderWidthChanged();
+        Q_EMIT autotileUseSystemBorderColorChanged();
+        Q_EMIT autotileActiveBorderColorChanged();
+        Q_EMIT autotileMonocleHideOthersChanged();
+        Q_EMIT autotileMonocleShowTabsChanged();
+        Q_EMIT autotileToggleShortcutChanged();
+        Q_EMIT autotileCycleAlgorithmShortcutChanged();
+        Q_EMIT autotileFocusMasterShortcutChanged();
+        Q_EMIT autotileSwapMasterShortcutChanged();
+        Q_EMIT autotileIncMasterRatioShortcutChanged();
+        Q_EMIT autotileDecMasterRatioShortcutChanged();
+        Q_EMIT autotileIncMasterCountShortcutChanged();
+        Q_EMIT autotileDecMasterCountShortcutChanged();
+        Q_EMIT autotileRetileShortcutChanged();
     }
 }
 
@@ -2070,7 +2098,7 @@ QString KCMPlasmaZones::getActivityIcon(const QString& activityId) const
 }
 
 void KCMPlasmaZones::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                   const QString& layoutId)
+                                                  const QString& layoutId)
 {
     if (screenName.isEmpty() || activityId.isEmpty()) {
         qCWarning(lcKcm) << "Cannot assign layout - empty screen name or activity ID";
@@ -2359,6 +2387,407 @@ QString KCMPlasmaZones::getQuickLayoutShortcut(int slotNumber) const
     // If KGlobalAccel returns empty, the shortcut is not assigned
     // Don't fall back to settings defaults as that would be misleading
     return QString();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTOTILING GETTERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+bool KCMPlasmaZones::autotileEnabled() const
+{
+    return m_settings->autotileEnabled();
+}
+
+QString KCMPlasmaZones::autotileAlgorithm() const
+{
+    return m_settings->autotileAlgorithm();
+}
+
+qreal KCMPlasmaZones::autotileSplitRatio() const
+{
+    return m_settings->autotileSplitRatio();
+}
+
+int KCMPlasmaZones::autotileMasterCount() const
+{
+    return m_settings->autotileMasterCount();
+}
+
+int KCMPlasmaZones::autotileInnerGap() const
+{
+    return m_settings->autotileInnerGap();
+}
+
+int KCMPlasmaZones::autotileOuterGap() const
+{
+    return m_settings->autotileOuterGap();
+}
+
+bool KCMPlasmaZones::autotileFocusNewWindows() const
+{
+    return m_settings->autotileFocusNewWindows();
+}
+
+bool KCMPlasmaZones::autotileSmartGaps() const
+{
+    return m_settings->autotileSmartGaps();
+}
+
+int KCMPlasmaZones::autotileInsertPosition() const
+{
+    return m_settings->autotileInsertPositionInt();
+}
+
+bool KCMPlasmaZones::autotileFocusFollowsMouse() const
+{
+    return m_settings->autotileFocusFollowsMouse();
+}
+
+bool KCMPlasmaZones::autotileRespectMinimumSize() const
+{
+    return m_settings->autotileRespectMinimumSize();
+}
+
+bool KCMPlasmaZones::autotileShowActiveBorder() const
+{
+    return m_settings->autotileShowActiveBorder();
+}
+
+int KCMPlasmaZones::autotileActiveBorderWidth() const
+{
+    return m_settings->autotileActiveBorderWidth();
+}
+
+bool KCMPlasmaZones::autotileUseSystemBorderColor() const
+{
+    return m_settings->autotileUseSystemBorderColor();
+}
+
+QColor KCMPlasmaZones::autotileActiveBorderColor() const
+{
+    return m_settings->autotileActiveBorderColor();
+}
+
+bool KCMPlasmaZones::autotileMonocleHideOthers() const
+{
+    return m_settings->autotileMonocleHideOthers();
+}
+
+bool KCMPlasmaZones::autotileMonocleShowTabs() const
+{
+    return m_settings->autotileMonocleShowTabs();
+}
+
+// Autotiling shortcut getters
+QString KCMPlasmaZones::autotileToggleShortcut() const
+{
+    return m_settings->autotileToggleShortcut();
+}
+
+QString KCMPlasmaZones::autotileCycleAlgorithmShortcut() const
+{
+    return m_settings->autotileCycleAlgorithmShortcut();
+}
+
+QString KCMPlasmaZones::autotileFocusMasterShortcut() const
+{
+    return m_settings->autotileFocusMasterShortcut();
+}
+
+QString KCMPlasmaZones::autotileSwapMasterShortcut() const
+{
+    return m_settings->autotileSwapMasterShortcut();
+}
+
+QString KCMPlasmaZones::autotileIncMasterRatioShortcut() const
+{
+    return m_settings->autotileIncMasterRatioShortcut();
+}
+
+QString KCMPlasmaZones::autotileDecMasterRatioShortcut() const
+{
+    return m_settings->autotileDecMasterRatioShortcut();
+}
+
+QString KCMPlasmaZones::autotileIncMasterCountShortcut() const
+{
+    return m_settings->autotileIncMasterCountShortcut();
+}
+
+QString KCMPlasmaZones::autotileDecMasterCountShortcut() const
+{
+    return m_settings->autotileDecMasterCountShortcut();
+}
+
+QString KCMPlasmaZones::autotileRetileShortcut() const
+{
+    return m_settings->autotileRetileShortcut();
+}
+
+// Available algorithms for the UI combobox
+QVariantList KCMPlasmaZones::availableAlgorithms() const
+{
+    // Static list of built-in algorithms with their metadata
+    // This avoids runtime dependency on AlgorithmRegistry in the KCM
+    return QVariantList{
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("master-stack")},
+                    {QStringLiteral("name"), i18n("Master + Stack")},
+                    {QStringLiteral("description"), i18n("Large master area with stacked secondary windows")},
+                    {QStringLiteral("icon"), QStringLiteral("view-split-left-right")},
+                    {QStringLiteral("supportsMasterCount"), true},
+                    {QStringLiteral("supportsSplitRatio"), true}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("columns")},
+                    {QStringLiteral("name"), i18n("Columns")},
+                    {QStringLiteral("description"), i18n("Equal-width vertical columns")},
+                    {QStringLiteral("icon"), QStringLiteral("view-split-left-right")},
+                    {QStringLiteral("supportsMasterCount"), false},
+                    {QStringLiteral("supportsSplitRatio"), false}},
+        QVariantMap{{QStringLiteral("id"), QStringLiteral("bsp")},
+                    {QStringLiteral("name"), i18n("BSP")},
+                    {QStringLiteral("description"), i18n("Binary space partitioning - recursive split layout")},
+                    {QStringLiteral("icon"), QStringLiteral("view-grid-symbolic")},
+                    {QStringLiteral("supportsMasterCount"), false},
+                    {QStringLiteral("supportsSplitRatio"), true}},
+    };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AUTOTILING SETTERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+void KCMPlasmaZones::setAutotileEnabled(bool enabled)
+{
+    if (m_settings->autotileEnabled() != enabled) {
+        m_settings->setAutotileEnabled(enabled);
+        Q_EMIT autotileEnabledChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileAlgorithm(const QString& algorithm)
+{
+    if (m_settings->autotileAlgorithm() != algorithm) {
+        m_settings->setAutotileAlgorithm(algorithm);
+        Q_EMIT autotileAlgorithmChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileSplitRatio(qreal ratio)
+{
+    if (!qFuzzyCompare(m_settings->autotileSplitRatio(), ratio)) {
+        m_settings->setAutotileSplitRatio(ratio);
+        Q_EMIT autotileSplitRatioChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMasterCount(int count)
+{
+    if (m_settings->autotileMasterCount() != count) {
+        m_settings->setAutotileMasterCount(count);
+        Q_EMIT autotileMasterCountChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileInnerGap(int gap)
+{
+    if (m_settings->autotileInnerGap() != gap) {
+        m_settings->setAutotileInnerGap(gap);
+        Q_EMIT autotileInnerGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileOuterGap(int gap)
+{
+    if (m_settings->autotileOuterGap() != gap) {
+        m_settings->setAutotileOuterGap(gap);
+        Q_EMIT autotileOuterGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileFocusNewWindows(bool focus)
+{
+    if (m_settings->autotileFocusNewWindows() != focus) {
+        m_settings->setAutotileFocusNewWindows(focus);
+        Q_EMIT autotileFocusNewWindowsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileSmartGaps(bool smart)
+{
+    if (m_settings->autotileSmartGaps() != smart) {
+        m_settings->setAutotileSmartGaps(smart);
+        Q_EMIT autotileSmartGapsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileInsertPosition(int position)
+{
+    if (m_settings->autotileInsertPositionInt() != position) {
+        m_settings->setAutotileInsertPositionInt(position);
+        Q_EMIT autotileInsertPositionChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileFocusFollowsMouse(bool focus)
+{
+    if (m_settings->autotileFocusFollowsMouse() != focus) {
+        m_settings->setAutotileFocusFollowsMouse(focus);
+        Q_EMIT autotileFocusFollowsMouseChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileRespectMinimumSize(bool respect)
+{
+    if (m_settings->autotileRespectMinimumSize() != respect) {
+        m_settings->setAutotileRespectMinimumSize(respect);
+        Q_EMIT autotileRespectMinimumSizeChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileShowActiveBorder(bool show)
+{
+    if (m_settings->autotileShowActiveBorder() != show) {
+        m_settings->setAutotileShowActiveBorder(show);
+        Q_EMIT autotileShowActiveBorderChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileActiveBorderWidth(int width)
+{
+    if (m_settings->autotileActiveBorderWidth() != width) {
+        m_settings->setAutotileActiveBorderWidth(width);
+        Q_EMIT autotileActiveBorderWidthChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileUseSystemBorderColor(bool use)
+{
+    if (m_settings->autotileUseSystemBorderColor() != use) {
+        m_settings->setAutotileUseSystemBorderColor(use);
+        Q_EMIT autotileUseSystemBorderColorChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileActiveBorderColor(const QColor& color)
+{
+    if (m_settings->autotileActiveBorderColor() != color) {
+        m_settings->setAutotileActiveBorderColor(color);
+        Q_EMIT autotileActiveBorderColorChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMonocleHideOthers(bool hide)
+{
+    if (m_settings->autotileMonocleHideOthers() != hide) {
+        m_settings->setAutotileMonocleHideOthers(hide);
+        Q_EMIT autotileMonocleHideOthersChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMonocleShowTabs(bool show)
+{
+    if (m_settings->autotileMonocleShowTabs() != show) {
+        m_settings->setAutotileMonocleShowTabs(show);
+        Q_EMIT autotileMonocleShowTabsChanged();
+        setNeedsSave(true);
+    }
+}
+
+// Autotiling shortcut setters
+void KCMPlasmaZones::setAutotileToggleShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileToggleShortcut() != shortcut) {
+        m_settings->setAutotileToggleShortcut(shortcut);
+        Q_EMIT autotileToggleShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileCycleAlgorithmShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileCycleAlgorithmShortcut() != shortcut) {
+        m_settings->setAutotileCycleAlgorithmShortcut(shortcut);
+        Q_EMIT autotileCycleAlgorithmShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileFocusMasterShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileFocusMasterShortcut() != shortcut) {
+        m_settings->setAutotileFocusMasterShortcut(shortcut);
+        Q_EMIT autotileFocusMasterShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileSwapMasterShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileSwapMasterShortcut() != shortcut) {
+        m_settings->setAutotileSwapMasterShortcut(shortcut);
+        Q_EMIT autotileSwapMasterShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileIncMasterRatioShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileIncMasterRatioShortcut() != shortcut) {
+        m_settings->setAutotileIncMasterRatioShortcut(shortcut);
+        Q_EMIT autotileIncMasterRatioShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileDecMasterRatioShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileDecMasterRatioShortcut() != shortcut) {
+        m_settings->setAutotileDecMasterRatioShortcut(shortcut);
+        Q_EMIT autotileDecMasterRatioShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileIncMasterCountShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileIncMasterCountShortcut() != shortcut) {
+        m_settings->setAutotileIncMasterCountShortcut(shortcut);
+        Q_EMIT autotileIncMasterCountShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileDecMasterCountShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileDecMasterCountShortcut() != shortcut) {
+        m_settings->setAutotileDecMasterCountShortcut(shortcut);
+        Q_EMIT autotileDecMasterCountShortcutChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileRetileShortcut(const QString& shortcut)
+{
+    if (m_settings->autotileRetileShortcut() != shortcut) {
+        m_settings->setAutotileRetileShortcut(shortcut);
+        Q_EMIT autotileRetileShortcutChanged();
+        setNeedsSave(true);
+    }
 }
 
 } // namespace PlasmaZones

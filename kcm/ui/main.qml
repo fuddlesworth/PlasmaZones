@@ -139,6 +139,10 @@ KCM.AbstractKCM {
                 text: i18n("Exclusions")
                 icon.name: "dialog-cancel-symbolic"
             }
+            TabButton {
+                text: i18n("Autotiling")
+                icon.name: "view-grid-symbolic"
+            }
         }
     }
 
@@ -2593,6 +2597,466 @@ KCM.AbstractKCM {
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════════
+        // TAB 8: AUTOTILING
+        // ═══════════════════════════════════════════════════════════════════
+        ScrollView {
+            visible: stackLayout.currentIndex === 7
+            clip: true
+            contentWidth: availableWidth
+
+            ColumnLayout {
+                width: parent.width
+                spacing: Kirigami.Units.largeSpacing
+
+                // Info message
+                Kirigami.InlineMessage {
+                    Layout.fillWidth: true
+                    type: Kirigami.MessageType.Information
+                    text: i18n("Autotiling automatically arranges windows using tiling algorithms like Master + Stack, Columns, or BSP.")
+                    visible: true
+                }
+
+                // Enable toggle - prominent at top
+                CheckBox {
+                    id: autotileEnabledCheck
+                    Layout.fillWidth: true
+                    text: i18n("Enable automatic window tiling")
+                    checked: kcm.autotileEnabled
+                    onToggled: kcm.autotileEnabled = checked
+                    font.bold: true
+                }
+
+                // Algorithm and Preview section
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    visible: autotileEnabledCheck.checked
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Algorithm")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: ColumnLayout {
+                        spacing: Kirigami.Units.largeSpacing
+
+                        // Algorithm selector and preview side by side
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: Kirigami.Units.largeSpacing
+
+                            // Algorithm selection
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Kirigami.FormLayout {
+                                    ComboBox {
+                                        id: algorithmCombo
+                                        Kirigami.FormData.label: i18n("Layout algorithm:")
+                                        Layout.fillWidth: true
+                                        model: kcm.availableAlgorithms
+                                        textRole: "name"
+                                        valueRole: "id"
+                                        currentIndex: {
+                                            for (let i = 0; i < model.length; i++) {
+                                                if (model[i].id === kcm.autotileAlgorithm) return i
+                                            }
+                                            return 0
+                                        }
+                                        onActivated: kcm.autotileAlgorithm = currentValue
+
+                                        // Show description as tooltip
+                                        ToolTip.visible: hovered && stackLayout.currentIndex === 7
+                                        ToolTip.text: model[currentIndex] ? model[currentIndex].description : ""
+                                    }
+
+                                    // Master count (only for algorithms that support it)
+                                    RowLayout {
+                                        Kirigami.FormData.label: i18n("Master windows:")
+                                        visible: algorithmCombo.model[algorithmCombo.currentIndex]?.supportsMasterCount ?? false
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        SpinBox {
+                                            id: masterCountSpinBox
+                                            from: 1
+                                            to: 5
+                                            value: kcm.autotileMasterCount
+                                            onValueModified: kcm.autotileMasterCount = value
+                                        }
+                                    }
+
+                                    // Split ratio (only for algorithms that support it)
+                                    RowLayout {
+                                        Kirigami.FormData.label: i18n("Master ratio:")
+                                        visible: algorithmCombo.model[algorithmCombo.currentIndex]?.supportsSplitRatio ?? false
+                                        spacing: Kirigami.Units.smallSpacing
+
+                                        Slider {
+                                            id: splitRatioSlider
+                                            Layout.preferredWidth: constants.sliderPreferredWidth
+                                            from: 0.2
+                                            to: 0.8
+                                            stepSize: 0.05
+                                            value: kcm.autotileSplitRatio
+                                            onMoved: kcm.autotileSplitRatio = value
+                                        }
+
+                                        Label {
+                                            text: Math.round(splitRatioSlider.value * 100) + "%"
+                                            Layout.preferredWidth: constants.sliderValueLabelWidth
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Algorithm preview
+                            AlgorithmPreview {
+                                id: algorithmPreview
+                                Layout.preferredWidth: 200
+                                Layout.preferredHeight: 140
+                                algorithm: kcm.autotileAlgorithm
+                                masterCount: kcm.autotileMasterCount
+                                splitRatio: kcm.autotileSplitRatio
+                                windowCount: 4
+                                innerGap: Math.min(kcm.autotileInnerGap, 8)
+                                outerGap: Math.min(kcm.autotileOuterGap, 8)
+                            }
+                        }
+                    }
+                }
+
+                // Gap Settings
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    visible: autotileEnabledCheck.checked
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Gaps")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: Kirigami.FormLayout {
+                        RowLayout {
+                            Kirigami.FormData.label: i18n("Inner gap:")
+                            spacing: Kirigami.Units.smallSpacing
+
+                            SpinBox {
+                                id: innerGapSpinBox
+                                from: 0
+                                to: 50
+                                value: kcm.autotileInnerGap
+                                onValueModified: kcm.autotileInnerGap = value
+                            }
+
+                            Label {
+                                text: i18n("px")
+                            }
+                        }
+
+                        RowLayout {
+                            Kirigami.FormData.label: i18n("Outer gap:")
+                            spacing: Kirigami.Units.smallSpacing
+
+                            SpinBox {
+                                id: outerGapSpinBox
+                                from: 0
+                                to: 50
+                                value: kcm.autotileOuterGap
+                                onValueModified: kcm.autotileOuterGap = value
+                            }
+
+                            Label {
+                                text: i18n("px")
+                            }
+                        }
+
+                        CheckBox {
+                            Kirigami.FormData.label: i18n("Smart gaps:")
+                            text: i18n("Hide gaps when only one window")
+                            checked: kcm.autotileSmartGaps
+                            onToggled: kcm.autotileSmartGaps = checked
+                        }
+                    }
+                }
+
+                // Behavior Settings
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    visible: autotileEnabledCheck.checked
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Behavior")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: Kirigami.FormLayout {
+                        ComboBox {
+                            id: insertPositionCombo
+                            Kirigami.FormData.label: i18n("New window position:")
+                            model: [
+                                { text: i18n("End of stack"), value: 0 },
+                                { text: i18n("After focused window"), value: 1 },
+                                { text: i18n("As master"), value: 2 }
+                            ]
+                            textRole: "text"
+                            valueRole: "value"
+                            currentIndex: kcm.autotileInsertPosition
+                            onActivated: kcm.autotileInsertPosition = currentValue
+                        }
+
+                        CheckBox {
+                            Kirigami.FormData.label: i18n("Focus:")
+                            text: i18n("Focus new windows when they open")
+                            checked: kcm.autotileFocusNewWindows
+                            onToggled: kcm.autotileFocusNewWindows = checked
+                        }
+
+                        CheckBox {
+                            text: i18n("Focus follows mouse")
+                            checked: kcm.autotileFocusFollowsMouse
+                            onToggled: kcm.autotileFocusFollowsMouse = checked
+                        }
+
+                        CheckBox {
+                            Kirigami.FormData.label: i18n("Size:")
+                            text: i18n("Respect minimum window sizes")
+                            checked: kcm.autotileRespectMinimumSize
+                            onToggled: kcm.autotileRespectMinimumSize = checked
+                        }
+                    }
+                }
+
+                // Appearance Settings
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    visible: autotileEnabledCheck.checked
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Active Border")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: Kirigami.FormLayout {
+                        CheckBox {
+                            id: showActiveBorderCheck
+                            Kirigami.FormData.label: i18n("Border:")
+                            text: i18n("Show border on active window")
+                            checked: kcm.autotileShowActiveBorder
+                            onToggled: kcm.autotileShowActiveBorder = checked
+                        }
+
+                        RowLayout {
+                            Kirigami.FormData.label: i18n("Border width:")
+                            visible: showActiveBorderCheck.checked
+                            spacing: Kirigami.Units.smallSpacing
+
+                            SpinBox {
+                                from: 1
+                                to: 10
+                                value: kcm.autotileActiveBorderWidth
+                                onValueModified: kcm.autotileActiveBorderWidth = value
+                            }
+
+                            Label {
+                                text: i18n("px")
+                            }
+                        }
+
+                        CheckBox {
+                            id: useSystemBorderColorCheck
+                            Kirigami.FormData.label: i18n("Color:")
+                            visible: showActiveBorderCheck.checked
+                            text: i18n("Use system accent color")
+                            checked: kcm.autotileUseSystemBorderColor
+                            onToggled: kcm.autotileUseSystemBorderColor = checked
+                        }
+
+                        RowLayout {
+                            Kirigami.FormData.label: i18n("Custom color:")
+                            visible: showActiveBorderCheck.checked && !useSystemBorderColorCheck.checked
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Rectangle {
+                                width: constants.colorButtonSize
+                                height: constants.colorButtonSize
+                                radius: Kirigami.Units.smallSpacing
+                                color: kcm.autotileActiveBorderColor
+                                border.color: Kirigami.Theme.separatorColor
+                                border.width: 1
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: autotileBorderColorDialog.open()
+                                }
+                            }
+
+                            Button {
+                                text: i18n("Choose...")
+                                onClicked: autotileBorderColorDialog.open()
+                            }
+                        }
+                    }
+                }
+
+                // Monocle Settings
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    visible: autotileEnabledCheck.checked
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Monocle Mode")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: Kirigami.FormLayout {
+                        Label {
+                            Kirigami.FormData.isSection: true
+                            text: i18n("Settings for fullscreen single-window mode")
+                            opacity: 0.7
+                        }
+
+                        CheckBox {
+                            Kirigami.FormData.label: i18n("Display:")
+                            text: i18n("Hide other windows in monocle mode")
+                            checked: kcm.autotileMonocleHideOthers
+                            onToggled: kcm.autotileMonocleHideOthers = checked
+                        }
+
+                        CheckBox {
+                            text: i18n("Show window tabs for switching")
+                            checked: kcm.autotileMonocleShowTabs
+                            onToggled: kcm.autotileMonocleShowTabs = checked
+                        }
+                    }
+                }
+
+                // Shortcuts
+                Kirigami.Card {
+                    Layout.fillWidth: true
+                    visible: autotileEnabledCheck.checked
+
+                    header: Kirigami.Heading {
+                        level: 3
+                        text: i18n("Keyboard Shortcuts")
+                        padding: Kirigami.Units.smallSpacing
+                    }
+
+                    contentItem: Kirigami.FormLayout {
+                        KeySequenceInput {
+                            id: autotileToggleShortcutField
+                            Kirigami.FormData.label: i18n("Toggle autotiling:")
+                            keySequence: kcm.autotileToggleShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileToggleShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileCycleAlgorithmShortcutField
+                            Kirigami.FormData.label: i18n("Cycle algorithm:")
+                            keySequence: kcm.autotileCycleAlgorithmShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileCycleAlgorithmShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileFocusMasterShortcutField
+                            Kirigami.FormData.label: i18n("Focus master:")
+                            keySequence: kcm.autotileFocusMasterShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileFocusMasterShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileSwapMasterShortcutField
+                            Kirigami.FormData.label: i18n("Swap with master:")
+                            keySequence: kcm.autotileSwapMasterShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileSwapMasterShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileIncMasterRatioShortcutField
+                            Kirigami.FormData.label: i18n("Increase master ratio:")
+                            keySequence: kcm.autotileIncMasterRatioShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileIncMasterRatioShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileDecMasterRatioShortcutField
+                            Kirigami.FormData.label: i18n("Decrease master ratio:")
+                            keySequence: kcm.autotileDecMasterRatioShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileDecMasterRatioShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileIncMasterCountShortcutField
+                            Kirigami.FormData.label: i18n("Increase master count:")
+                            keySequence: kcm.autotileIncMasterCountShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileIncMasterCountShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileDecMasterCountShortcutField
+                            Kirigami.FormData.label: i18n("Decrease master count:")
+                            keySequence: kcm.autotileDecMasterCountShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileDecMasterCountShortcut = keySequence
+                                }
+                            }
+                        }
+
+                        KeySequenceInput {
+                            id: autotileRetileShortcutField
+                            Kirigami.FormData.label: i18n("Retile all windows:")
+                            keySequence: kcm.autotileRetileShortcut
+                            onKeySequenceChanged: {
+                                if (!capturing) {
+                                    kcm.autotileRetileShortcut = keySequence
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Spacer
+                Item {
+                    Layout.fillHeight: true
+                }
+            }
+        }
+
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -2602,6 +3066,13 @@ KCM.AbstractKCM {
     // ═══════════════════════════════════════════════════════════════════════
     // DIALOGS
     // ═══════════════════════════════════════════════════════════════════════
+
+    // Autotile border color dialog
+    ColorDialog {
+        id: autotileBorderColorDialog
+        title: i18n("Choose Active Border Color")
+        onAccepted: kcm.autotileActiveBorderColor = selectedColor
+    }
 
     // Color dialogs
     ColorDialog {
