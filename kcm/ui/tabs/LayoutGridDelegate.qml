@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 import ".."
 
 /**
@@ -25,6 +26,9 @@ Item {
     property bool isSelected: false
     property bool isHovered: false
 
+    // Helper to check if this is an autotile algorithm
+    readonly property bool isAutotile: modelData.category === 1
+
     // Signals
     signal selected(int index)
     signal activated(string layoutId)
@@ -34,9 +38,11 @@ Item {
     height: cellHeight
 
     Accessible.name: modelData.name || i18n("Unnamed Layout")
-    Accessible.description: modelData.isSystem
-        ? i18n("System layout with %1 zones", modelData.zoneCount || 0)
-        : i18n("Custom layout with %1 zones", modelData.zoneCount || 0)
+    Accessible.description: isAutotile
+        ? i18n("Autotile algorithm with dynamic zones")
+        : modelData.isSystem
+            ? i18n("System layout with %1 zones", modelData.zoneCount || 0)
+            : i18n("Custom layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
 
     HoverHandler {
@@ -46,12 +52,22 @@ Item {
 
     TapHandler {
         onTapped: root.selected(root.index)
-        onDoubleTapped: root.activated(root.modelData.id)
+        onDoubleTapped: {
+            // Only allow editing manual layouts, not autotile algorithms
+            if (!root.isAutotile) {
+                root.activated(root.modelData.id)
+            }
+        }
     }
 
-    Keys.onReturnPressed: root.activated(root.modelData.id)
+    Keys.onReturnPressed: {
+        // Only allow editing manual layouts, not autotile algorithms
+        if (!root.isAutotile) {
+            root.activated(root.modelData.id)
+        }
+    }
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem) {
+        if (!root.modelData.isSystem && !root.isAutotile) {
             root.deleteRequested(root.modelData)
         }
     }
@@ -98,7 +114,7 @@ Item {
                     scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
                 }
 
-                // Default layout indicator
+                // Default layout indicator (top-left)
                 Kirigami.Icon {
                     anchors.top: parent.top
                     anchors.left: parent.left
@@ -113,22 +129,34 @@ Item {
                     ToolTip.visible: defaultIconHover.hovered
                     ToolTip.text: i18n("Default layout")
                 }
+
             }
 
-            // Info row
-            Label {
+            // Info row with category badge
+            RowLayout {
                 Layout.fillWidth: true
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-                font.pointSize: Kirigami.Theme.smallFont.pointSize
-                color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+                Layout.alignment: Qt.AlignHCenter
+                spacing: Kirigami.Units.smallSpacing
 
-                text: {
-                    var zoneCount = root.modelData.zoneCount || 0
-                    if (root.modelData.isSystem) {
-                        return i18n("System • %1", zoneCount)
-                    } else {
-                        return i18n("%1 zones", zoneCount)
+                QFZCommon.CategoryBadge {
+                    visible: root.modelData.category !== undefined
+                    category: root.modelData.category !== undefined ? root.modelData.category : 0
+                }
+
+                Label {
+                    elide: Text.ElideRight
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                    color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
+
+                    text: {
+                        var zoneCount = root.modelData.zoneCount || 0
+                        if (root.isAutotile) {
+                            return i18n("Dynamic")
+                        } else if (root.modelData.isSystem) {
+                            return i18n("System • %1", zoneCount)
+                        } else {
+                            return i18n("%1 zones", zoneCount)
+                        }
                     }
                 }
             }

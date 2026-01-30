@@ -198,6 +198,17 @@ public:
      */
     int windowPosition(const QString &windowId) const;
 
+    /**
+     * @brief Rotate all windows by one position
+     *
+     * Clockwise: each window moves to the next position, last becomes first
+     * Counterclockwise: each window moves to the previous position, first becomes last
+     *
+     * @param clockwise Direction of rotation
+     * @return true if rotation was performed (at least 2 windows)
+     */
+    bool rotateWindows(bool clockwise = true);
+
     // ═══════════════════════════════════════════════════════════════════════
     // Split Ratio
     // ═══════════════════════════════════════════════════════════════════════

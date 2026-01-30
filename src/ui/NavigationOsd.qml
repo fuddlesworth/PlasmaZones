@@ -64,16 +64,8 @@ Window {
             return success ? i18n("Rotated") : i18n("Failed")
         } else if (action === "cycle") {
             return success ? i18n("Focus") : i18n("Failed")
-        } else if (action === "autotile") {
-            // reason is "enabled" or "disabled"
-            return reason === "enabled" ? i18n("Autotile On") : i18n("Autotile Off")
-        } else if (action === "algorithm") {
-            // reason is the algorithm name - capitalize first letter
-            let algoName = reason.charAt(0).toUpperCase() + reason.slice(1)
-            // Convert kebab-case to Title Case (e.g., "master-stack" -> "Master Stack")
-            algoName = algoName.replace(/-([a-z])/g, (match, letter) => " " + letter.toUpperCase())
-            return algoName
         } else {
+            // Note: "autotile" and "algorithm" actions now use LayoutOsd with visual preview
             return success ? i18n("Done") : i18n("Failed")
         }
     }

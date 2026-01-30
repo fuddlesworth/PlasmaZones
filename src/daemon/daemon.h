@@ -31,6 +31,9 @@ class WindowDragAdaptor;
 class AutotileAdaptor;
 class AutotileEngine;
 class WindowTrackingService;
+class ModeTracker;
+class ContextAwareShortcutRouter;
+class ZoneSelectorController;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -105,6 +108,7 @@ public:
 
     // OSD notifications
     void showLayoutOsd(Layout* layout);
+    void showAutotileOsd(const QString& algorithmId);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
@@ -138,6 +142,21 @@ private:
     // Autotiling engine and service
     std::unique_ptr<WindowTrackingService> m_windowTrackingService;
     std::unique_ptr<AutotileEngine> m_autotileEngine;
+
+    // Mode tracking and context-aware shortcuts
+    std::unique_ptr<ModeTracker> m_modeTracker;
+    std::unique_ptr<ContextAwareShortcutRouter> m_shortcutRouter;
+
+    // Unified layout cycling (manual layouts + autotile algorithms)
+    struct UnifiedLayoutEntry {
+        QString id;        // Layout UUID or "autotile:<algorithm-id>"
+        QString name;      // Display name
+        bool isAutotile;   // True for autotile algorithms
+    };
+    QVector<UnifiedLayoutEntry> buildUnifiedLayoutList() const;
+    void applyUnifiedLayout(int index);
+    void cycleUnifiedLayout(bool forward);
+    int m_currentUnifiedLayoutIndex = -1;
 
     bool m_running = false;
 

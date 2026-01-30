@@ -54,12 +54,22 @@ Item {
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
     property bool interactive: false
+    /// Whether all zones highlight together (for autotile layouts)
+    property bool highlightAllZones: false
     /// Zone fill opacity when not active/hovered
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
     property real activeOpacity: 0.45
     /// Border opacity
     property real borderOpacity: 0.5
+    /// Highlight color for selected zones (default: theme highlight)
+    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+    /// Inactive color for non-selected zones (default: theme text)
+    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+    /// Border color (default: theme text)
+    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    /// Scale factor when zone is hovered (1.0 = no scale, set > 1.0 to enable)
+    property real hoverScale: 1.0
 
     /// Emitted when a zone is clicked
     signal zoneClicked(int index)
@@ -82,8 +92,12 @@ Item {
             property real relY: relGeo.y || 0
             property real relWidth: relGeo.width || 0.25
             property real relHeight: relGeo.height || 1
-            // Check if this zone is selected
-            property bool isZoneSelected: root.selectedZoneIndex === index
+            // Check if this zone is selected (or all zones if highlightAllZones)
+            property bool isZoneSelected: root.highlightAllZones
+                ? root.selectedZoneIndex >= 0
+                : root.selectedZoneIndex === index
+            // Track per-zone hover state
+            property bool isZoneHovered: root.interactive && zoneMouseArea.containsMouse
 
             // Detect screen boundaries (tolerance 0.01)
             readonly property real edgeTolerance: 0.01
@@ -97,15 +111,31 @@ Item {
             y: relY * root.height + topGap
             width: Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
             height: Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
-            // Zone fill color
+            // Scale on hover (only if hoverScale > 1.0)
+            scale: isZoneHovered && root.hoverScale > 1.0 ? root.hoverScale : 1.0
+            z: isZoneHovered ? 10 : 1
+            transformOrigin: Item.Center
+            // Zone fill color - use highlight color when selected/hovered, inactive color otherwise
             color: {
-                var baseColor = Kirigami.Theme.textColor;
-                var opacity = (root.isActive || root.isHovered || isZoneSelected) ? root.activeOpacity : root.inactiveOpacity;
-                return Qt.rgba(baseColor.r, baseColor.g, baseColor.b, opacity);
+                var isHighlighted = root.isActive || root.isHovered || isZoneSelected || isZoneHovered;
+                if (isHighlighted) {
+                    return root.highlightColor;
+                }
+                return root.inactiveColor;
             }
-            // Border
-            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.borderOpacity)
-            border.width: isZoneSelected ? 2 : 1
+            opacity: (root.isActive || root.isHovered || isZoneSelected || isZoneHovered) ? root.activeOpacity : root.inactiveOpacity
+            // Border - brighter on hover
+            border.color: {
+                if (isZoneHovered) {
+                    // Brighter border when hovered
+                    return Qt.rgba(
+                        Math.min(1, Kirigami.Theme.highlightColor.r * 1.2),
+                        Math.min(1, Kirigami.Theme.highlightColor.g * 1.2),
+                        Math.min(1, Kirigami.Theme.highlightColor.b * 1.2), 1);
+                }
+                return root.borderColor;
+            }
+            border.width: (isZoneSelected || isZoneHovered) ? 2 : 1
             radius: Kirigami.Units.smallSpacing * 0.5
 
             // Zone number label
@@ -116,7 +146,7 @@ Item {
                 font.pixelSize: Math.min(parent.width, parent.height) * 0.4
                 font.bold: true
                 color: Kirigami.Theme.textColor
-                opacity: (root.isActive || root.isHovered) ? 0.8 : 0.5
+                opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
                 visible: root.showZoneNumbers && parent.width >= 16 && parent.height >= 16
 
                 Behavior on opacity {
@@ -128,12 +158,14 @@ Item {
 
             }
 
-            // Optional: Mouse interaction for zone selection (only when interactive)
+            // Mouse interaction for zone selection (only when interactive)
             MouseArea {
+                id: zoneMouseArea
+
                 anchors.fill: parent
+                anchors.margins: -2  // Slightly larger hit area
                 hoverEnabled: root.interactive
                 enabled: root.interactive
-                visible: root.interactive
                 onEntered: root.zoneHovered(index)
                 onExited: root.zoneUnhovered(index)
                 onClicked: root.zoneClicked(index)
@@ -143,6 +175,29 @@ Item {
             Behavior on color {
                 ColorAnimation {
                     duration: root.animationDuration
+                }
+
+            }
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: root.animationDuration
+                }
+
+            }
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: root.animationDuration
+                    easing.type: Easing.OutBack
+                    easing.overshoot: 1.2
+                }
+
+            }
+
+            Behavior on border.color {
+                ColorAnimation {
+                    duration: root.animationDuration / 2
                 }
 
             }

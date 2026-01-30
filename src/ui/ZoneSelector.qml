@@ -253,6 +253,7 @@ Rectangle {
                     layoutId: modelData.id || ""
                     layoutName: modelData.name || i18n("Layout %1", index + 1)
                     zones: modelData.zones || []
+                    category: modelData.category !== undefined ? modelData.category : 0
                     isActive: layoutId === root.activeLayoutId
                     isHovered: layoutId === root.hoveredLayoutId
                     previewWidth: root.previewWidth

@@ -7,6 +7,7 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Zone Selector Window - Overlay window showing layout previews
@@ -89,6 +90,13 @@ Window {
     property color textColor: Kirigami.Theme.textColor
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
+
+    // Animation constants - avoid magic numbers per .cursorrules
+    QtObject {
+        id: animationConstants
+        readonly property int shortDuration: 150
+        readonly property int normalDuration: 200
+    }
 
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
@@ -339,6 +347,8 @@ Window {
                         property string layoutId: modelData.id || ""
                         property string layoutName: modelData.name || ("Layout " + (index + 1))
                         property var layoutZones: modelData.zones || []
+                        property int layoutCategory: modelData.category !== undefined ? modelData.category : 0
+                        property bool isAutotile: layoutCategory === 1
                         property bool isActive: layoutId === root.activeLayoutId
                         property bool hasSelectedZone: root.selectedLayoutId === layoutId
 
@@ -354,6 +364,21 @@ Window {
                             width: root.indicatorWidth
                             height: root.indicatorHeight
                             anchors.top: parent.top
+
+                            // Autotile: whole-preview MouseArea (in front, captures all hover/click)
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: indicator.isAutotile
+                                z: 50
+                                onEntered: {
+                                    if (indicator.isAutotile) {
+                                        root.selectedLayoutId = indicator.layoutId;
+                                        root.selectedZoneIndex = 0;
+                                        root.zoneSelected(indicator.layoutId, 0, {"x": 0, "y": 0, "width": 1, "height": 1});
+                                    }
+                                }
+                            }
 
                             // Background for the indicator - shows active layout and hover states
                             Rectangle {
@@ -381,7 +406,7 @@ Window {
 
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -389,7 +414,7 @@ Window {
 
                                 Behavior on border.color {
                                     ColorAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -397,7 +422,7 @@ Window {
 
                                 Behavior on border.width {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: animationConstants.shortDuration
                                     }
 
                                 }
@@ -411,17 +436,17 @@ Window {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                anchors.leftMargin: -2
-                                anchors.topMargin: 4
-                                anchors.bottomMargin: 4
-                                width: indicator.isActive ? 4 : 0
-                                radius: 2
+                                anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                anchors.bottomMargin: Kirigami.Units.smallSpacing
+                                width: indicator.isActive ? Kirigami.Units.smallSpacing : 0
+                                radius: Math.round(Kirigami.Units.smallSpacing / 2)
                                 color: Kirigami.Theme.highlightColor
                                 opacity: indicator.isActive ? 1 : 0
 
                                 Behavior on width {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -429,7 +454,7 @@ Window {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -441,13 +466,15 @@ Window {
                             Rectangle {
                                 id: activeBadge
 
+                                readonly property int badgeSize: Math.round(Kirigami.Units.gridUnit * 2.5)
+
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                anchors.rightMargin: 4
-                                anchors.topMargin: 4
-                                width: indicator.isActive ? 20 : 0
-                                height: indicator.isActive ? 20 : 0
-                                radius: 10
+                                anchors.rightMargin: Kirigami.Units.smallSpacing
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                width: indicator.isActive ? badgeSize : 0
+                                height: indicator.isActive ? badgeSize : 0
+                                radius: badgeSize / 2
                                 color: Kirigami.Theme.highlightColor
                                 opacity: indicator.isActive ? 1 : 0
                                 z: 100
@@ -455,7 +482,7 @@ Window {
                                 Label {
                                     anchors.centerIn: parent
                                     text: "\u2713" // Checkmark unicode
-                                    font.pixelSize: 12
+                                    font.pixelSize: Math.round(Kirigami.Units.gridUnit * 1.5)
                                     font.bold: true
                                     color: Kirigami.Theme.highlightedTextColor
                                     visible: indicator.isActive
@@ -463,7 +490,7 @@ Window {
 
                                 Behavior on width {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutBack
                                         easing.overshoot: 1.5
                                     }
@@ -472,7 +499,7 @@ Window {
 
                                 Behavior on height {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutBack
                                         easing.overshoot: 1.5
                                     }
@@ -481,210 +508,99 @@ Window {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: animationConstants.shortDuration
                                     }
 
                                 }
 
                             }
 
-                            // Zone rectangles - now proper children of previewArea
-                            Repeater {
-                                model: indicator.layoutZones
+                            // Zone rectangles - use shared ZonePreview for consistent rendering
+                            QFZCommon.ZonePreview {
+                                id: zonePreview
 
-                                delegate: Rectangle {
-                                    id: zoneRect
+                                anchors.fill: parent
+                                zones: indicator.layoutZones
+                                interactive: true
+                                showZoneNumbers: true
+                                highlightAllZones: indicator.isAutotile
+                                selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
+                                isHovered: indicator.hasSelectedZone
+                                isActive: indicator.isActive
+                                zonePadding: 1
+                                edgeGap: 1
+                                minZoneSize: 8
+                                // Colors from root
+                                highlightColor: root.highlightColor
+                                inactiveColor: root.inactiveColor
+                                borderColor: root.borderColor
+                                inactiveOpacity: root.inactiveOpacity
+                                activeOpacity: root.activeOpacity
+                                // Scale on hover for manual layouts only
+                                hoverScale: indicator.isAutotile ? 1.0 : 1.05
+                                animationDuration: animationConstants.normalDuration
 
-                                    required property var modelData
-                                    required property int index
-                                    property var relGeo: modelData.relativeGeometry || {
-                                    }
-                                    property bool isZoneSelected: root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === index
-                                    property bool isZoneHovered: zoneMouseArea.containsMouse
-                                    // Calculate actual pixel dimensions for tooltip
-                                    property int actualWidth: Math.round((relGeo.width || 0.25) * root.screenWidth)
-                                    property int actualHeight: Math.round((relGeo.height || 1) * root.screenWidth / root.screenAspectRatio)
-                                    property int widthPercent: Math.round((relGeo.width || 0.25) * 100)
-                                    property int heightPercent: Math.round((relGeo.height || 1) * 100)
-
-                                    // Use scaled padding for gaps between zones
-                                    // Position relative to parent (previewArea)
-                                    x: (relGeo.x || 0) * parent.width + root.scaledPadding
-                                    y: (relGeo.y || 0) * parent.height + root.scaledPadding
-                                    // P0: Increase minimum zone size from 8px to 24px for easier targeting
-                                    width: Math.max(24, (relGeo.width || 0.25) * parent.width - root.scaledPadding * 2)
-                                    height: Math.max(24, (relGeo.height || 1) * parent.height - root.scaledPadding * 2)
-                                    radius: root.scaledBorderRadius
-                                    // P0: Add scale transform on hover for better visual feedback
-                                    scale: isZoneHovered ? 1.05 : 1
-                                    z: isZoneHovered ? 10 : 1 // Bring hovered zone to front
-                                    transformOrigin: Item.Center
-                                    // Zone coloring - unified with ZoneOverlay/ZoneItem
-                                    // Use custom colors if useCustomColors is true, otherwise use theme defaults
-                                    color: {
-                                        // Check if useCustomColors is true (handle boolean, number, or string)
-                                        var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                                        // If custom colors are enabled and colors are provided, use them
-                                        if (useCustom) {
-                                            if (isZoneSelected && modelData.highlightColor)
-                                                return modelData.highlightColor;
-                                            else if (!isZoneSelected && modelData.inactiveColor)
-                                                return modelData.inactiveColor;
-                                        }
-                                        // Fall back to theme colors
-                                        return isZoneSelected ? highlightColor : inactiveColor;
-                                    }
-                                    opacity: {
-                                        var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                                        if (useCustom && modelData.activeOpacity !== undefined)
-                                            return isZoneSelected ? modelData.activeOpacity : modelData.inactiveOpacity;
-
-                                        return isZoneSelected ? activeOpacity : inactiveOpacity;
-                                    }
-                                    // Border - same style as ZoneItem (always visible)
-                                    // P0: Brighter border on hover for better visibility
-                                    border.color: {
-                                        var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                                        if (useCustom && modelData.borderColor)
-                                            return modelData.borderColor;
-
-                                        // Brighter border when hovered
-                                        if (isZoneHovered)
-                                            return Qt.rgba(Math.min(1, Kirigami.Theme.highlightColor.r * 1.2), Math.min(1, Kirigami.Theme.highlightColor.g * 1.2), Math.min(1, Kirigami.Theme.highlightColor.b * 1.2), 1);
-
-                                        return borderColor;
-                                    }
-                                    border.width: isZoneHovered ? root.scaledBorderWidth + 1 : root.scaledBorderWidth
-
-                                    // P1: Zone number label - more prominent with keyboard hint
-                                    Label {
-                                        id: zoneNumberLabel
-
-                                        anchors.centerIn: parent
-                                        text: (zoneRect.index + 1).toString()
-                                        // P1: Larger, more prominent number labels
-                                        font.pixelSize: Math.max(10, Math.min(parent.width, parent.height) * 0.4)
-                                        font.bold: true
-                                        color: numberColor
-                                        opacity: zoneRect.isZoneSelected || zoneRect.isZoneHovered ? 1 : 0.8
-                                        visible: parent.width >= 16 && parent.height >= 16
-                                        // Style enhancement for keyboard shortcut hint
-                                        style: (zoneRect.index < 9 && zoneRect.isZoneHovered) ? Text.Outline : Text.Normal
-                                        styleColor: Qt.rgba(0, 0, 0, 0.3)
-
-                                        Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: 150
-                                                easing.type: Easing.OutCubic
-                                            }
-
-                                        }
-
-                                        Behavior on font.pixelSize {
-                                            NumberAnimation {
-                                                duration: 100
-                                            }
-
-                                        }
-
-                                    }
-
-                                    // Mouse interaction for non-drag selection
-                                    MouseArea {
-                                        id: zoneMouseArea
-
-                                        anchors.fill: parent
-                                        // P0: Add extra hit area padding for easier targeting
-                                        anchors.margins: -2
-                                        hoverEnabled: true
-                                        onEntered: {
-                                            root.selectedLayoutId = indicator.layoutId;
-                                            root.selectedZoneIndex = zoneRect.index;
-                                            root.zoneSelected(indicator.layoutId, zoneRect.index, zoneRect.relGeo);
-                                        }
-                                    }
-
-                                    // P2: Smoother animations with easing curves
-                                    Behavior on color {
-                                        ColorAnimation {
-                                            duration: 200
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
-                                    Behavior on opacity {
-                                        NumberAnimation {
-                                            duration: 200
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
-                                    Behavior on scale {
-                                        NumberAnimation {
-                                            duration: 150
-                                            easing.type: Easing.OutBack
-                                            easing.overshoot: 1.2
-                                        }
-
-                                    }
-
-                                    Behavior on border.color {
-                                        ColorAnimation {
-                                            duration: 150
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
-                                    Behavior on border.width {
-                                        NumberAnimation {
-                                            duration: 150
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
+                                onZoneHovered: function(index) {
+                                    root.selectedLayoutId = indicator.layoutId;
+                                    root.selectedZoneIndex = indicator.isAutotile ? 0 : index;
+                                    var zone = indicator.layoutZones[index];
+                                    var relGeo = zone ? (zone.relativeGeometry || {}) : {};
+                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex,
+                                                     indicator.isAutotile ? {"x": 0, "y": 0, "width": 1, "height": 1} : relGeo);
                                 }
-
                             }
 
                         }
 
-                        // Layout name label below preview
-                        Label {
-                            id: nameLabel
+                        // Layout name label with category badge below preview
+                        Row {
+                            id: nameLabelRow
 
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: previewArea.bottom
                             anchors.topMargin: root.labelTopMargin
-                            text: indicator.layoutName
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
-                            // P1: More prominent styling for active layout label
-                            font.weight: indicator.isActive ? Font.Bold : Font.Normal
-                            color: {
-                                if (indicator.isActive)
-                                    return Kirigami.Theme.highlightColor;
-                                else if (indicator.hasSelectedZone)
-                                    return textColor;
-                                return Qt.rgba(textColor.r, textColor.g, textColor.b, 0.6);
-                            }
-                            opacity: indicator.hasSelectedZone || indicator.isActive ? 1 : 0.8
+                            spacing: Kirigami.Units.smallSpacing
 
-                            // P2: Smoother animations with easing
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
+                            // Category badge (Manual/Auto) - inline with name
+                            QFZCommon.CategoryBadge {
+                                id: categoryBadge
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                category: indicator.layoutCategory
+                            }
+
+                            Label {
+                                id: nameLabel
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: indicator.layoutName
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
+                                // P1: More prominent styling for active layout label
+                                font.weight: indicator.isActive ? Font.Bold : Font.Normal
+                                color: {
+                                    if (indicator.isActive)
+                                        return Kirigami.Theme.highlightColor;
+                                    else if (indicator.hasSelectedZone)
+                                        return textColor;
+                                    return Qt.rgba(textColor.r, textColor.g, textColor.b, 0.6);
+                                }
+                                opacity: indicator.hasSelectedZone || indicator.isActive ? 1 : 0.8
+
+                                // P2: Smoother animations with easing
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: animationConstants.normalDuration
+                                        easing.type: Easing.OutCubic
+                                    }
+
                                 }
 
-                            }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: animationConstants.normalDuration
+                                        easing.type: Easing.OutCubic
+                                    }
 
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
                                 }
 
                             }

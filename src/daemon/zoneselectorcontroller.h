@@ -6,6 +6,7 @@
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
+#include "../autotile/AlgorithmRegistry.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -54,6 +55,9 @@ class PLASMAZONES_EXPORT ZoneSelectorController : public QObject
     Q_PROPERTY(int triggerDistance READ triggerDistance WRITE setTriggerDistance NOTIFY triggerDistanceChanged)
     Q_PROPERTY(int nearDistance READ nearDistance WRITE setNearDistance NOTIFY nearDistanceChanged)
     Q_PROPERTY(int edgeTriggerZone READ edgeTriggerZone WRITE setEdgeTriggerZone NOTIFY edgeTriggerZoneChanged)
+
+    // Selector geometry (set from QML to prevent hiding while cursor is over selector)
+    Q_PROPERTY(QRectF selectorGeometry READ selectorGeometry WRITE setSelectorGeometry NOTIFY selectorGeometryChanged)
 
 public:
     /**
@@ -125,6 +129,13 @@ public:
     }
     void setEdgeTriggerZone(int zone);
 
+    // Selector geometry
+    QRectF selectorGeometry() const
+    {
+        return m_selectorGeometry;
+    }
+    void setSelectorGeometry(const QRectF& geometry);
+
     // Layout management (concrete type for signal connections)
     void setLayoutManager(LayoutManager* layoutManager);
     void setSettings(ISettings* settings);
@@ -184,10 +195,14 @@ Q_SIGNALS:
     void triggerDistanceChanged(int distance);
     void nearDistanceChanged(int distance);
     void edgeTriggerZoneChanged(int zone);
+    void selectorGeometryChanged(const QRectF& geometry);
 
     // Layout selection signal (for external handlers)
     void layoutSelected(const QString& layoutId);
     void layoutHovered(const QString& layoutId);
+
+    // Autotile layout selection (emitted when user selects an autotile algorithm from zone selector)
+    void autotileLayoutSelected(const QString& algorithmId);
 
     // Drag state signals
     void dragStarted();
@@ -220,6 +235,9 @@ private:
     int m_triggerDistance = 100; // Distance from top edge to activate
     int m_nearDistance = 50; // Distance for "near" state
     int m_edgeTriggerZone = 150; // Horizontal zone width for edge detection
+
+    // Selector geometry (global coordinates, set from QML)
+    QRectF m_selectorGeometry;
 
     // Layout data
     QString m_activeLayoutId;

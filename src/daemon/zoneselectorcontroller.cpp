@@ -5,6 +5,7 @@
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/utils.h"
+#include "../autotile/TilingAlgorithm.h"
 #include <QScreen>
 #include <QQuickItem>
 #include <QCursor>
@@ -83,10 +84,22 @@ QVariantList ZoneSelectorController::layouts() const
         return result;
     }
 
-    // Get all layouts from the layout manager
+    // Get all manual layouts from the layout manager
     const auto layoutList = m_layoutManager->layouts();
     for (Layout* layout : layoutList) {
         result.append(layoutToVariantMap(layout));
+    }
+
+    // Append autotile algorithms as layouts (using shared utility from AlgorithmRegistry)
+    auto* registry = AlgorithmRegistry::instance();
+    if (registry) {
+        const QStringList algorithmIds = registry->availableAlgorithms();
+        for (const QString& algorithmId : algorithmIds) {
+            TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
+            if (algorithm) {
+                result.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
+            }
+        }
     }
 
     return result;
@@ -141,6 +154,16 @@ void ZoneSelectorController::setEdgeTriggerZone(int zone)
 
     m_edgeTriggerZone = zone;
     Q_EMIT edgeTriggerZoneChanged(zone);
+}
+
+void ZoneSelectorController::setSelectorGeometry(const QRectF& geometry)
+{
+    if (m_selectorGeometry == geometry) {
+        return;
+    }
+
+    m_selectorGeometry = geometry;
+    Q_EMIT selectorGeometryChanged(geometry);
 }
 
 void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
@@ -318,10 +341,23 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
 {
     qCDebug(lcOverlay) << "Layout selected:" << layoutId;
 
+    // Check if this is an autotile algorithm selection
+    if (LayoutId::isAutotile(layoutId)) {
+        QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
+        if (algorithmId.isEmpty()) {
+            qCWarning(lcOverlay) << "Invalid autotile layout ID (empty algorithm):" << layoutId;
+            return;
+        }
+        qCInfo(lcOverlay) << "Autotile layout selected:" << algorithmId;
+        Q_EMIT autotileLayoutSelected(algorithmId);
+        return;
+    }
+
+    // Regular manual layout selection
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Optionally notify layout manager to switch layout
+    // Notify layout manager to switch layout
     if (m_layoutManager) {
         auto uuidOpt = Utils::parseUuid(layoutId);
         if (uuidOpt) {
@@ -397,6 +433,9 @@ void ZoneSelectorController::updateProximity()
         Q_EMIT cursorProximityChanged(proximity);
     }
 
+    // Check if cursor is over the selector (don't hide while interacting)
+    bool cursorOverSelector = m_selectorGeometry.isValid() && m_selectorGeometry.contains(m_cursorPosition);
+
     // State transitions based on proximity
     if (m_isDragging && inHorizontalZone) {
         if (proximity < 0.3 && m_state == State::Hidden) {
@@ -405,8 +444,8 @@ void ZoneSelectorController::updateProximity()
         } else if (proximity < 0.1 && m_state == State::Near) {
             // Very close - expand
             expand();
-        } else if (proximity > 0.7 && m_state != State::Hidden) {
-            // Far from edge - hide
+        } else if (proximity > 0.7 && m_state != State::Hidden && !cursorOverSelector) {
+            // Far from edge AND not over selector - hide
             hide();
         }
     }
@@ -443,18 +482,20 @@ ZoneSelectorController::State ZoneSelectorController::stringToState(const QStrin
 
 QVariantMap ZoneSelectorController::layoutToVariantMap(Layout* layout) const
 {
+    using namespace JsonKeys;
     QVariantMap map;
 
     if (!layout) {
         return map;
     }
 
-    map[QStringLiteral("id")] = layout->id().toString();
-    map[QStringLiteral("name")] = layout->name();
-    map[QStringLiteral("description")] = layout->description();
-    map[QStringLiteral("type")] = static_cast<int>(layout->type());
-    map[QStringLiteral("zoneCount")] = layout->zoneCount();
-    map[QStringLiteral("zones")] = zonesToVariantList(layout);
+    map[Id] = layout->id().toString();
+    map[Name] = layout->name();
+    map[Description] = layout->description();
+    map[Type] = static_cast<int>(layout->type());
+    map[ZoneCount] = layout->zoneCount();
+    map[Zones] = zonesToVariantList(layout);
+    map[Category] = static_cast<int>(LayoutCategory::Manual);
 
     return map;
 }

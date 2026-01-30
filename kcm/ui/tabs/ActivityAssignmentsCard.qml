@@ -104,11 +104,15 @@ Kirigami.Card {
                             required property var modelData
                             property string screenName: modelData.name || ""
 
+                            // Activity "Default" resolves to monitor's layout (or global if monitor has none)
+                            property string monitorLayout: root.kcm.getLayoutForScreen(screenName) || ""
+
                             kcm: root.kcm
                             iconSource: "video-display"
                             iconOpacity: 0.7
                             labelText: screenName
                             noneText: i18n("Use default")
+                            resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
                             currentLayoutId: {
                                 let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenName, activityDelegate.activityId)
                                 return hasExplicit ? (root.kcm.getLayoutForScreenActivity(screenName, activityDelegate.activityId) || "") : ""
@@ -120,6 +124,10 @@ Kirigami.Card {
                                     let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenRow.screenName, activityDelegate.activityId)
                                     screenRow.currentLayoutId = hasExplicit ?
                                         (root.kcm.getLayoutForScreenActivity(screenRow.screenName, activityDelegate.activityId) || "") : ""
+                                }
+                                function onScreenAssignmentsChanged() {
+                                    // Update resolved default when monitor assignment changes
+                                    screenRow.monitorLayout = root.kcm.getLayoutForScreen(screenRow.screenName) || ""
                                 }
                             }
 

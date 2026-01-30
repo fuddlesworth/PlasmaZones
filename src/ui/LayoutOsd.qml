@@ -20,6 +20,8 @@ Window {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
+    // Layout category: 0=Manual, 1=Autotile (matches LayoutCategory enum in C++)
+    property int category: 0
 
     // Screen info for aspect ratio (bounded to prevent layout issues)
     property real screenAspectRatio: 16 / 9
@@ -160,7 +162,7 @@ Window {
 
         anchors.centerIn: parent
         width: previewContainer.width + Kirigami.Units.gridUnit * 3
-        height: previewContainer.height + nameLabel.height + Kirigami.Units.gridUnit * 3
+        height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
         color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.15)
@@ -201,19 +203,34 @@ Window {
 
         }
 
-        // Layout name label
-        Label {
-            id: nameLabel
+        // Layout name with category badge
+        Row {
+            id: nameLabelRow
 
             anchors.top: previewContainer.bottom
             anchors.topMargin: Kirigami.Units.gridUnit
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
-            text: root.layoutName
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
-            font.weight: Font.Medium
-            color: textColor
-            horizontalAlignment: Text.AlignHCenter
+            spacing: Kirigami.Units.smallSpacing
+
+            // Category badge (Manual/Auto)
+            QFZCommon.CategoryBadge {
+                id: categoryBadge
+
+                anchors.verticalCenter: parent.verticalCenter
+                category: root.category
+            }
+
+            Label {
+                id: nameLabel
+
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.layoutName
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
+                font.weight: Font.Medium
+                color: textColor
+                horizontalAlignment: Text.AlignHCenter
+            }
         }
 
     }

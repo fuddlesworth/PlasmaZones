@@ -18,6 +18,12 @@ Rectangle {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: [] // Array of zone objects with relativeGeometry
+    // Layout category: 0=Manual, 1=Autotile (matches LayoutCategory enum in C++)
+    property int category: 0
+    // Category constants for readability (matches PlasmaZones::LayoutCategory)
+    readonly property int categoryManual: 0
+    readonly property int categoryAutotile: 1
+    property bool isAutotile: category === categoryAutotile
     // State
     property bool isActive: false
     property bool isHovered: false
@@ -88,7 +94,7 @@ Rectangle {
         animationDuration: constants.animationDuration
     }
 
-    // Layout name label at bottom
+    // Layout name label at bottom with category badge
     Rectangle {
         id: labelContainer
 
@@ -108,15 +114,28 @@ Rectangle {
             color: parent.color
         }
 
-        Label {
+        // Row containing category badge and layout name
+        Row {
             anchors.centerIn: parent
-            text: root.layoutName
-            color: Kirigami.Theme.textColor
-            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-            font.bold: root.isActive
-            elide: Text.ElideRight
-            width: parent.width - Kirigami.Units.gridUnit
-            horizontalAlignment: Text.AlignHCenter
+            spacing: Kirigami.Units.smallSpacing
+
+            // Category badge (Manual/Auto) - inline with name
+            QFZCommon.CategoryBadge {
+                id: categoryBadge
+
+                anchors.verticalCenter: parent.verticalCenter
+                category: root.category
+            }
+
+            Label {
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.layoutName
+                color: Kirigami.Theme.textColor
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                font.bold: root.isActive
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, labelContainer.width - categoryBadge.width - Kirigami.Units.gridUnit * 1.5)
+            }
         }
 
     }
@@ -153,6 +172,7 @@ Rectangle {
         }
 
     }
+
 
     // Mouse interaction
     MouseArea {

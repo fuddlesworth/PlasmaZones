@@ -608,6 +608,50 @@ void AutotileEngine::decreaseMasterCount()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Window rotation and floating
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::rotateWindowOrder(bool clockwise)
+{
+    QString screenName;
+    TilingState *state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.size() < 2 || !state) {
+        return; // Nothing to rotate with 0 or 1 window
+    }
+
+    // Rotate the window order
+    bool rotated = state->rotateWindows(clockwise);
+    retileAfterOperation(screenName, rotated);
+
+    qCInfo(lcAutotile) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
+}
+
+void AutotileEngine::toggleFocusedWindowFloat()
+{
+    QString screenName;
+    TilingState *state = nullptr;
+    tiledWindowsForFocusedScreen(screenName, state);
+
+    if (!state) {
+        return;
+    }
+
+    const QString focused = state->focusedWindow();
+    if (focused.isEmpty()) {
+        return;
+    }
+
+    // Toggle floating state
+    state->toggleFloating(focused);
+    retileAfterOperation(screenName, true);  // Always retile after successful toggle
+
+    bool isNowFloating = state->isFloating(focused);
+    qCInfo(lcAutotile) << "Window" << focused << (isNowFloating ? "now floating" : "now tiled");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Event handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 

@@ -28,6 +28,21 @@ enum class LayoutType {
 };
 
 /**
+ * @brief Category distinguishing manual layouts from autotile algorithms
+ *
+ * Used by the zone selector to show appropriate UI badges and handle
+ * selection differently for autotile algorithms acting as layouts.
+ *
+ * QML Note: Passed as int to QML. Values:
+ *   0 = Manual (traditional zone-based layout)
+ *   1 = Autotile (autotile algorithm acting as a layout)
+ */
+enum class LayoutCategory {
+    Manual = 0,   ///< Traditional zone-based layout
+    Autotile = 1  ///< Autotile algorithm acting as a layout
+};
+
+/**
  * @brief Represents a collection of zones that form a layout
  *
  * Layouts can be assigned to specific monitors, virtual desktops,
@@ -239,3 +254,4 @@ private:
 } // namespace PlasmaZones
 
 Q_DECLARE_METATYPE(PlasmaZones::LayoutType)
+Q_DECLARE_METATYPE(PlasmaZones::LayoutCategory)

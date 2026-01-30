@@ -643,16 +643,32 @@
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Mode Tracking (for smart toggle between manual and autotile modes)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="ModeTracking">
+    <entry name="LastTilingMode" type="Int">
+      <label>Last used tiling mode (0=Manual, 1=Autotile)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>1</max>
+    </entry>
+    <entry name="LastManualLayoutId" type="String">
+      <label>UUID of the last manually selected layout</label>
+      <default></default>
+    </entry>
+    <entry name="LastAutotileAlgorithm" type="String">
+      <label>ID of the last used autotile algorithm</label>
+      <default>master-stack</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
        Autotiling Shortcuts (Bismuth-compatible defaults)
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="AutotileShortcuts">
     <entry name="ToggleShortcut" type="String">
       <label>Toggle autotiling on/off</label>
       <default>Meta+T</default>
-    </entry>
-    <entry name="CycleAlgorithmShortcut" type="String">
-      <label>Cycle through tiling algorithms</label>
-      <default>Meta+Space</default>
     </entry>
     <entry name="FocusMasterShortcut" type="String">
       <label>Focus the master window</label>

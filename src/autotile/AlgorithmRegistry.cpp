@@ -3,10 +3,21 @@
 
 #include "AlgorithmRegistry.h"
 #include "TilingAlgorithm.h"
+#include "TilingState.h"
 #include "core/constants.h"
+#include "core/layout.h"
+#include "core/logging.h"
 
 #include <QDebug>
+#include <QRect>
 #include <algorithm>
+
+namespace {
+/// Preview uses 3 windows to show master/stack layout clearly
+constexpr int PreviewWindowCount = 3;
+/// Use 1000x1000 for high-precision relative coordinate conversion
+constexpr int PreviewSize = 1000;
+}
 
 namespace PlasmaZones {
 
@@ -127,7 +138,12 @@ QList<TilingAlgorithm *> AlgorithmRegistry::allAlgorithms() const
     result.reserve(m_registrationOrder.size());
 
     for (const QString &id : m_registrationOrder) {
-        result.append(m_algorithms.value(id));
+        if (auto* algo = m_algorithms.value(id)) {
+            result.append(algo);
+        } else {
+            qCWarning(lcAutotile) << "Algorithm ID in registration order not found in map:" << id
+                                  << "- possible registration/unregistration bug";
+        }
     }
 
     return result;
@@ -164,6 +180,67 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
 
     // Clear pending list (registrations are now complete)
     pending.clear();
+}
+
+QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
+{
+    QVariantList list;
+
+    if (!algorithm) {
+        return list;
+    }
+
+    // Generate preview zones for a representative window count
+    const QRect previewRect(0, 0, PreviewSize, PreviewSize);
+
+    TilingState previewState(QStringLiteral("preview"));
+    previewState.setMasterCount(1);
+    previewState.setSplitRatio(AutotileDefaults::DefaultSplitRatio);
+
+    QVector<QRect> zones = algorithm->calculateZones(PreviewWindowCount, previewRect, previewState);
+
+    for (int i = 0; i < zones.size(); ++i) {
+        const QRect &zone = zones[i];
+        QVariantMap zoneMap;
+
+        zoneMap[QStringLiteral("id")] = QString::number(i);
+        zoneMap[QStringLiteral("name")] = QString();
+        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
+
+        // Convert to relative geometry (0.0 - 1.0)
+        QVariantMap relGeoMap;
+        relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
+        relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
+        relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
+        relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
+        zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
+
+        zoneMap[QStringLiteral("useCustomColors")] = false;
+
+        list.append(zoneMap);
+    }
+
+    return list;
+}
+
+QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm *algorithm, const QString &algorithmId)
+{
+    QVariantMap map;
+
+    if (!algorithm) {
+        return map;
+    }
+
+    // Use autotile: prefix for ID to distinguish from manual layout UUIDs
+    map[QStringLiteral("id")] = LayoutId::makeAutotileId(algorithmId);
+    map[QStringLiteral("name")] = algorithm->name();
+    map[QStringLiteral("description")] = algorithm->description();
+    map[QStringLiteral("type")] = -1; // Not a standard LayoutType
+    map[QStringLiteral("zoneCount")] = 0; // Dynamic based on windows
+    map[QStringLiteral("zones")] = generatePreviewZones(algorithm);
+    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Autotile);
+
+    return map;
 }
 
 } // namespace PlasmaZones

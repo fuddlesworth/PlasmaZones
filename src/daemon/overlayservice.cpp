@@ -5,6 +5,9 @@
 #include "../core/layout.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
+#include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/AutotileEngine.h"
+#include "../autotile/TilingAlgorithm.h"
 #include "../core/platform.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
@@ -178,23 +181,9 @@ ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen*
         layout.columns = 1;
         layout.rows = safeLayoutCount;
     } else if (layoutMode == ZoneSelectorLayoutMode::Grid) {
-        if (sizeMode == ZoneSelectorSizeMode::Auto) {
-            // Auto-calculate columns based on layout count for balanced grid
-            // Heuristic: aim for roughly square-ish grid, max 6 columns
-            if (safeLayoutCount <= 3) {
-                layout.columns = safeLayoutCount;
-            } else if (safeLayoutCount <= 6) {
-                layout.columns = 3;
-            } else if (safeLayoutCount <= 12) {
-                layout.columns = 4;
-            } else {
-                layout.columns = std::min(6, static_cast<int>(std::ceil(std::sqrt(safeLayoutCount))));
-            }
-        } else {
-            // Manual mode: Use explicit grid columns setting
-            const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 3;
-            layout.columns = std::max(1, gridColumns);
-        }
+        // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
+        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 3;
+        layout.columns = std::max(1, gridColumns);
         layout.rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / layout.columns));
     } else {
         // Horizontal mode
@@ -941,6 +930,11 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
     m_layoutManager = layoutManager;
 }
 
+void OverlayService::setAutotileEngine(AutotileEngine* engine)
+{
+    m_autotileEngine = engine;
+}
+
 void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
@@ -1127,12 +1121,26 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 && localY < indicatorY + layout.indicatorHeight) {
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
-                QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
+                const int category = layoutMap.value(QStringLiteral("category"), 0).toInt();
+                const bool isAutotile = (category == static_cast<int>(LayoutCategory::Autotile));
 
-                // Read scaled padding from QML (calculated from zonePadding setting)
+                // Autotile: whole layout is the target - no per-zone selection
+                if (isAutotile) {
+                    if (m_selectedLayoutId != layoutId || m_selectedZoneIndex != 0) {
+                        m_selectedLayoutId = layoutId;
+                        m_selectedZoneIndex = 0; // Sentinel for whole-layout selection
+                        m_selectedZoneRelGeo = QRectF(0, 0, 1, 1);
+                        window->setProperty("selectedLayoutId", layoutId);
+                        window->setProperty("selectedZoneIndex", 0);
+                    }
+                    return;
+                }
+
+                // Manual: per-zone hit testing
+                QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
                 int scaledPadding = window->property("scaledPadding").toInt();
                 if (scaledPadding <= 0)
-                    scaledPadding = 1; // Fallback minimum
+                    scaledPadding = 1;
                 constexpr int minZoneSize = 8;
 
                 for (int z = 0; z < zones.size(); ++z) {
@@ -1390,16 +1398,16 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     QVariantList layouts = buildLayoutsList();
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
-    // Set active layout ID - use screen-specific layout if assigned
-    // Pass current virtual desktop and activity for per-desktop and per-activity assignments
+    // Set active layout ID - autotile takes precedence when enabled, else screen-specific manual layout
     QString activeLayoutId;
-    if (m_layoutManager) {
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        activeLayoutId = LayoutId::makeAutotileId(m_autotileEngine->algorithm());
+    } else if (m_layoutManager) {
         Layout* screenLayout =
             m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             activeLayoutId = screenLayout->id().toString();
         } else if (m_layout) {
-            // Fall back to global active layout
             activeLayoutId = m_layout->id().toString();
         }
     } else if (m_layout) {
@@ -1856,14 +1864,24 @@ QVariantList OverlayService::buildLayoutsList() const
 {
     QVariantList layoutsList;
 
-    if (!m_layoutManager) {
-        return layoutsList;
+    // Add manual layouts first
+    if (m_layoutManager) {
+        const auto layouts = m_layoutManager->layouts();
+        for (Layout* layout : layouts) {
+            layoutsList.append(layoutToVariantMap(layout));
+        }
     }
 
-    // Get all layouts from the layout manager
-    const auto layouts = m_layoutManager->layouts();
-    for (Layout* layout : layouts) {
-        layoutsList.append(layoutToVariantMap(layout));
+    // Add autotile algorithms (unified layout model - using shared utility)
+    auto* registry = AlgorithmRegistry::instance();
+    if (registry) {
+        const QStringList algorithmIds = registry->availableAlgorithms();
+        for (const QString& algorithmId : algorithmIds) {
+            TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
+            if (algorithm) {
+                layoutsList.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
+            }
+        }
     }
 
     return layoutsList;
@@ -1883,6 +1901,7 @@ QVariantMap OverlayService::layoutToVariantMap(Layout* layout) const
     map[QStringLiteral("type")] = static_cast<int>(layout->type());
     map[QStringLiteral("zoneCount")] = layout->zoneCount();
     map[QStringLiteral("zones")] = zonesToVariantList(layout);
+    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Manual);
 
     return map;
 }
@@ -1994,6 +2013,14 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
 
 void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry)
 {
+    // Check if this is an autotile layout selection (has "autotile:" prefix)
+    if (LayoutId::isAutotile(layoutId)) {
+        QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
+        qCInfo(lcOverlay) << "Autotile layout selected from zone selector:" << algorithmId;
+        Q_EMIT autotileLayoutSelected(algorithmId);
+        return;
+    }
+
     m_selectedLayoutId = layoutId;
     m_selectedZoneIndex = zoneIndex;
 
@@ -2004,6 +2031,10 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     qreal width = relGeoMap.value(QStringLiteral("width"), 0.0).toReal();
     qreal height = relGeoMap.value(QStringLiteral("height"), 0.0).toReal();
     m_selectedZoneRelGeo = QRectF(x, y, width, height);
+
+    // Emit signal to change the current layout (same behavior as autotile selection)
+    qCInfo(lcOverlay) << "Manual layout selected from zone selector:" << layoutId;
+    Q_EMIT manualLayoutSelected(layoutId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2209,6 +2240,8 @@ void OverlayService::showLayoutOsd(Layout* layout)
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+    // Manual layouts always have category 0 (LayoutCategory::Manual)
+    writeQmlProperty(window, QStringLiteral("category"), 0);
 
     // Reuse zonesToVariantList for OSD (DRY - same format as layout/zone selector)
     writeQmlProperty(window, QStringLiteral("zones"), zonesToVariantList(layout));
@@ -2225,6 +2258,59 @@ void OverlayService::showLayoutOsd(Layout* layout)
     QMetaObject::invokeMethod(window, "show");
 
     qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name();
+}
+
+void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category)
+{
+    // Don't show OSD for empty layouts
+    if (zones.isEmpty()) {
+        qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << name;
+        return;
+    }
+
+    // Show on primary screen only for OSD
+    QScreen* screen = Utils::primaryScreen();
+    if (!screen) {
+        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+        return;
+    }
+
+    // Create window if needed
+    if (!m_layoutOsdWindows.contains(screen)) {
+        createLayoutOsdWindow(screen);
+    }
+
+    auto* window = m_layoutOsdWindows.value(screen);
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to get layout OSD window";
+        return;
+    }
+
+    // Get screen geometry for aspect ratio
+    const QRect screenGeom = screen->geometry();
+    qreal aspectRatio =
+        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    // Ensure aspect ratio is within reasonable bounds
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+
+    // Set layout data
+    writeQmlProperty(window, QStringLiteral("layoutId"), id);
+    writeQmlProperty(window, QStringLiteral("layoutName"), name);
+    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+    writeQmlProperty(window, QStringLiteral("category"), category);
+    writeQmlProperty(window, QStringLiteral("zones"), zones);
+
+    // Set explicit window size before positioning
+    const int osdWidth = 280;
+    const int osdHeight = static_cast<int>(200 / aspectRatio) + 80;
+    window->setWidth(osdWidth);
+    window->setHeight(osdHeight);
+    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
+
+    // Show with animation
+    QMetaObject::invokeMethod(window, "show");
+
+    qCDebug(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category;
 }
 
 void OverlayService::hideLayoutOsd()

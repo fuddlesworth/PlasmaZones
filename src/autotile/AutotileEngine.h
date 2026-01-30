@@ -283,6 +283,29 @@ public:
      */
     Q_INVOKABLE void decreaseMasterCount();
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window rotation and floating (context-aware shortcuts support)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Rotate all tiled windows by one position
+     *
+     * Shifts all windows in the tiling order. Clockwise moves each window
+     * to the next position (first becomes last), counterclockwise moves
+     * each to the previous position (last becomes first).
+     *
+     * @param clockwise Direction of rotation
+     */
+    Q_INVOKABLE void rotateWindowOrder(bool clockwise = true);
+
+    /**
+     * @brief Toggle the focused window between tiled and floating states
+     *
+     * When the window is tiled, it becomes floating and is excluded from
+     * automatic tiling. When floating, it re-enters the tiling layout.
+     */
+    Q_INVOKABLE void toggleFocusedWindowFloat();
+
 Q_SIGNALS:
     /**
      * @brief Emitted when the enabled state changes

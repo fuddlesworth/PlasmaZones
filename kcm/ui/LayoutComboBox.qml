@@ -5,12 +5,18 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * @brief Reusable combo box for selecting layouts with consistent model building
  *
  * This component eliminates duplication of the layout model building logic
  * across MonitorAssignments, ActivityAssignments, and QuickLayoutSlots.
+ *
+ * Supports both manual layouts and autotile algorithms (unified layout model).
+ * Category: 0 = Manual, 1 = Autotile
+ *
+ * The "Default" option resolves to the actual default layout for preview.
  */
 ComboBox {
     id: root
@@ -20,17 +26,56 @@ ComboBox {
     property string currentLayoutId: ""
     property bool showPreview: false
 
+    // The layout ID that "Default" actually resolves to at runtime.
+    // Set by parent based on context:
+    // - Monitor dropdown: kcm.defaultLayoutId (global default)
+    // - Per-desktop dropdown: monitor's layout (or global if none)
+    // - Activity dropdown: monitor's layout (or global if none)
+    property string resolvedDefaultId: kcm?.defaultLayoutId ?? ""
+
     textRole: "text"
     valueRole: "value"
 
+    // Helper to find layout by ID
+    function findLayoutById(layoutId) {
+        if (!kcm || !kcm.layouts || !layoutId) return null
+        for (let i = 0; i < kcm.layouts.length; i++) {
+            if (kcm.layouts[i].id === layoutId) {
+                return kcm.layouts[i]
+            }
+        }
+        return null
+    }
+
+    // Helper to get category with default fallback (avoids repeated ternary)
+    function getCategory(layout, defaultCategory) {
+        if (!layout) return defaultCategory
+        return layout.category !== undefined ? layout.category : defaultCategory
+    }
+
+    // Resolve the actual layout that "Default" represents
+    readonly property var resolvedDefaultLayout: findLayoutById(resolvedDefaultId)
+
     model: {
-        let items = [{text: noneText, value: "", layout: null}]
+        // First item is "Default" - shows what it actually resolves to
+        let defaultLayout = resolvedDefaultLayout
+        let items = [{
+            text: noneText,
+            value: "",
+            layout: defaultLayout,  // Show actual resolved layout preview
+            category: getCategory(defaultLayout, -1),  // -1 = no badge for unresolved default
+            isDefaultOption: true   // Flag to indicate this is the "Default" option
+        }]
+
         if (kcm && kcm.layouts) {
             for (let i = 0; i < kcm.layouts.length; i++) {
+                let layout = kcm.layouts[i]
                 items.push({
-                    text: kcm.layouts[i].name,
-                    value: kcm.layouts[i].id,
-                    layout: kcm.layouts[i]
+                    text: layout.name,
+                    value: layout.id,
+                    layout: layout,
+                    category: getCategory(layout, 0),  // 0 = Manual as default
+                    isDefaultOption: false
                 })
             }
         }
@@ -56,7 +101,7 @@ ComboBox {
         currentIndex = 0
     }
 
-    // Custom delegate with optional layout preview
+    // Custom delegate with optional layout preview and category badge
     delegate: ItemDelegate {
         width: root.popup.width
         highlighted: root.highlightedIndex === index
@@ -64,11 +109,16 @@ ComboBox {
         required property var modelData
         required property int index
 
+        // Helper properties for readability
+        readonly property bool isAutotile: modelData.category === 1
+        readonly property bool hasLayout: modelData.layout != null
+        readonly property bool isDefaultOption: modelData.isDefaultOption === true
+
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
 
             // Mini layout preview (only if showPreview is enabled)
-            // Match LayoutThumbnail colors for consistency
+            // Uses shared ZonePreview component for DRY compliance
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
@@ -78,37 +128,19 @@ ComboBox {
                     Kirigami.Theme.highlightColor :
                     Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
                 border.width: highlighted ? 2 : 1
-                visible: root.showPreview && modelData.layout != null
+                visible: root.showPreview && hasLayout
 
-                Item {
-                    id: zonePreviewContainer
+                QFZCommon.ZonePreview {
                     anchors.fill: parent
                     anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
-
-                    property var zones: modelData.layout?.zones || []
-
-                    Repeater {
-                        model: zonePreviewContainer.zones
-                        Rectangle {
-                            required property var modelData
-                            required property int index
-                            property var relGeo: modelData.relativeGeometry || {}
-                            x: (relGeo.x || 0) * zonePreviewContainer.width
-                            y: (relGeo.y || 0) * zonePreviewContainer.height
-                            width: Math.max(2, (relGeo.width || 0.25) * zonePreviewContainer.width)
-                            height: Math.max(2, (relGeo.height || 1) * zonePreviewContainer.height)
-                            // Match ZonePreview colors for consistency
-                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b,
-                                highlighted ? 0.45 : 0.25)
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
-                            border.width: highlighted ? 2 : 1
-                            radius: Kirigami.Units.smallSpacing * 0.5
-                        }
-                    }
+                    zones: modelData.layout?.zones || []
+                    isHovered: highlighted
+                    showZoneNumbers: false
+                    minZoneSize: 2
                 }
             }
 
-            // "None" placeholder - match zone preview styling
+            // "None" placeholder - only shown when no default layout is configured
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
@@ -118,7 +150,7 @@ ComboBox {
                     Kirigami.Theme.highlightColor :
                     Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
                 border.width: highlighted ? 2 : 1
-                visible: root.showPreview && modelData.layout == null
+                visible: root.showPreview && !hasLayout
 
                 Kirigami.Icon {
                     anchors.centerIn: parent
@@ -134,17 +166,47 @@ ComboBox {
                 Layout.fillWidth: true
                 spacing: 0
 
-                Label {
-                    text: modelData.text
-                    font.bold: highlighted
-                    color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
-                    elide: Text.ElideRight
+                RowLayout {
                     Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    Label {
+                        text: modelData.text
+                        font.bold: highlighted
+                        color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                        elide: Text.ElideRight
+                        Layout.fillWidth: true
+                    }
+
+                    // Category badge (Auto/Manual)
+                    QFZCommon.CategoryBadge {
+                        visible: hasLayout && modelData.category >= 0
+                        category: modelData.category
+                    }
                 }
 
                 Label {
                     visible: root.showPreview
-                    text: modelData.layout ? i18n("%1 zones", modelData.layout.zoneCount || 0) : i18n("No layout assigned")
+                    text: {
+                        if (isDefaultOption && !hasLayout) {
+                            // "Default"/"None" with no resolution (e.g., quick layout slots)
+                            return i18n("No layout assigned")
+                        } else if (!hasLayout) {
+                            return i18n("No default configured")
+                        } else if (isDefaultOption) {
+                            // For "Default" option, show what it resolves to
+                            let layoutName = modelData.layout?.name || ""
+                            if (isAutotile) {
+                                return i18n("→ %1 (dynamic)", layoutName)
+                            } else {
+                                return i18n("→ %1 (%2 zones)", layoutName, modelData.layout?.zoneCount || 0)
+                            }
+                        } else if (isAutotile) {
+                            return i18n("Dynamic zones")
+                        } else {
+                            return i18n("%1 zones", modelData.layout?.zoneCount || 0)
+                        }
+                    }
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                     opacity: 0.7
