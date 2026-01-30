@@ -9,7 +9,7 @@ msgstr ""
 "Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
 "POT-Creation-Date: 2026-01-28 17:05-0600\n"
 "PO-Revision-Date: 2026-01-25 15:15-0600\n"
-"Last-Translator: Automatically generated\n"
+"Last-Translator: Gemini 3\n"
 "Language-Team: none\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
@@ -19,318 +19,322 @@ msgstr ""
 
 #: src/daemon/main.cpp:45
 msgid "PlasmaZones Daemon"
-msgstr ""
+msgstr "PlasmaZones-Hintergrunddienst"
 
 #: src/daemon/main.cpp:46
 msgid "FancyZones-style window snapping for KDE Plasma"
-msgstr ""
+msgstr "Fenster-Manager im FancyZones-Stil für KDE Plasma"
 
 #: src/daemon/main.cpp:47
 msgid "© 2026 fuddlesworth"
-msgstr ""
+msgstr "© 2026 fuddlesworth"
 
 #: src/daemon/main.cpp:48
 msgid "fuddlesworth"
-msgstr ""
+msgstr "fuddlesworth"
 
 #: src/daemon/main.cpp:60
 msgid "Replace existing daemon instance"
-msgstr ""
+msgstr "Vorhandene Instanz des Hintergrunddienstes ersetzen"
 
 #: src/daemon/daemon.cpp:580
 msgid "Zone Layout: %1"
-msgstr ""
+msgstr "Zonen-Layout: %1"
 
 #: src/daemon/shortcutmanager.cpp:305
 msgid "Open Zone Editor"
-msgstr ""
+msgstr "Zonen-Editor öffnen"
 
 #: src/daemon/shortcutmanager.cpp:318
 msgid "Previous Layout"
-msgstr ""
+msgstr "Vorheriges Layout"
 
 #: src/daemon/shortcutmanager.cpp:323
 msgid "Next Layout"
-msgstr ""
+msgstr "Nächstes Layout"
 
 #: src/daemon/shortcutmanager.cpp:337
 msgid "Apply Layout %1"
-msgstr ""
+msgstr "Layout %1 anwenden"
 
 #: src/daemon/shortcutmanager.cpp:386
 msgid "Move Window Left"
-msgstr ""
+msgstr "Fenster nach links verschieben"
 
 #: src/daemon/shortcutmanager.cpp:393
 msgid "Move Window Right"
-msgstr ""
+msgstr "Fenster nach rechts verschieben"
 
 #: src/daemon/shortcutmanager.cpp:400
 msgid "Move Window Up"
-msgstr ""
+msgstr "Fenster nach oben verschieben"
 
 #: src/daemon/shortcutmanager.cpp:407
 msgid "Move Window Down"
-msgstr ""
+msgstr "Fenster nach unten verschieben"
 
 #: src/daemon/shortcutmanager.cpp:415
 msgid "Focus Zone Left"
-msgstr ""
+msgstr "Zone links fokussieren"
 
 #: src/daemon/shortcutmanager.cpp:422
 msgid "Focus Zone Right"
-msgstr ""
+msgstr "Zone rechts fokussieren"
 
 #: src/daemon/shortcutmanager.cpp:429
 msgid "Focus Zone Up"
-msgstr ""
+msgstr "Zone oberhalb fokussieren"
 
 #: src/daemon/shortcutmanager.cpp:436
 msgid "Focus Zone Down"
-msgstr ""
+msgstr "Zone unterhalb fokussieren"
 
 #: src/daemon/shortcutmanager.cpp:444
 msgid "Push to Empty Zone"
-msgstr ""
+msgstr "In leere Zone schieben"
 
 #: src/daemon/shortcutmanager.cpp:451
 msgid "Restore Window Size"
-msgstr ""
+msgstr "Fenstergröße wiederherstellen"
 
 #: src/daemon/shortcutmanager.cpp:459
 msgid "Toggle Window Float"
-msgstr ""
+msgstr "Fenster-Schwebemodus umschalten"
 
 #: src/daemon/shortcutmanager.cpp:620
 msgid "Swap Window Left"
-msgstr ""
+msgstr "Fenster nach links tauschen"
 
 #: src/daemon/shortcutmanager.cpp:627
 msgid "Swap Window Right"
-msgstr ""
+msgstr "Fenster nach rechts tauschen"
 
 #: src/daemon/shortcutmanager.cpp:634
 msgid "Swap Window Up"
-msgstr ""
+msgstr "Fenster nach oben tauschen"
 
 #: src/daemon/shortcutmanager.cpp:641
 msgid "Swap Window Down"
-msgstr ""
+msgstr "Fenster nach unten tauschen"
 
 #: src/daemon/shortcutmanager.cpp:713
 msgid "Snap to Zone %1"
-msgstr ""
+msgstr "In Zone %1 einrasten"
 
 #: src/daemon/shortcutmanager.cpp:747
 msgid "Rotate Windows Clockwise"
-msgstr ""
+msgstr "Fenster im Uhrzeigersinn drehen"
 
 #: src/daemon/shortcutmanager.cpp:755
 msgid "Rotate Windows Counterclockwise"
-msgstr ""
+msgstr "Fenster gegen den Uhrzeigersinn drehen"
 
 #: src/daemon/shortcutmanager.cpp:800
 msgid "Cycle Window Forward in Zone"
-msgstr ""
+msgstr "Nächstes Fenster in der Zone"
 
 #: src/daemon/shortcutmanager.cpp:808
 msgid "Cycle Window Backward in Zone"
-msgstr ""
+msgstr "Voriges Fenster in der Zone"
 
 #: src/ui/LayoutPreview.qml:59
 #: src/ui/LayoutPicker.qml:107
 msgctxt "@info:accessibility"
 msgid "Layout: %1"
-msgstr ""
+msgstr "Layout: %1"
 
 #: src/ui/LayoutPreview.qml:60
 #: src/ui/LayoutPicker.qml:108
 msgctxt "@info:accessibility"
 msgid "Click to select this layout. Contains %1 zones."
-msgstr ""
+msgstr "Klicken, um dieses Layout auszuwählen. Enthält %1 Zonen."
 
 #: src/ui/LayoutPreview.qml:178
 msgctxt "@tooltip"
 msgid "Current layout: %1"
-msgstr ""
+msgstr "Aktuelles Layout: %1"
 
 #: src/ui/LayoutPreview.qml:178
 #: src/ui/LayoutPicker.qml:194
 msgctxt "@tooltip"
 msgid "Select layout: %1"
-msgstr ""
+msgstr "Layout auswählen: %1"
 
 #: src/ui/ZoneItem.qml:143
 msgid "Meta+Alt+%1"
-msgstr ""
+msgstr "Meta+Alt+%1"
 
 #: src/ui/ZoneOverlay.qml:79
 msgid ""
 "PlasmaZones Overlay Active\n"
 "(No zones defined)"
 msgstr ""
+"PlasmaZones-Overlay aktiv\n"
+"(Keine Zonen definiert)"
 
 #: src/ui/ZoneSelector.qml:213
 msgid "Select Layout"
-msgstr ""
+msgstr "Layout auswählen"
 
 #: src/ui/ZoneSelector.qml:254
 msgid "Layout %1"
-msgstr ""
+msgstr "Layout %1"
 
 #: src/ui/ZoneSelector.qml:325
 #: src/ui/ZoneSelectorWindow.qml:705
 #: src/ui/LayoutPicker.qml:232
 msgid "No layouts available"
-msgstr ""
+msgstr "Keine Layouts verfügbar"
 
 #: src/ui/ZoneEditor.qml:22
 msgid "PlasmaZones Layout Editor"
-msgstr ""
+msgstr "PlasmaZones Layout-Editor"
 
 #: src/ui/ZoneEditor.qml:88
 msgid "Canvas (Free-form)"
-msgstr ""
+msgstr "Arbeitsfläche (Freiform)"
 
 #: src/ui/ZoneEditor.qml:89
 msgid "Grid"
-msgstr ""
+msgstr "Raster"
 
 #: src/ui/ZoneEditor.qml:103
 msgid "Columns:"
-msgstr ""
+msgstr "Spalten:"
 
 #: src/ui/ZoneEditor.qml:112
 msgid "Rows:"
-msgstr ""
+msgstr "Zeilen:"
 
 #: src/ui/ZoneEditor.qml:129
 msgid "Add Zone"
-msgstr ""
+msgstr "Zone hinzufügen"
 
 #: src/ui/ZoneEditor.qml:130
 msgid "Add a new zone to the layout"
-msgstr ""
+msgstr "Neue Zone zum Layout hinzufügen"
 
 #: src/ui/ZoneEditor.qml:137
 msgid "Delete Zone"
-msgstr ""
+msgstr "Zone löschen"
 
 #: src/ui/ZoneEditor.qml:139
 msgid "Delete the selected zone"
-msgstr ""
+msgstr "Ausgewählte Zone löschen"
 
 #: src/ui/ZoneEditor.qml:150
 msgid "Layout Name"
-msgstr ""
+msgstr "Layout-Name"
 
 #: src/ui/ZoneEditor.qml:159
 msgid "Cancel"
-msgstr ""
+msgstr "Abbrechen"
 
 #: src/ui/ZoneEditor.qml:160
 msgid "Cancel editing and discard changes"
-msgstr ""
+msgstr "Bearbeitung abbrechen und Änderungen verwerfen"
 
 #: src/ui/ZoneEditor.qml:166
 msgid "Save Layout"
-msgstr ""
+msgstr "Layout speichern"
 
 #: src/ui/ZoneEditor.qml:169
 msgid "Save the current layout"
-msgstr ""
+msgstr "Aktuelles Layout speichern"
 
 #: src/ui/ZoneEditor.qml:299
 msgid "Zone Properties"
-msgstr ""
+msgstr "Zoneneigenschaften"
 
 #: src/ui/ZoneEditor.qml:303
 msgid "Name:"
-msgstr ""
+msgstr "Name:"
 
 #: src/ui/ZoneEditor.qml:309
 msgid "Zone Number:"
-msgstr ""
+msgstr "Zonennummer:"
 
 #: src/ui/ZoneEditor.qml:317
 msgid "Shortcut:"
-msgstr ""
+msgstr "Kurzbefehl:"
 
 #: src/ui/ZoneEditor.qml:319
 msgid "e.g., Meta+Alt+1"
-msgstr ""
+msgstr "z. B. Meta+Alt+1"
 
 #: src/ui/ZoneEditor.qml:325
 msgid "Appearance"
-msgstr ""
+msgstr "Erscheinungsbild"
 
 #: src/ui/ZoneEditor.qml:329
 msgid "Custom colors:"
-msgstr ""
+msgstr "Eigene Farben:"
 
 #: src/ui/ZoneEditor.qml:335
 msgid "Highlight:"
-msgstr ""
+msgstr "Highlight:"
 
 #: src/ui/ZoneEditor.qml:342
 msgid "Opacity:"
-msgstr ""
+msgstr "Deckkraft:"
 
 #: src/ui/ZoneEditor.qml:351
 msgid "Border radius:"
-msgstr ""
+msgstr "Eckenradius:"
 
 #: src/ui/ZoneEditor.qml:361
 msgid "Geometry"
-msgstr ""
+msgstr "Abmessungen"
 
 #: src/ui/ZoneEditor.qml:365
 msgid "Position:"
-msgstr ""
+msgstr "Position:"
 
 #: src/ui/ZoneEditor.qml:372
 msgid "Size:"
-msgstr ""
+msgstr "Größe:"
 
 #: src/ui/ZoneEditor.qml:484
 msgid "Custom Layout"
-msgstr ""
+msgstr "Benutzerdefiniertes Layout"
 
 #: src/ui/NavigationOsd.qml:19
 msgid "Navigation feedback"
-msgstr ""
+msgstr "Navigations-Feedback"
 
 #: src/ui/NavigationOsd.qml:20
 msgid ""
 "Brief feedback when using keyboard navigation to move or focus windows "
 "between zones"
 msgstr ""
+"Kurzes Feedback beim Verwenden der Tastaturnavigation zum Verschieben oder "
+"Fokussieren von Fenstern zwischen Zonen"
 
 #: src/ui/NavigationOsd.qml:50
 msgid "Moved"
-msgstr ""
+msgstr "Verschoben"
 
 #: src/ui/NavigationOsd.qml:50
 #: src/ui/NavigationOsd.qml:52
 msgid "No zone"
-msgstr ""
+msgstr "Keine Zone"
 
 #: src/ui/NavigationOsd.qml:52
 #: src/ui/NavigationOsd.qml:66
 msgid "Focus"
-msgstr ""
+msgstr "Fokus"
 
 #: src/ui/NavigationOsd.qml:54
 msgid "Pushed"
-msgstr ""
+msgstr "Geschoben"
 
 #: src/ui/NavigationOsd.qml:54
 msgid "No empty zone"
-msgstr ""
+msgstr "Keine freie Zone"
 
 #: src/ui/NavigationOsd.qml:56
 msgid "Restored"
-msgstr ""
+msgstr "Wiederhergestellt"
 
 #: src/ui/NavigationOsd.qml:56
 #: src/ui/NavigationOsd.qml:58
@@ -340,24 +344,24 @@ msgstr ""
 #: src/ui/NavigationOsd.qml:66
 #: src/ui/NavigationOsd.qml:68
 msgid "Failed"
-msgstr ""
+msgstr "Fehlgeschlagen"
 
 #: src/ui/NavigationOsd.qml:58
 msgid "Floating"
-msgstr ""
+msgstr "Schwebend"
 
 #: src/ui/NavigationOsd.qml:60
 msgid "Snapped"
-msgstr ""
+msgstr "Eingerastet"
 
 #: src/ui/NavigationOsd.qml:62
 msgid "Swapped"
-msgstr ""
+msgstr "Getauscht"
 
 #: src/ui/NavigationOsd.qml:64
 msgid "Rotated"
-msgstr ""
+msgstr "Gedreht"
 
 #: src/ui/NavigationOsd.qml:68
 msgid "Done"
-msgstr ""
+msgstr "Fertig"
