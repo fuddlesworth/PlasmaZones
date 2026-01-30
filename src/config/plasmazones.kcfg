@@ -510,7 +510,7 @@
     </entry>
     <entry name="GridColumns" type="Int">
       <label>Grid columns for zone selector (Manual mode)</label>
-      <default>3</default>
+      <default>5</default>
       <min>1</min>
       <max>10</max>
     </entry>

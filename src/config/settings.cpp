@@ -1489,10 +1489,10 @@ void Settings::load()
     }
     m_zoneSelectorPreviewHeight = previewHeight;
     m_zoneSelectorPreviewLockAspect = zoneSelector.readEntry("PreviewLockAspect", true);
-    int gridColumns = zoneSelector.readEntry("GridColumns", 3);
+    int gridColumns = zoneSelector.readEntry("GridColumns", 5);
     if (gridColumns < 1 || gridColumns > 10) {
         qCWarning(lcConfig) << "Invalid zone selector grid columns:" << gridColumns << "using default (1-10)";
-        gridColumns = 3;
+        gridColumns = 5;
     }
     m_zoneSelectorGridColumns = gridColumns;
 
@@ -1903,7 +1903,7 @@ void Settings::reset()
     m_zoneSelectorPreviewWidth = 180;
     m_zoneSelectorPreviewHeight = 101;
     m_zoneSelectorPreviewLockAspect = true;
-    m_zoneSelectorGridColumns = 3;
+    m_zoneSelectorGridColumns = 5;
     m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto; // Auto-calculate sizes from screen
     m_zoneSelectorMaxRows = 4; // Max visible rows before scrolling
 

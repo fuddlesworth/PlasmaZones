@@ -982,7 +982,7 @@ private:
     int m_zoneSelectorPreviewWidth = 180; // preview width in pixels (Manual mode)
     int m_zoneSelectorPreviewHeight = 101; // preview height in pixels (Manual mode, when unlocked)
     bool m_zoneSelectorPreviewLockAspect = true;
-    int m_zoneSelectorGridColumns = 3; // grid columns (Manual mode)
+    int m_zoneSelectorGridColumns = 5; // grid columns (Manual mode)
 
     // Shader Effects
     bool m_enableShaderEffects = true;

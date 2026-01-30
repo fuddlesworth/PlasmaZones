@@ -36,7 +36,7 @@ Window {
     // Selector configuration from settings
     property int selectorPosition: 0
     property int selectorLayoutMode: 1
-    property int selectorGridColumns: 3
+    property int selectorGridColumns: 5
     property int previewWidth: 180
     property int previewHeight: 101
     property bool previewLockAspect: true
