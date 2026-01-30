@@ -538,6 +538,12 @@ Window {
                                     property int widthPercent: Math.round((relGeo.width || 0.25) * 100)
                                     property int heightPercent: Math.round((relGeo.height || 1) * 100)
 
+                                    // DRY: Helper to check if custom colors are enabled (handles boolean, number, or string)
+                                    readonly property bool useCustomColors: modelData.useCustomColors === true ||
+                                        modelData.useCustomColors === 1 ||
+                                        (typeof modelData.useCustomColors === "string" &&
+                                         modelData.useCustomColors.toLowerCase() === "true")
+
                                     // Use scaled padding for gaps between zones
                                     // Position relative to parent (previewArea)
                                     x: (relGeo.x || 0) * parent.width + root.scaledPadding
@@ -551,12 +557,9 @@ Window {
                                     z: isZoneHovered ? 10 : 1
                                     transformOrigin: Item.Center
                                     // Zone coloring - unified with ZoneOverlay/ZoneItem
-                                    // Use custom colors if useCustomColors is true, otherwise use theme defaults
+                                    // Use custom colors if enabled, otherwise use theme defaults
                                     color: {
-                                        // Check if useCustomColors is true (handle boolean, number, or string)
-                                        var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                                        // If custom colors are enabled and colors are provided, use them
-                                        if (useCustom) {
+                                        if (useCustomColors) {
                                             if (isZoneSelected && modelData.highlightColor)
                                                 return modelData.highlightColor;
                                             else if (!isZoneSelected && modelData.inactiveColor)
@@ -566,8 +569,7 @@ Window {
                                         return isZoneSelected ? highlightColor : inactiveColor;
                                     }
                                     opacity: {
-                                        var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                                        if (useCustom && modelData.activeOpacity !== undefined)
+                                        if (useCustomColors && modelData.activeOpacity !== undefined)
                                             return isZoneSelected ? modelData.activeOpacity : modelData.inactiveOpacity;
 
                                         return isZoneSelected ? activeOpacity : inactiveOpacity;
@@ -575,8 +577,7 @@ Window {
                                     // Border - same style as ZoneItem (always visible)
                                     // P0: Brighter border on hover for better visibility
                                     border.color: {
-                                        var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
-                                        if (useCustom && modelData.borderColor)
+                                        if (useCustomColors && modelData.borderColor)
                                             return modelData.borderColor;
 
                                         // Brighter border when hovered

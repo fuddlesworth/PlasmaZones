@@ -112,7 +112,7 @@ ComboBox {
             spacing: Kirigami.Units.smallSpacing
 
             // Mini layout preview (only if showPreview is enabled)
-            // Match LayoutThumbnail colors for consistency
+            // Uses shared ZonePreview component for DRY compliance
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
@@ -124,31 +124,13 @@ ComboBox {
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && hasLayout
 
-                Item {
-                    id: zonePreviewContainer
+                QFZCommon.ZonePreview {
                     anchors.fill: parent
                     anchors.margins: Math.round(Kirigami.Units.smallSpacing * 0.75)
-
-                    property var zones: modelData.layout?.zones || []
-
-                    Repeater {
-                        model: zonePreviewContainer.zones
-                        Rectangle {
-                            required property var modelData
-                            required property int index
-                            property var relGeo: modelData.relativeGeometry || {}
-                            x: (relGeo.x || 0) * zonePreviewContainer.width
-                            y: (relGeo.y || 0) * zonePreviewContainer.height
-                            width: Math.max(2, (relGeo.width || 0.25) * zonePreviewContainer.width)
-                            height: Math.max(2, (relGeo.height || 1) * zonePreviewContainer.height)
-                            // Match ZonePreview colors for consistency
-                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b,
-                                highlighted ? 0.45 : 0.25)
-                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
-                            border.width: highlighted ? 2 : 1
-                            radius: Kirigami.Units.smallSpacing * 0.5
-                        }
-                    }
+                    zones: modelData.layout?.zones || []
+                    isHovered: highlighted
+                    showZoneNumbers: false
+                    minZoneSize: 2
                 }
             }
 

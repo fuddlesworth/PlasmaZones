@@ -46,6 +46,24 @@
 
 namespace PlasmaZones {
 
+namespace {
+// Helper function to convert NavigationDirection to string (DRY)
+QString navigationDirectionToString(NavigationDirection direction)
+{
+    switch (direction) {
+    case NavigationDirection::Left:
+        return QStringLiteral("left");
+    case NavigationDirection::Right:
+        return QStringLiteral("right");
+    case NavigationDirection::Up:
+        return QStringLiteral("up");
+    case NavigationDirection::Down:
+        return QStringLiteral("down");
+    }
+    return QString();
+}
+} // anonymous namespace
+
 Daemon::Daemon(QObject* parent)
     : QObject(parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
@@ -387,21 +405,8 @@ void Daemon::start()
     // Move window to adjacent zone shortcuts
     connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this,
             [this](NavigationDirection direction) {
-                QString dirStr;
-                switch (direction) {
-                case NavigationDirection::Left:
-                    dirStr = QStringLiteral("left");
-                    break;
-                case NavigationDirection::Right:
-                    dirStr = QStringLiteral("right");
-                    break;
-                case NavigationDirection::Up:
-                    dirStr = QStringLiteral("up");
-                    break;
-                case NavigationDirection::Down:
-                    dirStr = QStringLiteral("down");
-                    break;
-                default:
+                QString dirStr = navigationDirectionToString(direction);
+                if (dirStr.isEmpty()) {
                     qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
                     return;
                 }
@@ -410,21 +415,8 @@ void Daemon::start()
 
     // Focus navigation to adjacent zone shortcuts
     connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection direction) {
-        QString dirStr;
-        switch (direction) {
-        case NavigationDirection::Left:
-            dirStr = QStringLiteral("left");
-            break;
-        case NavigationDirection::Right:
-            dirStr = QStringLiteral("right");
-            break;
-        case NavigationDirection::Up:
-            dirStr = QStringLiteral("up");
-            break;
-        case NavigationDirection::Down:
-            dirStr = QStringLiteral("down");
-            break;
-        default:
+        QString dirStr = navigationDirectionToString(direction);
+        if (dirStr.isEmpty()) {
             qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
             return;
         }
@@ -454,21 +446,8 @@ void Daemon::start()
     // Swap window with adjacent zone shortcuts
     connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this,
             [this](NavigationDirection direction) {
-                QString dirStr;
-                switch (direction) {
-                case NavigationDirection::Left:
-                    dirStr = QStringLiteral("left");
-                    break;
-                case NavigationDirection::Right:
-                    dirStr = QStringLiteral("right");
-                    break;
-                case NavigationDirection::Up:
-                    dirStr = QStringLiteral("up");
-                    break;
-                case NavigationDirection::Down:
-                    dirStr = QStringLiteral("down");
-                    break;
-                default:
+                QString dirStr = navigationDirectionToString(direction);
+                if (dirStr.isEmpty()) {
                     qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
                     return;
                 }
@@ -612,7 +591,16 @@ void Daemon::start()
             return;
         }
 
+        auto oldMode = m_modeTracker->currentMode();
         auto newMode = m_modeTracker->toggleMode();
+
+        // Check if toggle actually succeeded (may fail if no layout recorded)
+        if (newMode == oldMode) {
+            qCDebug(lcDaemon) << "Smart toggle: mode unchanged (toggle may have been blocked)";
+            m_overlayService->showNavigationOsd(false, QStringLiteral("toggle"),
+                i18n("No layout recorded - cannot switch modes"));
+            return;
+        }
 
         if (newMode == ModeTracker::TilingMode::Autotile) {
             // Switching TO autotile mode
