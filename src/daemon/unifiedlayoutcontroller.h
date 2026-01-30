@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -65,9 +66,9 @@ public:
     /**
      * @brief Get the current layout entry
      *
-     * @return Pointer to entry if found, nullptr otherwise
+     * @return Entry if found, std::nullopt otherwise
      */
-    const UnifiedLayoutEntry* currentLayout() const;
+    std::optional<UnifiedLayoutEntry> currentLayout() const;
 
     /**
      * @brief Get the full unified layout list

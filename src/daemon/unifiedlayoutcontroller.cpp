@@ -27,7 +27,8 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, A
 
         // Sync when active layout changes externally
         connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
-            if (layout && !m_autotileEngine->isEnabled()) {
+            // Check m_autotileEngine for null - it may not be set if autotile is disabled
+            if (layout && (!m_autotileEngine || !m_autotileEngine->isEnabled())) {
                 QString newId = layout->id().toString(QUuid::WithoutBraces);
                 if (m_currentLayoutId != newId) {
                     setCurrentLayoutId(newId);
@@ -63,10 +64,16 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, A
 
 UnifiedLayoutController::~UnifiedLayoutController() = default;
 
-const UnifiedLayoutEntry* UnifiedLayoutController::currentLayout() const
+std::optional<UnifiedLayoutEntry> UnifiedLayoutController::currentLayout() const
 {
-    const auto list = layouts();
-    return LayoutUtils::findLayout(list, m_currentLayoutId);
+    // Ensure cache is populated, then search directly in cached member
+    // to avoid returning pointer to temporary
+    layouts();  // Populates m_cachedLayouts if needed
+    int index = LayoutUtils::findLayoutIndex(m_cachedLayouts, m_currentLayoutId);
+    if (index >= 0) {
+        return m_cachedLayouts[index];
+    }
+    return std::nullopt;
 }
 
 QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
@@ -103,9 +110,13 @@ bool UnifiedLayoutController::applyLayoutById(const QString& layoutId)
 bool UnifiedLayoutController::applyLayoutByIndex(int index)
 {
     const auto list = layouts();
+    if (list.isEmpty()) {
+        qCWarning(lcDaemon) << "applyLayoutByIndex: no layouts available";
+        return false;
+    }
     if (index < 0 || index >= list.size()) {
         qCWarning(lcDaemon) << "applyLayoutByIndex: invalid index" << index
-                            << "(valid range: 0 -" << (list.size() - 1) << ")";
+                            << "(valid: 0 to" << (list.size() - 1) << ")";
         return false;
     }
     return applyEntry(list[index]);
