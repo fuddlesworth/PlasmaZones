@@ -127,9 +127,9 @@ Rectangle {
                 width: categoryLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
                 height: Kirigami.Units.gridUnit * 0.9
                 radius: Kirigami.Units.smallSpacing / 2
-                // Green for autotile, neutral gray for manual
+                // Positive/accent color for autotile, neutral for manual
                 color: root.isAutotile
-                    ? Qt.rgba(0.2, 0.7, 0.3, 0.9)
+                    ? Kirigami.Theme.positiveBackgroundColor
                     : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
 
                 Label {
@@ -139,7 +139,7 @@ Rectangle {
                     text: root.isAutotile ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
                     font.pixelSize: Kirigami.Theme.smallFont.pixelSize * 0.75
                     font.weight: Font.Medium
-                    color: root.isAutotile ? "white" : Kirigami.Theme.highlightedTextColor
+                    color: root.isAutotile ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.highlightedTextColor
                 }
             }
 

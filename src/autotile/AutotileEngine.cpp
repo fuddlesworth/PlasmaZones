@@ -644,8 +644,8 @@ void AutotileEngine::toggleFocusedWindowFloat()
     }
 
     // Toggle floating state
-    bool toggled = state->toggleFloating(focused);
-    retileAfterOperation(screenName, toggled);
+    state->toggleFloating(focused);
+    retileAfterOperation(screenName, true);  // Always retile after successful toggle
 
     bool isNowFloating = state->isFloating(focused);
     qCInfo(lcAutotile) << "Window" << focused << (isNowFloating ? "now floating" : "now tiled");

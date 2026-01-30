@@ -661,19 +661,19 @@ Window {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: previewArea.bottom
                             anchors.topMargin: root.labelTopMargin
-                            spacing: 4
+                            spacing: Kirigami.Units.smallSpacing
 
                             // Category badge (Manual/Auto) - inline with name
                             Rectangle {
                                 id: categoryBadge
 
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: categoryBadgeLabel.implicitWidth + 6
-                                height: 14
-                                radius: 3
-                                // Green for autotile, neutral gray for manual
+                                width: categoryBadgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
+                                height: Kirigami.Units.gridUnit * 0.9
+                                radius: Kirigami.Units.smallSpacing / 2
+                                // Positive/accent color for autotile, neutral for manual
                                 color: indicator.isAutotile
-                                    ? Qt.rgba(0.2, 0.7, 0.3, 0.9)
+                                    ? Kirigami.Theme.positiveBackgroundColor
                                     : Qt.rgba(textColor.r, textColor.g, textColor.b, 0.35)
 
                                 Label {
@@ -681,9 +681,9 @@ Window {
 
                                     anchors.centerIn: parent
                                     text: indicator.isAutotile ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
-                                    font.pixelSize: 8
+                                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize * 0.75
                                     font.weight: Font.Medium
-                                    color: indicator.isAutotile ? "white" : Kirigami.Theme.highlightedTextColor
+                                    color: indicator.isAutotile ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.highlightedTextColor
                                 }
                             }
 
