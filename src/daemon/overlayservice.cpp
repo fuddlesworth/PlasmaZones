@@ -2217,6 +2217,8 @@ void OverlayService::showLayoutOsd(Layout* layout)
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+    // Manual layouts always have category 0 (LayoutCategory::Manual)
+    writeQmlProperty(window, QStringLiteral("category"), 0);
 
     // Reuse zonesToVariantList for OSD (DRY - same format as layout/zone selector)
     writeQmlProperty(window, QStringLiteral("zones"), zonesToVariantList(layout));
@@ -2233,6 +2235,59 @@ void OverlayService::showLayoutOsd(Layout* layout)
     QMetaObject::invokeMethod(window, "show");
 
     qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name();
+}
+
+void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category)
+{
+    // Don't show OSD for empty layouts
+    if (zones.isEmpty()) {
+        qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << name;
+        return;
+    }
+
+    // Show on primary screen only for OSD
+    QScreen* screen = Utils::primaryScreen();
+    if (!screen) {
+        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+        return;
+    }
+
+    // Create window if needed
+    if (!m_layoutOsdWindows.contains(screen)) {
+        createLayoutOsdWindow(screen);
+    }
+
+    auto* window = m_layoutOsdWindows.value(screen);
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to get layout OSD window";
+        return;
+    }
+
+    // Get screen geometry for aspect ratio
+    const QRect screenGeom = screen->geometry();
+    qreal aspectRatio =
+        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
+    // Ensure aspect ratio is within reasonable bounds
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+
+    // Set layout data
+    writeQmlProperty(window, QStringLiteral("layoutId"), id);
+    writeQmlProperty(window, QStringLiteral("layoutName"), name);
+    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
+    writeQmlProperty(window, QStringLiteral("category"), category);
+    writeQmlProperty(window, QStringLiteral("zones"), zones);
+
+    // Set explicit window size before positioning
+    const int osdWidth = 280;
+    const int osdHeight = static_cast<int>(200 / aspectRatio) + 80;
+    window->setWidth(osdWidth);
+    window->setHeight(osdHeight);
+    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
+
+    // Show with animation
+    QMetaObject::invokeMethod(window, "show");
+
+    qCDebug(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category;
 }
 
 void OverlayService::hideLayoutOsd()

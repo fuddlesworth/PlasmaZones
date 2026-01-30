@@ -27,6 +27,7 @@
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/TilingAlgorithm.h"
+#include "../autotile/TilingState.h"
 #include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
 
@@ -813,8 +814,46 @@ void Daemon::showAutotileOsd(const QString& algorithmId)
     }
 
     TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    QString displayName = algo ? algo->name() : algorithmId;
-    m_overlayService->showNavigationOsd(true, QStringLiteral("autotile"), displayName);
+    if (!algo) {
+        return;
+    }
+
+    QString displayName = algo->name();
+
+    // Generate preview zones for the algorithm (3 windows, like zone selector)
+    const int previewWindowCount = 3;
+    const QRect previewRect(0, 0, 1000, 1000); // Normalized space
+
+    TilingState previewState(QStringLiteral("preview"));
+    previewState.setMasterCount(1);
+    previewState.setSplitRatio(0.6);
+
+    QVector<QRect> zones = algo->calculateZones(previewWindowCount, previewRect, previewState);
+
+    // Convert to QVariantList for QML
+    QVariantList zonesList;
+    for (int i = 0; i < zones.size(); ++i) {
+        const QRect& zone = zones[i];
+        QVariantMap zoneMap;
+        zoneMap[QStringLiteral("id")] = QString::number(i);
+        zoneMap[QStringLiteral("name")] = QString();
+        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
+
+        // Convert to relative geometry (0.0 - 1.0)
+        QVariantMap relGeoMap;
+        relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
+        relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
+        relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
+        relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
+        zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
+        zoneMap[QStringLiteral("useCustomColors")] = false;
+
+        zonesList.append(zoneMap);
+    }
+
+    // Show visual OSD with autotile preview (category=1 for Autotile)
+    QString layoutId = LayoutId::makeAutotileId(algorithmId);
+    m_overlayService->showLayoutOsd(layoutId, displayName, zonesList, 1);
 }
 
 // Screen management now handled by ScreenManager (SRP)

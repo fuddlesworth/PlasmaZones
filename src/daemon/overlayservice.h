@@ -103,6 +103,8 @@ public:
 
     // Layout OSD (visual preview when switching layouts)
     void showLayoutOsd(Layout* layout);
+    // Overload for showing autotile algorithms as layouts (unified layout model)
+    void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category);
 
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason);
