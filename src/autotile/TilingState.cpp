@@ -316,7 +316,7 @@ bool TilingState::rotateWindows(bool clockwise)
     // Rebuild the full window order: keep floating windows at their positions,
     // replace tiled windows with rotated order
     int tiledIndex = 0;
-    for (int i = 0; i < m_windowOrder.size(); ++i) {
+    for (int i = 0; i < m_windowOrder.size() && tiledIndex < tiled.size(); ++i) {
         if (!m_floatingWindows.contains(m_windowOrder[i])) {
             m_windowOrder[i] = tiled[tiledIndex++];
         }

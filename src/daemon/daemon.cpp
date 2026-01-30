@@ -878,6 +878,8 @@ void Daemon::applyUnifiedLayout(int index)
 {
     const auto layouts = buildUnifiedLayoutList();
     if (index < 0 || index >= layouts.size()) {
+        qCWarning(lcDaemon) << "applyUnifiedLayout: invalid index" << index
+                            << "(valid range: 0 -" << (layouts.size() - 1) << ")";
         return;
     }
 

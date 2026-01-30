@@ -75,8 +75,10 @@ void ModeTracker::recordManualLayout(const QString& layoutId)
         Q_EMIT lastManualLayoutIdChanged(layoutId);
     }
 
-    // Set mode to manual when recording a manual layout
-    setCurrentMode(TilingMode::Manual);
+    // Set mode to manual when recording a manual layout (only if not already)
+    if (m_currentMode != TilingMode::Manual) {
+        setCurrentMode(TilingMode::Manual);
+    }
 
     qCDebug(lcDaemon) << "Recorded manual layout:" << layoutId;
 }
@@ -98,8 +100,10 @@ void ModeTracker::recordAutotileAlgorithm(const QString& algorithmId)
         Q_EMIT lastAutotileAlgorithmChanged(algorithmId);
     }
 
-    // Set mode to autotile when recording an algorithm
-    setCurrentMode(TilingMode::Autotile);
+    // Set mode to autotile when recording an algorithm (only if not already)
+    if (m_currentMode != TilingMode::Autotile) {
+        setCurrentMode(TilingMode::Autotile);
+    }
 
     qCDebug(lcDaemon) << "Recorded autotile algorithm:" << algorithmId;
 }

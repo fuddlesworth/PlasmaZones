@@ -47,6 +47,12 @@ ComboBox {
         return null
     }
 
+    // Helper to get category with default fallback (avoids repeated ternary)
+    function getCategory(layout, defaultCategory) {
+        if (!layout) return defaultCategory
+        return layout.category !== undefined ? layout.category : defaultCategory
+    }
+
     // Resolve the actual layout that "Default" represents
     readonly property var resolvedDefaultLayout: findLayoutById(resolvedDefaultId)
 
@@ -57,7 +63,7 @@ ComboBox {
             text: noneText,
             value: "",
             layout: defaultLayout,  // Show actual resolved layout preview
-            category: defaultLayout?.category !== undefined ? defaultLayout.category : -1,
+            category: getCategory(defaultLayout, -1),  // -1 = no badge for unresolved default
             isDefaultOption: true   // Flag to indicate this is the "Default" option
         }]
 
@@ -68,7 +74,7 @@ ComboBox {
                     text: layout.name,
                     value: layout.id,
                     layout: layout,
-                    category: layout.category !== undefined ? layout.category : 0,
+                    category: getCategory(layout, 0),  // 0 = Manual as default
                     isDefaultOption: false
                 })
             }
@@ -175,7 +181,7 @@ ComboBox {
                     // Category badge (Auto/Manual)
                     QFZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
-                        category: modelData.category !== undefined ? modelData.category : 0
+                        category: modelData.category
                     }
                 }
 

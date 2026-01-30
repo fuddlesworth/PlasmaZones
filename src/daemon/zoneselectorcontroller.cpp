@@ -344,6 +344,10 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     // Check if this is an autotile algorithm selection
     if (LayoutId::isAutotile(layoutId)) {
         QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
+        if (algorithmId.isEmpty()) {
+            qCWarning(lcOverlay) << "Invalid autotile layout ID (empty algorithm):" << layoutId;
+            return;
+        }
         qCInfo(lcOverlay) << "Autotile layout selected:" << algorithmId;
         Q_EMIT autotileLayoutSelected(algorithmId);
         return;

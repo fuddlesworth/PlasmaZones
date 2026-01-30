@@ -96,7 +96,6 @@ Window {
         id: animationConstants
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
-        readonly property int longDuration: 300
     }
 
     // Signals (zoneSelected is used by C++ for hover-based zone selection)

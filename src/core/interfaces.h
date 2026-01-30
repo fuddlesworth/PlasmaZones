@@ -482,7 +482,17 @@ Q_SIGNALS:
     void multiZoneActivated(const QVector<Zone*>& zones);
     void zoneSelectorVisibilityChanged(bool visible);
     void zoneSelectorZoneSelected(int zoneIndex);
+
+    /**
+     * @brief Emitted when an autotile layout is selected from the zone selector
+     * @param algorithmId The ID of the autotile algorithm (e.g., "master-stack", "bsp")
+     */
     void autotileLayoutSelected(const QString& algorithmId);
+
+    /**
+     * @brief Emitted when a manual layout is selected from the zone selector
+     * @param layoutId The UUID of the selected manual layout
+     */
     void manualLayoutSelected(const QString& layoutId);
 };
 
