@@ -147,6 +147,17 @@ private:
     std::unique_ptr<ModeTracker> m_modeTracker;
     std::unique_ptr<ContextAwareShortcutRouter> m_shortcutRouter;
 
+    // Unified layout cycling (manual layouts + autotile algorithms)
+    struct UnifiedLayoutEntry {
+        QString id;        // Layout UUID or "autotile:<algorithm-id>"
+        QString name;      // Display name
+        bool isAutotile;   // True for autotile algorithms
+    };
+    QVector<UnifiedLayoutEntry> buildUnifiedLayoutList() const;
+    void applyUnifiedLayout(int index);
+    void cycleUnifiedLayout(bool forward);
+    int m_currentUnifiedLayoutIndex = -1;
+
     bool m_running = false;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations

@@ -363,35 +363,19 @@ void Daemon::start()
             m_layoutAdaptor->openEditor();
         }
     });
+    // Quick layout shortcuts (Meta+1-9) - now includes autotile algorithms
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
-        auto* screen = Utils::primaryScreen();
-        m_layoutManager->applyQuickLayout(number, screen ? screen->name() : QString());
-        // Show OSD with the new layout name (if enabled)
-        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-            if (auto* layout = m_layoutManager->activeLayout()) {
-                showLayoutOsd(layout);
-            }
-        }
+        // number is 1-based, convert to 0-based index
+        int index = number - 1;
+        applyUnifiedLayout(index);
     });
+
+    // Cycle layout shortcuts (Meta+[/]) - now cycles through manual layouts AND autotile algorithms
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
-        auto* screen = Utils::primaryScreen();
-        m_layoutManager->cycleToPreviousLayout(screen ? screen->name() : QString());
-        // Show OSD with the new layout name (if enabled)
-        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-            if (auto* layout = m_layoutManager->activeLayout()) {
-                showLayoutOsd(layout);
-            }
-        }
+        cycleUnifiedLayout(false);  // backward
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
-        auto* screen = Utils::primaryScreen();
-        m_layoutManager->cycleToNextLayout(screen ? screen->name() : QString());
-        // Show OSD with the new layout name (if enabled)
-        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-            if (auto* layout = m_layoutManager->activeLayout()) {
-                showLayoutOsd(layout);
-            }
-        }
+        cycleUnifiedLayout(true);   // forward
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -854,6 +838,128 @@ void Daemon::showAutotileOsd(const QString& algorithmId)
     // Show visual OSD with autotile preview (category=1 for Autotile)
     QString layoutId = LayoutId::makeAutotileId(algorithmId);
     m_overlayService->showLayoutOsd(layoutId, displayName, zonesList, 1);
+}
+
+QVector<Daemon::UnifiedLayoutEntry> Daemon::buildUnifiedLayoutList() const
+{
+    QVector<UnifiedLayoutEntry> list;
+
+    // Add manual layouts first
+    if (m_layoutManager) {
+        const auto layouts = m_layoutManager->layouts();
+        for (Layout* layout : layouts) {
+            list.append({
+                layout->id().toString(QUuid::WithoutBraces),
+                layout->name(),
+                false  // Not autotile
+            });
+        }
+    }
+
+    // Add autotile algorithms
+    auto* registry = AlgorithmRegistry::instance();
+    if (registry) {
+        const QStringList algorithmIds = registry->availableAlgorithms();
+        for (const QString& algorithmId : algorithmIds) {
+            TilingAlgorithm* algo = registry->algorithm(algorithmId);
+            if (algo) {
+                list.append({
+                    LayoutId::makeAutotileId(algorithmId),
+                    algo->name(),
+                    true  // Is autotile
+                });
+            }
+        }
+    }
+
+    return list;
+}
+
+void Daemon::applyUnifiedLayout(int index)
+{
+    const auto layouts = buildUnifiedLayoutList();
+    if (index < 0 || index >= layouts.size()) {
+        return;
+    }
+
+    const auto& entry = layouts[index];
+    m_currentUnifiedLayoutIndex = index;
+
+    if (entry.isAutotile) {
+        // Extract algorithm ID from prefixed layout ID
+        QString algorithmId = LayoutId::extractAlgorithmId(entry.id);
+        if (m_autotileEngine && !algorithmId.isEmpty()) {
+            m_autotileEngine->setAlgorithm(algorithmId);
+            m_autotileEngine->setEnabled(true);
+            qCInfo(lcDaemon) << "Applied unified layout (autotile):" << entry.name;
+            showAutotileOsd(algorithmId);
+        }
+    } else {
+        // Manual layout - disable autotile and apply layout
+        if (m_autotileEngine) {
+            m_autotileEngine->setEnabled(false);
+        }
+
+        auto uuidOpt = Utils::parseUuid(entry.id);
+        if (uuidOpt && m_layoutManager) {
+            Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+            if (layout) {
+                m_layoutManager->setActiveLayout(layout);
+                qCInfo(lcDaemon) << "Applied unified layout (manual):" << entry.name;
+                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                    showLayoutOsd(layout);
+                }
+            }
+        }
+    }
+}
+
+void Daemon::cycleUnifiedLayout(bool forward)
+{
+    const auto layouts = buildUnifiedLayoutList();
+    if (layouts.isEmpty()) {
+        return;
+    }
+
+    // Find current position if not tracked
+    if (m_currentUnifiedLayoutIndex < 0 || m_currentUnifiedLayoutIndex >= layouts.size()) {
+        // Try to find current layout/algorithm in list
+        if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+            QString currentId = LayoutId::makeAutotileId(m_autotileEngine->algorithm());
+            for (int i = 0; i < layouts.size(); ++i) {
+                if (layouts[i].id == currentId) {
+                    m_currentUnifiedLayoutIndex = i;
+                    break;
+                }
+            }
+        } else if (m_layoutManager) {
+            Layout* current = m_layoutManager->activeLayout();
+            if (current) {
+                QString currentId = current->id().toString(QUuid::WithoutBraces);
+                for (int i = 0; i < layouts.size(); ++i) {
+                    if (layouts[i].id == currentId) {
+                        m_currentUnifiedLayoutIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Default to first if still not found
+        if (m_currentUnifiedLayoutIndex < 0) {
+            m_currentUnifiedLayoutIndex = 0;
+        }
+    }
+
+    // Calculate next index with wraparound
+    int nextIndex;
+    if (forward) {
+        nextIndex = (m_currentUnifiedLayoutIndex + 1) % layouts.size();
+    } else {
+        nextIndex = (m_currentUnifiedLayoutIndex - 1 + layouts.size()) % layouts.size();
+    }
+
+    applyUnifiedLayout(nextIndex);
 }
 
 // Screen management now handled by ScreenManager (SRP)
