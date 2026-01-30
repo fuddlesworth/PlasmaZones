@@ -593,7 +593,7 @@ data/layouts/    # Default layout templates (JSON)
 - Group related functionality: all zone-related code in `core/zone.*`
 - Separate concerns: UI (QML) vs. logic (C++)
 - Use service classes for cross-cutting concerns (snapping, templates)
-- Keep files under 500 lines (split large files)
+- Keep files under 800 lines (split large files)
 
 ## Common Pitfalls to Avoid
 
