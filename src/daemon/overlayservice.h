@@ -23,6 +23,7 @@ class QTimer;
 namespace PlasmaZones {
 
 class Zone;
+class TilingAlgorithm;
 
 /**
  * @brief Manages zone overlay windows
@@ -124,6 +125,9 @@ private:
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList() const;
     QVariantMap layoutToVariantMap(Layout* layout) const;
+    // Autotile algorithm conversion for unified layout list
+    QVariantMap autotileToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId) const;
+    QVariantList autotilePreviewZones(TilingAlgorithm* algorithm) const;
     QVariantList zonesToVariantList(Layout* layout) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
