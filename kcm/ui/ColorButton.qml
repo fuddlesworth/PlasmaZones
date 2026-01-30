@@ -15,10 +15,20 @@ Rectangle {
     width: buttonSize
     height: buttonSize
     radius: Kirigami.Units.smallSpacing
-    border.color: Kirigami.Theme.disabledTextColor
-    border.width: 1
+    border.color: activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+    border.width: activeFocus ? 2 : 1
 
     signal clicked()
+
+    // Accessibility
+    Accessible.name: i18n("Color picker")
+    Accessible.description: i18n("Current color: %1", root.color.toString())
+    Accessible.role: Accessible.Button
+
+    // Keyboard and focus support
+    activeFocusOnTab: true
+    Keys.onReturnPressed: root.clicked()
+    Keys.onSpacePressed: root.clicked()
 
     MouseArea {
         anchors.fill: parent
@@ -28,9 +38,13 @@ Rectangle {
 
     // Checkerboard pattern for transparency preview
     Canvas {
+        id: checkerboard
         anchors.fill: parent
         anchors.margins: Math.round(Kirigami.Units.devicePixelRatio)
         visible: root.color.a < 1.0
+
+        // Repaint when visibility changes (color alpha changed)
+        onVisibleChanged: if (visible) requestPaint()
 
         onPaint: {
             var ctx = getContext("2d")

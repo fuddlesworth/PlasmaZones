@@ -145,16 +145,28 @@ ScrollView {
                 }
 
                 ListView {
+                    id: excludedAppsList
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.margins: Kirigami.Units.smallSpacing
                     clip: true
                     model: kcm.excludedApplications
+                    focus: true
+                    keyNavigationEnabled: true
+                    activeFocusOnTab: true
+
+                    Accessible.name: i18n("Excluded applications list")
+                    Accessible.role: Accessible.List
 
                     delegate: ItemDelegate {
                         width: ListView.view.width
                         required property string modelData
                         required property int index
+
+                        highlighted: ListView.isCurrentItem
+                        onClicked: excludedAppsList.currentIndex = index
+
+                        Keys.onDeletePressed: kcm.removeExcludedApp(index)
 
                         contentItem: RowLayout {
                             Kirigami.Icon {
@@ -173,6 +185,7 @@ ScrollView {
                             ToolButton {
                                 icon.name: "edit-delete"
                                 onClicked: kcm.removeExcludedApp(index)
+                                Accessible.name: i18n("Remove %1", modelData)
                             }
                         }
                     }
@@ -231,16 +244,28 @@ ScrollView {
                 }
 
                 ListView {
+                    id: excludedClassesList
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     Layout.margins: Kirigami.Units.smallSpacing
                     clip: true
                     model: kcm.excludedWindowClasses
+                    focus: true
+                    keyNavigationEnabled: true
+                    activeFocusOnTab: true
+
+                    Accessible.name: i18n("Excluded window classes list")
+                    Accessible.role: Accessible.List
 
                     delegate: ItemDelegate {
                         width: ListView.view.width
                         required property string modelData
                         required property int index
+
+                        highlighted: ListView.isCurrentItem
+                        onClicked: excludedClassesList.currentIndex = index
+
+                        Keys.onDeletePressed: kcm.removeExcludedWindowClass(index)
 
                         contentItem: RowLayout {
                             Kirigami.Icon {
@@ -260,6 +285,7 @@ ScrollView {
                             ToolButton {
                                 icon.name: "edit-delete"
                                 onClicked: kcm.removeExcludedWindowClass(index)
+                                Accessible.name: i18n("Remove %1", modelData)
                             }
                         }
                     }

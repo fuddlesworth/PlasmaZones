@@ -298,7 +298,7 @@ ScrollView {
 
                         ToolTip.visible: hovered
                         ToolTip.delay: 500
-                        ToolTip.text: i18n("~10%% of screen width (120-280px)")
+                        ToolTip.text: i18n("Approximately 10% of screen width (120-280px)")
                     }
 
                     Button {

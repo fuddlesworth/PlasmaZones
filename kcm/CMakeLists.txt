@@ -36,6 +36,7 @@ install(FILES
     ui/PositionPicker.qml
     ui/PreviewSizeControl.qml
     ui/ColorButton.qml
+    ui/LayoutComboBox.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones
 )
 
@@ -48,5 +49,8 @@ install(FILES
     ui/tabs/BehaviorTab.qml
     ui/tabs/ZoneSelectorTab.qml
     ui/tabs/ExclusionsTab.qml
+    ui/tabs/MonitorAssignmentsCard.qml
+    ui/tabs/ActivityAssignmentsCard.qml
+    ui/tabs/QuickLayoutSlotsCard.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones/tabs
 )

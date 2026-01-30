@@ -73,6 +73,9 @@ KCM.AbstractKCM {
         readonly property int zoneSelectorPreviewHeightMax: 300
         readonly property int zoneSelectorGridColumnsMax: 10
 
+        // Quick layout shortcuts
+        readonly property int quickLayoutSlotCount: 9
+
         // Layout type ratios (matching C++ Defaults)
         readonly property real priorityGridMainRatio: 0.67
         readonly property real priorityGridSecondaryRatio: 0.33
@@ -288,7 +291,7 @@ KCM.AbstractKCM {
         title: i18n("Import Layout")
         nameFilters: ["JSON files (*.json)", "All files (*)"]
         fileMode: FileDialog.OpenFile
-        onAccepted: kcm.importLayout(selectedFile.toString().replace("file://", ""))
+        onAccepted: kcm.importLayout(selectedFile.toString().replace(/^file:\/\/+/, "/"))
     }
 
     FileDialog {
@@ -297,7 +300,7 @@ KCM.AbstractKCM {
         nameFilters: ["JSON files (*.json)"]
         fileMode: FileDialog.SaveFile
         property string layoutId: ""
-        onAccepted: kcm.exportLayout(layoutId, selectedFile.toString().replace("file://", ""))
+        onAccepted: kcm.exportLayout(layoutId, selectedFile.toString().replace(/^file:\/\/+/, "/"))
     }
 
     FileDialog {
@@ -305,7 +308,7 @@ KCM.AbstractKCM {
         title: i18n("Import Colors from File")
         nameFilters: ["JSON files (*.json)", "All files (*)"]
         fileMode: FileDialog.OpenFile
-        onAccepted: kcm.loadColorsFromFile(selectedFile.toString().replace("file://", ""))
+        onAccepted: kcm.loadColorsFromFile(selectedFile.toString().replace(/^file:\/\/+/, "/"))
     }
 
     // Delete confirmation dialog

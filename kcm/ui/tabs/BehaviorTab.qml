@@ -75,14 +75,14 @@ ScrollView {
                 to: root.constants.thresholdMax
                 value: kcm.adjacentThreshold
                 onValueModified: kcm.adjacentThreshold = value
+
+                ToolTip.visible: hovered && root.isCurrentTab
+                ToolTip.text: i18n("Distance from zone edge for multi-zone selection")
             }
 
             Label {
                 text: i18n("px")
             }
-
-            ToolTip.visible: adjacentThresholdSpinBox.hovered && root.isCurrentTab
-            ToolTip.text: i18n("Distance from zone edge for multi-zone selection")
         }
 
         // Zone settings
