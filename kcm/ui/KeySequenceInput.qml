@@ -281,7 +281,8 @@ QQC2.TextField {
     }
 
     background: Rectangle {
-        color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : (parent.enabled ? Kirigami.Theme.backgroundColor : Kirigami.Theme.disabledBackgroundColor)
+        // Note: Kirigami.Theme.disabledBackgroundColor doesn't exist, use semi-transparent backgroundColor instead
+        color: root.capturing ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : (parent.enabled ? Kirigami.Theme.backgroundColor : Qt.alpha(Kirigami.Theme.backgroundColor, 0.5))
         border.color: root.capturing ? Kirigami.Theme.highlightColor : (parent.activeFocus ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor)
         border.width: 1
         radius: Kirigami.Units.smallSpacing
