@@ -22,10 +22,8 @@
 
 namespace PlasmaZones {
 
-AutotileEngine::AutotileEngine(LayoutManager *layoutManager,
-                               WindowTrackingService *windowTracker,
-                               ScreenManager *screenManager,
-                               QObject *parent)
+AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+                               ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
@@ -56,8 +54,8 @@ void AutotileEngine::connectSignals()
     // or by monitoring WindowTrackingService::windowZoneChanged
     if (m_windowTracker) {
         // Use windowZoneChanged as a proxy until dedicated signals are added
-        connect(m_windowTracker, &WindowTrackingService::windowZoneChanged,
-                this, [this](const QString &windowId, const QString &zoneId) {
+        connect(m_windowTracker, &WindowTrackingService::windowZoneChanged, this,
+                [this](const QString& windowId, const QString& zoneId) {
                     if (zoneId.isEmpty()) {
                         onWindowRemoved(windowId);
                     } else {
@@ -71,18 +69,16 @@ void AutotileEngine::connectSignals()
 
     // Screen geometry changes
     if (m_screenManager) {
-        connect(m_screenManager, &ScreenManager::availableGeometryChanged,
-                this, [this](QScreen *screen, const QRect &) {
-                    if (screen) {
-                        onScreenGeometryChanged(screen->name());
-                    }
-                });
+        connect(m_screenManager, &ScreenManager::availableGeometryChanged, this, [this](QScreen* screen, const QRect&) {
+            if (screen) {
+                onScreenGeometryChanged(screen->name());
+            }
+        });
     }
 
     // Layout changes
     if (m_layoutManager) {
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged,
-                this, &AutotileEngine::onLayoutChanged);
+        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &AutotileEngine::onLayoutChanged);
     }
 }
 
@@ -119,15 +115,14 @@ QString AutotileEngine::algorithm() const noexcept
     return m_algorithmId;
 }
 
-void AutotileEngine::setAlgorithm(const QString &algorithmId)
+void AutotileEngine::setAlgorithm(const QString& algorithmId)
 {
     // Validate algorithm exists
-    auto *registry = AlgorithmRegistry::instance();
+    auto* registry = AlgorithmRegistry::instance();
     QString newId = algorithmId;
 
     if (!registry->hasAlgorithm(newId)) {
-        qWarning() << "AutotileEngine: unknown algorithm" << newId
-                   << "- falling back to default";
+        qWarning() << "AutotileEngine: unknown algorithm" << newId << "- falling back to default";
         newId = AlgorithmRegistry::defaultAlgorithmId();
     }
 
@@ -144,7 +139,7 @@ void AutotileEngine::setAlgorithm(const QString &algorithmId)
     }
 }
 
-TilingAlgorithm *AutotileEngine::currentAlgorithm() const
+TilingAlgorithm* AutotileEngine::currentAlgorithm() const
 {
     return AlgorithmRegistry::instance()->algorithm(m_algorithmId);
 }
@@ -153,7 +148,7 @@ TilingAlgorithm *AutotileEngine::currentAlgorithm() const
 // Tiling state access
 // ═══════════════════════════════════════════════════════════════════════════════
 
-TilingState *AutotileEngine::stateForScreen(const QString &screenName)
+TilingState* AutotileEngine::stateForScreen(const QString& screenName)
 {
     // Validate screenName - don't create state for empty name
     if (screenName.isEmpty()) {
@@ -167,7 +162,7 @@ TilingState *AutotileEngine::stateForScreen(const QString &screenName)
     }
 
     // Create new state for this screen with parent ownership
-    auto *state = new TilingState(screenName, this);
+    auto* state = new TilingState(screenName, this);
 
     // Initialize with config defaults
     state->setMasterCount(m_config->masterCount);
@@ -177,7 +172,7 @@ TilingState *AutotileEngine::stateForScreen(const QString &screenName)
     return state;
 }
 
-AutotileConfig *AutotileEngine::config() const noexcept
+AutotileConfig* AutotileEngine::config() const noexcept
 {
     return m_config.get();
 }
@@ -186,7 +181,7 @@ AutotileConfig *AutotileEngine::config() const noexcept
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::syncFromSettings(Settings *settings)
+void AutotileEngine::syncFromSettings(Settings* settings)
 {
     if (!settings) {
         return;
@@ -211,8 +206,7 @@ void AutotileEngine::syncFromSettings(Settings *settings)
     m_config->outerGap = settings->autotileOuterGap();
     m_config->focusNewWindows = settings->autotileFocusNewWindows();
     m_config->smartGaps = settings->autotileSmartGaps();
-    m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
-        settings->autotileInsertPositionInt());
+    m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(settings->autotileInsertPositionInt());
 
     // Additional settings
     m_config->focusFollowsMouse = settings->autotileFocusFollowsMouse();
@@ -232,7 +226,7 @@ void AutotileEngine::syncFromSettings(Settings *settings)
     // Set algorithm on engine (won't retile since m_enabled is false)
     m_algorithmId = settings->autotileAlgorithm();
     // Validate algorithm exists
-    auto *registry = AlgorithmRegistry::instance();
+    auto* registry = AlgorithmRegistry::instance();
     if (!registry->hasAlgorithm(m_algorithmId)) {
         qCWarning(lcAutotile) << "Unknown algorithm" << m_algorithmId << "- using default";
         m_algorithmId = AlgorithmRegistry::defaultAlgorithmId();
@@ -241,11 +235,10 @@ void AutotileEngine::syncFromSettings(Settings *settings)
     // Now set enabled state (will trigger single retile if enabling)
     setEnabled(targetEnabled);
 
-    qCInfo(lcAutotile) << "Settings synced - enabled:" << targetEnabled
-                       << "algorithm:" << m_algorithmId;
+    qCInfo(lcAutotile) << "Settings synced - enabled:" << targetEnabled << "algorithm:" << m_algorithmId;
 }
 
-void AutotileEngine::connectToSettings(Settings *settings)
+void AutotileEngine::connectToSettings(Settings* settings)
 {
     if (!settings) {
         return;
@@ -325,8 +318,8 @@ void AutotileEngine::connectToSettings(Settings *settings)
 
     connect(settings, &Settings::autotileInsertPositionChanged, this, [this]() {
         if (m_settings) {
-            m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
-                m_settings->autotileInsertPositionInt());
+            m_config->insertPosition =
+                static_cast<AutotileConfig::InsertPosition>(m_settings->autotileInsertPositionInt());
         }
     });
 
@@ -418,7 +411,7 @@ void AutotileEngine::processSettingsRetile()
 // Manual tiling operations
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::retile(const QString &screenName)
+void AutotileEngine::retile(const QString& screenName)
 {
     if (!m_enabled) {
         return;
@@ -427,7 +420,7 @@ void AutotileEngine::retile(const QString &screenName)
     if (screenName.isEmpty()) {
         // Retile all screens
         const auto keys = m_screenStates.keys();
-        for (const QString &key : keys) {
+        for (const QString& key : keys) {
             recalculateLayout(key);
             applyTiling(key);
         }
@@ -437,7 +430,7 @@ void AutotileEngine::retile(const QString &screenName)
     }
 }
 
-void AutotileEngine::swapWindows(const QString &windowId1, const QString &windowId2)
+void AutotileEngine::swapWindows(const QString& windowId1, const QString& windowId2)
 {
     // Early return if same window (no-op)
     if (windowId1 == windowId2) {
@@ -458,7 +451,7 @@ void AutotileEngine::swapWindows(const QString &windowId1, const QString &window
         return;
     }
 
-    TilingState *state = stateForScreen(screen1);
+    TilingState* state = stateForScreen(screen1);
     if (!state) {
         return;
     }
@@ -467,14 +460,14 @@ void AutotileEngine::swapWindows(const QString &windowId1, const QString &window
     retileAfterOperation(screen1, swapped);
 }
 
-void AutotileEngine::promoteToMaster(const QString &windowId)
+void AutotileEngine::promoteToMaster(const QString& windowId)
 {
     const QString screenName = m_windowToScreen.value(windowId);
     if (screenName.isEmpty()) {
         return;
     }
 
-    TilingState *state = stateForScreen(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (!state) {
         return;
     }
@@ -483,14 +476,14 @@ void AutotileEngine::promoteToMaster(const QString &windowId)
     retileAfterOperation(screenName, promoted);
 }
 
-void AutotileEngine::demoteFromMaster(const QString &windowId)
+void AutotileEngine::demoteFromMaster(const QString& windowId)
 {
     const QString screenName = m_windowToScreen.value(windowId);
     if (screenName.isEmpty()) {
         return;
     }
 
-    TilingState *state = stateForScreen(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (!state) {
         return;
     }
@@ -511,7 +504,7 @@ void AutotileEngine::swapFocusedWithMaster()
 {
     // Find the screen with a focused window
     QString screenName;
-    TilingState *state = nullptr;
+    TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
 
     if (windows.isEmpty() || !state) {
@@ -549,7 +542,7 @@ void AutotileEngine::focusMaster()
 void AutotileEngine::emitFocusRequestAtIndex(int indexOffset, bool useFirst)
 {
     QString screenName;
-    TilingState *state = nullptr;
+    TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
     if (windows.isEmpty()) {
         return;
@@ -565,7 +558,7 @@ void AutotileEngine::emitFocusRequestAtIndex(int indexOffset, bool useFirst)
     Q_EMIT focusWindowRequested(windows.at(targetIndex));
 }
 
-void AutotileEngine::setFocusedWindow(const QString &windowId)
+void AutotileEngine::setFocusedWindow(const QString& windowId)
 {
     onWindowFocused(windowId);
 }
@@ -576,7 +569,7 @@ void AutotileEngine::setFocusedWindow(const QString &windowId)
 
 void AutotileEngine::increaseMasterRatio(qreal delta)
 {
-    applyToAllStates([delta](TilingState *state) {
+    applyToAllStates([delta](TilingState* state) {
         // setSplitRatio handles clamping internally
         state->setSplitRatio(state->splitRatio() + delta);
     });
@@ -593,14 +586,14 @@ void AutotileEngine::decreaseMasterRatio(qreal delta)
 
 void AutotileEngine::increaseMasterCount()
 {
-    applyToAllStates([](TilingState *state) {
+    applyToAllStates([](TilingState* state) {
         state->setMasterCount(state->masterCount() + 1);
     });
 }
 
 void AutotileEngine::decreaseMasterCount()
 {
-    applyToAllStates([](TilingState *state) {
+    applyToAllStates([](TilingState* state) {
         if (state->masterCount() > 1) {
             state->setMasterCount(state->masterCount() - 1);
         }
@@ -611,7 +604,7 @@ void AutotileEngine::decreaseMasterCount()
 // Event handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::onWindowAdded(const QString &windowId)
+void AutotileEngine::onWindowAdded(const QString& windowId)
 {
     if (!m_enabled || !shouldTileWindow(windowId)) {
         return;
@@ -626,7 +619,7 @@ void AutotileEngine::onWindowAdded(const QString &windowId)
     retileAfterOperation(screenName, inserted);
 }
 
-void AutotileEngine::onWindowRemoved(const QString &windowId)
+void AutotileEngine::onWindowRemoved(const QString& windowId)
 {
     const QString screenName = m_windowToScreen.value(windowId);
     if (screenName.isEmpty()) {
@@ -637,7 +630,7 @@ void AutotileEngine::onWindowRemoved(const QString &windowId)
     retileAfterOperation(screenName, true);
 }
 
-void AutotileEngine::onWindowFocused(const QString &windowId)
+void AutotileEngine::onWindowFocused(const QString& windowId)
 {
     // Update focused window in tiling state
     const QString screenName = m_windowToScreen.value(windowId);
@@ -646,13 +639,13 @@ void AutotileEngine::onWindowFocused(const QString &windowId)
         return;
     }
 
-    TilingState *state = stateForScreen(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (state) {
         state->setFocusedWindow(windowId);
     }
 }
 
-void AutotileEngine::onScreenGeometryChanged(const QString &screenName)
+void AutotileEngine::onScreenGeometryChanged(const QString& screenName)
 {
     if (!m_enabled || !m_screenStates.contains(screenName)) {
         return;
@@ -661,7 +654,7 @@ void AutotileEngine::onScreenGeometryChanged(const QString &screenName)
     retileAfterOperation(screenName, true);
 }
 
-void AutotileEngine::onLayoutChanged(Layout *layout)
+void AutotileEngine::onLayoutChanged(Layout* layout)
 {
     Q_UNUSED(layout)
 
@@ -675,9 +668,9 @@ void AutotileEngine::onLayoutChanged(Layout *layout)
 // Internal implementation
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool AutotileEngine::insertWindow(const QString &windowId, const QString &screenName)
+bool AutotileEngine::insertWindow(const QString& windowId, const QString& screenName)
 {
-    TilingState *state = stateForScreen(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (!state) {
         qWarning() << "AutotileEngine::insertWindow: failed to get state for screen" << screenName;
         return false;
@@ -706,32 +699,32 @@ bool AutotileEngine::insertWindow(const QString &windowId, const QString &screen
     return true;
 }
 
-void AutotileEngine::removeWindow(const QString &windowId)
+void AutotileEngine::removeWindow(const QString& windowId)
 {
     const QString screenName = m_windowToScreen.take(windowId);
     if (screenName.isEmpty()) {
         return;
     }
 
-    TilingState *state = m_screenStates.value(screenName);
+    TilingState* state = m_screenStates.value(screenName);
     if (state) {
         state->removeWindow(windowId);
     }
 }
 
-void AutotileEngine::recalculateLayout(const QString &screenName)
+void AutotileEngine::recalculateLayout(const QString& screenName)
 {
     if (screenName.isEmpty()) {
         qWarning() << "AutotileEngine::recalculateLayout: empty screen name";
         return;
     }
 
-    TilingState *state = stateForScreen(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (!state) {
         return;
     }
 
-    TilingAlgorithm *algo = currentAlgorithm();
+    TilingAlgorithm* algo = currentAlgorithm();
     if (!algo) {
         qWarning() << "AutotileEngine::recalculateLayout: no algorithm set";
         return;
@@ -754,8 +747,8 @@ void AutotileEngine::recalculateLayout(const QString &screenName)
 
     // Validate algorithm returned correct number of zones
     if (zones.size() != windowCount) {
-        qWarning() << "AutotileEngine::recalculateLayout: algorithm returned"
-                   << zones.size() << "zones for" << windowCount << "windows";
+        qWarning() << "AutotileEngine::recalculateLayout: algorithm returned" << zones.size() << "zones for"
+                   << windowCount << "windows";
         return;
     }
 
@@ -769,9 +762,9 @@ void AutotileEngine::recalculateLayout(const QString &screenName)
     state->setCalculatedZones(zones);
 }
 
-void AutotileEngine::applyTiling(const QString &screenName)
+void AutotileEngine::applyTiling(const QString& screenName)
 {
-    TilingState *state = stateForScreen(screenName);
+    TilingState* state = stateForScreen(screenName);
     if (!state) {
         return;
     }
@@ -780,15 +773,15 @@ void AutotileEngine::applyTiling(const QString &screenName)
     const QVector<QRect> zones = state->calculatedZones();
 
     if (windows.size() != zones.size()) {
-        qWarning() << "AutotileEngine::applyTiling: window/zone count mismatch"
-                   << windows.size() << "vs" << zones.size();
+        qWarning() << "AutotileEngine::applyTiling: window/zone count mismatch" << windows.size() << "vs"
+                   << zones.size();
         return;
     }
 
     // Apply each window to its calculated zone
     for (int i = 0; i < windows.size(); ++i) {
-        const QString &windowId = windows[i];
-        const QRect &geometry = zones[i];
+        const QString& windowId = windows[i];
+        const QRect& geometry = zones[i];
 
         // TODO: Actually move the window via KWin script or D-Bus
         // For now, just emit the signal
@@ -796,7 +789,7 @@ void AutotileEngine::applyTiling(const QString &screenName)
     }
 }
 
-bool AutotileEngine::shouldTileWindow(const QString &windowId) const
+bool AutotileEngine::shouldTileWindow(const QString& windowId) const
 {
     Q_UNUSED(windowId)
 
@@ -809,7 +802,7 @@ bool AutotileEngine::shouldTileWindow(const QString &windowId) const
     return true;
 }
 
-QString AutotileEngine::screenForWindow(const QString &windowId) const
+QString AutotileEngine::screenForWindow(const QString& windowId) const
 {
     // Check if already tracked
     if (m_windowToScreen.contains(windowId)) {
@@ -825,13 +818,13 @@ QString AutotileEngine::screenForWindow(const QString &windowId) const
     return QString();
 }
 
-QRect AutotileEngine::screenGeometry(const QString &screenName) const
+QRect AutotileEngine::screenGeometry(const QString& screenName) const
 {
     if (!m_screenManager) {
         return QRect();
     }
 
-    QScreen *screen = m_screenManager->screenByName(screenName);
+    QScreen* screen = m_screenManager->screenByName(screenName);
     if (!screen) {
         return QRect();
     }
@@ -839,7 +832,7 @@ QRect AutotileEngine::screenGeometry(const QString &screenName) const
     return ScreenManager::actualAvailableGeometry(screen);
 }
 
-void AutotileEngine::retileAfterOperation(const QString &screenName, bool operationSucceeded)
+void AutotileEngine::retileAfterOperation(const QString& screenName, bool operationSucceeded)
 {
     if (!operationSucceeded) {
         return; // No change, no signal
@@ -852,13 +845,13 @@ void AutotileEngine::retileAfterOperation(const QString &screenName, bool operat
     }
 }
 
-QStringList AutotileEngine::tiledWindowsForFocusedScreen(QString &outScreenName, TilingState *&outState) const
+QStringList AutotileEngine::tiledWindowsForFocusedScreen(QString& outScreenName, TilingState*& outState) const
 {
     outState = nullptr;
 
     // Find screen with a focused window by checking all TilingStates
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        TilingState *state = it.value();
+        TilingState* state = it.value();
         if (state && !state->focusedWindow().isEmpty()) {
             outScreenName = it.key();
             outState = state;
@@ -870,7 +863,7 @@ QStringList AutotileEngine::tiledWindowsForFocusedScreen(QString &outScreenName,
     if (m_screenManager && m_screenManager->primaryScreen()) {
         outScreenName = m_screenManager->primaryScreen()->name();
         if (m_screenStates.contains(outScreenName)) {
-            TilingState *state = m_screenStates.value(outScreenName);
+            TilingState* state = m_screenStates.value(outScreenName);
             if (state) {
                 outState = state;
                 return state->tiledWindows();
@@ -882,13 +875,13 @@ QStringList AutotileEngine::tiledWindowsForFocusedScreen(QString &outScreenName,
     return {};
 }
 
-void AutotileEngine::applyToAllStates(const std::function<void(TilingState *)> &operation)
+void AutotileEngine::applyToAllStates(const std::function<void(TilingState*)>& operation)
 {
     if (m_screenStates.isEmpty()) {
         return; // No states to modify
     }
 
-    for (TilingState *state : m_screenStates) {
+    for (TilingState* state : m_screenStates) {
         if (state) {
             operation(state);
         }

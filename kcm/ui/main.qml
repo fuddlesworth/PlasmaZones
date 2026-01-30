@@ -188,7 +188,6 @@ KCM.AbstractKCM {
         // TAB 1: LAYOUTS
         // ═══════════════════════════════════════════════════════════════════
         ColumnLayout {
-            visible: stackLayout.currentIndex === 0
             spacing: Kirigami.Units.largeSpacing
 
             // Layout actions toolbar
@@ -490,7 +489,6 @@ KCM.AbstractKCM {
         // TAB 2: EDITOR
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 1
             clip: true
             contentWidth: availableWidth
 
@@ -721,12 +719,12 @@ KCM.AbstractKCM {
         // TAB 3: ASSIGNMENTS
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 2
+            id: assignmentsScrollView
             clip: true
             contentWidth: availableWidth
 
             ColumnLayout {
-                width: parent.width
+                width: assignmentsScrollView.availableWidth
                 spacing: Kirigami.Units.largeSpacing
 
                 Kirigami.InlineMessage {
@@ -740,6 +738,10 @@ KCM.AbstractKCM {
                 Kirigami.Card {
                     Layout.fillWidth: true
                     Layout.fillHeight: false
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.largeSpacing
+                    leftPadding: Kirigami.Units.smallSpacing
+                    rightPadding: Kirigami.Units.smallSpacing
 
                     header: Kirigami.Heading {
                         level: 3
@@ -1073,6 +1075,10 @@ KCM.AbstractKCM {
                     Layout.fillWidth: true
                     Layout.fillHeight: false
                     visible: kcm.activitiesAvailable
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.largeSpacing
+                    leftPadding: Kirigami.Units.smallSpacing
+                    rightPadding: Kirigami.Units.smallSpacing
 
                     header: Kirigami.Heading {
                         level: 3
@@ -1280,6 +1286,10 @@ KCM.AbstractKCM {
                 Kirigami.Card {
                     Layout.fillWidth: true
                     Layout.fillHeight: false
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.largeSpacing
+                    leftPadding: Kirigami.Units.smallSpacing
+                    rightPadding: Kirigami.Units.smallSpacing
 
                     header: Kirigami.Heading {
                         level: 3
@@ -1496,7 +1506,6 @@ KCM.AbstractKCM {
         // TAB 4: APPEARANCE
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 3
             clip: true
             contentWidth: availableWidth
 
@@ -1772,7 +1781,6 @@ KCM.AbstractKCM {
         // TAB 5: BEHAVIOR
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 4
             clip: true
             contentWidth: availableWidth
 
@@ -1941,7 +1949,6 @@ KCM.AbstractKCM {
         // TAB 6: AUTOTILING
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 5
             clip: true
             contentWidth: availableWidth
 
@@ -2327,12 +2334,12 @@ KCM.AbstractKCM {
         // TAB 7: ZONE SELECTOR
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 6
+            id: zoneSelectorScrollView
             clip: true
             contentWidth: availableWidth
 
             ColumnLayout {
-                width: parent.width
+                width: zoneSelectorScrollView.availableWidth
                 spacing: Kirigami.Units.largeSpacing
 
                 // Info message
@@ -2356,6 +2363,10 @@ KCM.AbstractKCM {
                 Kirigami.Card {
                     Layout.fillWidth: true
                     enabled: kcm.zoneSelectorEnabled
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.largeSpacing
+                    leftPadding: Kirigami.Units.smallSpacing
+                    rightPadding: Kirigami.Units.smallSpacing
 
                     header: Kirigami.Heading {
                         level: 3
@@ -2388,6 +2399,10 @@ KCM.AbstractKCM {
                 Kirigami.Card {
                     Layout.fillWidth: true
                     enabled: kcm.zoneSelectorEnabled
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.largeSpacing
+                    leftPadding: Kirigami.Units.smallSpacing
+                    rightPadding: Kirigami.Units.smallSpacing
 
                     header: Kirigami.Heading {
                         level: 3
@@ -2495,6 +2510,10 @@ KCM.AbstractKCM {
                 Kirigami.Card {
                     Layout.fillWidth: true
                     enabled: kcm.zoneSelectorEnabled
+                    topPadding: Kirigami.Units.smallSpacing
+                    bottomPadding: Kirigami.Units.largeSpacing
+                    leftPadding: Kirigami.Units.smallSpacing
+                    rightPadding: Kirigami.Units.smallSpacing
 
                     header: Kirigami.Heading {
                         level: 3
@@ -2720,12 +2739,12 @@ KCM.AbstractKCM {
         // TAB 8: EXCLUSIONS
         // ═══════════════════════════════════════════════════════════════════
         ScrollView {
-            visible: stackLayout.currentIndex === 7
+            id: exclusionsScrollView
             clip: true
             contentWidth: availableWidth
 
             ColumnLayout {
-                width: parent.width
+                width: exclusionsScrollView.availableWidth
                 spacing: Kirigami.Units.largeSpacing
 
                 Kirigami.InlineMessage {
@@ -2738,6 +2757,10 @@ KCM.AbstractKCM {
             // Window type and size exclusions
             Kirigami.Card {
                 Layout.fillWidth: true
+                topPadding: Kirigami.Units.smallSpacing
+                bottomPadding: Kirigami.Units.largeSpacing
+                leftPadding: Kirigami.Units.smallSpacing
+                rightPadding: Kirigami.Units.smallSpacing
 
                 header: Kirigami.Heading {
                     level: 3
@@ -2747,7 +2770,6 @@ KCM.AbstractKCM {
 
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
-                    Layout.margins: Kirigami.Units.smallSpacing
 
                     CheckBox {
                         text: i18n("Exclude transient windows (dialogs, utilities, tooltips)")
@@ -2812,6 +2834,10 @@ KCM.AbstractKCM {
             Kirigami.Card {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                topPadding: Kirigami.Units.smallSpacing
+                bottomPadding: Kirigami.Units.largeSpacing
+                leftPadding: Kirigami.Units.smallSpacing
+                rightPadding: Kirigami.Units.smallSpacing
 
                 header: Kirigami.Heading {
                     level: 3
@@ -2898,6 +2924,10 @@ KCM.AbstractKCM {
             Kirigami.Card {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                topPadding: Kirigami.Units.smallSpacing
+                bottomPadding: Kirigami.Units.largeSpacing
+                leftPadding: Kirigami.Units.smallSpacing
+                rightPadding: Kirigami.Units.smallSpacing
 
                 header: Kirigami.Heading {
                     level: 3

@@ -44,12 +44,12 @@ public:
      * @param screenName Unique identifier for the screen
      * @param parent Parent QObject
      */
-    explicit TilingState(const QString &screenName, QObject *parent = nullptr);
+    explicit TilingState(const QString& screenName, QObject* parent = nullptr);
     ~TilingState() override = default;
 
     // Prevent copying (QObject rule)
-    TilingState(const TilingState &) = delete;
-    TilingState &operator=(const TilingState &) = delete;
+    TilingState(const TilingState&) = delete;
+    TilingState& operator=(const TilingState&) = delete;
 
     /**
      * @brief Get the screen name this state belongs to
@@ -87,14 +87,14 @@ public:
      * @param position Insert position (-1 = end, 0 = beginning/master)
      * @return true if window was added, false if already tracked or invalid
      */
-    bool addWindow(const QString &windowId, int position = -1);
+    bool addWindow(const QString& windowId, int position = -1);
 
     /**
      * @brief Remove a window from the tiling
      * @param windowId Window to remove
      * @return true if window was found and removed
      */
-    bool removeWindow(const QString &windowId);
+    bool removeWindow(const QString& windowId);
 
     /**
      * @brief Move a window to a different position
@@ -118,19 +118,19 @@ public:
      * @param windowId2 Second window ID
      * @return true if both windows found and swapped
      */
-    bool swapWindowsById(const QString &windowId1, const QString &windowId2);
+    bool swapWindowsById(const QString& windowId1, const QString& windowId2);
 
     /**
      * @brief Get the index of a window
      * @param windowId Window to find
      * @return Index in window order, or -1 if not found
      */
-    int windowIndex(const QString &windowId) const;
+    int windowIndex(const QString& windowId) const;
 
     /**
      * @brief Check if a window is tracked
      */
-    bool containsWindow(const QString &windowId) const;
+    bool containsWindow(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Master Management
@@ -150,7 +150,7 @@ public:
     /**
      * @brief Check if a window is in the master area
      */
-    bool isMaster(const QString &windowId) const;
+    bool isMaster(const QString& windowId) const;
 
     /**
      * @brief Get windows currently in master area
@@ -167,21 +167,21 @@ public:
      * @param windowId Window to promote
      * @return true if window found and promoted
      */
-    bool promoteToMaster(const QString &windowId);
+    bool promoteToMaster(const QString& windowId);
 
     /**
      * @brief Move a window to the front (alias for promoteToMaster)
      * @param windowId Window to move
      * @return true if window found and moved
      */
-    bool moveToFront(const QString &windowId);
+    bool moveToFront(const QString& windowId);
 
     /**
      * @brief Insert a window after the currently focused window
      * @param windowId Window to insert
      * @return true if inserted successfully
      */
-    bool insertAfterFocused(const QString &windowId);
+    bool insertAfterFocused(const QString& windowId);
 
     /**
      * @brief Move a window to a specific position by its ID
@@ -189,14 +189,14 @@ public:
      * @param position Target position
      * @return true if move was successful
      */
-    bool moveToPosition(const QString &windowId, int position);
+    bool moveToPosition(const QString& windowId, int position);
 
     /**
      * @brief Get the position of a window (alias for windowIndex)
      * @param windowId Window to find
      * @return Position in tiled list, or -1 if not found
      */
-    int windowPosition(const QString &windowId) const;
+    int windowPosition(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Split Ratio
@@ -233,21 +233,21 @@ public:
     /**
      * @brief Check if a window is floating (excluded from tiling)
      */
-    bool isFloating(const QString &windowId) const;
+    bool isFloating(const QString& windowId) const;
 
     /**
      * @brief Set a window's floating state
      * @param windowId Window to modify
      * @param floating true to exclude from tiling
      */
-    void setFloating(const QString &windowId, bool floating);
+    void setFloating(const QString& windowId, bool floating);
 
     /**
      * @brief Toggle a window's floating state
      * @param windowId Window to toggle
      * @return Current floating state after toggle (unchanged if window not tracked)
      */
-    bool toggleFloating(const QString &windowId);
+    bool toggleFloating(const QString& windowId);
 
     /**
      * @brief Get list of floating windows
@@ -267,7 +267,7 @@ public:
      * @brief Set the focused window
      * @param windowId Window that received focus
      */
-    void setFocusedWindow(const QString &windowId);
+    void setFocusedWindow(const QString& windowId);
 
     /**
      * @brief Get index of focused window in tiled list
@@ -290,7 +290,7 @@ public:
      * @param parent Parent QObject
      * @return New TilingState or nullptr on error
      */
-    static TilingState *fromJson(const QJsonObject &json, QObject *parent = nullptr);
+    static TilingState* fromJson(const QJsonObject& json, QObject* parent = nullptr);
 
     /**
      * @brief Clear all state (remove all windows, reset to defaults)
@@ -309,7 +309,7 @@ public:
      *
      * @param zones Calculated zone geometries (one per tiled window)
      */
-    void setCalculatedZones(const QVector<QRect> &zones);
+    void setCalculatedZones(const QVector<QRect>& zones);
 
     /**
      * @brief Get stored calculated zone geometries
@@ -343,7 +343,7 @@ Q_SIGNALS:
      * @param windowId Affected window
      * @param floating New floating state
      */
-    void floatingChanged(const QString &windowId, bool floating);
+    void floatingChanged(const QString& windowId, bool floating);
 
     /**
      * @brief Emitted when focused window changes

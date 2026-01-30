@@ -48,12 +48,12 @@ class PLASMAZONES_EXPORT TilingAlgorithm : public QObject
     Q_PROPERTY(bool supportsSplitRatio READ supportsSplitRatio CONSTANT)
 
 public:
-    explicit TilingAlgorithm(QObject *parent = nullptr);
+    explicit TilingAlgorithm(QObject* parent = nullptr);
     ~TilingAlgorithm() override = default;
 
     // Prevent copying (QObject rule)
-    TilingAlgorithm(const TilingAlgorithm &) = delete;
-    TilingAlgorithm &operator=(const TilingAlgorithm &) = delete;
+    TilingAlgorithm(const TilingAlgorithm&) = delete;
+    TilingAlgorithm& operator=(const TilingAlgorithm&) = delete;
 
     /**
      * @brief Human-readable name of the algorithm
@@ -88,8 +88,8 @@ public:
      *       For windowCount == 0, return an empty vector.
      *       For windowCount == 1, typically return a single full-screen zone.
      */
-    virtual QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                          const TilingState &state) const = 0;
+    virtual QVector<QRect> calculateZones(int windowCount, const QRect& screenGeometry,
+                                          const TilingState& state) const = 0;
 
     /**
      * @brief Get the index of the "master" zone (if applicable)
@@ -149,7 +149,7 @@ public:
      * @param innerGap Gap between adjacent zones in pixels
      * @param outerGap Gap at screen edges in pixels
      */
-    static void applyGaps(QVector<QRect> &zones, const QRect &screenGeometry, int innerGap, int outerGap);
+    static void applyGaps(QVector<QRect>& zones, const QRect& screenGeometry, int innerGap, int outerGap);
 
 protected:
     /**

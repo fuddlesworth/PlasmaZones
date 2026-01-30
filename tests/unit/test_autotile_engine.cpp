@@ -158,7 +158,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state = engine.stateForScreen(QStringLiteral("TestScreen"));
+        TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
 
         QVERIFY(state != nullptr);
         QCOMPARE(state->screenName(), QStringLiteral("TestScreen"));
@@ -168,8 +168,8 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state1 = engine.stateForScreen(QStringLiteral("TestScreen"));
-        TilingState *state2 = engine.stateForScreen(QStringLiteral("TestScreen"));
+        TilingState* state1 = engine.stateForScreen(QStringLiteral("TestScreen"));
+        TilingState* state2 = engine.stateForScreen(QStringLiteral("TestScreen"));
 
         QCOMPARE(state1, state2);
     }
@@ -178,8 +178,8 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state1 = engine.stateForScreen(QStringLiteral("Screen1"));
-        TilingState *state2 = engine.stateForScreen(QStringLiteral("Screen2"));
+        TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
 
         QVERIFY(state1 != state2);
         QCOMPARE(state1->screenName(), QStringLiteral("Screen1"));
@@ -189,11 +189,11 @@ private Q_SLOTS:
     void testStateForScreen_inheritsConfigDefaults()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        AutotileConfig *config = engine.config();
+        AutotileConfig* config = engine.config();
         config->masterCount = 2;
         config->splitRatio = 0.7;
 
-        TilingState *state = engine.stateForScreen(QStringLiteral("TestScreen"));
+        TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
 
         // Note: masterCount gets clamped by TilingState based on actual window count
         // When no windows, it clamps to MinMasterCount (1)
@@ -220,7 +220,7 @@ private Q_SLOTS:
     void testConfig_modifiable()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        AutotileConfig *config = engine.config();
+        AutotileConfig* config = engine.config();
 
         config->innerGap = 20;
         config->outerGap = 15;
@@ -238,8 +238,8 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         // Create states for two screens
-        TilingState *state1 = engine.stateForScreen(QStringLiteral("Screen1"));
-        TilingState *state2 = engine.stateForScreen(QStringLiteral("Screen2"));
+        TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
 
         const qreal initial1 = state1->splitRatio();
         const qreal initial2 = state2->splitRatio();
@@ -254,7 +254,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
         const qreal initial = state->splitRatio();
 
         engine.decreaseMasterRatio(0.1);
@@ -270,7 +270,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
 
         // Add some windows so master count can increase
         state->addWindow(QStringLiteral("win1"));
@@ -288,7 +288,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         state->setMasterCount(2);
@@ -302,7 +302,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState *state = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state = engine.stateForScreen(QStringLiteral("Screen1"));
         state->addWindow(QStringLiteral("win1"));
         QCOMPARE(state->masterCount(), 1);
 

@@ -89,7 +89,7 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithSpacing(Zone* zone, QScreen* screen
  * (relative position 0 or 1), and innerGap/2 to edges between zones.
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap,
-                                                   bool useAvailableGeometry = true);
+                                                  bool useAvailableGeometry = true);
 
 /**
  * @brief Calculate absolute zone geometry using available screen area

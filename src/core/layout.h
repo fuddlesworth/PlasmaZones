@@ -221,8 +221,8 @@ private:
     QString m_description;
     QString m_author;
     QString m_shortcut;
-    int m_zonePadding = -1;  // -1 = use global setting
-    int m_outerGap = -1;     // -1 = use global setting
+    int m_zonePadding = -1; // -1 = use global setting
+    int m_outerGap = -1; // -1 = use global setting
     bool m_showZoneNumbers = true;
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)

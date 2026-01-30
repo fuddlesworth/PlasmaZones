@@ -59,9 +59,9 @@ void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, in
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         const int hMargin = qMax(0, (screenGeom.width() - osdWidth) / 2);
         const int vMargin = qMax(0, (screenGeom.height() - osdHeight) / 2);
-        layerWindow->setAnchors(LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-            | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
         layerWindow->setMargins(QMargins(hMargin, vMargin, hMargin, vMargin));
     }
 }
@@ -1664,8 +1664,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     // Get the layout for this screen to use layout-specific settings
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
     }
     if (!screenLayout) {
         screenLayout = m_layout;
@@ -1742,8 +1741,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // This allows different monitors, virtual desktops, and activities to have different layouts
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
     }
 
     // Fall back to the global active layout if no screen-specific assignment

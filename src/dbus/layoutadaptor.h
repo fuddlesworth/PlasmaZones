@@ -127,8 +127,10 @@ public Q_SLOTS:
 
     // Full assignment (screen + desktop + activity)
     QString getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId);
-    void assignLayoutToScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId, const QString& layoutId);
-    void clearAssignmentForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId);
+    void assignLayoutToScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId,
+                                             const QString& layoutId);
+    void clearAssignmentForScreenDesktopActivity(const QString& screenName, int virtualDesktop,
+                                                 const QString& activityId);
 
 Q_SIGNALS:
     /**

@@ -60,7 +60,6 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setSingleShot(true);
     m_geometryUpdateTimer.setInterval(50); // 50ms debounce - fast enough to feel responsive
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
-
 }
 
 Daemon::~Daemon()
@@ -173,13 +172,11 @@ bool Daemon::init()
 
     // Window tracking service - business logic for zone assignments (SRP)
     m_windowTrackingService = std::make_unique<WindowTrackingService>(
-        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-        m_virtualDesktopManager.get(), this);
+        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(), m_virtualDesktopManager.get(), this);
 
     // Autotiling engine - automatic window tiling
-    m_autotileEngine = std::make_unique<AutotileEngine>(
-        m_layoutManager.get(), m_windowTrackingService.get(),
-        m_screenManager.get(), this);
+    m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingService.get(),
+                                                        m_screenManager.get(), this);
 
     // Autotile adaptor - D-Bus interface for autotiling control
     m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
@@ -747,9 +744,8 @@ void Daemon::processPendingGeometryUpdates()
 
     // Use current desktop and activity so per-desktop/per-activity assignments are respected
     const int currentDesktop = m_virtualDesktopManager->currentDesktop();
-    const QString currentActivity = m_activityManager && ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
+    const QString currentActivity =
+        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
 
     // Choose geometry for active layout recalc: prefer primary screen when in batch, else first
     const QString primaryName = [this]() {
@@ -781,8 +777,7 @@ void Daemon::processPendingGeometryUpdates()
         }
 
         // Update screen-specific layout if different from active
-        if (Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenName, currentDesktop, currentActivity)) {
+        if (Layout* screenLayout = m_layoutManager->layoutForScreen(screenName, currentDesktop, currentActivity)) {
             if (screenLayout != m_layoutManager->activeLayout()) {
                 screenLayout->recalculateZoneGeometries(availableGeometry);
             }

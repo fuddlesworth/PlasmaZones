@@ -1183,6 +1183,103 @@ void KCMPlasmaZones::load()
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT quickLayoutSlotsRefreshed();
+
+    // Emit all property change signals so QML bindings update with loaded values
+    // Behavior settings
+    Q_EMIT shiftDragToActivateChanged();
+    Q_EMIT dragActivationModifierChanged();
+    Q_EMIT multiZoneModifierChanged();
+    Q_EMIT middleClickMultiZoneChanged();
+    Q_EMIT showZonesOnAllMonitorsChanged();
+    Q_EMIT disabledMonitorsChanged();
+    Q_EMIT showZoneNumbersChanged();
+    Q_EMIT flashZonesOnSwitchChanged();
+    Q_EMIT showOsdOnLayoutSwitchChanged();
+    Q_EMIT showNavigationOsdChanged();
+
+    // Appearance settings
+    Q_EMIT osdStyleChanged();
+    Q_EMIT useSystemColorsChanged();
+    Q_EMIT highlightColorChanged();
+    Q_EMIT inactiveColorChanged();
+    Q_EMIT borderColorChanged();
+    Q_EMIT numberColorChanged();
+    Q_EMIT activeOpacityChanged();
+    Q_EMIT inactiveOpacityChanged();
+    Q_EMIT borderWidthChanged();
+    Q_EMIT borderRadiusChanged();
+    Q_EMIT enableBlurChanged();
+    Q_EMIT enableShaderEffectsChanged();
+    Q_EMIT shaderFrameRateChanged();
+    Q_EMIT zonePaddingChanged();
+    Q_EMIT outerGapChanged();
+    Q_EMIT adjacentThresholdChanged();
+
+    // Window management settings
+    Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
+    Q_EMIT moveNewWindowsToLastZoneChanged();
+    Q_EMIT restoreOriginalSizeOnUnsnapChanged();
+    Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT defaultLayoutIdChanged();
+    Q_EMIT excludedApplicationsChanged();
+    Q_EMIT excludedWindowClassesChanged();
+    Q_EMIT excludeTransientWindowsChanged();
+    Q_EMIT minimumWindowWidthChanged();
+    Q_EMIT minimumWindowHeightChanged();
+
+    // Zone selector settings
+    Q_EMIT zoneSelectorEnabledChanged();
+    Q_EMIT zoneSelectorTriggerDistanceChanged();
+    Q_EMIT zoneSelectorPositionChanged();
+    Q_EMIT zoneSelectorLayoutModeChanged();
+    Q_EMIT zoneSelectorPreviewWidthChanged();
+    Q_EMIT zoneSelectorPreviewHeightChanged();
+    Q_EMIT zoneSelectorPreviewLockAspectChanged();
+    Q_EMIT zoneSelectorGridColumnsChanged();
+    Q_EMIT zoneSelectorSizeModeChanged();
+    Q_EMIT zoneSelectorMaxRowsChanged();
+
+    // Autotile settings
+    Q_EMIT autotileEnabledChanged();
+    Q_EMIT autotileAlgorithmChanged();
+    Q_EMIT autotileSplitRatioChanged();
+    Q_EMIT autotileMasterCountChanged();
+    Q_EMIT autotileInnerGapChanged();
+    Q_EMIT autotileOuterGapChanged();
+    Q_EMIT autotileFocusNewWindowsChanged();
+    Q_EMIT autotileSmartGapsChanged();
+    Q_EMIT autotileInsertPositionChanged();
+    Q_EMIT autotileFocusFollowsMouseChanged();
+    Q_EMIT autotileRespectMinimumSizeChanged();
+    Q_EMIT autotileShowActiveBorderChanged();
+    Q_EMIT autotileActiveBorderWidthChanged();
+    Q_EMIT autotileUseSystemBorderColorChanged();
+    Q_EMIT autotileActiveBorderColorChanged();
+    Q_EMIT autotileMonocleHideOthersChanged();
+    Q_EMIT autotileMonocleShowTabsChanged();
+    Q_EMIT autotileToggleShortcutChanged();
+    Q_EMIT autotileCycleAlgorithmShortcutChanged();
+    Q_EMIT autotileFocusMasterShortcutChanged();
+    Q_EMIT autotileSwapMasterShortcutChanged();
+    Q_EMIT autotileIncMasterRatioShortcutChanged();
+    Q_EMIT autotileDecMasterRatioShortcutChanged();
+    Q_EMIT autotileIncMasterCountShortcutChanged();
+    Q_EMIT autotileDecMasterCountShortcutChanged();
+    Q_EMIT autotileRetileShortcutChanged();
+
+    // Editor settings
+    Q_EMIT editorDuplicateShortcutChanged();
+    Q_EMIT editorSplitHorizontalShortcutChanged();
+    Q_EMIT editorSplitVerticalShortcutChanged();
+    Q_EMIT editorFillShortcutChanged();
+    Q_EMIT editorGridSnappingEnabledChanged();
+    Q_EMIT editorEdgeSnappingEnabledChanged();
+    Q_EMIT editorSnapIntervalXChanged();
+    Q_EMIT editorSnapIntervalYChanged();
+    Q_EMIT editorSnapOverrideModifierChanged();
+    Q_EMIT fillOnDropEnabledChanged();
+    Q_EMIT fillOnDropModifierChanged();
+
     setNeedsSave(false);
 }
 

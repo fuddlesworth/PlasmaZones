@@ -86,27 +86,11 @@ Rectangle {
         }
     }
 
-    // Algorithm label
-    Label {
-        anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottomMargin: 2
-        text: {
-            switch (root.algorithm) {
-                case "master-stack": return i18n("Master + Stack")
-                case "columns": return i18n("Columns")
-                case "bsp": return i18n("BSP")
-                default: return root.algorithm
-            }
-        }
-        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-        opacity: 0.6
-    }
 
     // Zone generation functions
     function generateZones() {
         const availableWidth = previewArea.width
-        const availableHeight = previewArea.height - 20 // Reserve space for label
+        const availableHeight = previewArea.height
         const gap = root.innerGap
 
         if (root.windowCount === 0) {

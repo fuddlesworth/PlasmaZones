@@ -105,7 +105,10 @@ public:
     QString layoutId() const;
     QString layoutName() const;
     QVariantList zones() const; // Delegates to ZoneManager
-    int zonesVersion() const { return m_zonesVersion; } // Lightweight change counter
+    int zonesVersion() const
+    {
+        return m_zonesVersion;
+    } // Lightweight change counter
     QString selectedZoneId() const;
     QStringList selectedZoneIds() const;
     int selectionCount() const;
@@ -265,7 +268,7 @@ public Q_SLOTS:
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE bool isSelected(const QString& zoneId) const;
-    
+
     /**
      * @brief Check if all selected zones have useCustomColors enabled
      * @return true if all selected zones use custom colors, false otherwise
@@ -273,7 +276,7 @@ public Q_SLOTS:
      * Performance optimization: O(n) C++ lookup instead of O(n*m) JavaScript nested loops.
      */
     Q_INVOKABLE bool allSelectedUseCustomColors() const;
-    
+
     /**
      * @brief Select zones that intersect with a rectangle
      * @param x Rectangle X in relative coordinates (0.0-1.0)

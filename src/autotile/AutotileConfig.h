@@ -86,9 +86,9 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * @brief Where to insert new windows
      */
     enum class InsertPosition {
-        End,          ///< Add to end of stack (default)
+        End, ///< Add to end of stack (default)
         AfterFocused, ///< Insert after currently focused window
-        AsMaster      ///< New window becomes master
+        AsMaster ///< New window becomes master
     };
 
     InsertPosition insertPosition = InsertPosition::End;
@@ -176,8 +176,8 @@ struct PLASMAZONES_EXPORT AutotileConfig
     // Comparison and Serialization
     // ═══════════════════════════════════════════════════════════════════════
 
-    bool operator==(const AutotileConfig &other) const;
-    bool operator!=(const AutotileConfig &other) const;
+    bool operator==(const AutotileConfig& other) const;
+    bool operator!=(const AutotileConfig& other) const;
 
     /**
      * @brief Serialize to JSON
@@ -187,7 +187,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
     /**
      * @brief Deserialize from JSON
      */
-    static AutotileConfig fromJson(const QJsonObject &json);
+    static AutotileConfig fromJson(const QJsonObject& json);
 
     /**
      * @brief Get default configuration with KDE system colors

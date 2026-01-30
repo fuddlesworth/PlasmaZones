@@ -57,7 +57,7 @@ public:
      * @param engine The AutotileEngine to expose via D-Bus
      * @param parent Parent QObject (typically the daemon)
      */
-    explicit AutotileAdaptor(AutotileEngine *engine, QObject *parent = nullptr);
+    explicit AutotileAdaptor(AutotileEngine* engine, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,7 @@ public:
     void setEnabled(bool enabled);
 
     QString algorithm() const;
-    void setAlgorithm(const QString &algorithmId);
+    void setAlgorithm(const QString& algorithmId);
 
     double masterRatio() const;
     void setMasterRatio(double ratio);
@@ -97,26 +97,26 @@ public Q_SLOTS:
      * @brief Force retiling of windows
      * @param screenName Screen to retile, or empty for all screens
      */
-    void retile(const QString &screenName);
+    void retile(const QString& screenName);
 
     /**
      * @brief Swap positions of two tiled windows
      * @param windowId1 First window ID
      * @param windowId2 Second window ID
      */
-    void swapWindows(const QString &windowId1, const QString &windowId2);
+    void swapWindows(const QString& windowId1, const QString& windowId2);
 
     /**
      * @brief Promote a window to the master area
      * @param windowId Window ID to promote
      */
-    void promoteToMaster(const QString &windowId);
+    void promoteToMaster(const QString& windowId);
 
     /**
      * @brief Demote a window from master to stack area
      * @param windowId Window ID to demote
      */
-    void demoteFromMaster(const QString &windowId);
+    void demoteFromMaster(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Focus Operations
@@ -145,7 +145,7 @@ public Q_SLOTS:
      *
      * @param windowId Window ID that gained focus
      */
-    void notifyWindowFocused(const QString &windowId);
+    void notifyWindowFocused(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment
@@ -188,7 +188,7 @@ public Q_SLOTS:
      * @param algorithmId Algorithm ID to query
      * @return JSON object with id, name, description, icon
      */
-    QString algorithmInfo(const QString &algorithmId);
+    QString algorithmInfo(const QString& algorithmId);
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -205,13 +205,13 @@ Q_SIGNALS:
      * @brief Emitted when the tiling algorithm changes
      * @param algorithmId New algorithm ID
      */
-    void algorithmChanged(const QString &algorithmId);
+    void algorithmChanged(const QString& algorithmId);
 
     /**
      * @brief Emitted when tiling layout changes for a screen
      * @param screenName Screen that was retiled
      */
-    void tilingChanged(const QString &screenName);
+    void tilingChanged(const QString& screenName);
 
     /**
      * @brief Emitted when a window should be moved to a new geometry
@@ -225,7 +225,7 @@ Q_SIGNALS:
      * @param width Target width
      * @param height Target height
      */
-    void windowTileRequested(const QString &windowId, int x, int y, int width, int height);
+    void windowTileRequested(const QString& windowId, int x, int y, int width, int height);
 
     /**
      * @brief Emitted when a window should be focused
@@ -234,7 +234,7 @@ Q_SIGNALS:
      *
      * @param windowId Window ID to focus
      */
-    void focusWindowRequested(const QString &windowId);
+    void focusWindowRequested(const QString& windowId);
 
     /**
      * @brief Emitted when any configuration property changes
@@ -242,7 +242,7 @@ Q_SIGNALS:
     void configChanged();
 
 private Q_SLOTS:
-    void onWindowTiled(const QString &windowId, const QRect &geometry);
+    void onWindowTiled(const QString& windowId, const QRect& geometry);
 
 private:
     /**
@@ -250,16 +250,16 @@ private:
      * @param methodName Name of the calling method for logging
      * @return true if engine is available
      */
-    bool ensureEngine(const char *methodName) const;
+    bool ensureEngine(const char* methodName) const;
 
     /**
      * @brief Check if engine and config are available, logging warning if not
      * @param methodName Name of the calling method for logging
      * @return true if both engine and config are available
      */
-    bool ensureEngineAndConfig(const char *methodName) const;
+    bool ensureEngineAndConfig(const char* methodName) const;
 
-    AutotileEngine *m_engine = nullptr;
+    AutotileEngine* m_engine = nullptr;
 };
 
 } // namespace PlasmaZones

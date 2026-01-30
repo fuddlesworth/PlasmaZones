@@ -384,10 +384,8 @@ void EditorController::refreshGlobalZonePadding()
     int newValue = PlasmaZones::Defaults::ZonePadding;
 
     QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
-        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
+        QString::fromLatin1(PlasmaZones::DBus::ServiceName), QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
+        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings), QDBusConnection::sessionBus());
 
     if (settingsIface.isValid()) {
         QDBusReply<QDBusVariant> reply =
@@ -411,14 +409,11 @@ void EditorController::refreshGlobalOuterGap()
     int newValue = PlasmaZones::Defaults::OuterGap;
 
     QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
-        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
+        QString::fromLatin1(PlasmaZones::DBus::ServiceName), QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
+        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings), QDBusConnection::sessionBus());
 
     if (settingsIface.isValid()) {
-        QDBusReply<QDBusVariant> reply =
-            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("outerGap"));
+        QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("outerGap"));
         if (reply.isValid()) {
             int value = reply.value().variant().toInt();
             if (value >= 0) {
@@ -2075,7 +2070,7 @@ bool EditorController::allSelectedUseCustomColors() const
     if (!m_zoneManager || m_selectedZoneIds.isEmpty()) {
         return false;
     }
-    
+
     for (const QString& zoneId : m_selectedZoneIds) {
         const QVariantMap zone = m_zoneManager->getZoneById(zoneId);
         if (zone.isEmpty()) {
@@ -2094,13 +2089,13 @@ QStringList EditorController::selectZonesInRect(qreal x, qreal y, qreal width, q
     if (!m_zoneManager || width <= 0.0 || height <= 0.0) {
         return QStringList();
     }
-    
+
     const qreal rectRight = x + width;
     const qreal rectBottom = y + height;
-    
+
     // Start with existing selection if additive
     QStringList selectedIds = additive ? m_selectedZoneIds : QStringList();
-    
+
     // Get zones and check intersection
     const QVariantList& zonesList = m_zoneManager->zones();
     for (const QVariant& zoneVar : zonesList) {
@@ -2109,27 +2104,26 @@ QStringList EditorController::selectZonesInRect(qreal x, qreal y, qreal width, q
         if (zoneId.isEmpty()) {
             continue;
         }
-        
+
         // Zone bounds
         const qreal zoneX = zone.value(QString(JsonKeys::X)).toDouble();
         const qreal zoneY = zone.value(QString(JsonKeys::Y)).toDouble();
         const qreal zoneRight = zoneX + zone.value(QString(JsonKeys::Width)).toDouble();
         const qreal zoneBottom = zoneY + zone.value(QString(JsonKeys::Height)).toDouble();
-        
+
         // Check AABB intersection
-        const bool intersects = !(zoneRight < x || zoneX > rectRight || 
-                                  zoneBottom < y || zoneY > rectBottom);
-        
+        const bool intersects = !(zoneRight < x || zoneX > rectRight || zoneBottom < y || zoneY > rectBottom);
+
         if (intersects && !selectedIds.contains(zoneId)) {
             selectedIds.append(zoneId);
         }
     }
-    
+
     // Update selection if we found any zones
     if (!selectedIds.isEmpty()) {
         setSelectedZoneIds(selectedIds);
     }
-    
+
     return selectedIds;
 }
 

@@ -36,19 +36,19 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
 
     // Helper to verify zones fill screen exactly
-    bool zonesFillScreen(const QVector<QRect> &zones, const QRect &screen) const
+    bool zonesFillScreen(const QVector<QRect>& zones, const QRect& screen) const
     {
         // Simple check: total area should equal screen area
         // Note: This doesn't catch overlaps, just ensures coverage
         int totalArea = 0;
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             totalArea += zone.width() * zone.height();
         }
         return totalArea == screen.width() * screen.height();
     }
 
     // Helper to verify no zone overlaps
-    bool noOverlaps(const QVector<QRect> &zones) const
+    bool noOverlaps(const QVector<QRect>& zones) const
     {
         for (int i = 0; i < zones.size(); ++i) {
             for (int j = i + 1; j < zones.size(); ++j) {
@@ -61,9 +61,9 @@ private:
     }
 
     // Helper to verify all zones are within screen bounds
-    bool allWithinBounds(const QVector<QRect> &zones, const QRect &screen) const
+    bool allWithinBounds(const QVector<QRect>& zones, const QRect& screen) const
     {
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             if (!screen.contains(zone)) {
                 return false;
             }
@@ -90,7 +90,7 @@ private Q_SLOTS:
 
         // Verify sum equals screen width exactly
         int totalWidth = 0;
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             totalWidth += zone.width();
             // Each zone should be either 274 or 275
             QVERIFY(zone.width() == 274 || zone.width() == 275);
@@ -249,7 +249,7 @@ private Q_SLOTS:
         QCOMPARE(zones.size(), 3);
 
         // All should be full width (no stack since masterCount >= windowCount)
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             QCOMPARE(zone.width(), ScreenWidth);
         }
 
@@ -331,7 +331,7 @@ private Q_SLOTS:
         // 1920 / 3 = 640, remainder 0 - actually divides evenly
         // All columns should be 640
         int currentX = 0;
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             QCOMPARE(zone.x(), currentX);
             QCOMPARE(zone.height(), ScreenHeight);
             currentX += zone.width();
@@ -352,7 +352,7 @@ private Q_SLOTS:
 
         // Verify contiguous and fill screen
         int currentX = 0;
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             QCOMPARE(zone.x(), currentX);
             QCOMPARE(zone.y(), 0);
             QCOMPARE(zone.height(), ScreenHeight);
@@ -456,7 +456,7 @@ private Q_SLOTS:
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
 
         // All zones should have reasonable minimum size
-        for (const QRect &zone : zones) {
+        for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
             QVERIFY(zone.height() > 0);
         }
@@ -495,10 +495,8 @@ private Q_SLOTS:
 
     void testApplyGaps_twoZonesHorizontal()
     {
-        QVector<QRect> zones = {
-            QRect(0, 0, ScreenWidth / 2, ScreenHeight),
-            QRect(ScreenWidth / 2, 0, ScreenWidth / 2, ScreenHeight)
-        };
+        QVector<QRect> zones = {QRect(0, 0, ScreenWidth / 2, ScreenHeight),
+                                QRect(ScreenWidth / 2, 0, ScreenWidth / 2, ScreenHeight)};
 
         TilingAlgorithm::applyGaps(zones, m_screenGeometry, 10, 20);
 
@@ -541,10 +539,8 @@ private Q_SLOTS:
 
     void testApplyGaps_oddInnerGap()
     {
-        QVector<QRect> zones = {
-            QRect(0, 0, ScreenWidth / 2, ScreenHeight),
-            QRect(ScreenWidth / 2, 0, ScreenWidth / 2, ScreenHeight)
-        };
+        QVector<QRect> zones = {QRect(0, 0, ScreenWidth / 2, ScreenHeight),
+                                QRect(ScreenWidth / 2, 0, ScreenWidth / 2, ScreenHeight)};
 
         // Odd gap of 9: should alternate 4/5 pixels
         TilingAlgorithm::applyGaps(zones, m_screenGeometry, 9, 0);

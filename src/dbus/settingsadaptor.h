@@ -100,10 +100,10 @@ Q_SIGNALS:
 
 private:
     void initializeRegistry();
-    
+
     /**
      * @brief Schedule a debounced save
-     * 
+     *
      * Performance optimization: Batches multiple setting changes into a single
      * save operation instead of writing to disk on every change.
      */
@@ -117,7 +117,7 @@ private:
 
     QHash<QString, Getter> m_getters;
     QHash<QString, Setter> m_setters;
-    
+
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;
     static constexpr int SaveDebounceMs = 500; // 500ms debounce

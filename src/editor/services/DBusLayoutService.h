@@ -42,7 +42,7 @@ private:
     QString m_serviceName;
     QString m_objectPath;
     QString m_interfaceName;
-    
+
     // Cached D-Bus interface (performance optimization)
     QDBusInterface* m_interface = nullptr;
 };

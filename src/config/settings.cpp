@@ -952,20 +952,14 @@ void Settings::setAutotileEnabled(bool enabled)
 void Settings::setAutotileAlgorithm(const QString& algorithm)
 {
     // Validate against known algorithms
-    static const QStringList validAlgorithms = {
-        DBus::AutotileAlgorithm::MasterStack,
-        DBus::AutotileAlgorithm::BSP,
-        DBus::AutotileAlgorithm::Columns,
-        DBus::AutotileAlgorithm::Rows,
-        DBus::AutotileAlgorithm::Fibonacci,
-        DBus::AutotileAlgorithm::Monocle,
-        DBus::AutotileAlgorithm::ThreeColumn
-    };
+    static const QStringList validAlgorithms = {DBus::AutotileAlgorithm::MasterStack, DBus::AutotileAlgorithm::BSP,
+                                                DBus::AutotileAlgorithm::Columns,     DBus::AutotileAlgorithm::Rows,
+                                                DBus::AutotileAlgorithm::Fibonacci,   DBus::AutotileAlgorithm::Monocle,
+                                                DBus::AutotileAlgorithm::ThreeColumn};
 
     QString validatedAlgorithm = algorithm;
     if (!validAlgorithms.contains(algorithm)) {
-        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
-                            << "- defaulting to master-stack";
+        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- defaulting to master-stack";
         validatedAlgorithm = DBus::AutotileAlgorithm::MasterStack;
     }
 
@@ -1511,10 +1505,8 @@ void Settings::load()
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
     // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
-    m_swapWindowLeftShortcut =
-        navigationShortcuts.readEntry("SwapWindowLeft", QStringLiteral("Meta+Ctrl+Alt+Left"));
-    m_swapWindowRightShortcut =
-        navigationShortcuts.readEntry("SwapWindowRight", QStringLiteral("Meta+Ctrl+Alt+Right"));
+    m_swapWindowLeftShortcut = navigationShortcuts.readEntry("SwapWindowLeft", QStringLiteral("Meta+Ctrl+Alt+Left"));
+    m_swapWindowRightShortcut = navigationShortcuts.readEntry("SwapWindowRight", QStringLiteral("Meta+Ctrl+Alt+Right"));
     m_swapWindowUpShortcut = navigationShortcuts.readEntry("SwapWindowUp", QStringLiteral("Meta+Ctrl+Alt+Up"));
     m_swapWindowDownShortcut = navigationShortcuts.readEntry("SwapWindowDown", QStringLiteral("Meta+Ctrl+Alt+Down"));
 
@@ -1534,10 +1526,8 @@ void Settings::load()
 
     // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
     // Cycles focus between windows stacked in the same zone (monocle-style navigation)
-    m_cycleWindowForwardShortcut =
-        navigationShortcuts.readEntry("CycleWindowForward", QStringLiteral("Meta+Alt+."));
-    m_cycleWindowBackwardShortcut =
-        navigationShortcuts.readEntry("CycleWindowBackward", QStringLiteral("Meta+Alt+,"));
+    m_cycleWindowForwardShortcut = navigationShortcuts.readEntry("CycleWindowForward", QStringLiteral("Meta+Alt+."));
+    m_cycleWindowBackwardShortcut = navigationShortcuts.readEntry("CycleWindowBackward", QStringLiteral("Meta+Alt+,"));
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (using AutotileDefaults from constants.h)
@@ -1592,7 +1582,8 @@ void Settings::load()
 
     int activeBorderWidth = autotiling.readEntry("AutotileActiveBorderWidth", 2);
     if (activeBorderWidth < 1 || activeBorderWidth > 10) {
-        qCWarning(lcConfig) << "Invalid autotile active border width:" << activeBorderWidth << "clamping to valid range";
+        qCWarning(lcConfig) << "Invalid autotile active border width:" << activeBorderWidth
+                            << "clamping to valid range";
         activeBorderWidth = qBound(1, activeBorderWidth, 10);
     }
     m_autotileActiveBorderWidth = activeBorderWidth;
@@ -1616,13 +1607,18 @@ void Settings::load()
     // Autotiling Shortcuts (Bismuth-compatible defaults)
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
     m_autotileToggleShortcut = autotileShortcuts.readEntry("ToggleShortcut", QStringLiteral("Meta+T"));
-    m_autotileCycleAlgorithmShortcut = autotileShortcuts.readEntry("CycleAlgorithmShortcut", QStringLiteral("Meta+Space"));
+    m_autotileCycleAlgorithmShortcut =
+        autotileShortcuts.readEntry("CycleAlgorithmShortcut", QStringLiteral("Meta+Space"));
     m_autotileFocusMasterShortcut = autotileShortcuts.readEntry("FocusMasterShortcut", QStringLiteral("Meta+M"));
     m_autotileSwapMasterShortcut = autotileShortcuts.readEntry("SwapMasterShortcut", QStringLiteral("Meta+Return"));
-    m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry("IncMasterRatioShortcut", QStringLiteral("Meta+Shift+="));
-    m_autotileDecMasterRatioShortcut = autotileShortcuts.readEntry("DecMasterRatioShortcut", QStringLiteral("Meta+Shift+-"));
-    m_autotileIncMasterCountShortcut = autotileShortcuts.readEntry("IncMasterCountShortcut", QStringLiteral("Meta+Shift+I"));
-    m_autotileDecMasterCountShortcut = autotileShortcuts.readEntry("DecMasterCountShortcut", QStringLiteral("Meta+Shift+D"));
+    m_autotileIncMasterRatioShortcut =
+        autotileShortcuts.readEntry("IncMasterRatioShortcut", QStringLiteral("Meta+Shift+="));
+    m_autotileDecMasterRatioShortcut =
+        autotileShortcuts.readEntry("DecMasterRatioShortcut", QStringLiteral("Meta+Shift+-"));
+    m_autotileIncMasterCountShortcut =
+        autotileShortcuts.readEntry("IncMasterCountShortcut", QStringLiteral("Meta+Shift+I"));
+    m_autotileDecMasterCountShortcut =
+        autotileShortcuts.readEntry("DecMasterCountShortcut", QStringLiteral("Meta+Shift+D"));
     m_autotileRetileShortcut = autotileShortcuts.readEntry("RetileShortcut", QStringLiteral("Meta+Shift+R"));
 
     // Apply system colors if enabled

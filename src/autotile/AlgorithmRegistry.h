@@ -59,7 +59,7 @@ public:
      *
      * @return Pointer to the global AlgorithmRegistry instance
      */
-    static AlgorithmRegistry *instance();
+    static AlgorithmRegistry* instance();
 
     /**
      * @brief Register a tiling algorithm
@@ -70,7 +70,7 @@ public:
      * @param id Unique identifier for the algorithm (use DBus::AutotileAlgorithm constants)
      * @param algorithm Algorithm instance (ownership transferred)
      */
-    void registerAlgorithm(const QString &id, TilingAlgorithm *algorithm);
+    void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm);
 
     /**
      * @brief Unregister and delete an algorithm
@@ -78,7 +78,7 @@ public:
      * @param id Algorithm ID to remove
      * @return true if algorithm was found and removed
      */
-    bool unregisterAlgorithm(const QString &id);
+    bool unregisterAlgorithm(const QString& id);
 
     /**
      * @brief Get an algorithm by ID
@@ -86,7 +86,7 @@ public:
      * @param id Algorithm identifier
      * @return Pointer to algorithm, or nullptr if not found
      */
-    TilingAlgorithm *algorithm(const QString &id) const;
+    TilingAlgorithm* algorithm(const QString& id) const;
 
     /**
      * @brief Get list of all registered algorithm IDs
@@ -100,7 +100,7 @@ public:
      *
      * @return List of algorithm pointers (owned by registry)
      */
-    QList<TilingAlgorithm *> allAlgorithms() const;
+    QList<TilingAlgorithm*> allAlgorithms() const;
 
     /**
      * @brief Check if an algorithm is registered
@@ -108,7 +108,7 @@ public:
      * @param id Algorithm identifier
      * @return true if algorithm exists
      */
-    bool hasAlgorithm(const QString &id) const noexcept;
+    bool hasAlgorithm(const QString& id) const noexcept;
 
     /**
      * @brief Get the default algorithm ID
@@ -124,23 +124,23 @@ public:
      *
      * @return Pointer to default algorithm
      */
-    TilingAlgorithm *defaultAlgorithm() const;
+    TilingAlgorithm* defaultAlgorithm() const;
 
 Q_SIGNALS:
     /**
      * @brief Emitted when an algorithm is registered
      * @param id The registered algorithm's ID
      */
-    void algorithmRegistered(const QString &id);
+    void algorithmRegistered(const QString& id);
 
     /**
      * @brief Emitted when an algorithm is unregistered
      * @param id The removed algorithm's ID
      */
-    void algorithmUnregistered(const QString &id);
+    void algorithmUnregistered(const QString& id);
 
 private:
-    explicit AlgorithmRegistry(QObject *parent = nullptr);
+    explicit AlgorithmRegistry(QObject* parent = nullptr);
     ~AlgorithmRegistry() override;
 
     /**
@@ -156,7 +156,7 @@ private:
      * @param algorithm Pointer to check
      * @return ID of existing registration, or empty string if not found
      */
-    QString findAlgorithmId(TilingAlgorithm *algorithm) const;
+    QString findAlgorithmId(TilingAlgorithm* algorithm) const;
 
     /**
      * @brief Remove algorithm from internal data structures
@@ -167,16 +167,17 @@ private:
      * @param id Algorithm ID to remove
      * @return Pointer to removed algorithm, or nullptr if not found
      */
-    TilingAlgorithm *removeAlgorithmInternal(const QString &id);
+    TilingAlgorithm* removeAlgorithmInternal(const QString& id);
 
-    QHash<QString, TilingAlgorithm *> m_algorithms;
+    QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 };
 
 /**
  * @brief Pending algorithm registration data
  */
-struct PLASMAZONES_EXPORT PendingAlgorithmRegistration {
+struct PLASMAZONES_EXPORT PendingAlgorithmRegistration
+{
     QString id;
     int priority;
     std::function<TilingAlgorithm*()> factory;
@@ -188,7 +189,7 @@ struct PLASMAZONES_EXPORT PendingAlgorithmRegistration {
  * This is separate from the template to ensure all registrations go to the
  * same list regardless of template instantiation.
  */
-PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration> &pendingAlgorithmRegistrations();
+PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations();
 
 /**
  * @brief Helper for static self-registration of built-in algorithms
@@ -217,10 +218,12 @@ public:
      * @param id Algorithm identifier (use DBus::AutotileAlgorithm constants)
      * @param priority Registration order (lower = registered first, default 100)
      */
-    explicit AlgorithmRegistrar(const QString &id, int priority = 100)
+    explicit AlgorithmRegistrar(const QString& id, int priority = 100)
     {
         // Store in the global (non-template) pending list
-        pendingAlgorithmRegistrations().append({id, priority, []() { return new T(); }});
+        pendingAlgorithmRegistrations().append({id, priority, []() {
+                                                    return new T();
+                                                }});
     }
 };
 

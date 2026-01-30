@@ -51,7 +51,7 @@ static void ensureInterface(InterfacePtr& interface, const QString& interfaceNam
     }
 
     interface = std::make_unique<QDBusInterface>(DBus::ServiceName, DBus::ObjectPath, interfaceName,
-                                                  QDBusConnection::sessionBus());
+                                                 QDBusConnection::sessionBus());
 
     if (!interface->isValid()) {
         qCWarning(lcEffect) << "Cannot connect to" << logName << "interface -" << interface->lastError().message();
@@ -637,7 +637,8 @@ void PlasmaZonesEffect::loadExclusionSettings()
     }
 
     // Load all exclusion settings using the template helper
-    m_excludeTransientWindows = loadDBusSetting<bool>(settingsInterface, QStringLiteral("excludeTransientWindows"), true);
+    m_excludeTransientWindows =
+        loadDBusSetting<bool>(settingsInterface, QStringLiteral("excludeTransientWindows"), true);
     m_minimumWindowWidth = loadDBusSetting<int>(settingsInterface, QStringLiteral("minimumWindowWidth"), 200);
     m_minimumWindowHeight = loadDBusSetting<int>(settingsInterface, QStringLiteral("minimumWindowHeight"), 150);
 
@@ -1179,7 +1180,7 @@ void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
 }
 
 void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
-                                                  const QString& zoneGeometry)
+                                                 const QString& zoneGeometry)
 {
     Q_UNUSED(targetWindowId)
     Q_UNUSED(zoneGeometry)
@@ -1447,8 +1448,7 @@ void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString
         if (!hasGeometry) {
             QRectF currentGeom = window->frameGeometry();
             m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), windowId,
-                                                 static_cast<int>(currentGeom.x()),
-                                                 static_cast<int>(currentGeom.y()),
+                                                 static_cast<int>(currentGeom.x()), static_cast<int>(currentGeom.y()),
                                                  static_cast<int>(currentGeom.width()),
                                                  static_cast<int>(currentGeom.height()));
             qCDebug(lcEffect) << "Stored pre-snap geometry for window" << windowId << "before rotation";
@@ -1588,8 +1588,8 @@ void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive
 
     KWin::EffectWindow* targetWindow = sortedWindowsInZone.at(nextIndex);
     QString targetWindowId = getWindowId(targetWindow);
-    qCDebug(lcEffect) << "Cycling from window" << currentIndex << "to" << nextIndex
-                      << "- target:" << targetWindowId << "(z-order sorted)";
+    qCDebug(lcEffect) << "Cycling from window" << currentIndex << "to" << nextIndex << "- target:" << targetWindowId
+                      << "(z-order sorted)";
 
     // Activate the target window
     qCDebug(lcEffect) << "Activating window" << targetWindowId;
@@ -1944,15 +1944,13 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 void PlasmaZonesEffect::connectAutotileSignals()
 {
     // Connect to Autotile D-Bus signals for window geometry and focus requests
-    QDBusConnection::sessionBus().connect(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-        QStringLiteral("windowTileRequested"), this,
-        SLOT(slotAutotileWindowRequested(QString, int, int, int, int)));
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                                          QStringLiteral("windowTileRequested"), this,
+                                          SLOT(slotAutotileWindowRequested(QString, int, int, int, int)));
 
-    QDBusConnection::sessionBus().connect(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-        QStringLiteral("focusWindowRequested"), this,
-        SLOT(slotAutotileFocusWindowRequested(QString)));
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                                          QStringLiteral("focusWindowRequested"), this,
+                                          SLOT(slotAutotileFocusWindowRequested(QString)));
 
     qCDebug(lcEffect) << "Connected to autotile D-Bus signals";
 }
@@ -1969,12 +1967,12 @@ void PlasmaZonesEffect::loadAutotileSettings()
     }
 
     // Load animation enabled setting (default true)
-    m_autotileAnimationsEnabled = loadDBusSetting<bool>(
-        settingsInterface, QStringLiteral("autotileAnimationsEnabled"), true);
+    m_autotileAnimationsEnabled =
+        loadDBusSetting<bool>(settingsInterface, QStringLiteral("autotileAnimationsEnabled"), true);
 
     // Load animation duration setting (default 150ms)
-    m_autotileAnimationDuration = loadDBusSetting<int>(
-        settingsInterface, QStringLiteral("autotileAnimationDuration"), 150);
+    m_autotileAnimationDuration =
+        loadDBusSetting<int>(settingsInterface, QStringLiteral("autotileAnimationDuration"), 150);
 
     qCDebug(lcEffect) << "Loaded autotile settings: animationsEnabled=" << m_autotileAnimationsEnabled
                       << "animationDuration=" << m_autotileAnimationDuration << "ms";
@@ -2091,7 +2089,7 @@ void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const 
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
-                                        std::chrono::milliseconds presentTime)
+                                       std::chrono::milliseconds presentTime)
 {
     if (m_autotileAnimations.contains(w)) {
         // Mark window as transformed so paintWindow gets called
@@ -2101,10 +2099,8 @@ void PlasmaZonesEffect::prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePai
     KWin::effects->prePaintWindow(w, data, presentTime);
 }
 
-void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget,
-                                     const KWin::RenderViewport& viewport,
-                                     KWin::EffectWindow* w, int mask, QRegion region,
-                                     KWin::WindowPaintData& data)
+void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                    KWin::EffectWindow* w, int mask, QRegion region, KWin::WindowPaintData& data)
 {
     if (m_autotileAnimations.contains(w)) {
         const WindowAnimation& anim = m_autotileAnimations[w];

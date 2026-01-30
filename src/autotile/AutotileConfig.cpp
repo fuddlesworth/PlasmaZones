@@ -26,7 +26,7 @@ QString insertPositionToString(AutotileConfig::InsertPosition pos)
     }
 }
 
-AutotileConfig::InsertPosition stringToInsertPosition(const QString &str)
+AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
 {
     if (str == InsertAfterFocused) {
         return AutotileConfig::InsertPosition::AfterFocused;
@@ -38,27 +38,19 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString &str)
 }
 } // anonymous namespace
 
-bool AutotileConfig::operator==(const AutotileConfig &other) const
+bool AutotileConfig::operator==(const AutotileConfig& other) const
 {
     // Use qFuzzyCompare properly (add 1.0 for values that could be near zero)
-    return algorithmId == other.algorithmId
-        && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
-        && masterCount == other.masterCount
-        && innerGap == other.innerGap
-        && outerGap == other.outerGap
-        && insertPosition == other.insertPosition
-        && focusFollowsMouse == other.focusFollowsMouse
-        && focusNewWindows == other.focusNewWindows
-        && showActiveBorder == other.showActiveBorder
-        && activeBorderWidth == other.activeBorderWidth
-        && activeBorderColor == other.activeBorderColor
-        && monocleHideOthers == other.monocleHideOthers
-        && monocleShowTabs == other.monocleShowTabs
-        && smartGaps == other.smartGaps
-        && respectMinimumSize == other.respectMinimumSize;
+    return algorithmId == other.algorithmId && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
+        && masterCount == other.masterCount && innerGap == other.innerGap && outerGap == other.outerGap
+        && insertPosition == other.insertPosition && focusFollowsMouse == other.focusFollowsMouse
+        && focusNewWindows == other.focusNewWindows && showActiveBorder == other.showActiveBorder
+        && activeBorderWidth == other.activeBorderWidth && activeBorderColor == other.activeBorderColor
+        && monocleHideOthers == other.monocleHideOthers && monocleShowTabs == other.monocleShowTabs
+        && smartGaps == other.smartGaps && respectMinimumSize == other.respectMinimumSize;
 }
 
-bool AutotileConfig::operator!=(const AutotileConfig &other) const
+bool AutotileConfig::operator!=(const AutotileConfig& other) const
 {
     return !(*this == other);
 }
@@ -84,7 +76,7 @@ QJsonObject AutotileConfig::toJson() const
     return json;
 }
 
-AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
+AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
 {
     AutotileConfig config;
 

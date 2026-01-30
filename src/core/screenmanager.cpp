@@ -401,8 +401,8 @@ void ScreenManager::queryKdePlasmaPanels()
                 int totalOffset = match.captured(3).toInt();
                 bool isFloating = !match.captured(4).isEmpty() && match.captured(4).toInt() != 0;
 
-                qCDebug(lcScreen) << "  Parsed panel: screen" << screenIndex << location
-                                  << "offset=" << totalOffset << "floating=" << isFloating;
+                qCDebug(lcScreen) << "  Parsed panel: screen" << screenIndex << location << "offset=" << totalOffset
+                                  << "floating=" << isFloating;
 
                 if (!m_panelOffsets.contains(screenIndex)) {
                     m_panelOffsets.insert(screenIndex, ScreenPanelOffsets{});

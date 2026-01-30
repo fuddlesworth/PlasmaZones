@@ -40,7 +40,7 @@ class PLASMAZONES_EXPORT BSPAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit BSPAlgorithm(QObject *parent = nullptr);
+    explicit BSPAlgorithm(QObject* parent = nullptr);
     ~BSPAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -48,22 +48,35 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                  const TilingState &state) const override;
+    QVector<QRect> calculateZones(int windowCount, const QRect& screenGeometry,
+                                  const TilingState& state) const override;
 
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    }
 
 private:
     /**
      * @brief BSP tree node
      */
-    struct BSPNode {
+    struct BSPNode
+    {
         QRect geometry;
         std::unique_ptr<BSPNode> first;
         std::unique_ptr<BSPNode> second;
-        bool isLeaf() const { return !first && !second; }
+        bool isLeaf() const
+        {
+            return !first && !second;
+        }
     };
 
     /**
@@ -77,14 +90,14 @@ private:
      * @param windowsRemaining Number of windows still needing space
      * @param splitRatio Ratio for splitting (0.0-1.0)
      */
-    void partition(BSPNode *node, int windowsRemaining, qreal splitRatio) const;
+    void partition(BSPNode* node, int windowsRemaining, qreal splitRatio) const;
 
     /**
      * @brief Collect leaf node geometries in order
      * @param node Root of subtree
      * @param zones Output vector
      */
-    void collectLeaves(const BSPNode *node, QVector<QRect> &zones) const;
+    void collectLeaves(const BSPNode* node, QVector<QRect>& zones) const;
 };
 
 } // namespace PlasmaZones

@@ -50,9 +50,8 @@ class PLASMAZONES_EXPORT WindowTrackingService : public QObject
     Q_OBJECT
 
 public:
-    explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
-                                   ISettings* settings, VirtualDesktopManager* vdm,
-                                   QObject* parent = nullptr);
+    explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
+                                   VirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~WindowTrackingService() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -66,8 +65,8 @@ public:
      * @param screenName Screen where the zone is located
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
-    void assignWindowToZone(const QString& windowId, const QString& zoneId,
-                            const QString& screenName, int virtualDesktop);
+    void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenName,
+                            int virtualDesktop);
 
     /**
      * @brief Remove window from its assigned zone
@@ -199,8 +198,7 @@ public:
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
      */
-    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenName,
-                                        bool isSticky) const;
+    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
 
     /**
      * @brief Calculate snap result to restore from persisted session
@@ -209,8 +207,7 @@ public:
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
      */
-    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenName,
-                                            bool isSticky) const;
+    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenName, bool isSticky) const;
 
     /**
      * @brief Record that a window class was user-snapped
@@ -222,13 +219,16 @@ public:
     /**
      * @brief Get last used zone ID
      */
-    QString lastUsedZoneId() const { return m_lastUsedZoneId; }
+    QString lastUsedZoneId() const
+    {
+        return m_lastUsedZoneId;
+    }
 
     /**
      * @brief Update last used zone tracking
      */
-    void updateLastUsedZone(const QString& zoneId, const QString& screenName,
-                            const QString& windowClass, int virtualDesktop);
+    void updateLastUsedZone(const QString& zoneId, const QString& screenName, const QString& windowClass,
+                            int virtualDesktop);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
@@ -290,78 +290,119 @@ public:
      * @brief Get all zone assignments for persistence
      * @return Map of windowId -> zoneId
      */
-    const QHash<QString, QString>& zoneAssignments() const { return m_windowZoneAssignments; }
+    const QHash<QString, QString>& zoneAssignments() const
+    {
+        return m_windowZoneAssignments;
+    }
 
     /**
      * @brief Get all screen assignments for persistence
      */
-    const QHash<QString, QString>& screenAssignments() const { return m_windowScreenAssignments; }
+    const QHash<QString, QString>& screenAssignments() const
+    {
+        return m_windowScreenAssignments;
+    }
 
     /**
      * @brief Get all desktop assignments for persistence
      */
-    const QHash<QString, int>& desktopAssignments() const { return m_windowDesktopAssignments; }
+    const QHash<QString, int>& desktopAssignments() const
+    {
+        return m_windowDesktopAssignments;
+    }
 
     /**
      * @brief Get all pre-snap geometries for persistence
      */
-    const QHash<QString, QRect>& preSnapGeometries() const { return m_preSnapGeometries; }
+    const QHash<QString, QRect>& preSnapGeometries() const
+    {
+        return m_preSnapGeometries;
+    }
 
     /**
      * @brief Get pending zone assignments (for session restore)
      */
-    const QHash<QString, QString>& pendingZoneAssignments() const { return m_pendingZoneAssignments; }
+    const QHash<QString, QString>& pendingZoneAssignments() const
+    {
+        return m_pendingZoneAssignments;
+    }
 
     /**
      * @brief Get pending screen assignments
      */
-    const QHash<QString, QString>& pendingScreenAssignments() const { return m_pendingZoneScreens; }
+    const QHash<QString, QString>& pendingScreenAssignments() const
+    {
+        return m_pendingZoneScreens;
+    }
 
     /**
      * @brief Get pending desktop assignments
      */
-    const QHash<QString, int>& pendingDesktopAssignments() const { return m_pendingZoneDesktops; }
+    const QHash<QString, int>& pendingDesktopAssignments() const
+    {
+        return m_pendingZoneDesktops;
+    }
 
     /**
      * @brief Get user-snapped classes
      */
-    const QSet<QString>& userSnappedClasses() const { return m_userSnappedClasses; }
+    const QSet<QString>& userSnappedClasses() const
+    {
+        return m_userSnappedClasses;
+    }
 
     /**
      * @brief Set pending zone assignments (loaded from KConfig by adaptor)
      */
-    void setPendingZoneAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneAssignments = assignments; }
+    void setPendingZoneAssignments(const QHash<QString, QString>& assignments)
+    {
+        m_pendingZoneAssignments = assignments;
+    }
 
     /**
      * @brief Set pending screen assignments
      */
-    void setPendingScreenAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneScreens = assignments; }
+    void setPendingScreenAssignments(const QHash<QString, QString>& assignments)
+    {
+        m_pendingZoneScreens = assignments;
+    }
 
     /**
      * @brief Set pending desktop assignments
      */
-    void setPendingDesktopAssignments(const QHash<QString, int>& assignments) { m_pendingZoneDesktops = assignments; }
+    void setPendingDesktopAssignments(const QHash<QString, int>& assignments)
+    {
+        m_pendingZoneDesktops = assignments;
+    }
 
     /**
      * @brief Set pre-snap geometries (loaded from KConfig by adaptor)
      */
-    void setPreSnapGeometries(const QHash<QString, QRect>& geometries) { m_preSnapGeometries = geometries; }
+    void setPreSnapGeometries(const QHash<QString, QRect>& geometries)
+    {
+        m_preSnapGeometries = geometries;
+    }
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
      */
-    void setUserSnappedClasses(const QSet<QString>& classes) { m_userSnappedClasses = classes; }
+    void setUserSnappedClasses(const QSet<QString>& classes)
+    {
+        m_userSnappedClasses = classes;
+    }
 
     /**
      * @brief Set last used zone info (loaded from KConfig by adaptor)
      */
-    void setLastUsedZone(const QString& zoneId, const QString& screenName,
-                         const QString& zoneClass, int desktop);
+    void setLastUsedZone(const QString& zoneId, const QString& screenName, const QString& zoneClass, int desktop);
 
     /**
      * @brief Set floating windows (loaded from KConfig by adaptor)
      */
-    void setFloatingWindows(const QSet<QString>& windows) { m_floatingWindows = windows; }
+    void setFloatingWindows(const QSet<QString>& windows)
+    {
+        m_floatingWindows = windows;
+    }
 
 Q_SIGNALS:
     /**
@@ -411,9 +452,9 @@ private:
     QSet<QString> m_floatingWindows;
 
     // Session persistence
-    QHash<QString, QString> m_pendingZoneAssignments;  // stableId -> zoneId
-    QHash<QString, QString> m_pendingZoneScreens;      // stableId -> screenName
-    QHash<QString, int> m_pendingZoneDesktops;         // stableId -> desktop
+    QHash<QString, QString> m_pendingZoneAssignments; // stableId -> zoneId
+    QHash<QString, QString> m_pendingZoneScreens; // stableId -> screenName
+    QHash<QString, int> m_pendingZoneDesktops; // stableId -> desktop
 
     // Pre-float zone (for unfloat restore)
     QHash<QString, QString> m_preFloatZoneAssignments;

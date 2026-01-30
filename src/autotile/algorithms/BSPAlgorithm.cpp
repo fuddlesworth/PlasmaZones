@@ -16,7 +16,7 @@ namespace {
 AlgorithmRegistrar<BSPAlgorithm> s_bspRegistrar(DBus::AutotileAlgorithm::BSP, 30);
 }
 
-BSPAlgorithm::BSPAlgorithm(QObject *parent)
+BSPAlgorithm::BSPAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -36,8 +36,8 @@ QString BSPAlgorithm::icon() const noexcept
     return QStringLiteral("view-grid-symbolic");
 }
 
-QVector<QRect> BSPAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,
-                                            const TilingState &state) const
+QVector<QRect> BSPAlgorithm::calculateZones(int windowCount, const QRect& screenGeometry,
+                                            const TilingState& state) const
 {
     QVector<QRect> zones;
 
@@ -67,13 +67,13 @@ QVector<QRect> BSPAlgorithm::calculateZones(int windowCount, const QRect &screen
     return zones;
 }
 
-void BSPAlgorithm::partition(BSPNode *node, int windowsRemaining, qreal splitRatio) const
+void BSPAlgorithm::partition(BSPNode* node, int windowsRemaining, qreal splitRatio) const
 {
     if (!node || windowsRemaining <= 1) {
         return; // This node is a leaf (holds one window)
     }
 
-    const QRect &geo = node->geometry;
+    const QRect& geo = node->geometry;
 
     // Determine split direction based on aspect ratio
     // Split perpendicular to longest side for balanced regions
@@ -110,7 +110,7 @@ void BSPAlgorithm::partition(BSPNode *node, int windowsRemaining, qreal splitRat
     partition(node->second.get(), secondCount, balancedRatio);
 }
 
-void BSPAlgorithm::collectLeaves(const BSPNode *node, QVector<QRect> &zones) const
+void BSPAlgorithm::collectLeaves(const BSPNode* node, QVector<QRect>& zones) const
 {
     if (!node) {
         return;

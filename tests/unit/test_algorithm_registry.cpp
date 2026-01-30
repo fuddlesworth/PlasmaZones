@@ -21,17 +21,25 @@ class TestAlgorithm : public TilingAlgorithm
 {
     Q_OBJECT
 public:
-    explicit TestAlgorithm(const QString &name = QStringLiteral("Test Algorithm"))
+    explicit TestAlgorithm(const QString& name = QStringLiteral("Test Algorithm"))
         : m_name(name)
     {
     }
 
-    QString name() const noexcept override { return m_name; }
-    QString description() const override { return QStringLiteral("Test algorithm for unit tests"); }
-    QString icon() const noexcept override { return QStringLiteral("test-icon"); }
+    QString name() const noexcept override
+    {
+        return m_name;
+    }
+    QString description() const override
+    {
+        return QStringLiteral("Test algorithm for unit tests");
+    }
+    QString icon() const noexcept override
+    {
+        return QStringLiteral("test-icon");
+    }
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screen,
-                                  const TilingState &state) const override
+    QVector<QRect> calculateZones(int windowCount, const QRect& screen, const TilingState& state) const override
     {
         Q_UNUSED(state)
         QVector<QRect> zones;
@@ -41,8 +49,7 @@ public:
         // Simple equal columns
         const int width = screen.width() / windowCount;
         for (int i = 0; i < windowCount; ++i) {
-            zones.append(QRect(screen.x() + i * width, screen.y(),
-                               width, screen.height()));
+            zones.append(QRect(screen.x() + i * width, screen.y(), width, screen.height()));
         }
         return zones;
     }
@@ -72,8 +79,8 @@ private Q_SLOTS:
 
     void testSingleton_sameInstance()
     {
-        auto *instance1 = AlgorithmRegistry::instance();
-        auto *instance2 = AlgorithmRegistry::instance();
+        auto* instance1 = AlgorithmRegistry::instance();
+        auto* instance2 = AlgorithmRegistry::instance();
 
         QVERIFY(instance1 != nullptr);
         QCOMPARE(instance1, instance2);
@@ -85,8 +92,8 @@ private Q_SLOTS:
 
     void testBuiltIn_masterStackRegistered()
     {
-        auto *registry = AlgorithmRegistry::instance();
-        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* registry = AlgorithmRegistry::instance();
+        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::MasterStack);
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Master + Stack"));
@@ -96,8 +103,8 @@ private Q_SLOTS:
 
     void testBuiltIn_columnsRegistered()
     {
-        auto *registry = AlgorithmRegistry::instance();
-        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::Columns);
+        auto* registry = AlgorithmRegistry::instance();
+        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::Columns);
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("Columns"));
@@ -107,8 +114,8 @@ private Q_SLOTS:
 
     void testBuiltIn_bspRegistered()
     {
-        auto *registry = AlgorithmRegistry::instance();
-        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::BSP);
+        auto* registry = AlgorithmRegistry::instance();
+        auto* algo = registry->algorithm(DBus::AutotileAlgorithm::BSP);
 
         QVERIFY(algo != nullptr);
         QCOMPARE(algo->name(), QStringLiteral("BSP"));
@@ -118,7 +125,7 @@ private Q_SLOTS:
 
     void testBuiltIn_allThreeRegistered()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
         QVERIFY(available.contains(DBus::AutotileAlgorithm::MasterStack));
@@ -133,15 +140,14 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
-        QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(),
-                 DBus::AutotileAlgorithm::MasterStack);
+        QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(), DBus::AutotileAlgorithm::MasterStack);
     }
 
     void testDefault_algorithmInstance()
     {
-        auto *registry = AlgorithmRegistry::instance();
-        auto *defaultAlgo = registry->defaultAlgorithm();
-        auto *masterStack = registry->algorithm(DBus::AutotileAlgorithm::MasterStack);
+        auto* registry = AlgorithmRegistry::instance();
+        auto* defaultAlgo = registry->defaultAlgorithm();
+        auto* masterStack = registry->algorithm(DBus::AutotileAlgorithm::MasterStack);
 
         QVERIFY(defaultAlgo != nullptr);
         QCOMPARE(defaultAlgo, masterStack);
@@ -153,23 +159,23 @@ private Q_SLOTS:
 
     void testRetrieval_unknownReturnsNull()
     {
-        auto *registry = AlgorithmRegistry::instance();
-        auto *algo = registry->algorithm(QStringLiteral("nonexistent-algorithm"));
+        auto* registry = AlgorithmRegistry::instance();
+        auto* algo = registry->algorithm(QStringLiteral("nonexistent-algorithm"));
 
         QVERIFY(algo == nullptr);
     }
 
     void testRetrieval_emptyIdReturnsNull()
     {
-        auto *registry = AlgorithmRegistry::instance();
-        auto *algo = registry->algorithm(QString());
+        auto* registry = AlgorithmRegistry::instance();
+        auto* algo = registry->algorithm(QString());
 
         QVERIFY(algo == nullptr);
     }
 
     void testRetrieval_hasAlgorithm()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
 
         QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::MasterStack));
         QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Columns));
@@ -179,13 +185,13 @@ private Q_SLOTS:
 
     void testRetrieval_allAlgorithms()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         auto all = registry->allAlgorithms();
 
         QCOMPARE(all.size(), 3);
 
         // All should be valid pointers
-        for (auto *algo : all) {
+        for (auto* algo : all) {
             QVERIFY(algo != nullptr);
             QVERIFY(!algo->name().isEmpty());
         }
@@ -197,7 +203,7 @@ private Q_SLOTS:
 
     void testRegister_emptyIdIgnored()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
@@ -211,7 +217,7 @@ private Q_SLOTS:
 
     void testRegister_nullptrIgnored()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
@@ -225,18 +231,18 @@ private Q_SLOTS:
 
     void testRegister_replacesExisting()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         const QString testId = QStringLiteral("test-replace");
 
         // Register first algorithm
-        auto *algo1 = new TestAlgorithm(QStringLiteral("First"));
+        auto* algo1 = new TestAlgorithm(QStringLiteral("First"));
         registry->registerAlgorithm(testId, algo1);
         QVERIFY(registry->hasAlgorithm(testId));
         QCOMPARE(registry->algorithm(testId)->name(), QStringLiteral("First"));
 
         // Register replacement with same ID
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
-        auto *algo2 = new TestAlgorithm(QStringLiteral("Second"));
+        auto* algo2 = new TestAlgorithm(QStringLiteral("Second"));
         registry->registerAlgorithm(testId, algo2);
 
         // Should replace - signal emitted, new algorithm returned
@@ -250,7 +256,7 @@ private Q_SLOTS:
 
     void testRegister_signalEmitted()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         const QString testId = QStringLiteral("test-signal");
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmRegistered);
@@ -265,12 +271,12 @@ private Q_SLOTS:
 
     void testRegister_doubleRegistrationRejected()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         const QString id1 = QStringLiteral("test-double-1");
         const QString id2 = QStringLiteral("test-double-2");
 
         // Register under first ID
-        auto *algo = new TestAlgorithm(QStringLiteral("Double Test"));
+        auto* algo = new TestAlgorithm(QStringLiteral("Double Test"));
         registry->registerAlgorithm(id1, algo);
         QVERIFY(registry->hasAlgorithm(id1));
 
@@ -296,7 +302,7 @@ private Q_SLOTS:
 
     void testUnregister_success()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         const QString testId = QStringLiteral("test-unregister");
 
         // Register first
@@ -315,7 +321,7 @@ private Q_SLOTS:
 
     void testUnregister_nonexistentReturnsFalse()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
 
         QSignalSpy spy(registry, &AlgorithmRegistry::algorithmUnregistered);
         bool result = registry->unregisterAlgorithm(QStringLiteral("nonexistent-id"));
@@ -326,7 +332,7 @@ private Q_SLOTS:
 
     void testUnregister_removesFromOrder()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         const QString testId = QStringLiteral("test-order-remove");
 
         registry->registerAlgorithm(testId, new TestAlgorithm());
@@ -342,7 +348,7 @@ private Q_SLOTS:
 
     void testOrder_preservedInAvailableAlgorithms()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
         // Built-in registration order: MasterStack, Columns, BSP
@@ -354,14 +360,14 @@ private Q_SLOTS:
 
     void testOrder_matchesAllAlgorithms()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
         auto all = registry->allAlgorithms();
 
         QCOMPARE(available.size(), all.size());
 
         for (int i = 0; i < available.size(); ++i) {
-            auto *expected = registry->algorithm(available[i]);
+            auto* expected = registry->algorithm(available[i]);
             QCOMPARE(all[i], expected);
         }
     }
@@ -372,20 +378,20 @@ private Q_SLOTS:
 
     void testFunctionality_algorithmsWork()
     {
-        auto *registry = AlgorithmRegistry::instance();
+        auto* registry = AlgorithmRegistry::instance();
         QRect screen(0, 0, 1920, 1080);
         TilingState state(QStringLiteral("test"));
 
         // Test each algorithm can calculate zones
-        for (const QString &id : registry->availableAlgorithms()) {
-            auto *algo = registry->algorithm(id);
+        for (const QString& id : registry->availableAlgorithms()) {
+            auto* algo = registry->algorithm(id);
             QVERIFY(algo != nullptr);
 
             auto zones = algo->calculateZones(4, screen, state);
             QCOMPARE(zones.size(), 4);
 
             // All zones should be valid
-            for (const QRect &zone : zones) {
+            for (const QRect& zone : zones) {
                 QVERIFY(zone.isValid());
                 QVERIFY(zone.width() > 0);
                 QVERIFY(zone.height() > 0);

@@ -16,7 +16,7 @@ namespace {
 AlgorithmRegistrar<MasterStackAlgorithm> s_masterStackRegistrar(DBus::AutotileAlgorithm::MasterStack, 10);
 }
 
-MasterStackAlgorithm::MasterStackAlgorithm(QObject *parent)
+MasterStackAlgorithm::MasterStackAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -56,8 +56,8 @@ qreal MasterStackAlgorithm::defaultSplitRatio() const noexcept
     return DefaultSplitRatio; // 0.6 (60% master)
 }
 
-QVector<QRect> MasterStackAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,
-                                                    const TilingState &state) const
+QVector<QRect> MasterStackAlgorithm::calculateZones(int windowCount, const QRect& screenGeometry,
+                                                    const TilingState& state) const
 {
     QVector<QRect> zones;
 

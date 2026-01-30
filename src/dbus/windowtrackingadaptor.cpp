@@ -43,8 +43,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
 
     // Forward service signals to D-Bus
-    connect(m_service, &WindowTrackingService::windowZoneChanged,
-            this, &WindowTrackingAdaptor::windowZoneChanged);
+    connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
 
     // Setup debounced save timer (500ms delay to batch rapid state changes)
     m_saveTimer = new QTimer(this);
@@ -430,9 +429,8 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
                 m_lastUsedDesktop = currentDesktop;
             }
 
-            qCDebug(lcDbusWindow) << "Updated last-used zone to" << zoneId
-                                  << "from focus on" << windowClass
-                                  << "screen" << screenName;
+            qCDebug(lcDbusWindow) << "Updated last-used zone to" << zoneId << "from focus on" << windowClass << "screen"
+                                  << screenName;
         }
     }
 
@@ -1273,7 +1271,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
     // This is more robust than iterating zones and calling getWindowsInZone(zoneId):
     // after "move one window to free space" we still see the remaining snapped window
     // even if zone ID format or layout iteration would otherwise miss it.
-    struct WindowZoneInfo {
+    struct WindowZoneInfo
+    {
         QString windowId;
         int zoneIndex;
         QString screenName;
@@ -1301,7 +1300,7 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
             normalizedZoneId = uuid->toString(); // Normalize to default format (with braces)
         } else {
             qCWarning(lcDbusWindow) << "Invalid zone ID format in assignment for window" << windowId
-                                   << "- zone ID:" << zoneId;
+                                    << "- zone ID:" << zoneId;
             // Continue with original zoneId - lookup will likely fail but we'll handle it below
         }
         auto idxIt = zoneIdToIndex.constFind(normalizedZoneId);
@@ -1348,8 +1347,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
 
         // Get geometry for destination zone ON THE CORRECT SCREEN
         // This fixes multi-monitor issues where windows could get wrong coordinates
-        QString geometry = screenName.isEmpty() ? getZoneGeometry(destZoneId)
-                                                 : getZoneGeometryForScreen(destZoneId, screenName);
+        QString geometry =
+            screenName.isEmpty() ? getZoneGeometry(destZoneId) : getZoneGeometryForScreen(destZoneId, screenName);
         if (geometry.isEmpty()) {
             qCWarning(lcDbusWindow) << "Could not get geometry for zone" << destZone->zoneNumber();
             continue;
@@ -1367,8 +1366,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
         moveObj[QStringLiteral("height")] = geomObj[QStringLiteral("height")];
         rotationArray.append(moveObj);
 
-        qCDebug(lcDbusWindow) << "Window" << windowId << "rotating from zone"
-                              << (currentIndex + 1) << "to zone" << (destIndex + 1);
+        qCDebug(lcDbusWindow) << "Window" << windowId << "rotating from zone" << (currentIndex + 1) << "to zone"
+                              << (destIndex + 1);
     }
 
     // Update pre-float zone assignments for floating windows whose zones are rotating.
@@ -1378,8 +1377,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
         const QString& oldZoneId = it.value();
         auto oldUuid = Utils::parseUuid(oldZoneId);
         if (!oldUuid) {
-            qCWarning(lcDbusWindow) << "Invalid zone ID format in pre-float assignment for floating window"
-                                    << it.key() << "- zone ID:" << oldZoneId;
+            qCWarning(lcDbusWindow) << "Invalid zone ID format in pre-float assignment for floating window" << it.key()
+                                    << "- zone ID:" << oldZoneId;
             continue; // Skip invalid zone IDs
         }
         // Normalize to default format (with braces) for lookup
@@ -1387,8 +1386,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
         auto rotationIt = zoneRotationMap.constFind(normalizedOldZoneId);
         if (rotationIt != zoneRotationMap.constEnd()) {
             QString newZoneId = *rotationIt;
-            qCDebug(lcDbusWindow) << "Updating pre-float zone for floating window" << it.key()
-                                  << "from" << oldZoneId << "to" << newZoneId;
+            qCDebug(lcDbusWindow) << "Updating pre-float zone for floating window" << it.key() << "from" << oldZoneId
+                                  << "to" << newZoneId;
             it.value() = newZoneId;
         }
     }
@@ -1410,7 +1409,8 @@ void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString
 {
     // This method is called by KWin effect via D-Bus to report navigation results.
     // Emit the Qt signal which triggers the OSD display.
-    qCDebug(lcDbusWindow) << "KWin effect reported navigation feedback: success=" << success << "action=" << action << "reason=" << reason;
+    qCDebug(lcDbusWindow) << "KWin effect reported navigation feedback: success=" << success << "action=" << action
+                          << "reason=" << reason;
     Q_EMIT navigationFeedback(success, action, reason);
 }
 

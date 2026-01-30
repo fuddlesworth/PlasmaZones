@@ -118,14 +118,12 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
             &ShortcutManager::updateCycleWindowBackwardShortcut);
 
     // Phase 3.1: Autotile shortcuts
-    connect(m_settings, &Settings::autotileToggleShortcutChanged, this,
-            &ShortcutManager::updateToggleAutotileShortcut);
+    connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
     connect(m_settings, &Settings::autotileCycleAlgorithmShortcutChanged, this,
             &ShortcutManager::updateCycleAlgorithmShortcut);
     connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this,
             &ShortcutManager::updateFocusMasterShortcut);
-    connect(m_settings, &Settings::autotileSwapMasterShortcutChanged, this,
-            &ShortcutManager::updateSwapMasterShortcut);
+    connect(m_settings, &Settings::autotileSwapMasterShortcutChanged, this, &ShortcutManager::updateSwapMasterShortcut);
     connect(m_settings, &Settings::autotileIncMasterRatioShortcutChanged, this,
             &ShortcutManager::updateIncMasterRatioShortcut);
     connect(m_settings, &Settings::autotileDecMasterRatioShortcutChanged, this,
@@ -134,8 +132,7 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
             &ShortcutManager::updateIncMasterCountShortcut);
     connect(m_settings, &Settings::autotileDecMasterCountShortcutChanged, this,
             &ShortcutManager::updateDecMasterCountShortcut);
-    connect(m_settings, &Settings::autotileRetileShortcutChanged, this,
-            &ShortcutManager::updateRetileShortcut);
+    connect(m_settings, &Settings::autotileRetileShortcutChanged, this, &ShortcutManager::updateRetileShortcut);
 
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
@@ -915,8 +912,7 @@ void ShortcutManager::setupAutotileShortcuts()
     if (!m_toggleAutotileAction) {
         m_toggleAutotileAction = new QAction(i18n("Toggle Autotiling"), this);
         m_toggleAutotileAction->setObjectName(QStringLiteral("toggle_autotile"));
-        KGlobalAccel::setGlobalShortcut(m_toggleAutotileAction,
-                                        QKeySequence(m_settings->autotileToggleShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_toggleAutotileAction, QKeySequence(m_settings->autotileToggleShortcut()));
         connect(m_toggleAutotileAction, &QAction::triggered, this, &ShortcutManager::onToggleAutotile);
     }
 
@@ -933,8 +929,7 @@ void ShortcutManager::setupAutotileShortcuts()
     if (!m_focusMasterAction) {
         m_focusMasterAction = new QAction(i18n("Focus Master Window"), this);
         m_focusMasterAction->setObjectName(QStringLiteral("focus_master"));
-        KGlobalAccel::setGlobalShortcut(m_focusMasterAction,
-                                        QKeySequence(m_settings->autotileFocusMasterShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_focusMasterAction, QKeySequence(m_settings->autotileFocusMasterShortcut()));
         connect(m_focusMasterAction, &QAction::triggered, this, &ShortcutManager::onFocusMaster);
     }
 
@@ -942,8 +937,7 @@ void ShortcutManager::setupAutotileShortcuts()
     if (!m_swapMasterAction) {
         m_swapMasterAction = new QAction(i18n("Swap with Master"), this);
         m_swapMasterAction->setObjectName(QStringLiteral("swap_master"));
-        KGlobalAccel::setGlobalShortcut(m_swapMasterAction,
-                                        QKeySequence(m_settings->autotileSwapMasterShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_swapMasterAction, QKeySequence(m_settings->autotileSwapMasterShortcut()));
         connect(m_swapMasterAction, &QAction::triggered, this, &ShortcutManager::onSwapMaster);
     }
 
@@ -987,8 +981,7 @@ void ShortcutManager::setupAutotileShortcuts()
     if (!m_retileAction) {
         m_retileAction = new QAction(i18n("Retile Windows"), this);
         m_retileAction->setObjectName(QStringLiteral("retile"));
-        KGlobalAccel::setGlobalShortcut(m_retileAction,
-                                        QKeySequence(m_settings->autotileRetileShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_retileAction, QKeySequence(m_settings->autotileRetileShortcut()));
         connect(m_retileAction, &QAction::triggered, this, &ShortcutManager::onRetile);
     }
 
@@ -1054,8 +1047,7 @@ void ShortcutManager::onRetile()
 void ShortcutManager::updateToggleAutotileShortcut()
 {
     if (m_toggleAutotileAction) {
-        KGlobalAccel::setGlobalShortcut(m_toggleAutotileAction,
-                                        QKeySequence(m_settings->autotileToggleShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_toggleAutotileAction, QKeySequence(m_settings->autotileToggleShortcut()));
     }
 }
 
@@ -1070,16 +1062,14 @@ void ShortcutManager::updateCycleAlgorithmShortcut()
 void ShortcutManager::updateFocusMasterShortcut()
 {
     if (m_focusMasterAction) {
-        KGlobalAccel::setGlobalShortcut(m_focusMasterAction,
-                                        QKeySequence(m_settings->autotileFocusMasterShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_focusMasterAction, QKeySequence(m_settings->autotileFocusMasterShortcut()));
     }
 }
 
 void ShortcutManager::updateSwapMasterShortcut()
 {
     if (m_swapMasterAction) {
-        KGlobalAccel::setGlobalShortcut(m_swapMasterAction,
-                                        QKeySequence(m_settings->autotileSwapMasterShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_swapMasterAction, QKeySequence(m_settings->autotileSwapMasterShortcut()));
     }
 }
 
@@ -1118,8 +1108,7 @@ void ShortcutManager::updateDecMasterCountShortcut()
 void ShortcutManager::updateRetileShortcut()
 {
     if (m_retileAction) {
-        KGlobalAccel::setGlobalShortcut(m_retileAction,
-                                        QKeySequence(m_settings->autotileRetileShortcut()));
+        KGlobalAccel::setGlobalShortcut(m_retileAction, QKeySequence(m_settings->autotileRetileShortcut()));
     }
 }
 

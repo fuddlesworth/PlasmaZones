@@ -33,7 +33,7 @@ class PLASMAZONES_EXPORT ColumnsAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit ColumnsAlgorithm(QObject *parent = nullptr);
+    explicit ColumnsAlgorithm(QObject* parent = nullptr);
     ~ColumnsAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -41,12 +41,18 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                  const TilingState &state) const override;
+    QVector<QRect> calculateZones(int windowCount, const QRect& screenGeometry,
+                                  const TilingState& state) const override;
 
     // Columns doesn't support master count or split ratio
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return false; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return false;
+    }
 };
 
 } // namespace PlasmaZones

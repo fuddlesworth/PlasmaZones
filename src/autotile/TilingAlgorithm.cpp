@@ -9,7 +9,7 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-TilingAlgorithm::TilingAlgorithm(QObject *parent)
+TilingAlgorithm::TilingAlgorithm(QObject* parent)
     : QObject(parent)
 {
 }
@@ -63,7 +63,7 @@ QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
     return sizes;
 }
 
-void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeometry, int innerGap, int outerGap)
+void TilingAlgorithm::applyGaps(QVector<QRect>& zones, const QRect& screenGeometry, int innerGap, int outerGap)
 {
     if (zones.isEmpty()) {
         return;
@@ -80,7 +80,7 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
 
     // For a single zone, only apply outer gaps
     if (zones.size() == 1) {
-        QRect &zone = zones[0];
+        QRect& zone = zones[0];
         zone.setLeft(zone.left() + outerGap);
         zone.setTop(zone.top() + outerGap);
         zone.setRight(zone.right() - outerGap);
@@ -107,7 +107,7 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
     const int halfInnerCeil = innerGap - halfInnerFloor; // Gets extra pixel if odd
 
     for (int i = 0; i < zones.size(); ++i) {
-        QRect &zone = zones[i];
+        QRect& zone = zones[i];
         const QRect originalZone = zone; // Store original for bounds checking
 
         int left = zone.left();

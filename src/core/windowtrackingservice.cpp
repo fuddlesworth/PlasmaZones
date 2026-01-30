@@ -19,8 +19,7 @@
 namespace PlasmaZones {
 
 WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
-                                             ISettings* settings, VirtualDesktopManager* vdm,
-                                             QObject* parent)
+                                             ISettings* settings, VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_zoneDetector(zoneDetector)
@@ -35,8 +34,7 @@ WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZone
     // Service just emits stateChanged() signal when state changes
 
     // Connect to layout changes
-    connect(m_layoutManager, &LayoutManager::activeLayoutChanged,
-            this, &WindowTrackingService::onLayoutChanged);
+    connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingService::onLayoutChanged);
 
     // Note: Persistence is handled by WindowTrackingAdaptor via KConfig.
     // The service is a pure in-memory state manager - adaptor calls
@@ -54,7 +52,7 @@ WindowTrackingService::~WindowTrackingService()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
-                                                const QString& screenName, int virtualDesktop)
+                                               const QString& screenName, int virtualDesktop)
 {
     if (windowId.isEmpty() || zoneId.isEmpty()) {
         return;
@@ -84,7 +82,7 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
 {
     // Only emit signal if window was actually assigned (.cursorrules compliance)
     if (m_windowZoneAssignments.remove(windowId) == 0) {
-        return;  // Window wasn't assigned, nothing to do
+        return; // Window wasn't assigned, nothing to do
     }
 
     m_windowScreenAssignments.remove(windowId);
@@ -105,8 +103,7 @@ QString WindowTrackingService::zoneForWindow(const QString& windowId) const
 QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 {
     QStringList result;
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         if (it.value() == zoneId) {
             result.append(it.key());
         }
@@ -242,9 +239,8 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 // Auto-Snap Logic
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowId,
-                                                           const QString& windowScreenName,
-                                                           bool isSticky) const
+SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowId, const QString& windowScreenName,
+                                                          bool isSticky) const
 {
     // Check if feature is enabled
     if (!m_settings || !m_settings->moveNewWindowsToLastZone()) {
@@ -254,8 +250,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     // Check sticky window handling
     if (isSticky && m_settings) {
         auto handling = m_settings->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll ||
-            handling == StickyWindowHandling::RestoreOnly) {
+        if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
             return SnapResult::noSnap();
         }
     }
@@ -272,8 +267,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Don't cross-screen snap
-    if (!windowScreenName.isEmpty() && !m_lastUsedScreenName.isEmpty() &&
-        windowScreenName != m_lastUsedScreenName) {
+    if (!windowScreenName.isEmpty() && !m_lastUsedScreenName.isEmpty() && windowScreenName != m_lastUsedScreenName) {
         return SnapResult::noSnap();
     }
 
@@ -299,9 +293,8 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     return result;
 }
 
-SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& windowId,
-                                                               const QString& screenName,
-                                                               bool isSticky) const
+SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& windowId, const QString& screenName,
+                                                              bool isSticky) const
 {
     // Check sticky window handling
     if (isSticky && m_settings) {
@@ -347,7 +340,7 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
 }
 
 void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenName,
-                                                const QString& windowClass, int virtualDesktop)
+                                               const QString& windowClass, int virtualDesktop)
 {
     m_lastUsedZoneId = zoneId;
     m_lastUsedScreenName = screenName;
@@ -398,9 +391,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    QScreen* screen = screenName.isEmpty()
-        ? Utils::primaryScreen()
-        : Utils::findScreenByName(screenName);
+    QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByName(screenName);
 
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -443,9 +434,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
     // Calculate rotated positions
     for (const auto& pair : windowZoneIndices) {
         int currentIdx = pair.second;
-        int targetIdx = clockwise
-            ? (currentIdx + 1) % zones.size()
-            : (currentIdx - 1 + zones.size()) % zones.size();
+        int targetIdx = clockwise ? (currentIdx + 1) % zones.size() : (currentIdx - 1 + zones.size()) % zones.size();
 
         Zone* targetZone = zones[targetIdx];
         QString screenName = m_windowScreenAssignments.value(pair.first);
@@ -475,8 +464,7 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         QString windowId = it.key();
         QString zoneId = it.value();
         QString screenName = m_windowScreenAssignments.value(windowId);
@@ -529,8 +517,7 @@ void WindowTrackingService::onLayoutChanged()
 
     // Remove stale assignments
     QStringList toRemove;
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         if (!validZoneIds.contains(it.value())) {
             toRemove.append(it.key());
         }
@@ -552,8 +539,8 @@ void WindowTrackingService::scheduleSaveState()
     Q_EMIT stateChanged();
 }
 
-void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenName,
-                                             const QString& zoneClass, int desktop)
+void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenName, const QString& zoneClass,
+                                            int desktop)
 {
     m_lastUsedZoneId = zoneId;
     m_lastUsedScreenName = screenName;
@@ -569,8 +556,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 {
     for (QScreen* screen : Utils::allScreens()) {
         QRect intersection = geometry.intersected(screen->geometry());
-        if (intersection.width() >= MinVisibleWidth &&
-            intersection.height() >= MinVisibleHeight) {
+        if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
             return true;
         }
     }

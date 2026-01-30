@@ -25,19 +25,22 @@ namespace PlasmaZones {
  * Stores the start/end geometry and progress for smooth window animations
  * when autotiling moves windows to their calculated positions.
  */
-struct WindowAnimation {
-    QRectF startGeometry;   ///< Window geometry at animation start
-    QRectF endGeometry;     ///< Target window geometry
-    QElapsedTimer timer;    ///< Timer for animation progress calculation
+struct WindowAnimation
+{
+    QRectF startGeometry; ///< Window geometry at animation start
+    QRectF endGeometry; ///< Target window geometry
+    QElapsedTimer timer; ///< Timer for animation progress calculation
     qreal duration = 150.0; ///< Animation duration in milliseconds (default 150ms)
 
     /// Check if the animation timer has been started
-    bool isValid() const {
+    bool isValid() const
+    {
         return timer.isValid();
     }
 
     /// Calculate current progress (0.0 to 1.0) with OutQuad easing
-    qreal progress() const {
+    qreal progress() const
+    {
         if (!timer.isValid()) {
             return 0.0;
         }
@@ -47,7 +50,8 @@ struct WindowAnimation {
     }
 
     /// Check if animation is complete
-    bool isComplete() const {
+    bool isComplete() const
+    {
         if (!timer.isValid()) {
             return true; // Invalid animation is considered complete
         }
@@ -55,14 +59,13 @@ struct WindowAnimation {
     }
 
     /// Interpolate geometry based on current progress
-    QRectF currentGeometry() const {
+    QRectF currentGeometry() const
+    {
         qreal p = progress();
-        return QRectF(
-            startGeometry.x() + (endGeometry.x() - startGeometry.x()) * p,
-            startGeometry.y() + (endGeometry.y() - startGeometry.y()) * p,
-            startGeometry.width() + (endGeometry.width() - startGeometry.width()) * p,
-            startGeometry.height() + (endGeometry.height() - startGeometry.height()) * p
-        );
+        return QRectF(startGeometry.x() + (endGeometry.x() - startGeometry.x()) * p,
+                      startGeometry.y() + (endGeometry.y() - startGeometry.y()) * p,
+                      startGeometry.width() + (endGeometry.width() - startGeometry.width()) * p,
+                      startGeometry.height() + (endGeometry.height() - startGeometry.height()) * p);
     }
 };
 
@@ -97,8 +100,7 @@ public:
     void prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::EffectWindow* w, int mask, QRegion region,
-                     KWin::WindowPaintData& data) override;
+                     KWin::EffectWindow* w, int mask, QRegion region, KWin::WindowPaintData& data) override;
     void postPaintWindow(KWin::EffectWindow* w) override;
 
 private Q_SLOTS:
@@ -225,7 +227,7 @@ private:
 
     // Phase 2.3: Autotile animations for smooth window geometry transitions
     QHash<KWin::EffectWindow*, WindowAnimation> m_autotileAnimations;
-    bool m_autotileAnimationsEnabled = true;   ///< Whether to animate autotile geometry changes
+    bool m_autotileAnimationsEnabled = true; ///< Whether to animate autotile geometry changes
     qreal m_autotileAnimationDuration = 150.0; ///< Animation duration in milliseconds
 
     // Polling timer for detecting window moves

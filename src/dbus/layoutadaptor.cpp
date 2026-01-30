@@ -762,8 +762,7 @@ void LayoutAdaptor::connectActivitySignals()
     if (m_activityManager) {
         connect(m_activityManager, &ActivityManager::currentActivityChanged, this,
                 &LayoutAdaptor::currentActivityChanged);
-        connect(m_activityManager, &ActivityManager::activitiesChanged, this,
-                &LayoutAdaptor::activitiesChanged);
+        connect(m_activityManager, &ActivityManager::activitiesChanged, this, &LayoutAdaptor::activitiesChanged);
     }
 }
 
@@ -828,7 +827,8 @@ QString LayoutAdaptor::getLayoutForScreenActivity(const QString& screenName, con
     return layout ? layout->id().toString() : QString();
 }
 
-void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId, const QString& layoutId)
+void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                 const QString& layoutId)
 {
     if (screenName.isEmpty()) {
         qCWarning(lcDbusLayout) << "Cannot assign layout - empty screen name";
@@ -861,8 +861,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenName, cons
     m_layoutManager->assignLayoutById(screenName, 0, activityId, *uuidOpt);
     m_layoutManager->saveAssignments();
 
-    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName
-                          << "for activity" << activityId;
+    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName << "for activity" << activityId;
 
     // Trigger active layout update if this affects the current activity
     if (m_activityManager && m_activityManager->currentActivity() == activityId) {
@@ -885,14 +884,15 @@ bool LayoutAdaptor::hasExplicitAssignmentForScreenActivity(const QString& screen
 }
 
 // Full assignment (screen + desktop + activity)
-QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId)
+QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop,
+                                                         const QString& activityId)
 {
     auto* layout = m_layoutManager->layoutForScreen(screenName, virtualDesktop, activityId);
     return layout ? layout->id().toString() : QString();
 }
 
 void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenName, int virtualDesktop,
-                                                         const QString& activityId, const QString& layoutId)
+                                                        const QString& activityId, const QString& layoutId)
 {
     if (screenName.isEmpty()) {
         qCWarning(lcDbusLayout) << "Cannot assign layout - empty screen name";
@@ -919,8 +919,8 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenNam
     m_layoutManager->assignLayoutById(screenName, virtualDesktop, activityId, *uuidOpt);
     m_layoutManager->saveAssignments();
 
-    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName
-                          << "desktop" << virtualDesktop << "activity" << activityId;
+    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName << "desktop" << virtualDesktop
+                          << "activity" << activityId;
 
     // Check if this affects current context
     bool affectsCurrentDesktop = (virtualDesktop == 0);
@@ -942,12 +942,12 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenNam
 }
 
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenName, int virtualDesktop,
-                                                             const QString& activityId)
+                                                            const QString& activityId)
 {
     m_layoutManager->clearAssignment(screenName, virtualDesktop, activityId);
     m_layoutManager->saveAssignments();
-    qCDebug(lcDbusLayout) << "Cleared assignment for screen" << screenName
-                          << "desktop" << virtualDesktop << "activity" << activityId;
+    qCDebug(lcDbusLayout) << "Cleared assignment for screen" << screenName << "desktop" << virtualDesktop << "activity"
+                          << activityId;
 }
 
 } // namespace PlasmaZones

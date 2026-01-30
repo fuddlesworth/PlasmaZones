@@ -30,7 +30,7 @@ constexpr qreal InactiveOpacity = 0.3;
 constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
 constexpr int ZonePadding = 8;
-constexpr int OuterGap = 8;  // Gap at screen edges (separate from zonePadding between zones)
+constexpr int OuterGap = 8; // Gap at screen edges (separate from zonePadding between zones)
 constexpr int AdjacentThreshold = 20;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
@@ -156,8 +156,8 @@ constexpr int MaxGap = 50;
 constexpr int DefaultGap = 8;
 
 // Zone size constraints (pixels)
-constexpr int MinZoneSizePx = 50;       // Minimum zone size after gap application
-constexpr int GapEdgeThresholdPx = 5;   // Threshold for detecting screen edges in gap application
+constexpr int MinZoneSizePx = 50; // Minimum zone size after gap application
+constexpr int GapEdgeThresholdPx = 5; // Threshold for detecting screen edges in gap application
 
 // Active border bounds
 constexpr int MinBorderWidth = 0;

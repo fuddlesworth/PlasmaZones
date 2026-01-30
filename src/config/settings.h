@@ -45,8 +45,7 @@ class PLASMAZONES_EXPORT Settings : public ISettings
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
-    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY
-                   showNavigationOsdChanged)
+    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
 
     // Appearance (ricer-friendly)
@@ -92,10 +91,10 @@ class PLASMAZONES_EXPORT Settings : public ISettings
                    excludedWindowClassesChanged)
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
-    Q_PROPERTY(int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY
-                   minimumWindowWidthChanged)
-    Q_PROPERTY(int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY
-                   minimumWindowHeightChanged)
+    Q_PROPERTY(
+        int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY minimumWindowWidthChanged)
+    Q_PROPERTY(
+        int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
     // Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -223,35 +222,57 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     // ═══════════════════════════════════════════════════════════════════════════
 
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
-    Q_PROPERTY(QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
-    Q_PROPERTY(qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
-    Q_PROPERTY(int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
+    Q_PROPERTY(
+        QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(
+        qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
+    Q_PROPERTY(
+        int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
     Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
-    Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY autotileFocusNewWindowsChanged)
+    Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
+                   autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
-    Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY autotileInsertPositionChanged)
+    Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY
+                   autotileInsertPositionChanged)
 
     // Additional Autotiling Settings (focus, visual feedback, monocle mode)
-    Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY autotileFocusFollowsMouseChanged)
-    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY autotileRespectMinimumSizeChanged)
-    Q_PROPERTY(bool autotileShowActiveBorder READ autotileShowActiveBorder WRITE setAutotileShowActiveBorder NOTIFY autotileShowActiveBorderChanged)
-    Q_PROPERTY(int autotileActiveBorderWidth READ autotileActiveBorderWidth WRITE setAutotileActiveBorderWidth NOTIFY autotileActiveBorderWidthChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColor READ autotileUseSystemBorderColor WRITE setAutotileUseSystemBorderColor NOTIFY autotileUseSystemBorderColorChanged)
-    Q_PROPERTY(QColor autotileActiveBorderColor READ autotileActiveBorderColor WRITE setAutotileActiveBorderColor NOTIFY autotileActiveBorderColorChanged)
-    Q_PROPERTY(bool autotileMonocleHideOthers READ autotileMonocleHideOthers WRITE setAutotileMonocleHideOthers NOTIFY autotileMonocleHideOthersChanged)
-    Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY autotileMonocleShowTabsChanged)
+    Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
+                   autotileFocusFollowsMouseChanged)
+    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
+                   NOTIFY autotileRespectMinimumSizeChanged)
+    Q_PROPERTY(bool autotileShowActiveBorder READ autotileShowActiveBorder WRITE setAutotileShowActiveBorder NOTIFY
+                   autotileShowActiveBorderChanged)
+    Q_PROPERTY(int autotileActiveBorderWidth READ autotileActiveBorderWidth WRITE setAutotileActiveBorderWidth NOTIFY
+                   autotileActiveBorderWidthChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColor READ autotileUseSystemBorderColor WRITE setAutotileUseSystemBorderColor
+                   NOTIFY autotileUseSystemBorderColorChanged)
+    Q_PROPERTY(QColor autotileActiveBorderColor READ autotileActiveBorderColor WRITE setAutotileActiveBorderColor NOTIFY
+                   autotileActiveBorderColorChanged)
+    Q_PROPERTY(bool autotileMonocleHideOthers READ autotileMonocleHideOthers WRITE setAutotileMonocleHideOthers NOTIFY
+                   autotileMonocleHideOthersChanged)
+    Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY
+                   autotileMonocleShowTabsChanged)
 
     // Autotiling Keyboard Shortcuts (Bismuth-compatible)
-    Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
-    Q_PROPERTY(QString autotileCycleAlgorithmShortcut READ autotileCycleAlgorithmShortcut WRITE setAutotileCycleAlgorithmShortcut NOTIFY autotileCycleAlgorithmShortcutChanged)
-    Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut NOTIFY autotileFocusMasterShortcutChanged)
-    Q_PROPERTY(QString autotileSwapMasterShortcut READ autotileSwapMasterShortcut WRITE setAutotileSwapMasterShortcut NOTIFY autotileSwapMasterShortcutChanged)
-    Q_PROPERTY(QString autotileIncMasterRatioShortcut READ autotileIncMasterRatioShortcut WRITE setAutotileIncMasterRatioShortcut NOTIFY autotileIncMasterRatioShortcutChanged)
-    Q_PROPERTY(QString autotileDecMasterRatioShortcut READ autotileDecMasterRatioShortcut WRITE setAutotileDecMasterRatioShortcut NOTIFY autotileDecMasterRatioShortcutChanged)
-    Q_PROPERTY(QString autotileIncMasterCountShortcut READ autotileIncMasterCountShortcut WRITE setAutotileIncMasterCountShortcut NOTIFY autotileIncMasterCountShortcutChanged)
-    Q_PROPERTY(QString autotileDecMasterCountShortcut READ autotileDecMasterCountShortcut WRITE setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
-    Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY autotileRetileShortcutChanged)
+    Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY
+                   autotileToggleShortcutChanged)
+    Q_PROPERTY(QString autotileCycleAlgorithmShortcut READ autotileCycleAlgorithmShortcut WRITE
+                   setAutotileCycleAlgorithmShortcut NOTIFY autotileCycleAlgorithmShortcutChanged)
+    Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut
+                   NOTIFY autotileFocusMasterShortcutChanged)
+    Q_PROPERTY(QString autotileSwapMasterShortcut READ autotileSwapMasterShortcut WRITE setAutotileSwapMasterShortcut
+                   NOTIFY autotileSwapMasterShortcutChanged)
+    Q_PROPERTY(QString autotileIncMasterRatioShortcut READ autotileIncMasterRatioShortcut WRITE
+                   setAutotileIncMasterRatioShortcut NOTIFY autotileIncMasterRatioShortcutChanged)
+    Q_PROPERTY(QString autotileDecMasterRatioShortcut READ autotileDecMasterRatioShortcut WRITE
+                   setAutotileDecMasterRatioShortcut NOTIFY autotileDecMasterRatioShortcutChanged)
+    Q_PROPERTY(QString autotileIncMasterCountShortcut READ autotileIncMasterCountShortcut WRITE
+                   setAutotileIncMasterCountShortcut NOTIFY autotileIncMasterCountShortcutChanged)
+    Q_PROPERTY(QString autotileDecMasterCountShortcut READ autotileDecMasterCountShortcut WRITE
+                   setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
+    Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
+                   autotileRetileShortcutChanged)
 
 public:
     explicit Settings(QObject* parent = nullptr);
@@ -815,87 +836,172 @@ public:
     // Autotiling Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bool autotileEnabled() const { return m_autotileEnabled; }
+    bool autotileEnabled() const
+    {
+        return m_autotileEnabled;
+    }
     void setAutotileEnabled(bool enabled);
 
-    QString autotileAlgorithm() const { return m_autotileAlgorithm; }
+    QString autotileAlgorithm() const
+    {
+        return m_autotileAlgorithm;
+    }
     void setAutotileAlgorithm(const QString& algorithm);
 
-    qreal autotileSplitRatio() const { return m_autotileSplitRatio; }
+    qreal autotileSplitRatio() const
+    {
+        return m_autotileSplitRatio;
+    }
     void setAutotileSplitRatio(qreal ratio);
 
-    int autotileMasterCount() const { return m_autotileMasterCount; }
+    int autotileMasterCount() const
+    {
+        return m_autotileMasterCount;
+    }
     void setAutotileMasterCount(int count);
 
-    int autotileInnerGap() const { return m_autotileInnerGap; }
+    int autotileInnerGap() const
+    {
+        return m_autotileInnerGap;
+    }
     void setAutotileInnerGap(int gap);
 
-    int autotileOuterGap() const { return m_autotileOuterGap; }
+    int autotileOuterGap() const
+    {
+        return m_autotileOuterGap;
+    }
     void setAutotileOuterGap(int gap);
 
-    bool autotileFocusNewWindows() const { return m_autotileFocusNewWindows; }
+    bool autotileFocusNewWindows() const
+    {
+        return m_autotileFocusNewWindows;
+    }
     void setAutotileFocusNewWindows(bool focus);
 
-    bool autotileSmartGaps() const { return m_autotileSmartGaps; }
+    bool autotileSmartGaps() const
+    {
+        return m_autotileSmartGaps;
+    }
     void setAutotileSmartGaps(bool smart);
 
-    enum class AutotileInsertPosition { End = 0, AfterFocused = 1, AsMaster = 2 };
-    AutotileInsertPosition autotileInsertPosition() const { return m_autotileInsertPosition; }
+    enum class AutotileInsertPosition {
+        End = 0,
+        AfterFocused = 1,
+        AsMaster = 2
+    };
+    AutotileInsertPosition autotileInsertPosition() const
+    {
+        return m_autotileInsertPosition;
+    }
     void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const { return static_cast<int>(m_autotileInsertPosition); }
+    int autotileInsertPositionInt() const
+    {
+        return static_cast<int>(m_autotileInsertPosition);
+    }
     void setAutotileInsertPositionInt(int position);
 
     // Autotiling Shortcuts
-    QString autotileToggleShortcut() const { return m_autotileToggleShortcut; }
+    QString autotileToggleShortcut() const
+    {
+        return m_autotileToggleShortcut;
+    }
     void setAutotileToggleShortcut(const QString& shortcut);
 
-    QString autotileCycleAlgorithmShortcut() const { return m_autotileCycleAlgorithmShortcut; }
+    QString autotileCycleAlgorithmShortcut() const
+    {
+        return m_autotileCycleAlgorithmShortcut;
+    }
     void setAutotileCycleAlgorithmShortcut(const QString& shortcut);
 
-    QString autotileFocusMasterShortcut() const { return m_autotileFocusMasterShortcut; }
+    QString autotileFocusMasterShortcut() const
+    {
+        return m_autotileFocusMasterShortcut;
+    }
     void setAutotileFocusMasterShortcut(const QString& shortcut);
 
-    QString autotileSwapMasterShortcut() const { return m_autotileSwapMasterShortcut; }
+    QString autotileSwapMasterShortcut() const
+    {
+        return m_autotileSwapMasterShortcut;
+    }
     void setAutotileSwapMasterShortcut(const QString& shortcut);
 
-    QString autotileIncMasterRatioShortcut() const { return m_autotileIncMasterRatioShortcut; }
+    QString autotileIncMasterRatioShortcut() const
+    {
+        return m_autotileIncMasterRatioShortcut;
+    }
     void setAutotileIncMasterRatioShortcut(const QString& shortcut);
 
-    QString autotileDecMasterRatioShortcut() const { return m_autotileDecMasterRatioShortcut; }
+    QString autotileDecMasterRatioShortcut() const
+    {
+        return m_autotileDecMasterRatioShortcut;
+    }
     void setAutotileDecMasterRatioShortcut(const QString& shortcut);
 
-    QString autotileIncMasterCountShortcut() const { return m_autotileIncMasterCountShortcut; }
+    QString autotileIncMasterCountShortcut() const
+    {
+        return m_autotileIncMasterCountShortcut;
+    }
     void setAutotileIncMasterCountShortcut(const QString& shortcut);
 
-    QString autotileDecMasterCountShortcut() const { return m_autotileDecMasterCountShortcut; }
+    QString autotileDecMasterCountShortcut() const
+    {
+        return m_autotileDecMasterCountShortcut;
+    }
     void setAutotileDecMasterCountShortcut(const QString& shortcut);
 
-    QString autotileRetileShortcut() const { return m_autotileRetileShortcut; }
+    QString autotileRetileShortcut() const
+    {
+        return m_autotileRetileShortcut;
+    }
     void setAutotileRetileShortcut(const QString& shortcut);
 
     // Additional Autotiling Settings
-    bool autotileFocusFollowsMouse() const { return m_autotileFocusFollowsMouse; }
+    bool autotileFocusFollowsMouse() const
+    {
+        return m_autotileFocusFollowsMouse;
+    }
     void setAutotileFocusFollowsMouse(bool focus);
 
-    bool autotileRespectMinimumSize() const { return m_autotileRespectMinimumSize; }
+    bool autotileRespectMinimumSize() const
+    {
+        return m_autotileRespectMinimumSize;
+    }
     void setAutotileRespectMinimumSize(bool respect);
 
-    bool autotileShowActiveBorder() const { return m_autotileShowActiveBorder; }
+    bool autotileShowActiveBorder() const
+    {
+        return m_autotileShowActiveBorder;
+    }
     void setAutotileShowActiveBorder(bool show);
 
-    int autotileActiveBorderWidth() const { return m_autotileActiveBorderWidth; }
+    int autotileActiveBorderWidth() const
+    {
+        return m_autotileActiveBorderWidth;
+    }
     void setAutotileActiveBorderWidth(int width);
 
-    bool autotileUseSystemBorderColor() const { return m_autotileUseSystemBorderColor; }
+    bool autotileUseSystemBorderColor() const
+    {
+        return m_autotileUseSystemBorderColor;
+    }
     void setAutotileUseSystemBorderColor(bool use);
 
-    QColor autotileActiveBorderColor() const { return m_autotileActiveBorderColor; }
+    QColor autotileActiveBorderColor() const
+    {
+        return m_autotileActiveBorderColor;
+    }
     void setAutotileActiveBorderColor(const QColor& color);
 
-    bool autotileMonocleHideOthers() const { return m_autotileMonocleHideOthers; }
+    bool autotileMonocleHideOthers() const
+    {
+        return m_autotileMonocleHideOthers;
+    }
     void setAutotileMonocleHideOthers(bool hide);
 
-    bool autotileMonocleShowTabs() const { return m_autotileMonocleShowTabs; }
+    bool autotileMonocleShowTabs() const
+    {
+        return m_autotileMonocleShowTabs;
+    }
     void setAutotileMonocleShowTabs(bool show);
 
     // Persistence
