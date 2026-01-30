@@ -114,7 +114,6 @@ ComboBox {
         readonly property bool isAutotile: modelData.category === 1
         readonly property bool hasLayout: modelData.layout != null
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
-        readonly property bool isCurrentSelection: root.currentIndex === index
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing

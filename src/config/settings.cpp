@@ -33,7 +33,8 @@ QString normalizeUuidString(const QString& uuidStr)
     // Parse as UUID (handles both with and without braces)
     QUuid uuid = QUuid::fromString(uuidStr);
     if (uuid.isNull()) {
-        return QString(); // Invalid UUID
+        qCWarning(lcConfig) << "Invalid UUID string in config, ignoring:" << uuidStr;
+        return QString();
     }
 
     // Return in default format (with braces) for consistent comparison

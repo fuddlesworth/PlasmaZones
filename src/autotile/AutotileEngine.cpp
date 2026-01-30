@@ -672,8 +672,9 @@ void AutotileEngine::windowClosed(const QString &windowId)
 
 void AutotileEngine::windowFocused(const QString &windowId, const QString &screenName)
 {
-    // Update screen mapping in case window moved between screens
-    if (!screenName.isEmpty() && m_windowToScreen.contains(windowId)) {
+    // Update screen mapping - always store when provided, even for new windows
+    // This handles edge cases where a window gets focused without going through windowOpened()
+    if (!screenName.isEmpty()) {
         m_windowToScreen[windowId] = screenName;
     }
     onWindowFocused(windowId);
