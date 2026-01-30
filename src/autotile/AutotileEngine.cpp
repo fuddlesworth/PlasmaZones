@@ -657,6 +657,11 @@ void AutotileEngine::toggleFocusedWindowFloat()
 
 void AutotileEngine::windowOpened(const QString &windowId, const QString &screenName)
 {
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << "windowOpened called with empty windowId";
+        return;
+    }
+
     // Store screen mapping so onWindowAdded uses correct screen
     // This solves the TODO in screenForWindow() which previously returned primary screen
     if (!screenName.isEmpty()) {
@@ -667,11 +672,21 @@ void AutotileEngine::windowOpened(const QString &windowId, const QString &screen
 
 void AutotileEngine::windowClosed(const QString &windowId)
 {
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << "windowClosed called with empty windowId";
+        return;
+    }
+
     onWindowRemoved(windowId);
 }
 
 void AutotileEngine::windowFocused(const QString &windowId, const QString &screenName)
 {
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << "windowFocused called with empty windowId";
+        return;
+    }
+
     // Update screen mapping - always store when provided, even for new windows
     // This handles edge cases where a window gets focused without going through windowOpened()
     if (!screenName.isEmpty()) {
@@ -879,7 +894,7 @@ bool AutotileEngine::shouldTileWindow(const QString &windowId) const
     // Check if window is floating in any screen's TilingState
     // (floating windows are excluded from autotiling)
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (it.value()->isFloating(windowId)) {
+        if (it.value() && it.value()->isFloating(windowId)) {
             qCDebug(lcAutotile) << "Window" << windowId << "is floating, skipping tile";
             return false;
         }
