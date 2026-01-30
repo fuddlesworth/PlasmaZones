@@ -9,6 +9,7 @@
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/TilingAlgorithm.h"
 
+#include <QColor>
 #include <QJsonArray>
 #include <QUuid>
 
@@ -23,6 +24,103 @@ QString UnifiedLayoutEntry::algorithmId() const
 }
 
 namespace LayoutUtils {
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Zone conversion (DRY - single implementation for all consumers)
+// ═══════════════════════════════════════════════════════════════════════════
+
+QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
+{
+    using namespace JsonKeys;
+    QVariantMap map;
+
+    if (!zone) {
+        return map;
+    }
+
+    // Always include core fields
+    map[Id] = zone->id().toString();
+    map[ZoneNumber] = zone->zoneNumber();
+
+    // Relative geometry (0.0-1.0) for resolution-independent rendering
+    QRectF relGeo = zone->relativeGeometry();
+    QVariantMap relGeoMap;
+    relGeoMap[X] = relGeo.x();
+    relGeoMap[Y] = relGeo.y();
+    relGeoMap[Width] = relGeo.width();
+    relGeoMap[Height] = relGeo.height();
+    map[RelativeGeometry] = relGeoMap;
+
+    // Optional: Name
+    if (fields.testFlag(ZoneField::Name)) {
+        map[Name] = zone->name();
+    }
+
+    // Optional: Appearance properties (colors, opacities, border)
+    if (fields.testFlag(ZoneField::Appearance)) {
+        map[UseCustomColors] = zone->useCustomColors();
+
+        // Colors as hex strings (ARGB format) for QML
+        map[HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
+        map[InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
+        map[BorderColor] = zone->borderColor().name(QColor::HexArgb);
+
+        // Opacity and border properties
+        map[ActiveOpacity] = zone->activeOpacity();
+        map[InactiveOpacity] = zone->inactiveOpacity();
+        map[BorderWidth] = zone->borderWidth();
+        map[BorderRadius] = zone->borderRadius();
+    }
+
+    return map;
+}
+
+QVariantList zonesToVariantList(Layout* layout, ZoneFields fields)
+{
+    QVariantList list;
+
+    if (!layout) {
+        return list;
+    }
+
+    const auto zones = layout->zones();
+    for (Zone* zone : zones) {
+        if (!zone) {
+            continue;
+        }
+        list.append(zoneToVariantMap(zone, fields));
+    }
+
+    return list;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Layout conversion (DRY - direct Layout* to QVariantMap)
+// ═══════════════════════════════════════════════════════════════════════════
+
+QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
+{
+    using namespace JsonKeys;
+    QVariantMap map;
+
+    if (!layout) {
+        return map;
+    }
+
+    map[Id] = layout->id().toString();
+    map[Name] = layout->name();
+    map[Description] = layout->description();
+    map[Type] = static_cast<int>(layout->type());
+    map[ZoneCount] = layout->zoneCount();
+    map[Zones] = zonesToVariantList(layout, zoneFields);
+    map[Category] = static_cast<int>(LayoutCategory::Manual);
+
+    return map;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Unified layout list building
+// ═══════════════════════════════════════════════════════════════════════════
 
 QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager)
 {
@@ -43,29 +141,8 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
             entry.isAutotile = false;
             entry.zoneCount = layout->zoneCount();
 
-            // Build zone list for preview
-            QVariantList zonesList;
-            const auto zones = layout->zones();
-            for (Zone* zone : zones) {
-                if (!zone) {
-                    continue;
-                }
-                QVariantMap zoneMap;
-                zoneMap[JsonKeys::Id] = zone->id().toString();
-                zoneMap[JsonKeys::ZoneNumber] = zone->zoneNumber();
-
-                // Relative geometry (0.0-1.0) for resolution-independent preview
-                QRectF relGeo = zone->relativeGeometry();
-                QVariantMap relGeoMap;
-                relGeoMap[JsonKeys::X] = relGeo.x();
-                relGeoMap[JsonKeys::Y] = relGeo.y();
-                relGeoMap[JsonKeys::Width] = relGeo.width();
-                relGeoMap[JsonKeys::Height] = relGeo.height();
-                zoneMap[JsonKeys::RelativeGeometry] = relGeoMap;
-
-                zonesList.append(zoneMap);
-            }
-            entry.zones = zonesList;
+            // Use shared zone conversion with minimal fields (for preview thumbnails)
+            entry.zones = zonesToVariantList(layout, ZoneField::Minimal);
 
             list.append(entry);
         }

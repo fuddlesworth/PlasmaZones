@@ -1869,78 +1869,6 @@ QVariantList OverlayService::buildLayoutsList() const
     return LayoutUtils::toVariantList(entries);
 }
 
-QVariantMap OverlayService::layoutToVariantMap(Layout* layout) const
-{
-    QVariantMap map;
-
-    if (!layout) {
-        return map;
-    }
-
-    map[QStringLiteral("id")] = layout->id().toString();
-    map[QStringLiteral("name")] = layout->name();
-    map[QStringLiteral("description")] = layout->description();
-    map[QStringLiteral("type")] = static_cast<int>(layout->type());
-    map[QStringLiteral("zoneCount")] = layout->zoneCount();
-    map[QStringLiteral("zones")] = zonesToVariantList(layout);
-    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Manual);
-
-    return map;
-}
-
-QVariantList OverlayService::zonesToVariantList(Layout* layout) const
-{
-    QVariantList list;
-
-    if (!layout) {
-        return list;
-    }
-
-    const auto zones = layout->zones();
-    for (Zone* zone : zones) {
-        // Null check for each zone to prevent SIGSEGV
-        if (!zone) {
-            continue;
-        }
-
-        using namespace JsonKeys;
-
-        QVariantMap zoneMap;
-        zoneMap[Id] = zone->id().toString();
-        zoneMap[Name] = zone->name();
-        zoneMap[ZoneNumber] = zone->zoneNumber();
-
-        // Convert relative geometry to QVariantMap for QML
-        QRectF relGeo = zone->relativeGeometry();
-        QVariantMap relGeoMap;
-        relGeoMap[X] = relGeo.x();
-        relGeoMap[Y] = relGeo.y();
-        relGeoMap[Width] = relGeo.width();
-        relGeoMap[Height] = relGeo.height();
-        zoneMap[RelativeGeometry] = relGeoMap;
-
-        // Always include useCustomColors flag so QML can check it
-        zoneMap[UseCustomColors] = zone->useCustomColors();
-
-        // Always include zone colors as hex strings (ARGB format) so QML can use them
-        // when useCustomColors is true. QML expects color strings, not QColor objects.
-        // This allows QML to always have access to zone colors and decide whether to use them.
-        zoneMap[HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
-        zoneMap[InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
-        zoneMap[BorderColor] = zone->borderColor().name(QColor::HexArgb);
-
-        // Always include appearance properties so QML can use them when useCustomColors is true
-        zoneMap[ActiveOpacity] = zone->activeOpacity();
-        zoneMap[InactiveOpacity] = zone->inactiveOpacity();
-        zoneMap[BorderWidth] = zone->borderWidth();
-        zoneMap[BorderRadius] = zone->borderRadius();
-
-        list.append(zoneMap);
-    }
-
-    return list;
-}
-
 bool OverlayService::hasSelectedZone() const
 {
     return !m_selectedLayoutId.isEmpty() && m_selectedZoneIndex >= 0;
@@ -2225,8 +2153,8 @@ void OverlayService::showLayoutOsd(Layout* layout)
     // Manual layouts always have category 0 (LayoutCategory::Manual)
     writeQmlProperty(window, QStringLiteral("category"), 0);
 
-    // Reuse zonesToVariantList for OSD (DRY - same format as layout/zone selector)
-    writeQmlProperty(window, QStringLiteral("zones"), zonesToVariantList(layout));
+    // Use shared LayoutUtils with full zone fields for OSD rendering
+    writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
 
     // Set explicit window size before positioning
     // OSD is approximately 280x200 based on QML layout (200px preview + margins + label)
@@ -2431,8 +2359,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     writeQmlProperty(window, QStringLiteral("action"), action);
     writeQmlProperty(window, QStringLiteral("reason"), reason);
 
-    // Reuse zonesToVariantList for OSD (DRY - same format as layout OSD / ZonePreview)
-    QVariantList zonesList = zonesToVariantList(m_layout);
+    // Use shared LayoutUtils with full zone fields for OSD rendering
+    QVariantList zonesList = LayoutUtils::zonesToVariantList(m_layout, ZoneField::Full);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // Get screen geometry for aspect ratio

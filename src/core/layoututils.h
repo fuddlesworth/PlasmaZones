@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <QFlags>
 #include <QJsonObject>
 #include <QString>
 #include <QVariantList>
@@ -13,6 +14,25 @@
 namespace PlasmaZones {
 
 class ILayoutManager;
+class Layout;
+class Zone;
+
+/**
+ * @brief Flags controlling which zone fields to include in conversion (OCP-compliant)
+ *
+ * These flags allow callers to request minimal or full zone data without duplicating
+ * conversion logic. Use Minimal for preview thumbnails, Full for overlay rendering.
+ */
+enum class ZoneField {
+    None = 0,
+    Name = 1 << 0,              ///< Include zone name
+    Appearance = 1 << 1,        ///< Include colors, opacities, border properties
+
+    Minimal = None,             ///< Id, ZoneNumber, RelativeGeometry only (for previews)
+    Full = Name | Appearance    ///< All fields (for overlay rendering)
+};
+Q_DECLARE_FLAGS(ZoneFields, ZoneField)
+Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
 
 /**
  * @brief Entry in the unified layout list (manual layouts + autotile algorithms)
@@ -128,6 +148,43 @@ PLASMAZONES_EXPORT int findLayoutIndex(const QVector<UnifiedLayoutEntry>& entrie
  */
 PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLayoutEntry>& entries,
                                                          const QString& layoutId);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Zone conversion utilities (DRY - consolidates duplicate implementations)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Convert a Zone to QVariantMap with configurable fields
+ *
+ * @param zone The zone to convert (returns empty map if null)
+ * @param fields Which fields to include (default: Minimal for previews)
+ * @return QVariantMap suitable for QML consumption
+ */
+PLASMAZONES_EXPORT QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields = ZoneField::Minimal);
+
+/**
+ * @brief Convert all zones in a layout to QVariantList
+ *
+ * @param layout The layout containing zones (returns empty list if null)
+ * @param fields Which fields to include for each zone
+ * @return QVariantList of zone maps
+ */
+PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Layout conversion utilities (DRY - direct Layout* conversion)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Convert a Layout to QVariantMap for QML
+ *
+ * Use this when you have a Layout* directly (not a UnifiedLayoutEntry).
+ *
+ * @param layout The layout to convert (returns empty map if null)
+ * @param zoneFields Which zone fields to include
+ * @return QVariantMap suitable for QML consumption
+ */
+PLASMAZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
 
 } // namespace LayoutUtils
 

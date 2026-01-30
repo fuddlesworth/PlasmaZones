@@ -218,9 +218,6 @@ private:
     void checkEdgeProximity();
     QString stateToString(State state) const;
     State stringToState(const QString& state) const;
-    QVariantMap layoutToVariantMap(Layout* layout) const;
-    QVariantList zonesToVariantList(Layout* layout) const;
-    QVariantMap zoneToVariantMap(Zone* zone) const;
 
     // State
     State m_state = State::Hidden;

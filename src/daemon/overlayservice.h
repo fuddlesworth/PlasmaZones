@@ -125,8 +125,6 @@ private:
     void updateOverlayWindow(QScreen* screen);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList() const;
-    QVariantMap layoutToVariantMap(Layout* layout) const;
-    QVariantList zonesToVariantList(Layout* layout) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
