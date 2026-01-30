@@ -4,6 +4,7 @@
 #include "zoneselectorcontroller.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
+#include "../core/layoututils.h"
 #include "../core/utils.h"
 #include "../autotile/TilingAlgorithm.h"
 #include <QScreen>
@@ -78,31 +79,9 @@ void ZoneSelectorController::setEnabled(bool enabled)
 
 QVariantList ZoneSelectorController::layouts() const
 {
-    QVariantList result;
-
-    if (!m_layoutManager) {
-        return result;
-    }
-
-    // Get all manual layouts from the layout manager
-    const auto layoutList = m_layoutManager->layouts();
-    for (Layout* layout : layoutList) {
-        result.append(layoutToVariantMap(layout));
-    }
-
-    // Append autotile algorithms as layouts (using shared utility from AlgorithmRegistry)
-    auto* registry = AlgorithmRegistry::instance();
-    if (registry) {
-        const QStringList algorithmIds = registry->availableAlgorithms();
-        for (const QString& algorithmId : algorithmIds) {
-            TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
-            if (algorithm) {
-                result.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
-            }
-        }
-    }
-
-    return result;
+    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, LayoutAdaptor)
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+    return LayoutUtils::toVariantList(entries);
 }
 
 void ZoneSelectorController::setActiveLayoutId(const QString& layoutId)
@@ -478,89 +457,6 @@ ZoneSelectorController::State ZoneSelectorController::stringToState(const QStrin
         return State::Expanded;
     }
     return State::Hidden;
-}
-
-QVariantMap ZoneSelectorController::layoutToVariantMap(Layout* layout) const
-{
-    using namespace JsonKeys;
-    QVariantMap map;
-
-    if (!layout) {
-        return map;
-    }
-
-    map[Id] = layout->id().toString();
-    map[Name] = layout->name();
-    map[Description] = layout->description();
-    map[Type] = static_cast<int>(layout->type());
-    map[ZoneCount] = layout->zoneCount();
-    map[Zones] = zonesToVariantList(layout);
-    map[Category] = static_cast<int>(LayoutCategory::Manual);
-
-    return map;
-}
-
-QVariantList ZoneSelectorController::zonesToVariantList(Layout* layout) const
-{
-    QVariantList list;
-
-    if (!layout) {
-        return list;
-    }
-
-    const auto zones = layout->zones();
-    for (Zone* zone : zones) {
-        // Skip null zones to prevent crashes
-        if (!zone) {
-            qCWarning(lcOverlay) << "Encountered null zone";
-            continue;
-        }
-        list.append(zoneToVariantMap(zone));
-    }
-
-    return list;
-}
-
-QVariantMap ZoneSelectorController::zoneToVariantMap(Zone* zone) const
-{
-    QVariantMap map;
-
-    if (!zone) {
-        return map;
-    }
-
-    using namespace JsonKeys;
-
-    map[Id] = zone->id().toString();
-    map[Name] = zone->name();
-    map[ZoneNumber] = zone->zoneNumber();
-
-    // Convert relative geometry to QVariantMap
-    QRectF relGeo = zone->relativeGeometry();
-    QVariantMap relGeoMap;
-    relGeoMap[X] = relGeo.x();
-    relGeoMap[Y] = relGeo.y();
-    relGeoMap[Width] = relGeo.width();
-    relGeoMap[Height] = relGeo.height();
-    map[RelativeGeometry] = relGeoMap;
-
-    // Always include useCustomColors flag so QML can check it
-    map[UseCustomColors] = zone->useCustomColors();
-
-    // Always include zone colors as hex strings (ARGB format) so QML can use them
-    // when useCustomColors is true. QML expects color strings, not QColor objects.
-    // This allows QML to always have access to zone colors and decide whether to use them.
-    map[HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
-    map[InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
-    map[BorderColor] = zone->borderColor().name(QColor::HexArgb);
-
-    // Always include appearance properties so QML can use them when useCustomColors is true
-    map[ActiveOpacity] = zone->activeOpacity();
-    map[InactiveOpacity] = zone->inactiveOpacity();
-    map[BorderWidth] = zone->borderWidth();
-    map[BorderRadius] = zone->borderRadius();
-
-    return map;
 }
 
 } // namespace PlasmaZones

@@ -7,6 +7,7 @@
 #include "../core/layoutfactory.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
+#include "../core/layoututils.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
 #include "../core/layoutmanager.h"
@@ -121,78 +122,25 @@ QStringList LayoutAdaptor::getLayoutList()
 {
     QStringList result;
 
-    // Add manual layouts first (category = 0)
-    for (const auto* layout : m_layoutManager->layouts()) {
-        QJsonObject info;
-        info[JsonKeys::Id] = layout->id().toString();
-        info[JsonKeys::Name] = layout->name();
-        info[JsonKeys::ZoneCount] = layout->zoneCount();
-        info[JsonKeys::IsSystem] = layout->isSystemLayout(); // Determined by source path
-        info[JsonKeys::Type] = static_cast<int>(layout->type());
-        info[JsonKeys::Category] = static_cast<int>(LayoutCategory::Manual);
+    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, ZoneSelectorController)
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+    for (const auto& entry : entries) {
+        QJsonObject json = LayoutUtils::toJson(entry);
 
-        // Include zone relative geometries for preview rendering
-        QJsonArray zonesArray;
-        for (const auto* zone : layout->zones()) {
-            QJsonObject zoneInfo;
-            zoneInfo[JsonKeys::ZoneNumber] = zone->zoneNumber();
-            // Include relative geometry (0-1 normalized) for resolution-independent preview
-            QJsonObject relGeo;
-            relGeo[JsonKeys::X] = zone->relativeGeometry().x();
-            relGeo[JsonKeys::Y] = zone->relativeGeometry().y();
-            relGeo[JsonKeys::Width] = zone->relativeGeometry().width();
-            relGeo[JsonKeys::Height] = zone->relativeGeometry().height();
-            zoneInfo[JsonKeys::RelativeGeometry] = relGeo;
-            zonesArray.append(zoneInfo);
-        }
-        info[JsonKeys::Zones] = zonesArray;
-
-        result.append(QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact)));
-    }
-
-    // Add autotile algorithms (category = 1) using shared utility
-    auto* registry = AlgorithmRegistry::instance();
-    if (registry) {
-        const QStringList algorithmIds = registry->availableAlgorithms();
-        for (const QString& algorithmId : algorithmIds) {
-            TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
-            if (algorithm) {
-                // Use shared utility to generate consistent data
-                QVariantMap algoMap = AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId);
-
-                // Convert QVariantMap to QJsonObject
-                QJsonObject info;
-                info[JsonKeys::Id] = algoMap[QStringLiteral("id")].toString();
-                info[JsonKeys::Name] = algoMap[QStringLiteral("name")].toString();
-                info[JsonKeys::Description] = algoMap[QStringLiteral("description")].toString();
-                info[JsonKeys::ZoneCount] = 0; // Dynamic
-                info[JsonKeys::IsSystem] = true;
-                info[JsonKeys::Type] = -1; // Not a standard LayoutType
-                info[JsonKeys::Category] = static_cast<int>(LayoutCategory::Autotile);
-
-                // Convert zones QVariantList to QJsonArray
-                QJsonArray zonesArray;
-                const QVariantList zonesList = algoMap[QStringLiteral("zones")].toList();
-                for (const QVariant& zoneVar : zonesList) {
-                    const QVariantMap zoneMap = zoneVar.toMap();
-                    QJsonObject zoneInfo;
-                    zoneInfo[JsonKeys::ZoneNumber] = zoneMap[QStringLiteral("zoneNumber")].toInt();
-
-                    const QVariantMap relGeoMap = zoneMap[QStringLiteral("relativeGeometry")].toMap();
-                    QJsonObject relGeo;
-                    relGeo[JsonKeys::X] = relGeoMap[QStringLiteral("x")].toDouble();
-                    relGeo[JsonKeys::Y] = relGeoMap[QStringLiteral("y")].toDouble();
-                    relGeo[JsonKeys::Width] = relGeoMap[QStringLiteral("width")].toDouble();
-                    relGeo[JsonKeys::Height] = relGeoMap[QStringLiteral("height")].toDouble();
-                    zoneInfo[JsonKeys::RelativeGeometry] = relGeo;
-
-                    zonesArray.append(zoneInfo);
+        // Add additional fields specific to D-Bus that aren't in base LayoutUtils
+        // For manual layouts, include isSystem based on actual layout source path
+        if (!entry.isAutotile) {
+            auto uuidOpt = Utils::parseUuid(entry.id);
+            if (uuidOpt) {
+                Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+                if (layout) {
+                    json[JsonKeys::IsSystem] = layout->isSystemLayout();
+                    json[JsonKeys::Type] = static_cast<int>(layout->type());
                 }
-                info[JsonKeys::Zones] = zonesArray;
-
-                result.append(QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact)));
             }
         }
+
+        result.append(QString::fromUtf8(QJsonDocument(json).toJson(QJsonDocument::Compact)));
     }
 
     return result;
