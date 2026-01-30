@@ -120,27 +120,11 @@ Rectangle {
             spacing: Kirigami.Units.smallSpacing
 
             // Category badge (Manual/Auto) - inline with name
-            Rectangle {
+            QFZCommon.CategoryBadge {
                 id: categoryBadge
 
                 anchors.verticalCenter: parent.verticalCenter
-                width: categoryLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
-                height: Kirigami.Units.gridUnit * 0.9
-                radius: Kirigami.Units.smallSpacing / 2
-                // Positive/accent color for autotile, neutral for manual
-                color: root.isAutotile
-                    ? Kirigami.Theme.positiveBackgroundColor
-                    : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
-
-                Label {
-                    id: categoryLabel
-
-                    anchors.centerIn: parent
-                    text: root.isAutotile ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
-                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize * 0.75
-                    font.weight: Font.Medium
-                    color: root.isAutotile ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.highlightedTextColor
-                }
+                category: root.category
             }
 
             Label {

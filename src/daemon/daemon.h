@@ -108,6 +108,7 @@ public:
 
     // OSD notifications
     void showLayoutOsd(Layout* layout);
+    void showAutotileOsd(const QString& algorithmId);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);

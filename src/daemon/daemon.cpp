@@ -572,16 +572,7 @@ void Daemon::start()
             m_autotileEngine->setAlgorithm(algorithmId);
             m_autotileEngine->setEnabled(true);
             qCInfo(lcDaemon) << "Autotile layout selected from zone selector:" << algorithmId;
-
-            // Show OSD feedback
-            if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-                auto* registry = AlgorithmRegistry::instance();
-                if (registry) {
-                    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-                    QString displayName = algo ? algo->name() : algorithmId;
-                    m_overlayService->showNavigationOsd(true, QStringLiteral("autotile"), displayName);
-                }
-            }
+            showAutotileOsd(algorithmId);
         }
     });
 
@@ -603,16 +594,7 @@ void Daemon::start()
             m_autotileEngine->setAlgorithm(algorithmId);
             m_autotileEngine->setEnabled(true);
             qCInfo(lcDaemon) << "Smart toggle: switched to Autotile mode -" << algorithmId;
-
-            // Show OSD with algorithm name
-            if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-                auto* registry = AlgorithmRegistry::instance();
-                if (registry) {
-                    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-                    QString displayName = algo ? algo->name() : algorithmId;
-                    m_overlayService->showNavigationOsd(true, QStringLiteral("autotile"), displayName);
-                }
-            }
+            showAutotileOsd(algorithmId);
         } else {
             // Switching TO manual mode
             m_autotileEngine->setEnabled(false);
@@ -817,6 +799,22 @@ void Daemon::showLayoutOsd(Layout* layout)
         }
         break;
     }
+}
+
+void Daemon::showAutotileOsd(const QString& algorithmId)
+{
+    if (!m_settings || !m_settings->showOsdOnLayoutSwitch()) {
+        return;
+    }
+
+    auto* registry = AlgorithmRegistry::instance();
+    if (!registry) {
+        return;
+    }
+
+    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    QString displayName = algo ? algo->name() : algorithmId;
+    m_overlayService->showNavigationOsd(true, QStringLiteral("autotile"), displayName);
 }
 
 // Screen management now handled by ScreenManager (SRP)

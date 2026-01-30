@@ -7,6 +7,7 @@ import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * Zone Selector Window - Overlay window showing layout previews
@@ -664,27 +665,11 @@ Window {
                             spacing: Kirigami.Units.smallSpacing
 
                             // Category badge (Manual/Auto) - inline with name
-                            Rectangle {
+                            QFZCommon.CategoryBadge {
                                 id: categoryBadge
 
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: categoryBadgeLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
-                                height: Kirigami.Units.gridUnit * 0.9
-                                radius: Kirigami.Units.smallSpacing / 2
-                                // Positive/accent color for autotile, neutral for manual
-                                color: indicator.isAutotile
-                                    ? Kirigami.Theme.positiveBackgroundColor
-                                    : Qt.rgba(textColor.r, textColor.g, textColor.b, 0.35)
-
-                                Label {
-                                    id: categoryBadgeLabel
-
-                                    anchors.centerIn: parent
-                                    text: indicator.isAutotile ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
-                                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize * 0.75
-                                    font.weight: Font.Medium
-                                    color: indicator.isAutotile ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.highlightedTextColor
-                                }
+                                category: indicator.layoutCategory
                             }
 
                             Label {
