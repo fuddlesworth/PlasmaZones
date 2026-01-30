@@ -181,23 +181,9 @@ ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen*
         layout.columns = 1;
         layout.rows = safeLayoutCount;
     } else if (layoutMode == ZoneSelectorLayoutMode::Grid) {
-        if (sizeMode == ZoneSelectorSizeMode::Auto) {
-            // Auto-calculate columns based on layout count for balanced grid
-            // Heuristic: aim for roughly square-ish grid, max 6 columns
-            if (safeLayoutCount <= 3) {
-                layout.columns = safeLayoutCount;
-            } else if (safeLayoutCount <= 6) {
-                layout.columns = 3;
-            } else if (safeLayoutCount <= 12) {
-                layout.columns = 4;
-            } else {
-                layout.columns = std::min(6, static_cast<int>(std::ceil(std::sqrt(safeLayoutCount))));
-            }
-        } else {
-            // Manual mode: Use explicit grid columns setting
-            const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 3;
-            layout.columns = std::max(1, gridColumns);
-        }
+        // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
+        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 3;
+        layout.columns = std::max(1, gridColumns);
         layout.rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / layout.columns));
     } else {
         // Horizontal mode

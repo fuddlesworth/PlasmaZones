@@ -21,11 +21,10 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * 0.9
     radius: Kirigami.Units.smallSpacing / 2
 
-    // Neutral styling for both categories - Manual vs Auto are type labels, not status
-    // KDE HIG: positive/negative colors reserved for success/error feedback
+    // Complementary styling - Auto uses Manual's text opacity as background, and vice versa
     color: root.isAutotile
-        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.25)
-        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.35)
+        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
+        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
     Label {
         id: categoryLabel
@@ -34,6 +33,7 @@ Rectangle {
         text: root.isAutotile ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize * 0.75
         font.weight: Font.Medium
-        color: Kirigami.Theme.textColor
+        color: root.isAutotile ? Kirigami.Theme.backgroundColor : Kirigami.Theme.textColor
+        opacity: root.isAutotile ? 1.0 : 0.6
     }
 }

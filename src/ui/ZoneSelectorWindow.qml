@@ -516,171 +516,39 @@ Window {
 
                             }
 
-                            // Zone rectangles - now proper children of previewArea
-                            Repeater {
-                                model: indicator.layoutZones
+                            // Zone rectangles - use shared ZonePreview for consistent rendering
+                            QFZCommon.ZonePreview {
+                                id: zonePreview
 
-                                delegate: Rectangle {
-                                    id: zoneRect
+                                anchors.fill: parent
+                                zones: indicator.layoutZones
+                                interactive: true
+                                showZoneNumbers: true
+                                highlightAllZones: indicator.isAutotile
+                                selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
+                                isHovered: indicator.hasSelectedZone
+                                isActive: indicator.isActive
+                                zonePadding: 1
+                                edgeGap: 1
+                                minZoneSize: 8
+                                // Colors from root
+                                highlightColor: root.highlightColor
+                                inactiveColor: root.inactiveColor
+                                borderColor: root.borderColor
+                                inactiveOpacity: root.inactiveOpacity
+                                activeOpacity: root.activeOpacity
+                                // Scale on hover for manual layouts only
+                                hoverScale: indicator.isAutotile ? 1.0 : 1.05
+                                animationDuration: animationConstants.normalDuration
 
-                                    required property var modelData
-                                    required property int index
-                                    property var relGeo: modelData.relativeGeometry || {
-                                    }
-                                    // Autotile: all zones highlight together when layout selected
-                                    property bool isZoneSelected: indicator.isAutotile
-                                        ? (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex >= 0)
-                                        : (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === index)
-                                    property bool isZoneHovered: indicator.isAutotile ? false : zoneMouseArea.containsMouse
-                                    // Calculate actual pixel dimensions for tooltip
-                                    property int actualWidth: Math.round((relGeo.width || 0.25) * root.screenWidth)
-                                    property int actualHeight: Math.round((relGeo.height || 1) * root.screenWidth / root.screenAspectRatio)
-                                    property int widthPercent: Math.round((relGeo.width || 0.25) * 100)
-                                    property int heightPercent: Math.round((relGeo.height || 1) * 100)
-
-                                    // DRY: Helper to check if custom colors are enabled (handles boolean, number, or string)
-                                    readonly property bool useCustomColors: modelData.useCustomColors === true ||
-                                        modelData.useCustomColors === 1 ||
-                                        (typeof modelData.useCustomColors === "string" &&
-                                         modelData.useCustomColors.toLowerCase() === "true")
-
-                                    // Use scaled padding for gaps between zones
-                                    // Position relative to parent (previewArea)
-                                    x: (relGeo.x || 0) * parent.width + root.scaledPadding
-                                    y: (relGeo.y || 0) * parent.height + root.scaledPadding
-                                    // P0: Increase minimum zone size for easier targeting (3 gridUnits)
-                                    width: Math.max(Kirigami.Units.gridUnit * 3, (relGeo.width || 0.25) * parent.width - root.scaledPadding * 2)
-                                    height: Math.max(Kirigami.Units.gridUnit * 3, (relGeo.height || 1) * parent.height - root.scaledPadding * 2)
-                                    radius: root.scaledBorderRadius
-                                    // P0: Scale on hover for manual zones only; autotile highlights whole layout
-                                    scale: isZoneHovered ? 1.05 : 1
-                                    z: isZoneHovered ? 10 : 1
-                                    transformOrigin: Item.Center
-                                    // Zone coloring - unified with ZoneOverlay/ZoneItem
-                                    // Use custom colors if enabled, otherwise use theme defaults
-                                    color: {
-                                        if (useCustomColors) {
-                                            if (isZoneSelected && modelData.highlightColor)
-                                                return modelData.highlightColor;
-                                            else if (!isZoneSelected && modelData.inactiveColor)
-                                                return modelData.inactiveColor;
-                                        }
-                                        // Fall back to theme colors
-                                        return isZoneSelected ? highlightColor : inactiveColor;
-                                    }
-                                    opacity: {
-                                        if (useCustomColors && modelData.activeOpacity !== undefined)
-                                            return isZoneSelected ? modelData.activeOpacity : modelData.inactiveOpacity;
-
-                                        return isZoneSelected ? activeOpacity : inactiveOpacity;
-                                    }
-                                    // Border - same style as ZoneItem (always visible)
-                                    // P0: Brighter border on hover for better visibility
-                                    border.color: {
-                                        if (useCustomColors && modelData.borderColor)
-                                            return modelData.borderColor;
-
-                                        // Brighter border when hovered
-                                        if (isZoneHovered)
-                                            return Qt.rgba(Math.min(1, Kirigami.Theme.highlightColor.r * 1.2), Math.min(1, Kirigami.Theme.highlightColor.g * 1.2), Math.min(1, Kirigami.Theme.highlightColor.b * 1.2), 1);
-
-                                        return borderColor;
-                                    }
-                                    border.width: isZoneHovered ? root.scaledBorderWidth + 1 : root.scaledBorderWidth
-
-                                    // P1: Zone number label - more prominent with keyboard hint
-                                    Label {
-                                        id: zoneNumberLabel
-
-                                        anchors.centerIn: parent
-                                        text: (zoneRect.index + 1).toString()
-                                        // P1: Larger, more prominent number labels
-                                        font.pixelSize: Math.max(10, Math.min(parent.width, parent.height) * 0.4)
-                                        font.bold: true
-                                        color: numberColor
-                                        opacity: zoneRect.isZoneSelected || zoneRect.isZoneHovered ? 1 : 0.8
-                                        visible: parent.width >= 16 && parent.height >= 16
-                                        // Style enhancement for keyboard shortcut hint
-                                        style: (zoneRect.index < 9 && zoneRect.isZoneHovered) ? Text.Outline : Text.Normal
-                                        styleColor: Qt.rgba(0, 0, 0, 0.3)
-
-                                        Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: animationConstants.shortDuration
-                                                easing.type: Easing.OutCubic
-                                            }
-
-                                        }
-
-                                        Behavior on font.pixelSize {
-                                            NumberAnimation {
-                                                duration: 100
-                                            }
-
-                                        }
-
-                                    }
-
-                                    // Mouse interaction for non-drag selection
-                                    MouseArea {
-                                        id: zoneMouseArea
-
-                                        anchors.fill: parent
-                                        anchors.margins: -2
-                                        hoverEnabled: true
-                                        onEntered: {
-                                            root.selectedLayoutId = indicator.layoutId;
-                                            // Autotile: whole layout selection (zone index 0 is sentinel)
-                                            root.selectedZoneIndex = indicator.isAutotile ? 0 : zoneRect.index;
-                                            root.zoneSelected(indicator.layoutId, root.selectedZoneIndex,
-                                                             indicator.isAutotile ? {"x": 0, "y": 0, "width": 1, "height": 1} : zoneRect.relGeo);
-                                        }
-                                    }
-
-                                    // P2: Smoother animations with easing curves
-                                    Behavior on color {
-                                        ColorAnimation {
-                                            duration: animationConstants.normalDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
-                                    Behavior on opacity {
-                                        NumberAnimation {
-                                            duration: animationConstants.normalDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
-                                    Behavior on scale {
-                                        NumberAnimation {
-                                            duration: animationConstants.shortDuration
-                                            easing.type: Easing.OutBack
-                                            easing.overshoot: 1.2
-                                        }
-
-                                    }
-
-                                    Behavior on border.color {
-                                        ColorAnimation {
-                                            duration: animationConstants.shortDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
-                                    Behavior on border.width {
-                                        NumberAnimation {
-                                            duration: animationConstants.shortDuration
-                                            easing.type: Easing.OutCubic
-                                        }
-
-                                    }
-
+                                onZoneHovered: function(index) {
+                                    root.selectedLayoutId = indicator.layoutId;
+                                    root.selectedZoneIndex = indicator.isAutotile ? 0 : index;
+                                    var zone = indicator.layoutZones[index];
+                                    var relGeo = zone ? (zone.relativeGeometry || {}) : {};
+                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex,
+                                                     indicator.isAutotile ? {"x": 0, "y": 0, "width": 1, "height": 1} : relGeo);
                                 }
-
                             }
 
                         }

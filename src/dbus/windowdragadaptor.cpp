@@ -12,6 +12,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/constants.h"
+#include "../autotile/AlgorithmRegistry.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
@@ -675,43 +676,73 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
     }
 
     QRect screenGeom = screen->geometry();
+    qreal screenAspectRatio =
+        screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
 
     // Calculate selector thickness based on settings/layouts (matches overlay sizing)
-    const int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
-    const int indicatorWidth = m_settings->zoneSelectorPreviewWidth();
-    int indicatorHeight = m_settings->zoneSelectorPreviewHeight();
-    if (m_settings->zoneSelectorPreviewLockAspect()) {
-        qreal aspectRatio =
-            screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-        indicatorHeight = qRound(static_cast<qreal>(indicatorWidth) / aspectRatio);
+    // Include both manual layouts AND autotile algorithms
+    int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
+    auto* registry = AlgorithmRegistry::instance();
+    if (registry) {
+        layoutCount += registry->availableAlgorithms().size();
     }
 
+    // Match overlayservice's size mode logic exactly
+    const ZoneSelectorSizeMode sizeMode = m_settings->zoneSelectorSizeMode();
+    int indicatorWidth = 0;
+    int indicatorHeight = 0;
+
+    if (sizeMode == ZoneSelectorSizeMode::Auto) {
+        // Auto-sizing: Calculate preview size as ~10% of screen width, bounded 120-280px
+        indicatorWidth = qBound(120, screenGeom.width() / 10, 280);
+        indicatorHeight = qRound(static_cast<qreal>(indicatorWidth) / screenAspectRatio);
+    } else {
+        // Manual mode: Use explicit settings
+        indicatorWidth = m_settings->zoneSelectorPreviewWidth();
+        if (m_settings->zoneSelectorPreviewLockAspect()) {
+            indicatorHeight = qRound(static_cast<qreal>(indicatorWidth) / screenAspectRatio);
+        } else {
+            indicatorHeight = m_settings->zoneSelectorPreviewHeight();
+        }
+    }
+
+    // Constants matching overlayservice ZoneSelectorLayout struct
     constexpr int indicatorSpacing = 18;
-    constexpr int containerPadding = 18; // per-side padding
+    constexpr int containerPadding = 36; // Total padding (both sides)
     constexpr int containerTopMargin = 10;
-    constexpr int labelSpace = 28;
+    constexpr int containerSideMargin = 10;
+    constexpr int labelTopMargin = 8;
+    constexpr int labelHeight = 20;
+    const int labelSpace = labelTopMargin + labelHeight; // = 28
 
     const int safeLayoutCount = std::max(1, layoutCount);
     const ZoneSelectorLayoutMode mode = m_settings->zoneSelectorLayoutMode();
+    const int maxRows = m_settings->zoneSelectorMaxRows();
     int columns = 1;
-    int rows = 1;
+    int totalRows = 1;
+
     if (mode == ZoneSelectorLayoutMode::Vertical) {
         columns = 1;
-        rows = safeLayoutCount;
+        totalRows = safeLayoutCount;
     } else if (mode == ZoneSelectorLayoutMode::Grid) {
+        // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
         columns = std::max(1, m_settings->zoneSelectorGridColumns());
-        rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / columns));
+        totalRows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / columns));
     } else {
+        // Horizontal mode
         columns = safeLayoutCount;
-        rows = 1;
+        totalRows = 1;
     }
 
+    // Cap visible rows to maxRows setting (only in Auto mode, matching overlayservice)
+    int visibleRows = (sizeMode == ZoneSelectorSizeMode::Auto && totalRows > maxRows) ? maxRows : totalRows;
+
     int contentWidth = columns * indicatorWidth + (columns - 1) * indicatorSpacing;
-    int contentHeight = rows * (indicatorHeight + labelSpace) + (rows - 1) * indicatorSpacing;
-    int containerWidth = contentWidth + 2 * containerPadding;
-    int containerHeight = contentHeight + 2 * containerPadding;
+    int contentHeight = visibleRows * (indicatorHeight + labelSpace) + (visibleRows - 1) * indicatorSpacing;
+    int containerWidth = contentWidth + containerPadding;
+    int containerHeight = contentHeight + containerPadding;
     int barHeight = containerTopMargin + containerHeight;
-    int barWidth = containerWidth;
+    int barWidth = containerSideMargin + containerWidth + containerSideMargin;
 
     int distanceFromTop = cursorY - screenGeom.top();
     int distanceFromBottom = screenGeom.bottom() - cursorY;

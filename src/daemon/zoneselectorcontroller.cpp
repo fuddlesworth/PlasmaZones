@@ -156,6 +156,16 @@ void ZoneSelectorController::setEdgeTriggerZone(int zone)
     Q_EMIT edgeTriggerZoneChanged(zone);
 }
 
+void ZoneSelectorController::setSelectorGeometry(const QRectF& geometry)
+{
+    if (m_selectorGeometry == geometry) {
+        return;
+    }
+
+    m_selectorGeometry = geometry;
+    Q_EMIT selectorGeometryChanged(geometry);
+}
+
 void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
 {
     if (m_layoutManager == layoutManager) {
@@ -419,6 +429,9 @@ void ZoneSelectorController::updateProximity()
         Q_EMIT cursorProximityChanged(proximity);
     }
 
+    // Check if cursor is over the selector (don't hide while interacting)
+    bool cursorOverSelector = m_selectorGeometry.isValid() && m_selectorGeometry.contains(m_cursorPosition);
+
     // State transitions based on proximity
     if (m_isDragging && inHorizontalZone) {
         if (proximity < 0.3 && m_state == State::Hidden) {
@@ -427,8 +440,8 @@ void ZoneSelectorController::updateProximity()
         } else if (proximity < 0.1 && m_state == State::Near) {
             // Very close - expand
             expand();
-        } else if (proximity > 0.7 && m_state != State::Hidden) {
-            // Far from edge - hide
+        } else if (proximity > 0.7 && m_state != State::Hidden && !cursorOverSelector) {
+            // Far from edge AND not over selector - hide
             hide();
         }
     }
