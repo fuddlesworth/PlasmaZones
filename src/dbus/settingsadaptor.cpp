@@ -11,6 +11,8 @@
 #include <QColor>
 #include <QDBusVariant>
 #include <QDBusAbstractAdaptor> // Explicit include to ensure proper namespace
+#include <QDBusConnection>
+#include <QDBusMessage>
 
 namespace PlasmaZones {
 
@@ -201,6 +203,30 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
 
+    // Autotile Animation Settings (KWin effect visual transitions)
+    REGISTER_BOOL_SETTING("autotileAnimationsEnabled", autotileAnimationsEnabled, setAutotileAnimationsEnabled)
+    REGISTER_INT_SETTING("autotileAnimationDuration", autotileAnimationDuration, setAutotileAnimationDuration)
+
+    // Core Autotiling Settings
+    REGISTER_BOOL_SETTING("autotileEnabled", autotileEnabled, setAutotileEnabled)
+    REGISTER_STRING_SETTING("autotileAlgorithm", autotileAlgorithm, setAutotileAlgorithm)
+    REGISTER_DOUBLE_SETTING("autotileSplitRatio", autotileSplitRatio, setAutotileSplitRatio)
+    REGISTER_INT_SETTING("autotileMasterCount", autotileMasterCount, setAutotileMasterCount)
+    REGISTER_INT_SETTING("autotileInnerGap", autotileInnerGap, setAutotileInnerGap)
+    REGISTER_INT_SETTING("autotileOuterGap", autotileOuterGap, setAutotileOuterGap)
+    REGISTER_BOOL_SETTING("autotileFocusNewWindows", autotileFocusNewWindows, setAutotileFocusNewWindows)
+    REGISTER_BOOL_SETTING("autotileSmartGaps", autotileSmartGaps, setAutotileSmartGaps)
+
+    // Additional Autotiling Settings
+    REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
+    REGISTER_BOOL_SETTING("autotileRespectMinimumSize", autotileRespectMinimumSize, setAutotileRespectMinimumSize)
+    REGISTER_BOOL_SETTING("autotileShowActiveBorder", autotileShowActiveBorder, setAutotileShowActiveBorder)
+    REGISTER_INT_SETTING("autotileActiveBorderWidth", autotileActiveBorderWidth, setAutotileActiveBorderWidth)
+    REGISTER_BOOL_SETTING("autotileUseSystemBorderColor", autotileUseSystemBorderColor, setAutotileUseSystemBorderColor)
+    REGISTER_COLOR_SETTING("autotileActiveBorderColor", autotileActiveBorderColor, setAutotileActiveBorderColor)
+    REGISTER_BOOL_SETTING("autotileMonocleHideOthers", autotileMonocleHideOthers, setAutotileMonocleHideOthers)
+    REGISTER_BOOL_SETTING("autotileMonocleShowTabs", autotileMonocleShowTabs, setAutotileMonocleShowTabs)
+
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
 #undef REGISTER_BOOL_SETTING
@@ -238,16 +264,26 @@ QDBusVariant SettingsAdaptor::getSetting(const QString& key)
 {
     if (key.isEmpty()) {
         qCWarning(lcDbusSettings) << "Cannot get setting - empty key";
-        return QDBusVariant();
+        // Return a valid but empty QDBusVariant to avoid marshalling errors
+        // (QDBusVariant() with no argument creates an invalid variant that can't be sent)
+        return QDBusVariant(QVariant(QString()));
     }
 
     auto it = m_getters.find(key);
     if (it != m_getters.end()) {
-        return QDBusVariant(it.value()());
+        QVariant value = it.value()();
+        // Ensure we never return an invalid variant - use empty string as fallback
+        if (!value.isValid()) {
+            qCWarning(lcDbusSettings) << "Setting" << key << "returned invalid variant, using empty string";
+            return QDBusVariant(QVariant(QString()));
+        }
+        return QDBusVariant(value);
     }
 
     qCWarning(lcDbusSettings) << "Setting key not found:" << key;
-    return QDBusVariant();
+    // Return a valid but empty QDBusVariant with error indicator
+    // Callers should check for empty string as "not found" indicator
+    return QDBusVariant(QVariant(QString()));
 }
 
 bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)

@@ -40,15 +40,7 @@ QStringList ScreenAdaptor::getScreens()
 {
     QStringList result;
     for (const auto* screen : Utils::allScreens()) {
-        QJsonObject info;
-        info[JsonKeys::Name] = screen->name();
-        info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, screen->geometry().x()},
-                                               {JsonKeys::Y, screen->geometry().y()},
-                                               {JsonKeys::Width, screen->geometry().width()},
-                                               {JsonKeys::Height, screen->geometry().height()}};
-        info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
-        info[JsonKeys::RefreshRate] = screen->refreshRate();
-        result.append(QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact)));
+        result.append(screen->name());
     }
     return result;
 }

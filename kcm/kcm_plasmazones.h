@@ -514,6 +514,9 @@ private:
     // Fill on drop settings (stored separately in Editor group)
     bool m_fillOnDropEnabled = true;
     int m_fillOnDropModifier = 0x04000000; // Qt::ControlModifier
+
+    // Save guard to prevent re-entry during synchronous D-Bus operations
+    bool m_saveInProgress = false;
 };
 
 } // namespace PlasmaZones

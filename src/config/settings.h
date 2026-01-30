@@ -232,6 +232,10 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
     Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY autotileInsertPositionChanged)
 
+    // Autotile Animation Settings (KWin effect visual transitions)
+    Q_PROPERTY(bool autotileAnimationsEnabled READ autotileAnimationsEnabled WRITE setAutotileAnimationsEnabled NOTIFY autotileAnimationsEnabledChanged)
+    Q_PROPERTY(int autotileAnimationDuration READ autotileAnimationDuration WRITE setAutotileAnimationDuration NOTIFY autotileAnimationDurationChanged)
+
     // Additional Autotiling Settings (focus, visual feedback, monocle mode)
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY autotileFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY autotileRespectMinimumSizeChanged)
@@ -812,32 +816,32 @@ public:
     void setCycleWindowBackwardShortcut(const QString& shortcut);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Autotiling Settings
+    // Autotiling Settings (IAutotileSettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bool autotileEnabled() const { return m_autotileEnabled; }
-    void setAutotileEnabled(bool enabled);
+    bool autotileEnabled() const override { return m_autotileEnabled; }
+    void setAutotileEnabled(bool enabled) override;
 
-    QString autotileAlgorithm() const { return m_autotileAlgorithm; }
-    void setAutotileAlgorithm(const QString& algorithm);
+    QString autotileAlgorithm() const override { return m_autotileAlgorithm; }
+    void setAutotileAlgorithm(const QString& algorithm) override;
 
-    qreal autotileSplitRatio() const { return m_autotileSplitRatio; }
-    void setAutotileSplitRatio(qreal ratio);
+    qreal autotileSplitRatio() const override { return m_autotileSplitRatio; }
+    void setAutotileSplitRatio(qreal ratio) override;
 
-    int autotileMasterCount() const { return m_autotileMasterCount; }
-    void setAutotileMasterCount(int count);
+    int autotileMasterCount() const override { return m_autotileMasterCount; }
+    void setAutotileMasterCount(int count) override;
 
-    int autotileInnerGap() const { return m_autotileInnerGap; }
-    void setAutotileInnerGap(int gap);
+    int autotileInnerGap() const override { return m_autotileInnerGap; }
+    void setAutotileInnerGap(int gap) override;
 
-    int autotileOuterGap() const { return m_autotileOuterGap; }
-    void setAutotileOuterGap(int gap);
+    int autotileOuterGap() const override { return m_autotileOuterGap; }
+    void setAutotileOuterGap(int gap) override;
 
-    bool autotileFocusNewWindows() const { return m_autotileFocusNewWindows; }
-    void setAutotileFocusNewWindows(bool focus);
+    bool autotileFocusNewWindows() const override { return m_autotileFocusNewWindows; }
+    void setAutotileFocusNewWindows(bool focus) override;
 
-    bool autotileSmartGaps() const { return m_autotileSmartGaps; }
-    void setAutotileSmartGaps(bool smart);
+    bool autotileSmartGaps() const override { return m_autotileSmartGaps; }
+    void setAutotileSmartGaps(bool smart) override;
 
     enum class AutotileInsertPosition { End = 0, AfterFocused = 1, AsMaster = 2 };
     AutotileInsertPosition autotileInsertPosition() const { return m_autotileInsertPosition; }
@@ -873,30 +877,37 @@ public:
     QString autotileRetileShortcut() const { return m_autotileRetileShortcut; }
     void setAutotileRetileShortcut(const QString& shortcut);
 
+    // Autotile Animation Settings (KWin effect visual transitions)
+    bool autotileAnimationsEnabled() const override { return m_autotileAnimationsEnabled; }
+    void setAutotileAnimationsEnabled(bool enabled) override;
+
+    int autotileAnimationDuration() const override { return m_autotileAnimationDuration; }
+    void setAutotileAnimationDuration(int duration) override;
+
     // Additional Autotiling Settings
-    bool autotileFocusFollowsMouse() const { return m_autotileFocusFollowsMouse; }
-    void setAutotileFocusFollowsMouse(bool focus);
+    bool autotileFocusFollowsMouse() const override { return m_autotileFocusFollowsMouse; }
+    void setAutotileFocusFollowsMouse(bool focus) override;
 
-    bool autotileRespectMinimumSize() const { return m_autotileRespectMinimumSize; }
-    void setAutotileRespectMinimumSize(bool respect);
+    bool autotileRespectMinimumSize() const override { return m_autotileRespectMinimumSize; }
+    void setAutotileRespectMinimumSize(bool respect) override;
 
-    bool autotileShowActiveBorder() const { return m_autotileShowActiveBorder; }
-    void setAutotileShowActiveBorder(bool show);
+    bool autotileShowActiveBorder() const override { return m_autotileShowActiveBorder; }
+    void setAutotileShowActiveBorder(bool show) override;
 
-    int autotileActiveBorderWidth() const { return m_autotileActiveBorderWidth; }
-    void setAutotileActiveBorderWidth(int width);
+    int autotileActiveBorderWidth() const override { return m_autotileActiveBorderWidth; }
+    void setAutotileActiveBorderWidth(int width) override;
 
-    bool autotileUseSystemBorderColor() const { return m_autotileUseSystemBorderColor; }
-    void setAutotileUseSystemBorderColor(bool use);
+    bool autotileUseSystemBorderColor() const override { return m_autotileUseSystemBorderColor; }
+    void setAutotileUseSystemBorderColor(bool use) override;
 
-    QColor autotileActiveBorderColor() const { return m_autotileActiveBorderColor; }
-    void setAutotileActiveBorderColor(const QColor& color);
+    QColor autotileActiveBorderColor() const override { return m_autotileActiveBorderColor; }
+    void setAutotileActiveBorderColor(const QColor& color) override;
 
-    bool autotileMonocleHideOthers() const { return m_autotileMonocleHideOthers; }
-    void setAutotileMonocleHideOthers(bool hide);
+    bool autotileMonocleHideOthers() const override { return m_autotileMonocleHideOthers; }
+    void setAutotileMonocleHideOthers(bool hide) override;
 
-    bool autotileMonocleShowTabs() const { return m_autotileMonocleShowTabs; }
-    void setAutotileMonocleShowTabs(bool show);
+    bool autotileMonocleShowTabs() const override { return m_autotileMonocleShowTabs; }
+    void setAutotileMonocleShowTabs(bool show) override;
 
     // Persistence
     void load() override;
@@ -1045,6 +1056,10 @@ private:
     bool m_autotileFocusNewWindows = true;
     bool m_autotileSmartGaps = true;
     AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
+
+    // Autotile Animation Settings (KWin effect visual transitions)
+    bool m_autotileAnimationsEnabled = true;
+    int m_autotileAnimationDuration = 150; // milliseconds
 
     // Additional Autotiling Settings
     bool m_autotileFocusFollowsMouse = false;

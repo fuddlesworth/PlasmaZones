@@ -1132,6 +1132,26 @@ void Settings::setAutotileRetileShortcut(const QString& shortcut)
     }
 }
 
+void Settings::setAutotileAnimationsEnabled(bool enabled)
+{
+    if (m_autotileAnimationsEnabled != enabled) {
+        m_autotileAnimationsEnabled = enabled;
+        Q_EMIT autotileAnimationsEnabledChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileAnimationDuration(int duration)
+{
+    // Clamp to reasonable range (50-500ms)
+    duration = qBound(50, duration, 500);
+    if (m_autotileAnimationDuration != duration) {
+        m_autotileAnimationDuration = duration;
+        Q_EMIT autotileAnimationDurationChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setAutotileFocusFollowsMouse(bool focus)
 {
     if (m_autotileFocusFollowsMouse != focus) {
@@ -1585,6 +1605,10 @@ void Settings::load()
     }
     m_autotileInsertPosition = static_cast<AutotileInsertPosition>(insertPos);
 
+    // Autotile Animation Settings
+    m_autotileAnimationsEnabled = autotiling.readEntry("AutotileAnimationsEnabled", true);
+    m_autotileAnimationDuration = qBound(50, autotiling.readEntry("AutotileAnimationDuration", 150), 500);
+
     // Additional Autotiling Settings
     m_autotileFocusFollowsMouse = autotiling.readEntry("AutotileFocusFollowsMouse", false);
     m_autotileRespectMinimumSize = autotiling.readEntry("AutotileRespectMinimumSize", false);
@@ -1774,6 +1798,10 @@ void Settings::save()
     autotiling.writeEntry("AutotileSmartGaps", m_autotileSmartGaps);
     autotiling.writeEntry("AutotileInsertPosition", static_cast<int>(m_autotileInsertPosition));
 
+    // Autotile Animation Settings
+    autotiling.writeEntry("AutotileAnimationsEnabled", m_autotileAnimationsEnabled);
+    autotiling.writeEntry("AutotileAnimationDuration", m_autotileAnimationDuration);
+
     // Additional Autotiling Settings
     autotiling.writeEntry("AutotileFocusFollowsMouse", m_autotileFocusFollowsMouse);
     autotiling.writeEntry("AutotileRespectMinimumSize", m_autotileRespectMinimumSize);
@@ -1926,6 +1954,10 @@ void Settings::reset()
     m_autotileFocusNewWindows = true;
     m_autotileSmartGaps = true;
     m_autotileInsertPosition = AutotileInsertPosition::End;
+
+    // Autotile Animation Settings
+    m_autotileAnimationsEnabled = true;
+    m_autotileAnimationDuration = 150;
 
     // Additional Autotiling Settings
     m_autotileFocusFollowsMouse = false;

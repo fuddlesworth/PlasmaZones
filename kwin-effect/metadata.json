@@ -1,6 +1,5 @@
 {
     "KPlugin": {
-        "Id": "kwin_effect_plasmazones",
         "Name": "PlasmaZones",
         "Description": "FancyZones-style window snapping with modifier key detection",
         "Icon": "plasmazones",

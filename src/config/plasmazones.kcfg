@@ -630,6 +630,16 @@
       <label>Show tab bar for window switching in monocle mode</label>
       <default>true</default>
     </entry>
+    <entry name="AutotileAnimationsEnabled" type="Bool">
+      <label>Enable smooth animations when windows are tiled/retiled</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileAnimationDuration" type="Int">
+      <label>Duration of tiling animations in milliseconds</label>
+      <default>150</default>
+      <min>50</min>
+      <max>500</max>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

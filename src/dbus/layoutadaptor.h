@@ -67,21 +67,26 @@ public Q_SLOTS:
     QString getLayoutForScreen(const QString& screenName);
     void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
     void clearAssignment(const QString& screenName);
+    void setAllScreenAssignments(const QVariantMap& assignments);  // Batch set - saves once
 
     // Per-virtual-desktop screen assignments
     QString getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop);
     void assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId);
     void clearAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop);
     bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop);
+    void setAllDesktopAssignments(const QVariantMap& assignments);  // Batch set - key: "screen:desktop", value: layoutId
 
     // Virtual desktop information
     int getVirtualDesktopCount();
     QStringList getVirtualDesktopNames();
     QString getAllScreenAssignments();
+    QVariantMap getAllDesktopAssignments();   // Get all per-desktop assignments as key -> layoutId
+    QVariantMap getAllActivityAssignments();  // Get all per-activity assignments as key -> layoutId
 
     // Quick layout slots (1-9)
     QString getQuickLayoutSlot(int slotNumber);
     void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
+    void setAllQuickLayoutSlots(const QVariantMap& slots);  // Batch set - saves once
     QVariantMap getAllQuickLayoutSlots();
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -124,6 +129,7 @@ public Q_SLOTS:
     void assignLayoutToScreenActivity(const QString& screenName, const QString& activityId, const QString& layoutId);
     void clearAssignmentForScreenActivity(const QString& screenName, const QString& activityId);
     bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId);
+    void setAllActivityAssignments(const QVariantMap& assignments);  // Batch set - key: "screen:activity", value: layoutId
 
     // Full assignment (screen + desktop + activity)
     QString getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId);

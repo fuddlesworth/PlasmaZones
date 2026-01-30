@@ -116,7 +116,8 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IWindowExclusionSettings,
                                      public IZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
-                                     public IDefaultLayoutSettings
+                                     public IDefaultLayoutSettings,
+                                     public IAutotileSettings
 {
     Q_OBJECT
 
@@ -261,6 +262,10 @@ Q_SIGNALS:
     void autotileSmartGapsChanged();
     void autotileInsertPositionChanged();
 
+    // Autotile Animation Settings
+    void autotileAnimationsEnabledChanged();
+    void autotileAnimationDurationChanged();
+
     // Additional Autotiling Settings
     void autotileFocusFollowsMouseChanged();
     void autotileRespectMinimumSizeChanged();
@@ -334,11 +339,15 @@ public:
                                  const QString& activity = QString()) = 0;
     virtual bool hasExplicitAssignment(const QString& screenName, int virtualDesktop = 0,
                                        const QString& activity = QString()) const = 0;
+    virtual void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) = 0;  // Batch set - saves once
+    virtual void setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) = 0;  // Batch per-desktop
+    virtual void setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) = 0;  // Batch per-activity
 
     // Quick layout switch
     virtual Layout* layoutForShortcut(int number) const = 0;
     virtual void applyQuickLayout(int number, const QString& screenName) = 0;
     virtual void setQuickLayoutSlot(int number, const QUuid& layoutId) = 0;
+    virtual void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) = 0;  // Batch set - saves once
     virtual QHash<int, QUuid> quickLayoutSlots() const = 0;
 
     // Built-in layouts
