@@ -248,7 +248,6 @@ class PLASMAZONES_EXPORT Settings : public ISettings
 
     // Autotiling Keyboard Shortcuts (Bismuth-compatible)
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
-    Q_PROPERTY(QString autotileCycleAlgorithmShortcut READ autotileCycleAlgorithmShortcut WRITE setAutotileCycleAlgorithmShortcut NOTIFY autotileCycleAlgorithmShortcutChanged)
     Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut NOTIFY autotileFocusMasterShortcutChanged)
     Q_PROPERTY(QString autotileSwapMasterShortcut READ autotileSwapMasterShortcut WRITE setAutotileSwapMasterShortcut NOTIFY autotileSwapMasterShortcutChanged)
     Q_PROPERTY(QString autotileIncMasterRatioShortcut READ autotileIncMasterRatioShortcut WRITE setAutotileIncMasterRatioShortcut NOTIFY autotileIncMasterRatioShortcutChanged)
@@ -853,9 +852,6 @@ public:
     QString autotileToggleShortcut() const { return m_autotileToggleShortcut; }
     void setAutotileToggleShortcut(const QString& shortcut);
 
-    QString autotileCycleAlgorithmShortcut() const { return m_autotileCycleAlgorithmShortcut; }
-    void setAutotileCycleAlgorithmShortcut(const QString& shortcut);
-
     QString autotileFocusMasterShortcut() const { return m_autotileFocusMasterShortcut; }
     void setAutotileFocusMasterShortcut(const QString& shortcut);
 
@@ -1073,7 +1069,6 @@ private:
 
     // Autotiling Keyboard Shortcuts (Bismuth-compatible defaults)
     QString m_autotileToggleShortcut = QStringLiteral("Meta+T");
-    QString m_autotileCycleAlgorithmShortcut = QStringLiteral("Meta+Space");
     QString m_autotileFocusMasterShortcut = QStringLiteral("Meta+M");
     QString m_autotileSwapMasterShortcut = QStringLiteral("Meta+Return");
     QString m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+=");

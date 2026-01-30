@@ -31,6 +31,9 @@ class WindowDragAdaptor;
 class AutotileAdaptor;
 class AutotileEngine;
 class WindowTrackingService;
+class ModeTracker;
+class ContextAwareShortcutRouter;
+class ZoneSelectorController;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -138,6 +141,10 @@ private:
     // Autotiling engine and service
     std::unique_ptr<WindowTrackingService> m_windowTrackingService;
     std::unique_ptr<AutotileEngine> m_autotileEngine;
+
+    // Mode tracking and context-aware shortcuts
+    std::unique_ptr<ModeTracker> m_modeTracker;
+    std::unique_ptr<ContextAwareShortcutRouter> m_shortcutRouter;
 
     bool m_running = false;
 

@@ -132,11 +132,6 @@ Q_SIGNALS:
     void toggleAutotileRequested();
 
     /**
-     * @brief Emitted when cycle tiling algorithm is requested
-     */
-    void cycleAlgorithmRequested();
-
-    /**
      * @brief Emitted when focus master window is requested
      */
     void focusMasterRequested();
@@ -237,7 +232,6 @@ private Q_SLOTS:
 
     // Phase 3.1: Autotile shortcut slots
     void onToggleAutotile();
-    void onCycleAlgorithm();
     void onFocusMaster();
     void onSwapMaster();
     void onIncMasterRatio();
@@ -248,7 +242,6 @@ private Q_SLOTS:
 
     // Phase 3.1: Autotile shortcut update handlers
     void updateToggleAutotileShortcut();
-    void updateCycleAlgorithmShortcut();
     void updateFocusMasterShortcut();
     void updateSwapMasterShortcut();
     void updateIncMasterRatioShortcut();
@@ -308,7 +301,6 @@ private:
 
     // Phase 3.1: Autotile shortcut actions
     QAction* m_toggleAutotileAction = nullptr;
-    QAction* m_cycleAlgorithmAction = nullptr;
     QAction* m_focusMasterAction = nullptr;
     QAction* m_swapMasterAction = nullptr;
     QAction* m_incMasterRatioAction = nullptr;

@@ -208,6 +208,11 @@ set(plasmazones_daemon_SRCS
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
     daemon/zoneselectorcontroller.h
+    # Mode tracking and smart toggle (Unified Layout Model)
+    daemon/modetracker.cpp
+    daemon/modetracker.h
+    daemon/contextawareshortcutrouter.cpp
+    daemon/contextawareshortcutrouter.h
     # Shader rendering system
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp

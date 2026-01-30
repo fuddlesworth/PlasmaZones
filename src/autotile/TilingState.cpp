@@ -292,6 +292,41 @@ int TilingState::windowPosition(const QString &windowId) const
     return windowIndex(windowId);
 }
 
+bool TilingState::rotateWindows(bool clockwise)
+{
+    // Get only tiled (non-floating) windows for rotation
+    QStringList tiled = tiledWindows();
+    if (tiled.size() < 2) {
+        return false; // Nothing to rotate with 0 or 1 tiled window
+    }
+
+    // Rotate the tiled windows list
+    if (clockwise) {
+        // Clockwise: move last element to front
+        // [A, B, C] -> [C, A, B]
+        QString last = tiled.takeLast();
+        tiled.prepend(last);
+    } else {
+        // Counter-clockwise: move first element to end
+        // [A, B, C] -> [B, C, A]
+        QString first = tiled.takeFirst();
+        tiled.append(first);
+    }
+
+    // Rebuild the full window order: keep floating windows at their positions,
+    // replace tiled windows with rotated order
+    int tiledIndex = 0;
+    for (int i = 0; i < m_windowOrder.size(); ++i) {
+        if (!m_floatingWindows.contains(m_windowOrder[i])) {
+            m_windowOrder[i] = tiled[tiledIndex++];
+        }
+    }
+
+    Q_EMIT windowOrderChanged();
+    notifyStateChanged();
+    return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Split Ratio
 // ═══════════════════════════════════════════════════════════════════════════════

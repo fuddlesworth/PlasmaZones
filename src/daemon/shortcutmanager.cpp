@@ -120,8 +120,6 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     // Phase 3.1: Autotile shortcuts
     connect(m_settings, &Settings::autotileToggleShortcutChanged, this,
             &ShortcutManager::updateToggleAutotileShortcut);
-    connect(m_settings, &Settings::autotileCycleAlgorithmShortcutChanged, this,
-            &ShortcutManager::updateCycleAlgorithmShortcut);
     connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this,
             &ShortcutManager::updateFocusMasterShortcut);
     connect(m_settings, &Settings::autotileSwapMasterShortcutChanged, this,
@@ -212,7 +210,6 @@ void ShortcutManager::updateShortcuts()
 
     // Phase 3.1: Autotile shortcuts
     updateToggleAutotileShortcut();
-    updateCycleAlgorithmShortcut();
     updateFocusMasterShortcut();
     updateSwapMasterShortcut();
     updateIncMasterRatioShortcut();
@@ -309,9 +306,6 @@ void ShortcutManager::unregisterShortcuts()
     // Phase 3.1: Autotile actions
     delete m_toggleAutotileAction;
     m_toggleAutotileAction = nullptr;
-
-    delete m_cycleAlgorithmAction;
-    m_cycleAlgorithmAction = nullptr;
 
     delete m_focusMasterAction;
     m_focusMasterAction = nullptr;
@@ -920,15 +914,6 @@ void ShortcutManager::setupAutotileShortcuts()
         connect(m_toggleAutotileAction, &QAction::triggered, this, &ShortcutManager::onToggleAutotile);
     }
 
-    // Cycle algorithm (Meta+Space)
-    if (!m_cycleAlgorithmAction) {
-        m_cycleAlgorithmAction = new QAction(i18n("Cycle Tiling Algorithm"), this);
-        m_cycleAlgorithmAction->setObjectName(QStringLiteral("cycle_algorithm"));
-        KGlobalAccel::setGlobalShortcut(m_cycleAlgorithmAction,
-                                        QKeySequence(m_settings->autotileCycleAlgorithmShortcut()));
-        connect(m_cycleAlgorithmAction, &QAction::triggered, this, &ShortcutManager::onCycleAlgorithm);
-    }
-
     // Focus master (Meta+M)
     if (!m_focusMasterAction) {
         m_focusMasterAction = new QAction(i18n("Focus Master Window"), this);
@@ -1002,12 +987,6 @@ void ShortcutManager::onToggleAutotile()
     Q_EMIT toggleAutotileRequested();
 }
 
-void ShortcutManager::onCycleAlgorithm()
-{
-    qCDebug(lcShortcuts) << "Cycle algorithm triggered";
-    Q_EMIT cycleAlgorithmRequested();
-}
-
 void ShortcutManager::onFocusMaster()
 {
     qCDebug(lcShortcuts) << "Focus master triggered";
@@ -1056,14 +1035,6 @@ void ShortcutManager::updateToggleAutotileShortcut()
     if (m_toggleAutotileAction) {
         KGlobalAccel::setGlobalShortcut(m_toggleAutotileAction,
                                         QKeySequence(m_settings->autotileToggleShortcut()));
-    }
-}
-
-void ShortcutManager::updateCycleAlgorithmShortcut()
-{
-    if (m_cycleAlgorithmAction) {
-        KGlobalAccel::setGlobalShortcut(m_cycleAlgorithmAction,
-                                        QKeySequence(m_settings->autotileCycleAlgorithmShortcut()));
     }
 }
 

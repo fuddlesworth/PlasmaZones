@@ -278,7 +278,6 @@ Q_SIGNALS:
 
     // Autotiling Shortcuts
     void autotileToggleShortcutChanged();
-    void autotileCycleAlgorithmShortcutChanged();
     void autotileFocusMasterShortcutChanged();
     void autotileSwapMasterShortcutChanged();
     void autotileIncMasterRatioShortcutChanged();
@@ -483,6 +482,7 @@ Q_SIGNALS:
     void multiZoneActivated(const QVector<Zone*>& zones);
     void zoneSelectorVisibilityChanged(bool visible);
     void zoneSelectorZoneSelected(int zoneIndex);
+    void autotileLayoutSelected(const QString& algorithmId);
 };
 
 } // namespace PlasmaZones

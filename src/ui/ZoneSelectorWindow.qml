@@ -339,6 +339,8 @@ Window {
                         property string layoutId: modelData.id || ""
                         property string layoutName: modelData.name || ("Layout " + (index + 1))
                         property var layoutZones: modelData.zones || []
+                        property int layoutCategory: modelData.category !== undefined ? modelData.category : 0
+                        property bool isAutotile: layoutCategory === 1
                         property bool isActive: layoutId === root.activeLayoutId
                         property bool hasSelectedZone: root.selectedLayoutId === layoutId
 
@@ -652,39 +654,71 @@ Window {
 
                         }
 
-                        // Layout name label below preview
-                        Label {
-                            id: nameLabel
+                        // Layout name label with category badge below preview
+                        Row {
+                            id: nameLabelRow
 
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: previewArea.bottom
                             anchors.topMargin: root.labelTopMargin
-                            text: indicator.layoutName
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
-                            // P1: More prominent styling for active layout label
-                            font.weight: indicator.isActive ? Font.Bold : Font.Normal
-                            color: {
-                                if (indicator.isActive)
-                                    return Kirigami.Theme.highlightColor;
-                                else if (indicator.hasSelectedZone)
-                                    return textColor;
-                                return Qt.rgba(textColor.r, textColor.g, textColor.b, 0.6);
-                            }
-                            opacity: indicator.hasSelectedZone || indicator.isActive ? 1 : 0.8
+                            spacing: 4
 
-                            // P2: Smoother animations with easing
-                            Behavior on color {
-                                ColorAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
+                            // Category badge (Manual/Auto) - inline with name
+                            Rectangle {
+                                id: categoryBadge
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: categoryBadgeLabel.implicitWidth + 6
+                                height: 14
+                                radius: 3
+                                // Green for autotile, neutral gray for manual
+                                color: indicator.isAutotile
+                                    ? Qt.rgba(0.2, 0.7, 0.3, 0.9)
+                                    : Qt.rgba(textColor.r, textColor.g, textColor.b, 0.35)
+
+                                Label {
+                                    id: categoryBadgeLabel
+
+                                    anchors.centerIn: parent
+                                    text: indicator.isAutotile ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
+                                    font.pixelSize: 8
+                                    font.weight: Font.Medium
+                                    color: indicator.isAutotile ? "white" : Kirigami.Theme.highlightedTextColor
+                                }
+                            }
+
+                            Label {
+                                id: nameLabel
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: indicator.layoutName
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
+                                // P1: More prominent styling for active layout label
+                                font.weight: indicator.isActive ? Font.Bold : Font.Normal
+                                color: {
+                                    if (indicator.isActive)
+                                        return Kirigami.Theme.highlightColor;
+                                    else if (indicator.hasSelectedZone)
+                                        return textColor;
+                                    return Qt.rgba(textColor.r, textColor.g, textColor.b, 0.6);
+                                }
+                                opacity: indicator.hasSelectedZone || indicator.isActive ? 1 : 0.8
+
+                                // P2: Smoother animations with easing
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: 200
+                                        easing.type: Easing.OutCubic
+                                    }
+
                                 }
 
-                            }
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: 200
+                                        easing.type: Easing.OutCubic
+                                    }
 
-                            Behavior on opacity {
-                                NumberAnimation {
-                                    duration: 200
-                                    easing.type: Easing.OutCubic
                                 }
 
                             }

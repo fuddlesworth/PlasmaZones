@@ -6,6 +6,7 @@
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
+#include "../autotile/AlgorithmRegistry.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -189,6 +190,9 @@ Q_SIGNALS:
     void layoutSelected(const QString& layoutId);
     void layoutHovered(const QString& layoutId);
 
+    // Autotile layout selection (emitted when user selects an autotile algorithm from zone selector)
+    void autotileLayoutSelected(const QString& algorithmId);
+
     // Drag state signals
     void dragStarted();
     void dragEnded();
@@ -206,6 +210,10 @@ private:
     QVariantMap layoutToVariantMap(Layout* layout) const;
     QVariantList zonesToVariantList(Layout* layout) const;
     QVariantMap zoneToVariantMap(Zone* zone) const;
+
+    // Autotile algorithm conversion for unified layout list
+    QVariantMap autotileToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId) const;
+    QVariantList autotilePreviewZones(TilingAlgorithm* algorithm) const;
 
     // State
     State m_state = State::Hidden;

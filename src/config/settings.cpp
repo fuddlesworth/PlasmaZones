@@ -1060,15 +1060,6 @@ void Settings::setAutotileToggleShortcut(const QString& shortcut)
     }
 }
 
-void Settings::setAutotileCycleAlgorithmShortcut(const QString& shortcut)
-{
-    if (m_autotileCycleAlgorithmShortcut != shortcut) {
-        m_autotileCycleAlgorithmShortcut = shortcut;
-        Q_EMIT autotileCycleAlgorithmShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
 void Settings::setAutotileFocusMasterShortcut(const QString& shortcut)
 {
     if (m_autotileFocusMasterShortcut != shortcut) {
@@ -1640,7 +1631,6 @@ void Settings::load()
     // Autotiling Shortcuts (Bismuth-compatible defaults)
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
     m_autotileToggleShortcut = autotileShortcuts.readEntry("ToggleShortcut", QStringLiteral("Meta+T"));
-    m_autotileCycleAlgorithmShortcut = autotileShortcuts.readEntry("CycleAlgorithmShortcut", QStringLiteral("Meta+Space"));
     m_autotileFocusMasterShortcut = autotileShortcuts.readEntry("FocusMasterShortcut", QStringLiteral("Meta+M"));
     m_autotileSwapMasterShortcut = autotileShortcuts.readEntry("SwapMasterShortcut", QStringLiteral("Meta+Return"));
     m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry("IncMasterRatioShortcut", QStringLiteral("Meta+Shift+="));
@@ -1815,7 +1805,6 @@ void Settings::save()
     // Autotiling Shortcuts
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
     autotileShortcuts.writeEntry("ToggleShortcut", m_autotileToggleShortcut);
-    autotileShortcuts.writeEntry("CycleAlgorithmShortcut", m_autotileCycleAlgorithmShortcut);
     autotileShortcuts.writeEntry("FocusMasterShortcut", m_autotileFocusMasterShortcut);
     autotileShortcuts.writeEntry("SwapMasterShortcut", m_autotileSwapMasterShortcut);
     autotileShortcuts.writeEntry("IncMasterRatioShortcut", m_autotileIncMasterRatioShortcut);
@@ -1973,7 +1962,6 @@ void Settings::reset()
 
     // Autotiling Shortcuts (Bismuth-compatible defaults)
     m_autotileToggleShortcut = QStringLiteral("Meta+T");
-    m_autotileCycleAlgorithmShortcut = QStringLiteral("Meta+Space");
     m_autotileFocusMasterShortcut = QStringLiteral("Meta+M");
     m_autotileSwapMasterShortcut = QStringLiteral("Meta+Return");
     m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+=");
