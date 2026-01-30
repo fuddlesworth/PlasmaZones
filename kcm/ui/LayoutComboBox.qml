@@ -104,7 +104,8 @@ ComboBox {
     // Custom delegate with optional layout preview and category badge
     delegate: ItemDelegate {
         width: root.popup.width
-        highlighted: root.highlightedIndex === index
+        // Highlight on hover OR if this is the currently selected item
+        highlighted: root.highlightedIndex === index || root.currentIndex === index
 
         required property var modelData
         required property int index
@@ -113,6 +114,7 @@ ComboBox {
         readonly property bool isAutotile: modelData.category === 1
         readonly property bool hasLayout: modelData.layout != null
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
+        readonly property bool isCurrentSelection: root.currentIndex === index
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
