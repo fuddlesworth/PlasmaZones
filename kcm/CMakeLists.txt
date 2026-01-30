@@ -35,5 +35,26 @@ install(FILES
     ui/ModifierCheckBoxes.qml
     ui/PositionPicker.qml
     ui/PreviewSizeControl.qml
+    ui/ColorButton.qml
+    ui/LayoutComboBox.qml
+    ui/AssignmentRow.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones
+)
+
+# Install tab component files
+install(FILES
+    ui/tabs/LayoutsTab.qml
+    ui/tabs/EditorTab.qml
+    ui/tabs/AssignmentsTab.qml
+    ui/tabs/AppearanceTab.qml
+    ui/tabs/BehaviorTab.qml
+    ui/tabs/ZoneSelectorTab.qml
+    ui/tabs/ExclusionsTab.qml
+    ui/tabs/ExclusionListCard.qml
+    ui/tabs/MonitorAssignmentsCard.qml
+    ui/tabs/ActivityAssignmentsCard.qml
+    ui/tabs/QuickLayoutSlotsCard.qml
+    ui/tabs/LayoutToolbar.qml
+    ui/tabs/LayoutGridDelegate.qml
+    DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones/tabs
 )
