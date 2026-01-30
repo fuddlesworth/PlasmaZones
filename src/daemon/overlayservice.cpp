@@ -5,7 +5,6 @@
 #include "../core/layout.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
-#include "../core/layoututils.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/TilingAlgorithm.h"
@@ -1337,8 +1336,7 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
 
-    // Use unified layout count (manual layouts + autotile algorithms)
-    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager).size();
+    const int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
     updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
 
     // Initially hidden
@@ -1864,9 +1862,29 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 
 QVariantList OverlayService::buildLayoutsList() const
 {
-    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, ZoneSelectorController, LayoutAdaptor)
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
-    return LayoutUtils::toVariantList(entries);
+    QVariantList layoutsList;
+
+    // Add manual layouts first
+    if (m_layoutManager) {
+        const auto layouts = m_layoutManager->layouts();
+        for (Layout* layout : layouts) {
+            layoutsList.append(layoutToVariantMap(layout));
+        }
+    }
+
+    // Add autotile algorithms (unified layout model - using shared utility)
+    auto* registry = AlgorithmRegistry::instance();
+    if (registry) {
+        const QStringList algorithmIds = registry->availableAlgorithms();
+        for (const QString& algorithmId : algorithmIds) {
+            TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
+            if (algorithm) {
+                layoutsList.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
+            }
+        }
+    }
+
+    return layoutsList;
 }
 
 QVariantMap OverlayService::layoutToVariantMap(Layout* layout) const

@@ -4,7 +4,6 @@
 #include "zoneselectorcontroller.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
-#include "../core/layoututils.h"
 #include "../core/utils.h"
 #include "../autotile/TilingAlgorithm.h"
 #include <QScreen>
@@ -79,9 +78,31 @@ void ZoneSelectorController::setEnabled(bool enabled)
 
 QVariantList ZoneSelectorController::layouts() const
 {
-    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, LayoutAdaptor)
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
-    return LayoutUtils::toVariantList(entries);
+    QVariantList result;
+
+    if (!m_layoutManager) {
+        return result;
+    }
+
+    // Get all manual layouts from the layout manager
+    const auto layoutList = m_layoutManager->layouts();
+    for (Layout* layout : layoutList) {
+        result.append(layoutToVariantMap(layout));
+    }
+
+    // Append autotile algorithms as layouts (using shared utility from AlgorithmRegistry)
+    auto* registry = AlgorithmRegistry::instance();
+    if (registry) {
+        const QStringList algorithmIds = registry->availableAlgorithms();
+        for (const QString& algorithmId : algorithmIds) {
+            TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
+            if (algorithm) {
+                result.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
+            }
+        }
+    }
+
+    return result;
 }
 
 void ZoneSelectorController::setActiveLayoutId(const QString& layoutId)
