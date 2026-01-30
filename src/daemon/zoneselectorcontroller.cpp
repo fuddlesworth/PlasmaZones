@@ -333,9 +333,8 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     qCDebug(lcOverlay) << "Layout selected:" << layoutId;
 
     // Check if this is an autotile algorithm selection
-    static const QString autotilePrefix = QStringLiteral("autotile:");
-    if (layoutId.startsWith(autotilePrefix)) {
-        QString algorithmId = layoutId.mid(autotilePrefix.length());
+    if (LayoutId::isAutotile(layoutId)) {
+        QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
         qCInfo(lcOverlay) << "Autotile layout selected:" << algorithmId;
         Q_EMIT autotileLayoutSelected(algorithmId);
         return;
@@ -493,7 +492,7 @@ QVariantMap ZoneSelectorController::autotileToVariantMap(TilingAlgorithm* algori
     }
 
     // Use autotile: prefix for ID to distinguish from manual layout UUIDs
-    map[QStringLiteral("id")] = QString(QStringLiteral("autotile:") + algorithmId);
+    map[QStringLiteral("id")] = LayoutId::makeAutotileId(algorithmId);
     map[QStringLiteral("name")] = algorithm->name();
     map[QStringLiteral("description")] = algorithm->description();
     map[QStringLiteral("type")] = -1; // Not a standard LayoutType

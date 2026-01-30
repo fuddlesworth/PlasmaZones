@@ -1995,9 +1995,8 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
 void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry)
 {
     // Check if this is an autotile layout selection (has "autotile:" prefix)
-    static const QString autotilePrefix = QStringLiteral("autotile:");
-    if (layoutId.startsWith(autotilePrefix)) {
-        QString algorithmId = layoutId.mid(autotilePrefix.length());
+    if (LayoutId::isAutotile(layoutId)) {
+        QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
         qCInfo(lcOverlay) << "Autotile layout selected from zone selector:" << algorithmId;
         Q_EMIT autotileLayoutSelected(algorithmId);
         return;

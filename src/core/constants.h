@@ -236,4 +236,43 @@ inline constexpr QLatin1String ThreeColumn{"three-column"};
 }
 }
 
+/**
+ * @brief Layout ID utilities for unified layout model
+ *
+ * Autotile algorithms use prefixed IDs to distinguish them from manual layout UUIDs
+ * in the zone selector. This namespace provides constants and helpers for working
+ * with these IDs consistently (DRY principle).
+ */
+namespace LayoutId {
+inline constexpr QLatin1String AutotilePrefix{"autotile:"};
+
+/**
+ * @brief Check if a layout ID represents an autotile algorithm
+ */
+inline bool isAutotile(const QString& layoutId)
+{
+    return layoutId.startsWith(AutotilePrefix);
+}
+
+/**
+ * @brief Extract algorithm ID from a prefixed autotile layout ID
+ * @return Algorithm ID, or empty string if not an autotile layout
+ */
+inline QString extractAlgorithmId(const QString& layoutId)
+{
+    if (!isAutotile(layoutId)) {
+        return QString();
+    }
+    return layoutId.mid(AutotilePrefix.size());
+}
+
+/**
+ * @brief Create an autotile layout ID from an algorithm ID
+ */
+inline QString makeAutotileId(const QString& algorithmId)
+{
+    return QString(AutotilePrefix) + algorithmId;
+}
+}
+
 } // namespace PlasmaZones
