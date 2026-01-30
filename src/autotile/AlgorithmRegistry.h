@@ -9,6 +9,8 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantList>
+#include <QVariantMap>
 #include <functional>
 
 namespace PlasmaZones {
@@ -125,6 +127,34 @@ public:
      * @return Pointer to default algorithm
      */
     TilingAlgorithm *defaultAlgorithm() const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Preview utilities for unified layout model (DRY - shared by zone selector,
+    // overlay service, and daemon OSD)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Generate preview zones for an algorithm as QVariantList
+     *
+     * Creates a representative preview with 3 windows showing how the algorithm
+     * arranges windows. Used by zone selector and layout OSD.
+     *
+     * @param algorithm The tiling algorithm to preview
+     * @return QVariantList of zone maps with relativeGeometry (0.0-1.0)
+     */
+    static QVariantList generatePreviewZones(TilingAlgorithm *algorithm);
+
+    /**
+     * @brief Convert an algorithm to QVariantMap for QML consumption
+     *
+     * Creates a layout-compatible variant map including id (with autotile: prefix),
+     * name, description, zones preview, and category.
+     *
+     * @param algorithm The tiling algorithm
+     * @param algorithmId The algorithm's registry ID
+     * @return QVariantMap suitable for zone selector/OSD
+     */
+    static QVariantMap algorithmToVariantMap(TilingAlgorithm *algorithm, const QString &algorithmId);
 
 Q_SIGNALS:
     /**

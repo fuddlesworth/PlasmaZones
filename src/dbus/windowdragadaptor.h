@@ -94,6 +94,15 @@ public Q_SLOTS:
      */
     void handleWindowClosed(const QString& windowId);
 
+Q_SIGNALS:
+    /**
+     * Emitted when a window is dropped on an autotile layout in the zone selector.
+     * Daemon should enable autotile with the given algorithm and retile.
+     * @param windowId Window that was dropped
+     * @param algorithmId Autotile algorithm to enable (e.g. "master-stack")
+     */
+    void autotileDropRequested(const QString& windowId, const QString& algorithmId);
+
 private:
     // Tolerance constants for geometry matching (fallback detection)
     // Position tolerance is generous due to KWin window decoration/shadow offsets

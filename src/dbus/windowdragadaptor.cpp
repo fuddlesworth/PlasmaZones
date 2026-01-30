@@ -11,6 +11,7 @@
 #include "../core/screenmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/constants.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
@@ -463,8 +464,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
     bool usedZoneSelector = false;
     if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
+        QString selectedLayoutId = m_overlayService->selectedLayoutId();
         QScreen* screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
-        if (screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
+
+        if (LayoutId::isAutotile(selectedLayoutId)) {
+            QString algorithmId = LayoutId::extractAlgorithmId(selectedLayoutId);
+            Q_EMIT autotileDropRequested(windowId, algorithmId);
+            usedZoneSelector = true;
+        } else if (screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
@@ -476,7 +483,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
 
                 tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
 
-                QString selectedLayoutId = m_overlayService->selectedLayoutId();
                 int selectedZoneIndex = m_overlayService->selectedZoneIndex();
                 if (m_windowTracking && m_layoutManager) {
                     // Get the actual zone UUID from layout and zone index so navigation works

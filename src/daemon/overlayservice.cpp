@@ -6,8 +6,8 @@
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/AutotileEngine.h"
 #include "../autotile/TilingAlgorithm.h"
-#include "../autotile/TilingState.h"
 #include "../core/platform.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
@@ -944,6 +944,11 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
     m_layoutManager = layoutManager;
 }
 
+void OverlayService::setAutotileEngine(AutotileEngine* engine)
+{
+    m_autotileEngine = engine;
+}
+
 void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
@@ -1130,12 +1135,26 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 && localY < indicatorY + layout.indicatorHeight) {
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
-                QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
+                const int category = layoutMap.value(QStringLiteral("category"), 0).toInt();
+                const bool isAutotile = (category == static_cast<int>(LayoutCategory::Autotile));
 
-                // Read scaled padding from QML (calculated from zonePadding setting)
+                // Autotile: whole layout is the target - no per-zone selection
+                if (isAutotile) {
+                    if (m_selectedLayoutId != layoutId || m_selectedZoneIndex != 0) {
+                        m_selectedLayoutId = layoutId;
+                        m_selectedZoneIndex = 0; // Sentinel for whole-layout selection
+                        m_selectedZoneRelGeo = QRectF(0, 0, 1, 1);
+                        window->setProperty("selectedLayoutId", layoutId);
+                        window->setProperty("selectedZoneIndex", 0);
+                    }
+                    return;
+                }
+
+                // Manual: per-zone hit testing
+                QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
                 int scaledPadding = window->property("scaledPadding").toInt();
                 if (scaledPadding <= 0)
-                    scaledPadding = 1; // Fallback minimum
+                    scaledPadding = 1;
                 constexpr int minZoneSize = 8;
 
                 for (int z = 0; z < zones.size(); ++z) {
@@ -1393,16 +1412,16 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     QVariantList layouts = buildLayoutsList();
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
-    // Set active layout ID - use screen-specific layout if assigned
-    // Pass current virtual desktop and activity for per-desktop and per-activity assignments
+    // Set active layout ID - autotile takes precedence when enabled, else screen-specific manual layout
     QString activeLayoutId;
-    if (m_layoutManager) {
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        activeLayoutId = LayoutId::makeAutotileId(m_autotileEngine->algorithm());
+    } else if (m_layoutManager) {
         Layout* screenLayout =
             m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             activeLayoutId = screenLayout->id().toString();
         } else if (m_layout) {
-            // Fall back to global active layout
             activeLayoutId = m_layout->id().toString();
         }
     } else if (m_layout) {
@@ -1867,14 +1886,14 @@ QVariantList OverlayService::buildLayoutsList() const
         }
     }
 
-    // Add autotile algorithms (unified layout model)
+    // Add autotile algorithms (unified layout model - using shared utility)
     auto* registry = AlgorithmRegistry::instance();
     if (registry) {
         const QStringList algorithmIds = registry->availableAlgorithms();
         for (const QString& algorithmId : algorithmIds) {
             TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
             if (algorithm) {
-                layoutsList.append(autotileToVariantMap(algorithm, algorithmId));
+                layoutsList.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
             }
         }
     }
@@ -1899,68 +1918,6 @@ QVariantMap OverlayService::layoutToVariantMap(Layout* layout) const
     map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Manual);
 
     return map;
-}
-
-QVariantMap OverlayService::autotileToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId) const
-{
-    QVariantMap map;
-
-    if (!algorithm) {
-        return map;
-    }
-
-    // Use autotile: prefix for ID to distinguish from manual layout UUIDs
-    map[QStringLiteral("id")] = LayoutId::makeAutotileId(algorithmId);
-    map[QStringLiteral("name")] = algorithm->name();
-    map[QStringLiteral("description")] = algorithm->description();
-    map[QStringLiteral("type")] = -1; // Not a standard LayoutType
-    map[QStringLiteral("zoneCount")] = 0; // Dynamic based on windows
-    map[QStringLiteral("zones")] = autotilePreviewZones(algorithm);
-    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Autotile);
-
-    return map;
-}
-
-QVariantList OverlayService::autotilePreviewZones(TilingAlgorithm* algorithm) const
-{
-    QVariantList list;
-
-    if (!algorithm) {
-        return list;
-    }
-
-    // Generate preview zones for a representative window count (3 windows)
-    const int previewWindowCount = 3;
-    const QRect previewRect(0, 0, 1000, 1000); // Normalized space
-
-    TilingState previewState(QStringLiteral("preview"));
-    previewState.setMasterCount(1);
-    previewState.setSplitRatio(0.6);
-
-    QVector<QRect> zones = algorithm->calculateZones(previewWindowCount, previewRect, previewState);
-
-    for (int i = 0; i < zones.size(); ++i) {
-        const QRect& zone = zones[i];
-        QVariantMap zoneMap;
-
-        zoneMap[QStringLiteral("id")] = QString::number(i);
-        zoneMap[QStringLiteral("name")] = QString();
-        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
-
-        // Convert to relative geometry (0.0 - 1.0)
-        QVariantMap relGeoMap;
-        relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
-        relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
-        relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
-        relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
-        zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
-
-        zoneMap[QStringLiteral("useCustomColors")] = false;
-
-        list.append(zoneMap);
-    }
-
-    return list;
 }
 
 QVariantList OverlayService::zonesToVariantList(Layout* layout) const

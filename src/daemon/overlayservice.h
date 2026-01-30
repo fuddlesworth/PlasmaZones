@@ -71,6 +71,7 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(ILayoutManager* layoutManager);
+    void setAutotileEngine(class AutotileEngine* engine);
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
@@ -125,9 +126,6 @@ private:
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList() const;
     QVariantMap layoutToVariantMap(Layout* layout) const;
-    // Autotile algorithm conversion for unified layout list
-    QVariantMap autotileToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId) const;
-    QVariantList autotilePreviewZones(TilingAlgorithm* algorithm) const;
     QVariantList zonesToVariantList(Layout* layout) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
@@ -137,6 +135,7 @@ private:
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
+    class AutotileEngine* m_autotileEngine = nullptr;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;

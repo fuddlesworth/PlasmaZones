@@ -110,6 +110,7 @@ inline constexpr QLatin1String ShowZoneNumbers{"showZoneNumbers"};
 inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; // Legacy, for backward compat when loading
 inline constexpr QLatin1String IsSystem{"isSystem"}; // New: determined by source path
 inline constexpr QLatin1String ZoneCount{"zoneCount"};
+inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual, 1=Autotile
 
 // Shader keys
 inline constexpr QLatin1String ShaderId{"shaderId"};

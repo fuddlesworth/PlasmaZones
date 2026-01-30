@@ -108,9 +108,10 @@ Kirigami.Card {
                         // (AssignmentRow adds icon+label which we already have)
                         LayoutComboBox {
                             id: screenLayoutCombo
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                             kcm: root.kcm
                             noneText: i18n("Default")
+                            showPreview: true
                             currentLayoutId: root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
 
                             Connections {
@@ -193,10 +194,14 @@ Kirigami.Card {
                                 property int desktopNumber: index + 1
                                 property string desktopName: root.kcm.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
 
+                                // Per-desktop "Default" resolves to monitor's layout (or global if monitor has none)
+                                property string monitorLayout: root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
+
                                 kcm: root.kcm
                                 iconSource: "preferences-desktop-virtual"
                                 labelText: desktopName
                                 noneText: i18n("Use default")
+                                resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
                                 currentLayoutId: {
                                     let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber)
                                     return hasExplicit ? (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : ""
@@ -208,6 +213,8 @@ Kirigami.Card {
                                         let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRow.desktopNumber)
                                         desktopRow.currentLayoutId = hasExplicit ?
                                             (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopRow.desktopNumber) || "") : ""
+                                        // Also update resolved default when monitor assignment changes
+                                        desktopRow.monitorLayout = root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
                                     }
                                 }
 

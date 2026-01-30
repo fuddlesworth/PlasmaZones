@@ -358,6 +358,21 @@ Window {
                             height: root.indicatorHeight
                             anchors.top: parent.top
 
+                            // Autotile: whole-preview MouseArea (in front, captures all hover/click)
+                            MouseArea {
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                enabled: indicator.isAutotile
+                                z: 50
+                                onEntered: {
+                                    if (indicator.isAutotile) {
+                                        root.selectedLayoutId = indicator.layoutId;
+                                        root.selectedZoneIndex = 0;
+                                        root.zoneSelected(indicator.layoutId, 0, {"x": 0, "y": 0, "width": 1, "height": 1});
+                                    }
+                                }
+                            }
+
                             // Background for the indicator - shows active layout and hover states
                             Rectangle {
                                 // Active layout gets a prominent highlight border
@@ -502,8 +517,11 @@ Window {
                                     required property int index
                                     property var relGeo: modelData.relativeGeometry || {
                                     }
-                                    property bool isZoneSelected: root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === index
-                                    property bool isZoneHovered: zoneMouseArea.containsMouse
+                                    // Autotile: all zones highlight together when layout selected
+                                    property bool isZoneSelected: indicator.isAutotile
+                                        ? (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex >= 0)
+                                        : (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === index)
+                                    property bool isZoneHovered: indicator.isAutotile ? false : zoneMouseArea.containsMouse
                                     // Calculate actual pixel dimensions for tooltip
                                     property int actualWidth: Math.round((relGeo.width || 0.25) * root.screenWidth)
                                     property int actualHeight: Math.round((relGeo.height || 1) * root.screenWidth / root.screenAspectRatio)
@@ -518,9 +536,9 @@ Window {
                                     width: Math.max(24, (relGeo.width || 0.25) * parent.width - root.scaledPadding * 2)
                                     height: Math.max(24, (relGeo.height || 1) * parent.height - root.scaledPadding * 2)
                                     radius: root.scaledBorderRadius
-                                    // P0: Add scale transform on hover for better visual feedback
+                                    // P0: Scale on hover for manual zones only; autotile highlights whole layout
                                     scale: isZoneHovered ? 1.05 : 1
-                                    z: isZoneHovered ? 10 : 1 // Bring hovered zone to front
+                                    z: isZoneHovered ? 10 : 1
                                     transformOrigin: Item.Center
                                     // Zone coloring - unified with ZoneOverlay/ZoneItem
                                     // Use custom colors if useCustomColors is true, otherwise use theme defaults
@@ -597,13 +615,14 @@ Window {
                                         id: zoneMouseArea
 
                                         anchors.fill: parent
-                                        // P0: Add extra hit area padding for easier targeting
                                         anchors.margins: -2
                                         hoverEnabled: true
                                         onEntered: {
                                             root.selectedLayoutId = indicator.layoutId;
-                                            root.selectedZoneIndex = zoneRect.index;
-                                            root.zoneSelected(indicator.layoutId, zoneRect.index, zoneRect.relGeo);
+                                            // Autotile: whole layout selection (zone index 0 is sentinel)
+                                            root.selectedZoneIndex = indicator.isAutotile ? 0 : zoneRect.index;
+                                            root.zoneSelected(indicator.layoutId, root.selectedZoneIndex,
+                                                             indicator.isAutotile ? {"x": 0, "y": 0, "width": 1, "height": 1} : zoneRect.relGeo);
                                         }
                                     }
 

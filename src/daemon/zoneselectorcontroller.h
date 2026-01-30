@@ -211,10 +211,6 @@ private:
     QVariantList zonesToVariantList(Layout* layout) const;
     QVariantMap zoneToVariantMap(Zone* zone) const;
 
-    // Autotile algorithm conversion for unified layout list
-    QVariantMap autotileToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId) const;
-    QVariantList autotilePreviewZones(TilingAlgorithm* algorithm) const;
-
     // State
     State m_state = State::Hidden;
     bool m_enabled = true;

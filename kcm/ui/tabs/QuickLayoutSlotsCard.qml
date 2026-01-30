@@ -79,6 +79,7 @@ Kirigami.Card {
                         kcm: root.kcm
                         noneText: i18n("None")
                         showPreview: true
+                        resolvedDefaultId: ""  // "None" means no assignment, not a resolution to something
                         currentLayoutId: root.kcm.getQuickLayoutSlot(slotDelegate.slotNumber) || ""
 
                         Connections {

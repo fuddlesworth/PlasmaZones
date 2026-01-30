@@ -6,7 +6,6 @@
 #include "../core/constants.h"
 #include "../core/utils.h"
 #include "../autotile/TilingAlgorithm.h"
-#include "../autotile/TilingState.h"
 #include <QScreen>
 #include <QQuickItem>
 #include <QCursor>
@@ -91,14 +90,14 @@ QVariantList ZoneSelectorController::layouts() const
         result.append(layoutToVariantMap(layout));
     }
 
-    // Append autotile algorithms as layouts
+    // Append autotile algorithms as layouts (using shared utility from AlgorithmRegistry)
     auto* registry = AlgorithmRegistry::instance();
     if (registry) {
         const QStringList algorithmIds = registry->availableAlgorithms();
         for (const QString& algorithmId : algorithmIds) {
             TilingAlgorithm* algorithm = registry->algorithm(algorithmId);
             if (algorithm) {
-                result.append(autotileToVariantMap(algorithm, algorithmId));
+                result.append(AlgorithmRegistry::algorithmToVariantMap(algorithm, algorithmId));
             }
         }
     }
@@ -481,73 +480,6 @@ QVariantMap ZoneSelectorController::layoutToVariantMap(Layout* layout) const
     map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Manual);
 
     return map;
-}
-
-QVariantMap ZoneSelectorController::autotileToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId) const
-{
-    QVariantMap map;
-
-    if (!algorithm) {
-        return map;
-    }
-
-    // Use autotile: prefix for ID to distinguish from manual layout UUIDs
-    map[QStringLiteral("id")] = LayoutId::makeAutotileId(algorithmId);
-    map[QStringLiteral("name")] = algorithm->name();
-    map[QStringLiteral("description")] = algorithm->description();
-    map[QStringLiteral("type")] = -1; // Not a standard LayoutType
-    map[QStringLiteral("zoneCount")] = 0; // Dynamic based on windows
-    map[QStringLiteral("zones")] = autotilePreviewZones(algorithm);
-    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Autotile);
-
-    return map;
-}
-
-QVariantList ZoneSelectorController::autotilePreviewZones(TilingAlgorithm* algorithm) const
-{
-    QVariantList list;
-
-    if (!algorithm) {
-        return list;
-    }
-
-    // Generate preview zones for a representative window count (e.g., 3 windows)
-    // This gives users a sense of how the algorithm arranges windows
-    const int previewWindowCount = 3;
-    const QRect previewRect(0, 0, 1000, 1000); // Normalized space
-
-    // Create a minimal TilingState for preview
-    // We use relative geometry so actual screen size doesn't matter
-    TilingState previewState(QStringLiteral("preview"));
-    previewState.setMasterCount(1);
-    previewState.setSplitRatio(0.6);
-
-    QVector<QRect> zones = algorithm->calculateZones(previewWindowCount, previewRect, previewState);
-
-    for (int i = 0; i < zones.size(); ++i) {
-        const QRect& zone = zones[i];
-        QVariantMap zoneMap;
-
-        // Generate a stable ID for the preview zone
-        zoneMap[QStringLiteral("id")] = QString::number(i);
-        zoneMap[QStringLiteral("name")] = QString();
-        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
-
-        // Convert to relative geometry (0.0 - 1.0)
-        QVariantMap relGeoMap;
-        relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
-        relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
-        relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
-        relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
-        zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
-
-        // No custom colors for autotile previews - use theme defaults
-        zoneMap[QStringLiteral("useCustomColors")] = false;
-
-        list.append(zoneMap);
-    }
-
-    return list;
 }
 
 QVariantList ZoneSelectorController::zonesToVariantList(Layout* layout) const

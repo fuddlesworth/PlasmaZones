@@ -25,9 +25,12 @@ RowLayout {
     // Optional customization
     property string noneText: i18n("Default")
     property int labelWidth: Kirigami.Units.gridUnit * 8
-    property int comboWidth: Kirigami.Units.gridUnit * 12
-    property bool showPreview: false
+    property int comboWidth: Kirigami.Units.gridUnit * 16
+    property bool showPreview: true  // Default to true for unified layout model with previews
     property real iconOpacity: 1.0
+
+    // The layout ID that "Default" resolves to (set by parent based on hierarchy)
+    property string resolvedDefaultId: kcm?.defaultLayoutId ?? ""
 
     // Current assignment (set externally, component updates selection)
     property string currentLayoutId: ""
@@ -60,6 +63,7 @@ RowLayout {
         noneText: root.noneText
         showPreview: root.showPreview
         currentLayoutId: root.currentLayoutId
+        resolvedDefaultId: root.resolvedDefaultId
 
         onActivated: {
             let selectedValue = model[currentIndex].value
