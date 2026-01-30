@@ -68,12 +68,15 @@ ComboBox {
             spacing: Kirigami.Units.smallSpacing
 
             // Mini layout preview (only if showPreview is enabled)
+            // Match LayoutThumbnail colors for consistency
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                 radius: Kirigami.Units.smallSpacing / 2
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.1)
-                border.color: highlighted ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                border.color: highlighted ?
+                    Kirigami.Theme.highlightColor :
+                    Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
                 border.width: highlighted ? 2 : 1
                 visible: root.showPreview && modelData.layout != null
 
@@ -94,29 +97,27 @@ ComboBox {
                             y: (relGeo.y || 0) * zonePreviewContainer.height
                             width: Math.max(2, (relGeo.width || 0.25) * zonePreviewContainer.width)
                             height: Math.max(2, (relGeo.height || 1) * zonePreviewContainer.height)
-                            color: highlighted ?
-                                Qt.rgba(Kirigami.Theme.highlightedTextColor.r, Kirigami.Theme.highlightedTextColor.g, Kirigami.Theme.highlightedTextColor.b, 0.85) :
-                                Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-                            border.color: highlighted ?
-                                Kirigami.Theme.highlightedTextColor :
-                                Kirigami.Theme.highlightColor
-                            border.width: Math.round(Kirigami.Units.devicePixelRatio * 2)
+                            // Match ZonePreview colors for consistency
+                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b,
+                                highlighted ? 0.45 : 0.25)
+                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
+                            border.width: highlighted ? 2 : 1
                             radius: Kirigami.Units.smallSpacing * 0.5
                         }
                     }
                 }
             }
 
-            // "None" placeholder
+            // "None" placeholder - match zone preview styling
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                 radius: Kirigami.Units.smallSpacing / 2
-                color: highlighted ?
-                    Qt.rgba(Kirigami.Theme.highlightedTextColor.r, Kirigami.Theme.highlightedTextColor.g, Kirigami.Theme.highlightedTextColor.b, 0.15) :
-                    Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
-                border.color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.highlightColor
-                border.width: Math.round(Kirigami.Units.devicePixelRatio * 2)
+                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                border.color: highlighted ?
+                    Kirigami.Theme.highlightColor :
+                    Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+                border.width: highlighted ? 2 : 1
                 visible: root.showPreview && modelData.layout == null
 
                 Kirigami.Icon {
@@ -124,8 +125,8 @@ ComboBox {
                     source: "action-unavailable-symbolic"
                     width: Kirigami.Units.iconSizes.smallMedium
                     height: Kirigami.Units.iconSizes.smallMedium
-                    color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.highlightColor
-                    opacity: 0.7
+                    color: Kirigami.Theme.textColor
+                    opacity: highlighted ? 0.6 : 0.4
                 }
             }
 
