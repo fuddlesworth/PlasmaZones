@@ -43,6 +43,8 @@ set(plasmazones_core_SRCS
     core/layout.h
     core/layoutmanager.cpp
     core/layoutmanager.h
+    core/layoututils.cpp
+    core/layoututils.h
     core/screenmanager.cpp
     core/screenmanager.h
     core/virtualdesktopmanager.cpp
@@ -213,6 +215,8 @@ set(plasmazones_daemon_SRCS
     daemon/modetracker.h
     daemon/contextawareshortcutrouter.cpp
     daemon/contextawareshortcutrouter.h
+    daemon/unifiedlayoutcontroller.cpp
+    daemon/unifiedlayoutcontroller.h
     # Shader rendering system
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
