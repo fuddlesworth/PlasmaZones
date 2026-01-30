@@ -2045,6 +2045,10 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     qreal width = relGeoMap.value(QStringLiteral("width"), 0.0).toReal();
     qreal height = relGeoMap.value(QStringLiteral("height"), 0.0).toReal();
     m_selectedZoneRelGeo = QRectF(x, y, width, height);
+
+    // Emit signal to change the current layout (same behavior as autotile selection)
+    qCInfo(lcOverlay) << "Manual layout selected from zone selector:" << layoutId;
+    Q_EMIT manualLayoutSelected(layoutId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

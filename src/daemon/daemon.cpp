@@ -560,6 +560,32 @@ void Daemon::start()
             m_autotileEngine->setEnabled(true);
             qCInfo(lcDaemon) << "Autotile layout selected from zone selector:" << algorithmId;
             showAutotileOsd(algorithmId);
+            // Update mode tracker
+            if (m_modeTracker) {
+                m_modeTracker->recordAutotileAlgorithm(algorithmId);
+            }
+        }
+    });
+
+    // Connect zone selector manual layout selection (drop on zone)
+    connect(m_overlayService.get(), &OverlayService::manualLayoutSelected, this, [this](const QString& layoutId) {
+        if (!m_layoutManager) {
+            return;
+        }
+        Layout* layout = m_layoutManager->layoutById(QUuid::fromString(layoutId));
+        if (layout) {
+            // Disable autotile when switching to manual layout
+            if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+                m_autotileEngine->setEnabled(false);
+                qCInfo(lcDaemon) << "Disabling autotile - switching to manual layout";
+            }
+            m_layoutManager->setActiveLayout(layout);
+            qCInfo(lcDaemon) << "Manual layout selected from zone selector:" << layout->name();
+            m_overlayService->showLayoutOsd(layout);
+            // Update mode tracker
+            if (m_modeTracker) {
+                m_modeTracker->recordManualLayout(layout->id());
+            }
         }
     });
 

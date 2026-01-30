@@ -483,6 +483,7 @@ Q_SIGNALS:
     void zoneSelectorVisibilityChanged(bool visible);
     void zoneSelectorZoneSelected(int zoneIndex);
     void autotileLayoutSelected(const QString& algorithmId);
+    void manualLayoutSelected(const QString& layoutId);
 };
 
 } // namespace PlasmaZones
