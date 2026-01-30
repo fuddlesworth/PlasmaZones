@@ -382,7 +382,7 @@ qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.showOverlay
 qdbus org.plasmazones /PlasmaZones org.plasmazones.Overlay.hideOverlay
 
 # Get all screens
-qdbus org.plasmazones /PlasmaZones org.plasmazones.ScreenManager.getScreens
+qdbus org.plasmazones /PlasmaZones org.plasmazones.Screen.getScreens
 ```
 
 Full API documentation on the [wiki D-Bus API](https://github.com/fuddlesworth/PlasmaZones/wiki/D-Bus-API) (generated from `dbus/org.plasmazones.xml`) covering all interfaces and methods.
