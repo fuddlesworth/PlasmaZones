@@ -6,10 +6,18 @@
 #include "TilingState.h"
 #include "core/constants.h"
 #include "core/layout.h"
+#include "core/logging.h"
 
 #include <QDebug>
 #include <QRect>
 #include <algorithm>
+
+namespace {
+/// Preview uses 3 windows to show master/stack layout clearly
+constexpr int PreviewWindowCount = 3;
+/// Use 1000x1000 for high-precision relative coordinate conversion
+constexpr int PreviewSize = 1000;
+}
 
 namespace PlasmaZones {
 
@@ -132,6 +140,9 @@ QList<TilingAlgorithm *> AlgorithmRegistry::allAlgorithms() const
     for (const QString &id : m_registrationOrder) {
         if (auto* algo = m_algorithms.value(id)) {
             result.append(algo);
+        } else {
+            qCWarning(lcAutotile) << "Algorithm ID in registration order not found in map:" << id
+                                  << "- possible registration/unregistration bug";
         }
     }
 
@@ -179,15 +190,14 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
         return list;
     }
 
-    // Generate preview zones for a representative window count (3 windows)
-    const int previewWindowCount = 3;
-    const QRect previewRect(0, 0, 1000, 1000); // Normalized space
+    // Generate preview zones for a representative window count
+    const QRect previewRect(0, 0, PreviewSize, PreviewSize);
 
     TilingState previewState(QStringLiteral("preview"));
     previewState.setMasterCount(1);
-    previewState.setSplitRatio(0.6);
+    previewState.setSplitRatio(AutotileDefaults::DefaultSplitRatio);
 
-    QVector<QRect> zones = algorithm->calculateZones(previewWindowCount, previewRect, previewState);
+    QVector<QRect> zones = algorithm->calculateZones(PreviewWindowCount, previewRect, previewState);
 
     for (int i = 0; i < zones.size(); ++i) {
         const QRect &zone = zones[i];

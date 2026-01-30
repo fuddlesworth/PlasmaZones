@@ -176,7 +176,7 @@ private:
     QPointer<Settings> m_settings;  // QPointer for safe access if Settings destroyed
     TilingMode m_currentMode = TilingMode::Manual;
     QString m_lastManualLayoutId;
-    QString m_lastAutotileAlgorithm = QStringLiteral("master-stack");
+    QString m_lastAutotileAlgorithm;  // Initialized in constructor to DBus::AutotileAlgorithm::MasterStack
 };
 
 } // namespace PlasmaZones

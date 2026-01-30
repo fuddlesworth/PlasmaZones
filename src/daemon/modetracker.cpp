@@ -7,6 +7,7 @@
 #include <KSharedConfig>
 
 #include "../config/settings.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 
 namespace PlasmaZones {
@@ -14,6 +15,7 @@ namespace PlasmaZones {
 ModeTracker::ModeTracker(Settings* settings, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
+    , m_lastAutotileAlgorithm(DBus::AutotileAlgorithm::MasterStack)
 {
 }
 
@@ -42,7 +44,7 @@ ModeTracker::TilingMode ModeTracker::toggleMode()
     QString relevantId;
     if (newMode == TilingMode::Autotile) {
         relevantId = m_lastAutotileAlgorithm.isEmpty()
-            ? QStringLiteral("master-stack")  // Default algorithm
+            ? QString(DBus::AutotileAlgorithm::MasterStack)  // Default algorithm
             : m_lastAutotileAlgorithm;
     } else {
         relevantId = m_lastManualLayoutId;
@@ -123,7 +125,8 @@ void ModeTracker::load()
     m_currentMode = (modeInt == 1) ? TilingMode::Autotile : TilingMode::Manual;
 
     m_lastManualLayoutId = group.readEntry(QStringLiteral("LastManualLayoutId"), QString());
-    m_lastAutotileAlgorithm = group.readEntry(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("master-stack"));
+    m_lastAutotileAlgorithm = group.readEntry(QStringLiteral("LastAutotileAlgorithm"),
+                                               QString(DBus::AutotileAlgorithm::MasterStack));
 
     qCInfo(lcDaemon) << "ModeTracker loaded - mode:"
                      << (m_currentMode == TilingMode::Autotile ? "Autotile" : "Manual")
@@ -134,6 +137,7 @@ void ModeTracker::load()
 void ModeTracker::save()
 {
     if (!m_settings) {
+        qCWarning(lcDaemon) << "ModeTracker::save() called without settings";
         return;
     }
 
