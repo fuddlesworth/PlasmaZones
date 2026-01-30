@@ -87,8 +87,8 @@ void ModeTracker::recordManualLayout(const QString& layoutId)
 
 void ModeTracker::recordManualLayout(const QUuid& layoutId)
 {
-    // Use WithoutBraces for consistent UUID string format
-    recordManualLayout(layoutId.toString(QUuid::WithoutBraces));
+    // Use default format (with braces) for consistent UUID string format across codebase
+    recordManualLayout(layoutId.toString());
 }
 
 void ModeTracker::recordAutotileAlgorithm(const QString& algorithmId)
