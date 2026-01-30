@@ -387,6 +387,30 @@ void LayoutAdaptor::clearAssignment(const QString& screenName)
     m_layoutManager->saveAssignments(); // Persist to disk
 }
 
+void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
+{
+    QHash<QString, QUuid> parsedAssignments;
+
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        const QString& screenName = it.key();
+        QString layoutId = it.value().toString();
+
+        QUuid uuid;
+        if (!layoutId.isEmpty()) {
+            auto uuidOpt = Utils::parseUuid(layoutId);
+            if (!uuidOpt) {
+                qCWarning(lcDbusLayout) << "Invalid UUID format for screen" << screenName << ":" << layoutId;
+                continue;
+            }
+            uuid = *uuidOpt;
+        }
+        parsedAssignments[screenName] = uuid;
+    }
+
+    m_layoutManager->setAllScreenAssignments(parsedAssignments);
+    qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
+}
+
 bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 {
     if (layoutJson.isEmpty()) {
@@ -618,6 +642,38 @@ void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
     Q_EMIT quickLayoutSlotsChanged();
 }
 
+void LayoutAdaptor::setAllQuickLayoutSlots(const QVariantMap& slots)
+{
+    QHash<int, QUuid> parsedSlots;
+
+    for (auto it = slots.begin(); it != slots.end(); ++it) {
+        bool ok;
+        int slotNumber = it.key().toInt(&ok);
+        if (!ok || slotNumber < 1 || slotNumber > 9) {
+            qCWarning(lcDbusLayout) << "Invalid slot key:" << it.key();
+            continue;
+        }
+
+        QString layoutId = it.value().toString();
+        QUuid uuid;
+        if (!layoutId.isEmpty()) {
+            auto uuidOpt = Utils::parseUuid(layoutId);
+            if (!uuidOpt) {
+                qCWarning(lcDbusLayout) << "Invalid UUID format for slot" << slotNumber << ":" << layoutId;
+                continue;
+            }
+            uuid = *uuidOpt;
+        }
+        parsedSlots[slotNumber] = uuid;
+    }
+
+    m_layoutManager->setAllQuickLayoutSlots(parsedSlots);
+    qCDebug(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots";
+
+    // Notify listeners (e.g., KCM) that quick layout slots have changed
+    Q_EMIT quickLayoutSlotsChanged();
+}
+
 QVariantMap LayoutAdaptor::getAllQuickLayoutSlots()
 {
     QVariantMap result;
@@ -686,6 +742,43 @@ bool LayoutAdaptor::hasExplicitAssignmentForScreenDesktop(const QString& screenN
     return m_layoutManager->hasExplicitAssignment(screenName, virtualDesktop, QString());
 }
 
+void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
+{
+    QHash<QPair<QString, int>, QUuid> parsedAssignments;
+
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        // Key format: "screenName:virtualDesktop"
+        QStringList parts = it.key().split(QLatin1Char(':'));
+        if (parts.size() != 2) {
+            qCWarning(lcDbusLayout) << "Invalid desktop assignment key format:" << it.key();
+            continue;
+        }
+
+        QString screenName = parts[0];
+        bool ok;
+        int virtualDesktop = parts[1].toInt(&ok);
+        if (!ok || virtualDesktop < 1) {
+            qCWarning(lcDbusLayout) << "Invalid virtual desktop number:" << parts[1];
+            continue;
+        }
+
+        QString layoutId = it.value().toString();
+        QUuid uuid;
+        if (!layoutId.isEmpty()) {
+            auto uuidOpt = Utils::parseUuid(layoutId);
+            if (!uuidOpt) {
+                qCWarning(lcDbusLayout) << "Invalid UUID format for desktop assignment:" << layoutId;
+                continue;
+            }
+            uuid = *uuidOpt;
+        }
+        parsedAssignments[qMakePair(screenName, virtualDesktop)] = uuid;
+    }
+
+    m_layoutManager->setAllDesktopAssignments(parsedAssignments);
+    qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "desktop assignments";
+}
+
 int LayoutAdaptor::getVirtualDesktopCount()
 {
     if (m_virtualDesktopManager) {
@@ -740,6 +833,46 @@ QString LayoutAdaptor::getAllScreenAssignments()
     }
 
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+}
+
+QVariantMap LayoutAdaptor::getAllDesktopAssignments()
+{
+    QVariantMap result;
+
+    auto* layoutManager = qobject_cast<LayoutManager*>(m_layoutManager);
+    if (!layoutManager) {
+        qCWarning(lcDbusLayout) << "Cannot get desktop assignments - LayoutManager cast failed";
+        return result;
+    }
+
+    const auto assignments = layoutManager->desktopAssignments();
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        // Key format: "screenName:desktopNumber"
+        QString key = QStringLiteral("%1:%2").arg(it.key().first).arg(it.key().second);
+        result[key] = it.value().toString();
+    }
+
+    return result;
+}
+
+QVariantMap LayoutAdaptor::getAllActivityAssignments()
+{
+    QVariantMap result;
+
+    auto* layoutManager = qobject_cast<LayoutManager*>(m_layoutManager);
+    if (!layoutManager) {
+        qCWarning(lcDbusLayout) << "Cannot get activity assignments - LayoutManager cast failed";
+        return result;
+    }
+
+    const auto assignments = layoutManager->activityAssignments();
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        // Key format: "screenName:activityId"
+        QString key = QStringLiteral("%1:%2").arg(it.key().first, it.key().second);
+        result[key] = it.value().toString();
+    }
+
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -882,6 +1015,42 @@ void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenName, 
 bool LayoutAdaptor::hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId)
 {
     return m_layoutManager->hasExplicitAssignment(screenName, 0, activityId);
+}
+
+void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
+{
+    QHash<QPair<QString, QString>, QUuid> parsedAssignments;
+
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        // Key format: "screenName:activityId"
+        QStringList parts = it.key().split(QLatin1Char(':'));
+        if (parts.size() != 2) {
+            qCWarning(lcDbusLayout) << "Invalid activity assignment key format:" << it.key();
+            continue;
+        }
+
+        QString screenName = parts[0];
+        QString activityId = parts[1];
+        if (screenName.isEmpty() || activityId.isEmpty()) {
+            qCWarning(lcDbusLayout) << "Empty screen or activity in assignment key:" << it.key();
+            continue;
+        }
+
+        QString layoutId = it.value().toString();
+        QUuid uuid;
+        if (!layoutId.isEmpty()) {
+            auto uuidOpt = Utils::parseUuid(layoutId);
+            if (!uuidOpt) {
+                qCWarning(lcDbusLayout) << "Invalid UUID format for activity assignment:" << layoutId;
+                continue;
+            }
+            uuid = *uuidOpt;
+        }
+        parsedAssignments[qMakePair(screenName, activityId)] = uuid;
+    }
+
+    m_layoutManager->setAllActivityAssignments(parsedAssignments);
+    qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "activity assignments";
 }
 
 // Full assignment (screen + desktop + activity)

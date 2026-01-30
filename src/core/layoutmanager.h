@@ -113,9 +113,31 @@ public:
     Q_INVOKABLE bool hasExplicitAssignment(const QString& screenName, int virtualDesktop = 0,
                                            const QString& activity = QString()) const override;
 
+    /**
+     * @brief Batch set all screen assignments (base assignments, desktop=0, no activity)
+     * @param assignments Map of screenName -> layoutId
+     * Clears existing base assignments and sets new ones, saves once at end
+     */
+    void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) override;
+
+    /**
+     * @brief Batch set all per-desktop assignments
+     * @param assignments Map of (screenName, virtualDesktop) -> layoutId
+     * Clears existing per-desktop assignments and sets new ones, saves once at end
+     */
+    void setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) override;
+
+    /**
+     * @brief Batch set all per-activity assignments
+     * @param assignments Map of (screenName, activityId) -> layoutId
+     * Clears existing per-activity assignments and sets new ones, saves once at end
+     */
+    void setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) override;
+
     Q_INVOKABLE Layout* layoutForShortcut(int number) const override;
     Q_INVOKABLE void applyQuickLayout(int number, const QString& screenName) override;
     void setQuickLayoutSlot(int number, const QUuid& layoutId) override;
+    void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) override;  // Batch set - saves once
     QHash<int, QUuid> quickLayoutSlots() const override
     {
         return m_quickLayoutShortcuts;
@@ -135,6 +157,18 @@ public:
     Q_INVOKABLE void saveAssignments() override;
     Q_INVOKABLE void importLayout(const QString& filePath) override;
     Q_INVOKABLE void exportLayout(Layout* layout, const QString& filePath) override;
+
+    /**
+     * @brief Get all per-desktop assignments (virtualDesktop > 0, no activity)
+     * @return Map of (screenName, virtualDesktop) -> layoutId
+     */
+    QHash<QPair<QString, int>, QUuid> desktopAssignments() const;
+
+    /**
+     * @brief Get all per-activity assignments (activity non-empty, any desktop)
+     * @return Map of (screenName, activityId) -> layoutId
+     */
+    QHash<QPair<QString, QString>, QUuid> activityAssignments() const;
 
 Q_SIGNALS:
     // Signals declared here only (ILayoutManager is a pure interface without signals)

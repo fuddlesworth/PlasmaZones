@@ -291,6 +291,206 @@ void LayoutManager::setQuickLayoutSlot(int number, const QUuid& layoutId)
     saveAssignments();
 }
 
+void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QUuid>& slots)
+{
+    // Clear all existing slots first
+    m_quickLayoutShortcuts.clear();
+
+    // Set new slots (validate each one)
+    for (auto it = slots.begin(); it != slots.end(); ++it) {
+        int number = it.key();
+        const QUuid& layoutId = it.value();
+
+        if (number < 1 || number > 9) {
+            qCWarning(lcLayout) << "Skipping invalid quick layout slot number:" << number;
+            continue;
+        }
+
+        if (layoutId.isNull()) {
+            // Empty/null means clear this slot (already cleared above)
+            continue;
+        }
+
+        // Verify layout exists
+        if (!layoutById(layoutId)) {
+            qCWarning(lcLayout) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
+            continue;
+        }
+
+        m_quickLayoutShortcuts[number] = layoutId;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to quick slot" << number;
+    }
+
+    // Save once at the end
+    saveAssignments();
+    qCDebug(lcLayout) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
+}
+
+void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignments)
+{
+    // Clear existing base screen assignments (desktop=0, activity=empty)
+    // Keep per-desktop and per-activity assignments intact
+    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
+        if (it.key().virtualDesktop == 0 && it.key().activity.isEmpty()) {
+            it = m_assignments.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Set new assignments
+    int count = 0;
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        const QString& screenName = it.key();
+        const QUuid& layoutId = it.value();
+
+        if (screenName.isEmpty()) {
+            qCWarning(lcLayout) << "Skipping assignment with empty screen name";
+            continue;
+        }
+
+        if (layoutId.isNull()) {
+            // Empty/null means clear (already removed above)
+            continue;
+        }
+
+        // Verify layout exists
+        if (!layoutById(layoutId)) {
+            qCWarning(lcLayout) << "Skipping non-existent layout for screen" << screenName << ":" << layoutId;
+            continue;
+        }
+
+        LayoutAssignmentKey key{screenName, 0, QString()};
+        m_assignments[key] = layoutId;
+        ++count;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenName;
+    }
+
+    // Save once at the end
+    saveAssignments();
+    qCDebug(lcLayout) << "Batch set" << count << "screen assignments";
+}
+
+void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments)
+{
+    // Clear existing per-desktop assignments (desktop > 0, activity empty)
+    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
+        if (it.key().virtualDesktop > 0 && it.key().activity.isEmpty()) {
+            it = m_assignments.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Set new assignments
+    int count = 0;
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        const QString& screenName = it.key().first;
+        int virtualDesktop = it.key().second;
+        const QUuid& layoutId = it.value();
+
+        if (screenName.isEmpty() || virtualDesktop < 1) {
+            qCWarning(lcLayout) << "Skipping invalid desktop assignment:" << screenName << virtualDesktop;
+            continue;
+        }
+
+        if (layoutId.isNull()) {
+            // Empty/null means clear (already removed above)
+            continue;
+        }
+
+        // Verify layout exists
+        if (!layoutById(layoutId)) {
+            qCWarning(lcLayout) << "Skipping non-existent layout for" << screenName << "desktop" << virtualDesktop;
+            continue;
+        }
+
+        LayoutAssignmentKey key{screenName, virtualDesktop, QString()};
+        m_assignments[key] = layoutId;
+        ++count;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenName << "desktop" << virtualDesktop;
+    }
+
+    // Save once at the end
+    saveAssignments();
+    qCDebug(lcLayout) << "Batch set" << count << "desktop assignments";
+}
+
+void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments)
+{
+    // Clear existing per-activity assignments (activity non-empty, desktop=0)
+    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
+        if (!it.key().activity.isEmpty() && it.key().virtualDesktop == 0) {
+            it = m_assignments.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Set new assignments
+    int count = 0;
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        const QString& screenName = it.key().first;
+        const QString& activityId = it.key().second;
+        const QUuid& layoutId = it.value();
+
+        if (screenName.isEmpty() || activityId.isEmpty()) {
+            qCWarning(lcLayout) << "Skipping invalid activity assignment:" << screenName << activityId;
+            continue;
+        }
+
+        if (layoutId.isNull()) {
+            // Empty/null means clear (already removed above)
+            continue;
+        }
+
+        // Verify layout exists
+        if (!layoutById(layoutId)) {
+            qCWarning(lcLayout) << "Skipping non-existent layout for" << screenName << "activity" << activityId;
+            continue;
+        }
+
+        LayoutAssignmentKey key{screenName, 0, activityId};
+        m_assignments[key] = layoutId;
+        ++count;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenName << "activity" << activityId;
+    }
+
+    // Save once at the end
+    saveAssignments();
+    qCDebug(lcLayout) << "Batch set" << count << "activity assignments";
+}
+
+QHash<QPair<QString, int>, QUuid> LayoutManager::desktopAssignments() const
+{
+    QHash<QPair<QString, int>, QUuid> result;
+
+    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
+        const LayoutAssignmentKey& key = it.key();
+        // Per-desktop: virtualDesktop > 0 and activity is empty
+        if (key.virtualDesktop > 0 && key.activity.isEmpty()) {
+            result[qMakePair(key.screenName, key.virtualDesktop)] = it.value();
+        }
+    }
+
+    return result;
+}
+
+QHash<QPair<QString, QString>, QUuid> LayoutManager::activityAssignments() const
+{
+    QHash<QPair<QString, QString>, QUuid> result;
+
+    for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
+        const LayoutAssignmentKey& key = it.key();
+        // Per-activity: activity is non-empty (for any desktop value)
+        if (!key.activity.isEmpty()) {
+            result[qMakePair(key.screenName, key.activity)] = it.value();
+        }
+    }
+
+    return result;
+}
+
 void LayoutManager::cycleToPreviousLayout(const QString& screenName)
 {
     if (m_layouts.isEmpty()) {

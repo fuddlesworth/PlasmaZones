@@ -1014,104 +1014,94 @@ void KCMPlasmaZones::save()
     int errorCount = 0;
     const QString layoutInterface = QString(DBus::Interface::LayoutManager);
 
-    // Apply screen assignments to daemon via D-Bus
-    // First, clear assignments for screens that don't have a layout assigned
-    for (const QVariant& screenVar : std::as_const(m_screens)) {
-        QVariantMap screen = screenVar.toMap();
-        QString screenName = screen.value(QStringLiteral("name")).toString();
-        if (!screenName.isEmpty() && !m_screenAssignments.contains(screenName)) {
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("clearAssignment"), {screenName});
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                ++errorCount;
-            }
-        }
-    }
-
-    // Then set the assignments
+    // Apply screen assignments to daemon via D-Bus (batch - saves only once on daemon)
+    // Convert m_screenAssignments to QVariantMap for D-Bus
+    QVariantMap screenAssignments;
     for (auto it = m_screenAssignments.begin(); it != m_screenAssignments.end(); ++it) {
-        QString layoutId = it.value().toString();
-        QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("assignLayoutToScreen"), {it.key(), layoutId});
-        if (reply.type() == QDBusMessage::ErrorMessage) {
-            ++errorCount;
-        }
+        screenAssignments[it.key()] = it.value().toString();
+    }
+    QDBusMessage screenReply = callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
+    if (screenReply.type() == QDBusMessage::ErrorMessage) {
+        ++errorCount;
     }
 
-    // Apply quick layout slots to daemon via D-Bus
-    // Send all 9 slots - empty string clears the slot on daemon
+    // Apply quick layout slots to daemon via D-Bus (batch - saves only once on daemon)
+    QVariantMap quickSlots;
     for (int slot = 1; slot <= 9; ++slot) {
-        QString layoutId = m_quickLayoutSlots.value(slot, QString());
-        QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("setQuickLayoutSlot"), {slot, layoutId});
-        if (reply.type() == QDBusMessage::ErrorMessage) {
+        quickSlots[QString::number(slot)] = m_quickLayoutSlots.value(slot, QString());
+    }
+    QDBusMessage quickReply = callDaemon(layoutInterface, QStringLiteral("setAllQuickLayoutSlots"), {quickSlots});
+    if (quickReply.type() == QDBusMessage::ErrorMessage) {
+        ++errorCount;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-Desktop Assignments (batch)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Query current state, merge with pending changes, send as batch
+    if (!m_pendingDesktopAssignments.isEmpty() || !m_clearedDesktopAssignments.isEmpty()) {
+        QVariantMap desktopAssignments;
+
+        // Get current state from daemon
+        QDBusMessage currentReply = callDaemon(layoutInterface, QStringLiteral("getAllDesktopAssignments"));
+        if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
+            desktopAssignments = qdbus_cast<QVariantMap>(currentReply.arguments().first());
+        }
+
+        // Apply cleared assignments (remove from map)
+        for (const QString& key : std::as_const(m_clearedDesktopAssignments)) {
+            desktopAssignments.remove(key);
+        }
+
+        // Apply pending assignments (add/update in map)
+        for (auto it = m_pendingDesktopAssignments.begin(); it != m_pendingDesktopAssignments.end(); ++it) {
+            desktopAssignments[it.key()] = it.value();
+        }
+
+        // Send full state as batch
+        QDBusMessage desktopReply = callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
+        if (desktopReply.type() == QDBusMessage::ErrorMessage) {
             ++errorCount;
         }
-    }
 
-    // Apply pending per-desktop assignments to daemon via D-Bus
-    // First, process cleared assignments
-    for (const QString& key : std::as_const(m_clearedDesktopAssignments)) {
-        QStringList parts = key.split(QLatin1Char(':'));
-        if (parts.size() == 2) {
-            QString screenName = parts[0];
-            int virtualDesktop = parts[1].toInt();
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("clearAssignmentForScreenDesktop"),
-                                            {screenName, virtualDesktop});
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                ++errorCount;
-            }
-        }
+        m_clearedDesktopAssignments.clear();
+        m_pendingDesktopAssignments.clear();
     }
-    m_clearedDesktopAssignments.clear();
-
-    // Then, apply pending assignments
-    for (auto it = m_pendingDesktopAssignments.begin(); it != m_pendingDesktopAssignments.end(); ++it) {
-        QStringList parts = it.key().split(QLatin1Char(':'));
-        if (parts.size() == 2) {
-            QString screenName = parts[0];
-            int virtualDesktop = parts[1].toInt();
-            QString layoutId = it.value();
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("assignLayoutToScreenDesktop"),
-                                            {screenName, virtualDesktop, layoutId});
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                ++errorCount;
-            }
-        }
-    }
-    m_pendingDesktopAssignments.clear();
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Per-Activity Assignments
+    // Per-Activity Assignments (batch)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // First, process cleared activity assignments
-    for (const QString& key : std::as_const(m_clearedActivityAssignments)) {
-        QStringList parts = key.split(QLatin1Char(':'));
-        if (parts.size() == 2) {
-            QString screenName = parts[0];
-            QString activityId = parts[1];
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("clearAssignmentForScreenActivity"),
-                                            {screenName, activityId});
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                ++errorCount;
-            }
-        }
-    }
-    m_clearedActivityAssignments.clear();
+    // Query current state, merge with pending changes, send as batch
+    if (!m_pendingActivityAssignments.isEmpty() || !m_clearedActivityAssignments.isEmpty()) {
+        QVariantMap activityAssignments;
 
-    // Then, apply pending activity assignments
-    for (auto it = m_pendingActivityAssignments.begin(); it != m_pendingActivityAssignments.end(); ++it) {
-        QStringList parts = it.key().split(QLatin1Char(':'));
-        if (parts.size() == 2) {
-            QString screenName = parts[0];
-            QString activityId = parts[1];
-            QString layoutId = it.value();
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("assignLayoutToScreenActivity"),
-                                            {screenName, activityId, layoutId});
-            if (reply.type() == QDBusMessage::ErrorMessage) {
-                ++errorCount;
-            }
+        // Get current state from daemon
+        QDBusMessage currentReply = callDaemon(layoutInterface, QStringLiteral("getAllActivityAssignments"));
+        if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
+            activityAssignments = qdbus_cast<QVariantMap>(currentReply.arguments().first());
         }
+
+        // Apply cleared assignments (remove from map)
+        for (const QString& key : std::as_const(m_clearedActivityAssignments)) {
+            activityAssignments.remove(key);
+        }
+
+        // Apply pending assignments (add/update in map)
+        for (auto it = m_pendingActivityAssignments.begin(); it != m_pendingActivityAssignments.end(); ++it) {
+            activityAssignments[it.key()] = it.value();
+        }
+
+        // Send full state as batch
+        QDBusMessage activityReply = callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
+        if (activityReply.type() == QDBusMessage::ErrorMessage) {
+            ++errorCount;
+        }
+
+        m_clearedActivityAssignments.clear();
+        m_pendingActivityAssignments.clear();
     }
-    m_pendingActivityAssignments.clear();
 
     if (errorCount > 0) {
         qCWarning(lcKcm) << "Save:" << errorCount
@@ -1858,6 +1848,13 @@ void KCMPlasmaZones::refreshScreens()
 {
     QVariantList newScreens;
 
+    // Get primary screen name from daemon for isPrimary flag
+    QString primaryScreenName;
+    QDBusMessage primaryReply = callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getPrimaryScreen"));
+    if (primaryReply.type() == QDBusMessage::ReplyMessage && !primaryReply.arguments().isEmpty()) {
+        primaryScreenName = primaryReply.arguments().first().toString();
+    }
+
     // Get screens from daemon via D-Bus
     QDBusMessage screenReply = callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreens"));
 
@@ -1873,19 +1870,32 @@ void KCMPlasmaZones::refreshScreens()
                 QString infoJson = infoReply.arguments().first().toString();
                 QJsonDocument doc = QJsonDocument::fromJson(infoJson.toUtf8());
                 if (!doc.isNull() && doc.isObject()) {
-                    QVariantMap screenInfo = doc.object().toVariantMap();
+                    QJsonObject jsonObj = doc.object();
+                    QVariantMap screenInfo;
                     screenInfo[QStringLiteral("name")] = screenName;
+                    screenInfo[QStringLiteral("isPrimary")] = (screenName == primaryScreenName);
+
+                    // Create resolution string from geometry for QML display
+                    if (jsonObj.contains(QStringLiteral("geometry"))) {
+                        QJsonObject geom = jsonObj[QStringLiteral("geometry")].toObject();
+                        int width = geom[QStringLiteral("width")].toInt();
+                        int height = geom[QStringLiteral("height")].toInt();
+                        screenInfo[QStringLiteral("resolution")] = QStringLiteral("%1×%2").arg(width).arg(height);
+                    }
+
                     newScreens.append(screenInfo);
                 } else {
                     // If JSON parsing fails, create minimal screen info
                     QVariantMap screenInfo;
                     screenInfo[QStringLiteral("name")] = screenName;
+                    screenInfo[QStringLiteral("isPrimary")] = (screenName == primaryScreenName);
                     newScreens.append(screenInfo);
                 }
             } else {
                 // If D-Bus call fails, create minimal screen info
                 QVariantMap screenInfo;
                 screenInfo[QStringLiteral("name")] = screenName;
+                screenInfo[QStringLiteral("isPrimary")] = (screenName == primaryScreenName);
                 newScreens.append(screenInfo);
             }
         }
@@ -1893,11 +1903,14 @@ void KCMPlasmaZones::refreshScreens()
 
     // Fallback: if no screens from daemon, get from Qt
     if (newScreens.isEmpty()) {
+        QScreen* primaryScreen = QGuiApplication::primaryScreen();
         for (QScreen* screen : QGuiApplication::screens()) {
             QVariantMap screenInfo;
             screenInfo[QStringLiteral("name")] = screen->name();
-            screenInfo[QStringLiteral("geometry")] = screen->geometry();
-            screenInfo[QStringLiteral("primary")] = (screen == QGuiApplication::primaryScreen());
+            screenInfo[QStringLiteral("isPrimary")] = (screen == primaryScreen);
+            screenInfo[QStringLiteral("resolution")] = QStringLiteral("%1×%2")
+                .arg(screen->geometry().width())
+                .arg(screen->geometry().height());
             newScreens.append(screenInfo);
         }
     }
