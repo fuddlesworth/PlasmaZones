@@ -1006,12 +1006,19 @@ void KCMPlasmaZones::setFillOnDropModifier(int modifier)
 
 void KCMPlasmaZones::save()
 {
+    // Guard against re-entry during synchronous D-Bus operations
+    if (m_saveInProgress) {
+        qCWarning(lcKcm) << "Save already in progress, ignoring duplicate request";
+        return;
+    }
+    m_saveInProgress = true;
+
     m_settings->save();
 
     // Screen assignments and quick layout slots are owned by the daemon.
     // We only send changes via D-Bus; the daemon persists to assignments.json.
 
-    int errorCount = 0;
+    QStringList failedOperations;
     const QString layoutInterface = QString(DBus::Interface::LayoutManager);
 
     // Apply screen assignments to daemon via D-Bus (batch - saves only once on daemon)
@@ -1022,7 +1029,7 @@ void KCMPlasmaZones::save()
     }
     QDBusMessage screenReply = callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
     if (screenReply.type() == QDBusMessage::ErrorMessage) {
-        ++errorCount;
+        failedOperations.append(QStringLiteral("Screen assignments"));
     }
 
     // Apply quick layout slots to daemon via D-Bus (batch - saves only once on daemon)
@@ -1032,7 +1039,7 @@ void KCMPlasmaZones::save()
     }
     QDBusMessage quickReply = callDaemon(layoutInterface, QStringLiteral("setAllQuickLayoutSlots"), {quickSlots});
     if (quickReply.type() == QDBusMessage::ErrorMessage) {
-        ++errorCount;
+        failedOperations.append(QStringLiteral("Quick layout slots"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1062,7 +1069,7 @@ void KCMPlasmaZones::save()
         // Send full state as batch
         QDBusMessage desktopReply = callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
         if (desktopReply.type() == QDBusMessage::ErrorMessage) {
-            ++errorCount;
+            failedOperations.append(QStringLiteral("Per-desktop assignments"));
         }
 
         m_clearedDesktopAssignments.clear();
@@ -1096,20 +1103,21 @@ void KCMPlasmaZones::save()
         // Send full state as batch
         QDBusMessage activityReply = callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
         if (activityReply.type() == QDBusMessage::ErrorMessage) {
-            ++errorCount;
+            failedOperations.append(QStringLiteral("Per-activity assignments"));
         }
 
         m_clearedActivityAssignments.clear();
         m_pendingActivityAssignments.clear();
     }
 
-    if (errorCount > 0) {
-        qCWarning(lcKcm) << "Save:" << errorCount
-                         << "D-Bus call(s) failed - some settings may not have been saved to daemon";
+    if (!failedOperations.isEmpty()) {
+        qCWarning(lcKcm) << "Save: D-Bus operations failed:" << failedOperations.join(QStringLiteral(", "))
+                         << "- some settings may not have been saved to daemon";
     }
 
     notifyDaemon();
     setNeedsSave(false);
+    m_saveInProgress = false;
 }
 
 void KCMPlasmaZones::load()

@@ -118,6 +118,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen to clear assignment for."/>
             </arg>
         </method>
+        <method name="setAllScreenAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all base screen assignments (saves once). Clears existing base assignments first."/>
+            <arg name="assignments" type="a{ss}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of screenName to layoutId."/>
+            </arg>
+        </method>
         <!-- Per-virtual-desktop layout assignment methods -->
         <method name="getLayoutForScreenDesktop">
             <annotation name="org.gtk.GDBus.DocString" value="Get layout for a specific screen and virtual desktop (1-based)."/>
@@ -164,6 +170,18 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if explicit assignment exists."/>
             </arg>
         </method>
+        <method name="setAllDesktopAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-desktop assignments (saves once). Key format: screenName:desktopNumber."/>
+            <arg name="assignments" type="a{ss}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:desktop' to layoutId."/>
+            </arg>
+        </method>
+        <method name="getAllDesktopAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Get all per-desktop assignments."/>
+            <arg name="assignments" type="a{ss}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:desktop' to layoutId."/>
+            </arg>
+        </method>
         <method name="getVirtualDesktopCount">
             <annotation name="org.gtk.GDBus.DocString" value="Returns the number of virtual desktops."/>
             <arg name="count" type="i" direction="out">
@@ -180,6 +198,37 @@
             <annotation name="org.gtk.GDBus.DocString" value="Returns all screen-to-layout assignments as JSON."/>
             <arg name="assignmentsJson" type="s" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="JSON object mapping screens to layout IDs."/>
+            </arg>
+        </method>
+        <!-- Quick Layout Slots (1-9) -->
+        <method name="getQuickLayoutSlot">
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a quick slot (1-9)."/>
+            <arg name="slotNumber" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID or empty string."/>
+            </arg>
+        </method>
+        <method name="setQuickLayoutSlot">
+            <annotation name="org.gtk.GDBus.DocString" value="Assign a layout to a quick slot (1-9)."/>
+            <arg name="slotNumber" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Slot number (1-9)."/>
+            </arg>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID to assign (empty to clear)."/>
+            </arg>
+        </method>
+        <method name="setAllQuickLayoutSlots">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all quick layout slots (saves once)."/>
+            <arg name="slots" type="a{ss}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
+            </arg>
+        </method>
+        <method name="getAllQuickLayoutSlots">
+            <annotation name="org.gtk.GDBus.DocString" value="Get all quick layout slot assignments."/>
+            <arg name="slots" type="a{ss}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of slot number (as string) to layoutId."/>
             </arg>
         </method>
         <!-- KDE Activities Support -->
@@ -260,6 +309,18 @@
             </arg>
             <arg name="hasAssignment" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="True if explicit assignment exists."/>
+            </arg>
+        </method>
+        <method name="setAllActivityAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch set all per-activity assignments (saves once). Key format: screenName:activityId."/>
+            <arg name="assignments" type="a{ss}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:activity' to layoutId."/>
+            </arg>
+        </method>
+        <method name="getAllActivityAssignments">
+            <annotation name="org.gtk.GDBus.DocString" value="Get all per-activity assignments."/>
+            <arg name="assignments" type="a{ss}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of 'screen:activity' to layoutId."/>
             </arg>
         </method>
         <!-- Full assignment (screen + desktop + activity) -->
