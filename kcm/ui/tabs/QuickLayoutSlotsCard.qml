@@ -9,6 +9,8 @@ import ".."
 
 /**
  * @brief Quick layout slots card - Assign layouts to keyboard shortcuts
+ *
+ * Refactored to use cleaner structure with LayoutComboBox.
  */
 Kirigami.Card {
     id: root
@@ -46,63 +48,60 @@ Kirigami.Card {
             Accessible.role: Accessible.List
 
             delegate: Item {
+                id: slotDelegate
                 width: ListView.view.width
-                height: shortcutRowLayout.implicitHeight + Kirigami.Units.smallSpacing * 2
+                height: slotRow.implicitHeight + Kirigami.Units.smallSpacing * 2
                 required property int index
 
+                property int slotNumber: index + 1
+                property string shortcutText: root.kcm.getQuickLayoutShortcut(slotNumber)
+
                 RowLayout {
-                    id: shortcutRowLayout
+                    id: slotRow
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
+                    // Shortcut display
                     Label {
-                        property string shortcut: root.kcm.getQuickLayoutShortcut(index + 1)
-                        text: shortcut !== "" ? shortcut : i18n("Not assigned")
-                        Layout.preferredWidth: Kirigami.Units.gridUnit * 14 + Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                        text: slotDelegate.shortcutText !== "" ? slotDelegate.shortcutText : i18n("Not assigned")
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 14
                         font.family: "monospace"
-                        opacity: shortcut !== "" ? 1.0 : 0.6
+                        opacity: slotDelegate.shortcutText !== "" ? 1.0 : 0.6
                     }
 
                     Item { Layout.fillWidth: true }
 
+                    // Layout selection
                     LayoutComboBox {
                         id: slotLayoutCombo
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                         kcm: root.kcm
                         noneText: i18n("None")
                         showPreview: true
-
-                        property int slotNumber: index + 1
-
-                        function updateFromSlot() {
-                            currentLayoutId = root.kcm.getQuickLayoutSlot(slotNumber) || ""
-                        }
-
-                        Component.onCompleted: updateFromSlot()
+                        currentLayoutId: root.kcm.getQuickLayoutSlot(slotDelegate.slotNumber) || ""
 
                         Connections {
                             target: root.kcm
                             function onScreenAssignmentsChanged() {
-                                slotLayoutCombo.updateFromSlot()
+                                slotLayoutCombo.currentLayoutId = root.kcm.getQuickLayoutSlot(slotDelegate.slotNumber) || ""
                             }
                         }
 
                         onActivated: {
-                            let selectedValue = model[currentIndex].value
-                            root.kcm.setQuickLayoutSlot(slotNumber, selectedValue)
+                            root.kcm.setQuickLayoutSlot(slotDelegate.slotNumber, model[currentIndex].value)
                         }
                     }
 
                     ToolButton {
                         icon.name: "edit-clear"
                         onClicked: {
-                            root.kcm.setQuickLayoutSlot(index + 1, "")
+                            root.kcm.setQuickLayoutSlot(slotDelegate.slotNumber, "")
                             slotLayoutCombo.clearSelection()
                         }
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("Clear shortcut")
-                        Accessible.name: i18n("Clear shortcut %1", index + 1)
+                        Accessible.name: i18n("Clear shortcut %1", slotDelegate.slotNumber)
                     }
                 }
             }

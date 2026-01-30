@@ -37,6 +37,7 @@ install(FILES
     ui/PreviewSizeControl.qml
     ui/ColorButton.qml
     ui/LayoutComboBox.qml
+    ui/AssignmentRow.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones
 )
 
@@ -52,5 +53,7 @@ install(FILES
     ui/tabs/MonitorAssignmentsCard.qml
     ui/tabs/ActivityAssignmentsCard.qml
     ui/tabs/QuickLayoutSlotsCard.qml
+    ui/tabs/LayoutToolbar.qml
+    ui/tabs/LayoutGridDelegate.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones/tabs
 )

@@ -9,6 +9,8 @@ import ".."
 
 /**
  * @brief Activity assignments card - Assign layouts to KDE Activities
+ *
+ * Refactored to use AssignmentRow component, eliminating duplicated patterns.
  */
 Kirigami.Card {
     id: root
@@ -30,12 +32,11 @@ Kirigami.Card {
         Label {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            text: i18n("Assign different layouts to KDE Activities. When you switch activities, the layout will change automatically.")
+            text: i18n("Assign layouts to KDE Activities. Layout changes automatically when you switch activities.")
             wrapMode: Text.WordWrap
             opacity: root.constants.labelSecondaryOpacity
         }
 
-        // Activities list
         ListView {
             id: activitiesListView
             Layout.fillWidth: true
@@ -49,8 +50,9 @@ Kirigami.Card {
             Accessible.role: Accessible.List
 
             delegate: Item {
+                id: activityDelegate
                 width: ListView.view.width
-                height: activityRowLayout.implicitHeight + Kirigami.Units.smallSpacing * 2
+                height: activityContent.implicitHeight + Kirigami.Units.smallSpacing * 2
                 required property var modelData
                 required property int index
 
@@ -59,115 +61,80 @@ Kirigami.Card {
                 property string activityIcon: modelData.icon && modelData.icon !== "" ? modelData.icon : "activities"
 
                 ColumnLayout {
-                    id: activityRowLayout
+                    id: activityContent
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Activity header row
+                    // Activity header
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
 
                         Kirigami.Icon {
-                            source: activityIcon
+                            source: activityDelegate.activityIcon
                             Layout.preferredWidth: Kirigami.Units.iconSizes.medium
                             Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                         }
 
                         Label {
                             Layout.fillWidth: true
-                            text: activityName
-                            font.bold: activityId === root.kcm.currentActivity
+                            text: activityDelegate.activityName
+                            font.bold: activityDelegate.activityId === root.kcm.currentActivity
                             elide: Text.ElideRight
                         }
 
-                        // Show "Current" badge if this is the current activity
                         Label {
-                            visible: activityId === root.kcm.currentActivity
+                            visible: activityDelegate.activityId === root.kcm.currentActivity
                             text: i18n("Current")
                             font.italic: true
                             opacity: 0.7
                         }
                     }
 
-                    // Per-screen layout assignments for this activity
+                    // Per-screen assignments using AssignmentRow
                     Repeater {
                         model: root.kcm.screens
 
-                        RowLayout {
+                        AssignmentRow {
+                            id: screenRow
                             Layout.fillWidth: true
                             Layout.leftMargin: Kirigami.Units.gridUnit * 2
-                            spacing: Kirigami.Units.smallSpacing
 
                             required property var modelData
                             property string screenName: modelData.name || ""
 
-                            Kirigami.Icon {
-                                source: "video-display"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                opacity: 0.7
+                            kcm: root.kcm
+                            iconSource: "video-display"
+                            iconOpacity: 0.7
+                            labelText: screenName
+                            noneText: i18n("Use default")
+                            currentLayoutId: {
+                                let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenName, activityDelegate.activityId)
+                                return hasExplicit ? (root.kcm.getLayoutForScreenActivity(screenName, activityDelegate.activityId) || "") : ""
                             }
 
-                            Label {
-                                text: screenName
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                                elide: Text.ElideRight
-                            }
-
-                            LayoutComboBox {
-                                id: activityLayoutCombo
-                                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-                                kcm: root.kcm
-                                noneText: i18n("Use default")
-
-                                function updateFromAssignment() {
-                                    let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenName, activityId)
-                                    if (!hasExplicit) {
-                                        currentLayoutId = ""
-                                        return
-                                    }
-                                    currentLayoutId = root.kcm.getLayoutForScreenActivity(screenName, activityId) || ""
-                                }
-
-                                Component.onCompleted: updateFromAssignment()
-
-                                Connections {
-                                    target: root.kcm
-                                    function onActivityAssignmentsChanged() {
-                                        activityLayoutCombo.updateFromAssignment()
-                                    }
-                                }
-
-                                onActivated: {
-                                    let selectedValue = model[currentIndex].value
-                                    if (selectedValue === "") {
-                                        root.kcm.clearScreenActivityAssignment(screenName, activityId)
-                                    } else {
-                                        root.kcm.assignLayoutToScreenActivity(screenName, activityId, selectedValue)
-                                    }
+                            Connections {
+                                target: root.kcm
+                                function onActivityAssignmentsChanged() {
+                                    let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenRow.screenName, activityDelegate.activityId)
+                                    screenRow.currentLayoutId = hasExplicit ?
+                                        (root.kcm.getLayoutForScreenActivity(screenRow.screenName, activityDelegate.activityId) || "") : ""
                                 }
                             }
 
-                            ToolButton {
-                                icon.name: "edit-clear"
-                                onClicked: {
-                                    root.kcm.clearScreenActivityAssignment(screenName, activityId)
-                                    activityLayoutCombo.clearSelection()
-                                }
-                                ToolTip.visible: hovered
-                                ToolTip.text: i18n("Clear assignment")
+                            onAssignmentSelected: (layoutId) => {
+                                root.kcm.assignLayoutToScreenActivity(screenName, activityDelegate.activityId, layoutId)
                             }
-
-                            Item { Layout.fillWidth: true }
+                            onAssignmentCleared: {
+                                root.kcm.clearScreenActivityAssignment(screenName, activityDelegate.activityId)
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Message when no activities
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
@@ -176,7 +143,6 @@ Kirigami.Card {
             text: i18n("No activities found. Create activities in System Settings → Activities.")
         }
 
-        // Message when no screens
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
@@ -185,7 +151,6 @@ Kirigami.Card {
             text: i18n("No screens detected. Make sure the PlasmaZones daemon is running.")
         }
 
-        // Bottom spacer
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: Kirigami.Units.smallSpacing

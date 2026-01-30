@@ -9,6 +9,8 @@ import ".."
 
 /**
  * @brief Monitor assignments card - Assign layouts to monitors and virtual desktops
+ *
+ * Refactored to use AssignmentRow component, eliminating duplicated patterns.
  */
 Kirigami.Card {
     id: root
@@ -52,19 +54,17 @@ Kirigami.Card {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.leftMargin: Kirigami.Units.smallSpacing
-                    anchors.rightMargin: Kirigami.Units.smallSpacing
+                    anchors.margins: Kirigami.Units.smallSpacing
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Top spacer
                     Item { height: Kirigami.Units.smallSpacing }
 
-                    // Header row - always visible
+                    // Monitor header with assignment
                     RowLayout {
-                        id: monitorHeaderRow
                         Layout.fillWidth: true
                         spacing: Kirigami.Units.smallSpacing
 
+                        // Monitor info
                         Kirigami.Icon {
                             source: "video-display"
                             Layout.preferredWidth: Kirigami.Units.iconSizes.small
@@ -73,11 +73,10 @@ Kirigami.Card {
                         }
 
                         ColumnLayout {
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                            Layout.preferredWidth: Kirigami.Units.gridUnit * 10
                             spacing: 0
 
                             Label {
-                                id: monitorNameLabel
                                 text: modelData.name || i18n("Unknown Monitor")
                                 font.bold: true
                                 elide: Text.ElideRight
@@ -99,28 +98,24 @@ Kirigami.Card {
                             }
                         }
 
-                        // "All Desktops" label
                         Label {
                             text: i18n("All Desktops:")
                             Layout.alignment: Qt.AlignVCenter
                         }
 
+                        // Screen-level assignment using LayoutComboBox directly
+                        // (AssignmentRow adds icon+label which we already have)
                         LayoutComboBox {
                             id: screenLayoutCombo
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                             kcm: root.kcm
                             noneText: i18n("Default")
-
-                            function updateFromAssignment() {
-                                currentLayoutId = root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
-                            }
-
-                            Component.onCompleted: updateFromAssignment()
+                            currentLayoutId: root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
 
                             Connections {
                                 target: root.kcm
                                 function onScreenAssignmentsChanged() {
-                                    screenLayoutCombo.updateFromAssignment()
+                                    screenLayoutCombo.currentLayoutId = root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
                                 }
                             }
 
@@ -142,12 +137,10 @@ Kirigami.Card {
                             }
                             ToolTip.visible: hovered
                             ToolTip.text: i18n("Clear assignment")
-                            Accessible.name: i18n("Clear assignment for %1", monitorDelegate.screenName)
                         }
 
                         Item { Layout.fillWidth: true }
 
-                        // Expand button - only show if multiple virtual desktops
                         ToolButton {
                             visible: root.kcm.virtualDesktopCount > 1
                             icon.name: monitorDelegate.expanded ? "go-up" : "go-down"
@@ -161,27 +154,24 @@ Kirigami.Card {
                         }
                     }
 
-                    // Disable PlasmaZones on this monitor
+                    // Monitor disable option
                     CheckBox {
                         Layout.fillWidth: true
                         text: i18n("Disable PlasmaZones on this monitor")
                         checked: root.kcm.disabledMonitors.indexOf(monitorDelegate.screenName) >= 0
                         onToggled: root.kcm.setMonitorDisabled(monitorDelegate.screenName, checked)
                         ToolTip.visible: hovered
-                        ToolTip.text: i18n("When enabled, the zone overlay and zone picker will not appear on this monitor, and windows will not snap to zones here.")
+                        ToolTip.text: i18n("When enabled, zones will not appear on this monitor")
                     }
 
-                    // Per-desktop assignments section - expandable
+                    // Per-desktop section (expandable)
                     ColumnLayout {
-                        id: perDesktopSection
                         Layout.fillWidth: true
                         Layout.leftMargin: Kirigami.Units.gridUnit * 2
                         visible: monitorDelegate.expanded && root.kcm.virtualDesktopCount > 1
                         spacing: Kirigami.Units.smallSpacing
 
-                        Kirigami.Separator {
-                            Layout.fillWidth: true
-                        }
+                        Kirigami.Separator { Layout.fillWidth: true }
 
                         Label {
                             text: i18n("Per-Desktop Overrides")
@@ -190,93 +180,46 @@ Kirigami.Card {
                             opacity: 0.8
                         }
 
-                        Label {
-                            text: i18n("Override the default layout for specific virtual desktops")
-                            font.pointSize: Kirigami.Theme.smallFont.pointSize
-                            opacity: root.constants.labelSecondaryOpacity
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                        }
-
-                        // Per-desktop combo boxes
+                        // Per-desktop assignments using AssignmentRow
                         Repeater {
                             model: root.kcm.virtualDesktopCount
 
-                            RowLayout {
+                            AssignmentRow {
+                                id: desktopRow
                                 Layout.fillWidth: true
-                                spacing: Kirigami.Units.smallSpacing
-
                                 required property int index
 
                                 property int desktopNumber: index + 1
                                 property string desktopName: root.kcm.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
 
-                                Kirigami.Icon {
-                                    source: "preferences-desktop-virtual"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    Layout.alignment: Qt.AlignVCenter
+                                kcm: root.kcm
+                                iconSource: "preferences-desktop-virtual"
+                                labelText: desktopName
+                                noneText: i18n("Use default")
+                                currentLayoutId: {
+                                    let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber)
+                                    return hasExplicit ? (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : ""
                                 }
 
-                                Label {
-                                    text: desktopName
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 8
-                                    Layout.alignment: Qt.AlignVCenter
-                                    elide: Text.ElideRight
-                                }
-
-                                LayoutComboBox {
-                                    id: desktopLayoutCombo
-                                    Layout.preferredWidth: Kirigami.Units.gridUnit * 12
-                                    kcm: root.kcm
-                                    noneText: i18n("Use default")
-
-                                    property int desktopNum: desktopNumber
-
-                                    function updateFromAssignment() {
-                                        let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNum)
-                                        if (!hasExplicit) {
-                                            currentLayoutId = ""
-                                            return
-                                        }
-                                        currentLayoutId = root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopNum) || ""
-                                    }
-
-                                    Component.onCompleted: updateFromAssignment()
-
-                                    Connections {
-                                        target: root.kcm
-                                        function onScreenAssignmentsChanged() {
-                                            desktopLayoutCombo.updateFromAssignment()
-                                        }
-                                    }
-
-                                    onActivated: {
-                                        let selectedValue = model[currentIndex].value
-                                        if (selectedValue === "") {
-                                            root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopNum)
-                                        } else {
-                                            root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopNum, selectedValue)
-                                        }
+                                Connections {
+                                    target: root.kcm
+                                    function onScreenAssignmentsChanged() {
+                                        let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRow.desktopNumber)
+                                        desktopRow.currentLayoutId = hasExplicit ?
+                                            (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopRow.desktopNumber) || "") : ""
                                     }
                                 }
 
-                                ToolButton {
-                                    icon.name: "edit-clear"
-                                    onClicked: {
-                                        root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopLayoutCombo.desktopNum)
-                                        desktopLayoutCombo.clearSelection()
-                                    }
-                                    ToolTip.visible: hovered
-                                    ToolTip.text: i18n("Clear assignment for this desktop")
+                                onAssignmentSelected: (layoutId) => {
+                                    root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopNumber, layoutId)
                                 }
-
-                                Item { Layout.fillWidth: true }
+                                onAssignmentCleared: {
+                                    root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopNumber)
+                                }
                             }
                         }
                     }
 
-                    // Bottom spacer
                     Item { height: Kirigami.Units.smallSpacing }
                 }
             }
@@ -290,13 +233,12 @@ Kirigami.Card {
             }
         }
 
-        // Info message when only one virtual desktop
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
             visible: root.kcm.virtualDesktopCount <= 1 && root.kcm.screens.length > 0
             type: Kirigami.MessageType.Information
-            text: i18n("Per-desktop layout assignments are available when using multiple virtual desktops. Add more desktops in System Settings → Virtual Desktops.")
+            text: i18n("Per-desktop assignments are available with multiple virtual desktops.")
         }
     }
 }
