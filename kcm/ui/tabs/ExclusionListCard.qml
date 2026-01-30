@@ -69,10 +69,13 @@ Kirigami.Card {
         ListView {
             id: listView
             Layout.fillWidth: true
-            Layout.fillHeight: true
+            // Use contentHeight with minimum fallback - never use fillHeight in ScrollView
+            Layout.preferredHeight: Math.max(contentHeight, Kirigami.Units.gridUnit * 6)
+            Layout.minimumHeight: Kirigami.Units.gridUnit * 6
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
             model: root.model
+            interactive: false  // Parent ScrollView handles scrolling
             focus: true
             keyNavigationEnabled: true
             activeFocusOnTab: true

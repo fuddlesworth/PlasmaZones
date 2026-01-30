@@ -35,20 +35,31 @@ ScrollView {
             visible: true
         }
 
-        // Monitor Assignments
-        MonitorAssignmentsCard {
+        // Monitor Assignments - wrapped in Item for stable sizing
+        Item {
             Layout.fillWidth: true
-            Layout.fillHeight: false
-            kcm: root.kcm
-            constants: root.constants
+            implicitHeight: monitorCard.implicitHeight
+
+            MonitorAssignmentsCard {
+                id: monitorCard
+                anchors.fill: parent
+                kcm: root.kcm
+                constants: root.constants
+            }
         }
 
         // Activity Assignments (only visible when Activities are available)
-        ActivityAssignmentsCard {
+        Item {
             Layout.fillWidth: true
-            Layout.fillHeight: false
-            kcm: root.kcm
-            constants: root.constants
+            implicitHeight: activityCard.implicitHeight
+            visible: root.kcm.activitiesAvailable
+
+            ActivityAssignmentsCard {
+                id: activityCard
+                anchors.fill: parent
+                kcm: root.kcm
+                constants: root.constants
+            }
         }
 
         // Info message when Activities not available
@@ -60,12 +71,18 @@ ScrollView {
             text: i18n("KDE Activities support is not available. Activity-based layout assignments require the KDE Activities service to be running.")
         }
 
-        // Quick Layout Shortcuts
-        QuickLayoutSlotsCard {
+        // Quick Layout Shortcuts - wrapped in Item for stable sizing
+        Item {
             Layout.fillWidth: true
-            Layout.fillHeight: false
-            kcm: root.kcm
-            constants: root.constants
+            implicitHeight: quickSlotsCard.implicitHeight
+
+            QuickLayoutSlotsCard {
+                id: quickSlotsCard
+                anchors.fill: parent
+                kcm: root.kcm
+                constants: root.constants
+            }
         }
+
     }
 }
