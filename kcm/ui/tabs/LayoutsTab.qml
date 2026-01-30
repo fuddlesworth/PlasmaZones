@@ -111,9 +111,9 @@ ColumnLayout {
         }
 
         // Delegate using extracted component
+        // Note: modelData and index are automatically injected by GridView
+        // into components with matching required properties
         delegate: LayoutGridDelegate {
-            modelData: model.modelData
-            index: model.index
             kcm: root.kcm
             cellWidth: layoutGrid.cellWidth
             cellHeight: layoutGrid.cellHeight
