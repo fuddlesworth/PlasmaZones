@@ -306,6 +306,42 @@ public:
      */
     Q_INVOKABLE void toggleFocusedWindowFloat();
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window event handlers (public API for external notification)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Notify the engine that a new window was added
+     *
+     * Called by Daemon when KWin reports a new window. Triggers retiling
+     * if autotile is enabled and window is tileable.
+     *
+     * @param windowId Window identifier from KWin
+     * @param screenName Screen where the window appeared
+     */
+    void windowOpened(const QString &windowId, const QString &screenName);
+
+    /**
+     * @brief Notify the engine that a window was closed
+     *
+     * Called by Daemon when KWin reports a window closed. Triggers retiling
+     * to fill the gap left by the closed window.
+     *
+     * @param windowId Window identifier from KWin
+     */
+    void windowClosed(const QString &windowId);
+
+    /**
+     * @brief Notify the engine that a window was focused
+     *
+     * Called by Daemon when KWin reports window activation. Updates focus
+     * tracking for tiling operations.
+     *
+     * @param windowId Window identifier from KWin
+     * @param screenName Screen where the window is located
+     */
+    void windowFocused(const QString &windowId, const QString &screenName);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when the enabled state changes

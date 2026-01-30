@@ -135,7 +135,7 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
             }
 
             UnifiedLayoutEntry entry;
-            entry.id = layout->id().toString(QUuid::WithoutBraces);
+            entry.id = layout->id().toString();
             entry.name = layout->name();
             entry.description = layout->description();
             entry.isAutotile = false;

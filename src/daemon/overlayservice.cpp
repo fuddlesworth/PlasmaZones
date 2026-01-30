@@ -183,7 +183,7 @@ ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen*
         layout.rows = safeLayoutCount;
     } else if (layoutMode == ZoneSelectorLayoutMode::Grid) {
         // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
-        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 3;
+        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 5;
         layout.columns = std::max(1, gridColumns);
         layout.rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / layout.columns));
     } else {

@@ -601,6 +601,21 @@ void Daemon::start()
             });
 
     // ═══════════════════════════════════════════════════════════════════════════════
+    // Phase 2.1: Connect window events to AutotileEngine
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // WindowTrackingAdaptor receives window events from KWin via D-Bus and emits signals.
+    // Connect these to AutotileEngine so it knows about windows for tiling.
+    if (m_autotileEngine) {
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowAddedEvent,
+                m_autotileEngine.get(), &AutotileEngine::windowOpened);
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowRemovedEvent,
+                m_autotileEngine.get(), &AutotileEngine::windowClosed);
+        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowActivatedEvent,
+                m_autotileEngine.get(), &AutotileEngine::windowFocused);
+        qCDebug(lcDaemon) << "Connected window tracking events to AutotileEngine";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
     // Phase 3.1: Autotile shortcut connections (Smart Toggle)
     // ═══════════════════════════════════════════════════════════════════════════════
 

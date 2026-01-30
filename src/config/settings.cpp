@@ -13,8 +13,34 @@
 #include <QRegularExpression>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUuid>
 
 namespace PlasmaZones {
+
+namespace {
+/**
+ * @brief Normalize a UUID string to use the default format (with braces)
+ *
+ * Handles migration from configs saved with WithoutBraces format.
+ * Returns empty string if input is empty or not a valid UUID.
+ */
+QString normalizeUuidString(const QString& uuidStr)
+{
+    if (uuidStr.isEmpty()) {
+        return QString();
+    }
+
+    // Parse as UUID (handles both with and without braces)
+    QUuid uuid = QUuid::fromString(uuidStr);
+    if (uuid.isNull()) {
+        qCWarning(lcConfig) << "Invalid UUID string in config, ignoring:" << uuidStr;
+        return QString();
+    }
+
+    // Return in default format (with braces) for consistent comparison
+    return uuid.toString();
+}
+} // anonymous namespace
 
 Settings::Settings(QObject* parent)
     : ISettings(parent)
@@ -368,8 +394,10 @@ void Settings::setStickyWindowHandlingInt(int handling)
 
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
-    if (m_defaultLayoutId != layoutId) {
-        m_defaultLayoutId = layoutId;
+    // Normalize to default format (with braces) for consistent comparison
+    QString normalizedId = normalizeUuidString(layoutId);
+    if (m_defaultLayoutId != normalizedId) {
+        m_defaultLayoutId = normalizedId;
         Q_EMIT defaultLayoutIdChanged();
         Q_EMIT settingsChanged();
     }
@@ -1416,7 +1444,9 @@ void Settings::load()
     m_stickyWindowHandling =
         static_cast<StickyWindowHandling>(qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
                                                  static_cast<int>(StickyWindowHandling::IgnoreAll)));
-    m_defaultLayoutId = behavior.readEntry("DefaultLayoutId", QString());
+    // Normalize UUID to default format (with braces) for consistent comparison
+    // Handles migration from configs saved with WithoutBraces format
+    m_defaultLayoutId = normalizeUuidString(behavior.readEntry("DefaultLayoutId", QString()));
 
     // Exclusions
     m_excludedApplications = exclusions.readEntry("Applications", QStringList());
@@ -1460,10 +1490,10 @@ void Settings::load()
     }
     m_zoneSelectorPreviewHeight = previewHeight;
     m_zoneSelectorPreviewLockAspect = zoneSelector.readEntry("PreviewLockAspect", true);
-    int gridColumns = zoneSelector.readEntry("GridColumns", 3);
+    int gridColumns = zoneSelector.readEntry("GridColumns", 5);
     if (gridColumns < 1 || gridColumns > 10) {
         qCWarning(lcConfig) << "Invalid zone selector grid columns:" << gridColumns << "using default (1-10)";
-        gridColumns = 3;
+        gridColumns = 5;
     }
     m_zoneSelectorGridColumns = gridColumns;
 
@@ -1874,7 +1904,7 @@ void Settings::reset()
     m_zoneSelectorPreviewWidth = 180;
     m_zoneSelectorPreviewHeight = 101;
     m_zoneSelectorPreviewLockAspect = true;
-    m_zoneSelectorGridColumns = 3;
+    m_zoneSelectorGridColumns = 5;
     m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto; // Auto-calculate sizes from screen
     m_zoneSelectorMaxRows = 4; // Max visible rows before scrolling
 

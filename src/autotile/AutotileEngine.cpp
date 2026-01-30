@@ -51,9 +51,9 @@ AutotileEngine::~AutotileEngine() = default;
 void AutotileEngine::connectSignals()
 {
     // Window tracking signals
-    // TODO: WindowTrackingService needs windowSnapped/windowUnsnapped signals
-    // For now, AutotileEngine must be notified externally via onWindowAdded/onWindowRemoved
-    // or by monitoring WindowTrackingService::windowZoneChanged
+    // Primary window events (open/close/focus) are received via public methods:
+    // windowOpened(), windowClosed(), windowFocused() - connected by Daemon to
+    // WindowTrackingAdaptor signals. This connection also handles zone changes:
     if (m_windowTracker) {
         // Use windowZoneChanged as a proxy until dedicated signals are added
         connect(m_windowTracker, &WindowTrackingService::windowZoneChanged,
@@ -652,7 +652,51 @@ void AutotileEngine::toggleFocusedWindowFloat()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Event handlers
+// Public window event handlers (called by Daemon via D-Bus signals)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void AutotileEngine::windowOpened(const QString &windowId, const QString &screenName)
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << "windowOpened called with empty windowId";
+        return;
+    }
+
+    // Store screen mapping so onWindowAdded uses correct screen
+    // This solves the TODO in screenForWindow() which previously returned primary screen
+    if (!screenName.isEmpty()) {
+        m_windowToScreen[windowId] = screenName;
+    }
+    onWindowAdded(windowId);
+}
+
+void AutotileEngine::windowClosed(const QString &windowId)
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << "windowClosed called with empty windowId";
+        return;
+    }
+
+    onWindowRemoved(windowId);
+}
+
+void AutotileEngine::windowFocused(const QString &windowId, const QString &screenName)
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << "windowFocused called with empty windowId";
+        return;
+    }
+
+    // Update screen mapping - always store when provided, even for new windows
+    // This handles edge cases where a window gets focused without going through windowOpened()
+    if (!screenName.isEmpty()) {
+        m_windowToScreen[windowId] = screenName;
+    }
+    onWindowFocused(windowId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Private slot event handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void AutotileEngine::onWindowAdded(const QString &windowId)
@@ -834,21 +878,31 @@ void AutotileEngine::applyTiling(const QString &screenName)
         const QString &windowId = windows[i];
         const QRect &geometry = zones[i];
 
-        // TODO: Actually move the window via KWin script or D-Bus
-        // For now, just emit the signal
+        // Emit signal for D-Bus adaptor to forward to KWin effect
+        // Signal chain: windowTiled → AutotileAdaptor::onWindowTiled →
+        // D-Bus windowTileRequested → KWin effect applyAutotileGeometry
         Q_EMIT windowTiled(windowId, geometry);
     }
 }
 
 bool AutotileEngine::shouldTileWindow(const QString &windowId) const
 {
-    Q_UNUSED(windowId)
+    if (windowId.isEmpty()) {
+        return false;
+    }
 
-    // TODO: Check exclusion rules from config
-    // - Window class exclusions
-    // - Floating state
-    // - Dialog/transient windows
-    // - Fullscreen windows
+    // Check if window is floating in any screen's TilingState
+    // (floating windows are excluded from autotiling)
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (it.value() && it.value()->isFloating(windowId)) {
+            qCDebug(lcAutotile) << "Window" << windowId << "is floating, skipping tile";
+            return false;
+        }
+    }
+
+    // Note: Other exclusions (special windows, dialogs, fullscreen, etc.)
+    // are already handled by KWin effect's shouldHandleWindow() before
+    // sending window events to daemon.
 
     return true;
 }
@@ -860,8 +914,9 @@ QString AutotileEngine::screenForWindow(const QString &windowId) const
         return m_windowToScreen.value(windowId);
     }
 
-    // TODO: Get screen from window geometry via KWin
-    // For now, return primary screen
+    // Fallback to primary screen if screen not known
+    // Note: windowOpened() stores screen name before calling onWindowAdded(),
+    // so this fallback is only for edge cases (e.g., windows added via other paths)
     if (m_screenManager && m_screenManager->primaryScreen()) {
         return m_screenManager->primaryScreen()->name();
     }

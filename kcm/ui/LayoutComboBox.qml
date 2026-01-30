@@ -104,7 +104,8 @@ ComboBox {
     // Custom delegate with optional layout preview and category badge
     delegate: ItemDelegate {
         width: root.popup.width
-        highlighted: root.highlightedIndex === index
+        // Highlight on hover OR if this is the currently selected item
+        highlighted: root.highlightedIndex === index || root.currentIndex === index
 
         required property var modelData
         required property int index

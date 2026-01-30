@@ -42,6 +42,26 @@ PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality f
 - Prefer direct function calls over signals when possible (within same object)
 - Use `QMetaObject::invokeMethod` for cross-thread calls only
 
+### QUuid String Format Convention
+- **CRITICAL**: Use `QUuid::toString()` (default format with braces) for ALL UUID-to-string conversions
+- **ONLY EXCEPTION**: Use `QUuid::toString(QUuid::WithoutBraces)` for **filesystem paths** (braces are invalid in filenames)
+- This ensures consistent ID comparison across the codebase (QML `===` comparisons, C++ `==` comparisons)
+- Examples:
+  ```cpp
+  // ✅ CORRECT - Use default format (with braces) for IDs
+  QString layoutId = layout->id().toString();           // "{abc-123-...}"
+  QString entryId = entry.id.toString();                // "{abc-123-...}"
+  activeLayoutId = m_layout->id().toString();           // For QML comparison
+
+  // ✅ CORRECT - Only use WithoutBraces for filesystem paths
+  QString filePath = dir + "/" + id.toString(QUuid::WithoutBraces) + ".json";
+
+  // ❌ WRONG - Inconsistent formats break ID comparison
+  entry.id = layout->id().toString(QUuid::WithoutBraces);  // "abc-123-..."
+  activeLayoutId = m_layout->id().toString();              // "{abc-123-...}"
+  // QML comparison layoutId === activeLayoutId will FAIL!
+  ```
+
 ### Memory Management
 - Use **parent-based ownership** for QObjects (Qt auto-deletes children)
 - Use `std::unique_ptr` or `QPointer` for optional ownership (don't use raw pointers for owned objects)
@@ -615,12 +635,14 @@ data/layouts/    # Default layout templates (JSON)
 - ❌ **DON'T** emit signals without checking if value actually changed
 - ❌ **DON'T** use raw pointers for owned QObjects
 - ❌ **DON'T** use raw string literals with `QJsonObject` keys or `QString` comparisons (Qt6 requirement)
+- ❌ **DON'T** use `QUuid::toString(QUuid::WithoutBraces)` except for filesystem paths (breaks ID comparison)
 - ✅ **DO** use parent-based ownership for QObjects
 - ✅ **DO** emit signals only when values change
 - ✅ **DO** use `Q_EMIT` macro (not just `emit`)
 - ✅ **DO** forward declare classes in headers
 - ✅ **DO** use `QLatin1String()` for JSON keys and string comparisons
 - ✅ **DO** use `QStringLiteral()` for MIME types and string constants
+- ✅ **DO** use `QUuid::toString()` (default with braces) for consistent ID comparison
 
 ### Architecture Pitfalls
 - ❌ **DON'T** mix UI logic and business logic

@@ -29,7 +29,7 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, A
         connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
             // Check m_autotileEngine for null - it may not be set if autotile is disabled
             if (layout && (!m_autotileEngine || !m_autotileEngine->isEnabled())) {
-                QString newId = layout->id().toString(QUuid::WithoutBraces);
+                QString newId = layout->id().toString();
                 if (m_currentLayoutId != newId) {
                     setCurrentLayoutId(newId);
                 }
@@ -161,7 +161,7 @@ void UnifiedLayoutController::syncFromExternalState()
     if (m_autotileEngine && m_autotileEngine->isEnabled()) {
         m_currentLayoutId = LayoutId::makeAutotileId(m_autotileEngine->algorithm());
     } else if (m_layoutManager && m_layoutManager->activeLayout()) {
-        m_currentLayoutId = m_layoutManager->activeLayout()->id().toString(QUuid::WithoutBraces);
+        m_currentLayoutId = m_layoutManager->activeLayout()->id().toString();
     } else {
         m_currentLayoutId.clear();
     }
