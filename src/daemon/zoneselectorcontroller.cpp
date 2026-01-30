@@ -465,19 +465,20 @@ ZoneSelectorController::State ZoneSelectorController::stringToState(const QStrin
 
 QVariantMap ZoneSelectorController::layoutToVariantMap(Layout* layout) const
 {
+    using namespace JsonKeys;
     QVariantMap map;
 
     if (!layout) {
         return map;
     }
 
-    map[QStringLiteral("id")] = layout->id().toString();
-    map[QStringLiteral("name")] = layout->name();
-    map[QStringLiteral("description")] = layout->description();
-    map[QStringLiteral("type")] = static_cast<int>(layout->type());
-    map[QStringLiteral("zoneCount")] = layout->zoneCount();
-    map[QStringLiteral("zones")] = zonesToVariantList(layout);
-    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Manual);
+    map[Id] = layout->id().toString();
+    map[Name] = layout->name();
+    map[Description] = layout->description();
+    map[Type] = static_cast<int>(layout->type());
+    map[ZoneCount] = layout->zoneCount();
+    map[Zones] = zonesToVariantList(layout);
+    map[Category] = static_cast<int>(LayoutCategory::Manual);
 
     return map;
 }

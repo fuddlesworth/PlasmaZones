@@ -130,7 +130,9 @@ QList<TilingAlgorithm *> AlgorithmRegistry::allAlgorithms() const
     result.reserve(m_registrationOrder.size());
 
     for (const QString &id : m_registrationOrder) {
-        result.append(m_algorithms.value(id));
+        if (auto* algo = m_algorithms.value(id)) {
+            result.append(algo);
+        }
     }
 
     return result;

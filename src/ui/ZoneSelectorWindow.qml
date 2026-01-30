@@ -91,6 +91,14 @@ Window {
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
 
+    // Animation constants - avoid magic numbers per .cursorrules
+    QtObject {
+        id: animationConstants
+        readonly property int shortDuration: 150
+        readonly property int normalDuration: 200
+        readonly property int longDuration: 300
+    }
+
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
 
@@ -399,7 +407,7 @@ Window {
 
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -407,7 +415,7 @@ Window {
 
                                 Behavior on border.color {
                                     ColorAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -415,7 +423,7 @@ Window {
 
                                 Behavior on border.width {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: animationConstants.shortDuration
                                     }
 
                                 }
@@ -429,17 +437,17 @@ Window {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.bottom: parent.bottom
-                                anchors.leftMargin: -2
-                                anchors.topMargin: 4
-                                anchors.bottomMargin: 4
-                                width: indicator.isActive ? 4 : 0
-                                radius: 2
+                                anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                anchors.bottomMargin: Kirigami.Units.smallSpacing
+                                width: indicator.isActive ? Kirigami.Units.smallSpacing : 0
+                                radius: Math.round(Kirigami.Units.smallSpacing / 2)
                                 color: Kirigami.Theme.highlightColor
                                 opacity: indicator.isActive ? 1 : 0
 
                                 Behavior on width {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -447,7 +455,7 @@ Window {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -459,13 +467,15 @@ Window {
                             Rectangle {
                                 id: activeBadge
 
+                                readonly property int badgeSize: Math.round(Kirigami.Units.gridUnit * 2.5)
+
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                anchors.rightMargin: 4
-                                anchors.topMargin: 4
-                                width: indicator.isActive ? 20 : 0
-                                height: indicator.isActive ? 20 : 0
-                                radius: 10
+                                anchors.rightMargin: Kirigami.Units.smallSpacing
+                                anchors.topMargin: Kirigami.Units.smallSpacing
+                                width: indicator.isActive ? badgeSize : 0
+                                height: indicator.isActive ? badgeSize : 0
+                                radius: badgeSize / 2
                                 color: Kirigami.Theme.highlightColor
                                 opacity: indicator.isActive ? 1 : 0
                                 z: 100
@@ -473,7 +483,7 @@ Window {
                                 Label {
                                     anchors.centerIn: parent
                                     text: "\u2713" // Checkmark unicode
-                                    font.pixelSize: 12
+                                    font.pixelSize: Math.round(Kirigami.Units.gridUnit * 1.5)
                                     font.bold: true
                                     color: Kirigami.Theme.highlightedTextColor
                                     visible: indicator.isActive
@@ -481,7 +491,7 @@ Window {
 
                                 Behavior on width {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutBack
                                         easing.overshoot: 1.5
                                     }
@@ -490,7 +500,7 @@ Window {
 
                                 Behavior on height {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutBack
                                         easing.overshoot: 1.5
                                     }
@@ -499,7 +509,7 @@ Window {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 150
+                                        duration: animationConstants.shortDuration
                                     }
 
                                 }
@@ -532,9 +542,9 @@ Window {
                                     // Position relative to parent (previewArea)
                                     x: (relGeo.x || 0) * parent.width + root.scaledPadding
                                     y: (relGeo.y || 0) * parent.height + root.scaledPadding
-                                    // P0: Increase minimum zone size from 8px to 24px for easier targeting
-                                    width: Math.max(24, (relGeo.width || 0.25) * parent.width - root.scaledPadding * 2)
-                                    height: Math.max(24, (relGeo.height || 1) * parent.height - root.scaledPadding * 2)
+                                    // P0: Increase minimum zone size for easier targeting (3 gridUnits)
+                                    width: Math.max(Kirigami.Units.gridUnit * 3, (relGeo.width || 0.25) * parent.width - root.scaledPadding * 2)
+                                    height: Math.max(Kirigami.Units.gridUnit * 3, (relGeo.height || 1) * parent.height - root.scaledPadding * 2)
                                     radius: root.scaledBorderRadius
                                     // P0: Scale on hover for manual zones only; autotile highlights whole layout
                                     scale: isZoneHovered ? 1.05 : 1
@@ -595,7 +605,7 @@ Window {
 
                                         Behavior on opacity {
                                             NumberAnimation {
-                                                duration: 150
+                                                duration: animationConstants.shortDuration
                                                 easing.type: Easing.OutCubic
                                             }
 
@@ -629,7 +639,7 @@ Window {
                                     // P2: Smoother animations with easing curves
                                     Behavior on color {
                                         ColorAnimation {
-                                            duration: 200
+                                            duration: animationConstants.normalDuration
                                             easing.type: Easing.OutCubic
                                         }
 
@@ -637,7 +647,7 @@ Window {
 
                                     Behavior on opacity {
                                         NumberAnimation {
-                                            duration: 200
+                                            duration: animationConstants.normalDuration
                                             easing.type: Easing.OutCubic
                                         }
 
@@ -645,7 +655,7 @@ Window {
 
                                     Behavior on scale {
                                         NumberAnimation {
-                                            duration: 150
+                                            duration: animationConstants.shortDuration
                                             easing.type: Easing.OutBack
                                             easing.overshoot: 1.2
                                         }
@@ -654,7 +664,7 @@ Window {
 
                                     Behavior on border.color {
                                         ColorAnimation {
-                                            duration: 150
+                                            duration: animationConstants.shortDuration
                                             easing.type: Easing.OutCubic
                                         }
 
@@ -662,7 +672,7 @@ Window {
 
                                     Behavior on border.width {
                                         NumberAnimation {
-                                            duration: 150
+                                            duration: animationConstants.shortDuration
                                             easing.type: Easing.OutCubic
                                         }
 
@@ -711,7 +721,7 @@ Window {
                                 // P2: Smoother animations with easing
                                 Behavior on color {
                                     ColorAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 
@@ -719,7 +729,7 @@ Window {
 
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 200
+                                        duration: animationConstants.normalDuration
                                         easing.type: Easing.OutCubic
                                     }
 

@@ -257,13 +257,14 @@ Window {
 
         function buildCustomColor1() {
             var p = root.shaderParams || {}
-            var c = p.customColor1 || "#ffffff"
+            // Use theme background color as fallback instead of hardcoded white
+            var c = p.customColor1 || Kirigami.Theme.backgroundColor
             // Parse hex string to color, or use as-is if already a color object
             if (typeof c === "string") {
                 try {
                     c = Qt.color(c)
                 } catch (e) {
-                    c = Qt.rgba(1, 1, 1, 1)
+                    c = Kirigami.Theme.backgroundColor
                 }
             }
             return Qt.vector4d(c.r !== undefined ? c.r : 1, c.g !== undefined ? c.g : 1, c.b !== undefined ? c.b : 1, c.a !== undefined ? c.a : 1)
@@ -271,13 +272,14 @@ Window {
 
         function buildCustomColor2() {
             var p = root.shaderParams || {}
-            var c = p.customColor2 || "#000000"
+            // Use theme text color as fallback instead of hardcoded black
+            var c = p.customColor2 || Kirigami.Theme.textColor
             // Parse hex string to color, or use as-is if already a color object
             if (typeof c === "string") {
                 try {
                     c = Qt.color(c)
                 } catch (e) {
-                    c = Qt.rgba(0, 0, 0, 1)
+                    c = Kirigami.Theme.textColor
                 }
             }
             return Qt.vector4d(c.r !== undefined ? c.r : 0, c.g !== undefined ? c.g : 0, c.b !== undefined ? c.b : 0, c.a !== undefined ? c.a : 1)

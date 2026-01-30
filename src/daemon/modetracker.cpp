@@ -38,12 +38,22 @@ ModeTracker::TilingMode ModeTracker::toggleMode()
         ? TilingMode::Autotile
         : TilingMode::Manual;
 
-    setCurrentMode(newMode);
+    // Get relevant ID with fallback defaults
+    QString relevantId;
+    if (newMode == TilingMode::Autotile) {
+        relevantId = m_lastAutotileAlgorithm.isEmpty()
+            ? QStringLiteral("master-stack")  // Default algorithm
+            : m_lastAutotileAlgorithm;
+    } else {
+        relevantId = m_lastManualLayoutId;
+        // If no manual layout recorded, don't switch - stay in current mode
+        if (relevantId.isEmpty()) {
+            qCWarning(lcDaemon) << "Cannot toggle to Manual mode: no layout recorded yet";
+            return m_currentMode;
+        }
+    }
 
-    // Emit toggle signal with relevant ID
-    QString relevantId = (newMode == TilingMode::Autotile)
-        ? m_lastAutotileAlgorithm
-        : m_lastManualLayoutId;
+    setCurrentMode(newMode);
 
     Q_EMIT modeToggled(newMode, relevantId);
 
