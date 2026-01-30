@@ -88,10 +88,14 @@ Item {
                     anchors.centerIn: parent
                     layout: root.modelData
                     isSelected: root.isSelected
-                    scale: (implicitWidth > 0 && implicitHeight > 0 && parent.width > 0 && parent.height > 0)
-                           ? Math.min(1, Math.min(parent.width / implicitWidth, parent.height / implicitHeight))
-                           : 1
                     transformOrigin: Item.Center
+
+                    // Safe scale calculation - fit thumbnail within parent bounds
+                    readonly property real safeImplicitWidth: Math.max(1, implicitWidth)
+                    readonly property real safeImplicitHeight: Math.max(1, implicitHeight)
+                    readonly property real safeParentWidth: Math.max(1, parent.width)
+                    readonly property real safeParentHeight: Math.max(1, parent.height)
+                    scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
                 }
 
                 // Default layout indicator

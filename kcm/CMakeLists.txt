@@ -50,6 +50,7 @@ install(FILES
     ui/tabs/BehaviorTab.qml
     ui/tabs/ZoneSelectorTab.qml
     ui/tabs/ExclusionsTab.qml
+    ui/tabs/ExclusionListCard.qml
     ui/tabs/MonitorAssignmentsCard.qml
     ui/tabs/ActivityAssignmentsCard.qml
     ui/tabs/QuickLayoutSlotsCard.qml

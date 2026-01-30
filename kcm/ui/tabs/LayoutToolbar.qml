@@ -39,28 +39,28 @@ RowLayout {
                 text: i18n("Edit"),
                 icon: "document-edit",
                 enabled: root.currentLayout !== null,
-                action: () => root.kcm.editLayout(root.currentLayout.id),
+                action: () => { if (root.currentLayout) root.kcm.editLayout(root.currentLayout.id) },
                 tooltip: ""
             },
             {
                 text: i18n("Duplicate"),
                 icon: "edit-copy",
                 enabled: root.currentLayout !== null,
-                action: () => root.kcm.duplicateLayout(root.currentLayout.id),
+                action: () => { if (root.currentLayout) root.kcm.duplicateLayout(root.currentLayout.id) },
                 tooltip: ""
             },
             {
                 text: i18n("Delete"),
                 icon: "edit-delete",
-                enabled: root.currentLayout !== null && !root.currentLayout.isSystem,
-                action: () => root.requestDeleteLayout(root.currentLayout),
+                enabled: root.currentLayout !== null && !root.currentLayout?.isSystem,
+                action: () => { if (root.currentLayout) root.requestDeleteLayout(root.currentLayout) },
                 tooltip: i18n("Delete the selected layout")
             },
             {
                 text: i18n("Set as Default"),
                 icon: "favorite",
-                enabled: root.currentLayout !== null && root.currentLayout.id !== root.kcm.defaultLayoutId,
-                action: () => { root.kcm.defaultLayoutId = root.currentLayout.id },
+                enabled: root.currentLayout !== null && root.currentLayout?.id !== root.kcm.defaultLayoutId,
+                action: () => { if (root.currentLayout) root.kcm.defaultLayoutId = root.currentLayout.id },
                 tooltip: i18n("Set this layout as the default for screens without specific assignments")
             }
         ]
@@ -90,6 +90,6 @@ RowLayout {
         text: i18n("Export")
         icon.name: "document-export"
         enabled: root.currentLayout !== null
-        onClicked: root.requestExportLayout(root.currentLayout.id)
+        onClicked: { if (root.currentLayout) root.requestExportLayout(root.currentLayout.id) }
     }
 }

@@ -30,7 +30,8 @@ Kirigami.Card {
         ListView {
             id: monitorListView
             Layout.fillWidth: true
-            Layout.preferredHeight: count > 0 ? contentHeight : Kirigami.Units.gridUnit * 4
+            // Use model length for reactive height calculation (count may lag on first load)
+            Layout.preferredHeight: (root.kcm.screens && root.kcm.screens.length > 0) ? contentHeight : Kirigami.Units.gridUnit * 4
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
             model: root.kcm.screens

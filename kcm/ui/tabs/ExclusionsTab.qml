@@ -8,6 +8,8 @@ import org.kde.kirigami as Kirigami
 
 /**
  * @brief Exclusions tab - Window filtering, excluded applications, and window classes
+ *
+ * Refactored to use ExclusionListCard for DRY compliance.
  */
 ScrollView {
     id: root
@@ -102,203 +104,38 @@ ScrollView {
             }
         }
 
-        // Excluded applications
-        Kirigami.Card {
+        // Excluded applications - using reusable component
+        ExclusionListCard {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Excluded Applications")
-                padding: Kirigami.Units.smallSpacing
-            }
+            title: i18n("Excluded Applications")
+            placeholderText: i18n("Application name (e.g., firefox, konsole)")
+            emptyTitle: i18n("No excluded applications")
+            emptyExplanation: i18n("Add application names above to exclude them from zone snapping")
+            iconSource: "application-x-executable"
+            model: kcm.excludedApplications
+            useMonospaceFont: false
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.smallSpacing
-
-                    TextField {
-                        id: excludedAppField
-                        Layout.fillWidth: true
-                        placeholderText: i18n("Application name (e.g., firefox, konsole)")
-
-                        onAccepted: {
-                            if (text.length > 0) {
-                                kcm.addExcludedApp(text)
-                                text = ""
-                            }
-                        }
-                    }
-
-                    Button {
-                        text: i18n("Add")
-                        icon.name: "list-add"
-                        enabled: excludedAppField.text.length > 0
-                        onClicked: {
-                            kcm.addExcludedApp(excludedAppField.text)
-                            excludedAppField.text = ""
-                        }
-                    }
-                }
-
-                ListView {
-                    id: excludedAppsList
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.margins: Kirigami.Units.smallSpacing
-                    clip: true
-                    model: kcm.excludedApplications
-                    focus: true
-                    keyNavigationEnabled: true
-                    activeFocusOnTab: true
-
-                    Accessible.name: i18n("Excluded applications list")
-                    Accessible.role: Accessible.List
-
-                    delegate: ItemDelegate {
-                        width: ListView.view.width
-                        required property string modelData
-                        required property int index
-
-                        highlighted: ListView.isCurrentItem
-                        onClicked: excludedAppsList.currentIndex = index
-
-                        Keys.onDeletePressed: kcm.removeExcludedApp(index)
-
-                        contentItem: RowLayout {
-                            Kirigami.Icon {
-                                source: "application-x-executable"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            Label {
-                                text: modelData
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            ToolButton {
-                                icon.name: "edit-delete"
-                                onClicked: kcm.removeExcludedApp(index)
-                                Accessible.name: i18n("Remove %1", modelData)
-                            }
-                        }
-                    }
-
-                    Kirigami.PlaceholderMessage {
-                        anchors.centerIn: parent
-                        width: parent.width - Kirigami.Units.gridUnit * 4
-                        visible: parent.count === 0
-                        text: i18n("No excluded applications")
-                        explanation: i18n("Add application names above to exclude them from zone snapping")
-                    }
-                }
-            }
+            onAddRequested: (text) => kcm.addExcludedApp(text)
+            onRemoveRequested: (index) => kcm.removeExcludedApp(index)
         }
 
-        // Excluded window classes
-        Kirigami.Card {
+        // Excluded window classes - using reusable component
+        ExclusionListCard {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
-            header: Kirigami.Heading {
-                level: 3
-                text: i18n("Excluded Window Classes")
-                padding: Kirigami.Units.smallSpacing
-            }
+            title: i18n("Excluded Window Classes")
+            placeholderText: i18n("Window class (use xprop to find)")
+            emptyTitle: i18n("No excluded window classes")
+            emptyExplanation: i18n("Use 'xprop | grep WM_CLASS' to find window classes")
+            iconSource: "window"
+            model: kcm.excludedWindowClasses
+            useMonospaceFont: true
 
-            contentItem: ColumnLayout {
-                spacing: Kirigami.Units.smallSpacing
-
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.margins: Kirigami.Units.smallSpacing
-
-                    TextField {
-                        id: excludedClassField
-                        Layout.fillWidth: true
-                        placeholderText: i18n("Window class (use xprop to find)")
-
-                        onAccepted: {
-                            if (text.length > 0) {
-                                kcm.addExcludedWindowClass(text)
-                                text = ""
-                            }
-                        }
-                    }
-
-                    Button {
-                        text: i18n("Add")
-                        icon.name: "list-add"
-                        enabled: excludedClassField.text.length > 0
-                        onClicked: {
-                            kcm.addExcludedWindowClass(excludedClassField.text)
-                            excludedClassField.text = ""
-                        }
-                    }
-                }
-
-                ListView {
-                    id: excludedClassesList
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.margins: Kirigami.Units.smallSpacing
-                    clip: true
-                    model: kcm.excludedWindowClasses
-                    focus: true
-                    keyNavigationEnabled: true
-                    activeFocusOnTab: true
-
-                    Accessible.name: i18n("Excluded window classes list")
-                    Accessible.role: Accessible.List
-
-                    delegate: ItemDelegate {
-                        width: ListView.view.width
-                        required property string modelData
-                        required property int index
-
-                        highlighted: ListView.isCurrentItem
-                        onClicked: excludedClassesList.currentIndex = index
-
-                        Keys.onDeletePressed: kcm.removeExcludedWindowClass(index)
-
-                        contentItem: RowLayout {
-                            Kirigami.Icon {
-                                source: "window"
-                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-
-                            Label {
-                                text: modelData
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                font: Kirigami.Theme.fixedWidthFont
-                            }
-
-                            ToolButton {
-                                icon.name: "edit-delete"
-                                onClicked: kcm.removeExcludedWindowClass(index)
-                                Accessible.name: i18n("Remove %1", modelData)
-                            }
-                        }
-                    }
-
-                    Kirigami.PlaceholderMessage {
-                        anchors.centerIn: parent
-                        width: parent.width - Kirigami.Units.gridUnit * 4
-                        visible: parent.count === 0
-                        text: i18n("No excluded window classes")
-                        explanation: i18n("Use 'xprop | grep WM_CLASS' to find window classes")
-                    }
-                }
-            }
+            onAddRequested: (text) => kcm.addExcludedWindowClass(text)
+            onRemoveRequested: (index) => kcm.removeExcludedWindowClass(index)
         }
     }
 }
