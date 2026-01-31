@@ -8,10 +8,10 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Shader settings dialog with Card-based layout
+ * @brief Shader settings dialog
  *
  * Provides a consistent UX for configuring shader effects on zone overlays.
- * Uses Card-based layout pattern matching KCM settings tabs.
+ * Uses section-based layout appropriate for dialogs.
  * Supports both grouped parameters (with accordion sections) and flat parameters.
  */
 Kirigami.Dialog {
@@ -20,8 +20,8 @@ Kirigami.Dialog {
     required property var editorController
 
     title: i18nc("@title:window", "Shader Settings")
-    preferredWidth: Kirigami.Units.gridUnit * 30
-    preferredHeight: Kirigami.Units.gridUnit * 32
+    preferredWidth: Kirigami.Units.gridUnit * 28
+    preferredHeight: Kirigami.Units.gridUnit * 30
 
     // ═══════════════════════════════════════════════════════════════════════
     // CONSTANTS
@@ -60,8 +60,6 @@ Kirigami.Dialog {
     readonly property var shaderParams: currentShaderInfo ? (currentShaderInfo.parameters || []) : []
 
     // Computed property: parameters grouped by their "group" field
-    // Returns array of { name: string, params: array } objects
-    // Returns empty array if no parameters have groups defined (triggers flat layout)
     readonly property var parameterGroups: buildParameterGroups(shaderParams)
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -69,7 +67,7 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     onOpened: {
         initializePendingState();
-        expandedGroupIndex = 0;  // Reset to first group expanded
+        expandedGroupIndex = 0;
     }
 
     onPendingShaderIdChanged: {
@@ -84,7 +82,6 @@ Kirigami.Dialog {
     function initializePendingState() {
         if (!editorController) return;
         pendingShaderId = editorController.currentShaderId || "";
-        // Copy current params to pending
         var current = editorController.currentShaderParams || {};
         var copy = {};
         for (var key in current) {
@@ -128,12 +125,10 @@ Kirigami.Dialog {
     function applyChanges() {
         if (!editorController) return;
 
-        // Apply shader selection
         if (pendingShaderId !== editorController.currentShaderId) {
             editorController.currentShaderId = pendingShaderId;
         }
 
-        // Apply all pending parameter changes
         var currentParams = editorController.currentShaderParams || {};
         for (var paramId in pendingParams) {
             if (pendingParams[paramId] !== currentParams[paramId]) {
@@ -164,11 +159,9 @@ Kirigami.Dialog {
         return noneShaderId;
     }
 
-    // Helper function to group parameters by their "group" field
     function buildParameterGroups(params) {
         if (!params || params.length === 0) return [];
 
-        // Check if any parameter has a group defined
         var hasGroups = false;
         for (var i = 0; i < params.length; i++) {
             if (params[i] && params[i].group) {
@@ -177,10 +170,8 @@ Kirigami.Dialog {
             }
         }
 
-        // If no groups defined, return empty to use flat layout
         if (!hasGroups) return [];
 
-        // Group parameters by their group field
         var groupMap = {};
         var groupOrder = [];
         for (var j = 0; j < params.length; j++) {
@@ -194,7 +185,6 @@ Kirigami.Dialog {
             groupMap[groupName].push(param);
         }
 
-        // Convert to array of objects
         var result = [];
         for (var k = 0; k < groupOrder.length; k++) {
             var name = groupOrder[k];
@@ -231,258 +221,175 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     // MAIN CONTENT
     // ═══════════════════════════════════════════════════════════════════════
-    ScrollView {
-        id: scrollView
-        anchors.fill: parent
-        clip: true
-        contentWidth: availableWidth
+    ColumnLayout {
+        spacing: Kirigami.Units.largeSpacing
 
-        ColumnLayout {
-            width: scrollView.availableWidth
-            spacing: Kirigami.Units.largeSpacing
+        // ═══════════════════════════════════════════════════════════════════
+        // EFFECT SELECTION SECTION
+        // ═══════════════════════════════════════════════════════════════════
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
 
-            // ═══════════════════════════════════════════════════════════════
-            // EFFECT SELECTION CARD
-            // ═══════════════════════════════════════════════════════════════
-            Kirigami.Card {
-                id: effectCard
-                Layout.fillWidth: true
+            CheckBox {
+                id: enableEffectCheck
+                Kirigami.FormData.label: i18nc("@label", "Enable effect:")
+                text: i18nc("@option:check", "Enable shader effect")
+                checked: root.hasShaderEffect
 
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18nc("@title", "Effect")
-                    padding: Kirigami.Units.smallSpacing
-                }
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
-
-                    Kirigami.FormLayout {
-                        Layout.fillWidth: true
-
-                        CheckBox {
-                            id: enableEffectCheck
-                            Kirigami.FormData.label: i18nc("@label", "Enable:")
-                            text: i18nc("@option:check", "Enable shader effect")
-                            checked: root.hasShaderEffect
-
-                            onToggled: {
-                                if (checked) {
-                                    if (root.pendingShaderId === root.noneShaderId) {
-                                        root.pendingShaderId = root.firstEffectId();
-                                    }
-                                } else {
-                                    root.pendingShaderId = root.noneShaderId;
-                                }
-                            }
+                onToggled: {
+                    if (checked) {
+                        if (root.pendingShaderId === root.noneShaderId) {
+                            root.pendingShaderId = root.firstEffectId();
                         }
-
-                        ComboBox {
-                            id: shaderComboBox
-                            Kirigami.FormData.label: i18nc("@label", "Shader:")
-                            enabled: root.hasShaderEffect
-                            Layout.fillWidth: true
-
-                            model: root.editorController ? root.editorController.availableShaders : []
-                            textRole: "name"
-                            valueRole: "id"
-
-                            function findShaderIndex() {
-                                if (!model) return 0;
-                                for (var i = 0; i < model.length; i++) {
-                                    if (model[i] && model[i].id === root.pendingShaderId) return i;
-                                }
-                                return 0;
-                            }
-
-                            Component.onCompleted: currentIndex = findShaderIndex()
-
-                            onActivated: {
-                                if (currentValue !== undefined) {
-                                    root.pendingShaderId = currentValue;
-                                }
-                            }
-
-                            Connections {
-                                target: root
-                                function onPendingShaderIdChanged() {
-                                    shaderComboBox.currentIndex = shaderComboBox.findShaderIndex();
-                                }
-                            }
-                        }
-                    }
-
-                    // Shader info area - fixed height container to prevent layout shifts
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: shaderInfoColumn.implicitHeight
-                        Layout.minimumHeight: Kirigami.Units.gridUnit * 2
-                        visible: root.hasShaderEffect
-
-                        ColumnLayout {
-                            id: shaderInfoColumn
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            spacing: Kirigami.Units.smallSpacing
-
-                            // Shader description
-                            Label {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: Kirigami.Units.largeSpacing
-                                visible: root.currentShaderInfo && root.currentShaderInfo.description
-                                text: root.currentShaderInfo ? (root.currentShaderInfo.description || "") : ""
-                                wrapMode: Text.WordWrap
-                                opacity: 0.7
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                            }
-
-                            // Author/version metadata
-                            Label {
-                                Layout.fillWidth: true
-                                Layout.leftMargin: Kirigami.Units.largeSpacing
-                                visible: text.length > 0
-                                text: {
-                                    if (!root.currentShaderInfo) return "";
-                                    var info = root.currentShaderInfo;
-                                    var parts = [];
-                                    if (info.author) parts.push(i18nc("@info shader author", "by %1", info.author));
-                                    if (info.version) parts.push(i18nc("@info shader version", "v%1", info.version));
-                                    if (info.isUserShader) parts.push(i18nc("@info user-installed shader", "(User shader)"));
-                                    return parts.join(" · ");
-                                }
-                                wrapMode: Text.WordWrap
-                                opacity: 0.5
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                                font.italic: true
-                            }
-                        }
+                    } else {
+                        root.pendingShaderId = root.noneShaderId;
                     }
                 }
             }
 
-            // ═══════════════════════════════════════════════════════════════
-            // PARAMETERS CARD
-            // ═══════════════════════════════════════════════════════════════
-            Kirigami.Card {
-                id: parametersCard
+            ComboBox {
+                id: shaderComboBox
+                Kirigami.FormData.label: i18nc("@label", "Shader:")
+                enabled: root.hasShaderEffect
                 Layout.fillWidth: true
-                visible: root.hasShaderEffect
 
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18nc("@title", "Parameters")
-                    padding: Kirigami.Units.smallSpacing
+                model: root.editorController ? root.editorController.availableShaders : []
+                textRole: "name"
+                valueRole: "id"
+
+                function findShaderIndex() {
+                    if (!model) return 0;
+                    for (var i = 0; i < model.length; i++) {
+                        if (model[i] && model[i].id === root.pendingShaderId) return i;
+                    }
+                    return 0;
                 }
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.smallSpacing
+                Component.onCompleted: currentIndex = findShaderIndex()
 
-                    // Message when shader has no parameters
-                    Label {
-                        Layout.fillWidth: true
-                        visible: root.shaderParams.length === 0
-                        text: i18nc("@info", "This effect has no configurable parameters.")
-                        wrapMode: Text.WordWrap
-                        opacity: 0.7
+                onActivated: {
+                    if (currentValue !== undefined) {
+                        root.pendingShaderId = currentValue;
+                    }
+                }
+
+                Connections {
+                    target: root
+                    function onPendingShaderIdChanged() {
+                        shaderComboBox.currentIndex = shaderComboBox.findShaderIndex();
+                    }
+                }
+            }
+
+            // Shader description
+            Label {
+                Kirigami.FormData.label: ""
+                Layout.fillWidth: true
+                visible: root.hasShaderEffect && root.currentShaderInfo && root.currentShaderInfo.description
+                text: root.currentShaderInfo ? (root.currentShaderInfo.description || "") : ""
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+            }
+
+            // Author/version metadata
+            Label {
+                Kirigami.FormData.label: ""
+                Layout.fillWidth: true
+                visible: root.hasShaderEffect && text.length > 0
+                text: {
+                    if (!root.currentShaderInfo) return "";
+                    var info = root.currentShaderInfo;
+                    var parts = [];
+                    if (info.author) parts.push(i18nc("@info shader author", "by %1", info.author));
+                    if (info.version) parts.push(i18nc("@info shader version", "v%1", info.version));
+                    if (info.isUserShader) parts.push(i18nc("@info user-installed shader", "(User shader)"));
+                    return parts.join(" · ");
+                }
+                wrapMode: Text.WordWrap
+                opacity: 0.5
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                font.italic: true
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // PARAMETERS SECTION
+        // ═══════════════════════════════════════════════════════════════════
+        Kirigami.Separator {
+            Layout.fillWidth: true
+            visible: root.hasShaderEffect && root.shaderParams.length > 0
+        }
+
+        Label {
+            Layout.fillWidth: true
+            visible: root.hasShaderEffect && root.shaderParams.length > 0
+            text: i18nc("@title:group", "Parameters")
+            font.weight: Font.DemiBold
+        }
+
+        // Message when shader has no parameters
+        Label {
+            Layout.fillWidth: true
+            visible: root.hasShaderEffect && root.shaderParams.length === 0
+            text: i18nc("@info", "This effect has no configurable parameters.")
+            wrapMode: Text.WordWrap
+            opacity: 0.7
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // GROUPED PARAMETERS - Accordion sections when groups defined
+        // ═══════════════════════════════════════════════════════════════════
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: root.hasShaderEffect && root.parameterGroups.length > 0
+            spacing: Kirigami.Units.smallSpacing
+
+            Repeater {
+                id: groupRepeater
+                model: root.parameterGroups
+
+                delegate: ShaderParameterSection {
+                    id: paramSection
+                    required property var modelData
+                    required property int index
+
+                    Layout.fillWidth: true
+                    title: modelData.name
+                    groupParams: modelData.params
+
+                    expanded: root.expandedGroupIndex === index
+
+                    onToggled: {
+                        root.expandedGroupIndex = expanded ? -1 : index;
                     }
 
-                    // ═══════════════════════════════════════════════════════
-                    // GROUPED PARAMETERS - Accordion sections when groups defined
-                    // ═══════════════════════════════════════════════════════
-                    Repeater {
-                        id: groupRepeater
-                        model: root.parameterGroups
+                    contentItem: Component {
+                        Kirigami.FormLayout {
+                            Repeater {
+                                model: paramSection.groupParams
 
-                        delegate: ShaderParameterSection {
-                            id: paramSection
-                            required property var modelData
-                            required property int index
+                                delegate: Loader {
+                                    Layout.fillWidth: true
+                                    visible: sourceComponent !== null
 
-                            Layout.fillWidth: true
-                            title: modelData.name
-                            groupParams: modelData.params
+                                    required property var modelData
+                                    required property int index
 
-                            // Accordion behavior: expand only if this is the active index
-                            expanded: root.expandedGroupIndex === index
+                                    Kirigami.FormData.label: modelData.name || modelData.id
 
-                            // Toggle accordion: collapse if already open, otherwise open this one
-                            onToggled: {
-                                root.expandedGroupIndex = expanded ? -1 : index;
-                            }
-
-                            contentItem: Component {
-                                Kirigami.FormLayout {
-                                    id: groupFormLayout
-
-                                    Repeater {
-                                        model: paramSection.groupParams
-
-                                        delegate: Loader {
-                                            id: groupParamLoader
-                                            Layout.fillWidth: true
-                                            visible: sourceComponent !== null
-
-                                            required property var modelData
-                                            required property int index
-
-                                            Kirigami.FormData.label: modelData.name || modelData.id
-
-                                            sourceComponent: {
-                                                switch (modelData.type) {
-                                                    case "float": return floatParamComponent;
-                                                    case "color": return colorParamComponent;
-                                                    case "bool": return boolParamComponent;
-                                                    case "int": return intParamComponent;
-                                                    default: return null;
-                                                }
-                                            }
-
-                                            onLoaded: {
-                                                if (item) {
-                                                    item.paramData = modelData;
-                                                }
-                                            }
+                                    sourceComponent: {
+                                        switch (modelData.type) {
+                                            case "float": return floatParamComponent;
+                                            case "color": return colorParamComponent;
+                                            case "bool": return boolParamComponent;
+                                            case "int": return intParamComponent;
+                                            default: return null;
                                         }
                                     }
-                                }
-                            }
-                        }
-                    }
 
-                    // ═══════════════════════════════════════════════════════
-                    // FLAT PARAMETERS - When no groups are defined
-                    // ═══════════════════════════════════════════════════════
-                    Kirigami.FormLayout {
-                        Layout.fillWidth: true
-                        visible: root.parameterGroups.length === 0 && root.shaderParams.length > 0
-
-                        Repeater {
-                            model: root.parameterGroups.length === 0 ? root.shaderParams : []
-
-                            delegate: Loader {
-                                id: flatParamLoader
-                                Layout.fillWidth: true
-                                visible: sourceComponent !== null
-
-                                required property var modelData
-                                required property int index
-
-                                Kirigami.FormData.label: modelData.name || modelData.id
-
-                                sourceComponent: {
-                                    switch (modelData.type) {
-                                        case "float": return floatParamComponent;
-                                        case "color": return colorParamComponent;
-                                        case "bool": return boolParamComponent;
-                                        case "int": return intParamComponent;
-                                        default: return null;
-                                    }
-                                }
-
-                                onLoaded: {
-                                    if (item) {
-                                        item.paramData = modelData;
+                                    onLoaded: {
+                                        if (item) item.paramData = modelData;
                                     }
                                 }
                             }
@@ -490,21 +397,53 @@ Kirigami.Dialog {
                     }
                 }
             }
+        }
 
-            // ═══════════════════════════════════════════════════════════════
-            // DISABLED STATE MESSAGE
-            // ═══════════════════════════════════════════════════════════════
-            Kirigami.InlineMessage {
-                Layout.fillWidth: true
-                visible: !root.hasShaderEffect
-                type: Kirigami.MessageType.Information
-                text: i18nc("@info", "Enable the shader effect above to configure visual effects for zone overlays.")
-            }
+        // ═══════════════════════════════════════════════════════════════════
+        // FLAT PARAMETERS - When no groups are defined
+        // ═══════════════════════════════════════════════════════════════════
+        Kirigami.FormLayout {
+            Layout.fillWidth: true
+            visible: root.hasShaderEffect && root.parameterGroups.length === 0 && root.shaderParams.length > 0
 
-            // Spacer
-            Item {
-                Layout.fillHeight: true
+            Repeater {
+                model: root.parameterGroups.length === 0 ? root.shaderParams : []
+
+                delegate: Loader {
+                    Layout.fillWidth: true
+                    visible: sourceComponent !== null
+
+                    required property var modelData
+                    required property int index
+
+                    Kirigami.FormData.label: modelData.name || modelData.id
+
+                    sourceComponent: {
+                        switch (modelData.type) {
+                            case "float": return floatParamComponent;
+                            case "color": return colorParamComponent;
+                            case "bool": return boolParamComponent;
+                            case "int": return intParamComponent;
+                            default: return null;
+                        }
+                    }
+
+                    onLoaded: {
+                        if (item) item.paramData = modelData;
+                    }
+                }
             }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // DISABLED STATE MESSAGE
+        // ═══════════════════════════════════════════════════════════════════
+        Label {
+            Layout.fillWidth: true
+            visible: !root.hasShaderEffect
+            text: i18nc("@info", "Enable the shader effect to configure visual effects for zone overlays.")
+            wrapMode: Text.WordWrap
+            opacity: 0.7
         }
     }
 
