@@ -436,6 +436,29 @@ private:
      */
     void applyToAllStates(const std::function<void(TilingState *)> &operation);
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Validate that a windowId is not empty, logging a warning if it is
+     * @param windowId Window ID to validate
+     * @param operation Operation name for the warning message
+     * @return true if valid (non-empty), false if empty (logs warning)
+     */
+    bool warnIfEmptyWindowId(const QString& windowId, const char* operation) const;
+
+    /**
+     * @brief Get TilingState for a window by looking up its screen
+     *
+     * Consolidates the common pattern of m_windowToScreen lookup + stateForScreen.
+     *
+     * @param windowId Window ID to look up
+     * @param outScreenName If non-null, receives the screen name
+     * @return TilingState pointer or nullptr if window not tracked/screen invalid
+     */
+    TilingState* stateForWindow(const QString& windowId, QString* outScreenName = nullptr);
+
     LayoutManager *m_layoutManager = nullptr;
     WindowTrackingService *m_windowTracker = nullptr;
     ScreenManager *m_screenManager = nullptr;
@@ -446,7 +469,7 @@ private:
     QHash<QString, TilingState *> m_screenStates; // Owned via Qt parent (this)
     QHash<QString, QString> m_windowToScreen;     // windowId -> screenName
 
-    // Settings synchronization (SRP: engine owns its settings sync)
+    // Settings synchronization
     QPointer<Settings> m_settings;  // QPointer for safe access if Settings destroyed
     QTimer m_settingsRetileTimer;   // Debounce timer for settings changes
     bool m_pendingSettingsRetile = false;

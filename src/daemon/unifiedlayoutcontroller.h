@@ -19,7 +19,7 @@ class Layout;
 /**
  * @brief Controller for unified layout management (manual layouts + autotile algorithms)
  *
- * Extracted from Daemon to follow SRP. Handles:
+ * Extracted from Daemon. Handles:
  * - Quick layout switching (Meta+1-9)
  * - Layout cycling (Meta+[/])
  * - ID-based layout tracking (more robust than index-based)

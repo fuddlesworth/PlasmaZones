@@ -12,13 +12,10 @@ namespace PlasmaZones {
 class Zone;
 
 /**
- * @brief Manages zone highlighting state (UI concern)
+ * @brief Manages zone highlighting state
  *
- * This class separates UI state management from detection algorithms,
- * following the Single Responsibility Principle.
- *
- * ZoneDetector handles pure detection algorithms.
- * ZoneHighlighter handles UI highlighting state.
+ * Separates UI state from detection logic. ZoneDetector runs the detection
+ * algorithms; this class manages the visual highlighting.
  */
 class PLASMAZONES_EXPORT ZoneHighlighter : public QObject
 {

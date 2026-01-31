@@ -28,12 +28,8 @@ class TilingAlgorithm;
 /**
  * @brief Manages zone overlay windows
  *
- * This class separates UI/overlay concerns from the Daemon,
- * following the Single Responsibility Principle.
- * It handles:
- * - Creating and managing overlay windows per screen
- * - Updating overlay appearance from settings
- * - Zone highlighting and visual feedback
+ * Creates and manages overlay windows per screen, updates appearance
+ * from settings, and provides zone highlighting/visual feedback.
  */
 class OverlayService : public IOverlayService
 {
@@ -163,6 +159,27 @@ private:
     void destroyLayoutOsdWindow(QScreen* screen);
     void createNavigationOsdWindow(QScreen* screen);
     void destroyNavigationOsdWindow(QScreen* screen);
+
+    /**
+     * @brief Prepare layout OSD window for display
+     * @param window Output: the prepared window (nullptr on failure)
+     * @param screenGeom Output: screen geometry
+     * @param aspectRatio Output: calculated aspect ratio
+     * @return true if window is ready, false on failure
+     */
+    bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio);
+
+    /**
+     * @brief Create a QML window from a resource URL
+     * @param qmlUrl QML resource URL (e.g., "qrc:/ui/ZoneOverlay.qml")
+     * @param screen Screen to assign the window to
+     * @param windowType Description for logging (e.g., "overlay", "zone selector")
+     * @return Created window with C++ ownership, or nullptr on failure
+     *
+     * Handles common QML window creation: component loading, error checking,
+     * QQuickWindow casting, ownership, and screen assignment.
+     */
+    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType);
 
     // Shader support methods
     bool useShaderOverlay() const;

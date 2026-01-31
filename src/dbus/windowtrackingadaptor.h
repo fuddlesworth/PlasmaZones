@@ -17,15 +17,17 @@
 namespace PlasmaZones {
 
 class LayoutManager; // Concrete type needed for signal connections
+class Layout;
+class Zone;
 class IZoneDetector;
 class ISettings;
 class VirtualDesktopManager;
 
 /**
- * @brief D-Bus adaptor for window-zone tracking (SRP)
+ * @brief D-Bus adaptor for window-zone tracking
  *
  * Provides D-Bus interface: org.plasmazones.WindowTracking
- * Single responsibility: Window-zone assignment tracking
+ *  Window-zone assignment tracking
  */
 class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 {
@@ -487,78 +489,66 @@ private Q_SLOTS:
     void onLayoutChanged();
 
 private:
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Constants
+    // ═══════════════════════════════════════════════════════════════════════════════
+
     // Minimum visible area for isGeometryOnScreen check (pixels)
     // A window must have at least this much area visible on a screen to be considered "on screen"
     static constexpr int MinVisibleWidth = 100;
     static constexpr int MinVisibleHeight = 100;
 
-    // Window-zone tracking: windowId -> zoneId (primary zone only)
-    QHash<QString, QString> m_windowZoneAssignments;
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper Methods - Private
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    // Window-screen tracking: windowId -> screenName (for multi-monitor support)
-    // Used by getUpdatedWindowGeometries() to recalculate zone geometry on correct screen
-    QHash<QString, QString> m_windowScreenAssignments;
+    /**
+     * @brief Get validated active layout with logging
+     * @param operation Name of the operation (for logging)
+     * @return Pointer to active layout, or nullptr if unavailable
+     */
+    Layout* getValidatedActiveLayout(const QString& operation) const;
 
-    // Window-desktop tracking: windowId -> virtual desktop (1-based)
-    QHash<QString, int> m_windowDesktopAssignments;
+    /**
+     * @brief Validate window ID and log warning if empty
+     * @param windowId Window ID to validate
+     * @param operation Name of the operation (for logging)
+     * @return true if windowId is valid, false if empty
+     */
+    bool validateWindowId(const QString& windowId, const QString& operation) const;
 
-    // Pre-snap geometry storage: windowId -> geometry before first snap
-    // Used for "restore original size on unsnap" feature
-    // Key design: Only stores on FIRST snap, not overwritten when moving A→B
-    QHash<QString, QRect> m_preSnapGeometries;
+    /**
+     * @brief Validate direction parameter and emit feedback if invalid
+     * @param direction Direction string to validate
+     * @param action Action name for feedback signal
+     * @return true if direction is valid, false if empty
+     */
+    bool validateDirection(const QString& direction, const QString& action);
 
-    // Last used zone tracking (for moveNewWindowsToLastZone feature)
-    QString m_lastUsedZoneId;
-    QString m_lastUsedScreenName; // Track which screen the zone was on
-    QString m_lastUsedZoneClass; // Track which class last used the zone
-    int m_lastUsedDesktop = 0; // Track which virtual desktop last used the zone
+    /**
+     * @brief Convert QRect to JSON geometry string for D-Bus
+     * @param rect Rectangle to convert
+     * @return JSON string with x, y, width, height
+     */
+    QString rectToJson(const QRect& rect) const;
 
-    // Temporarily floating windows (Phase 1 keyboard navigation)
-    // These windows are excluded from zone snapping until toggled back
-    QSet<QString> m_floatingWindows;
-
-    // Pending zone assignments from previous session (stableId -> zoneId)
-    // Used to restore windows to their previous zones after relog
-    // Keyed by stable ID (windowClass:resourceName, without pointer address)
-    QHash<QString, QString> m_pendingZoneAssignments;
-    // Pending screen assignments for closed windows (stableId -> screenName)
-    // Used to restore windows to the correct monitor on reopen.
-    QHash<QString, QString> m_pendingZoneScreens;
-    // Pending desktop assignments for closed windows (stableId -> virtual desktop)
-    // Used to restore windows to the correct desktop on reopen.
-    QHash<QString, int> m_pendingZoneDesktops;
-
-    // Zone to restore to when unfloating (stableId -> zoneId). Saved when floating a snapped
-    // window; cleared when unfloating and restoring, or when the window is closed.
-    // Not persisted across daemon restarts.
-    QHash<QString, QString> m_preFloatZoneAssignments;
-
-    // Window classes that have been USER-snapped (not auto-snapped)
-    // Only windows whose class is in this set will be auto-snapped to last zone
-    // This prevents auto-snapping windows that were never manually snapped by the user.
-    // Keyed by window class (first part of stable ID, before first colon)
-    QSet<QString> m_userSnappedClasses;
-
-    // Sticky window tracking (windowId -> sticky)
-    QHash<QString, bool> m_windowStickyStates;
-
-    // Windows that were auto-snapped (restore or moveNewWindowsToLastZone)
-    // Used to avoid updating last-used zone from automatic snaps.
-    QSet<QString> m_autoSnappedWindows;
-
-    // Dependencies
-    LayoutManager* m_layoutManager; // Concrete type for signal connections
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Dependencies (kept for signal connections and settings access)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    LayoutManager* m_layoutManager;
     IZoneDetector* m_zoneDetector;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
 
-    // Business logic service (SRP: separates tracking logic from D-Bus interface)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Business logic service
+    // ═══════════════════════════════════════════════════════════════════════════════
     WindowTrackingService* m_service = nullptr;
 
-    // Debounced save timer to batch multiple state changes
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Persistence (adaptor responsibility: KConfig save/load)
+    // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
-
-    // Schedule a debounced save (batches rapid changes into a single disk write)
     void scheduleSaveState();
 };
 

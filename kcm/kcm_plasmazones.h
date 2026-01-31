@@ -4,6 +4,7 @@
 #pragma once
 
 #include <KQuickConfigModule>
+#include <KConfigGroup>
 #include <QObject>
 #include <QColor>
 #include <QMap>
@@ -481,9 +482,11 @@ private:
     static constexpr int DBusTimeoutMs = 5000; // 5 second timeout
     QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {}) const;
 
-    // Helper functions to convert DragModifier enum to/from Qt::KeyboardModifier bitmask
-    static int dragModifierToBitmask(int enumValue);
-    static int bitmaskToDragModifier(int bitmask);
+    /**
+     * @brief Get Editor config group from plasmazonesrc
+     * @return KConfigGroup for the Editor section
+     */
+    static KConfigGroup editorConfigGroup();
 
     Settings* m_settings = nullptr;
     QTimer* m_daemonCheckTimer = nullptr;

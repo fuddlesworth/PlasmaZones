@@ -148,7 +148,7 @@ private:
     void checkZoneSelectorTrigger(int cursorX, int cursorY);
     bool isNearTriggerEdge(int cursorX, int cursorY) const;
 
-    // dragStopped() helpers (SRP refactoring)
+    // dragStopped() helpers
     void hideOverlayAndSelector();
     void resetDragState();
 

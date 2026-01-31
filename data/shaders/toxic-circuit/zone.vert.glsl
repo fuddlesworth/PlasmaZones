@@ -20,9 +20,9 @@ layout(std140) uniform ZoneUniforms {
     vec2 iResolution;
     int zoneCount;
     int highlightedCount;
-    vec4 iMouse;        // xy = pixels, zw = normalized (0-1)
-    vec4 customParams[4];  // [0-3], access as customParams[0].x for slot 0, etc.
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
+    vec4 iMouse;
+    vec4 customParams[4];
+    vec4 customColors[8];
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
@@ -30,14 +30,11 @@ layout(std140) uniform ZoneUniforms {
 };
 
 /**
- * GRADIENT MESH VERTEX SHADER
- * Simple pass-through vertex shader
+ * TOXIC CIRCUIT VERTEX SHADER
+ * Pass-through vertex shader for toxic circuit effect
  */
 
 void main() {
-    // Pass through texture coordinates
     vTexCoord = texCoord;
-    
-    // Transform position by the Qt matrix
     gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 }

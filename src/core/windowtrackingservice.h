@@ -26,7 +26,7 @@ class Zone;
  * @brief Window-zone tracking service (business logic layer)
  *
  * This service encapsulates all window tracking business logic that was
- * previously in WindowTrackingAdaptor. Following the Single Responsibility
+ * previously in WindowTrackingAdaptor. Following separation of concerns,
  * Principle, it handles:
  *
  * - Zone assignment management (which window is in which zone)

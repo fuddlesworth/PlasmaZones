@@ -11,15 +11,8 @@ namespace PlasmaZones {
 /**
  * @brief Default values for zone appearance and core module constants
  *
- * IMPORTANT: These defaults are used by the core module (zone.h, layout.cpp,
- * geometryutils.cpp) which cannot depend on the config module.
- *
- * For settings-related defaults, use ConfigDefaults (src/config/configdefaults.h)
- * which wraps the KConfigXT-generated PlasmaZonesConfig class. The .kcfg file
- * is the single source of truth for user-configurable settings.
- *
- * Values here should match the corresponding <default> values in plasmazones.kcfg.
- * If you change a default here, also update plasmazones.kcfg to match (and vice versa).
+ * These defaults are used by core module files that can't depend on config.
+ * For user-configurable settings, see ConfigDefaults and plasmazones.kcfg.
  *
  * Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
  * structural constants for built-in layouts and are NOT in .kcfg.
@@ -82,7 +75,7 @@ inline constexpr const char* DefaultBorderColor = "#CCFFFFFF";
 }
 
 /**
- * @brief JSON keys for serialization (DRY principle)
+ * @brief JSON keys for serialization
  */
 namespace JsonKeys {
 // Zone keys
@@ -151,7 +144,7 @@ inline constexpr QLatin1String Colors{"colors"};
 }
 
 /**
- * @brief Autotiling constants (DRY - used by TilingState, AutotileConfig, Settings)
+ * @brief Autotiling constants
  */
 namespace AutotileDefaults {
 // Split ratio bounds (master area percentage)
@@ -255,7 +248,7 @@ inline constexpr QLatin1String ThreeColumn{"three-column"};
  *
  * Autotile algorithms use prefixed IDs to distinguish them from manual layout UUIDs
  * in the zone selector. This namespace provides constants and helpers for working
- * with these IDs consistently (DRY principle).
+ * with these IDs consistently.
  */
 namespace LayoutId {
 inline constexpr QLatin1String AutotilePrefix{"autotile:"};

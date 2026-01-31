@@ -11,6 +11,46 @@
 
 namespace PlasmaZones {
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Macros for setter patterns
+// Reduces boilerplate for layout property setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Simple setter: if changed, update member, emit specific signal and layoutModified
+#define LAYOUT_SETTER(Type, name, member, signal) \
+    void Layout::set##name(Type value) \
+    { \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+            Q_EMIT layoutModified(); \
+        } \
+    }
+
+// Simple setter without layoutModified signal (for internal properties)
+#define LAYOUT_SETTER_NO_MODIFIED(Type, name, member, signal) \
+    void Layout::set##name(Type value) \
+    { \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+        } \
+    }
+
+// Setter that allows -1 (use global setting) or any non-negative value
+#define LAYOUT_SETTER_MIN_NEGATIVE_ONE(name, member, signal) \
+    void Layout::set##name(int value) \
+    { \
+        if (value < -1) { \
+            value = -1; \
+        } \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+            Q_EMIT layoutModified(); \
+        } \
+    }
+
 Layout::Layout(QObject* parent)
     : QObject(parent)
     , m_id(QUuid::createUuid())
@@ -82,120 +122,35 @@ Layout& Layout::operator=(const Layout& other)
     return *this;
 }
 
-void Layout::setName(const QString& name)
-{
-    if (m_name != name) {
-        m_name = name;
-        Q_EMIT nameChanged();
-        Q_EMIT layoutModified();
-    }
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout Property Setters
+// ═══════════════════════════════════════════════════════════════════════════════
 
-void Layout::setType(LayoutType type)
-{
-    if (m_type != type) {
-        m_type = type;
-        Q_EMIT typeChanged();
-        Q_EMIT layoutModified();
-    }
-}
+// Simple property setters
+LAYOUT_SETTER(const QString&, Name, m_name, nameChanged)
+LAYOUT_SETTER(LayoutType, Type, m_type, typeChanged)
+LAYOUT_SETTER(const QString&, Description, m_description, descriptionChanged)
+LAYOUT_SETTER(const QString&, Author, m_author, authorChanged)
+LAYOUT_SETTER(const QString&, Shortcut, m_shortcut, shortcutChanged)
+LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
+LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
+LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
 
-void Layout::setDescription(const QString& description)
-{
-    if (m_description != description) {
-        m_description = description;
-        Q_EMIT descriptionChanged();
-        Q_EMIT layoutModified();
-    }
-}
+// Gap setters (allow -1 for "use global" or non-negative values)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(ZonePadding, m_zonePadding, zonePaddingChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGap, m_outerGap, outerGapChanged)
 
-void Layout::setAuthor(const QString& author)
-{
-    if (m_author != author) {
-        m_author = author;
-        Q_EMIT authorChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::setShortcut(const QString& shortcut)
-{
-    if (m_shortcut != shortcut) {
-        m_shortcut = shortcut;
-        Q_EMIT shortcutChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::setZonePadding(int padding)
-{
-    // Allow -1 (use global) or any non-negative value
-    if (padding < -1) {
-        padding = -1;
-    }
-    if (m_zonePadding != padding) {
-        m_zonePadding = padding;
-        Q_EMIT zonePaddingChanged();
-        Q_EMIT layoutModified();
-    }
-}
+// Source path setter (no layoutModified - internal tracking property)
+LAYOUT_SETTER_NO_MODIFIED(const QString&, SourcePath, m_sourcePath, sourcePathChanged)
 
 void Layout::clearZonePaddingOverride()
 {
     setZonePadding(-1);
 }
 
-void Layout::setOuterGap(int gap)
-{
-    // Allow -1 (use global) or any non-negative value
-    if (gap < -1) {
-        gap = -1;
-    }
-    if (m_outerGap != gap) {
-        m_outerGap = gap;
-        Q_EMIT outerGapChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
 void Layout::clearOuterGapOverride()
 {
     setOuterGap(-1);
-}
-
-void Layout::setShowZoneNumbers(bool show)
-{
-    if (m_showZoneNumbers != show) {
-        m_showZoneNumbers = show;
-        Q_EMIT showZoneNumbersChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::setSourcePath(const QString& path)
-{
-    if (m_sourcePath != path) {
-        m_sourcePath = path;
-        Q_EMIT sourcePathChanged();
-    }
-}
-
-void Layout::setShaderId(const QString& id)
-{
-    if (m_shaderId != id) {
-        m_shaderId = id;
-        Q_EMIT shaderIdChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::setShaderParams(const QVariantMap& params)
-{
-    if (m_shaderParams != params) {
-        m_shaderParams = params;
-        Q_EMIT shaderParamsChanged();
-        Q_EMIT layoutModified();
-    }
 }
 
 bool Layout::isSystemLayout() const

@@ -26,7 +26,7 @@ namespace PlasmaZones {
  * @brief Parsed zone rectangle data for shader rendering
  *
  * Stores zone geometry normalized to [0,1] coordinates for GPU processing.
- * This struct is designed to be safely copied between threads.
+ * Safe to copy between threads.
  */
 struct ZoneRect
 {

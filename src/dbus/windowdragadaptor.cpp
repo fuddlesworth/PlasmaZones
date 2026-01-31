@@ -507,7 +507,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
                         zoneUuid = QStringLiteral("zoneselector-%1-%2").arg(selectedLayoutId).arg(selectedZoneIndex);
                     }
                     m_windowTracking->windowSnapped(windowId, zoneUuid);
-                    // BUG FIX: Record that this window class was USER-snapped (not auto-snapped)
+                    // Record user-initiated snap (not auto-snap)
                     // This prevents auto-snapping windows that were never manually snapped by user
                     m_windowTracking->recordSnapIntent(windowId, true);
                 }
@@ -531,7 +531,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
                 m_windowTracking->windowSnapped(windowId, capturedZoneId);
-                // BUG FIX: Record that this window class was USER-snapped (not auto-snapped)
+                // Record user-initiated snap (not auto-snap)
                 m_windowTracking->recordSnapIntent(windowId, true);
             }
         } else if (capturedZoneGeometry.isValid()) {
@@ -543,7 +543,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
                 m_windowTracking->windowSnapped(windowId, capturedZoneId);
-                // BUG FIX: Record that this window class was USER-snapped (not auto-snapped)
+                // Record user-initiated snap (not auto-snap)
                 m_windowTracking->recordSnapIntent(windowId, true);
             }
         }

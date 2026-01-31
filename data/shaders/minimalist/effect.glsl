@@ -45,8 +45,8 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 }
 
 vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
+    // Zone shape: params.x = borderRadius, params.y = zone-level border (unused; we use shader param)
     float borderRadius = max(params.x, 10.0);
-    float zoneBorderWidth = max(params.y, 2.0);
     
     float fillOpacity = customParams[0].x > 0.1 ? customParams[0].x : 0.85;
     float borderWidth = customParams[0].y > 0.1 ? customParams[0].y : 2.0;

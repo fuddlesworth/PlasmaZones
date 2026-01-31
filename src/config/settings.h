@@ -924,6 +924,44 @@ public:
     Q_INVOKABLE void applySystemColorScheme();
 
 private:
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper Methods for load()
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Read and validate an integer from config with bounds checking
+     * @param group KConfigGroup to read from
+     * @param key Config key name
+     * @param defaultValue Default if not found or invalid
+     * @param min Minimum valid value
+     * @param max Maximum valid value
+     * @param settingName Human-readable name for warning messages
+     * @return Validated integer value
+     */
+    int readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue,
+                         int min, int max, const char* settingName);
+
+    /**
+     * @brief Read and validate a color from config
+     * @param group KConfigGroup to read from
+     * @param key Config key name
+     * @param defaultValue Default if not found or invalid
+     * @param settingName Human-readable name for warning messages
+     * @return Validated QColor value
+     */
+    QColor readValidatedColor(const KConfigGroup& group, const char* key,
+                              const QColor& defaultValue, const char* settingName);
+
+    /**
+     * @brief Load indexed shortcuts (1-9) from config group
+     * @param group KConfigGroup to read from
+     * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
+     * @param shortcuts Array of 9 QString to populate
+     * @param defaults Array of 9 default values
+     */
+    void loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern,
+                              QString (&shortcuts)[9], const QString (&defaults)[9]);
+
     // Activation
     bool m_shiftDragToActivate = true; // Deprecated - kept for migration
     // KWin Effect provides modifiers via mouseChanged signal
@@ -942,7 +980,7 @@ private:
     bool m_showNavigationOsd = true;
     OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
 
-    // Appearance (DRY: use constants from Defaults namespace)
+    // Appearance
     bool m_useSystemColors = true;
     QColor m_highlightColor = Defaults::HighlightColor;
     QColor m_inactiveColor = Defaults::InactiveColor;
@@ -954,12 +992,12 @@ private:
     int m_borderRadius = Defaults::BorderRadius;
     bool m_enableBlur = true;
 
-    // Zone settings (DRY: use constants from Defaults namespace)
+    // Zone settings
     int m_zonePadding = Defaults::ZonePadding;
     int m_outerGap = Defaults::OuterGap;
     int m_adjacentThreshold = Defaults::AdjacentThreshold;
 
-    // Performance and behavior (DRY: use constants from Defaults namespace)
+    // Performance and behavior
     int m_pollIntervalMs = Defaults::PollIntervalMs;
     int m_minimumZoneSizePx = Defaults::MinimumZoneSizePx;
     int m_minimumZoneDisplaySizePx = Defaults::MinimumZoneDisplaySizePx;

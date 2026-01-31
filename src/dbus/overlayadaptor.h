@@ -18,15 +18,15 @@ class ISettings;
 class Zone;
 
 /**
- * @brief D-Bus adaptor for overlay control operations (SRP)
+ * @brief D-Bus adaptor for overlay control operations
  *
  * Provides D-Bus interface: org.plasmazones.Overlay
- * Single responsibility: Zone overlay visibility and highlighting only
+ *  Zone overlay visibility and highlighting only
  *
  * Note: Zone detection and window tracking are handled by separate adaptors
- * (ZoneDetectionAdaptor and WindowTrackingAdaptor) to follow SRP.
+ * (ZoneDetectionAdaptor and WindowTrackingAdaptor).
  *
- * Uses interface types for Dependency Inversion Principle (DIP)
+ * Uses interface types for loose coupling
  */
 class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 {

@@ -119,7 +119,7 @@ ComboBox {
             spacing: Kirigami.Units.smallSpacing
 
             // Mini layout preview (only if showPreview is enabled)
-            // Uses shared ZonePreview component for DRY compliance
+            // Uses shared ZonePreview component
             Rectangle {
                 Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3

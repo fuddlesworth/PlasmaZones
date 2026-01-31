@@ -8,7 +8,9 @@
 #include <QRectF>
 #include <QUuid>
 #include <QScreen>
+#include <KConfigGroup>
 #include "../core/constants.h"
+#include "../core/logging.h"
 #include "undo/UndoController.h"
 
 namespace PlasmaZones {
@@ -428,6 +430,58 @@ private:
     void markUnsaved();
 
     /**
+     * @brief Z-order operation types for changeZOrderImpl
+     */
+    enum class ZOrderOp { BringToFront, SendToBack, BringForward, SendBackward };
+
+    /**
+     * @brief Internal implementation for all z-order operations
+     * @param zoneId Zone to modify
+     * @param op Z-order operation to perform
+     * @param actionName Undo action display name (already translated)
+     */
+    void changeZOrderImpl(const QString& zoneId, ZOrderOp op, const QString& actionName);
+
+    /**
+     * @brief Check if required services are ready for operations
+     * @param operation Description of the operation (for logging)
+     * @return true if both m_undoController and m_zoneManager are valid
+     */
+    bool servicesReady(const char* operation) const;
+
+    /**
+     * @brief Sync single-selection with multi-selection and emit signals
+     *
+     * Updates m_selectedZoneId to match first item in m_selectedZoneIds
+     * and emits the appropriate changed signals. Call after modifying
+     * m_selectedZoneIds directly.
+     */
+    void syncSelectionSignals();
+
+    /**
+     * @brief Load a shortcut from config with validation
+     * @param group KConfig group to read from
+     * @param key Config key name
+     * @param defaultValue Default shortcut if not set or empty
+     * @param member Reference to member variable to update
+     * @param emitSignal Lambda to emit the changed signal
+     */
+    template<typename F>
+    void loadShortcutSetting(KConfigGroup& group, const QString& key,
+                             const QString& defaultValue, QString& member, F emitSignal)
+    {
+        QString value = group.readEntry(key, defaultValue);
+        if (value.isEmpty()) {
+            qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
+            value = defaultValue;
+        }
+        if (member != value) {
+            member = value;
+            emitSignal();
+        }
+    }
+
+    /**
      * @brief Loads editor settings from KConfig
      */
     void loadEditorSettings();
@@ -444,20 +498,6 @@ private:
      * This enables reactive QML bindings to update when clipboard changes.
      */
     void onClipboardChanged();
-
-    /**
-     * @brief Serializes zones to JSON format for clipboard
-     * @param zones List of zones to serialize
-     * @return JSON string containing zone data
-     */
-    QString serializeZonesToClipboard(const QVariantList& zones);
-
-    /**
-     * @brief Deserializes zones from clipboard JSON format
-     * @param clipboardText JSON string from clipboard
-     * @return List of zones, or empty list if invalid data
-     */
-    QVariantList deserializeZonesFromClipboard(const QString& clipboardText);
 
     /**
      * @brief Gets shader info from daemon via D-Bus
@@ -482,12 +522,6 @@ private:
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
 
-    // Snapping settings (delegated to SnappingService, cached for fallback)
-    bool m_gridSnappingEnabled = true;
-    bool m_edgeSnappingEnabled = true;
-    qreal m_snapIntervalX = PlasmaZones::EditorConstants::DefaultSnapInterval;
-    qreal m_snapIntervalY = PlasmaZones::EditorConstants::DefaultSnapInterval;
-    qreal m_snapInterval = PlasmaZones::EditorConstants::DefaultSnapInterval; // For backward compatibility
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 
     // Keyboard shortcuts (app-specific, loaded from settings)

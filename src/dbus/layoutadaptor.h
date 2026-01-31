@@ -10,6 +10,7 @@
 #include <QStringList>
 #include <QUuid>
 #include <QHash>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -22,7 +23,7 @@ class Layout;
  * @brief D-Bus adaptor for layout management operations
  *
  * Provides D-Bus interface: org.plasmazones.LayoutManager
- * Single responsibility: Layout CRUD and assignment operations
+ *  Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 {
@@ -185,6 +186,59 @@ private:
     void connectLayoutManagerSignals();
     void connectVirtualDesktopSignals();
     void connectActivitySignals();
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Parse UUID string with validation and logging
+     * @param id UUID string to parse
+     * @param operation Description for error logging (e.g., "setActiveLayout")
+     * @return Valid QUuid or std::nullopt on failure (logs warning)
+     */
+    std::optional<QUuid> parseAndValidateUuid(const QString& id, const QString& operation) const;
+
+    /**
+     * @brief Get layout by ID string with full validation
+     * @param id UUID string
+     * @param operation Description for error logging
+     * @return Layout pointer or nullptr on failure (logs warning)
+     *
+     * Consolidates parseUuid + layoutById + error logging.
+     */
+    Layout* getValidatedLayout(const QString& id, const QString& operation);
+
+    /**
+     * @brief Validate that a required string parameter is not empty
+     * @param value The value to check
+     * @param paramName Parameter name for error message (e.g., "layout ID")
+     * @param operation Operation name for error message
+     * @return true if valid (non-empty), false if empty (logs warning)
+     */
+    bool validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const;
+
+    /**
+     * @brief Parse JSON string to QJsonObject with validation
+     * @param jsonString JSON string to parse
+     * @param operation Operation name for error messages
+     * @return QJsonObject if valid, std::nullopt on parse error or non-object
+     */
+    std::optional<QJsonObject> parseJsonObject(const QString& jsonString, const QString& operation) const;
+
+    /**
+     * @brief Launch the editor with given arguments
+     * @param args Command line arguments for the editor
+     * @param description Description for logging (e.g., "for screen: DP-1")
+     */
+    void launchEditor(const QStringList& args, const QString& description);
+
+    /**
+     * @brief Build activity info JSON object
+     * @param activityId The activity ID
+     * @return QJsonObject with id, name, icon fields
+     */
+    QJsonObject buildActivityInfoJson(const QString& activityId) const;
 
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;

@@ -39,15 +39,8 @@ class UnifiedLayoutController;
 /**
  * @brief Main daemon for PlasmaZones
  *
- * The daemon runs in the background and handles:
- * - Layout management and persistence
- * - Zone overlay rendering via Wayland layer-shell
- * - Communication with KWin script via D-Bus
- * - Global keyboard shortcut handling
- * - Multi-monitor support
- *
- * Note: This class does NOT use the singleton pattern. Create instances
- * where needed and pass via dependency injection.
+ * Runs in the background managing layouts, zone overlays, KWin D-Bus
+ * communication, keyboard shortcuts, and multi-monitor support.
  */
 class Daemon : public QObject
 {
@@ -117,7 +110,7 @@ Q_SIGNALS:
     void stopped();
 
 private:
-    void connectToKWinScript(); // Shortcuts now handled by ShortcutManager (SRP)
+    void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<ZoneDetector> m_zoneDetector;
@@ -128,7 +121,7 @@ private:
     std::unique_ptr<ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
 
-    // Domain-specific D-Bus adaptors (SRP - each has single responsibility)
+    // Domain-specific D-Bus adaptors
     // D-Bus adaptors need a parent (the adapted object); Qt requires it.
     // So we use raw pointers; Qt parent-child system manages their lifetime
     LayoutAdaptor* m_layoutAdaptor = nullptr;
@@ -148,7 +141,7 @@ private:
     std::unique_ptr<ModeTracker> m_modeTracker;
     std::unique_ptr<ContextAwareShortcutRouter> m_shortcutRouter;
 
-    // Unified layout management (SRP - extracted from Daemon)
+    // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
     bool m_running = false;

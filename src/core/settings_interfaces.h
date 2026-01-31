@@ -19,11 +19,7 @@ enum class StickyWindowHandling;
 enum class OsdStyle;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Interface Segregation Principle (ISP) - Settings Interfaces
-// ═══════════════════════════════════════════════════════════════════════════════
-// These interfaces allow components to depend only on the settings they need,
-// rather than the full ISettings interface. This reduces coupling and makes
-// testing easier.
+// Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**

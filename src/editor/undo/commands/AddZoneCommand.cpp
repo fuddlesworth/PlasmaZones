@@ -21,13 +21,7 @@ AddZoneCommand::AddZoneCommand(QPointer<ZoneManager> zoneManager, const QString&
 
 void AddZoneCommand::undo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before deletion
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for undo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->deleteZone(m_zoneId);

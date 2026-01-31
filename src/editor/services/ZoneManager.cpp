@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ZoneManager.h"
+#include "ZoneAutoFiller.h"
 #include "../../core/constants.h"
 
 #include <QUuid>
@@ -13,11 +14,129 @@
 
 using namespace PlasmaZones;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPER METHOD IMPLEMENTATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QRectF ZoneManager::extractZoneGeometry(const QVariantMap& zone) const
+{
+    return QRectF(zone[JsonKeys::X].toDouble(),
+                  zone[JsonKeys::Y].toDouble(),
+                  zone[JsonKeys::Width].toDouble(),
+                  zone[JsonKeys::Height].toDouble());
+}
+
+std::optional<QVariantMap> ZoneManager::getValidatedZone(const QString& zoneId) const
+{
+    if (zoneId.isEmpty()) {
+        return std::nullopt;
+    }
+
+    int index = findZoneIndex(zoneId);
+    if (index < 0 || index >= m_zones.size()) {
+        return std::nullopt;
+    }
+
+    return m_zones[index].toMap();
+}
+
+ZoneManager::ValidatedGeometry ZoneManager::validateAndClampGeometry(qreal x, qreal y, qreal width, qreal height) const
+{
+    ValidatedGeometry result;
+
+    // Input validation
+    if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+        result.isValid = false;
+        return result;
+    }
+
+    // Minimum size
+    result.width = qMax(EditorConstants::MinZoneSize, width);
+    result.height = qMax(EditorConstants::MinZoneSize, height);
+
+    // Clamp to screen bounds
+    result.x = qBound(0.0, x, 1.0 - result.width);
+    result.y = qBound(0.0, y, 1.0 - result.height);
+    result.isValid = true;
+
+    return result;
+}
+
+void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool includeModified)
+{
+    if (m_batchUpdateDepth > 0) {
+        // Defer signals until batch completes
+        switch (type) {
+        case SignalType::ZoneAdded:
+            m_pendingZoneAdded.insert(zoneId);
+            break;
+        case SignalType::ZoneRemoved:
+            m_pendingZoneRemoved.insert(zoneId);
+            break;
+        case SignalType::GeometryChanged:
+            m_pendingGeometryChanges.insert(zoneId);
+            break;
+        case SignalType::ColorChanged:
+            m_pendingColorChanges.insert(zoneId);
+            break;
+        default:
+            break;
+        }
+        m_pendingZonesChanged = true;
+        if (includeModified) {
+            m_pendingZonesModified = true;
+        }
+    } else {
+        // Immediate signal emission
+        switch (type) {
+        case SignalType::ZoneAdded:
+            Q_EMIT zoneAdded(zoneId);
+            break;
+        case SignalType::ZoneRemoved:
+            Q_EMIT zoneRemoved(zoneId);
+            break;
+        case SignalType::GeometryChanged:
+            Q_EMIT zoneGeometryChanged(zoneId);
+            break;
+        case SignalType::NameChanged:
+            Q_EMIT zoneNameChanged(zoneId);
+            break;
+        case SignalType::NumberChanged:
+            Q_EMIT zoneNumberChanged(zoneId);
+            break;
+        case SignalType::ColorChanged:
+            Q_EMIT zoneColorChanged(zoneId);
+            break;
+        case SignalType::ZOrderChanged:
+            Q_EMIT zoneZOrderChanged(zoneId);
+            break;
+        }
+        Q_EMIT zonesChanged();
+        if (includeModified) {
+            Q_EMIT zonesModified();
+        }
+    }
+}
+
+void ZoneManager::updateAllZOrderValues()
+{
+    for (int i = 0; i < m_zones.size(); ++i) {
+        QVariantMap zoneMap = m_zones[i].toMap();
+        zoneMap[JsonKeys::ZOrder] = i;
+        m_zones[i] = zoneMap;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTRUCTOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
 ZoneManager::ZoneManager(QObject* parent)
     : QObject(parent)
     , m_defaultHighlightColor(QString::fromLatin1(EditorConstants::DefaultHighlightColor))
     , m_defaultInactiveColor(QString::fromLatin1(EditorConstants::DefaultInactiveColor))
     , m_defaultBorderColor(QString::fromLatin1(EditorConstants::DefaultBorderColor))
+    , m_autoFiller(std::make_unique<ZoneAutoFiller>(this))
 {
 }
 
@@ -53,39 +172,19 @@ QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qr
 
 QString ZoneManager::addZone(qreal x, qreal y, qreal width, qreal height)
 {
-    // Input validation
-    if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+    ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
+    if (!geom.isValid) {
         qCWarning(lcEditorZone) << "Invalid zone geometry:" << x << y << width << height;
         return QString();
     }
 
-    // Minimum size check
-    width = qMax(EditorConstants::MinZoneSize, width);
-    height = qMax(EditorConstants::MinZoneSize, height);
-
-    // Clamp to screen bounds
-    x = qBound(0.0, x, 1.0 - width);
-    y = qBound(0.0, y, 1.0 - height);
-
     int zoneNumber = m_zones.size() + 1;
     QString zoneName = QStringLiteral("Zone %1").arg(zoneNumber);
-    QVariantMap zone = createZone(zoneName, zoneNumber, x, y, width, height);
+    QVariantMap zone = createZone(zoneName, zoneNumber, geom.x, geom.y, geom.width, geom.height);
     QString zoneId = zone[JsonKeys::Id].toString();
 
     m_zones.append(zone);
-
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingZoneAdded.insert(zoneId);
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneAdded(zoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::ZoneAdded, zoneId);
 
     return zoneId;
 }
@@ -97,7 +196,8 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
         return;
     }
 
-    if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+    ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
+    if (!geom.isValid) {
         qCWarning(lcEditorZone) << "Invalid zone geometry:" << x << y << width << height;
         return;
     }
@@ -108,34 +208,14 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
         return;
     }
 
-    // Minimum size
-    width = qMax(EditorConstants::MinZoneSize, width);
-    height = qMax(EditorConstants::MinZoneSize, height);
-
-    // Clamp to screen
-    x = qBound(0.0, x, 1.0 - width);
-    y = qBound(0.0, y, 1.0 - height);
-
-    // Update zone in list
     QVariantMap zone = m_zones[index].toMap();
-    zone[JsonKeys::X] = x;
-    zone[JsonKeys::Y] = y;
-    zone[JsonKeys::Width] = width;
-    zone[JsonKeys::Height] = height;
+    zone[JsonKeys::X] = geom.x;
+    zone[JsonKeys::Y] = geom.y;
+    zone[JsonKeys::Width] = geom.width;
+    zone[JsonKeys::Height] = geom.height;
     m_zones[index] = zone;
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingGeometryChanges.insert(zoneId);
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneGeometryChanged(zoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::GeometryChanged, zoneId);
 }
 
 void ZoneManager::updateZoneGeometryDirect(const QString& zoneId, qreal x, qreal y, qreal width, qreal height)
@@ -150,33 +230,20 @@ void ZoneManager::updateZoneGeometryDirect(const QString& zoneId, qreal x, qreal
         return;
     }
 
-    // Minimum size
-    width = qMax(EditorConstants::MinZoneSize, width);
-    height = qMax(EditorConstants::MinZoneSize, height);
+    ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
+    if (!geom.isValid) {
+        return;
+    }
 
-    // Clamp to screen
-    x = qBound(0.0, x, 1.0 - width);
-    y = qBound(0.0, y, 1.0 - height);
-
-    // Update zone in list
     QVariantMap zone = m_zones[index].toMap();
-    zone[JsonKeys::X] = x;
-    zone[JsonKeys::Y] = y;
-    zone[JsonKeys::Width] = width;
-    zone[JsonKeys::Height] = height;
+    zone[JsonKeys::X] = geom.x;
+    zone[JsonKeys::Y] = geom.y;
+    zone[JsonKeys::Width] = geom.width;
+    zone[JsonKeys::Height] = geom.height;
     m_zones[index] = zone;
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingGeometryChanges.insert(zoneId);
-        m_pendingZonesChanged = true;
-        // Note: no zonesModified - this is a preview, not a user action
-    } else {
-        // Emit only zonesChanged for QML binding update (no zonesModified - not a user action)
-        Q_EMIT zoneGeometryChanged(zoneId);
-        Q_EMIT zonesChanged();
-    }
+    // No zonesModified - this is a preview, not a user action
+    emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
 }
 
 void ZoneManager::updateZoneName(const QString& zoneId, const QString& name)
@@ -194,21 +261,9 @@ void ZoneManager::updateZoneName(const QString& zoneId, const QString& name)
 
     QVariantMap zone = m_zones[index].toMap();
     zone[JsonKeys::Name] = name;
-    // Force QVariantList update by replacing the item
-    // QML needs replace() to detect the change
     m_zones.replace(index, zone);
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneNameChanged(zoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::NameChanged, zoneId);
 }
 
 void ZoneManager::updateZoneNumber(const QString& zoneId, int number)
@@ -226,21 +281,9 @@ void ZoneManager::updateZoneNumber(const QString& zoneId, int number)
 
     QVariantMap zone = m_zones[index].toMap();
     zone[JsonKeys::ZoneNumber] = number;
-    // Force QVariantList update by replacing the item
-    // QML needs replace() to detect the change
     m_zones.replace(index, zone);
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneNumberChanged(zoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::NumberChanged, zoneId);
 }
 
 void ZoneManager::updateZoneColor(const QString& zoneId, const QString& colorType, const QString& color)
@@ -258,22 +301,9 @@ void ZoneManager::updateZoneColor(const QString& zoneId, const QString& colorTyp
 
     QVariantMap zone = m_zones[index].toMap();
     zone[colorType] = color;
-    // Force QVariantList update by replacing the item
-    // QML needs replace() to detect the change
     m_zones.replace(index, zone);
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingColorChanges.insert(zoneId);
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneColorChanged(zoneId);
-        Q_EMIT zonesChanged(); // Emit zonesChanged to ensure QML bindings update
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::ColorChanged, zoneId);
 }
 
 void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& propertyName, const QVariant& value)
@@ -310,22 +340,10 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
     }
 
     zone[normalizedKey] = value;
-    // Force QVariantList update by replacing the item
-    // QML needs replace() to detect the change
     m_zones.replace(index, zone);
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingColorChanges.insert(zoneId);
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneColorChanged(zoneId); // Reuse zoneColorChanged signal for all appearance updates
-        Q_EMIT zonesChanged(); // Emit zonesChanged to ensure QML bindings update
-        Q_EMIT zonesModified();
-    }
+    // Reuse ColorChanged signal for all appearance updates
+    emitZoneSignal(SignalType::ColorChanged, zoneId);
 }
 
 void ZoneManager::deleteZone(const QString& zoneId)
@@ -344,102 +362,61 @@ void ZoneManager::deleteZone(const QString& zoneId)
     m_zones.removeAt(index);
     renumberZones();
 
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingZoneRemoved.insert(zoneId);
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneRemoved(zoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::ZoneRemoved, zoneId);
 }
 
 QString ZoneManager::duplicateZone(const QString& zoneId)
 {
-    if (zoneId.isEmpty()) {
-        qCWarning(lcEditorZone) << "Empty zone ID for duplication";
-        return QString();
-    }
-
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
+    auto zoneOpt = getValidatedZone(zoneId);
+    if (!zoneOpt) {
         qCWarning(lcEditorZone) << "Zone not found for duplication:" << zoneId;
         return QString();
     }
 
-    QVariantMap original = m_zones[index].toMap();
-    qreal x = original[JsonKeys::X].toDouble();
-    qreal y = original[JsonKeys::Y].toDouble();
-    qreal width = original[JsonKeys::Width].toDouble();
-    qreal height = original[JsonKeys::Height].toDouble();
-    QString originalName = original[JsonKeys::Name].toString();
+    QRectF original = extractZoneGeometry(*zoneOpt);
+    QString originalName = (*zoneOpt)[JsonKeys::Name].toString();
 
     // Offset slightly, but respect zone dimensions to stay in bounds
-    qreal newX = x + EditorConstants::DuplicateOffset;
-    qreal newY = y + EditorConstants::DuplicateOffset;
-    newX = qMin(newX, 1.0 - width);
-    newY = qMin(newY, 1.0 - height);
+    qreal newX = qMin(original.x() + EditorConstants::DuplicateOffset, 1.0 - original.width());
+    qreal newY = qMin(original.y() + EditorConstants::DuplicateOffset, 1.0 - original.height());
 
     int zoneNumber = m_zones.size() + 1;
     QString copyName = originalName + QStringLiteral(" (Copy)");
-    QVariantMap duplicate = createZone(copyName, zoneNumber, newX, newY, width, height);
+    QVariantMap duplicate = createZone(copyName, zoneNumber, newX, newY, original.width(), original.height());
     QString newZoneId = duplicate[JsonKeys::Id].toString();
 
     m_zones.append(duplicate);
-
-    // Handle signal emission (deferred during batch updates)
-    if (m_batchUpdateDepth > 0) {
-        // Defer signals until batch completes
-        m_pendingZoneAdded.insert(newZoneId);
-        m_pendingZonesChanged = true;
-        m_pendingZonesModified = true;
-    } else {
-        // Immediate signal emission
-        Q_EMIT zoneAdded(newZoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
+    emitZoneSignal(SignalType::ZoneAdded, newZoneId);
 
     return newZoneId;
 }
 
 QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 {
-    if (zoneId.isEmpty()) {
-        qCWarning(lcEditorZone) << "Empty zone ID for split";
-        return QString();
-    }
-
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
+    auto zoneOpt = getValidatedZone(zoneId);
+    if (!zoneOpt) {
         qCWarning(lcEditorZone) << "Zone not found for split:" << zoneId;
         return QString();
     }
 
-    QVariantMap original = m_zones[index].toMap();
-    qreal x = original[JsonKeys::X].toDouble();
-    qreal y = original[JsonKeys::Y].toDouble();
-    qreal w = original[JsonKeys::Width].toDouble();
-    qreal h = original[JsonKeys::Height].toDouble();
+    int index = findZoneIndex(zoneId);
+    QVariantMap original = *zoneOpt;
+    QRectF geom = extractZoneGeometry(original);
 
     // Check if split would create zones smaller than minimum size
     const qreal minSize = EditorConstants::MinZoneSize;
     if (horizontal) {
-        qreal newH = h / 2.0;
+        qreal newH = geom.height() / 2.0;
         if (newH < minSize) {
             qCWarning(lcEditorZone) << "Cannot split horizontally - resulting zones would be too small"
-                                    << "(current height:" << h << ", min size:" << minSize << ")";
+                                    << "(current height:" << geom.height() << ", min size:" << minSize << ")";
             return QString();
         }
     } else {
-        qreal newW = w / 2.0;
+        qreal newW = geom.width() / 2.0;
         if (newW < minSize) {
             qCWarning(lcEditorZone) << "Cannot split vertically - resulting zones would be too small"
-                                    << "(current width:" << w << ", min size:" << minSize << ")";
+                                    << "(current width:" << geom.width() << ", min size:" << minSize << ")";
             return QString();
         }
     }
@@ -448,25 +425,25 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
     QVariantMap newZone;
 
     if (horizontal) {
-        qreal newH = h / 2.0;
+        qreal newH = geom.height() / 2.0;
         original[JsonKeys::Height] = newH;
         m_zones[index] = original;
-        Q_EMIT zoneGeometryChanged(zoneId);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, x, y + newH, w, newH);
+        emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
+        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber,
+                            geom.x(), geom.y() + newH, geom.width(), newH);
     } else {
-        qreal newW = w / 2.0;
+        qreal newW = geom.width() / 2.0;
         original[JsonKeys::Width] = newW;
         m_zones[index] = original;
-        Q_EMIT zoneGeometryChanged(zoneId);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, x + newW, y, newW, h);
+        emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
+        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber,
+                            geom.x() + newW, geom.y(), newW, geom.height());
     }
 
     QString newZoneId = newZone[JsonKeys::Id].toString();
     m_zones.append(newZone);
 
-    Q_EMIT zoneAdded(newZoneId);
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
+    emitZoneSignal(SignalType::ZoneAdded, newZoneId);
 
     return newZoneId;
 }
@@ -934,16 +911,8 @@ void ZoneManager::bringToFront(const QString& zoneId)
     QVariant zone = m_zones.takeAt(index);
     m_zones.append(zone);
 
-    // Update zOrder values for all zones
-    for (int i = 0; i < m_zones.size(); ++i) {
-        QVariantMap zoneMap = m_zones[i].toMap();
-        zoneMap[JsonKeys::ZOrder] = i;
-        m_zones[i] = zoneMap;
-    }
-
-    Q_EMIT zoneZOrderChanged(zoneId);
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
+    updateAllZOrderValues();
+    emitZoneSignal(SignalType::ZOrderChanged, zoneId);
 }
 
 void ZoneManager::sendToBack(const QString& zoneId)
@@ -968,16 +937,8 @@ void ZoneManager::sendToBack(const QString& zoneId)
     QVariant zone = m_zones.takeAt(index);
     m_zones.prepend(zone);
 
-    // Update zOrder values for all zones
-    for (int i = 0; i < m_zones.size(); ++i) {
-        QVariantMap zoneMap = m_zones[i].toMap();
-        zoneMap[JsonKeys::ZOrder] = i;
-        m_zones[i] = zoneMap;
-    }
-
-    Q_EMIT zoneZOrderChanged(zoneId);
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
+    updateAllZOrderValues();
+    emitZoneSignal(SignalType::ZOrderChanged, zoneId);
 }
 
 void ZoneManager::bringForward(const QString& zoneId)
@@ -1001,7 +962,7 @@ void ZoneManager::bringForward(const QString& zoneId)
     // Swap with next zone (move up one layer)
     m_zones.swapItemsAt(index, index + 1);
 
-    // Update zOrder values for swapped zones
+    // Update zOrder values for swapped zones only (optimization over updateAllZOrderValues)
     QVariantMap zone1 = m_zones[index].toMap();
     QVariantMap zone2 = m_zones[index + 1].toMap();
     zone1[JsonKeys::ZOrder] = index;
@@ -1009,9 +970,7 @@ void ZoneManager::bringForward(const QString& zoneId)
     m_zones[index] = zone1;
     m_zones[index + 1] = zone2;
 
-    Q_EMIT zoneZOrderChanged(zoneId);
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
+    emitZoneSignal(SignalType::ZOrderChanged, zoneId);
 }
 
 void ZoneManager::sendBackward(const QString& zoneId)
@@ -1035,7 +994,7 @@ void ZoneManager::sendBackward(const QString& zoneId)
     // Swap with previous zone (move down one layer)
     m_zones.swapItemsAt(index, index - 1);
 
-    // Update zOrder values for swapped zones
+    // Update zOrder values for swapped zones only (optimization over updateAllZOrderValues)
     QVariantMap zone1 = m_zones[index - 1].toMap();
     QVariantMap zone2 = m_zones[index].toMap();
     zone1[JsonKeys::ZOrder] = index - 1;
@@ -1043,9 +1002,7 @@ void ZoneManager::sendBackward(const QString& zoneId)
     m_zones[index - 1] = zone1;
     m_zones[index] = zone2;
 
-    Q_EMIT zoneZOrderChanged(zoneId);
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
+    emitZoneSignal(SignalType::ZOrderChanged, zoneId);
 }
 
 void ZoneManager::clearAllZones()
@@ -1097,654 +1054,24 @@ void ZoneManager::renumberZones()
 // AUTO-FILL OPERATIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool ZoneManager::isRectangleEmpty(qreal x, qreal y, qreal width, qreal height, const QString& excludeZoneId) const
-{
-    const qreal threshold = 0.002; // Small epsilon for floating point comparison
-
-    for (const QVariant& zoneVar : m_zones) {
-        QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
-
-        if (!excludeZoneId.isEmpty() && zoneId == excludeZoneId) {
-            continue;
-        }
-
-        qreal zx = zone[JsonKeys::X].toDouble();
-        qreal zy = zone[JsonKeys::Y].toDouble();
-        qreal zw = zone[JsonKeys::Width].toDouble();
-        qreal zh = zone[JsonKeys::Height].toDouble();
-
-        // Check if rectangles overlap (with small threshold to avoid false positives)
-        bool overlapsX = (x + threshold < zx + zw) && (x + width - threshold > zx);
-        bool overlapsY = (y + threshold < zy + zh) && (y + height - threshold > zy);
-
-        if (overlapsX && overlapsY) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-qreal ZoneManager::findMaxExpansion(const QString& zoneId, int direction) const
-{
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
-        return 0.0;
-    }
-
-    QVariantMap zone = m_zones[index].toMap();
-    qreal zx = zone[JsonKeys::X].toDouble();
-    qreal zy = zone[JsonKeys::Y].toDouble();
-    qreal zw = zone[JsonKeys::Width].toDouble();
-    qreal zh = zone[JsonKeys::Height].toDouble();
-
-    const qreal step = 0.01; // 1% increments
-    qreal maxExpansion = 0.0;
-
-    switch (direction) {
-    case 0: // Left
-        for (qreal expansion = step; expansion <= zx; expansion += step) {
-            if (isRectangleEmpty(zx - expansion, zy, expansion, zh, zoneId)) {
-                maxExpansion = expansion;
-            } else {
-                break;
-            }
-        }
-        break;
-
-    case 1: // Right
-        for (qreal expansion = step; expansion <= (1.0 - zx - zw); expansion += step) {
-            if (isRectangleEmpty(zx + zw, zy, expansion, zh, zoneId)) {
-                maxExpansion = expansion;
-            } else {
-                break;
-            }
-        }
-        break;
-
-    case 2: // Up
-        for (qreal expansion = step; expansion <= zy; expansion += step) {
-            if (isRectangleEmpty(zx, zy - expansion, zw, expansion, zoneId)) {
-                maxExpansion = expansion;
-            } else {
-                break;
-            }
-        }
-        break;
-
-    case 3: // Down
-        for (qreal expansion = step; expansion <= (1.0 - zy - zh); expansion += step) {
-            if (isRectangleEmpty(zx, zy + zh, zw, expansion, zoneId)) {
-                maxExpansion = expansion;
-            } else {
-                break;
-            }
-        }
-        break;
-    }
-
-    return maxExpansion;
-}
-
 QVariantMap ZoneManager::findAdjacentZones(const QString& zoneId, qreal threshold)
 {
-    QVariantMap result;
-    QVariantList leftZones, rightZones, topZones, bottomZones;
-
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
-        result[QStringLiteral("left")] = leftZones;
-        result[QStringLiteral("right")] = rightZones;
-        result[QStringLiteral("top")] = topZones;
-        result[QStringLiteral("bottom")] = bottomZones;
-        return result;
-    }
-
-    QVariantMap targetZone = m_zones[index].toMap();
-    qreal tx = targetZone[JsonKeys::X].toDouble();
-    qreal ty = targetZone[JsonKeys::Y].toDouble();
-    qreal tw = targetZone[JsonKeys::Width].toDouble();
-    qreal th = targetZone[JsonKeys::Height].toDouble();
-
-    for (int i = 0; i < m_zones.size(); ++i) {
-        if (i == index)
-            continue;
-
-        QVariantMap zone = m_zones[i].toMap();
-        QString otherZoneId = zone[JsonKeys::Id].toString();
-        qreal zx = zone[JsonKeys::X].toDouble();
-        qreal zy = zone[JsonKeys::Y].toDouble();
-        qreal zw = zone[JsonKeys::Width].toDouble();
-        qreal zh = zone[JsonKeys::Height].toDouble();
-
-        // Check vertical overlap
-        bool verticalOverlap = (ty < zy + zh - threshold) && (ty + th > zy + threshold);
-
-        // Check horizontal overlap
-        bool horizontalOverlap = (tx < zx + zw - threshold) && (tx + tw > zx + threshold);
-
-        // Left adjacency: zone's right edge touches target's left edge
-        if (verticalOverlap && qAbs((zx + zw) - tx) < threshold) {
-            leftZones.append(otherZoneId);
-        }
-
-        // Right adjacency: zone's left edge touches target's right edge
-        if (verticalOverlap && qAbs(zx - (tx + tw)) < threshold) {
-            rightZones.append(otherZoneId);
-        }
-
-        // Top adjacency: zone's bottom edge touches target's top edge
-        if (horizontalOverlap && qAbs((zy + zh) - ty) < threshold) {
-            topZones.append(otherZoneId);
-        }
-
-        // Bottom adjacency: zone's top edge touches target's bottom edge
-        if (horizontalOverlap && qAbs(zy - (ty + th)) < threshold) {
-            bottomZones.append(otherZoneId);
-        }
-    }
-
-    result[QStringLiteral("left")] = leftZones;
-    result[QStringLiteral("right")] = rightZones;
-    result[QStringLiteral("top")] = topZones;
-    result[QStringLiteral("bottom")] = bottomZones;
-
-    return result;
+    return m_autoFiller->findAdjacentZones(zoneId, threshold);
 }
 
 bool ZoneManager::expandToFillSpace(const QString& zoneId, qreal mouseX, qreal mouseY)
 {
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for expansion:" << zoneId;
-        return false;
-    }
-
-    // If mouse coordinates are provided (fill-on-drop), use smartFillZone
-    // for proper edge alignment with adjacent zones
-    bool hasMousePosition = (mouseX >= 0 && mouseX <= 1 && mouseY >= 0 && mouseY <= 1);
-    if (hasMousePosition) {
-        return smartFillZone(zoneId, mouseX, mouseY);
-    }
-
-    // No mouse position - use directional expansion (programmatic expansion)
-    QVariantMap zone = m_zones[index].toMap();
-    qreal x = zone[JsonKeys::X].toDouble();
-    qreal y = zone[JsonKeys::Y].toDouble();
-    qreal w = zone[JsonKeys::Width].toDouble();
-    qreal h = zone[JsonKeys::Height].toDouble();
-
-    // First, check if this zone overlaps with any other zones
-    // If so, we need to find empty space first
-    bool hasOverlap = false;
-    for (int i = 0; i < m_zones.size(); ++i) {
-        if (i == index)
-            continue;
-
-        QVariantMap other = m_zones[i].toMap();
-        qreal ox = other[JsonKeys::X].toDouble();
-        qreal oy = other[JsonKeys::Y].toDouble();
-        qreal ow = other[JsonKeys::Width].toDouble();
-        qreal oh = other[JsonKeys::Height].toDouble();
-
-        // Check for overlap
-        bool overlapsX = (x < ox + ow) && (x + w > ox);
-        bool overlapsY = (y < oy + oh) && (y + h > oy);
-
-        if (overlapsX && overlapsY) {
-            hasOverlap = true;
-            break;
-        }
-    }
-
-    if (hasOverlap) {
-        // Use smart fill with zone center
-        return smartFillZone(zoneId, -1, -1);
-    }
-
-    bool changed = false;
-
-    // Try expanding in each direction
-    // Left
-    qreal leftExpansion = findMaxExpansion(zoneId, 0);
-    if (leftExpansion > 0.005) { // At least 0.5% expansion
-        x -= leftExpansion;
-        w += leftExpansion;
-        changed = true;
-    }
-
-    // Right
-    qreal rightExpansion = findMaxExpansion(zoneId, 1);
-    if (rightExpansion > 0.005) {
-        w += rightExpansion;
-        changed = true;
-    }
-
-    // Up
-    qreal upExpansion = findMaxExpansion(zoneId, 2);
-    if (upExpansion > 0.005) {
-        y -= upExpansion;
-        h += upExpansion;
-        changed = true;
-    }
-
-    // Down
-    qreal downExpansion = findMaxExpansion(zoneId, 3);
-    if (downExpansion > 0.005) {
-        h += downExpansion;
-        changed = true;
-    }
-
-    if (changed) {
-        // Clamp to bounds
-        x = qBound(0.0, x, 1.0 - EditorConstants::MinZoneSize);
-        y = qBound(0.0, y, 1.0 - EditorConstants::MinZoneSize);
-        w = qMin(w, 1.0 - x);
-        h = qMin(h, 1.0 - y);
-
-        zone[JsonKeys::X] = x;
-        zone[JsonKeys::Y] = y;
-        zone[JsonKeys::Width] = w;
-        zone[JsonKeys::Height] = h;
-        m_zones[index] = zone;
-
-        Q_EMIT zoneGeometryChanged(zoneId);
-        Q_EMIT zonesChanged();
-        Q_EMIT zonesModified();
-    }
-
-    return changed;
-}
-
-bool ZoneManager::smartFillZone(const QString& zoneId, qreal mouseX, qreal mouseY)
-{
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
-        return false;
-    }
-
-    QVariantMap zone = m_zones[index].toMap();
-    qreal zx = zone[JsonKeys::X].toDouble();
-    qreal zy = zone[JsonKeys::Y].toDouble();
-    qreal zw = zone[JsonKeys::Width].toDouble();
-    qreal zh = zone[JsonKeys::Height].toDouble();
-
-    // Use mouse position if provided, otherwise use zone center
-    qreal targetX = (mouseX >= 0 && mouseX <= 1) ? mouseX : (zx + zw / 2.0);
-    qreal targetY = (mouseY >= 0 && mouseY <= 1) ? mouseY : (zy + zh / 2.0);
-
-    // Find the largest empty rectangular region containing the target point
-    // so the zone fills where the user clicked.
-
-    // Helper to check if coordinate already exists (with tolerance)
-    auto coordExists = [](const QList<qreal>& list, qreal val) {
-        for (qreal v : list) {
-            if (qAbs(v - val) < 0.001)
-                return true;
-        }
-        return false;
-    };
-
-    // Collect all unique X and Y coordinates (zone edges + screen edges)
-    QList<qreal> xCoords = {0.0, 1.0};
-    QList<qreal> yCoords = {0.0, 1.0};
-
-    for (int i = 0; i < m_zones.size(); ++i) {
-        if (i == index)
-            continue;
-
-        QVariantMap other = m_zones[i].toMap();
-        qreal ox = other[JsonKeys::X].toDouble();
-        qreal oy = other[JsonKeys::Y].toDouble();
-        qreal ow = other[JsonKeys::Width].toDouble();
-        qreal oh = other[JsonKeys::Height].toDouble();
-
-        if (!coordExists(xCoords, ox))
-            xCoords.append(ox);
-        if (!coordExists(xCoords, ox + ow))
-            xCoords.append(ox + ow);
-        if (!coordExists(yCoords, oy))
-            yCoords.append(oy);
-        if (!coordExists(yCoords, oy + oh))
-            yCoords.append(oy + oh);
-    }
-
-    std::sort(xCoords.begin(), xCoords.end());
-    std::sort(yCoords.begin(), yCoords.end());
-
-    // Find the largest empty region that CONTAINS the target point
-    qreal bestX = 0, bestY = 0, bestW = 0, bestH = 0;
-    qreal bestArea = -1;
-
-    // Check all possible rectangles formed by any pair of X and Y coordinates
-    for (int xi1 = 0; xi1 < xCoords.size(); ++xi1) {
-        for (int xi2 = xi1 + 1; xi2 < xCoords.size(); ++xi2) {
-            for (int yi1 = 0; yi1 < yCoords.size(); ++yi1) {
-                for (int yi2 = yi1 + 1; yi2 < yCoords.size(); ++yi2) {
-                    qreal rx = xCoords[xi1];
-                    qreal ry = yCoords[yi1];
-                    qreal rw = xCoords[xi2] - rx;
-                    qreal rh = yCoords[yi2] - ry;
-
-                    // Skip regions that are too small
-                    if (rw < EditorConstants::MinZoneSize || rh < EditorConstants::MinZoneSize) {
-                        continue;
-                    }
-
-                    // Check if this region CONTAINS the target point
-                    bool containsTarget = (targetX >= rx && targetX <= rx + rw && targetY >= ry && targetY <= ry + rh);
-                    if (!containsTarget) {
-                        continue;
-                    }
-
-                    // Check if this region is empty (no zones overlap with it)
-                    if (!isRectangleEmpty(rx, ry, rw, rh, zoneId)) {
-                        continue;
-                    }
-
-                    qreal area = rw * rh;
-
-                    // Pick the largest region containing the target point
-                    if (area > bestArea) {
-                        bestArea = area;
-                        bestX = rx;
-                        bestY = ry;
-                        bestW = rw;
-                        bestH = rh;
-                    }
-                }
-            }
-        }
-    }
-
-    if (bestW < EditorConstants::MinZoneSize || bestH < EditorConstants::MinZoneSize) {
-        return false;
-    }
-
-    // Update the zone
-    zone[JsonKeys::X] = bestX;
-    zone[JsonKeys::Y] = bestY;
-    zone[JsonKeys::Width] = bestW;
-    zone[JsonKeys::Height] = bestH;
-    m_zones[index] = zone;
-
-    Q_EMIT zoneGeometryChanged(zoneId);
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
-
-    return true;
+    return m_autoFiller->expandToFillSpace(zoneId, mouseX, mouseY);
 }
 
 QVariantMap ZoneManager::calculateFillRegion(const QString& zoneId, qreal mouseX, qreal mouseY)
 {
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
-        return QVariantMap();
-    }
-
-    // Use mouse position as target point
-    qreal targetX = mouseX;
-    qreal targetY = mouseY;
-
-    // Helper to check if coordinate already exists (with tolerance)
-    auto coordExists = [](const QList<qreal>& list, qreal val) {
-        for (qreal v : list) {
-            if (qAbs(v - val) < 0.001)
-                return true;
-        }
-        return false;
-    };
-
-    // Collect all unique X and Y coordinates (zone edges + screen edges)
-    QList<qreal> xCoords = {0.0, 1.0};
-    QList<qreal> yCoords = {0.0, 1.0};
-
-    for (int i = 0; i < m_zones.size(); ++i) {
-        if (i == index)
-            continue;
-
-        QVariantMap other = m_zones[i].toMap();
-        qreal ox = other[JsonKeys::X].toDouble();
-        qreal oy = other[JsonKeys::Y].toDouble();
-        qreal ow = other[JsonKeys::Width].toDouble();
-        qreal oh = other[JsonKeys::Height].toDouble();
-
-        if (!coordExists(xCoords, ox))
-            xCoords.append(ox);
-        if (!coordExists(xCoords, ox + ow))
-            xCoords.append(ox + ow);
-        if (!coordExists(yCoords, oy))
-            yCoords.append(oy);
-        if (!coordExists(yCoords, oy + oh))
-            yCoords.append(oy + oh);
-    }
-
-    std::sort(xCoords.begin(), xCoords.end());
-    std::sort(yCoords.begin(), yCoords.end());
-
-    // Find the largest empty region that CONTAINS the target point
-    qreal bestX = 0, bestY = 0, bestW = 0, bestH = 0;
-    qreal bestArea = -1;
-
-    for (int xi1 = 0; xi1 < xCoords.size(); ++xi1) {
-        for (int xi2 = xi1 + 1; xi2 < xCoords.size(); ++xi2) {
-            for (int yi1 = 0; yi1 < yCoords.size(); ++yi1) {
-                for (int yi2 = yi1 + 1; yi2 < yCoords.size(); ++yi2) {
-                    qreal rx = xCoords[xi1];
-                    qreal ry = yCoords[yi1];
-                    qreal rw = xCoords[xi2] - rx;
-                    qreal rh = yCoords[yi2] - ry;
-
-                    if (rw < EditorConstants::MinZoneSize || rh < EditorConstants::MinZoneSize) {
-                        continue;
-                    }
-
-                    // Check if this region CONTAINS the target point
-                    bool containsTarget = (targetX >= rx && targetX <= rx + rw && targetY >= ry && targetY <= ry + rh);
-                    if (!containsTarget) {
-                        continue;
-                    }
-
-                    // Check if this region is empty (no zones overlap with it)
-                    // Use the provided zone geometry for the exclusion check
-                    bool isEmpty = true;
-                    for (int i = 0; i < m_zones.size(); ++i) {
-                        if (i == index)
-                            continue;
-
-                        QVariantMap other = m_zones[i].toMap();
-                        qreal ox = other[JsonKeys::X].toDouble();
-                        qreal oy = other[JsonKeys::Y].toDouble();
-                        qreal ow = other[JsonKeys::Width].toDouble();
-                        qreal oh = other[JsonKeys::Height].toDouble();
-
-                        bool overlapsX = (rx < ox + ow - 0.001) && (rx + rw > ox + 0.001);
-                        bool overlapsY = (ry < oy + oh - 0.001) && (ry + rh > oy + 0.001);
-
-                        if (overlapsX && overlapsY) {
-                            isEmpty = false;
-                            break;
-                        }
-                    }
-
-                    if (!isEmpty)
-                        continue;
-
-                    qreal area = rw * rh;
-                    if (area > bestArea) {
-                        bestArea = area;
-                        bestX = rx;
-                        bestY = ry;
-                        bestW = rw;
-                        bestH = rh;
-                    }
-                }
-            }
-        }
-    }
-
-    if (bestW < EditorConstants::MinZoneSize || bestH < EditorConstants::MinZoneSize) {
-        return QVariantMap();
-    }
-
-    QVariantMap result;
-    result[JsonKeys::X] = bestX;
-    result[JsonKeys::Y] = bestY;
-    result[JsonKeys::Width] = bestW;
-    result[JsonKeys::Height] = bestH;
-    return result;
+    return m_autoFiller->calculateFillRegion(zoneId, mouseX, mouseY);
 }
 
 void ZoneManager::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 {
-    if (zoneId.isEmpty()) {
-        qCWarning(lcEditorZone) << "Empty zone ID for deletion";
-        return;
-    }
-
-    int index = findZoneIndex(zoneId);
-    if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for deletion:" << zoneId;
-        return;
-    }
-
-    // Get the zone's geometry before deleting
-    QVariantMap deletedZone = m_zones[index].toMap();
-    qreal dx = deletedZone[JsonKeys::X].toDouble();
-    qreal dy = deletedZone[JsonKeys::Y].toDouble();
-    qreal dw = deletedZone[JsonKeys::Width].toDouble();
-    qreal dh = deletedZone[JsonKeys::Height].toDouble();
-
-    // Find adjacent zones before deletion
-    QVariantMap adjacentZones;
-    if (autoFill) {
-        adjacentZones = findAdjacentZones(zoneId);
-    }
-
-    // Delete the zone
-    m_zones.removeAt(index);
-    renumberZones();
-
-    Q_EMIT zoneRemoved(zoneId);
-
-    // Auto-fill: expand adjacent zones to fill the gap
-    if (autoFill) {
-        // Strategy: Try to expand adjacent zones to fill the deleted space
-        // Priority: larger adjacent zones first, then by direction (left/right before up/down)
-
-        const qreal threshold = 0.02;
-
-        // Get adjacent zone IDs
-        QVariantList leftZones = adjacentZones[QStringLiteral("left")].toList();
-        QVariantList rightZones = adjacentZones[QStringLiteral("right")].toList();
-        QVariantList topZones = adjacentZones[QStringLiteral("top")].toList();
-        QVariantList bottomZones = adjacentZones[QStringLiteral("bottom")].toList();
-
-        // Try to expand right zones leftward (into the deleted space)
-        for (const QVariant& rightZoneVar : rightZones) {
-            QString rightZoneId = rightZoneVar.toString();
-            int rightIndex = findZoneIndex(rightZoneId);
-            if (rightIndex < 0)
-                continue;
-
-            QVariantMap rightZone = m_zones[rightIndex].toMap();
-            qreal rx = rightZone[JsonKeys::X].toDouble();
-            qreal ry = rightZone[JsonKeys::Y].toDouble();
-            qreal rh = rightZone[JsonKeys::Height].toDouble();
-
-            // Check if this zone can expand leftward into deleted space
-            // Zone must span the full height of deleted zone or be contained within it
-            if (ry >= dy - threshold && ry + rh <= dy + dh + threshold) {
-                // Expand leftward
-                qreal newX = dx;
-                qreal expansion = rx - dx;
-                if (expansion > 0) {
-                    rightZone[JsonKeys::X] = newX;
-                    rightZone[JsonKeys::Width] = rightZone[JsonKeys::Width].toDouble() + expansion;
-                    m_zones[rightIndex] = rightZone;
-                    Q_EMIT zoneGeometryChanged(rightZoneId);
-                }
-            }
-        }
-
-        // Try to expand left zones rightward
-        for (const QVariant& leftZoneVar : leftZones) {
-            QString leftZoneId = leftZoneVar.toString();
-            int leftIndex = findZoneIndex(leftZoneId);
-            if (leftIndex < 0)
-                continue;
-
-            QVariantMap leftZone = m_zones[leftIndex].toMap();
-            qreal lx = leftZone[JsonKeys::X].toDouble();
-            qreal ly = leftZone[JsonKeys::Y].toDouble();
-            qreal lw = leftZone[JsonKeys::Width].toDouble();
-            qreal lh = leftZone[JsonKeys::Height].toDouble();
-
-            // Check if this zone can expand rightward
-            if (ly >= dy - threshold && ly + lh <= dy + dh + threshold) {
-                qreal newRight = dx + dw;
-                qreal expansion = newRight - (lx + lw);
-                if (expansion > 0 && isRectangleEmpty(lx + lw, ly, expansion, lh, leftZoneId)) {
-                    leftZone[JsonKeys::Width] = lw + expansion;
-                    m_zones[leftIndex] = leftZone;
-                    Q_EMIT zoneGeometryChanged(leftZoneId);
-                }
-            }
-        }
-
-        // Try to expand bottom zones upward
-        for (const QVariant& bottomZoneVar : bottomZones) {
-            QString bottomZoneId = bottomZoneVar.toString();
-            int bottomIndex = findZoneIndex(bottomZoneId);
-            if (bottomIndex < 0)
-                continue;
-
-            QVariantMap bottomZone = m_zones[bottomIndex].toMap();
-            qreal bx = bottomZone[JsonKeys::X].toDouble();
-            qreal by = bottomZone[JsonKeys::Y].toDouble();
-            qreal bw = bottomZone[JsonKeys::Width].toDouble();
-
-            // Check if this zone can expand upward
-            if (bx >= dx - threshold && bx + bw <= dx + dw + threshold) {
-                qreal expansion = by - dy;
-                if (expansion > 0 && isRectangleEmpty(bx, dy, bw, expansion, bottomZoneId)) {
-                    bottomZone[JsonKeys::Y] = dy;
-                    bottomZone[JsonKeys::Height] = bottomZone[JsonKeys::Height].toDouble() + expansion;
-                    m_zones[bottomIndex] = bottomZone;
-                    Q_EMIT zoneGeometryChanged(bottomZoneId);
-                }
-            }
-        }
-
-        // Try to expand top zones downward
-        for (const QVariant& topZoneVar : topZones) {
-            QString topZoneId = topZoneVar.toString();
-            int topIndex = findZoneIndex(topZoneId);
-            if (topIndex < 0)
-                continue;
-
-            QVariantMap topZone = m_zones[topIndex].toMap();
-            qreal tx = topZone[JsonKeys::X].toDouble();
-            qreal ty = topZone[JsonKeys::Y].toDouble();
-            qreal tw = topZone[JsonKeys::Width].toDouble();
-            qreal th = topZone[JsonKeys::Height].toDouble();
-
-            // Check if this zone can expand downward
-            if (tx >= dx - threshold && tx + tw <= dx + dw + threshold) {
-                qreal newBottom = dy + dh;
-                qreal expansion = newBottom - (ty + th);
-                if (expansion > 0 && isRectangleEmpty(tx, ty + th, tw, expansion, topZoneId)) {
-                    topZone[JsonKeys::Height] = th + expansion;
-                    m_zones[topIndex] = topZone;
-                    Q_EMIT zoneGeometryChanged(topZoneId);
-                }
-            }
-        }
-    }
-
-    Q_EMIT zonesChanged();
-    Q_EMIT zonesModified();
+    m_autoFiller->deleteZoneWithFill(zoneId, autoFill);
 }
 
 void ZoneManager::setDefaultColors(const QString& highlightColor, const QString& inactiveColor,

@@ -55,6 +55,8 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float coreIntensity = customParams[0].w > 0.1 ? customParams[0].w : 2.0;
     float fillDim = customParams[1].x > 0.001 ? customParams[1].x : 0.08;
     float flickerAmount = customParams[1].y > 0.001 ? customParams[1].y : 0.1;
+    float cornerGlowStrength = customParams[1].z > 0.001 ? customParams[1].z : 0.5;
+    float innerGlowSpread = customParams[1].w > 0.01 ? customParams[1].w : 0.25;
     
     vec2 rectPos = rect.xy * iResolution;
     vec2 rectSize = rect.zw * iResolution;
@@ -97,11 +99,11 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         
         // Primary inner glow (strongest near border)
         float innerDist = -d; // Distance from border going inward
-        float glow1 = exp(-innerDist / (glowSize * 0.25)) * glowIntensity * 0.9;
+        float glow1 = exp(-innerDist / (glowSize * innerGlowSpread)) * glowIntensity * 0.9;
         // Secondary softer inner glow
-        float glow2 = exp(-innerDist / (glowSize * 0.5)) * glowIntensity * 0.5;
+        float glow2 = exp(-innerDist / (glowSize * innerGlowSpread * 2.0)) * glowIntensity * 0.5;
         // Tertiary ambient inner glow
-        float glow3 = exp(-innerDist / (glowSize * 1.0)) * glowIntensity * 0.25;
+        float glow3 = exp(-innerDist / (glowSize * innerGlowSpread * 4.0)) * glowIntensity * 0.25;
         
         float totalInnerGlow = (glow1 + glow2 + glow3) * intensity;
         result.rgb += neonColor * totalInnerGlow;
@@ -132,7 +134,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec2 cornerDist = abs(localUV - 0.5) * 2.0;
         float cornerProximity = max(cornerDist.x, cornerDist.y);
         if (cornerProximity > 0.85) {
-            float cornerGlow = (cornerProximity - 0.85) / 0.15 * 0.5 * intensity;
+            float cornerGlow = (cornerProximity - 0.85) / 0.15 * cornerGlowStrength * intensity;
             result.rgb += neonColor * cornerGlow;
         }
     }

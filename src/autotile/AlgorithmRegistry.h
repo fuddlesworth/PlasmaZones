@@ -129,7 +129,7 @@ public:
     TilingAlgorithm *defaultAlgorithm() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Preview utilities for unified layout model (DRY - shared by zone selector,
+    // Preview utilities for unified layout model (shared by zone selector,
     // overlay service, and daemon OSD)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -224,7 +224,7 @@ PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration> &pendingAlgorithmRegistra
  * @brief Helper for static self-registration of built-in algorithms
  *
  * Use this in algorithm .cpp files to register at static initialization time.
- * This follows the Open/Closed Principle - new algorithms can be added without
+ * New algorithms can be added without
  * modifying AlgorithmRegistry.
  *
  * Usage in algorithm .cpp file:

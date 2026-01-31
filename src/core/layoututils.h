@@ -66,7 +66,7 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
 };
 
 /**
- * @brief Utility functions for unified layout management (DRY)
+ * @brief Utility functions for unified layout management
  *
  * This namespace consolidates layout list building that was previously
  * duplicated in Daemon, ZoneSelectorController, LayoutAdaptor, and OverlayService.
@@ -150,7 +150,7 @@ PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLay
                                                          const QString& layoutId);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Zone conversion utilities (DRY - consolidates duplicate implementations)
+// Zone conversion utilities
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
@@ -172,7 +172,7 @@ PLASMAZONES_EXPORT QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields = 
 PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Layout conversion utilities (DRY - direct Layout* conversion)
+// Layout conversion utilities
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**

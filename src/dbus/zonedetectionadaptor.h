@@ -15,12 +15,12 @@ class ILayoutManager;
 class ISettings;
 
 /**
- * @brief D-Bus adaptor for zone detection operations (SRP)
+ * @brief D-Bus adaptor for zone detection operations
  *
  * Provides D-Bus interface: org.plasmazones.ZoneDetection
- * Single responsibility: Zone detection queries
+ *  Zone detection queries
  *
- * Uses interface types for Dependency Inversion Principle (DIP)
+ * Uses interface types for loose coupling
  */
 class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor
 {

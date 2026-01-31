@@ -55,7 +55,52 @@ void writeQmlProperty(QObject* object, const QString& name, const QVariant& valu
     }
 }
 
-// Center an OSD/layer window on screen using LayerShellQt margins (DRY - used by layout and navigation OSD)
+// Convert ZoneSelectorPosition to LayerShellQt anchors
+LayerShellQt::Window::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
+{
+    switch (pos) {
+    case ZoneSelectorPosition::TopLeft:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
+    case ZoneSelectorPosition::Top:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                             | LayerShellQt::Window::AnchorRight);
+    case ZoneSelectorPosition::TopRight:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
+    case ZoneSelectorPosition::Left:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
+                                             | LayerShellQt::Window::AnchorBottom);
+    case ZoneSelectorPosition::Right:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
+                                             | LayerShellQt::Window::AnchorBottom);
+    case ZoneSelectorPosition::BottomLeft:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
+    case ZoneSelectorPosition::Bottom:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
+                                             | LayerShellQt::Window::AnchorRight);
+    case ZoneSelectorPosition::BottomRight:
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
+    default:
+        // Default to top anchors
+        return LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
+                                             | LayerShellQt::Window::AnchorRight);
+    }
+}
+
+// Clean up all windows in a QHash map
+template<typename K>
+void cleanupWindowMap(QHash<K, QQuickWindow*>& windowMap)
+{
+    for (auto* window : std::as_const(windowMap)) {
+        if (window) {
+            QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+            window->close();
+            window->deleteLater();
+        }
+    }
+    windowMap.clear();
+}
+
+// Center an OSD/layer window on screen using LayerShellQt margins
 void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, int osdWidth, int osdHeight)
 {
     if (!window) {
@@ -69,6 +114,25 @@ void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, in
             | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
         layerWindow->setMargins(QMargins(hMargin, vMargin, hMargin, vMargin));
     }
+}
+
+// Result of OSD window preparation
+struct OsdWindowSetup {
+    QQuickWindow* window = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 16.0 / 9.0;
+
+    explicit operator bool() const { return window != nullptr; }
+};
+
+// Calculate OSD size and center window
+void sizeAndCenterOsd(QQuickWindow* window, const QRect& screenGeom, qreal aspectRatio)
+{
+    constexpr int osdWidth = 280;
+    const int osdHeight = static_cast<int>(200 / aspectRatio) + 80;
+    window->setWidth(osdWidth);
+    window->setHeight(osdHeight);
+    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
 }
 
 // The zone model doesn't know about overlay highlights (keyboard/hover),
@@ -370,47 +434,7 @@ void updateZoneSelectorWindowLayout(QQuickWindow* window, QScreen* screen, ISett
     const ZoneSelectorPosition pos = settings ? settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
 
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        // Initialize to Top anchors as safe default
-        LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
-        switch (pos) {
-        case ZoneSelectorPosition::TopLeft:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
-            break;
-        case ZoneSelectorPosition::Top:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                                    | LayerShellQt::Window::AnchorRight);
-            break;
-        case ZoneSelectorPosition::TopRight:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
-            break;
-        case ZoneSelectorPosition::Left:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                                    | LayerShellQt::Window::AnchorBottom);
-            break;
-        case ZoneSelectorPosition::Right:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                                    | LayerShellQt::Window::AnchorBottom);
-            break;
-        case ZoneSelectorPosition::BottomLeft:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
-            break;
-        case ZoneSelectorPosition::Bottom:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                              | LayerShellQt::Window::AnchorRight);
-            break;
-        case ZoneSelectorPosition::BottomRight:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
-            break;
-        default:
-            // Already initialized to Top anchors
-            break;
-        }
-        layerWindow->setAnchors(anchors);
+        layerWindow->setAnchors(getAnchorsForPosition(pos));
     }
 
     applyZoneSelectorGeometry(window, screen, layout, pos);
@@ -464,46 +488,12 @@ OverlayService::~OverlayService()
         disconnect(qGuiApp, nullptr, this, nullptr);
     }
 
-    // Clean up zone selector windows before engine is destroyed
-    for (auto* window : std::as_const(m_zoneSelectorWindows)) {
-        if (window) {
-            // Take C++ ownership FIRST to prevent QML GC interference
-            QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-            window->close();
-            window->deleteLater();
-        }
-    }
-    m_zoneSelectorWindows.clear();
-
-    // Clean up overlay windows
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
-            QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-            window->close();
-            window->deleteLater();
-        }
-    }
-    m_overlayWindows.clear();
-
-    // Clean up layout OSD windows
-    for (auto* window : std::as_const(m_layoutOsdWindows)) {
-        if (window) {
-            QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-            window->close();
-            window->deleteLater();
-        }
-    }
-    m_layoutOsdWindows.clear();
-
-    // Clean up navigation OSD windows
-    for (auto* window : std::as_const(m_navigationOsdWindows)) {
-        if (window) {
-            QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-            window->close();
-            window->deleteLater();
-        }
-    }
-    m_navigationOsdWindows.clear();
+    // Clean up all window types before engine is destroyed
+    // (takes C++ ownership to prevent QML GC interference)
+    cleanupWindowMap(m_zoneSelectorWindows);
+    cleanupWindowMap(m_overlayWindows);
+    cleanupWindowMap(m_layoutOsdWindows);
+    cleanupWindowMap(m_navigationOsdWindows);
 
     // Process pending deletions before destroying the QML engine.
     // All deleteLater() calls must complete while the engine is still valid.
@@ -511,6 +501,47 @@ OverlayService::~OverlayService()
 
     // Now m_engine (unique_ptr) will be destroyed safely
     // since all QML objects have been properly cleaned up
+}
+
+QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType)
+{
+    if (!screen) {
+        qCWarning(lcOverlay) << "Screen is null for" << windowType;
+        return nullptr;
+    }
+
+    QQmlComponent component(m_engine.get(), qmlUrl);
+
+    if (component.isError()) {
+        qCWarning(lcOverlay) << "Failed to load" << windowType << "QML:" << component.errors();
+        return nullptr;
+    }
+
+    if (component.status() != QQmlComponent::Ready) {
+        qCWarning(lcOverlay) << windowType << "QML component not ready, status:" << component.status();
+        return nullptr;
+    }
+
+    QObject* obj = component.create();
+    if (!obj) {
+        qCWarning(lcOverlay) << "Failed to create" << windowType << "window:" << component.errors();
+        return nullptr;
+    }
+
+    auto* window = qobject_cast<QQuickWindow*>(obj);
+    if (!window) {
+        qCWarning(lcOverlay) << "Created object is not a QQuickWindow for" << windowType;
+        obj->deleteLater();
+        return nullptr;
+    }
+
+    // Take C++ ownership so QML's GC doesn't delete the window
+    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
+
+    // Set the screen before configuring LayerShellQt
+    window->setScreen(screen);
+
+    return window;
 }
 
 void OverlayService::show()
@@ -1215,110 +1246,30 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
 
 void OverlayService::createZoneSelectorWindow(QScreen* screen)
 {
-    if (!screen) {
-        qCWarning(lcOverlay) << "Screen is null";
-        return;
-    }
-
     if (m_zoneSelectorWindows.contains(screen)) {
         return;
     }
 
-    QQmlComponent component(m_engine.get(), QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")));
-
-    if (component.isError()) {
-        qCWarning(lcOverlay) << "Failed to load ZoneSelectorWindow.qml:" << component.errors();
-        return;
-    }
-
-    if (component.status() != QQmlComponent::Ready) {
-        qCWarning(lcOverlay) << "QML component not ready, status:" << component.status();
-        return;
-    }
-
-    QObject* obj = component.create();
-    if (!obj) {
-        qCWarning(lcOverlay) << "Failed to create zone selector window:" << component.errors();
-        return;
-    }
-
-    auto* window = qobject_cast<QQuickWindow*>(obj);
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), screen, "zone selector");
     if (!window) {
-        qCWarning(lcOverlay) << "Created object is not a QQuickWindow, type:" << obj->metaObject()->className();
-        obj->deleteLater();
         return;
     }
 
-    // Take C++ ownership so QML's GC doesn't delete the window.
-    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-
-    // Set the screen before configuring LayerShellQt so it picks up the right output
-    // on multi-monitor setups.
-    window->setScreen(screen);
     const QRect screenGeom = screen->geometry();
 
-    // Configure LayerShellQt for Wayland overlay
+    // Configure LayerShellQt for zone selector (LayerTop for pointer input)
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        // Explicitly use the Qt window's screen for the layer surface
         layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
-        // Use LayerTop instead of LayerOverlay to receive pointer input
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
 
-        // Anchor based on position setting
         ZoneSelectorPosition pos = m_settings ? m_settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
-        // Initialize to Top anchors as safe default
-        LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight);
-        switch (pos) {
-        case ZoneSelectorPosition::TopLeft:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft);
-            break;
-        case ZoneSelectorPosition::Top:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft
-                                                    | LayerShellQt::Window::AnchorRight);
-            break;
-        case ZoneSelectorPosition::TopRight:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorRight);
-            break;
-        case ZoneSelectorPosition::Left:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorTop
-                                                    | LayerShellQt::Window::AnchorBottom);
-            break;
-        case ZoneSelectorPosition::Right:
-            anchors = LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorRight | LayerShellQt::Window::AnchorTop
-                                                    | LayerShellQt::Window::AnchorBottom);
-            break;
-        case ZoneSelectorPosition::BottomLeft:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft);
-            break;
-        case ZoneSelectorPosition::Bottom:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorLeft
-                                              | LayerShellQt::Window::AnchorRight);
-            break;
-        case ZoneSelectorPosition::BottomRight:
-            anchors =
-                LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorBottom | LayerShellQt::Window::AnchorRight);
-            break;
-        default:
-            // Already initialized to Top anchors
-            break;
-        }
-        layerWindow->setAnchors(anchors);
-        // Use -1 to ignore other exclusive zones - this gives us deterministic positioning
-        // The window will render exactly where we specify via setMargins()
-        // This fixes the hover coordinate mismatch when panels are present
+        layerWindow->setAnchors(getAnchorsForPosition(pos));
         layerWindow->setExclusiveZone(-1);
-        // Include screen name in scope so the compositor doesn't mix up layer surfaces
-        // across monitors.
         layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screen->name()));
-        qCDebug(lcOverlay) << "Created layer shell zone selector for screen:" << screen->name();
     }
 
-    // Set screen properties for proper layout preview scaling
+    // Set screen properties for layout preview scaling
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
@@ -1339,17 +1290,11 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
 
-    // Use unified layout count (manual layouts + autotile algorithms)
     const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager).size();
     updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
 
-    // Initially hidden
     window->setVisible(false);
-    window->hide();
-
-    // Connect zone selection signal from QML
     connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this, SLOT(onZoneSelected(QString, int, QVariant)));
-
     m_zoneSelectorWindows.insert(screen, window);
 }
 
@@ -1540,105 +1485,69 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     }
 
     // Choose overlay type based on shader settings
-    const bool usingShader = useShaderOverlay();
-
-    QUrl qmlSource;
-    if (usingShader) {
-        // Use RenderNodeOverlay with ZoneShaderItem for GPU-accelerated rendering
-        qmlSource = QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml"));
-        qCDebug(lcOverlay) << "Creating render node shader overlay for screen:" << screen->name();
-    } else {
-        qmlSource = QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml"));
-    }
+    bool usingShader = useShaderOverlay();
 
     // Expose overlayService to QML context for error reporting
     m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
-    QQmlComponent component(m_engine.get(), qmlSource);
-
-    // Fall back to standard overlay if shader overlay fails to load
-    if (component.isError() && usingShader) {
-        qCWarning(lcOverlay) << "Failed to load shader overlay:" << component.errors();
-        qCWarning(lcOverlay) << "Falling back to standard overlay";
-        qmlSource = QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml"));
-        component.loadUrl(qmlSource);
+    // Try shader overlay first, fall back to standard overlay if it fails
+    QQuickWindow* window = nullptr;
+    if (usingShader) {
+        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay");
+        if (!window) {
+            qCWarning(lcOverlay) << "Falling back to standard overlay";
+            usingShader = false;
+        }
     }
-
-    if (component.isError()) {
-        qCWarning(lcOverlay) << "Failed to load ZoneOverlay.qml:" << component.errors();
-        return;
-    }
-
-    QObject* obj = component.create();
-    if (!obj) {
-        qCWarning(lcOverlay) << "Failed to create overlay window";
-        return;
-    }
-
-    auto* window = qobject_cast<QQuickWindow*>(obj);
     if (!window) {
-        qCWarning(lcOverlay) << "Created object is not a QQuickWindow";
-        obj->deleteLater();
-        return;
+        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), screen, "overlay");
+        if (!window) {
+            return;
+        }
     }
 
-    // Take C++ ownership; we manage these via m_overlayWindows.
-    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-
-    // Set the screen before configuring LayerShellQt so it picks up the right output.
-    window->setScreen(screen);
+    // Set window geometry to cover full screen
     const QRect geom = screen->geometry();
     window->setX(geom.x());
     window->setY(geom.y());
     window->setWidth(geom.width());
     window->setHeight(geom.height());
 
-    // Mark window type for reliable type detection (used by mismatch detection logic)
+    // Mark window type for reliable type detection
     window->setProperty("isShaderOverlay", usingShader);
 
-    // Set shader-specific properties if using shader overlay
+    // Set shader-specific properties
     if (usingShader && m_layout) {
         auto* registry = ShaderRegistry::instance();
         if (registry) {
             const QString shaderId = m_layout->shaderId();
             window->setProperty("shaderSource", registry->shaderUrl(shaderId));
-            // Translate parameter IDs to shader uniform names (mapsTo values)
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, m_layout->shaderParams());
             window->setProperty("shaderParams", QVariant::fromValue(translatedParams));
         }
     }
 
-    // Configure LayerShellQt for Wayland overlay
+    // Configure LayerShellQt for full-screen overlay
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        // Explicitly use the Qt window's screen for the layer surface
         layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         layerWindow->setAnchors(
             LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
                                           | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
-        layerWindow->setExclusiveZone(-1); // Don't reserve space
-        // Include screen name in scope so the compositor doesn't mix up layer surfaces
-        // across monitors.
+        layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-overlay-%1").arg(screen->name()));
-        qCDebug(lcOverlay) << "Created layer shell overlay for screen:" << screen->name();
     }
 
-    // Check if platform is supported
     if (!Platform::isSupported()) {
         qCWarning(lcOverlay) << "Platform not supported - PlasmaZones requires Wayland";
     }
 
-    // Explicitly ensure window is hidden after creation
-    // (LayerShellQt on Wayland may show the window during configuration)
     window->setVisible(false);
-    window->hide();
 
     // Connect to screen geometry changes
-    // Use QPointer to safely handle screen destruction during callback
     QPointer<QScreen> screenPtr = screen;
     connect(screen, &QScreen::geometryChanged, window, [this, screenPtr](const QRect& newGeom) {
-        // Guard against screen being destroyed
         if (!screenPtr) {
             return;
         }
@@ -1866,7 +1775,7 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 
 QVariantList OverlayService::buildLayoutsList() const
 {
-    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, ZoneSelectorController, LayoutAdaptor)
+    // Use shared utility to build unified layout list
     const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
     return LayoutUtils::toVariantList(entries);
 }
@@ -2110,6 +2019,33 @@ void OverlayService::onShaderError(const QString& errorLog)
     // (shader shows nothing on error, but window remains to prevent flicker)
 }
 
+bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio)
+{
+    QScreen* screen = Utils::primaryScreen();
+    if (!screen) {
+        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+        return false;
+    }
+
+    if (!m_layoutOsdWindows.contains(screen)) {
+        createLayoutOsdWindow(screen);
+    }
+
+    window = m_layoutOsdWindows.value(screen);
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to get layout OSD window";
+        return false;
+    }
+
+    screenGeom = screen->geometry();
+    aspectRatio = (screenGeom.height() > 0)
+        ? static_cast<qreal>(screenGeom.width()) / screenGeom.height()
+        : (16.0 / 9.0);
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+
+    return true;
+}
+
 void OverlayService::showLayoutOsd(Layout* layout)
 {
     if (!layout) {
@@ -2117,56 +2053,25 @@ void OverlayService::showLayoutOsd(Layout* layout)
         return;
     }
 
-    // Don't show OSD for empty layouts
     if (layout->zones().isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << layout->name();
         return;
     }
 
-    // Show on primary screen only for OSD
-    QScreen* screen = Utils::primaryScreen();
-    if (!screen) {
-        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+    QQuickWindow* window = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 0;
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio)) {
         return;
     }
 
-    // Create window if needed
-    if (!m_layoutOsdWindows.contains(screen)) {
-        createLayoutOsdWindow(screen);
-    }
-
-    auto* window = m_layoutOsdWindows.value(screen);
-    if (!window) {
-        qCWarning(lcOverlay) << "Failed to get layout OSD window";
-        return;
-    }
-
-    // Get screen geometry for aspect ratio
-    const QRect screenGeom = screen->geometry();
-    qreal aspectRatio =
-        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    // Ensure aspect ratio is within reasonable bounds
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
-
-    // Set layout data
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    // Manual layouts always have category 0 (LayoutCategory::Manual)
     writeQmlProperty(window, QStringLiteral("category"), 0);
-
-    // Use shared LayoutUtils with full zone fields for OSD rendering
     writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
 
-    // Set explicit window size before positioning
-    // OSD is approximately 280x200 based on QML layout (200px preview + margins + label)
-    const int osdWidth = 280;
-    const int osdHeight = static_cast<int>(200 / aspectRatio) + 80; // preview height + margins + label
-    window->setWidth(osdWidth);
-    window->setHeight(osdHeight);
-    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
-
-    // Show with animation
+    sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
     qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name();
@@ -2174,52 +2079,25 @@ void OverlayService::showLayoutOsd(Layout* layout)
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category)
 {
-    // Don't show OSD for empty layouts
     if (zones.isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << name;
         return;
     }
 
-    // Show on primary screen only for OSD
-    QScreen* screen = Utils::primaryScreen();
-    if (!screen) {
-        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+    QQuickWindow* window = nullptr;
+    QRect screenGeom;
+    qreal aspectRatio = 0;
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio)) {
         return;
     }
 
-    // Create window if needed
-    if (!m_layoutOsdWindows.contains(screen)) {
-        createLayoutOsdWindow(screen);
-    }
-
-    auto* window = m_layoutOsdWindows.value(screen);
-    if (!window) {
-        qCWarning(lcOverlay) << "Failed to get layout OSD window";
-        return;
-    }
-
-    // Get screen geometry for aspect ratio
-    const QRect screenGeom = screen->geometry();
-    qreal aspectRatio =
-        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    // Ensure aspect ratio is within reasonable bounds
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
-
-    // Set layout data
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("category"), category);
     writeQmlProperty(window, QStringLiteral("zones"), zones);
 
-    // Set explicit window size before positioning
-    const int osdWidth = 280;
-    const int osdHeight = static_cast<int>(200 / aspectRatio) + 80;
-    window->setWidth(osdWidth);
-    window->setHeight(osdHeight);
-    centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
-
-    // Show with animation
+    sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
     qCDebug(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category;
@@ -2236,45 +2114,14 @@ void OverlayService::hideLayoutOsd()
 
 void OverlayService::createLayoutOsdWindow(QScreen* screen)
 {
-    if (!screen) {
-        qCWarning(lcOverlay) << "Screen is null for layout OSD";
-        return;
-    }
-
     if (m_layoutOsdWindows.contains(screen)) {
         return;
     }
 
-    QQmlComponent component(m_engine.get(), QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")));
-
-    if (component.isError()) {
-        qCWarning(lcOverlay) << "Failed to load LayoutOsd.qml:" << component.errors();
-        return;
-    }
-
-    if (component.status() != QQmlComponent::Ready) {
-        qCWarning(lcOverlay) << "LayoutOsd QML component not ready, status:" << component.status();
-        return;
-    }
-
-    QObject* obj = component.create();
-    if (!obj) {
-        qCWarning(lcOverlay) << "Failed to create layout OSD window:" << component.errors();
-        return;
-    }
-
-    auto* window = qobject_cast<QQuickWindow*>(obj);
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), screen, "layout OSD");
     if (!window) {
-        qCWarning(lcOverlay) << "Created object is not a QQuickWindow";
-        obj->deleteLater();
         return;
     }
-
-    // Take C++ ownership
-    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-
-    // Set screen before configuring LayerShellQt
-    window->setScreen(screen);
 
     // Configure LayerShellQt for Wayland overlay (prevents window from appearing in taskbar)
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
@@ -2282,21 +2129,13 @@ void OverlayService::createLayoutOsdWindow(QScreen* screen)
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         // Anchors will be set dynamically in showLayoutOsd() based on window size
-        // Scope includes screen name to avoid conflicts across monitors
         layerWindow->setScope(QStringLiteral("plasmazones-layout-osd-%1").arg(screen->name()));
-        layerWindow->setExclusiveZone(-1); // Don't reserve space
-        qCDebug(lcOverlay) << "Configured LayerShellQt for layout OSD on screen:" << screen->name();
+        layerWindow->setExclusiveZone(-1);
     }
 
-    // Connect dismissed signal to clean up
     connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
-
-    // Initially hidden
     window->setVisible(false);
-
     m_layoutOsdWindows.insert(screen, window);
-
-    qCDebug(lcOverlay) << "Created layout OSD window for screen:" << screen->name();
 }
 
 void OverlayService::destroyLayoutOsdWindow(QScreen* screen)
@@ -2401,79 +2240,29 @@ void OverlayService::hideNavigationOsd()
 
 void OverlayService::createNavigationOsdWindow(QScreen* screen)
 {
-    if (!screen) {
-        qCWarning(lcOverlay) << "Screen is null for navigation OSD";
-        return;
-    }
-
     if (m_navigationOsdWindows.contains(screen)) {
         return;
     }
 
-    if (!m_engine) {
-        qCWarning(lcOverlay) << "QML engine not available for navigation OSD";
-        m_navigationOsdCreationFailed.insert(screen, true);
-        return;
-    }
-
-    QQmlComponent component(m_engine.get(), QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")));
-
-    if (component.isError()) {
-        qCWarning(lcOverlay) << "Failed to load NavigationOsd.qml:" << component.errors();
-        m_navigationOsdCreationFailed.insert(screen, true);
-        return;
-    }
-
-    if (component.status() != QQmlComponent::Ready) {
-        qCWarning(lcOverlay) << "NavigationOsd QML component not ready, status:" << component.status();
-        m_navigationOsdCreationFailed.insert(screen, true);
-        return;
-    }
-
-    QObject* obj = component.create();
-    if (!obj) {
-        qCWarning(lcOverlay) << "Failed to create navigation OSD window:" << component.errors();
-        m_navigationOsdCreationFailed.insert(screen, true);
-        return;
-    }
-
-    auto* window = qobject_cast<QQuickWindow*>(obj);
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), screen, "navigation OSD");
     if (!window) {
-        qCWarning(lcOverlay) << "Created object is not a QQuickWindow";
-        obj->deleteLater();
         m_navigationOsdCreationFailed.insert(screen, true);
         return;
     }
 
-    // Take C++ ownership
-    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-
-    // Set screen before configuring LayerShellQt
-    window->setScreen(screen);
-
-    // Configure LayerShellQt for Wayland overlay (prevents window from appearing in taskbar)
+    // Configure LayerShellQt for Wayland overlay
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
-        // Anchors will be set dynamically in showNavigationOsd() based on window size
-        // Scope includes screen name to avoid conflicts across monitors
         layerWindow->setScope(QStringLiteral("plasmazones-navigation-osd-%1").arg(screen->name()));
-        layerWindow->setExclusiveZone(-1); // Don't reserve space
-        qCDebug(lcOverlay) << "Configured LayerShellQt for navigation OSD on screen:" << screen->name();
+        layerWindow->setExclusiveZone(-1);
     }
 
-    // Connect dismissed signal to clean up
     connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
-
-    // Initially hidden
     window->setVisible(false);
-
     m_navigationOsdWindows.insert(screen, window);
-    // Clear failed flag on successful creation
     m_navigationOsdCreationFailed.remove(screen);
-
-    qCDebug(lcOverlay) << "Created navigation OSD window for screen:" << screen->name();
 }
 
 void OverlayService::destroyNavigationOsdWindow(QScreen* screen)

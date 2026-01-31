@@ -24,6 +24,25 @@ public:
 
 protected:
     /**
+     * @brief Validates that ZoneManager exists and zone ID is valid
+     * @param zoneId The zone ID to validate
+     * @return true if ZoneManager exists, zoneId is non-empty, and zone exists
+     *
+     * Logs a warning if the zone is not found.
+     */
+    bool validateZoneExists(const QString& zoneId) const;
+
+    /**
+     * @brief Gets a validated zone by ID
+     * @param zoneId The zone ID to retrieve
+     * @return The zone data if valid, empty QVariantMap otherwise
+     *
+     * Performs all validation checks and logs warnings on failure.
+     * Equivalent to calling validateZoneExists() and then getZoneById().
+     */
+    QVariantMap getValidatedZone(const QString& zoneId) const;
+
+    /**
      * @brief Non-owning pointer to ZoneManager
      *
      * ZoneManager is owned by EditorController.

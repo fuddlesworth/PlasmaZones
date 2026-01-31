@@ -22,9 +22,9 @@ class Settings; // Forward declaration for concrete type
  * @brief D-Bus adaptor for settings operations
  *
  * Provides D-Bus interface: org.plasmazones.Settings
- * Single responsibility: Settings read/write operations
+ *  Settings read/write operations
  *
- * Uses registry pattern to avoid Open/Closed violation in setSetting.
+ * Uses registry pattern for setSetting.
  */
 class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
 {
@@ -111,7 +111,7 @@ private:
 
     ISettings* m_settings; // Interface type (DIP)
 
-    // Registry pattern for Open/Closed compliance
+    // Registry pattern
     using Getter = std::function<QVariant()>;
     using Setter = std::function<bool(const QVariant&)>;
 

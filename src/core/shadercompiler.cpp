@@ -200,7 +200,7 @@ ShaderCompiler::Result ShaderCompiler::runQsb(const QString& inputPath, const QS
     args << QStringLiteral("--glsl") << QStringLiteral("100es,120,150");
     args << QStringLiteral("--hlsl") << QStringLiteral("50");
     args << QStringLiteral("--msl") << QStringLiteral("12");
-    args << QStringLiteral("-b"); // Batchable for ShaderEffect (CRITICAL!)
+    args << QStringLiteral("-b"); // Required for ShaderEffect batching
     args << QStringLiteral("-o") << outputPath;
     args << inputPath;
 

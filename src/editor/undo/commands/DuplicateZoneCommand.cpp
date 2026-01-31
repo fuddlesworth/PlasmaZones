@@ -21,13 +21,7 @@ DuplicateZoneCommand::DuplicateZoneCommand(QPointer<ZoneManager> zoneManager, co
 
 void DuplicateZoneCommand::undo()
 {
-    if (!m_zoneManager || m_duplicatedZoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before deletion
-    QVariantMap zone = m_zoneManager->getZoneById(m_duplicatedZoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for undo:" << m_duplicatedZoneId;
+    if (!validateZoneExists(m_duplicatedZoneId)) {
         return;
     }
     m_zoneManager->deleteZone(m_duplicatedZoneId);

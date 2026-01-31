@@ -106,21 +106,10 @@ struct ZoneData
 };
 
 /**
- * @brief QSGRenderNode subclass for direct OpenGL zone rendering
+ * @brief QSGRenderNode for direct OpenGL zone rendering
  *
- * This node bypasses Qt Quick's shader effect limitations (QTBUG-50493)
- * by using direct OpenGL calls with uniform buffers. It provides:
- *
- * - Full control over the rendering pipeline
- * - Support for up to 64 zones with individual properties
- * - Shadertoy-compatible uniforms (iTime, iResolution, etc.)
- * - Custom shader loading from file
- * - Uniform buffer updates
- *
- * Usage:
- * 1. Create in QQuickItem::updatePaintNode()
- * 2. Call setters to update zone data
- * 3. Node handles OpenGL resource management automatically
+ * Uses direct OpenGL calls with uniform buffers to work around QTBUG-50493.
+ * Supports up to 64 zones with Shadertoy-compatible uniforms.
  *
  * @note Requires OpenGL 3.3+ or OpenGL ES 3.0+ for UBO support
  */

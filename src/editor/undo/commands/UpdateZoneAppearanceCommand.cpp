@@ -22,13 +22,7 @@ UpdateZoneAppearanceCommand::UpdateZoneAppearanceCommand(QPointer<ZoneManager> z
 
 void UpdateZoneAppearanceCommand::undo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty() || m_propertyName.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for undo:" << m_zoneId;
+    if (m_propertyName.isEmpty() || !validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->updateZoneAppearance(m_zoneId, m_propertyName, m_oldValue);
@@ -36,13 +30,7 @@ void UpdateZoneAppearanceCommand::undo()
 
 void UpdateZoneAppearanceCommand::redo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty() || m_propertyName.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for redo:" << m_zoneId;
+    if (m_propertyName.isEmpty() || !validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->updateZoneAppearance(m_zoneId, m_propertyName, m_newValue);

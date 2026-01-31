@@ -101,12 +101,27 @@ Kirigami.Dialog {
     }
 
     function initializePendingParamsForShader() {
-        var info = currentShaderInfo;
-        if (!info || !info.parameters) {
+        // Get params directly by ID to avoid stale computed property values
+        // When onPendingShaderIdChanged fires, currentShaderInfo may not have updated yet
+        var params = getShaderParamsById(pendingShaderId);
+        if (!params || params.length === 0) {
             pendingParams = {};
             return;
         }
-        pendingParams = extractDefaults(info.parameters);
+        pendingParams = extractDefaults(params);
+    }
+
+    // Helper to get shader parameters directly by ID, avoiding computed property timing issues
+    function getShaderParamsById(shaderId) {
+        if (!editorController || !shaderId) return [];
+        var shaders = editorController.availableShaders;
+        if (!shaders) return [];
+        for (var i = 0; i < shaders.length; i++) {
+            if (shaders[i] && shaders[i].id === shaderId) {
+                return shaders[i].parameters || [];
+            }
+        }
+        return [];
     }
 
     function setPendingParam(paramId, value) {
@@ -198,7 +213,7 @@ Kirigami.Dialog {
         pendingParams = randomized;
     }
 
-    // DRY: Shared defaults extraction logic
+    // Extract default values from parameter definitions
     function extractDefaults(params) {
         var defaults = {};
         if (!params) return defaults;
@@ -211,18 +226,12 @@ Kirigami.Dialog {
         return defaults;
     }
 
-    // DRY: Shared component selection for parameter types
-    // Open/Closed: Add new parameter types by extending this mapping
-    function getParameterComponent(paramType) {
-        switch (paramType) {
-            case "float": return floatParamComponent;
-            case "color": return colorParamComponent;
-            case "bool": return boolParamComponent;
-            case "int": return intParamComponent;
-            default:
-                console.warn("ShaderSettingsDialog: Unknown parameter type:", paramType);
-                return null;
-        }
+    // Helper for ParameterDelegate to open color dialog
+    function openColorDialog(paramId, paramName, currentColor) {
+        shaderColorDialog.selectedColor = currentColor;
+        shaderColorDialog.paramId = paramId;
+        shaderColorDialog.paramName = paramName;
+        shaderColorDialog.open();
     }
 
     function firstEffectId() {
@@ -490,27 +499,33 @@ Kirigami.Dialog {
                     }
 
                     contentItem: Component {
-                        Kirigami.FormLayout {
+                        ColumnLayout {
                             Kirigami.Theme.inherit: true
+                            spacing: Kirigami.Units.smallSpacing
+
                             Repeater {
                                 model: paramSection.groupParams
 
-                                delegate: Loader {
-                                    Layout.fillWidth: true
-                                    visible: sourceComponent !== null
-
+                                delegate: RowLayout {
                                     required property var modelData
                                     required property int index
 
-                                    Kirigami.FormData.label: modelData.name || modelData.id
+                                    Layout.fillWidth: true
+                                    spacing: Kirigami.Units.largeSpacing
 
-                                    // Ensure Kirigami theme context propagates to loaded parameter components
-                                    Kirigami.Theme.inherit: true
+                                    Label {
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+                                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                                        text: modelData ? (modelData.name || modelData.id || "") : ""
+                                        horizontalAlignment: Text.AlignRight
+                                        elide: Text.ElideRight
+                                    }
 
-                                    sourceComponent: root.getParameterComponent(modelData.type)
-
-                                    onLoaded: {
-                                        if (item) item.paramData = modelData;
+                                    ParameterDelegate {
+                                        Layout.fillWidth: true
+                                        Kirigami.Theme.inherit: true
+                                        dialogRoot: root
+                                        paramData: modelData
                                     }
                                 }
                             }
@@ -522,30 +537,37 @@ Kirigami.Dialog {
 
         // ═══════════════════════════════════════════════════════════════════
         // FLAT PARAMETERS - When no groups are defined
+        // Uses ColumnLayout instead of FormLayout to avoid attached property
+        // issues during Repeater model changes (FormLayout caches FormData refs)
         // ═══════════════════════════════════════════════════════════════════
-        Kirigami.FormLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             visible: root.hasShaderEffect && root.parameterGroups.length === 0 && root.shaderParams.length > 0
+            spacing: Kirigami.Units.smallSpacing
 
             Repeater {
                 model: root.parameterGroups.length === 0 ? root.shaderParams : []
 
-                delegate: Loader {
-                    Layout.fillWidth: true
-                    visible: sourceComponent !== null
-
+                delegate: RowLayout {
                     required property var modelData
                     required property int index
 
-                    Kirigami.FormData.label: modelData.name || modelData.id
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.largeSpacing
 
-                    // Ensure Kirigami theme context propagates to loaded parameter components
-                    Kirigami.Theme.inherit: true
+                    Label {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        text: modelData ? (modelData.name || modelData.id || "") : ""
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideRight
+                    }
 
-                    sourceComponent: root.getParameterComponent(modelData.type)
-
-                    onLoaded: {
-                        if (item) item.paramData = modelData;
+                    ParameterDelegate {
+                        Layout.fillWidth: true
+                        Kirigami.Theme.inherit: true
+                        dialogRoot: root
+                        paramData: modelData
                     }
                 }
             }
@@ -560,178 +582,6 @@ Kirigami.Dialog {
             text: i18nc("@info", "Enable the shader effect to configure visual effects for zone overlays.")
             wrapMode: Text.WordWrap
             opacity: 0.7
-        }
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // PARAMETER COMPONENTS
-    // ═══════════════════════════════════════════════════════════════════════
-
-    Component {
-        id: floatParamComponent
-
-        RowLayout {
-            property var paramData
-
-            Kirigami.Theme.inherit: true
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Slider {
-                id: floatSlider
-                Layout.fillWidth: true
-
-                from: paramData && paramData.min !== undefined ? paramData.min : 0
-                to: paramData && paramData.max !== undefined ? paramData.max : 1
-                stepSize: paramData && paramData.step !== undefined ? paramData.step : 0.01
-
-                value: paramData ? root.parameterValue(
-                    paramData.id,
-                    paramData.default !== undefined ? paramData.default : 0.5
-                ) : 0.5
-
-                ToolTip.text: paramData ? (paramData.description || "") : ""
-                ToolTip.visible: hovered && paramData && paramData.description
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-
-                onMoved: {
-                    if (paramData) {
-                        root.setPendingParam(paramData.id, value);
-                    }
-                }
-            }
-
-            Label {
-                text: floatSlider.value.toFixed(2)
-                Layout.preferredWidth: root.sliderValueLabelWidth
-                horizontalAlignment: Text.AlignRight
-                font: Kirigami.Theme.fixedWidthFont
-            }
-        }
-    }
-
-    Component {
-        id: colorParamComponent
-
-        RowLayout {
-            property var paramData
-
-            Kirigami.Theme.inherit: true
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            Rectangle {
-                id: colorSwatch
-
-                property color currentColor: {
-                    if (!paramData) return "#ffffff";
-                    var fallback = (typeof paramData.default === "string" && paramData.default.length > 0)
-                        ? paramData.default : "#ffffff";
-                    var colorStr = root.parameterValue(paramData.id, fallback);
-                    // Validate color string
-                    if (typeof colorStr !== "string" || colorStr.length === 0) {
-                        return fallback;
-                    }
-                    // Qt.color() returns invalid color for bad strings; check and return string
-                    var parsed = Qt.color(colorStr);
-                    return parsed.valid ? colorStr : fallback;
-                }
-
-                width: root.colorButtonSize
-                height: root.colorButtonSize
-                radius: Kirigami.Units.smallSpacing
-                color: currentColor
-                border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-                border.color: root.themeSeparatorColor
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-
-                    // Accessibility for screen readers
-                    Accessible.name: i18nc("@action:button", "Choose %1 color", paramData ? (paramData.name || paramData.id) : "")
-                    Accessible.role: Accessible.Button
-
-                    onClicked: {
-                        if (!paramData) return;
-                        shaderColorDialog.selectedColor = colorSwatch.currentColor;
-                        shaderColorDialog.paramId = paramData.id;
-                        shaderColorDialog.paramName = paramData.name || paramData.id;
-                        shaderColorDialog.open();
-                    }
-                }
-            }
-
-            Label {
-                text: colorSwatch.currentColor.toString().toUpperCase()
-                Layout.preferredWidth: root.colorLabelWidth
-                font: Kirigami.Theme.fixedWidthFont
-                opacity: 0.7
-            }
-
-            Item { Layout.fillWidth: true }
-        }
-    }
-
-    Component {
-        id: boolParamComponent
-
-        RowLayout {
-            property var paramData
-
-            Kirigami.Theme.inherit: true
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            CheckBox {
-                text: paramData ? (paramData.description || "") : ""
-                checked: paramData ? root.parameterValue(
-                    paramData.id,
-                    paramData.default !== undefined ? paramData.default : false
-                ) : false
-
-                onToggled: {
-                    if (paramData) {
-                        root.setPendingParam(paramData.id, checked);
-                    }
-                }
-            }
-
-            Item { Layout.fillWidth: true }
-        }
-    }
-
-    Component {
-        id: intParamComponent
-
-        RowLayout {
-            property var paramData
-
-            Kirigami.Theme.inherit: true
-            Layout.fillWidth: true
-            spacing: Kirigami.Units.smallSpacing
-
-            SpinBox {
-                from: paramData && paramData.min !== undefined ? paramData.min : 0
-                to: paramData && paramData.max !== undefined ? paramData.max : 100
-
-                value: paramData ? root.parameterValue(
-                    paramData.id,
-                    paramData.default !== undefined ? paramData.default : 0
-                ) : 0
-
-                ToolTip.text: paramData ? (paramData.description || "") : ""
-                ToolTip.visible: hovered && paramData && paramData.description
-                ToolTip.delay: Kirigami.Units.toolTipDelay
-
-                onValueModified: {
-                    if (paramData) {
-                        root.setPendingParam(paramData.id, value);
-                    }
-                }
-            }
-
-            Item { Layout.fillWidth: true }
         }
     }
 

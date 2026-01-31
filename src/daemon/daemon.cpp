@@ -48,7 +48,7 @@
 namespace PlasmaZones {
 
 namespace {
-// Helper function to convert NavigationDirection to string (DRY)
+// Helper function to convert NavigationDirection to string
 QString navigationDirectionToString(NavigationDirection direction)
 {
     switch (direction) {
@@ -165,28 +165,28 @@ bool Daemon::init()
     // Connect overlay visibility to daemon signal
     connect(m_overlayService.get(), &OverlayService::visibilityChanged, this, &Daemon::overlayVisibilityChanged);
 
-    // Initialize domain-specific D-Bus adaptors (SRP)
-    // Each adaptor has a single responsibility and its own D-Bus interface
+    // Initialize domain-specific D-Bus adaptors
+    // Each adaptor has its own D-Bus interface
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.
     m_layoutAdaptor = new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
 
-    // Overlay adaptor - overlay visibility and highlighting (SRP - kept for backward compatibility)
+    // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor =
         new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(), m_settings.get(), this);
 
-    // Zone detection adaptor - zone detection queries (SRP)
+    // Zone detection adaptor - zone detection queries
     m_zoneDetectionAdaptor =
         new ZoneDetectionAdaptor(m_zoneDetector.get(), m_layoutManager.get(), m_settings.get(), this);
 
-    // Window tracking adaptor - window-zone assignments (SRP)
+    // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
                                                         m_virtualDesktopManager.get(), this);
 
     m_screenAdaptor = new ScreenAdaptor(this);
 
-    // Window drag adaptor - handles drag events from KWin script (SRP)
+    // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here
     m_windowDragAdaptor = new WindowDragAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
                                                 m_settings.get(), m_windowTrackingAdaptor, this);
@@ -194,7 +194,7 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Window tracking service - business logic for zone assignments (SRP)
+    // Window tracking service - business logic for zone assignments
     m_windowTrackingService = std::make_unique<WindowTrackingService>(
         m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
         m_virtualDesktopManager.get(), this);
@@ -287,11 +287,11 @@ void Daemon::start()
         return;
     }
 
-    // Initialize and start screen manager (SRP: centralized screen handling)
+    // Initialize and start screen manager
     m_screenManager->init();
     m_screenManager->start();
 
-    // Initialize and start virtual desktop manager (SRP: virtual desktop handling)
+    // Initialize and start virtual desktop manager
     m_virtualDesktopManager->init();
     m_virtualDesktopManager->start();
 
@@ -309,7 +309,7 @@ void Daemon::start()
     // Set initial virtual desktop on overlay service
     m_overlayService->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
 
-    // Initialize and start activity manager (SRP: activity handling)
+    // Initialize and start activity manager
     // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
     m_activityManager->setVirtualDesktopManager(m_virtualDesktopManager.get());
     m_activityManager->init();
@@ -368,7 +368,7 @@ void Daemon::start()
     qCInfo(lcDaemon) << "Overlay service ready -" << m_screenManager->screens().count()
                      << "screens available (windows created on-demand)";
 
-    // Register global shortcuts via ShortcutManager (SRP)
+    // Register global shortcuts via ShortcutManager
     m_shortcutManager->registerShortcuts();
 
     // Connect shortcut signals
@@ -485,7 +485,7 @@ void Daemon::start()
     });
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Phase 3.2: Autotile settings initialization (SRP: engine owns settings sync)
+    // Phase 3.2: Autotile settings initialization
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // Initialize autotile engine from settings and connect for live updates
@@ -508,7 +508,7 @@ void Daemon::start()
     m_shortcutRouter = std::make_unique<ContextAwareShortcutRouter>(
         m_modeTracker.get(), m_autotileEngine.get(), m_windowTrackingAdaptor, this);
 
-    // Initialize unified layout controller (SRP - extracted from Daemon)
+    // Initialize unified layout controller
     m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
         m_layoutManager.get(), m_autotileEngine.get(), m_settings.get(), this);
 
@@ -865,7 +865,7 @@ void Daemon::showAutotileOsd(const QString& algorithmId)
         return;
     }
 
-    // Use shared utility to generate preview zones (DRY)
+    // Use shared utility to generate preview zones
     QVariantList zonesList = AlgorithmRegistry::generatePreviewZones(algo);
 
     // Show visual OSD with autotile preview (category=1 for Autotile)
@@ -873,9 +873,9 @@ void Daemon::showAutotileOsd(const QString& algorithmId)
     m_overlayService->showLayoutOsd(layoutId, algo->name(), zonesList, 1);
 }
 
-// Unified layout management now handled by UnifiedLayoutController (SRP)
-// Screen management now handled by ScreenManager (SRP)
-// Shortcut management now handled by ShortcutManager (SRP)
+// Unified layout management now handled by UnifiedLayoutController
+// Screen management now handled by ScreenManager
+// Shortcut management now handled by ShortcutManager
 // Signals are connected in start() method
 // Note: Navigation feedback from KWin effect comes via reportNavigationFeedback D-Bus method,
 // which emits the Qt navigationFeedback signal handled by the connection above.

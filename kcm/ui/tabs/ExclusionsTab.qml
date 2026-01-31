@@ -9,7 +9,7 @@ import org.kde.kirigami as Kirigami
 /**
  * @brief Exclusions tab - Window filtering, excluded applications, and window classes
  *
- * Refactored to use ExclusionListCard for DRY compliance.
+ * * Refactored to use ExclusionListCard.
  */
 ScrollView {
     id: root

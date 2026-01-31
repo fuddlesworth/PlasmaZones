@@ -11,7 +11,6 @@
 #include <QObject>
 #include <QTimer>
 #include <QDBusInterface>
-#include <QElapsedTimer>
 #include <QHash>
 #include <QPoint>
 #include <QRect>
@@ -19,52 +18,10 @@
 
 namespace PlasmaZones {
 
-/**
- * @brief Animation data for autotile window geometry transitions
- *
- * Stores the start/end geometry and progress for smooth window animations
- * when autotiling moves windows to their calculated positions.
- */
-struct WindowAnimation {
-    QRectF startGeometry;   ///< Window geometry at animation start
-    QRectF endGeometry;     ///< Target window geometry
-    QElapsedTimer timer;    ///< Timer for animation progress calculation
-    qreal duration = 150.0; ///< Animation duration in milliseconds (default 150ms)
-
-    /// Check if the animation timer has been started
-    bool isValid() const {
-        return timer.isValid();
-    }
-
-    /// Calculate current progress (0.0 to 1.0) with OutQuad easing
-    qreal progress() const {
-        if (!timer.isValid()) {
-            return 0.0;
-        }
-        qreal t = qMin(1.0, timer.elapsed() / duration);
-        // OutQuad easing: fast start, smooth deceleration
-        return 1.0 - (1.0 - t) * (1.0 - t);
-    }
-
-    /// Check if animation is complete
-    bool isComplete() const {
-        if (!timer.isValid()) {
-            return true; // Invalid animation is considered complete
-        }
-        return timer.elapsed() >= duration;
-    }
-
-    /// Interpolate geometry based on current progress
-    QRectF currentGeometry() const {
-        qreal p = progress();
-        return QRectF(
-            startGeometry.x() + (endGeometry.x() - startGeometry.x()) * p,
-            startGeometry.y() + (endGeometry.y() - startGeometry.y()) * p,
-            startGeometry.width() + (endGeometry.width() - startGeometry.width()) * p,
-            startGeometry.height() + (endGeometry.height() - startGeometry.height()) * p
-        );
-    }
-};
+// Forward declarations for helper classes
+class NavigationHandler;
+class WindowAnimator;
+class DragTracker;
 
 /**
  * @brief KWin C++ Effect for PlasmaZones
@@ -153,9 +110,56 @@ private:
      * @brief Ensure WindowTracking D-Bus interface is ready for use
      * @param methodName Name of the calling method (for debug logging)
      * @return true if interface is valid and ready, false otherwise
-     * @note DRY helper - consolidates repeated interface validation pattern
+     * Consolidates interface validation pattern
      */
     bool ensureWindowTrackingReady(const char* methodName);
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Parse JSON zone geometry string to QRect
+     * @param json JSON string with x, y, width, height fields
+     * @return Valid QRect on success, invalid QRect on parse error
+     */
+    QRect parseZoneGeometry(const QString& json) const;
+
+    /**
+     * @brief Query zone ID for a window from daemon
+     * @param windowId The window identifier
+     * @return Zone ID or empty string if not snapped/error
+     */
+    QString queryZoneForWindow(const QString& windowId);
+
+    /**
+     * @brief Ensure pre-snap geometry is stored for a window before snapping
+     * @param w The effect window
+     * @param windowId The window identifier
+     * @note Checks if geometry exists, stores current geometry if not
+     */
+    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId);
+
+    /**
+     * @brief Build a map of stable window IDs to EffectWindow pointers
+     * @param filterHandleable If true, only include windows passing shouldHandleWindow()
+     * @return Hash map of stableId -> EffectWindow*
+     */
+    QHash<QString, KWin::EffectWindow*> buildWindowMap(bool filterHandleable = true) const;
+
+    /**
+     * @brief Get the active window if valid, emit navigation feedback on failure
+     * @param action The action name for feedback (e.g., "move", "swap")
+     * @return Valid EffectWindow* or nullptr (feedback already emitted)
+     */
+    KWin::EffectWindow* getValidActiveWindowOrFail(const QString& action);
+
+    /**
+     * @brief Check if a window is floating by its stable ID
+     * @param stableId The stable window identifier (without pointer address)
+     * @return true if window is floating
+     */
+    bool isWindowFloating(const QString& stableId) const;
 
     // Phase 2.1: Window event notifications for autotiling
     void notifyWindowAdded(KWin::EffectWindow* w);
@@ -201,11 +205,29 @@ public Q_SLOTS:
     // and prevent KWin Quick Tile from triggering
     bool borderActivated(KWin::ElectricBorder border) override;
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper class access methods
+    // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
+    // ═══════════════════════════════════════════════════════════════════════════════
+public:
+    // D-Bus interface access for helpers
+    QDBusInterface* windowTrackingInterface() const { return m_windowTrackingInterface.get(); }
+
+    // Current keyboard modifiers (for drag tracking)
+    Qt::KeyboardModifiers currentModifiers() const { return m_currentModifiers; }
+
 private:
-    // State
-    KWin::EffectWindow* m_draggedWindow = nullptr;
-    QString m_draggedWindowId;
-    QPointF m_lastCursorPos;
+    // Friend classes for helpers
+    friend class NavigationHandler;
+    friend class WindowAnimator;
+    friend class DragTracker;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Helper class instances
+    // ═══════════════════════════════════════════════════════════════════════════════
+    std::unique_ptr<NavigationHandler> m_navigationHandler;
+    std::unique_ptr<WindowAnimator> m_windowAnimator;
+    std::unique_ptr<DragTracker> m_dragTracker;
 
     // Keyboard modifiers from KWin's input system
     // Updated via mouseChanged; that's the only reliable way to get modifiers in a
@@ -217,17 +239,9 @@ private:
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
 
-    // Float tracking (Phase 1 keyboard navigation)
-    QSet<QString> m_floatingWindows;
-
     // Phase 2.1: Track windows notified to daemon via windowAdded
     // Only send windowClosed for windows in this set (avoids D-Bus calls for untracked windows)
     QSet<QString> m_notifiedWindows;
-
-    // Phase 2.3: Autotile animations for smooth window geometry transitions
-    QHash<KWin::EffectWindow*, WindowAnimation> m_autotileAnimations;
-    bool m_autotileAnimationsEnabled = true;   ///< Whether to animate autotile geometry changes
-    qreal m_autotileAnimationDuration = 150.0; ///< Animation duration in milliseconds
 
     // Polling timer for detecting window moves
     QTimer m_pollTimer;

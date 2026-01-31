@@ -37,6 +37,8 @@ set(plasmazones_core_SRCS
     core/platform.h
     core/geometryutils.cpp
     core/geometryutils.h
+    core/dbusvariantutils.cpp
+    core/dbusvariantutils.h
     core/zone.cpp
     core/zone.h
     core/layout.cpp
@@ -57,8 +59,12 @@ set(plasmazones_core_SRCS
     core/zonehighlighter.h
     core/shaderregistry.cpp
     core/shaderregistry.h
+    core/modifierutils.cpp
+    core/modifierutils.h
     config/settings.cpp
     config/settings.h
+    config/colorimporter.cpp
+    config/colorimporter.h
     # Autotiling support
     autotile/TilingAlgorithm.h
     autotile/TilingAlgorithm.cpp
@@ -296,11 +302,19 @@ set(plasmazones_editor_SRCS
     editor/main.cpp
     editor/EditorController.cpp
     editor/EditorController.h
+    editor/helpers/ZoneSerialization.cpp
+    editor/helpers/ZoneSerialization.h
+    editor/helpers/SettingsDbusQueries.cpp
+    editor/helpers/SettingsDbusQueries.h
+    editor/helpers/ShaderDbusQueries.cpp
+    editor/helpers/ShaderDbusQueries.h
     editor/services/ILayoutService.h
     editor/services/DBusLayoutService.cpp
     editor/services/DBusLayoutService.h
     editor/services/ZoneManager.cpp
     editor/services/ZoneManager.h
+    editor/services/ZoneAutoFiller.cpp
+    editor/services/ZoneAutoFiller.h
     editor/services/SnappingService.cpp
     editor/services/SnappingService.h
     editor/services/TemplateService.cpp
@@ -368,6 +382,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/PropertyPanel.qml
         editor/qml/ControlBar.qml
         editor/qml/DividerManager.qml
+        editor/qml/DividerHandle.qml
         editor/qml/ResizeHandles.qml
         editor/qml/ZoneContent.qml
         editor/qml/ActionButtons.qml
@@ -387,6 +402,13 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/TemplatePreview.qml
         editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
+        editor/qml/ParameterDelegate.qml
+        # SRP-extracted components from PropertyPanel
+        editor/qml/ColorUtils.js
+        editor/qml/ColorPickerRow.qml
+        editor/qml/OpacitySliderRow.qml
+        editor/qml/AppearanceSpinBox.qml
+        editor/qml/ZoneColorDialog.qml
     )
 
 target_link_libraries(plasmazones-editor

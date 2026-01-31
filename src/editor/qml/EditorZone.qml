@@ -90,7 +90,7 @@ Item {
     signal operationUpdated(string zoneId, real x, real y, real width, real height)
     signal operationEnded(string zoneId)
 
-    // Coordinate conversion helpers (DRY)
+    // Coordinate conversion helpers
     function toCanvasX(relX) {
         if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
             return 0;

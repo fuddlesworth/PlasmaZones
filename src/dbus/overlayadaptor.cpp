@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "overlayadaptor.h"
+#include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include "../core/layout.h"
 #include "../core/zone.h"
@@ -56,25 +57,8 @@ bool OverlayAdaptor::isOverlayVisible()
 
 void OverlayAdaptor::highlightZone(const QString& zoneId)
 {
-    if (zoneId.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot highlight zone - empty zone ID";
-        return;
-    }
-
-    if (!m_layoutManager || !m_layoutManager->activeLayout()) {
-        qCWarning(lcDbus) << "Cannot highlight zone - no active layout";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(zoneId);
-    if (!uuidOpt) {
-        qCWarning(lcDbus) << "Invalid UUID format for highlightZone:" << zoneId;
-        return;
-    }
-
-    auto* zone = m_layoutManager->activeLayout()->zoneById(*uuidOpt);
+    auto* zone = DbusHelpers::getZoneFromActiveLayout(m_layoutManager, zoneId, QStringLiteral("highlight zone"));
     if (!zone) {
-        qCWarning(lcDbus) << "Zone not found for highlighting:" << zoneId;
         return;
     }
 
@@ -116,7 +100,7 @@ void OverlayAdaptor::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
-// Window tracking and zone detection methods moved to separate adaptors (SRP)
+// Window tracking and zone detection methods moved to separate adaptors
 // See WindowTrackingAdaptor and ZoneDetectionAdaptor
 
 int OverlayAdaptor::getPollIntervalMs()
@@ -136,19 +120,13 @@ int OverlayAdaptor::getMinimumZoneDisplaySizePx()
 
 void OverlayAdaptor::switchToLayout(const QString& layoutId)
 {
-    if (layoutId.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot switch layout - empty layout ID";
+    auto uuidOpt = DbusHelpers::parseAndValidateUuid(layoutId, QStringLiteral("switch layout"));
+    if (!uuidOpt) {
         return;
     }
 
     if (!m_layoutManager) {
         qCWarning(lcDbus) << "Cannot switch layout - no layout manager";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(layoutId);
-    if (!uuidOpt) {
-        qCWarning(lcDbus) << "Invalid UUID format for switchToLayout:" << layoutId;
         return;
     }
 

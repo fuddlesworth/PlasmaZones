@@ -31,6 +31,11 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "../core/dbusvariantutils.h"
+#include "helpers/ZoneSerialization.h"
+#include "helpers/SettingsDbusQueries.h"
+#include "helpers/ShaderDbusQueries.h"
+#include "helpers/BatchOperationScope.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -40,7 +45,6 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <QGuiApplication>
-#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -54,87 +58,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-// D-Bus wraps nested maps/lists in QDBusArgument which is read-only.
-// QML chokes on these, so we recursively unwrap everything to plain QVariants.
-// qdbus_cast won't help here - it only handles top-level types.
-static QVariant convertDbusArgument(const QVariant& value)
-{
-    // Handle QDBusArgument wrapper - extract to plain types first
-    if (value.canConvert<QDBusArgument>()) {
-        const QDBusArgument arg = value.value<QDBusArgument>();
-        switch (arg.currentType()) {
-        case QDBusArgument::MapType: {
-            // Extract the entire map at once, then recursively convert values
-            QVariantMap map;
-            arg >> map;
-            QVariantMap result;
-            for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-                result.insert(it.key(), convertDbusArgument(it.value()));
-            }
-            return result;
-        }
-        case QDBusArgument::ArrayType: {
-            // Extract the entire list at once using operator>>, which is more
-            // reliable than beginArray()/endArray() for nested structures
-            QVariantList list;
-            arg >> list;
-            QVariantList result;
-            result.reserve(list.size());
-            for (const QVariant& item : list) {
-                result.append(convertDbusArgument(item));
-            }
-            return result;
-        }
-        case QDBusArgument::StructureType: {
-            // Handle D-Bus structures (less common, but can occur)
-            QVariantList structData;
-            arg >> structData;
-            QVariantList result;
-            result.reserve(structData.size());
-            for (const QVariant& item : structData) {
-                result.append(convertDbusArgument(item));
-            }
-            return result;
-        }
-        case QDBusArgument::BasicType:
-        case QDBusArgument::VariantType: {
-            // Basic types can be extracted directly
-            QVariant extracted;
-            arg >> extracted;
-            return extracted;
-        }
-        default:
-            // Unknown type - return as-is (may cause issues, but log for debugging)
-            qCWarning(lcEditor) << "Unhandled QDBusArgument type:" << arg.currentType();
-            return value;
-        }
-    }
-
-    // Handle QVariantList that might contain nested QDBusArgument objects
-    if (value.typeId() == QMetaType::QVariantList) {
-        const QVariantList list = value.toList();
-        QVariantList result;
-        result.reserve(list.size());
-        for (const QVariant& item : list) {
-            result.append(convertDbusArgument(item));
-        }
-        return result;
-    }
-
-    // Handle QVariantMap that might contain nested QDBusArgument objects
-    if (value.typeId() == QMetaType::QVariantMap) {
-        const QVariantMap map = value.toMap();
-        QVariantMap result;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            result.insert(it.key(), convertDbusArgument(it.value()));
-        }
-        return result;
-    }
-
-    // Plain types pass through unchanged
-    return value;
-}
 
 EditorController::EditorController(QObject* parent)
     : QObject(parent)
@@ -179,12 +102,7 @@ EditorController::EditorController(QObject* parent)
         // Remove zone from selection if it was selected
         if (m_selectedZoneIds.contains(zoneId)) {
             m_selectedZoneIds.removeAll(zoneId);
-            QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-            if (m_selectedZoneId != newSelectedId) {
-                m_selectedZoneId = newSelectedId;
-                Q_EMIT selectedZoneIdChanged();
-            }
-            Q_EMIT selectedZoneIdsChanged();
+            syncSelectionSignals();
         }
         Q_EMIT zoneRemoved(zoneId);
     });
@@ -261,19 +179,19 @@ bool EditorController::isNewLayout() const
 }
 bool EditorController::gridSnappingEnabled() const
 {
-    return m_snappingService ? m_snappingService->gridSnappingEnabled() : m_gridSnappingEnabled;
+    return m_snappingService->gridSnappingEnabled();
 }
 bool EditorController::edgeSnappingEnabled() const
 {
-    return m_snappingService ? m_snappingService->edgeSnappingEnabled() : m_edgeSnappingEnabled;
+    return m_snappingService->edgeSnappingEnabled();
 }
 qreal EditorController::snapIntervalX() const
 {
-    return m_snappingService ? m_snappingService->snapIntervalX() : m_snapIntervalX;
+    return m_snappingService->snapIntervalX();
 }
 qreal EditorController::snapIntervalY() const
 {
-    return m_snappingService ? m_snappingService->snapIntervalY() : m_snapIntervalY;
+    return m_snappingService->snapIntervalY();
 }
 qreal EditorController::snapInterval() const
 {
@@ -381,24 +299,7 @@ void EditorController::clearOuterGapOverride()
 
 void EditorController::refreshGlobalZonePadding()
 {
-    int newValue = PlasmaZones::Defaults::ZonePadding;
-
-    QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
-        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QDBusVariant> reply =
-            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("zonePadding"));
-        if (reply.isValid()) {
-            int value = reply.value().variant().toInt();
-            if (value >= 0) {
-                newValue = value;
-            }
-        }
-    }
+    int newValue = SettingsDbusQueries::queryGlobalZonePadding();
 
     if (m_cachedGlobalZonePadding != newValue) {
         m_cachedGlobalZonePadding = newValue;
@@ -408,24 +309,7 @@ void EditorController::refreshGlobalZonePadding()
 
 void EditorController::refreshGlobalOuterGap()
 {
-    int newValue = PlasmaZones::Defaults::OuterGap;
-
-    QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
-        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QDBusVariant> reply =
-            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("outerGap"));
-        if (reply.isValid()) {
-            int value = reply.value().variant().toInt();
-            if (value >= 0) {
-                newValue = value;
-            }
-        }
-    }
+    int newValue = SettingsDbusQueries::queryGlobalOuterGap();
 
     if (m_cachedGlobalOuterGap != newValue) {
         m_cachedGlobalOuterGap = newValue;
@@ -440,21 +324,7 @@ UndoController* EditorController::undoController() const
 bool EditorController::canPaste() const
 {
     QClipboard* clipboard = QGuiApplication::clipboard();
-    QString clipboardText = clipboard->text();
-
-    if (clipboardText.isEmpty()) {
-        return false;
-    }
-
-    // Quick validation - check if it's valid JSON with our format
-    QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8());
-    if (doc.isNull() || !doc.isObject()) {
-        return false;
-    }
-
-    QJsonObject clipboardData = doc.object();
-    return clipboardData[QLatin1String("application")].toString() == QLatin1String("PlasmaZones")
-        && clipboardData[QLatin1String("dataType")].toString() == QLatin1String("zones");
+    return ZoneSerialization::isValidClipboardFormat(clipboard->text());
 }
 
 // Property setters
@@ -529,16 +399,8 @@ void EditorController::setSelectedZoneIdsDirect(const QStringList& zoneIds)
 
 void EditorController::setGridSnappingEnabled(bool enabled)
 {
-    if (m_snappingService) {
-        m_snappingService->setGridSnappingEnabled(enabled);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        if (m_gridSnappingEnabled != enabled) {
-            m_gridSnappingEnabled = enabled;
-            Q_EMIT gridSnappingEnabledChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setGridSnappingEnabled(enabled);
+    saveEditorSettings();
 }
 
 void EditorController::setGridOverlayVisible(bool visible)
@@ -551,46 +413,20 @@ void EditorController::setGridOverlayVisible(bool visible)
 
 void EditorController::setEdgeSnappingEnabled(bool enabled)
 {
-    if (m_snappingService) {
-        m_snappingService->setEdgeSnappingEnabled(enabled);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        if (m_edgeSnappingEnabled != enabled) {
-            m_edgeSnappingEnabled = enabled;
-            Q_EMIT edgeSnappingEnabledChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setEdgeSnappingEnabled(enabled);
+    saveEditorSettings();
 }
 
 void EditorController::setSnapIntervalX(qreal interval)
 {
-    if (m_snappingService) {
-        m_snappingService->setSnapIntervalX(interval);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        interval = qBound(0.01, interval, 1.0);
-        if (!qFuzzyCompare(m_snapIntervalX, interval)) {
-            m_snapIntervalX = interval;
-            Q_EMIT snapIntervalXChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setSnapIntervalX(interval);
+    saveEditorSettings();
 }
 
 void EditorController::setSnapIntervalY(qreal interval)
 {
-    if (m_snappingService) {
-        m_snappingService->setSnapIntervalY(interval);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        interval = qBound(0.01, interval, 1.0);
-        if (!qFuzzyCompare(m_snapIntervalY, interval)) {
-            m_snapIntervalY = interval;
-            Q_EMIT snapIntervalYChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setSnapIntervalY(interval);
+    saveEditorSettings();
 }
 
 void EditorController::setSnapInterval(qreal interval)
@@ -1199,8 +1035,7 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
  */
 void EditorController::updateZoneColor(const QString& zoneId, const QString& colorType, const QString& color)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot update zone color - undo controller or zone manager is null";
+    if (!servicesReady("update zone color")) {
         return;
     }
 
@@ -1223,8 +1058,7 @@ void EditorController::updateZoneColor(const QString& zoneId, const QString& col
 
 void EditorController::updateZoneAppearance(const QString& zoneId, const QString& propertyName, const QVariant& value)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot update zone appearance - undo controller or zone manager is null";
+    if (!servicesReady("update zone appearance")) {
         return;
     }
 
@@ -1250,8 +1084,7 @@ void EditorController::updateZoneAppearance(const QString& zoneId, const QString
  */
 void EditorController::deleteZone(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot delete zone - undo controller or zone manager is null";
+    if (!servicesReady("delete zone")) {
         return;
     }
 
@@ -1270,12 +1103,7 @@ void EditorController::deleteZone(const QString& zoneId)
     // Update selection state
     if (m_selectedZoneIds.contains(zoneId)) {
         m_selectedZoneIds.removeAll(zoneId);
-        QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-        if (m_selectedZoneId != newSelectedId) {
-            m_selectedZoneId = newSelectedId;
-            Q_EMIT selectedZoneIdChanged();
-        }
-        Q_EMIT selectedZoneIdsChanged();
+        syncSelectionSignals();
     }
 
     markUnsaved();
@@ -1305,8 +1133,7 @@ QVariantMap EditorController::findAdjacentZones(const QString& zoneId)
  */
 bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qreal mouseY)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot expand zone - undo controller or zone manager is null";
+    if (!servicesReady("expand zone")) {
         return false;
     }
 
@@ -1359,8 +1186,7 @@ QVariantMap EditorController::calculateFillRegion(const QString& zoneId, qreal m
  */
 void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot delete zone with fill - undo controller or zone manager is null";
+    if (!servicesReady("delete zone with fill")) {
         return;
     }
 
@@ -1388,12 +1214,7 @@ void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
     // Update selection state
     if (m_selectedZoneIds.contains(zoneId)) {
         m_selectedZoneIds.removeAll(zoneId);
-        QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-        if (m_selectedZoneId != newSelectedId) {
-            m_selectedZoneId = newSelectedId;
-            Q_EMIT selectedZoneIdChanged();
-        }
-        Q_EMIT selectedZoneIdsChanged();
+        syncSelectionSignals();
     }
 
     markUnsaved();
@@ -1403,96 +1224,53 @@ void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 // Z-ORDER OPERATIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-void EditorController::bringToFront(const QString& zoneId)
+void EditorController::changeZOrderImpl(const QString& zoneId, ZOrderOp op, const QString& actionName)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
+    if (!servicesReady("change z-order")) {
         return;
     }
 
-    // Get old zones list
     QVariantList oldZones = m_zoneManager->zones();
 
-    // Perform operation
-    m_zoneManager->bringToFront(zoneId);
+    switch (op) {
+    case ZOrderOp::BringToFront:
+        m_zoneManager->bringToFront(zoneId);
+        break;
+    case ZOrderOp::SendToBack:
+        m_zoneManager->sendToBack(zoneId);
+        break;
+    case ZOrderOp::BringForward:
+        m_zoneManager->bringForward(zoneId);
+        break;
+    case ZOrderOp::SendBackward:
+        m_zoneManager->sendBackward(zoneId);
+        break;
+    }
 
-    // Get new zones list
     QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Bring to Front"));
+    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones, actionName);
     m_undoController->push(command);
     markUnsaved();
+}
+
+void EditorController::bringToFront(const QString& zoneId)
+{
+    changeZOrderImpl(zoneId, ZOrderOp::BringToFront, i18nc("@action", "Bring to Front"));
 }
 
 void EditorController::sendToBack(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
-        return;
-    }
-
-    // Get old zones list
-    QVariantList oldZones = m_zoneManager->zones();
-
-    // Perform operation
-    m_zoneManager->sendToBack(zoneId);
-
-    // Get new zones list
-    QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Send to Back"));
-    m_undoController->push(command);
-    markUnsaved();
+    changeZOrderImpl(zoneId, ZOrderOp::SendToBack, i18nc("@action", "Send to Back"));
 }
 
 void EditorController::bringForward(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
-        return;
-    }
-
-    // Get old zones list
-    QVariantList oldZones = m_zoneManager->zones();
-
-    // Perform operation
-    m_zoneManager->bringForward(zoneId);
-
-    // Get new zones list
-    QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Bring Forward"));
-    m_undoController->push(command);
-    markUnsaved();
+    changeZOrderImpl(zoneId, ZOrderOp::BringForward, i18nc("@action", "Bring Forward"));
 }
 
 void EditorController::sendBackward(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
-        return;
-    }
-
-    // Get old zones list
-    QVariantList oldZones = m_zoneManager->zones();
-
-    // Perform operation
-    m_zoneManager->sendBackward(zoneId);
-
-    // Get new zones list
-    QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Send Backward"));
-    m_undoController->push(command);
-    markUnsaved();
+    changeZOrderImpl(zoneId, ZOrderOp::SendBackward, i18nc("@action", "Send Backward"));
 }
 
 /**
@@ -1502,8 +1280,7 @@ void EditorController::sendBackward(const QString& zoneId)
  */
 QString EditorController::duplicateZone(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot duplicate zone - undo controller or zone manager is null";
+    if (!servicesReady("duplicate zone")) {
         return QString();
     }
 
@@ -1642,8 +1419,7 @@ void EditorController::applyTemplate(const QString& templateType, int columns, i
  */
 void EditorController::clearAllZones()
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot clear zones - undo controller or zone manager is null";
+    if (!servicesReady("clear zones")) {
         return;
     }
 
@@ -1735,6 +1511,25 @@ void EditorController::markUnsaved()
         m_hasUnsavedChanges = true;
         Q_EMIT hasUnsavedChangesChanged();
     }
+}
+
+bool EditorController::servicesReady(const char* operation) const
+{
+    if (!m_undoController || !m_zoneManager) {
+        qCWarning(lcEditor) << "Cannot" << operation << "- undo controller or zone manager is null";
+        return false;
+    }
+    return true;
+}
+
+void EditorController::syncSelectionSignals()
+{
+    QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
+    if (m_selectedZoneId != newSelectedId) {
+        m_selectedZoneId = newSelectedId;
+        Q_EMIT selectedZoneIdChanged();
+    }
+    Q_EMIT selectedZoneIdsChanged();
 }
 
 /**
@@ -1967,15 +1762,7 @@ void EditorController::removeFromSelection(const QString& zoneId)
     }
 
     m_selectedZoneIds.removeAll(zoneId);
-
-    // Update single selection for backward compatibility
-    QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-    if (m_selectedZoneId != newSelectedId) {
-        m_selectedZoneId = newSelectedId;
-        Q_EMIT selectedZoneIdChanged();
-    }
-
-    Q_EMIT selectedZoneIdsChanged();
+    syncSelectionSignals();
 }
 
 void EditorController::toggleSelection(const QString& zoneId)
@@ -2146,18 +1933,13 @@ void EditorController::deleteSelectedZones()
     // Copy list since we'll modify it during deletion
     QStringList zonesToDelete = m_selectedZoneIds;
 
-    // Use macro for single undo step
-    m_undoController->beginMacro(i18nc("@action", "Delete %1 Zones", zonesToDelete.count()));
-
-    // Use batch update to defer signals until all zones are deleted
-    m_zoneManager->beginBatchUpdate();
-
-    for (const QString& zoneId : zonesToDelete) {
-        deleteZone(zoneId);
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Delete %1 Zones", zonesToDelete.count()));
+        for (const QString& zoneId : zonesToDelete) {
+            deleteZone(zoneId);
+        }
     }
-
-    m_zoneManager->endBatchUpdate();
-    m_undoController->endMacro();
 
     // Clear selection (already done by deleteZone removing individual zones)
     clearSelection();
@@ -2179,21 +1961,16 @@ QStringList EditorController::duplicateSelectedZones()
     QStringList zonesToDuplicate = m_selectedZoneIds;
     QStringList newZoneIds;
 
-    // Use macro for single undo step
-    m_undoController->beginMacro(i18nc("@action", "Duplicate %1 Zones", zonesToDuplicate.count()));
-
-    // Use batch update to defer signals until all zones are duplicated
-    m_zoneManager->beginBatchUpdate();
-
-    for (const QString& zoneId : zonesToDuplicate) {
-        QString newId = duplicateZone(zoneId);
-        if (!newId.isEmpty()) {
-            newZoneIds.append(newId);
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Duplicate %1 Zones", zonesToDuplicate.count()));
+        for (const QString& zoneId : zonesToDuplicate) {
+            QString newId = duplicateZone(zoneId);
+            if (!newId.isEmpty()) {
+                newZoneIds.append(newId);
+            }
         }
     }
-
-    m_zoneManager->endBatchUpdate();
-    m_undoController->endMacro();
 
     // Select all duplicated zones
     if (!newZoneIds.isEmpty()) {
@@ -2267,23 +2044,19 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         }
     }
 
-    // Apply movement using macro for single undo
-    m_undoController->beginMacro(i18nc("@action", "Move %1 Zones", zonesToMove.count()));
-
-    // Use batch update to defer signals until all zones are moved
-    m_zoneManager->beginBatchUpdate();
-
-    for (const auto& pair : zonesToMove) {
-        const QString& zoneId = pair.first;
-        const QVariantMap& zone = pair.second;
-        qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
-        qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
-        updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
-                           true); // Skip snapping for keyboard
+    // Apply movement using RAII scope for undo macro and batch update
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Move %1 Zones", zonesToMove.count()));
+        for (const auto& pair : zonesToMove) {
+            const QString& zoneId = pair.first;
+            const QVariantMap& zone = pair.second;
+            qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
+            qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
+            updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
+                               true); // Skip snapping for keyboard
+        }
     }
-
-    m_zoneManager->endBatchUpdate();
-    m_undoController->endMacro();
     return true;
 }
 
@@ -2313,67 +2086,61 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
 
     const qreal minSize = 0.05; // Minimum 5% size
 
-    // Apply resize using macro for single undo
-    m_undoController->beginMacro(i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
+        for (const auto& pair : zonesToResize) {
+            const QString& zoneId = pair.first;
+            const QVariantMap& zone = pair.second;
+            qreal x = zone[JsonKeys::X].toDouble();
+            qreal y = zone[JsonKeys::Y].toDouble();
+            qreal width = zone[JsonKeys::Width].toDouble();
+            qreal height = zone[JsonKeys::Height].toDouble();
 
-    // Use batch update to defer signals until all zones are resized
-    m_zoneManager->beginBatchUpdate();
+            // Apply resize based on direction (same logic as resizeSelectedZone)
+            // Left/Up = shrink, Right/Down = grow (intuitive behavior)
+            switch (direction) {
+            case 0: // Left (shrink width)
+                width = qMax(minSize, width - step);
+                break;
+            case 1: // Right (grow width)
+                width = qMin(1.0 - x, width + step);
+                break;
+            case 2: // Up (shrink height)
+                height = qMax(minSize, height - step);
+                break;
+            case 3: // Down (grow height)
+                height = qMin(1.0 - y, height + step);
+                break;
+            default:
+                continue;
+            }
 
-    for (const auto& pair : zonesToResize) {
-        const QString& zoneId = pair.first;
-        const QVariantMap& zone = pair.second;
-        qreal x = zone[JsonKeys::X].toDouble();
-        qreal y = zone[JsonKeys::Y].toDouble();
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
-
-        // Apply resize based on direction (same logic as resizeSelectedZone)
-        // Left/Up = shrink, Right/Down = grow (intuitive behavior)
-        switch (direction) {
-        case 0: // Left (shrink width)
-            width = qMax(minSize, width - step);
-            break;
-        case 1: // Right (grow width)
-            width = qMin(1.0 - x, width + step);
-            break;
-        case 2: // Up (shrink height)
-            height = qMax(minSize, height - step);
-            break;
-        case 3: // Down (grow height)
-            height = qMin(1.0 - y, height + step);
-            break;
-        default:
-            continue;
-        }
-
-        // Ensure minimum size
-        if (width < minSize)
-            width = minSize;
-        if (height < minSize)
-            height = minSize;
-
-        // Clamp to valid bounds
-        if (x + width > 1.0) {
-            width = 1.0 - x;
-            if (width < minSize) {
+            // Ensure minimum size
+            if (width < minSize)
                 width = minSize;
-                x = 1.0 - minSize;
-            }
-        }
-        if (y + height > 1.0) {
-            height = 1.0 - y;
-            if (height < minSize) {
+            if (height < minSize)
                 height = minSize;
-                y = 1.0 - minSize;
+
+            // Clamp to valid bounds
+            if (x + width > 1.0) {
+                width = 1.0 - x;
+                if (width < minSize) {
+                    width = minSize;
+                    x = 1.0 - minSize;
+                }
             }
+            if (y + height > 1.0) {
+                height = 1.0 - y;
+                if (height < minSize) {
+                    height = minSize;
+                    y = 1.0 - minSize;
+                }
+            }
+
+            updateZoneGeometry(zoneId, x, y, width, height, true); // Skip snapping for keyboard
         }
-
-        updateZoneGeometry(zoneId, x, y, width, height, true); // Skip snapping for keyboard
     }
-
-    m_zoneManager->endBatchUpdate();
-
-    m_undoController->endMacro();
     return true;
 }
 
@@ -2699,64 +2466,30 @@ void EditorController::loadEditorSettings()
     if (snapIntY < 0.0)
         snapIntY = snapInt;
 
-    // Apply to services
-    if (m_snappingService) {
-        m_snappingService->setGridSnappingEnabled(gridEnabled);
-        m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
-        m_snappingService->setSnapIntervalX(snapIntX);
-        m_snappingService->setSnapIntervalY(snapIntY);
-    } else {
-        // Fallback if service not initialized
-        m_gridSnappingEnabled = gridEnabled;
-        m_edgeSnappingEnabled = edgeEnabled;
-        m_snapIntervalX = qBound(0.01, snapIntX, 1.0);
-        m_snapIntervalY = qBound(0.01, snapIntY, 1.0);
-        m_snapInterval = qBound(0.01, snapInt, 1.0); // For backward compatibility
-    }
+    // Apply to snapping service
+    m_snappingService->setGridSnappingEnabled(gridEnabled);
+    m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
+    m_snappingService->setSnapIntervalX(snapIntX);
+    m_snappingService->setSnapIntervalY(snapIntY);
 
     // Load app-specific keyboard shortcuts with validation
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
-    QString duplicateShortcut = editorGroup.readEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
-    if (duplicateShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor duplicate shortcut (empty), using default";
-        duplicateShortcut = QStringLiteral("Ctrl+D");
-    }
-    if (m_editorDuplicateShortcut != duplicateShortcut) {
-        m_editorDuplicateShortcut = duplicateShortcut;
-        Q_EMIT editorDuplicateShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorDuplicateShortcut"),
+                        QStringLiteral("Ctrl+D"), m_editorDuplicateShortcut,
+                        [this]() { Q_EMIT editorDuplicateShortcutChanged(); });
 
-    QString splitHorizontalShortcut =
-        editorGroup.readEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
-    if (splitHorizontalShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor split horizontal shortcut (empty), using default";
-        splitHorizontalShortcut = QStringLiteral("Ctrl+Shift+H");
-    }
-    if (m_editorSplitHorizontalShortcut != splitHorizontalShortcut) {
-        m_editorSplitHorizontalShortcut = splitHorizontalShortcut;
-        Q_EMIT editorSplitHorizontalShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitHorizontalShortcut"),
+                        QStringLiteral("Ctrl+Shift+H"), m_editorSplitHorizontalShortcut,
+                        [this]() { Q_EMIT editorSplitHorizontalShortcutChanged(); });
 
     // Note: Default changed from Ctrl+Shift+V to Ctrl+Alt+V to avoid conflict with Paste with Offset
-    QString splitVerticalShortcut = editorGroup.readEntry(QLatin1String("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
-    if (splitVerticalShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor split vertical shortcut (empty), using default";
-        splitVerticalShortcut = QStringLiteral("Ctrl+Alt+V");
-    }
-    if (m_editorSplitVerticalShortcut != splitVerticalShortcut) {
-        m_editorSplitVerticalShortcut = splitVerticalShortcut;
-        Q_EMIT editorSplitVerticalShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitVerticalShortcut"),
+                        QStringLiteral("Ctrl+Alt+V"), m_editorSplitVerticalShortcut,
+                        [this]() { Q_EMIT editorSplitVerticalShortcutChanged(); });
 
-    QString fillShortcut = editorGroup.readEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
-    if (fillShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor fill shortcut (empty), using default";
-        fillShortcut = QStringLiteral("Ctrl+Shift+F");
-    }
-    if (m_editorFillShortcut != fillShortcut) {
-        m_editorFillShortcut = fillShortcut;
-        Q_EMIT editorFillShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorFillShortcut"),
+                        QStringLiteral("Ctrl+Shift+F"), m_editorFillShortcut,
+                        [this]() { Q_EMIT editorFillShortcutChanged(); });
 
     // Load snap override modifier
     int snapOverrideMod = editorGroup.readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000);
@@ -2785,21 +2518,11 @@ void EditorController::saveEditorSettings()
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
 
     // Save snapping settings (save both separate intervals and single for backward compatibility)
-    if (m_snappingService) {
-        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_snappingService->gridSnappingEnabled());
-        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_snappingService->edgeSnappingEnabled());
-        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snappingService->snapIntervalX());
-        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snappingService->snapIntervalY());
-        // Also save single interval for backward compatibility
-        editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snappingService->snapIntervalX());
-    } else {
-        // Fallback if service not initialized
-        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_gridSnappingEnabled);
-        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_edgeSnappingEnabled);
-        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snapIntervalX);
-        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snapIntervalY);
-        editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snapInterval); // For backward compatibility
-    }
+    editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_snappingService->gridSnappingEnabled());
+    editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_snappingService->edgeSnappingEnabled());
+    editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snappingService->snapIntervalX());
+    editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snappingService->snapIntervalY());
+    editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snappingService->snapIntervalX()); // Backward compat
 
     // Save app-specific keyboard shortcuts
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
@@ -2862,8 +2585,7 @@ QVariantList EditorController::getZonesSharingEdge(const QString& zoneId, qreal 
  */
 QString EditorController::splitZone(const QString& zoneId, bool horizontal)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot split zone - undo controller or zone manager is null";
+    if (!servicesReady("split zone")) {
         return QString();
     }
 
@@ -2911,8 +2633,7 @@ QString EditorController::splitZone(const QString& zoneId, bool horizontal)
 void EditorController::resizeZonesAtDivider(const QString& zoneId1, const QString& zoneId2, qreal newDividerX,
                                             qreal newDividerY, bool isVertical)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "UndoController or ZoneManager not initialized";
+    if (!servicesReady("resize zones at divider")) {
         return;
     }
 
@@ -3024,105 +2745,6 @@ void EditorController::onClipboardChanged()
     }
 }
 
-QString EditorController::serializeZonesToClipboard(const QVariantList& zones)
-{
-    QJsonObject clipboardData;
-    clipboardData[QLatin1String("version")] = QLatin1String("1.0");
-    clipboardData[QLatin1String("application")] = QLatin1String("PlasmaZones");
-    clipboardData[QLatin1String("dataType")] = QLatin1String("zones");
-
-    QJsonArray zonesArray;
-    for (const QVariant& zoneVar : zones) {
-        QVariantMap zone = zoneVar.toMap();
-        QJsonObject zoneObj;
-
-        // Generate new UUID for paste (preserve original ID in metadata)
-        zoneObj[QLatin1String("id")] = QUuid::createUuid().toString();
-        zoneObj[QLatin1String("name")] = zone[JsonKeys::Name].toString();
-        zoneObj[QLatin1String("zoneNumber")] = zone[JsonKeys::ZoneNumber].toInt();
-        zoneObj[QLatin1String("x")] = zone[JsonKeys::X].toDouble();
-        zoneObj[QLatin1String("y")] = zone[JsonKeys::Y].toDouble();
-        zoneObj[QLatin1String("width")] = zone[JsonKeys::Width].toDouble();
-        zoneObj[QLatin1String("height")] = zone[JsonKeys::Height].toDouble();
-
-        // Appearance properties
-        zoneObj[QLatin1String("highlightColor")] = zone[JsonKeys::HighlightColor].toString();
-        zoneObj[QLatin1String("inactiveColor")] = zone[JsonKeys::InactiveColor].toString();
-        zoneObj[QLatin1String("borderColor")] = zone[JsonKeys::BorderColor].toString();
-        zoneObj[QLatin1String("activeOpacity")] =
-            zone.contains(JsonKeys::ActiveOpacity) ? zone[JsonKeys::ActiveOpacity].toDouble() : Defaults::Opacity;
-        zoneObj[QLatin1String("inactiveOpacity")] = zone.contains(JsonKeys::InactiveOpacity)
-            ? zone[JsonKeys::InactiveOpacity].toDouble()
-            : Defaults::InactiveOpacity;
-        zoneObj[QLatin1String("borderWidth")] =
-            zone.contains(JsonKeys::BorderWidth) ? zone[JsonKeys::BorderWidth].toInt() : Defaults::BorderWidth;
-        zoneObj[QLatin1String("borderRadius")] =
-            zone.contains(JsonKeys::BorderRadius) ? zone[JsonKeys::BorderRadius].toInt() : Defaults::BorderRadius;
-
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
-        zoneObj[QLatin1String("useCustomColors")] =
-            zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
-        zoneObj[QLatin1String("shortcut")] =
-            zone.contains(JsonKeys::Shortcut) ? zone[JsonKeys::Shortcut].toString() : QString();
-
-        zonesArray.append(zoneObj);
-    }
-    clipboardData[QLatin1String("zones")] = zonesArray;
-
-    QJsonDocument doc(clipboardData);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-}
-
-QVariantList EditorController::deserializeZonesFromClipboard(const QString& clipboardText)
-{
-    QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8());
-    if (doc.isNull() || !doc.isObject()) {
-        return QVariantList();
-    }
-
-    QJsonObject clipboardData = doc.object();
-
-    // Validate clipboard format
-    if (clipboardData[QLatin1String("application")].toString() != QLatin1String("PlasmaZones")
-        || clipboardData[QLatin1String("dataType")].toString() != QLatin1String("zones")) {
-        return QVariantList();
-    }
-
-    QJsonArray zonesArray = clipboardData[QLatin1String("zones")].toArray();
-    QVariantList zones;
-
-    for (const QJsonValue& zoneVal : zonesArray) {
-        QJsonObject zoneObj = zoneVal.toObject();
-        QVariantMap zone;
-
-        // Convert JSON to QVariantMap format used by ZoneManager
-        zone[JsonKeys::Id] = zoneObj[QLatin1String("id")].toString();
-        zone[JsonKeys::Name] = zoneObj[QLatin1String("name")].toString();
-        zone[JsonKeys::ZoneNumber] = zoneObj[QLatin1String("zoneNumber")].toInt();
-        zone[JsonKeys::X] = zoneObj[QLatin1String("x")].toDouble();
-        zone[JsonKeys::Y] = zoneObj[QLatin1String("y")].toDouble();
-        zone[JsonKeys::Width] = zoneObj[QLatin1String("width")].toDouble();
-        zone[JsonKeys::Height] = zoneObj[QLatin1String("height")].toDouble();
-
-        // Appearance properties
-        zone[JsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();
-        zone[JsonKeys::InactiveColor] = zoneObj[QLatin1String("inactiveColor")].toString();
-        zone[JsonKeys::BorderColor] = zoneObj[QLatin1String("borderColor")].toString();
-        zone[JsonKeys::ActiveOpacity] = zoneObj[QLatin1String("activeOpacity")].toDouble(Defaults::Opacity);
-        zone[JsonKeys::InactiveOpacity] = zoneObj[QLatin1String("inactiveOpacity")].toDouble(Defaults::InactiveOpacity);
-        zone[JsonKeys::BorderWidth] = zoneObj[QLatin1String("borderWidth")].toInt(Defaults::BorderWidth);
-        zone[JsonKeys::BorderRadius] = zoneObj[QLatin1String("borderRadius")].toInt(Defaults::BorderRadius);
-
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
-        zone[useCustomColorsKey] = zoneObj[QLatin1String("useCustomColors")].toBool(false);
-        zone[JsonKeys::Shortcut] = zoneObj[QLatin1String("shortcut")].toString();
-
-        zones.append(zone);
-    }
-
-    return zones;
-}
-
 void EditorController::copyZones(const QStringList& zoneIds)
 {
     if (!m_zoneManager) {
@@ -3153,8 +2775,8 @@ void EditorController::copyZones(const QStringList& zoneIds)
         return;
     }
 
-    // Serialize to JSON
-    QString jsonData = serializeZonesToClipboard(zonesToCopy);
+    // Serialize to JSON using helper
+    QString jsonData = ZoneSerialization::serializeZonesToClipboard(zonesToCopy);
 
     // Copy to clipboard
     QClipboard* clipboard = QGuiApplication::clipboard();
@@ -3187,18 +2809,13 @@ void EditorController::cutZones(const QStringList& zoneIds)
     copyZones(zoneIds);
 
     // Then delete with undo macro for single undo step
-    m_undoController->beginMacro(i18nc("@action", "Cut %1 Zones", zoneIds.count()));
-
-    // Use batch update to defer signals until all zones are deleted
-    m_zoneManager->beginBatchUpdate();
-
-    for (const QString& zoneId : zoneIds) {
-        deleteZone(zoneId);
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Cut %1 Zones", zoneIds.count()));
+        for (const QString& zoneId : zoneIds) {
+            deleteZone(zoneId);
+        }
     }
-
-    m_zoneManager->endBatchUpdate();
-
-    m_undoController->endMacro();
 }
 
 QStringList EditorController::pasteZones(bool withOffset)
@@ -3217,8 +2834,8 @@ QStringList EditorController::pasteZones(bool withOffset)
         return QStringList();
     }
 
-    // Deserialize zones
-    QVariantList zonesToPaste = deserializeZonesFromClipboard(clipboardText);
+    // Deserialize zones using helper
+    QVariantList zonesToPaste = ZoneSerialization::deserializeZonesFromClipboard(clipboardText);
     if (zonesToPaste.isEmpty()) {
         return QStringList();
     }
@@ -3408,75 +3025,16 @@ void EditorController::resetShaderParameters()
 
 void EditorController::refreshAvailableShaders()
 {
-    // Query daemon's ShaderRegistry via SettingsAdaptor D-Bus
-    QDBusInterface settingsIface(QStringLiteral("org.plasmazones"), QStringLiteral("/PlasmaZones"),
-                                 QStringLiteral("org.plasmazones.Settings"), QDBusConnection::sessionBus());
+    m_shadersEnabled = ShaderDbusQueries::queryShadersEnabled();
+    m_availableShaders = ShaderDbusQueries::queryAvailableShaders();
 
-    if (!settingsIface.isValid()) {
-        qCWarning(lcEditor) << "Cannot query shaders: daemon D-Bus interface unavailable";
-        m_availableShaders.clear();
-        m_shadersEnabled = false;
-        Q_EMIT availableShadersChanged();
-        Q_EMIT shadersEnabledChanged();
-        return;
-    }
-
-    // Check if shaders are supported (system capability, not user preference)
-    QDBusReply<bool> enabledReply = settingsIface.call(QStringLiteral("shadersEnabled"));
-    m_shadersEnabled = enabledReply.isValid() && enabledReply.value();
-
-    // Get available shaders list
-    QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
-    if (reply.isValid()) {
-        m_availableShaders.clear();
-
-        // D-Bus returns nested structures (QVariantMap, QVariantList) as QDBusArgument
-        // Use convertDbusArgument to recursively convert them to proper Qt types
-        for (const QVariant& item : reply.value()) {
-            QVariant converted = convertDbusArgument(item);
-            if (converted.typeId() == QMetaType::QVariantMap) {
-                QVariantMap map = converted.toMap();
-                // Validate that required fields exist
-                if (map.contains(QLatin1String("id")) && map.contains(QLatin1String("name"))) {
-                    m_availableShaders.append(map);
-                } else {
-                    qCWarning(lcEditor) << "Shader entry missing required fields (id/name):" << map;
-                }
-            } else {
-                qCWarning(lcEditor) << "Unexpected shader list item type after conversion:" << converted.typeName();
-            }
-        }
-
-        qCDebug(lcEditor) << "Loaded" << m_availableShaders.size() << "shaders";
-        Q_EMIT availableShadersChanged();
-    } else {
-        qCWarning(lcEditor) << "D-Bus availableShaders call failed:" << reply.error().message();
-        m_availableShaders.clear();
-        Q_EMIT availableShadersChanged();
-    }
-
+    Q_EMIT availableShadersChanged();
     Q_EMIT shadersEnabledChanged();
 }
 
 QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
 {
-    if (ShaderRegistry::isNoneShader(shaderId)) {
-        return QVariantMap();
-    }
-
-    QDBusInterface settingsIface(QStringLiteral("org.plasmazones"), QStringLiteral("/PlasmaZones"),
-                                 QStringLiteral("org.plasmazones.Settings"), QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("shaderInfo"), shaderId);
-        if (reply.isValid()) {
-            // D-Bus may return nested structures as QDBusArgument - convert recursively
-            QVariant converted = convertDbusArgument(QVariant::fromValue(reply.value()));
-            return converted.toMap();
-        }
-        qCWarning(lcEditor) << "D-Bus shaderInfo call failed:" << reply.error().message();
-    }
-    return QVariantMap();
+    return ShaderDbusQueries::queryShaderInfo(shaderId);
 }
 
 } // namespace PlasmaZones
