@@ -285,51 +285,59 @@ Kirigami.Dialog {
             // ═══════════════════════════════════════════════════════════════
             // FIXED-HEIGHT DESCRIPTION AREA
             // Prevents layout shifts when switching between shaders with
-            // different description lengths.
+            // different description lengths. Item wrapper constrains width.
             // ═══════════════════════════════════════════════════════════════
-            Label {
+            Item {
                 Kirigami.FormData.label: ""
                 Layout.fillWidth: true
-                // Reserve space for ~3 lines of description text
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 3.5
-                Layout.maximumHeight: Kirigami.Units.gridUnit * 3.5
+                // Reserve space for ~3 lines of description text + metadata
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 4.5
+                Layout.maximumHeight: Kirigami.Units.gridUnit * 4.5
                 visible: root.hasShaderEffect
 
-                text: {
-                    if (!root.currentShaderInfo) return i18nc("@info:placeholder", "No description available");
-                    var desc = root.currentShaderInfo.description;
-                    return desc ? desc : i18nc("@info:placeholder", "No description available");
-                }
-                wrapMode: Text.WordWrap
-                elide: Text.ElideRight
-                maximumLineCount: 3
-                opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
-                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                font.italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
-                verticalAlignment: Text.AlignTop
-            }
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: Kirigami.Units.smallSpacing
 
-            // Author/version metadata (fixed single line, elides if too long)
-            Label {
-                Kirigami.FormData.label: ""
-                Layout.fillWidth: true
-                Layout.preferredHeight: Kirigami.Units.gridUnit * 1.2
-                visible: root.hasShaderEffect
-                text: {
-                    if (!root.currentShaderInfo) return "";
-                    var info = root.currentShaderInfo;
-                    var parts = [];
-                    if (info.author) parts.push(i18nc("@info shader author", "by %1", info.author));
-                    if (info.version) parts.push(i18nc("@info shader version", "v%1", info.version));
-                    if (info.isUserShader) parts.push(i18nc("@info user-installed shader", "(User shader)"));
-                    return parts.join(" · ");
+                    // Description text
+                    Label {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        text: {
+                            if (!root.currentShaderInfo) return i18nc("@info:placeholder", "No description available");
+                            var desc = root.currentShaderInfo.description;
+                            return desc ? desc : i18nc("@info:placeholder", "No description available");
+                        }
+                        wrapMode: Text.WordWrap
+                        elide: Text.ElideRight
+                        maximumLineCount: 3
+                        opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font.italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
+                        verticalAlignment: Text.AlignTop
+                    }
+
+                    // Author/version metadata
+                    Label {
+                        Layout.fillWidth: true
+
+                        text: {
+                            if (!root.currentShaderInfo) return "";
+                            var info = root.currentShaderInfo;
+                            var parts = [];
+                            if (info.author) parts.push(i18nc("@info shader author", "by %1", info.author));
+                            if (info.version) parts.push(i18nc("@info shader version", "v%1", info.version));
+                            if (info.isUserShader) parts.push(i18nc("@info user-installed shader", "(User shader)"));
+                            return parts.join(" · ");
+                        }
+                        wrapMode: Text.NoWrap
+                        elide: Text.ElideRight
+                        opacity: 0.5
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        font.italic: true
+                    }
                 }
-                wrapMode: Text.NoWrap
-                elide: Text.ElideRight
-                opacity: 0.5
-                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                font.italic: true
-                verticalAlignment: Text.AlignVCenter
             }
         }
 
