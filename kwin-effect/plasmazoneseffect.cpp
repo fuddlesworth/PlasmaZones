@@ -679,6 +679,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("cycleWindowsInZoneRequested"), this,
                                           SLOT(slotCycleWindowsInZoneRequested(QString, QString)));
 
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("pendingRestoresAvailable"), this,
+                                          SLOT(slotPendingRestoresAvailable()));
+
     qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
@@ -1603,6 +1607,43 @@ void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive
     qCDebug(lcEffect) << "Activating window" << targetWindowId;
     KWin::effects->activateWindow(targetWindow);
     emitNavigationFeedback(true, QStringLiteral("cycle"));
+}
+
+void PlasmaZonesEffect::slotPendingRestoresAvailable()
+{
+    qCDebug(lcEffect) << "Pending restores available - retrying restoration for all visible windows";
+
+    // The daemon's layout is now available and there are pending zone assignments
+    // Iterate through all visible windows and try to restore them
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* window : windows) {
+        if (!window || !shouldHandleWindow(window)) {
+            continue;
+        }
+
+        // Skip minimized or invisible windows
+        if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+            continue;
+        }
+
+        // Check if this window is already tracked (has a zone assignment)
+        // If already tracked, skip - no need to restore again
+        QString windowId = getWindowId(window);
+        if (ensureWindowTrackingReady("check zone for pending restore")) {
+            QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), windowId);
+            if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+                QString existingZoneId = msg.arguments().at(0).toString();
+                if (!existingZoneId.isEmpty()) {
+                    // Already tracked, skip
+                    continue;
+                }
+            }
+        }
+
+        // Window is not tracked - try to restore it
+        qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
+        callSnapToLastZone(window);
+    }
 }
 
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)

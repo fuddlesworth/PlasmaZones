@@ -890,11 +890,12 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
 
     auto* layout = m_layoutManager->activeLayout();
     if (!layout) {
-        qCWarning(lcDbusWindow) << "No active layout for persisted restore";
-        // BUG FIX: Remove pending entry to prevent stale data causing wrong zone on retry
-        m_pendingZoneAssignments.remove(stableId);
-        m_pendingZoneScreens.remove(stableId);
-        m_pendingZoneDesktops.remove(stableId);
+        // No active layout yet - this can happen during startup race conditions
+        // when the effect tries to restore windows before the daemon is fully initialized.
+        // IMPORTANT: Do NOT remove the pending assignment here. Keep it so the window
+        // can be restored when it's activated or when the layout becomes available.
+        qCDebug(lcDbusWindow) << "No active layout for persisted restore of" << stableId
+                              << "- keeping pending assignment for later retry";
         return;
     }
 
@@ -1949,6 +1950,14 @@ void WindowTrackingAdaptor::onLayoutChanged()
             qCDebug(lcDbusWindow) << "Layout changed, removed" << pendingToRemove.size()
                                   << "orphaned pending assignments";
         }
+    }
+
+    // After layout becomes available, notify effect about pending restores
+    // This handles startup timing issues where windows appeared before layout was ready
+    if (!m_pendingZoneAssignments.isEmpty()) {
+        qCDebug(lcDbusWindow) << "Layout available with" << m_pendingZoneAssignments.size()
+                              << "pending restores - notifying effect";
+        Q_EMIT pendingRestoresAvailable();
     }
 }
 
