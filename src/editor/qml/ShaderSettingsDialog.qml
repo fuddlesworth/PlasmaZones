@@ -292,6 +292,7 @@ Kirigami.Dialog {
         ColumnLayout {
             id: descriptionArea
             Layout.fillWidth: true
+            Layout.preferredWidth: 0  // Don't expand parent based on content
             Layout.preferredHeight: Kirigami.Units.gridUnit * 4
             Layout.minimumHeight: Kirigami.Units.gridUnit * 4
             Layout.leftMargin: Kirigami.Units.largeSpacing
@@ -300,10 +301,12 @@ Kirigami.Dialog {
             spacing: Kirigami.Units.smallSpacing
 
             // Description text - takes remaining vertical space
+            // Layout.preferredWidth: 0 prevents implicitWidth from expanding layout
             Label {
                 id: descriptionLabel
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: 0
 
                 text: {
                     if (!root.currentShaderInfo) return i18nc("@info:placeholder", "No description available");
@@ -323,6 +326,7 @@ Kirigami.Dialog {
             Label {
                 id: metadataLabel
                 Layout.fillWidth: true
+                Layout.preferredWidth: 0
 
                 text: {
                     if (!root.currentShaderInfo) return "";
