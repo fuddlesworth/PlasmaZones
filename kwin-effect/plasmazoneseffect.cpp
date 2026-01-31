@@ -1626,17 +1626,19 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
             continue;
         }
 
+        // Only attempt restore when D-Bus tracking is ready
+        if (!ensureWindowTrackingReady("check zone for pending restore")) {
+            continue;
+        }
+
         // Check if this window is already tracked (has a zone assignment)
         // If already tracked, skip - no need to restore again
         QString windowId = getWindowId(window);
-        if (ensureWindowTrackingReady("check zone for pending restore")) {
-            QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), windowId);
-            if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
-                QString existingZoneId = msg.arguments().at(0).toString();
-                if (!existingZoneId.isEmpty()) {
-                    // Already tracked, skip
-                    continue;
-                }
+        QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), windowId);
+        if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
+            QString existingZoneId = msg.arguments().at(0).toString();
+            if (!existingZoneId.isEmpty()) {
+                continue; // Already tracked
             }
         }
 

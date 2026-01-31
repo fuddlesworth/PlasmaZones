@@ -1455,7 +1455,7 @@ void Settings::load()
     m_stickyWindowHandling =
         static_cast<StickyWindowHandling>(qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
                                                  static_cast<int>(StickyWindowHandling::IgnoreAll)));
-    m_restoreWindowsToZonesOnLogin = behavior.readEntry("RestoreWindowsToZonesOnLogin", ConfigDefaults::restoreWindowsToZonesOnLogin());
+    m_restoreWindowsToZonesOnLogin = behavior.readEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), ConfigDefaults::restoreWindowsToZonesOnLogin());
     // Normalize UUID to default format (with braces) for consistent comparison
     // Handles migration from configs saved with WithoutBraces format
     m_defaultLayoutId = normalizeUuidString(behavior.readEntry("DefaultLayoutId", QString()));
@@ -1759,7 +1759,7 @@ void Settings::save()
     behavior.writeEntry("MoveNewToLastZone", m_moveNewWindowsToLastZone);
     behavior.writeEntry("RestoreSizeOnUnsnap", m_restoreOriginalSizeOnUnsnap);
     behavior.writeEntry("StickyWindowHandling", static_cast<int>(m_stickyWindowHandling));
-    behavior.writeEntry("RestoreWindowsToZonesOnLogin", m_restoreWindowsToZonesOnLogin);
+    behavior.writeEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), m_restoreWindowsToZonesOnLogin);
     behavior.writeEntry("DefaultLayoutId", m_defaultLayoutId);
 
     // Exclusions
