@@ -28,6 +28,15 @@ Kirigami.Dialog {
     // CONSTANTS
     // ═══════════════════════════════════════════════════════════════════════
     readonly property int colorButtonSize: Kirigami.Units.gridUnit * 3
+
+    // Theme colors cached at dialog level for use in dynamically loaded Components
+    // Use disabledTextColor with reduced opacity as separator color
+    readonly property color themeSeparatorColor: Qt.rgba(
+        Kirigami.Theme.textColor.r,
+        Kirigami.Theme.textColor.g,
+        Kirigami.Theme.textColor.b,
+        0.2
+    )
     readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 4
     readonly property int colorLabelWidth: Kirigami.Units.gridUnit * 7
 
@@ -482,6 +491,7 @@ Kirigami.Dialog {
 
                     contentItem: Component {
                         Kirigami.FormLayout {
+                            Kirigami.Theme.inherit: true
                             Repeater {
                                 model: paramSection.groupParams
 
@@ -493,6 +503,9 @@ Kirigami.Dialog {
                                     required property int index
 
                                     Kirigami.FormData.label: modelData.name || modelData.id
+
+                                    // Ensure Kirigami theme context propagates to loaded parameter components
+                                    Kirigami.Theme.inherit: true
 
                                     sourceComponent: root.getParameterComponent(modelData.type)
 
@@ -526,6 +539,9 @@ Kirigami.Dialog {
 
                     Kirigami.FormData.label: modelData.name || modelData.id
 
+                    // Ensure Kirigami theme context propagates to loaded parameter components
+                    Kirigami.Theme.inherit: true
+
                     sourceComponent: root.getParameterComponent(modelData.type)
 
                     onLoaded: {
@@ -557,6 +573,7 @@ Kirigami.Dialog {
         RowLayout {
             property var paramData
 
+            Kirigami.Theme.inherit: true
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
@@ -599,6 +616,7 @@ Kirigami.Dialog {
         RowLayout {
             property var paramData
 
+            Kirigami.Theme.inherit: true
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
@@ -607,16 +625,16 @@ Kirigami.Dialog {
 
                 property color currentColor: {
                     if (!paramData) return "#ffffff";
-                    var colorStr = root.parameterValue(
-                        paramData.id,
-                        paramData.default || "#ffffff"
-                    );
-                    // Validate color string before parsing
+                    var fallback = (typeof paramData.default === "string" && paramData.default.length > 0)
+                        ? paramData.default : "#ffffff";
+                    var colorStr = root.parameterValue(paramData.id, fallback);
+                    // Validate color string
                     if (typeof colorStr !== "string" || colorStr.length === 0) {
-                        return "#ffffff";
+                        return fallback;
                     }
+                    // Qt.color() returns invalid color for bad strings; check and return string
                     var parsed = Qt.color(colorStr);
-                    return parsed.valid ? parsed : "#ffffff";
+                    return parsed.valid ? colorStr : fallback;
                 }
 
                 width: root.colorButtonSize
@@ -624,7 +642,7 @@ Kirigami.Dialog {
                 radius: Kirigami.Units.smallSpacing
                 color: currentColor
                 border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-                border.color: Kirigami.Theme.separatorColor
+                border.color: root.themeSeparatorColor
 
                 MouseArea {
                     anchors.fill: parent
@@ -661,6 +679,7 @@ Kirigami.Dialog {
         RowLayout {
             property var paramData
 
+            Kirigami.Theme.inherit: true
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
@@ -688,6 +707,7 @@ Kirigami.Dialog {
         RowLayout {
             property var paramData
 
+            Kirigami.Theme.inherit: true
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
