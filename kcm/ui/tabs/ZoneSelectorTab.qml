@@ -51,7 +51,7 @@ ScrollView {
             font.bold: true
         }
 
-        // Position card - wrapped in Item for stable sizing
+        // Position & Trigger card - wrapped in Item for stable sizing
         Item {
             Layout.fillWidth: true
             implicitHeight: positionCard.implicitHeight
@@ -63,15 +63,14 @@ ScrollView {
 
                 header: Kirigami.Heading {
                     level: 3
-                    text: i18n("Position")
+                    text: i18n("Position & Trigger")
                     padding: Kirigami.Units.smallSpacing
                 }
 
-                contentItem: RowLayout {
-                    spacing: Kirigami.Units.gridUnit * 2
-
+                contentItem: Kirigami.FormLayout {
                     PositionPicker {
                         id: positionPicker
+                        Kirigami.FormData.label: i18n("Screen position:")
                         position: kcm.zoneSelectorPosition
                         enabled: kcm.zoneSelectorEnabled
                         onPositionSelected: function(newPosition) {
@@ -79,124 +78,92 @@ ScrollView {
                         }
                     }
 
-                    Label {
-                        Layout.fillWidth: true
-                        text: i18n("Choose where the popup appears on screen. Edges and corners are supported.")
-                        wrapMode: Text.WordWrap
-                        opacity: 0.7
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Trigger distance:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: triggerSlider
+                            Layout.preferredWidth: root.constants.sliderPreferredWidth
+                            from: 10
+                            to: root.constants.zoneSelectorTriggerMax
+                            value: kcm.zoneSelectorTriggerDistance
+                            stepSize: 10
+                            onMoved: kcm.zoneSelectorTriggerDistance = value
+
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 500
+                            ToolTip.text: i18n("How close to the screen edge before the popup appears")
+                        }
+
+                        Label {
+                            text: kcm.zoneSelectorTriggerDistance + " px"
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
                     }
                 }
             }
         }
 
-        // Trigger & Behavior card - wrapped in Item for stable sizing
+        // Layout Arrangement card - wrapped in Item for stable sizing
         Item {
             Layout.fillWidth: true
-            implicitHeight: triggerCard.implicitHeight
+            implicitHeight: layoutCard.implicitHeight
 
             Kirigami.Card {
-                id: triggerCard
+                id: layoutCard
                 anchors.fill: parent
                 enabled: kcm.zoneSelectorEnabled
 
                 header: Kirigami.Heading {
                     level: 3
-                    text: i18n("Trigger & Layout")
+                    text: i18n("Layout Arrangement")
                     padding: Kirigami.Units.smallSpacing
                 }
 
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.largeSpacing
+                contentItem: Kirigami.FormLayout {
+                    ComboBox {
+                        id: zoneSelectorLayoutModeCombo
+                        Kirigami.FormData.label: i18n("Arrangement:")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [
+                            { text: i18n("Grid"), value: 0 },
+                            { text: i18n("Horizontal"), value: 1 },
+                            { text: i18n("Vertical"), value: 2 }
+                        ]
+                        currentIndex: indexForValue(kcm.zoneSelectorLayoutMode)
+                        onActivated: kcm.zoneSelectorLayoutMode = currentValue
 
-                    // Trigger distance
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Label {
-                            text: i18n("Trigger distance")
-                            font.bold: true
-                        }
-
-                        Label {
-                            text: i18n("How close to the edge before the popup appears")
-                            opacity: 0.7
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: Kirigami.Units.smallSpacing
-
-                            Slider {
-                                id: triggerSlider
-                                Layout.fillWidth: true
-                                from: 10
-                                to: root.constants.zoneSelectorTriggerMax
-                                value: kcm.zoneSelectorTriggerDistance
-                                stepSize: 10
-                                onMoved: kcm.zoneSelectorTriggerDistance = value
+                        function indexForValue(value) {
+                            for (let i = 0; i < model.length; i++) {
+                                if (model[i].value === value) return i
                             }
-
-                            Label {
-                                text: kcm.zoneSelectorTriggerDistance + " px"
-                                Layout.preferredWidth: 55
-                                horizontalAlignment: Text.AlignRight
-                                font.family: "monospace"
-                            }
+                            return 0
                         }
                     }
 
-                    Kirigami.Separator {
-                        Layout.fillWidth: true
+                    SpinBox {
+                        Kirigami.FormData.label: i18n("Grid columns:")
+                        from: 1
+                        to: root.constants.zoneSelectorGridColumnsMax
+                        value: kcm.zoneSelectorGridColumns
+                        visible: kcm.zoneSelectorLayoutMode === 0
+                        onValueModified: kcm.zoneSelectorGridColumns = value
                     }
 
-                    // Layout arrangement
-                    Kirigami.FormLayout {
-                        Layout.fillWidth: true
+                    SpinBox {
+                        Kirigami.FormData.label: i18n("Max visible rows:")
+                        from: 1
+                        to: 10
+                        value: kcm.zoneSelectorMaxRows
+                        visible: kcm.zoneSelectorLayoutMode !== 1  // Hide for horizontal mode
+                        onValueModified: kcm.zoneSelectorMaxRows = value
 
-                        ComboBox {
-                            id: zoneSelectorLayoutModeCombo
-                            Kirigami.FormData.label: i18n("Arrangement:")
-                            textRole: "text"
-                            valueRole: "value"
-                            model: [
-                                { text: i18n("Grid"), value: 0 },
-                                { text: i18n("Horizontal"), value: 1 },
-                                { text: i18n("Vertical"), value: 2 }
-                            ]
-                            currentIndex: indexForValue(kcm.zoneSelectorLayoutMode)
-                            onActivated: kcm.zoneSelectorLayoutMode = currentValue
-
-                            function indexForValue(value) {
-                                for (let i = 0; i < model.length; i++) {
-                                    if (model[i].value === value) return i
-                                }
-                                return 0
-                            }
-                        }
-
-                        SpinBox {
-                            Kirigami.FormData.label: i18n("Grid columns:")
-                            from: 1
-                            to: root.constants.zoneSelectorGridColumnsMax
-                            value: kcm.zoneSelectorGridColumns
-                            visible: kcm.zoneSelectorLayoutMode === 0
-                            onValueModified: kcm.zoneSelectorGridColumns = value
-                        }
-
-                        SpinBox {
-                            Kirigami.FormData.label: i18n("Max visible rows:")
-                            from: 1
-                            to: 10
-                            value: kcm.zoneSelectorMaxRows
-                            visible: kcm.zoneSelectorLayoutMode !== 1  // Hide for horizontal mode
-                            onValueModified: kcm.zoneSelectorMaxRows = value
-
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: i18n("Scrolling enabled when more rows exist")
-                        }
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 500
+                        ToolTip.text: i18n("Scrolling enabled when more rows exist")
                     }
                 }
             }
