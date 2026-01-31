@@ -8,7 +8,9 @@
 #include <QRectF>
 #include <QUuid>
 #include <QScreen>
+#include <KConfigGroup>
 #include "../core/constants.h"
+#include "../core/logging.h"
 #include "undo/UndoController.h"
 
 namespace PlasmaZones {
@@ -457,6 +459,29 @@ private:
     void syncSelectionSignals();
 
     /**
+     * @brief Load a shortcut from config with validation
+     * @param group KConfig group to read from
+     * @param key Config key name
+     * @param defaultValue Default shortcut if not set or empty
+     * @param member Reference to member variable to update
+     * @param emitSignal Lambda to emit the changed signal
+     */
+    template<typename F>
+    void loadShortcutSetting(KConfigGroup& group, const QString& key,
+                             const QString& defaultValue, QString& member, F emitSignal)
+    {
+        QString value = group.readEntry(key, defaultValue);
+        if (value.isEmpty()) {
+            qCWarning(lcEditor) << "Invalid editor shortcut" << key << "(empty), using default";
+            value = defaultValue;
+        }
+        if (member != value) {
+            member = value;
+            emitSignal();
+        }
+    }
+
+    /**
      * @brief Loads editor settings from KConfig
      */
     void loadEditorSettings();
@@ -497,12 +522,6 @@ private:
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
 
-    // Snapping settings (delegated to SnappingService, cached for fallback)
-    bool m_gridSnappingEnabled = true;
-    bool m_edgeSnappingEnabled = true;
-    qreal m_snapIntervalX = PlasmaZones::EditorConstants::DefaultSnapInterval;
-    qreal m_snapIntervalY = PlasmaZones::EditorConstants::DefaultSnapInterval;
-    qreal m_snapInterval = PlasmaZones::EditorConstants::DefaultSnapInterval; // For backward compatibility
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 
     // Keyboard shortcuts (app-specific, loaded from settings)

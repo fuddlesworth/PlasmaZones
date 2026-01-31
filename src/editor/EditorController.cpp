@@ -179,19 +179,19 @@ bool EditorController::isNewLayout() const
 }
 bool EditorController::gridSnappingEnabled() const
 {
-    return m_snappingService ? m_snappingService->gridSnappingEnabled() : m_gridSnappingEnabled;
+    return m_snappingService->gridSnappingEnabled();
 }
 bool EditorController::edgeSnappingEnabled() const
 {
-    return m_snappingService ? m_snappingService->edgeSnappingEnabled() : m_edgeSnappingEnabled;
+    return m_snappingService->edgeSnappingEnabled();
 }
 qreal EditorController::snapIntervalX() const
 {
-    return m_snappingService ? m_snappingService->snapIntervalX() : m_snapIntervalX;
+    return m_snappingService->snapIntervalX();
 }
 qreal EditorController::snapIntervalY() const
 {
-    return m_snappingService ? m_snappingService->snapIntervalY() : m_snapIntervalY;
+    return m_snappingService->snapIntervalY();
 }
 qreal EditorController::snapInterval() const
 {
@@ -399,16 +399,8 @@ void EditorController::setSelectedZoneIdsDirect(const QStringList& zoneIds)
 
 void EditorController::setGridSnappingEnabled(bool enabled)
 {
-    if (m_snappingService) {
-        m_snappingService->setGridSnappingEnabled(enabled);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        if (m_gridSnappingEnabled != enabled) {
-            m_gridSnappingEnabled = enabled;
-            Q_EMIT gridSnappingEnabledChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setGridSnappingEnabled(enabled);
+    saveEditorSettings();
 }
 
 void EditorController::setGridOverlayVisible(bool visible)
@@ -421,46 +413,20 @@ void EditorController::setGridOverlayVisible(bool visible)
 
 void EditorController::setEdgeSnappingEnabled(bool enabled)
 {
-    if (m_snappingService) {
-        m_snappingService->setEdgeSnappingEnabled(enabled);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        if (m_edgeSnappingEnabled != enabled) {
-            m_edgeSnappingEnabled = enabled;
-            Q_EMIT edgeSnappingEnabledChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setEdgeSnappingEnabled(enabled);
+    saveEditorSettings();
 }
 
 void EditorController::setSnapIntervalX(qreal interval)
 {
-    if (m_snappingService) {
-        m_snappingService->setSnapIntervalX(interval);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        interval = qBound(0.01, interval, 1.0);
-        if (!qFuzzyCompare(m_snapIntervalX, interval)) {
-            m_snapIntervalX = interval;
-            Q_EMIT snapIntervalXChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setSnapIntervalX(interval);
+    saveEditorSettings();
 }
 
 void EditorController::setSnapIntervalY(qreal interval)
 {
-    if (m_snappingService) {
-        m_snappingService->setSnapIntervalY(interval);
-        saveEditorSettings(); // Persist setting change
-    } else {
-        interval = qBound(0.01, interval, 1.0);
-        if (!qFuzzyCompare(m_snapIntervalY, interval)) {
-            m_snapIntervalY = interval;
-            Q_EMIT snapIntervalYChanged();
-            saveEditorSettings();
-        }
-    }
+    m_snappingService->setSnapIntervalY(interval);
+    saveEditorSettings();
 }
 
 void EditorController::setSnapInterval(qreal interval)
@@ -2500,64 +2466,30 @@ void EditorController::loadEditorSettings()
     if (snapIntY < 0.0)
         snapIntY = snapInt;
 
-    // Apply to services
-    if (m_snappingService) {
-        m_snappingService->setGridSnappingEnabled(gridEnabled);
-        m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
-        m_snappingService->setSnapIntervalX(snapIntX);
-        m_snappingService->setSnapIntervalY(snapIntY);
-    } else {
-        // Fallback if service not initialized
-        m_gridSnappingEnabled = gridEnabled;
-        m_edgeSnappingEnabled = edgeEnabled;
-        m_snapIntervalX = qBound(0.01, snapIntX, 1.0);
-        m_snapIntervalY = qBound(0.01, snapIntY, 1.0);
-        m_snapInterval = qBound(0.01, snapInt, 1.0); // For backward compatibility
-    }
+    // Apply to snapping service
+    m_snappingService->setGridSnappingEnabled(gridEnabled);
+    m_snappingService->setEdgeSnappingEnabled(edgeEnabled);
+    m_snappingService->setSnapIntervalX(snapIntX);
+    m_snappingService->setSnapIntervalY(snapIntY);
 
     // Load app-specific keyboard shortcuts with validation
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
-    QString duplicateShortcut = editorGroup.readEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
-    if (duplicateShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor duplicate shortcut (empty), using default";
-        duplicateShortcut = QStringLiteral("Ctrl+D");
-    }
-    if (m_editorDuplicateShortcut != duplicateShortcut) {
-        m_editorDuplicateShortcut = duplicateShortcut;
-        Q_EMIT editorDuplicateShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorDuplicateShortcut"),
+                        QStringLiteral("Ctrl+D"), m_editorDuplicateShortcut,
+                        [this]() { Q_EMIT editorDuplicateShortcutChanged(); });
 
-    QString splitHorizontalShortcut =
-        editorGroup.readEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
-    if (splitHorizontalShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor split horizontal shortcut (empty), using default";
-        splitHorizontalShortcut = QStringLiteral("Ctrl+Shift+H");
-    }
-    if (m_editorSplitHorizontalShortcut != splitHorizontalShortcut) {
-        m_editorSplitHorizontalShortcut = splitHorizontalShortcut;
-        Q_EMIT editorSplitHorizontalShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitHorizontalShortcut"),
+                        QStringLiteral("Ctrl+Shift+H"), m_editorSplitHorizontalShortcut,
+                        [this]() { Q_EMIT editorSplitHorizontalShortcutChanged(); });
 
     // Note: Default changed from Ctrl+Shift+V to Ctrl+Alt+V to avoid conflict with Paste with Offset
-    QString splitVerticalShortcut = editorGroup.readEntry(QLatin1String("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
-    if (splitVerticalShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor split vertical shortcut (empty), using default";
-        splitVerticalShortcut = QStringLiteral("Ctrl+Alt+V");
-    }
-    if (m_editorSplitVerticalShortcut != splitVerticalShortcut) {
-        m_editorSplitVerticalShortcut = splitVerticalShortcut;
-        Q_EMIT editorSplitVerticalShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitVerticalShortcut"),
+                        QStringLiteral("Ctrl+Alt+V"), m_editorSplitVerticalShortcut,
+                        [this]() { Q_EMIT editorSplitVerticalShortcutChanged(); });
 
-    QString fillShortcut = editorGroup.readEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
-    if (fillShortcut.isEmpty()) {
-        qCWarning(lcEditor) << "Invalid editor fill shortcut (empty), using default";
-        fillShortcut = QStringLiteral("Ctrl+Shift+F");
-    }
-    if (m_editorFillShortcut != fillShortcut) {
-        m_editorFillShortcut = fillShortcut;
-        Q_EMIT editorFillShortcutChanged();
-    }
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorFillShortcut"),
+                        QStringLiteral("Ctrl+Shift+F"), m_editorFillShortcut,
+                        [this]() { Q_EMIT editorFillShortcutChanged(); });
 
     // Load snap override modifier
     int snapOverrideMod = editorGroup.readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000);
@@ -2586,21 +2518,11 @@ void EditorController::saveEditorSettings()
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
 
     // Save snapping settings (save both separate intervals and single for backward compatibility)
-    if (m_snappingService) {
-        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_snappingService->gridSnappingEnabled());
-        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_snappingService->edgeSnappingEnabled());
-        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snappingService->snapIntervalX());
-        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snappingService->snapIntervalY());
-        // Also save single interval for backward compatibility
-        editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snappingService->snapIntervalX());
-    } else {
-        // Fallback if service not initialized
-        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_gridSnappingEnabled);
-        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_edgeSnappingEnabled);
-        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snapIntervalX);
-        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snapIntervalY);
-        editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snapInterval); // For backward compatibility
-    }
+    editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_snappingService->gridSnappingEnabled());
+    editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_snappingService->edgeSnappingEnabled());
+    editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snappingService->snapIntervalX());
+    editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snappingService->snapIntervalY());
+    editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snappingService->snapIntervalX()); // Backward compat
 
     // Save app-specific keyboard shortcuts
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
