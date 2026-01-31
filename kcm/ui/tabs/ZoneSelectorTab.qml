@@ -67,39 +67,80 @@ ScrollView {
                     padding: Kirigami.Units.smallSpacing
                 }
 
-                contentItem: Kirigami.FormLayout {
-                    PositionPicker {
-                        id: positionPicker
-                        Kirigami.FormData.label: i18n("Screen position:")
-                        position: kcm.zoneSelectorPosition
-                        enabled: kcm.zoneSelectorEnabled
-                        onPositionSelected: function(newPosition) {
-                            kcm.zoneSelectorPosition = newPosition
-                        }
-                    }
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.largeSpacing
 
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Trigger distance:")
-                        spacing: Kirigami.Units.smallSpacing
+                    // Centered position picker with description
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: positionPicker.height + positionDescription.height + Kirigami.Units.smallSpacing
 
-                        Slider {
-                            id: triggerSlider
-                            Layout.preferredWidth: root.constants.sliderPreferredWidth
-                            from: 10
-                            to: root.constants.zoneSelectorTriggerMax
-                            value: kcm.zoneSelectorTriggerDistance
-                            stepSize: 10
-                            onMoved: kcm.zoneSelectorTriggerDistance = value
-
-                            ToolTip.visible: hovered
-                            ToolTip.delay: 500
-                            ToolTip.text: i18n("How close to the screen edge before the popup appears")
+                        PositionPicker {
+                            id: positionPicker
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: parent.top
+                            position: kcm.zoneSelectorPosition
+                            enabled: kcm.zoneSelectorEnabled
+                            onPositionSelected: function(newPosition) {
+                                kcm.zoneSelectorPosition = newPosition
+                            }
                         }
 
                         Label {
-                            text: kcm.zoneSelectorTriggerDistance + " px"
-                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
-                            font: Kirigami.Theme.fixedWidthFont
+                            id: positionDescription
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.top: positionPicker.bottom
+                            anchors.topMargin: Kirigami.Units.smallSpacing
+                            text: i18n("Choose where the popup appears on screen")
+                            opacity: 0.7
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        }
+                    }
+
+                    Kirigami.Separator {
+                        Layout.fillWidth: true
+                    }
+
+                    // Trigger distance slider - centered like Preview Size
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: i18n("Trigger Distance")
+                            font.bold: true
+                        }
+
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: i18n("How close to the screen edge before the popup appears")
+                            opacity: 0.7
+                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.maximumWidth: 400
+                            spacing: Kirigami.Units.smallSpacing
+
+                            Slider {
+                                id: triggerSlider
+                                Layout.fillWidth: true
+                                from: 10
+                                to: root.constants.zoneSelectorTriggerMax
+                                value: kcm.zoneSelectorTriggerDistance
+                                stepSize: 10
+                                onMoved: kcm.zoneSelectorTriggerDistance = value
+                            }
+
+                            Label {
+                                text: kcm.zoneSelectorTriggerDistance + " px"
+                                Layout.preferredWidth: 55
+                                horizontalAlignment: Text.AlignRight
+                                font: Kirigami.Theme.fixedWidthFont
+                            }
                         }
                     }
                 }
@@ -244,7 +285,7 @@ ScrollView {
                                 anchors.top: parent.bottom
                                 anchors.topMargin: Kirigami.Units.smallSpacing
                                 text: root.effectivePreviewWidth + " × " + root.effectivePreviewHeight + " px"
-                                font.family: "monospace"
+                                font: Kirigami.Theme.fixedWidthFont
                                 opacity: 0.7
                             }
                         }
@@ -380,7 +421,7 @@ ScrollView {
                             text: kcm.zoneSelectorPreviewWidth + " px"
                             Layout.preferredWidth: 55
                             horizontalAlignment: Text.AlignRight
-                            font.family: "monospace"
+                            font: Kirigami.Theme.fixedWidthFont
                         }
                     }
 
