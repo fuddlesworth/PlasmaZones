@@ -97,14 +97,7 @@ Kirigami.Dialog {
             pendingParams = {};
             return;
         }
-        var defaults = {};
-        for (var i = 0; i < info.parameters.length; i++) {
-            var param = info.parameters[i];
-            if (param && param.id !== undefined && param.default !== undefined) {
-                defaults[param.id] = param.default;
-            }
-        }
-        pendingParams = defaults;
+        pendingParams = extractDefaults(info.parameters);
     }
 
     function setPendingParam(paramId, value) {
@@ -140,14 +133,34 @@ Kirigami.Dialog {
 
     function resetToDefaults() {
         if (!editorController) return;
+        pendingParams = extractDefaults(shaderParams);
+    }
+
+    // DRY: Shared defaults extraction logic
+    function extractDefaults(params) {
         var defaults = {};
-        for (var i = 0; i < shaderParams.length; i++) {
-            var param = shaderParams[i];
+        if (!params) return defaults;
+        for (var i = 0; i < params.length; i++) {
+            var param = params[i];
             if (param && param.id !== undefined && param.default !== undefined) {
                 defaults[param.id] = param.default;
             }
         }
-        pendingParams = defaults;
+        return defaults;
+    }
+
+    // DRY: Shared component selection for parameter types
+    // Open/Closed: Add new parameter types by extending this mapping
+    function getParameterComponent(paramType) {
+        switch (paramType) {
+            case "float": return floatParamComponent;
+            case "color": return colorParamComponent;
+            case "bool": return boolParamComponent;
+            case "int": return intParamComponent;
+            default:
+                console.warn("ShaderSettingsDialog: Unknown parameter type:", paramType);
+                return null;
+        }
     }
 
     function firstEffectId() {
@@ -409,17 +422,7 @@ Kirigami.Dialog {
 
                                     Kirigami.FormData.label: modelData.name || modelData.id
 
-                                    sourceComponent: {
-                                        switch (modelData.type) {
-                                            case "float": return floatParamComponent;
-                                            case "color": return colorParamComponent;
-                                            case "bool": return boolParamComponent;
-                                            case "int": return intParamComponent;
-                                            default:
-                                                console.warn("ShaderSettingsDialog: Unknown parameter type:", modelData.type, "for param:", modelData.id);
-                                                return null;
-                                        }
-                                    }
+                                    sourceComponent: root.getParameterComponent(modelData.type)
 
                                     onLoaded: {
                                         if (item) item.paramData = modelData;
@@ -451,17 +454,7 @@ Kirigami.Dialog {
 
                     Kirigami.FormData.label: modelData.name || modelData.id
 
-                    sourceComponent: {
-                        switch (modelData.type) {
-                            case "float": return floatParamComponent;
-                            case "color": return colorParamComponent;
-                            case "bool": return boolParamComponent;
-                            case "int": return intParamComponent;
-                            default:
-                                console.warn("ShaderSettingsDialog: Unknown parameter type:", modelData.type, "for param:", modelData.id);
-                                return null;
-                        }
-                    }
+                    sourceComponent: root.getParameterComponent(modelData.type)
 
                     onLoaded: {
                         if (item) item.paramData = modelData;
