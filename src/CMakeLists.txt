@@ -401,6 +401,14 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/TemplatePreview.qml
         editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
+        # SRP-extracted components from PropertyPanel
+        editor/qml/ColorUtils.js
+        editor/qml/TransparencyCheckerboard.qml
+        editor/qml/ColorPreviewButton.qml
+        editor/qml/ColorPickerRow.qml
+        editor/qml/OpacitySliderRow.qml
+        editor/qml/AppearanceSpinBox.qml
+        editor/qml/ZoneColorDialog.qml
     )
 
 target_link_libraries(plasmazones-editor
