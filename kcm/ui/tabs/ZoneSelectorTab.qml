@@ -97,49 +97,50 @@ ScrollView {
                         }
                     }
 
-                    Kirigami.Separator {
+                    // Trigger distance - centered like position picker
+                    Item {
                         Layout.fillWidth: true
-                    }
+                        Layout.preferredHeight: triggerColumn.implicitHeight
 
-                    // Trigger distance slider - centered like Preview Size
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: Kirigami.Units.smallSpacing
-
-                        Label {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: i18n("Trigger Distance")
-                            font.bold: true
-                        }
-
-                        Label {
-                            Layout.alignment: Qt.AlignHCenter
-                            text: i18n("How close to the screen edge before the popup appears")
-                            opacity: 0.7
-                            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.maximumWidth: 400
+                        ColumnLayout {
+                            id: triggerColumn
+                            anchors.horizontalCenter: parent.horizontalCenter
                             spacing: Kirigami.Units.smallSpacing
+                            width: Math.min(400, parent.width)
 
-                            Slider {
-                                id: triggerSlider
-                                Layout.fillWidth: true
-                                from: 10
-                                to: root.constants.zoneSelectorTriggerMax
-                                value: kcm.zoneSelectorTriggerDistance
-                                stepSize: 10
-                                onMoved: kcm.zoneSelectorTriggerDistance = value
+                            Label {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: i18n("Trigger Distance")
+                                font.bold: true
                             }
 
                             Label {
-                                text: kcm.zoneSelectorTriggerDistance + " px"
-                                Layout.preferredWidth: 55
-                                horizontalAlignment: Text.AlignRight
-                                font: Kirigami.Theme.fixedWidthFont
+                                Layout.alignment: Qt.AlignHCenter
+                                text: i18n("How close to the screen edge before the popup appears")
+                                opacity: 0.7
+                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Slider {
+                                    id: triggerSlider
+                                    Layout.fillWidth: true
+                                    from: 10
+                                    to: root.constants.zoneSelectorTriggerMax
+                                    value: kcm.zoneSelectorTriggerDistance
+                                    stepSize: 10
+                                    onMoved: kcm.zoneSelectorTriggerDistance = value
+                                }
+
+                                Label {
+                                    text: kcm.zoneSelectorTriggerDistance + " px"
+                                    Layout.preferredWidth: 55
+                                    horizontalAlignment: Text.AlignRight
+                                    font: Kirigami.Theme.fixedWidthFont
+                                }
                             }
                         }
                     }
