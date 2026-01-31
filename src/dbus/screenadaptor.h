@@ -14,7 +14,7 @@ namespace PlasmaZones {
  * @brief D-Bus adaptor for screen management operations
  *
  * Provides D-Bus interface: org.plasmazones.Screen
- * Single responsibility: Screen information and monitoring
+ *  Screen information and monitoring
  *
  * NOTE: Interface name must match dbus/org.plasmazones.Screen.xml and
  * DBus::Interface::Screen constant for KCM signal connections to work.

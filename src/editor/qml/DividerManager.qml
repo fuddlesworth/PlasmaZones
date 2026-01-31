@@ -371,7 +371,7 @@ Item {
     Repeater {
         id: dividerRepeater
 
-        // Bind dividerData to dividers property - this ensures repeater updates when dividers change
+        // Bind dividerData to dividers property for repeater updates
         property var dividerData: dividerManager.dividers
 
         // Track the currently dragging handle for validation after release

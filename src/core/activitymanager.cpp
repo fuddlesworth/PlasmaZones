@@ -260,7 +260,7 @@ void ActivityManager::updateActiveLayout()
     }
 
     // Get current virtual desktop from VirtualDesktopManager if available
-    // This ensures activity + desktop combination is properly considered
+    // Consider activity + desktop combination
     int currentDesktop = 0;
     if (m_virtualDesktopManager) {
         currentDesktop = m_virtualDesktopManager->currentDesktop();

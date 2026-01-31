@@ -23,7 +23,7 @@ class Layout;
  * @brief D-Bus adaptor for layout management operations
  *
  * Provides D-Bus interface: org.plasmazones.LayoutManager
- * Single responsibility: Layout CRUD and assignment operations
+ *  Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 {

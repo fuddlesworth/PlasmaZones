@@ -34,20 +34,11 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 /**
  * @brief Manages all layouts and their assignments to screens/desktops
  *
- * The LayoutManager is the central component for managing zone layouts.
- * It handles:
- * - Loading/saving layouts from disk
- * - Layout assignment to screens, virtual desktops, and activities
- * - Quick layout switching via keyboard shortcuts
- * - Built-in template layouts
+ * Central component for zone layouts: loading/saving, screen/desktop/activity
+ * assignment, keyboard shortcuts, and built-in templates.
  *
- * Note: This class does NOT use the singleton pattern. Create instances
- * where needed and pass via dependency injection.
- *
- * Architecture note: This class inherits from both QObject (for Qt signals/properties)
- * and ILayoutManager (for the interface contract). ILayoutManager is a pure abstract
- * interface without QObject to avoid signal shadowing issues that cause heap corruption.
- * Components needing to connect to signals should use LayoutManager* directly.
+ * Inherits QObject for signals and ILayoutManager for the interface contract.
+ * ILayoutManager avoids QObject to prevent signal shadowing issues.
  */
 class PLASMAZONES_EXPORT LayoutManager : public QObject, public ILayoutManager
 {

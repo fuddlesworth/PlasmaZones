@@ -11,15 +11,8 @@ namespace PlasmaZones {
 /**
  * @brief Default values for zone appearance and core module constants
  *
- * IMPORTANT: These defaults are used by the core module (zone.h, layout.cpp,
- * geometryutils.cpp) which cannot depend on the config module.
- *
- * For settings-related defaults, use ConfigDefaults (src/config/configdefaults.h)
- * which wraps the KConfigXT-generated PlasmaZonesConfig class. The .kcfg file
- * is the single source of truth for user-configurable settings.
- *
- * Values here should match the corresponding <default> values in plasmazones.kcfg.
- * If you change a default here, also update plasmazones.kcfg to match (and vice versa).
+ * These defaults are used by core module files that can't depend on config.
+ * For user-configurable settings, see ConfigDefaults and plasmazones.kcfg.
  *
  * Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
  * structural constants for built-in layouts and are NOT in .kcfg.

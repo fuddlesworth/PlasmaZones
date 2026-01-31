@@ -27,7 +27,7 @@ class VirtualDesktopManager;
  * @brief D-Bus adaptor for window-zone tracking
  *
  * Provides D-Bus interface: org.plasmazones.WindowTracking
- * Single responsibility: Window-zone assignment tracking
+ *  Window-zone assignment tracking
  */
 class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 {

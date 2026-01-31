@@ -28,12 +28,8 @@ class TilingAlgorithm;
 /**
  * @brief Manages zone overlay windows
  *
- * This class separates UI/overlay concerns from the Daemon,
- * following the Single Responsibility Principle.
- * It handles:
- * - Creating and managing overlay windows per screen
- * - Updating overlay appearance from settings
- * - Zone highlighting and visual feedback
+ * Creates and manages overlay windows per screen, updates appearance
+ * from settings, and provides zone highlighting/visual feedback.
  */
 class OverlayService : public IOverlayService
 {

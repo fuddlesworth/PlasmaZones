@@ -39,15 +39,8 @@ class UnifiedLayoutController;
 /**
  * @brief Main daemon for PlasmaZones
  *
- * The daemon runs in the background and handles:
- * - Layout management and persistence
- * - Zone overlay rendering via Wayland layer-shell
- * - Communication with KWin script via D-Bus
- * - Global keyboard shortcut handling
- * - Multi-monitor support
- *
- * Note: This class does NOT use the singleton pattern. Create instances
- * where needed and pass via dependency injection.
+ * Runs in the background managing layouts, zone overlays, KWin D-Bus
+ * communication, keyboard shortcuts, and multi-monitor support.
  */
 class Daemon : public QObject
 {

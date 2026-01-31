@@ -166,7 +166,7 @@ bool Daemon::init()
     connect(m_overlayService.get(), &OverlayService::visibilityChanged, this, &Daemon::overlayVisibilityChanged);
 
     // Initialize domain-specific D-Bus adaptors
-    // Each adaptor has a single responsibility and its own D-Bus interface
+    // Each adaptor has its own D-Bus interface
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.
     m_layoutAdaptor = new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());

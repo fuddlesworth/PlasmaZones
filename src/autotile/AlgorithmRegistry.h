@@ -224,7 +224,7 @@ PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration> &pendingAlgorithmRegistra
  * @brief Helper for static self-registration of built-in algorithms
  *
  * Use this in algorithm .cpp files to register at static initialization time.
- * This follows the Open/Closed Principle - new algorithms can be added without
+ * New algorithms can be added without
  * modifying AlgorithmRegistry.
  *
  * Usage in algorithm .cpp file:

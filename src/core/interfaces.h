@@ -101,13 +101,8 @@ enum class OsdStyle {
  * @brief Abstract interface for settings management
  *
  * Allows dependency inversion - components depend on this interface
- * rather than concrete Settings implementation.
- *
- * This class implements the Interface Segregation Principle by inheriting
- * from focused sub-interfaces. Components can depend on just the interfaces
- * they need (e.g., IZoneVisualizationSettings) rather than the full ISettings.
- *
- * Backward compatible - existing code using ISettings continues to work unchanged.
+ * rather than concrete Settings implementation. Inherits from focused
+ * sub-interfaces so components can depend on just what they need.
  */
 class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IZoneActivationSettings,
