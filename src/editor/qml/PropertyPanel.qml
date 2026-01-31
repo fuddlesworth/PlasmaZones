@@ -479,7 +479,7 @@ Rectangle {
                     from: 0; to: 20
                     spinValue: selectedZone?.borderWidth ?? propertyPanel.defaultBorderWidth
                     defaultValue: propertyPanel.defaultBorderWidth
-                    spinEnabled: selectedZone !== null && editorController !== null
+                    spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border width in pixels")
                     toolTipText: i18nc("@info:tooltip", "Set zone border width in pixels (0-20)")
                     onSpinValueModified: function(newValue) {
@@ -494,7 +494,7 @@ Rectangle {
                     from: 0; to: 50
                     spinValue: selectedZone?.borderRadius ?? propertyPanel.defaultBorderRadius
                     defaultValue: propertyPanel.defaultBorderRadius
-                    spinEnabled: selectedZone !== null && editorController !== null
+                    spinEnabled: Boolean(selectedZone) && Boolean(editorController)
                     accessibleName: i18nc("@label", "Border radius in pixels")
                     toolTipText: i18nc("@info:tooltip", "Set zone corner radius in pixels (0-50)")
                     onSpinValueModified: function(newValue) {
