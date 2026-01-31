@@ -16,8 +16,7 @@ import org.plasmazones.common as QFZCommon
 Window {
     id: root
 
-    Accessible.name: i18n("Navigation feedback")
-    Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
+    // Note: Accessible properties moved to container (Window doesn't support Accessible)
 
     // Navigation feedback data
     property bool success: true
@@ -92,9 +91,9 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
 
-    // Size based on preview (matches LayoutOsd)
-    width: contentWrapper.width + 40
-    height: contentWrapper.height + 40
+    // Size based on container (which is inside contentWrapper)
+    width: container.width + 40
+    height: container.height + 40
 
     // Start hidden, will be shown with animation
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
@@ -217,7 +216,10 @@ Window {
         Rectangle {
             id: container
 
-        anchors.centerIn: parent
+            Accessible.name: i18n("Navigation feedback")
+            Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
+
+            anchors.centerIn: parent
         width: previewContainer.visible ? previewContainer.width + Kirigami.Units.gridUnit * 3 : Math.max(messageLabel.width + Kirigami.Units.gridUnit * 2, 200)
         height: previewContainer.height + messageLabel.height + Kirigami.Units.gridUnit * 3
         color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)

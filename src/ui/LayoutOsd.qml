@@ -44,9 +44,9 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
     color: "transparent"
 
-    // Size based on preview
-    width: contentWrapper.width + 40
-    height: contentWrapper.height + 40
+    // Size based on container (which is inside contentWrapper)
+    width: container.width + 40
+    height: container.height + 40
 
     // Start hidden, will be shown with animation
     // Note: Don't set Window.opacity - use contentWrapper.opacity instead
