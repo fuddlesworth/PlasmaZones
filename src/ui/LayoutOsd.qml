@@ -45,11 +45,12 @@ Window {
     color: "transparent"
 
     // Size based on preview
-    width: container.width + 40
-    height: container.height + 40
+    width: contentWrapper.width + 40
+    height: contentWrapper.height + 40
 
     // Start hidden, will be shown with animation
-    opacity: 0
+    // Note: Don't set Window.opacity - use contentWrapper.opacity instead
+    // QWaylandWindow::setOpacity() is not implemented and logs warnings
     visible: false
 
     // Show the OSD with animation
@@ -59,8 +60,8 @@ Window {
         hideAnimation.stop();
         dismissTimer.stop();
 
-        // Reset state for fresh animation
-        root.opacity = 0;
+        // Reset state for fresh animation (animate wrapper, not window)
+        contentWrapper.opacity = 0;
         container.scale = 0.8;
 
         root.visible = true;
@@ -93,7 +94,7 @@ Window {
         id: showAnimation
 
         NumberAnimation {
-            target: root
+            target: contentWrapper
             property: "opacity"
             from: 0
             to: 1
@@ -119,7 +120,7 @@ Window {
 
         ParallelAnimation {
             NumberAnimation {
-                target: root
+                target: contentWrapper
                 property: "opacity"
                 to: 0
                 duration: root.fadeOutDuration
@@ -145,20 +146,28 @@ Window {
 
     }
 
-    // Shadow effect
-    MultiEffect {
-        source: container
-        anchors.fill: container
-        shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.5)
-        shadowBlur: 1.0
-        shadowVerticalOffset: 4
-        shadowHorizontalOffset: 0
-    }
+    // Content wrapper - animates opacity instead of Window
+    // This avoids "This plugin does not support setting window opacity" on Wayland
+    Item {
+        id: contentWrapper
 
-    // Main container
-    Rectangle {
-        id: container
+        anchors.fill: parent
+        opacity: 0
+
+        // Shadow effect
+        MultiEffect {
+            source: container
+            anchors.fill: container
+            shadowEnabled: true
+            shadowColor: Qt.rgba(0, 0, 0, 0.5)
+            shadowBlur: 1.0
+            shadowVerticalOffset: 4
+            shadowHorizontalOffset: 0
+        }
+
+        // Main container
+        Rectangle {
+            id: container
 
         anchors.centerIn: parent
         width: previewContainer.width + Kirigami.Units.gridUnit * 3
@@ -235,11 +244,13 @@ Window {
 
     }
 
-    // Click to dismiss
-    MouseArea {
-        anchors.fill: parent
-        onClicked: root.hide()
-    }
+        // Click to dismiss
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.hide()
+        }
+
+    } // contentWrapper
 
     // Note: Escape shortcut removed - window uses BypassWindowManagerHint
     // and doesn't receive keyboard focus on Wayland
