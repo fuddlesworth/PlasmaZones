@@ -92,9 +92,11 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Exclusion Settings
-    // Note: MinimumWindowWidth, MinimumWindowHeight, ExcludeTransientWindows
-    // are not in .kcfg - see constants.h Defaults:: namespace for these
     // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool excludeTransientWindows() { return instance().defaultExcludeTransientWindowsValue(); }
+    static int minimumWindowWidth() { return instance().defaultMinimumWindowWidthValue(); }
+    static int minimumWindowHeight() { return instance().defaultMinimumWindowHeightValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone Selector Settings

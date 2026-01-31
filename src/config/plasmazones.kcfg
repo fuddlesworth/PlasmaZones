@@ -210,6 +210,22 @@
       <label>Window classes excluded from zone snapping</label>
       <default></default>
     </entry>
+    <entry name="ExcludeTransientWindows" type="Bool">
+      <label>Exclude transient/dialog windows from zone snapping</label>
+      <default>true</default>
+    </entry>
+    <entry name="MinimumWindowWidth" type="Int">
+      <label>Minimum window width for zone snapping (pixels)</label>
+      <default>200</default>
+      <min>0</min>
+      <max>1000</max>
+    </entry>
+    <entry name="MinimumWindowHeight" type="Int">
+      <label>Minimum window height for zone snapping (pixels)</label>
+      <default>150</default>
+      <min>0</min>
+      <max>1000</max>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

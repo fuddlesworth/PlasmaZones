@@ -1449,13 +1449,13 @@ void Settings::load()
     // Handles migration from configs saved with WithoutBraces format
     m_defaultLayoutId = normalizeUuidString(behavior.readEntry("DefaultLayoutId", QString()));
 
-    // Exclusions
+    // Exclusions (defaults from .kcfg via ConfigDefaults)
     m_excludedApplications = exclusions.readEntry("Applications", QStringList());
     m_excludedWindowClasses = exclusions.readEntry("WindowClasses", QStringList());
-    m_excludeTransientWindows = exclusions.readEntry("ExcludeTransientWindows", true);
-    int minWidth = exclusions.readEntry("MinimumWindowWidth", 200);
+    m_excludeTransientWindows = exclusions.readEntry("ExcludeTransientWindows", ConfigDefaults::excludeTransientWindows());
+    int minWidth = exclusions.readEntry("MinimumWindowWidth", ConfigDefaults::minimumWindowWidth());
     m_minimumWindowWidth = qBound(0, minWidth, 1000);
-    int minHeight = exclusions.readEntry("MinimumWindowHeight", 150);
+    int minHeight = exclusions.readEntry("MinimumWindowHeight", ConfigDefaults::minimumWindowHeight());
     m_minimumWindowHeight = qBound(0, minHeight, 1000);
 
     // Zone Selector (defaults from .kcfg via ConfigDefaults)
@@ -1894,12 +1894,12 @@ void Settings::reset()
     m_stickyWindowHandling = static_cast<StickyWindowHandling>(ConfigDefaults::stickyWindowHandling());
     m_defaultLayoutId.clear();
 
-    // Exclusions (not in .kcfg yet, using hardcoded defaults)
+    // Exclusions (from .kcfg via ConfigDefaults)
     m_excludedApplications.clear();
     m_excludedWindowClasses.clear();
-    m_excludeTransientWindows = true;
-    m_minimumWindowWidth = 200;
-    m_minimumWindowHeight = 150;
+    m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
+    m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
+    m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
 
     // Zone Selector defaults (from .kcfg via ConfigDefaults)
     m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
