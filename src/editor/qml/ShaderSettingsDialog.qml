@@ -591,7 +591,7 @@ Kirigami.Dialog {
                 ) : 0.5
 
                 ToolTip.text: paramData ? (paramData.description || "") : ""
-                ToolTip.visible: hovered && paramData && paramData.description
+                ToolTip.visible: hovered && paramData !== null && paramData !== undefined && Boolean(paramData.description)
                 ToolTip.delay: Kirigami.Units.toolTipDelay
 
                 onMoved: {
@@ -721,7 +721,7 @@ Kirigami.Dialog {
                 ) : 0
 
                 ToolTip.text: paramData ? (paramData.description || "") : ""
-                ToolTip.visible: hovered && paramData && paramData.description
+                ToolTip.visible: hovered && paramData !== null && paramData !== undefined && Boolean(paramData.description)
                 ToolTip.delay: Kirigami.Units.toolTipDelay
 
                 onValueModified: {

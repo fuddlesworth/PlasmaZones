@@ -381,7 +381,8 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Custom colors:")
                     text: i18nc("@option:check", "Use custom colors")
                     checked: selectedZone?.useCustomColors === true
-                    enabled: selectedZone !== null && editorController !== null
+                    // Use explicit boolean to avoid binding loop from null coercion
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@info:accessibility", "Enable custom colors for this zone")
                     onToggled: {
                         if (selectedZoneId && editorController)

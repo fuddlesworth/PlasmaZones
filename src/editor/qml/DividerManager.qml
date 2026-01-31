@@ -384,8 +384,10 @@ Item {
             id: dividerHandleItem
 
             // Required properties from DividerHandle component
+            // Note: For required properties in Repeater delegate with integer model,
+            // QML automatically binds 'index' from the model context
             dividerInfo: (index >= 0 && index < dividerRepeater.dividerData.length && dividerRepeater.dividerData[index]) ? dividerRepeater.dividerData[index] : null
-            index: model.index
+            // index is auto-bound from Repeater context (required property)
             spacing: dividerManager.zoneSpacing
             drawingArea: dividerManager.drawingArea
             zonesRepeater: dividerManager.zonesRepeater
