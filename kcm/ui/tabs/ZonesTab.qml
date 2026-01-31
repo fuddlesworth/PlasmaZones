@@ -261,7 +261,7 @@ ScrollView {
 
                         Label {
                             text: Math.round(shaderFpsSlider.value) + " fps"
-                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 10
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
                         }
                     }
 

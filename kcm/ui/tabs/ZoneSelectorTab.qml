@@ -16,15 +16,19 @@ ScrollView {
     required property var kcm
     required property QtObject constants
 
-    // Screen aspect ratio for preview calculations
+    // Whether this tab is currently visible (for conditional tooltips)
+    property bool isCurrentTab: false
+
+    // Screen aspect ratio for preview calculations (with safety check)
     property real screenAspectRatio: 16/9
+    readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16/9)
 
     // Effective preview dimensions based on size mode
     property int effectivePreviewWidth: kcm.zoneSelectorSizeMode === 0
-        ? Math.round(180 * (screenAspectRatio / (16/9)))
+        ? Math.round(180 * (safeAspectRatio / (16/9)))
         : kcm.zoneSelectorPreviewWidth
     property int effectivePreviewHeight: kcm.zoneSelectorSizeMode === 0
-        ? Math.round(effectivePreviewWidth / screenAspectRatio)
+        ? Math.round(effectivePreviewWidth / safeAspectRatio)
         : kcm.zoneSelectorPreviewHeight
 
     clip: true
@@ -107,7 +111,7 @@ ScrollView {
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: Kirigami.Units.smallSpacing
-                            width: Math.min(400, parent.width)
+                            width: Math.min(Kirigami.Units.gridUnit * 25, parent.width)
 
                             Label {
                                 Layout.alignment: Qt.AlignHCenter
@@ -138,7 +142,7 @@ ScrollView {
 
                                 Label {
                                     text: kcm.zoneSelectorTriggerDistance + " px"
-                                    Layout.preferredWidth: 55
+                                    Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
                                     horizontalAlignment: Text.AlignRight
                                     font: Kirigami.Theme.fixedWidthFont
                                 }
@@ -204,8 +208,7 @@ ScrollView {
                         visible: kcm.zoneSelectorLayoutMode !== 1  // Hide for horizontal mode
                         onValueModified: kcm.zoneSelectorMaxRows = value
 
-                        ToolTip.visible: hovered
-                        ToolTip.delay: 500
+                        ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Scrolling enabled when more rows exist")
                     }
                 }
@@ -324,7 +327,7 @@ ScrollView {
                             }
 
                             ToolTip.visible: hovered
-                            ToolTip.delay: 500
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
                             ToolTip.text: i18n("Approximately 10% of screen width (120-280px)")
                         }
 
@@ -340,7 +343,7 @@ ScrollView {
                             }
 
                             ToolTip.visible: hovered
-                            ToolTip.delay: 500
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
                             ToolTip.text: i18n("120px width")
                         }
 
@@ -356,7 +359,7 @@ ScrollView {
                             }
 
                             ToolTip.visible: hovered
-                            ToolTip.delay: 500
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
                             ToolTip.text: i18n("180px width")
                         }
 
@@ -372,7 +375,7 @@ ScrollView {
                             }
 
                             ToolTip.visible: hovered
-                            ToolTip.delay: 500
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
                             ToolTip.text: i18n("260px width")
                         }
 
@@ -386,7 +389,7 @@ ScrollView {
                             }
 
                             ToolTip.visible: hovered
-                            ToolTip.delay: 500
+                            ToolTip.delay: Kirigami.Units.toolTipDelay
                             ToolTip.text: i18n("Custom size with slider")
                         }
                     }
@@ -395,7 +398,7 @@ ScrollView {
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.maximumWidth: 400
+                        Layout.maximumWidth: Kirigami.Units.gridUnit * 25
                         visible: sizeButtonRow.selectedSize === 4
                         spacing: Kirigami.Units.smallSpacing
 

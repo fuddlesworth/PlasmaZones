@@ -242,6 +242,7 @@ KCM.AbstractKCM {
             kcm: root.kcmModule
             constants: constants
             screenAspectRatio: root.screenAspectRatio
+            isCurrentTab: stackLayout.currentIndex === 4
         }
 
         // TAB 6: EXCLUSIONS
