@@ -362,22 +362,24 @@ add_custom_target(uninstall
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Post-install: Refresh KDE sycoca cache and show helpful message
+# Skip sycoca when DESTDIR is set (packaging); skip when not a real user install
 # ═══════════════════════════════════════════════════════════════════════════════
 install(CODE "
-    # Try to refresh sycoca cache for the installing user
-    # This makes the KCM immediately visible in System Settings
     set(SYCOCA_REFRESHED FALSE)
-    find_program(KBUILDSYCOCA kbuildsycoca6)
-    if(KBUILDSYCOCA)
-        message(STATUS \"Refreshing KDE service cache...\")
-        execute_process(
-            COMMAND \${KBUILDSYCOCA} --noincremental
-            RESULT_VARIABLE SYCOCA_RESULT
-            OUTPUT_QUIET
-            ERROR_QUIET
-        )
-        if(SYCOCA_RESULT EQUAL 0)
-            set(SYCOCA_REFRESHED TRUE)
+    # Only refresh when doing a real install (not packaging with DESTDIR)
+    if(NOT DEFINED ENV{DESTDIR} OR \"\$ENV{DESTDIR}\" STREQUAL \"\")
+        set(SYCOCA_SCRIPT \"${CMAKE_SOURCE_DIR}/cmake/post-install-sycoca.sh\")
+        if(EXISTS \"\${SYCOCA_SCRIPT}\")
+            message(STATUS \"Refreshing KDE service cache...\")
+            execute_process(
+                COMMAND \"\${SYCOCA_SCRIPT}\"
+                RESULT_VARIABLE SYCOCA_RESULT
+                OUTPUT_QUIET
+                ERROR_QUIET
+            )
+            if(SYCOCA_RESULT EQUAL 0)
+                set(SYCOCA_REFRESHED TRUE)
+            endif()
         endif()
     endif()
 
@@ -393,9 +395,9 @@ install(CODE "
     message(STATUS \"      systemctl --user enable --now plasmazones.service\")
     message(STATUS \"\")
     if(NOT SYCOCA_REFRESHED)
-        message(STATUS \"  ⚠ KDE cache not refreshed. If PlasmaZones doesn't appear:\")
+        message(STATUS \"  If PlasmaZones doesn't appear in System Settings:\")
         message(STATUS \"      kbuildsycoca6 --noincremental\")
-        message(STATUS \"    or log out and back in.\")
+        message(STATUS \"  or log out and back in.\")
         message(STATUS \"\")
     endif()
 ")

@@ -47,19 +47,30 @@ endif()
 message(STATUS "")
 message(STATUS "[2/5] Removing all known PlasmaZones files and directories...")
 
+# Known files (manifest is primary; this covers installs without manifest)
+# D-Bus XML files are installed individually; manifest lists them
+# Daemon uses systemd user service, not XDG autostart
 set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazonesd"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_BINDIR@/plasmazones-editor"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_APPDIR@/org.plasmazones.editor.desktop"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_AUTOSTARTDIR@/org.plasmazones.daemon.desktop"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_KCFGDIR@/plasmazones.kcfg"
-    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Autotile.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.LayoutManager.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Overlay.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Screen.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.Settings.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.WindowDrag.xml"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_DBUSINTERFACEDIR@/org.plasmazones.WindowTracking.xml"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor/scalable/apps/plasmazones-editor.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones.svg"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_ICONDIR@/hicolor-light/scalable/apps/plasmazones-editor.svg"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kwin/effects/plugins/kwin_effect_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kcm_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones.so"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_SYSTEMDUSERUNITDIR@/plasmazones.service"
 )
 
 foreach(f ${KNOWN_FILES})

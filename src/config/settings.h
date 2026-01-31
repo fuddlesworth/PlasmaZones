@@ -19,9 +19,13 @@ namespace PlasmaZones {
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
+// Forward declaration for friend class
+class SettingsPersistence;
+
 class PLASMAZONES_EXPORT Settings : public ISettings
 {
     Q_OBJECT
+    friend class SettingsPersistence;
 
     // Activation settings
     Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
@@ -924,6 +928,44 @@ public:
     Q_INVOKABLE void applySystemColorScheme();
 
 private:
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DRY Helper Methods for load() - Consolidate repeated validation patterns
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Read and validate an integer from config with bounds checking
+     * @param group KConfigGroup to read from
+     * @param key Config key name
+     * @param defaultValue Default if not found or invalid
+     * @param min Minimum valid value
+     * @param max Maximum valid value
+     * @param settingName Human-readable name for warning messages
+     * @return Validated integer value
+     */
+    int readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue,
+                         int min, int max, const char* settingName);
+
+    /**
+     * @brief Read and validate a color from config
+     * @param group KConfigGroup to read from
+     * @param key Config key name
+     * @param defaultValue Default if not found or invalid
+     * @param settingName Human-readable name for warning messages
+     * @return Validated QColor value
+     */
+    QColor readValidatedColor(const KConfigGroup& group, const char* key,
+                              const QColor& defaultValue, const char* settingName);
+
+    /**
+     * @brief Load indexed shortcuts (1-9) from config group
+     * @param group KConfigGroup to read from
+     * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
+     * @param shortcuts Array of 9 QString to populate
+     * @param defaults Array of 9 default values
+     */
+    void loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern,
+                              QString (&shortcuts)[9], const QString (&defaults)[9]);
+
     // Activation
     bool m_shiftDragToActivate = true; // Deprecated - kept for migration
     // KWin Effect provides modifiers via mouseChanged signal

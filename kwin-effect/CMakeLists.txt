@@ -11,6 +11,12 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
+    navigationhandler.cpp
+    navigationhandler.h
+    windowanimator.cpp
+    windowanimator.h
+    dragtracker.cpp
+    dragtracker.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro

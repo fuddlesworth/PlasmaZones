@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settings.h"
+#include "colorimporter.h"
 #include "configdefaults.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -15,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
+#include <climits> // For INT_MAX in readValidatedInt
 
 namespace PlasmaZones {
 
@@ -47,6 +49,42 @@ Settings::Settings(QObject* parent)
     : ISettings(parent)
 {
     load();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRY Helper Methods - Consolidate repeated validation patterns in load()
+// ═══════════════════════════════════════════════════════════════════════════════
+
+int Settings::readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue,
+                               int min, int max, const char* settingName)
+{
+    int value = group.readEntry(QLatin1String(key), defaultValue);
+    if (value < min || value > max) {
+        qCWarning(lcConfig) << "Invalid" << settingName << ":" << value
+                            << "using default (must be" << min << "-" << max << ")";
+        value = defaultValue;
+    }
+    return value;
+}
+
+QColor Settings::readValidatedColor(const KConfigGroup& group, const char* key,
+                                    const QColor& defaultValue, const char* settingName)
+{
+    QColor color = group.readEntry(QLatin1String(key), defaultValue);
+    if (!color.isValid()) {
+        qCWarning(lcConfig) << "Invalid" << settingName << "color, using default";
+        color = defaultValue;
+    }
+    return color;
+}
+
+void Settings::loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern,
+                                    QString (&shortcuts)[9], const QString (&defaults)[9])
+{
+    for (int i = 0; i < 9; ++i) {
+        QString key = keyPattern.arg(i + 1);
+        shortcuts[i] = group.readEntry(key, defaults[i]);
+    }
 }
 
 void Settings::setShiftDragToActivate(bool enable)
@@ -1330,44 +1368,16 @@ void Settings::load()
     m_flashZonesOnSwitch = display.readEntry(QLatin1String("FlashOnSwitch"), ConfigDefaults::flashOnSwitch());
     m_showOsdOnLayoutSwitch = display.readEntry(QLatin1String("ShowOsdOnLayoutSwitch"), ConfigDefaults::showOsdOnLayoutSwitch());
     m_showNavigationOsd = display.readEntry(QLatin1String("ShowNavigationOsd"), ConfigDefaults::showNavigationOsd());
-    int osdStyleInt = display.readEntry(QLatin1String("OsdStyle"), ConfigDefaults::osdStyle());
-    if (osdStyleInt < 0 || osdStyleInt > 2) {
-        qCWarning(lcConfig) << "Invalid OSD style:" << osdStyleInt << "using default";
-        osdStyleInt = ConfigDefaults::osdStyle();
-    }
-    m_osdStyle = static_cast<OsdStyle>(osdStyleInt);
+    m_osdStyle = static_cast<OsdStyle>(readValidatedInt(display, "OsdStyle", ConfigDefaults::osdStyle(), 0, 2, "OSD style"));
 
     // Appearance with validation (defaults from .kcfg via ConfigDefaults)
     m_useSystemColors = appearance.readEntry(QLatin1String("UseSystemColors"), ConfigDefaults::useSystemColors());
 
-    // Validate colors
-    QColor highlightColor = appearance.readEntry(QLatin1String("HighlightColor"), ConfigDefaults::highlightColor());
-    if (!highlightColor.isValid()) {
-        qCWarning(lcConfig) << "Invalid highlight color, using default";
-        highlightColor = ConfigDefaults::highlightColor();
-    }
-    m_highlightColor = highlightColor;
-
-    QColor inactiveColor = appearance.readEntry(QLatin1String("InactiveColor"), ConfigDefaults::inactiveColor());
-    if (!inactiveColor.isValid()) {
-        qCWarning(lcConfig) << "Invalid inactive color, using default";
-        inactiveColor = ConfigDefaults::inactiveColor();
-    }
-    m_inactiveColor = inactiveColor;
-
-    QColor borderColor = appearance.readEntry(QLatin1String("BorderColor"), ConfigDefaults::borderColor());
-    if (!borderColor.isValid()) {
-        qCWarning(lcConfig) << "Invalid border color, using default";
-        borderColor = ConfigDefaults::borderColor();
-    }
-    m_borderColor = borderColor;
-
-    QColor numberColor = appearance.readEntry(QLatin1String("NumberColor"), ConfigDefaults::numberColor());
-    if (!numberColor.isValid()) {
-        qCWarning(lcConfig) << "Invalid number color, using default";
-        numberColor = ConfigDefaults::numberColor();
-    }
-    m_numberColor = numberColor;
+    // Validate colors using DRY helper
+    m_highlightColor = readValidatedColor(appearance, "HighlightColor", ConfigDefaults::highlightColor(), "highlight");
+    m_inactiveColor = readValidatedColor(appearance, "InactiveColor", ConfigDefaults::inactiveColor(), "inactive");
+    m_borderColor = readValidatedColor(appearance, "BorderColor", ConfigDefaults::borderColor(), "border");
+    m_numberColor = readValidatedColor(appearance, "NumberColor", ConfigDefaults::numberColor(), "number");
 
     // Validate opacity (0.0 to 1.0)
     qreal activeOpacity = appearance.readEntry(QLatin1String("ActiveOpacity"), ConfigDefaults::activeOpacity());
@@ -1384,67 +1394,21 @@ void Settings::load()
     }
     m_inactiveOpacity = inactiveOpacity;
 
-    // Validate dimensions (non-negative)
-    int borderWidth = appearance.readEntry(QLatin1String("BorderWidth"), ConfigDefaults::borderWidth());
-    if (borderWidth < 0) {
-        qCWarning(lcConfig) << "Invalid border width:" << borderWidth << "using default";
-        borderWidth = ConfigDefaults::borderWidth();
-    }
-    m_borderWidth = borderWidth;
-
-    int borderRadius = appearance.readEntry(QLatin1String("BorderRadius"), ConfigDefaults::borderRadius());
-    if (borderRadius < 0) {
-        qCWarning(lcConfig) << "Invalid border radius:" << borderRadius << "using default";
-        borderRadius = ConfigDefaults::borderRadius();
-    }
-    m_borderRadius = borderRadius;
+    // Validate dimensions (non-negative) using DRY helper with INT_MAX as upper bound
+    m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), 0, INT_MAX, "border width");
+    m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, INT_MAX, "border radius");
 
     m_enableBlur = appearance.readEntry(QLatin1String("EnableBlur"), ConfigDefaults::enableBlur());
 
-    // Zones with validation (defaults from .kcfg via ConfigDefaults)
-    int zonePadding = zones.readEntry(QLatin1String("Padding"), ConfigDefaults::zonePadding());
-    if (zonePadding < 0) {
-        qCWarning(lcConfig) << "Invalid zone padding:" << zonePadding << "using default";
-        zonePadding = ConfigDefaults::zonePadding();
-    }
-    m_zonePadding = zonePadding;
+    // Zones with validation (defaults from .kcfg via ConfigDefaults) using DRY helper
+    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, INT_MAX, "zone padding");
+    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, INT_MAX, "outer gap");
+    m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 0, INT_MAX, "adjacent threshold");
 
-    int outerGap = zones.readEntry(QLatin1String("OuterGap"), ConfigDefaults::outerGap());
-    if (outerGap < 0) {
-        qCWarning(lcConfig) << "Invalid outer gap:" << outerGap << "using default";
-        outerGap = ConfigDefaults::outerGap();
-    }
-    m_outerGap = outerGap;
-
-    int adjacentThreshold = zones.readEntry(QLatin1String("AdjacentThreshold"), ConfigDefaults::adjacentThreshold());
-    if (adjacentThreshold < 0) {
-        qCWarning(lcConfig) << "Invalid adjacent threshold:" << adjacentThreshold << "using default";
-        adjacentThreshold = ConfigDefaults::adjacentThreshold();
-    }
-    m_adjacentThreshold = adjacentThreshold;
-
-    // Performance and behavior settings with validation (defaults from .kcfg via ConfigDefaults)
-    int pollIntervalMs = zones.readEntry(QLatin1String("PollIntervalMs"), ConfigDefaults::pollIntervalMs());
-    if (pollIntervalMs < 10 || pollIntervalMs > 1000) {
-        qCWarning(lcConfig) << "Invalid poll interval:" << pollIntervalMs << "using default (must be 10-1000ms)";
-        pollIntervalMs = ConfigDefaults::pollIntervalMs();
-    }
-    m_pollIntervalMs = pollIntervalMs;
-
-    int minimumZoneSizePx = zones.readEntry(QLatin1String("MinimumZoneSizePx"), ConfigDefaults::minimumZoneSizePx());
-    if (minimumZoneSizePx < 50 || minimumZoneSizePx > 500) {
-        qCWarning(lcConfig) << "Invalid minimum zone size:" << minimumZoneSizePx << "using default (must be 50-500px)";
-        minimumZoneSizePx = ConfigDefaults::minimumZoneSizePx();
-    }
-    m_minimumZoneSizePx = minimumZoneSizePx;
-
-    int minimumZoneDisplaySizePx = zones.readEntry(QLatin1String("MinimumZoneDisplaySizePx"), ConfigDefaults::minimumZoneDisplaySizePx());
-    if (minimumZoneDisplaySizePx < 1 || minimumZoneDisplaySizePx > 50) {
-        qCWarning(lcConfig) << "Invalid minimum zone display size:" << minimumZoneDisplaySizePx
-                            << "using default (must be 1-50px)";
-        minimumZoneDisplaySizePx = ConfigDefaults::minimumZoneDisplaySizePx();
-    }
-    m_minimumZoneDisplaySizePx = minimumZoneDisplaySizePx;
+    // Performance and behavior settings with validation using DRY helper
+    m_pollIntervalMs = readValidatedInt(zones, "PollIntervalMs", ConfigDefaults::pollIntervalMs(), 10, 1000, "poll interval");
+    m_minimumZoneSizePx = readValidatedInt(zones, "MinimumZoneSizePx", ConfigDefaults::minimumZoneSizePx(), 50, 500, "minimum zone size");
+    m_minimumZoneDisplaySizePx = readValidatedInt(zones, "MinimumZoneDisplaySizePx", ConfigDefaults::minimumZoneDisplaySizePx(), 1, 50, "minimum zone display size");
 
     // Behavior (defaults from .kcfg via ConfigDefaults)
     m_keepWindowsInZonesOnResolutionChange = behavior.readEntry(QLatin1String("KeepOnResolutionChange"), ConfigDefaults::keepWindowsInZonesOnResolutionChange());
@@ -1472,13 +1436,7 @@ void Settings::load()
     // Zone Selector (defaults from .kcfg via ConfigDefaults)
     KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
     m_zoneSelectorEnabled = zoneSelector.readEntry(QLatin1String("Enabled"), ConfigDefaults::zoneSelectorEnabled());
-    int triggerDistance = zoneSelector.readEntry(QLatin1String("TriggerDistance"), ConfigDefaults::triggerDistance());
-    if (triggerDistance < 10 || triggerDistance > 200) {
-        qCWarning(lcConfig) << "Invalid zone selector trigger distance:" << triggerDistance
-                            << "using default (must be 10-200px)";
-        triggerDistance = ConfigDefaults::triggerDistance();
-    }
-    m_zoneSelectorTriggerDistance = triggerDistance;
+    m_zoneSelectorTriggerDistance = readValidatedInt(zoneSelector, "TriggerDistance", ConfigDefaults::triggerDistance(), 10, 200, "zone selector trigger distance");
     int selectorPos = zoneSelector.readEntry(QLatin1String("Position"), ConfigDefaults::position());
     // Valid positions are 0-8 except 4 (center)
     if (selectorPos >= 0 && selectorPos <= 8 && selectorPos != 4) {
@@ -1489,25 +1447,10 @@ void Settings::load()
     int selectorMode = zoneSelector.readEntry(QLatin1String("LayoutMode"), ConfigDefaults::layoutMode());
     m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(
         qBound(0, selectorMode, static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    int previewWidth = zoneSelector.readEntry(QLatin1String("PreviewWidth"), ConfigDefaults::previewWidth());
-    if (previewWidth < 80 || previewWidth > 400) {
-        qCWarning(lcConfig) << "Invalid zone selector preview width:" << previewWidth << "using default (80-400px)";
-        previewWidth = ConfigDefaults::previewWidth();
-    }
-    m_zoneSelectorPreviewWidth = previewWidth;
-    int previewHeight = zoneSelector.readEntry(QLatin1String("PreviewHeight"), ConfigDefaults::previewHeight());
-    if (previewHeight < 60 || previewHeight > 300) {
-        qCWarning(lcConfig) << "Invalid zone selector preview height:" << previewHeight << "using default (60-300px)";
-        previewHeight = ConfigDefaults::previewHeight();
-    }
-    m_zoneSelectorPreviewHeight = previewHeight;
+    m_zoneSelectorPreviewWidth = readValidatedInt(zoneSelector, "PreviewWidth", ConfigDefaults::previewWidth(), 80, 400, "zone selector preview width");
+    m_zoneSelectorPreviewHeight = readValidatedInt(zoneSelector, "PreviewHeight", ConfigDefaults::previewHeight(), 60, 300, "zone selector preview height");
     m_zoneSelectorPreviewLockAspect = zoneSelector.readEntry(QLatin1String("PreviewLockAspect"), ConfigDefaults::previewLockAspect());
-    int gridColumns = zoneSelector.readEntry(QLatin1String("GridColumns"), ConfigDefaults::gridColumns());
-    if (gridColumns < 1 || gridColumns > 10) {
-        qCWarning(lcConfig) << "Invalid zone selector grid columns:" << gridColumns << "using default (1-10)";
-        gridColumns = ConfigDefaults::gridColumns();
-    }
-    m_zoneSelectorGridColumns = gridColumns;
+    m_zoneSelectorGridColumns = readValidatedInt(zoneSelector, "GridColumns", ConfigDefaults::gridColumns(), 1, 10, "zone selector grid columns");
 
     // Size mode (Auto/Manual)
     int sizeMode = zoneSelector.readEntry(QLatin1String("SizeMode"), ConfigDefaults::sizeMode());
@@ -1515,12 +1458,7 @@ void Settings::load()
         static_cast<ZoneSelectorSizeMode>(qBound(0, sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual)));
 
     // Max visible rows before scrolling (Auto mode)
-    int maxRows = zoneSelector.readEntry(QLatin1String("MaxRows"), ConfigDefaults::maxRows());
-    if (maxRows < 1 || maxRows > 10) {
-        qCWarning(lcConfig) << "Invalid zone selector max rows:" << maxRows << "using default (1-10)";
-        maxRows = ConfigDefaults::maxRows();
-    }
-    m_zoneSelectorMaxRows = maxRows;
+    m_zoneSelectorMaxRows = readValidatedInt(zoneSelector, "MaxRows", ConfigDefaults::maxRows(), 1, 10, "zone selector max rows");
 
     // Shader Effects (defaults from .kcfg via ConfigDefaults)
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
@@ -1532,7 +1470,7 @@ void Settings::load()
     m_openEditorShortcut = globalShortcuts.readEntry(QLatin1String("OpenEditorShortcut"), ConfigDefaults::openEditorShortcut());
     m_previousLayoutShortcut = globalShortcuts.readEntry(QLatin1String("PreviousLayoutShortcut"), QStringLiteral("Meta+Alt+["));
     m_nextLayoutShortcut = globalShortcuts.readEntry(QLatin1String("NextLayoutShortcut"), QStringLiteral("Meta+Alt+]"));
-    // Quick layout shortcuts - use ConfigDefaults for each
+    // Quick layout shortcuts - use DRY helper with ConfigDefaults
     const QString quickLayoutDefaults[9] = {
         ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
@@ -1540,10 +1478,7 @@ void Settings::load()
         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
         ConfigDefaults::quickLayout9Shortcut()
     };
-    for (int i = 0; i < 9; ++i) {
-        QString key = QStringLiteral("QuickLayout%1Shortcut").arg(i + 1);
-        m_quickLayoutShortcuts[i] = globalShortcuts.readEntry(key, quickLayoutDefaults[i]);
-    }
+    loadIndexedShortcuts(globalShortcuts, QStringLiteral("QuickLayout%1Shortcut"), m_quickLayoutShortcuts, quickLayoutDefaults);
 
     // Keyboard Navigation Shortcuts (defaults from .kcfg via ConfigDefaults)
     // Shortcut pattern philosophy for consistency and KDE conflict avoidance:
@@ -1578,7 +1513,7 @@ void Settings::load()
     m_swapWindowUpShortcut = navigationShortcuts.readEntry(QLatin1String("SwapWindowUp"), ConfigDefaults::swapWindowUpShortcut());
     m_swapWindowDownShortcut = navigationShortcuts.readEntry(QLatin1String("SwapWindowDown"), ConfigDefaults::swapWindowDownShortcut());
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9) - using ConfigDefaults
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9) - using DRY helper
     const QString snapToZoneDefaults[9] = {
         ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
         ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
@@ -1586,10 +1521,7 @@ void Settings::load()
         ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
         ConfigDefaults::snapToZone9Shortcut()
     };
-    for (int i = 0; i < 9; ++i) {
-        QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
-        m_snapToZoneShortcuts[i] = navigationShortcuts.readEntry(key, snapToZoneDefaults[i]);
-    }
+    loadIndexedShortcuts(navigationShortcuts, QStringLiteral("SnapToZone%1"), m_snapToZoneShortcuts, snapToZoneDefaults);
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise
@@ -1628,58 +1560,30 @@ void Settings::load()
     }
     m_autotileMasterCount = masterCount;
 
-    int innerGap = autotiling.readEntry(QLatin1String("AutotileInnerGap"), ConfigDefaults::autotileInnerGap());
-    if (innerGap < AutotileDefaults::MinGap || innerGap > AutotileDefaults::MaxGap) {
-        qCWarning(lcConfig) << "Invalid autotile inner gap:" << innerGap << "clamping to valid range";
-        innerGap = qBound(AutotileDefaults::MinGap, innerGap, AutotileDefaults::MaxGap);
-    }
-    m_autotileInnerGap = innerGap;
-
-    int autotileOuterGap = autotiling.readEntry(QLatin1String("AutotileOuterGap"), ConfigDefaults::autotileOuterGap());
-    if (autotileOuterGap < AutotileDefaults::MinGap || autotileOuterGap > AutotileDefaults::MaxGap) {
-        qCWarning(lcConfig) << "Invalid autotile outer gap:" << autotileOuterGap << "clamping to valid range";
-        autotileOuterGap = qBound(AutotileDefaults::MinGap, autotileOuterGap, AutotileDefaults::MaxGap);
-    }
-    m_autotileOuterGap = autotileOuterGap;
-
+    m_autotileInnerGap = readValidatedInt(autotiling, "AutotileInnerGap", ConfigDefaults::autotileInnerGap(),
+                                          AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile inner gap");
+    m_autotileOuterGap = readValidatedInt(autotiling, "AutotileOuterGap", ConfigDefaults::autotileOuterGap(),
+                                          AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap");
     m_autotileFocusNewWindows = autotiling.readEntry(QLatin1String("AutotileFocusNewWindows"), ConfigDefaults::autotileFocusNewWindows());
     m_autotileSmartGaps = autotiling.readEntry(QLatin1String("AutotileSmartGaps"), ConfigDefaults::autotileSmartGaps());
-
-    int insertPos = autotiling.readEntry(QLatin1String("AutotileInsertPosition"), ConfigDefaults::autotileInsertPosition());
-    if (insertPos < 0 || insertPos > 2) {
-        qCWarning(lcConfig) << "Invalid autotile insert position:" << insertPos << "using default";
-        insertPos = ConfigDefaults::autotileInsertPosition();
-    }
-    m_autotileInsertPosition = static_cast<AutotileInsertPosition>(insertPos);
+    m_autotileInsertPosition = static_cast<AutotileInsertPosition>(
+        readValidatedInt(autotiling, "AutotileInsertPosition", ConfigDefaults::autotileInsertPosition(), 0, 2, "autotile insert position"));
 
     // Autotile Animation Settings
     m_autotileAnimationsEnabled = autotiling.readEntry(QLatin1String("AutotileAnimationsEnabled"), ConfigDefaults::autotileAnimationsEnabled());
-    m_autotileAnimationDuration = qBound(50, autotiling.readEntry(QLatin1String("AutotileAnimationDuration"), ConfigDefaults::autotileAnimationDuration()), 500);
+    m_autotileAnimationDuration = readValidatedInt(autotiling, "AutotileAnimationDuration", ConfigDefaults::autotileAnimationDuration(), 50, 500, "autotile animation duration");
 
     // Additional Autotiling Settings
     m_autotileFocusFollowsMouse = autotiling.readEntry(QLatin1String("AutotileFocusFollowsMouse"), ConfigDefaults::autotileFocusFollowsMouse());
     m_autotileRespectMinimumSize = autotiling.readEntry(QLatin1String("AutotileRespectMinimumSize"), ConfigDefaults::autotileRespectMinimumSize());
     m_autotileShowActiveBorder = autotiling.readEntry(QLatin1String("AutotileShowActiveBorder"), ConfigDefaults::autotileShowActiveBorder());
-
-    int activeBorderWidth = autotiling.readEntry(QLatin1String("AutotileActiveBorderWidth"), ConfigDefaults::autotileActiveBorderWidth());
-    if (activeBorderWidth < 1 || activeBorderWidth > 10) {
-        qCWarning(lcConfig) << "Invalid autotile active border width:" << activeBorderWidth << "clamping to valid range";
-        activeBorderWidth = qBound(1, activeBorderWidth, 10);
-    }
-    m_autotileActiveBorderWidth = activeBorderWidth;
-
+    m_autotileActiveBorderWidth = readValidatedInt(autotiling, "AutotileActiveBorderWidth", ConfigDefaults::autotileActiveBorderWidth(), 1, 10, "autotile active border width");
     m_autotileUseSystemBorderColor = autotiling.readEntry(QLatin1String("AutotileUseSystemBorderColor"), ConfigDefaults::autotileUseSystemBorderColor());
 
     // Get system highlight color as default for custom border color
     KColorScheme borderScheme(QPalette::Active, KColorScheme::Selection);
     QColor systemHighlight = borderScheme.background(KColorScheme::ActiveBackground).color();
-
-    QColor activeBorderColor = autotiling.readEntry(QLatin1String("AutotileActiveBorderColor"), systemHighlight);
-    if (!activeBorderColor.isValid()) {
-        qCWarning(lcConfig) << "Invalid autotile active border color, using system highlight";
-        activeBorderColor = systemHighlight;
-    }
-    m_autotileActiveBorderColor = activeBorderColor;
+    m_autotileActiveBorderColor = readValidatedColor(autotiling, "AutotileActiveBorderColor", systemHighlight, "autotile active border");
 
     m_autotileMonocleHideOthers = autotiling.readEntry(QLatin1String("AutotileMonocleHideOthers"), ConfigDefaults::autotileMonocleHideOthers());
     m_autotileMonocleShowTabs = autotiling.readEntry(QLatin1String("AutotileMonocleShowTabs"), ConfigDefaults::autotileMonocleShowTabs());
@@ -1875,230 +1779,53 @@ void Settings::save()
 
 void Settings::reset()
 {
-    // Reset to default values (from .kcfg via ConfigDefaults)
-    // Activation settings
-    m_shiftDragToActivate = ConfigDefaults::shiftDrag(); // Deprecated
-    m_dragActivationModifier = static_cast<DragModifier>(ConfigDefaults::dragActivationModifier());
-    m_skipSnapModifier = static_cast<DragModifier>(ConfigDefaults::skipSnapModifier());
-    m_multiZoneModifier = static_cast<DragModifier>(ConfigDefaults::multiZoneModifier());
-    m_middleClickMultiZone = ConfigDefaults::middleClickMultiZone();
+    // DRY: Clear all config groups and reload with defaults
+    // This avoids duplicating ~160 lines of default assignments
+    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
 
-    // Display settings (from .kcfg via ConfigDefaults)
-    m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
-    m_disabledMonitors.clear();
-    m_showZoneNumbers = ConfigDefaults::showNumbers();
-    m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
-    m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
-    m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
-    m_osdStyle = static_cast<OsdStyle>(ConfigDefaults::osdStyle());
+    // Delete all setting groups (load() will use ConfigDefaults for missing keys)
+    const QStringList groups = {
+        QStringLiteral("Activation"),
+        QStringLiteral("Display"),
+        QStringLiteral("Appearance"),
+        QStringLiteral("Zones"),
+        QStringLiteral("Behavior"),
+        QStringLiteral("Exclusions"),
+        QStringLiteral("ZoneSelector"),
+        QStringLiteral("Shaders"),
+        QStringLiteral("GlobalShortcuts"),
+        QStringLiteral("NavigationShortcuts"),
+        QStringLiteral("Autotiling"),
+        QStringLiteral("AutotileShortcuts")
+    };
 
-    // Appearance defaults (from .kcfg via ConfigDefaults)
-    m_useSystemColors = ConfigDefaults::useSystemColors();
-    m_highlightColor = ConfigDefaults::highlightColor();
-    m_inactiveColor = ConfigDefaults::inactiveColor();
-    m_borderColor = ConfigDefaults::borderColor();
-    m_numberColor = ConfigDefaults::numberColor();
-    m_activeOpacity = ConfigDefaults::activeOpacity();
-    m_inactiveOpacity = ConfigDefaults::inactiveOpacity();
-    m_borderWidth = ConfigDefaults::borderWidth();
-    m_borderRadius = ConfigDefaults::borderRadius();
-    m_enableBlur = ConfigDefaults::enableBlur();
+    for (const QString& groupName : groups) {
+        config->deleteGroup(groupName);
+    }
+    config->sync();
 
-    // Zone settings defaults (from .kcfg via ConfigDefaults)
-    m_zonePadding = ConfigDefaults::zonePadding();
-    m_outerGap = ConfigDefaults::outerGap();
-    m_adjacentThreshold = ConfigDefaults::adjacentThreshold();
+    // Reload from (now empty) config - will use ConfigDefaults for all values
+    load();
 
-    // Performance and behavior defaults (from .kcfg via ConfigDefaults)
-    m_pollIntervalMs = ConfigDefaults::pollIntervalMs();
-    m_minimumZoneSizePx = ConfigDefaults::minimumZoneSizePx();
-    m_minimumZoneDisplaySizePx = ConfigDefaults::minimumZoneDisplaySizePx();
-
-    m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();
-    m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
-    m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
-    m_stickyWindowHandling = static_cast<StickyWindowHandling>(ConfigDefaults::stickyWindowHandling());
-    m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
-    m_defaultLayoutId.clear();
-
-    // Exclusions (from .kcfg via ConfigDefaults)
-    m_excludedApplications.clear();
-    m_excludedWindowClasses.clear();
-    m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
-    m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
-    m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
-
-    // Zone Selector defaults (from .kcfg via ConfigDefaults)
-    m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
-    m_zoneSelectorTriggerDistance = ConfigDefaults::triggerDistance();
-    m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
-    m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(ConfigDefaults::layoutMode());
-    m_zoneSelectorPreviewWidth = ConfigDefaults::previewWidth();
-    m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
-    m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
-    m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
-    m_zoneSelectorSizeMode = static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
-    m_zoneSelectorMaxRows = ConfigDefaults::maxRows();
-
-    // Shader Effects defaults (from .kcfg via ConfigDefaults)
-    m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
-    m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
-
-    // Global Shortcuts defaults (from .kcfg via ConfigDefaults)
-    m_openEditorShortcut = ConfigDefaults::openEditorShortcut();
-    m_previousLayoutShortcut = QStringLiteral("Meta+Alt+[");
-    m_nextLayoutShortcut = QStringLiteral("Meta+Alt+]");
-    m_quickLayoutShortcuts[0] = ConfigDefaults::quickLayout1Shortcut();
-    m_quickLayoutShortcuts[1] = ConfigDefaults::quickLayout2Shortcut();
-    m_quickLayoutShortcuts[2] = ConfigDefaults::quickLayout3Shortcut();
-    m_quickLayoutShortcuts[3] = ConfigDefaults::quickLayout4Shortcut();
-    m_quickLayoutShortcuts[4] = ConfigDefaults::quickLayout5Shortcut();
-    m_quickLayoutShortcuts[5] = ConfigDefaults::quickLayout6Shortcut();
-    m_quickLayoutShortcuts[6] = ConfigDefaults::quickLayout7Shortcut();
-    m_quickLayoutShortcuts[7] = ConfigDefaults::quickLayout8Shortcut();
-    m_quickLayoutShortcuts[8] = ConfigDefaults::quickLayout9Shortcut();
-
-    // Keyboard Navigation Shortcuts defaults (from .kcfg via ConfigDefaults)
-    m_moveWindowLeftShortcut = ConfigDefaults::moveWindowLeftShortcut();
-    m_moveWindowRightShortcut = ConfigDefaults::moveWindowRightShortcut();
-    m_moveWindowUpShortcut = ConfigDefaults::moveWindowUpShortcut();
-    m_moveWindowDownShortcut = ConfigDefaults::moveWindowDownShortcut();
-    m_focusZoneLeftShortcut = ConfigDefaults::focusZoneLeftShortcut();
-    m_focusZoneRightShortcut = ConfigDefaults::focusZoneRightShortcut();
-    m_focusZoneUpShortcut = ConfigDefaults::focusZoneUpShortcut();
-    m_focusZoneDownShortcut = ConfigDefaults::focusZoneDownShortcut();
-    m_pushToEmptyZoneShortcut = ConfigDefaults::pushToEmptyZoneShortcut();
-    m_restoreWindowSizeShortcut = ConfigDefaults::restoreWindowSizeShortcut();
-    m_toggleWindowFloatShortcut = ConfigDefaults::toggleWindowFloatShortcut();
-
-    // Swap Window Shortcuts (from .kcfg via ConfigDefaults)
-    m_swapWindowLeftShortcut = ConfigDefaults::swapWindowLeftShortcut();
-    m_swapWindowRightShortcut = ConfigDefaults::swapWindowRightShortcut();
-    m_swapWindowUpShortcut = ConfigDefaults::swapWindowUpShortcut();
-    m_swapWindowDownShortcut = ConfigDefaults::swapWindowDownShortcut();
-
-    // Snap to Zone by Number Shortcuts (from .kcfg via ConfigDefaults)
-    m_snapToZoneShortcuts[0] = ConfigDefaults::snapToZone1Shortcut();
-    m_snapToZoneShortcuts[1] = ConfigDefaults::snapToZone2Shortcut();
-    m_snapToZoneShortcuts[2] = ConfigDefaults::snapToZone3Shortcut();
-    m_snapToZoneShortcuts[3] = ConfigDefaults::snapToZone4Shortcut();
-    m_snapToZoneShortcuts[4] = ConfigDefaults::snapToZone5Shortcut();
-    m_snapToZoneShortcuts[5] = ConfigDefaults::snapToZone6Shortcut();
-    m_snapToZoneShortcuts[6] = ConfigDefaults::snapToZone7Shortcut();
-    m_snapToZoneShortcuts[7] = ConfigDefaults::snapToZone8Shortcut();
-    m_snapToZoneShortcuts[8] = ConfigDefaults::snapToZone9Shortcut();
-
-    // Rotate Windows Shortcuts (from .kcfg via ConfigDefaults)
-    m_rotateWindowsClockwiseShortcut = ConfigDefaults::rotateWindowsClockwiseShortcut();
-    m_rotateWindowsCounterclockwiseShortcut = ConfigDefaults::rotateWindowsCounterclockwiseShortcut();
-
-    // Cycle Windows in Zone Shortcuts (from .kcfg via ConfigDefaults)
-    m_cycleWindowForwardShortcut = ConfigDefaults::cycleWindowForwardShortcut();
-    m_cycleWindowBackwardShortcut = ConfigDefaults::cycleWindowBackwardShortcut();
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Autotiling Settings (from .kcfg via ConfigDefaults)
-    // ═══════════════════════════════════════════════════════════════════════════
-    m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    m_autotileAlgorithm = ConfigDefaults::autotileAlgorithm();
-    m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
-    m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
-    m_autotileInnerGap = ConfigDefaults::autotileInnerGap();
-    m_autotileOuterGap = ConfigDefaults::autotileOuterGap();
-    m_autotileFocusNewWindows = ConfigDefaults::autotileFocusNewWindows();
-    m_autotileSmartGaps = ConfigDefaults::autotileSmartGaps();
-    m_autotileInsertPosition = static_cast<AutotileInsertPosition>(ConfigDefaults::autotileInsertPosition());
-
-    // Autotile Animation Settings
-    m_autotileAnimationsEnabled = ConfigDefaults::autotileAnimationsEnabled();
-    m_autotileAnimationDuration = ConfigDefaults::autotileAnimationDuration();
-
-    // Additional Autotiling Settings
-    m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
-    m_autotileRespectMinimumSize = ConfigDefaults::autotileRespectMinimumSize();
-    m_autotileShowActiveBorder = ConfigDefaults::autotileShowActiveBorder();
-    m_autotileActiveBorderWidth = ConfigDefaults::autotileActiveBorderWidth();
-    m_autotileUseSystemBorderColor = ConfigDefaults::autotileUseSystemBorderColor();
-    // Get system highlight color as default for custom border color
-    KColorScheme resetBorderScheme(QPalette::Active, KColorScheme::Selection);
-    m_autotileActiveBorderColor = resetBorderScheme.background(KColorScheme::ActiveBackground).color();
-    m_autotileMonocleHideOthers = ConfigDefaults::autotileMonocleHideOthers();
-    m_autotileMonocleShowTabs = ConfigDefaults::autotileMonocleShowTabs();
-
-    // Autotiling Shortcuts (from .kcfg via ConfigDefaults, Bismuth-compatible)
-    m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();
-    m_autotileFocusMasterShortcut = ConfigDefaults::autotileFocusMasterShortcut();
-    m_autotileSwapMasterShortcut = ConfigDefaults::autotileSwapMasterShortcut();
-    m_autotileIncMasterRatioShortcut = ConfigDefaults::autotileIncMasterRatioShortcut();
-    m_autotileDecMasterRatioShortcut = ConfigDefaults::autotileDecMasterRatioShortcut();
-    m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
-    m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
-    m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
-
-    Q_EMIT settingsChanged();
+    qCDebug(lcConfig) << "Settings reset to defaults";
 }
 
 void Settings::loadColorsFromFile(const QString& filePath)
 {
-    // Support pywal colors.json or simple color list
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
+    // Delegate to ColorImporter (SRP: color parsing is separate concern)
+    ColorImportResult result = ColorImporter::importFromFile(filePath);
+    if (!result.success) {
         return;
     }
 
-    QTextStream stream(&file);
-    QString content = stream.readAll();
+    // Apply imported colors
+    setHighlightColor(result.highlightColor);
+    setInactiveColor(result.inactiveColor);
+    setBorderColor(result.borderColor);
+    setNumberColor(result.numberColor);
 
-    // Try to parse as pywal JSON
-    if (filePath.endsWith(QStringLiteral(".json"))) {
-        QJsonDocument doc = QJsonDocument::fromJson(content.toUtf8());
-        if (!doc.isNull()) {
-            QJsonObject colors = doc.object()[JsonKeys::Colors].toObject();
-            if (!colors.isEmpty()) {
-                // Use pywal colors with standard alpha values
-                QColor accent(colors[QStringLiteral("color4")].toString());
-                QColor bg(colors[QStringLiteral("color0")].toString());
-                QColor fg(colors[QStringLiteral("color7")].toString());
-
-                accent.setAlpha(Defaults::HighlightAlpha);
-                setHighlightColor(accent);
-
-                bg.setAlpha(Defaults::InactiveAlpha);
-                setInactiveColor(bg);
-
-                fg.setAlpha(Defaults::BorderAlpha);
-                setBorderColor(fg);
-                setNumberColor(fg);
-
-                m_useSystemColors = false;
-                Q_EMIT useSystemColorsChanged();
-                return;
-            }
-        }
-    }
-
-    // Try to parse as simple color list (one hex per line)
-    QStringList lines = content.split(QRegularExpression(QStringLiteral("[\r\n]+")));
-    if (lines.size() >= 8) {
-        QColor accent(lines[4].trimmed());
-        QColor bg(lines[0].trimmed());
-        QColor fg(lines[7].trimmed());
-
-        if (accent.isValid() && bg.isValid() && fg.isValid()) {
-            accent.setAlpha(Defaults::HighlightAlpha);
-            setHighlightColor(accent);
-
-            bg.setAlpha(Defaults::InactiveAlpha);
-            setInactiveColor(bg);
-
-            fg.setAlpha(Defaults::BorderAlpha);
-            setBorderColor(fg);
-            setNumberColor(fg);
-
-            m_useSystemColors = false;
-            Q_EMIT useSystemColorsChanged();
-        }
-    }
+    m_useSystemColors = false;
+    Q_EMIT useSystemColorsChanged();
 }
 
 void Settings::applySystemColorScheme()

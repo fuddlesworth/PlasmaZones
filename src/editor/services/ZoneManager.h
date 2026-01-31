@@ -11,14 +11,21 @@
 #include <QVariantList>
 #include <QVariantMap>
 #include <QVector>
+#include <memory>
+#include <optional>
 
 namespace PlasmaZones {
+
+// Forward declaration for SRP helper
+class ZoneAutoFiller;
 
 /**
  * @brief Manages zone CRUD operations
  *
  * Handles zone creation, updates, deletion, duplication, and splitting.
  * Maintains the zones list and emits signals for zone changes.
+ *
+ * Auto-fill operations are delegated to ZoneAutoFiller (SRP).
  */
 class ZoneManager : public QObject
 {
@@ -54,7 +61,7 @@ public:
     QVector<QPair<QString, QRectF>> collectGeometriesAtDivider(const QString& zoneId1, const QString& zoneId2,
                                                                bool isVertical);
 
-    // Auto-fill operations
+    // Auto-fill operations (delegated to ZoneAutoFiller - SRP)
     /**
      * @brief Find zones adjacent to the given zone
      * @param zoneId The zone to find neighbors for
@@ -87,6 +94,28 @@ public:
      * @param autoFill If true, expand adjacent zones to fill the deleted zone's space
      */
     void deleteZoneWithFill(const QString& zoneId, bool autoFill = true);
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DRY Helper Methods - Public for use by helper classes
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Extract geometry from a zone map as QRectF
+     * @param zone The zone QVariantMap
+     * @return QRectF with x, y, width, height
+     *
+     * DRY: Consolidates the repeated pattern of extracting geometry fields.
+     */
+    QRectF extractZoneGeometry(const QVariantMap& zone) const;
+
+    /**
+     * @brief Get validated zone by ID with logging on failure
+     * @param zoneId Zone ID to look up
+     * @return Optional containing zone data, or empty on failure (logs warning)
+     *
+     * DRY: Consolidates findZoneIndex + validation + logging pattern.
+     */
+    std::optional<QVariantMap> getValidatedZone(const QString& zoneId) const;
 
     // Z-order operations
     void bringToFront(const QString& zoneId);
@@ -163,6 +192,9 @@ Q_SIGNALS:
     void zonesModified(); // Generic signal for any zone modification
 
 private:
+    // Friend class for SRP helper
+    friend class ZoneAutoFiller;
+
     /**
      * @brief Creates a new zone map with default values
      */
@@ -173,34 +205,56 @@ private:
      */
     void renumberZones();
 
-    /**
-     * @brief Check if a rectangle is empty (no zones occupy it)
-     * @param x, y, width, height The rectangle to check (0-1 normalized)
-     * @param excludeZoneId Zone to exclude from check (optional)
-     * @return true if the rectangle is empty
-     */
-    bool isRectangleEmpty(qreal x, qreal y, qreal width, qreal height, const QString& excludeZoneId = QString()) const;
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DRY Helper Methods - Private
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Find the maximum extent a zone can expand in a given direction
-     * @param zoneId The zone to expand
-     * @param direction 0=left, 1=right, 2=up, 3=down
-     * @return Maximum expansion amount (0-1 normalized), 0 if cannot expand
+     * @brief Validated geometry result
      */
-    qreal findMaxExpansion(const QString& zoneId, int direction) const;
+    struct ValidatedGeometry {
+        qreal x, y, width, height;
+        bool isValid = false;
+    };
 
     /**
-     * @brief Smart fill: find the empty region at the target position and resize to fill it
+     * @brief Validate and clamp zone geometry to valid bounds
+     * @param x, y, width, height Input geometry (may be invalid)
+     * @return ValidatedGeometry with clamped values and isValid flag
      *
-     * Used when a zone overlaps with other zones - finds the empty space at
-     * the mouse position (or zone center if not provided) and resizes the zone to fill that region.
-     *
-     * @param zoneId The zone to fill
-     * @param mouseX Normalized mouse X position (0-1), or -1 to use zone center
-     * @param mouseY Normalized mouse Y position (0-1), or -1 to use zone center
-     * @return true if zone was repositioned and resized
+     * DRY: Consolidates geometry validation repeated in addZone, updateZoneGeometry, etc.
      */
-    bool smartFillZone(const QString& zoneId, qreal mouseX = -1, qreal mouseY = -1);
+    ValidatedGeometry validateAndClampGeometry(qreal x, qreal y, qreal width, qreal height) const;
+
+    /**
+     * @brief Signal types for deferred emission
+     */
+    enum class SignalType {
+        ZoneAdded,
+        ZoneRemoved,
+        GeometryChanged,
+        NameChanged,
+        NumberChanged,
+        ColorChanged,
+        ZOrderChanged
+    };
+
+    /**
+     * @brief Emit zone signals with batch support
+     * @param type The type of signal to emit
+     * @param zoneId The zone ID
+     * @param includeModified Whether to also emit zonesModified signal
+     *
+     * DRY: Consolidates the repeated if(batch) {...} else {...} pattern.
+     */
+    void emitZoneSignal(SignalType type, const QString& zoneId, bool includeModified = true);
+
+    /**
+     * @brief Update z-order values for all zones
+     *
+     * DRY: Consolidates the loop that updates zOrder after reordering.
+     */
+    void updateAllZOrderValues();
 
     QVariantList m_zones;
 
@@ -208,6 +262,9 @@ private:
     QString m_defaultHighlightColor;
     QString m_defaultInactiveColor;
     QString m_defaultBorderColor;
+
+    // Auto-fill helper (SRP - initialized after colors are set)
+    std::unique_ptr<ZoneAutoFiller> m_autoFiller;
 
     // Batch update support
     int m_batchUpdateDepth = 0;

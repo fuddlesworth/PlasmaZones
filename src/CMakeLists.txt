@@ -59,8 +59,12 @@ set(plasmazones_core_SRCS
     core/zonehighlighter.h
     core/shaderregistry.cpp
     core/shaderregistry.h
+    core/modifierutils.cpp
+    core/modifierutils.h
     config/settings.cpp
     config/settings.h
+    config/colorimporter.cpp
+    config/colorimporter.h
     # Autotiling support
     autotile/TilingAlgorithm.h
     autotile/TilingAlgorithm.cpp
@@ -309,6 +313,8 @@ set(plasmazones_editor_SRCS
     editor/services/DBusLayoutService.h
     editor/services/ZoneManager.cpp
     editor/services/ZoneManager.h
+    editor/services/ZoneAutoFiller.cpp
+    editor/services/ZoneAutoFiller.h
     editor/services/SnappingService.cpp
     editor/services/SnappingService.h
     editor/services/TemplateService.cpp

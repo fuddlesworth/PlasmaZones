@@ -6,6 +6,7 @@
 #include "../src/core/constants.h"
 #include "../src/core/interfaces.h" // For DragModifier enum
 #include "../src/core/logging.h"
+#include "../src/core/modifierutils.h"
 
 #include <KPluginFactory>
 #include <KLocalizedString>
@@ -128,6 +129,12 @@ KCMPlasmaZones::~KCMPlasmaZones()
 {
 }
 
+KConfigGroup KCMPlasmaZones::editorConfigGroup()
+{
+    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+    return config->group(QStringLiteral("Editor"));
+}
+
 // Activation getters
 bool KCMPlasmaZones::shiftDragToActivate() const
 {
@@ -136,12 +143,12 @@ bool KCMPlasmaZones::shiftDragToActivate() const
 int KCMPlasmaZones::dragActivationModifier() const
 {
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
-    return dragModifierToBitmask(static_cast<int>(m_settings->dragActivationModifier()));
+    return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->dragActivationModifier()));
 }
 int KCMPlasmaZones::multiZoneModifier() const
 {
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
-    return dragModifierToBitmask(static_cast<int>(m_settings->multiZoneModifier()));
+    return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->multiZoneModifier()));
 }
 bool KCMPlasmaZones::middleClickMultiZone() const
 {
@@ -336,92 +343,72 @@ int KCMPlasmaZones::zoneSelectorMaxRows() const
 // Note: Save, Delete, Close shortcuts now use Qt StandardKey (system shortcuts)
 QString KCMPlasmaZones::editorDuplicateShortcut() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
+    return editorConfigGroup().readEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
 }
 
 QString KCMPlasmaZones::editorSplitHorizontalShortcut() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
+    return editorConfigGroup().readEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
 }
 
 QString KCMPlasmaZones::editorSplitVerticalShortcut() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
     // Note: Default changed from Ctrl+Shift+V to Ctrl+Alt+V to avoid conflict with Paste with Offset
-    return editorGroup.readEntry(QLatin1String("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
+    return editorConfigGroup().readEntry(QLatin1String("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
 }
 
 QString KCMPlasmaZones::editorFillShortcut() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
+    return editorConfigGroup().readEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
 }
 
 // Editor snapping settings getters (read from KConfig Editor group)
 bool KCMPlasmaZones::editorGridSnappingEnabled() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("GridSnappingEnabled"), true);
+    return editorConfigGroup().readEntry(QLatin1String("GridSnappingEnabled"), true);
 }
 
 bool KCMPlasmaZones::editorEdgeSnappingEnabled() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("EdgeSnappingEnabled"), true);
+    return editorConfigGroup().readEntry(QLatin1String("EdgeSnappingEnabled"), true);
 }
 
 qreal KCMPlasmaZones::editorSnapIntervalX() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    qreal intervalX = editorGroup.readEntry(QLatin1String("SnapIntervalX"), -1.0);
+    KConfigGroup group = editorConfigGroup();
+    qreal intervalX = group.readEntry(QLatin1String("SnapIntervalX"), -1.0);
     if (intervalX < 0.0) {
         // Fall back to single SnapInterval for backward compatibility
-        intervalX = editorGroup.readEntry(QLatin1String("SnapInterval"), 0.1);
+        intervalX = group.readEntry(QLatin1String("SnapInterval"), 0.1);
     }
     return intervalX;
 }
 
 qreal KCMPlasmaZones::editorSnapIntervalY() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    qreal intervalY = editorGroup.readEntry(QLatin1String("SnapIntervalY"), -1.0);
+    KConfigGroup group = editorConfigGroup();
+    qreal intervalY = group.readEntry(QLatin1String("SnapIntervalY"), -1.0);
     if (intervalY < 0.0) {
         // Fall back to single SnapInterval for backward compatibility
-        intervalY = editorGroup.readEntry(QLatin1String("SnapInterval"), 0.1);
+        intervalY = group.readEntry(QLatin1String("SnapInterval"), 0.1);
     }
     return intervalY;
 }
 
 int KCMPlasmaZones::editorSnapOverrideModifier() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000); // Qt::ShiftModifier
+    return editorConfigGroup().readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000); // Qt::ShiftModifier
 }
 
 // Fill on drop getters (read from KConfig Editor group)
 bool KCMPlasmaZones::fillOnDropEnabled() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("FillOnDropEnabled"), true);
+    return editorConfigGroup().readEntry(QLatin1String("FillOnDropEnabled"), true);
 }
 
 int KCMPlasmaZones::fillOnDropModifier() const
 {
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry(QLatin1String("FillOnDropModifier"), 0x04000000); // Qt::ControlModifier
+    return editorConfigGroup().readEntry(QLatin1String("FillOnDropModifier"), 0x04000000); // Qt::ControlModifier
 }
 
 // Layouts getter
@@ -469,7 +456,7 @@ void KCMPlasmaZones::setShiftDragToActivate(bool enable)
 void KCMPlasmaZones::setDragActivationModifier(int bitmask)
 {
     // Convert Qt::KeyboardModifier bitmask to DragModifier enum for storage
-    int enumValue = bitmaskToDragModifier(bitmask);
+    int enumValue = ModifierUtils::bitmaskToDragModifier(bitmask);
     if (static_cast<int>(m_settings->dragActivationModifier()) != enumValue) {
         m_settings->setDragActivationModifier(static_cast<DragModifier>(enumValue));
         Q_EMIT dragActivationModifierChanged();
@@ -480,7 +467,7 @@ void KCMPlasmaZones::setDragActivationModifier(int bitmask)
 void KCMPlasmaZones::setMultiZoneModifier(int bitmask)
 {
     // Convert Qt::KeyboardModifier bitmask to DragModifier enum for storage
-    int enumValue = bitmaskToDragModifier(bitmask);
+    int enumValue = ModifierUtils::bitmaskToDragModifier(bitmask);
     if (static_cast<int>(m_settings->multiZoneModifier()) != enumValue) {
         m_settings->setMultiZoneModifier(static_cast<DragModifier>(enumValue));
         Q_EMIT multiZoneModifierChanged();
@@ -884,10 +871,9 @@ void KCMPlasmaZones::setZoneSelectorMaxRows(int rows)
 void KCMPlasmaZones::setEditorDuplicateShortcut(const QString& shortcut)
 {
     if (editorDuplicateShortcut() != shortcut) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("EditorDuplicateShortcut"), shortcut);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("EditorDuplicateShortcut"), shortcut);
+        group.sync();
         Q_EMIT editorDuplicateShortcutChanged();
         setNeedsSave(true);
     }
@@ -896,10 +882,9 @@ void KCMPlasmaZones::setEditorDuplicateShortcut(const QString& shortcut)
 void KCMPlasmaZones::setEditorSplitHorizontalShortcut(const QString& shortcut)
 {
     if (editorSplitHorizontalShortcut() != shortcut) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), shortcut);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), shortcut);
+        group.sync();
         Q_EMIT editorSplitHorizontalShortcutChanged();
         setNeedsSave(true);
     }
@@ -908,10 +893,9 @@ void KCMPlasmaZones::setEditorSplitHorizontalShortcut(const QString& shortcut)
 void KCMPlasmaZones::setEditorSplitVerticalShortcut(const QString& shortcut)
 {
     if (editorSplitVerticalShortcut() != shortcut) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("EditorSplitVerticalShortcut"), shortcut);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("EditorSplitVerticalShortcut"), shortcut);
+        group.sync();
         Q_EMIT editorSplitVerticalShortcutChanged();
         setNeedsSave(true);
     }
@@ -920,10 +904,9 @@ void KCMPlasmaZones::setEditorSplitVerticalShortcut(const QString& shortcut)
 void KCMPlasmaZones::setEditorFillShortcut(const QString& shortcut)
 {
     if (editorFillShortcut() != shortcut) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("EditorFillShortcut"), shortcut);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("EditorFillShortcut"), shortcut);
+        group.sync();
         Q_EMIT editorFillShortcutChanged();
         setNeedsSave(true);
     }
@@ -933,10 +916,9 @@ void KCMPlasmaZones::setEditorFillShortcut(const QString& shortcut)
 void KCMPlasmaZones::setEditorGridSnappingEnabled(bool enabled)
 {
     if (editorGridSnappingEnabled() != enabled) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), enabled);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("GridSnappingEnabled"), enabled);
+        group.sync();
         Q_EMIT editorGridSnappingEnabledChanged();
         setNeedsSave(true);
     }
@@ -945,10 +927,9 @@ void KCMPlasmaZones::setEditorGridSnappingEnabled(bool enabled)
 void KCMPlasmaZones::setEditorEdgeSnappingEnabled(bool enabled)
 {
     if (editorEdgeSnappingEnabled() != enabled) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), enabled);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("EdgeSnappingEnabled"), enabled);
+        group.sync();
         Q_EMIT editorEdgeSnappingEnabledChanged();
         setNeedsSave(true);
     }
@@ -958,10 +939,9 @@ void KCMPlasmaZones::setEditorSnapIntervalX(qreal interval)
 {
     interval = qBound(0.01, interval, 1.0);
     if (!qFuzzyCompare(editorSnapIntervalX(), interval)) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), interval);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("SnapIntervalX"), interval);
+        group.sync();
         Q_EMIT editorSnapIntervalXChanged();
         setNeedsSave(true);
     }
@@ -971,10 +951,9 @@ void KCMPlasmaZones::setEditorSnapIntervalY(qreal interval)
 {
     interval = qBound(0.01, interval, 1.0);
     if (!qFuzzyCompare(editorSnapIntervalY(), interval)) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), interval);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("SnapIntervalY"), interval);
+        group.sync();
         Q_EMIT editorSnapIntervalYChanged();
         setNeedsSave(true);
     }
@@ -983,10 +962,9 @@ void KCMPlasmaZones::setEditorSnapIntervalY(qreal interval)
 void KCMPlasmaZones::setEditorSnapOverrideModifier(int modifier)
 {
     if (editorSnapOverrideModifier() != modifier) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("SnapOverrideModifier"), modifier);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("SnapOverrideModifier"), modifier);
+        group.sync();
         Q_EMIT editorSnapOverrideModifierChanged();
         setNeedsSave(true);
     }
@@ -996,10 +974,9 @@ void KCMPlasmaZones::setEditorSnapOverrideModifier(int modifier)
 void KCMPlasmaZones::setFillOnDropEnabled(bool enabled)
 {
     if (fillOnDropEnabled() != enabled) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("FillOnDropEnabled"), enabled);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("FillOnDropEnabled"), enabled);
+        group.sync();
         Q_EMIT fillOnDropEnabledChanged();
         setNeedsSave(true);
     }
@@ -1008,10 +985,9 @@ void KCMPlasmaZones::setFillOnDropEnabled(bool enabled)
 void KCMPlasmaZones::setFillOnDropModifier(int modifier)
 {
     if (fillOnDropModifier() != modifier) {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry(QLatin1String("FillOnDropModifier"), modifier);
-        config->sync();
+        KConfigGroup group = editorConfigGroup();
+        group.writeEntry(QLatin1String("FillOnDropModifier"), modifier);
+        group.sync();
         Q_EMIT fillOnDropModifierChanged();
         setNeedsSave(true);
     }
@@ -1450,17 +1426,16 @@ void KCMPlasmaZones::resetEditorShortcuts()
 {
     // Force set all app-specific editor shortcuts to defaults (always emit signals)
     // Note: Save, Delete, Close shortcuts use Qt StandardKey (system shortcuts) and are not configurable
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
+    KConfigGroup group = editorConfigGroup();
 
-    editorGroup.writeEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
-    editorGroup.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
-    editorGroup.writeEntry(
+    group.writeEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
+    group.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
+    group.writeEntry(
         QLatin1String("EditorSplitVerticalShortcut"),
         QStringLiteral("Ctrl+Alt+V")); // Note: Changed from Ctrl+Shift+V to avoid conflict with Paste with Offset
-    editorGroup.writeEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
+    group.writeEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
 
-    config->sync();
+    group.sync();
 
     // Always emit signals to update UI
     Q_EMIT editorDuplicateShortcutChanged();
@@ -1469,103 +1444,6 @@ void KCMPlasmaZones::resetEditorShortcuts()
     Q_EMIT editorFillShortcutChanged();
 
     setNeedsSave(true);
-}
-
-// Helper functions to convert DragModifier enum to/from Qt::KeyboardModifier bitmask
-int KCMPlasmaZones::dragModifierToBitmask(int enumValue)
-{
-    // Qt modifier flags
-    constexpr int ShiftModifier = 0x02000000;
-    constexpr int ControlModifier = 0x04000000;
-    constexpr int AltModifier = 0x08000000;
-    constexpr int MetaModifier = 0x10000000;
-
-    switch (enumValue) {
-    case 0:
-        return 0; // None
-    case 1:
-        return ShiftModifier; // Shift
-    case 2:
-        return ControlModifier; // Ctrl
-    case 3:
-        return AltModifier; // Alt
-    case 4:
-        return MetaModifier; // Meta
-    case 5:
-        return ControlModifier | AltModifier; // Ctrl+Alt
-    case 6:
-        return ControlModifier | ShiftModifier; // Ctrl+Shift
-    case 7:
-        return AltModifier | ShiftModifier; // Alt+Shift
-    case 8:
-        return 0; // AlwaysActive - no modifier keys in checkbox UI
-    case 9:
-        return AltModifier | MetaModifier; // Alt+Meta
-    case 10:
-        return ControlModifier | AltModifier | MetaModifier; // Ctrl+Alt+Meta
-    default:
-        return 0;
-    }
-}
-
-int KCMPlasmaZones::bitmaskToDragModifier(int bitmask)
-{
-    // Qt modifier flags
-    constexpr int ShiftModifier = 0x02000000;
-    constexpr int ControlModifier = 0x04000000;
-    constexpr int AltModifier = 0x08000000;
-    constexpr int MetaModifier = 0x10000000;
-
-    if (bitmask == 0)
-        return 0; // None
-
-    bool hasShift = (bitmask & ShiftModifier) != 0;
-    bool hasCtrl = (bitmask & ControlModifier) != 0;
-    bool hasAlt = (bitmask & AltModifier) != 0;
-    bool hasMeta = (bitmask & MetaModifier) != 0;
-
-    // Single modifiers
-    if (hasShift && !hasCtrl && !hasAlt && !hasMeta)
-        return 1; // Shift
-    if (hasCtrl && !hasShift && !hasAlt && !hasMeta)
-        return 2; // Ctrl
-    if (hasAlt && !hasCtrl && !hasShift && !hasMeta)
-        return 3; // Alt
-    if (hasMeta && !hasCtrl && !hasAlt && !hasShift)
-        return 4; // Meta
-
-    // Two- and three-modifier combinations
-    if (hasAlt && hasMeta && !hasCtrl && !hasShift)
-        return 9; // Alt+Meta
-    if (hasCtrl && hasAlt && hasMeta && !hasShift)
-        return 10; // Ctrl+Alt+Meta
-    if (hasCtrl && hasAlt && !hasShift && !hasMeta)
-        return 5; // Ctrl+Alt
-    if (hasCtrl && hasShift && !hasAlt && !hasMeta)
-        return 6; // Ctrl+Shift
-    if (hasAlt && hasShift && !hasCtrl && !hasMeta)
-        return 7; // Alt+Shift
-
-    // For other combinations not in enum, map to closest match or default
-    // This allows UI flexibility while maintaining enum compatibility
-    if (hasCtrl && hasAlt && hasMeta)
-        return 10; // Ctrl+Alt+Meta (e.g. all four modifiers)
-    if (hasCtrl && hasAlt)
-        return 5; // Ctrl+Alt (closest)
-    if (hasCtrl && hasShift)
-        return 6; // Ctrl+Shift (closest)
-    if (hasAlt && hasShift)
-        return 7; // Alt+Shift (closest)
-    if (hasCtrl)
-        return 2; // Default to Ctrl
-    if (hasAlt)
-        return 3; // Default to Alt
-    if (hasShift)
-        return 1; // Default to Shift
-    if (hasMeta)
-        return 4; // Default to Meta
-
-    return 0; // None
 }
 
 // Daemon status methods

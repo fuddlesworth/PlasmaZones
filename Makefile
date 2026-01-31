@@ -56,21 +56,17 @@ build: configure
 release:
 	@$(MAKE) BUILD_TYPE=Release build
 
-# Install to system
+# Install to system (CMake install prints success message, runs sycoca via script)
+# Sycoca runs as original user when using sudo (handled by cmake/post-install-sycoca.sh)
 install: build
 	@echo "$(YELLOW)>>> Installing (may require sudo)...$(NC)"
 	@cmake --install $(BUILD_DIR)
 	@echo "$(GREEN)>>> Installation complete$(NC)"
-	@echo ""
-	@echo "$(BLUE)>>> Next steps:$(NC)"
-	@echo "    1. Enable daemon: systemctl --user enable --now plasmazones.service"
-	@echo "    2. Open settings: System Settings → Window Management → PlasmaZones"
-	@echo ""
 
-# Refresh KDE service cache (run after install if KCM not visible)
+# Refresh KDE service cache (standalone, e.g. after ninja install or if KCM not visible)
 post-install:
 	@echo "$(BLUE)>>> Refreshing KDE service cache...$(NC)"
-	@kbuildsycoca6 --noincremental 2>/dev/null || echo "$(YELLOW)kbuildsycoca6 not found - log out and back in instead$(NC)"
+	@$(SHELL) cmake/post-install-sycoca.sh
 	@echo "$(GREEN)>>> Done. PlasmaZones should now appear in System Settings.$(NC)"
 
 # Uninstall from system (uses full CMake uninstall: manifest + all known /usr paths)
@@ -162,7 +158,7 @@ help:
 	@echo ""
 	@echo "$(GREEN)Install targets:$(NC)"
 	@echo "  make install      - Install to system (may need sudo)"
-	@echo "  make post-install - Refresh KDE cache (if KCM not visible)"
+	@echo "  make post-install - Refresh KDE cache (e.g. after ninja install)"
 	@echo "  make uninstall    - Uninstall from system (may need sudo)"
 	@echo ""
 	@echo "$(GREEN)Other targets:$(NC)"
