@@ -46,8 +46,7 @@ install(FILES
     ui/tabs/LayoutsTab.qml
     ui/tabs/EditorTab.qml
     ui/tabs/AssignmentsTab.qml
-    ui/tabs/AppearanceTab.qml
-    ui/tabs/BehaviorTab.qml
+    ui/tabs/ZonesTab.qml
     ui/tabs/ZoneSelectorTab.qml
     ui/tabs/ExclusionsTab.qml
     ui/tabs/ExclusionListCard.qml
