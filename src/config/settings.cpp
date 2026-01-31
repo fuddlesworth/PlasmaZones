@@ -20,6 +20,34 @@
 
 namespace PlasmaZones {
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRY Macros for repetitive setter patterns
+// Reduces boilerplate for ~50+ setter methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Simple setter: if changed, update member, emit specific signal, emit settingsChanged
+#define SETTINGS_SETTER(Type, name, member, signal) \
+    void Settings::set##name(Type value) \
+    { \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+            Q_EMIT settingsChanged(); \
+        } \
+    }
+
+// Clamped int setter: clamp value, then apply if changed
+#define SETTINGS_SETTER_CLAMPED(name, member, signal, minVal, maxVal) \
+    void Settings::set##name(int value) \
+    { \
+        value = qBound(minVal, value, maxVal); \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+            Q_EMIT settingsChanged(); \
+        } \
+    }
+
 namespace {
 /**
  * @brief Normalize a UUID string to use the default format (with braces)
@@ -148,73 +176,20 @@ void Settings::setMultiZoneModifierInt(int modifier)
     }
 }
 
-void Settings::setMiddleClickMultiZone(bool enable)
-{
-    if (m_middleClickMultiZone != enable) {
-        m_middleClickMultiZone = enable;
-        Q_EMIT middleClickMultiZoneChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setShowZonesOnAllMonitors(bool show)
-{
-    if (m_showZonesOnAllMonitors != show) {
-        m_showZonesOnAllMonitors = show;
-        Q_EMIT showZonesOnAllMonitorsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setDisabledMonitors(const QStringList& screenNames)
-{
-    if (m_disabledMonitors != screenNames) {
-        m_disabledMonitors = screenNames;
-        Q_EMIT disabledMonitorsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Simple bool setters using DRY macro
+SETTINGS_SETTER(bool, MiddleClickMultiZone, m_middleClickMultiZone, middleClickMultiZoneChanged)
+SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
+SETTINGS_SETTER(const QStringList&, DisabledMonitors, m_disabledMonitors, disabledMonitorsChanged)
 
 bool Settings::isMonitorDisabled(const QString& screenName) const
 {
     return m_disabledMonitors.contains(screenName);
 }
 
-void Settings::setShowZoneNumbers(bool show)
-{
-    if (m_showZoneNumbers != show) {
-        m_showZoneNumbers = show;
-        Q_EMIT showZoneNumbersChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setFlashZonesOnSwitch(bool flash)
-{
-    if (m_flashZonesOnSwitch != flash) {
-        m_flashZonesOnSwitch = flash;
-        Q_EMIT flashZonesOnSwitchChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setShowOsdOnLayoutSwitch(bool show)
-{
-    if (m_showOsdOnLayoutSwitch != show) {
-        m_showOsdOnLayoutSwitch = show;
-        Q_EMIT showOsdOnLayoutSwitchChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setShowNavigationOsd(bool show)
-{
-    if (m_showNavigationOsd != show) {
-        m_showNavigationOsd = show;
-        Q_EMIT showNavigationOsdChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
+SETTINGS_SETTER(bool, FlashZonesOnSwitch, m_flashZonesOnSwitch, flashZonesOnSwitchChanged)
+SETTINGS_SETTER(bool, ShowOsdOnLayoutSwitch, m_showOsdOnLayoutSwitch, showOsdOnLayoutSwitchChanged)
+SETTINGS_SETTER(bool, ShowNavigationOsd, m_showNavigationOsd, showNavigationOsdChanged)
 
 void Settings::setOsdStyle(OsdStyle style)
 {
@@ -242,41 +217,11 @@ void Settings::setUseSystemColors(bool use)
     }
 }
 
-void Settings::setHighlightColor(const QColor& color)
-{
-    if (m_highlightColor != color) {
-        m_highlightColor = color;
-        Q_EMIT highlightColorChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setInactiveColor(const QColor& color)
-{
-    if (m_inactiveColor != color) {
-        m_inactiveColor = color;
-        Q_EMIT inactiveColorChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setBorderColor(const QColor& color)
-{
-    if (m_borderColor != color) {
-        m_borderColor = color;
-        Q_EMIT borderColorChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setNumberColor(const QColor& color)
-{
-    if (m_numberColor != color) {
-        m_numberColor = color;
-        Q_EMIT numberColorChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Color setters using DRY macro
+SETTINGS_SETTER(const QColor&, HighlightColor, m_highlightColor, highlightColorChanged)
+SETTINGS_SETTER(const QColor&, InactiveColor, m_inactiveColor, inactiveColorChanged)
+SETTINGS_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
+SETTINGS_SETTER(const QColor&, NumberColor, m_numberColor, numberColorChanged)
 
 void Settings::setActiveOpacity(qreal opacity)
 {
@@ -298,130 +243,23 @@ void Settings::setInactiveOpacity(qreal opacity)
     }
 }
 
-void Settings::setBorderWidth(int width)
-{
-    width = qMax(0, width);
-    if (m_borderWidth != width) {
-        m_borderWidth = width;
-        Q_EMIT borderWidthChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Border setters (using DRY macros - clamped with min 0)
+SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, 0, INT_MAX)
 
-void Settings::setBorderRadius(int radius)
-{
-    radius = qMax(0, radius);
-    if (m_borderRadius != radius) {
-        m_borderRadius = radius;
-        Q_EMIT borderRadiusChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER(bool, EnableBlur, m_enableBlur, enableBlurChanged)
+SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, 10, 1000)
+SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
+SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, minimumZoneDisplaySizePxChanged, 1, 50)
 
-void Settings::setEnableBlur(bool enable)
-{
-    if (m_enableBlur != enable) {
-        m_enableBlur = enable;
-        Q_EMIT enableBlurChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZonePadding(int padding)
-{
-    padding = qMax(0, padding);
-    if (m_zonePadding != padding) {
-        m_zonePadding = padding;
-        Q_EMIT zonePaddingChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setOuterGap(int gap)
-{
-    gap = qMax(0, gap);
-    if (m_outerGap != gap) {
-        m_outerGap = gap;
-        Q_EMIT outerGapChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAdjacentThreshold(int threshold)
-{
-    threshold = qMax(0, threshold);
-    if (m_adjacentThreshold != threshold) {
-        m_adjacentThreshold = threshold;
-        Q_EMIT adjacentThresholdChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setPollIntervalMs(int interval)
-{
-    interval = qBound(10, interval, 1000); // Clamp to 10-1000ms
-    if (m_pollIntervalMs != interval) {
-        m_pollIntervalMs = interval;
-        Q_EMIT pollIntervalMsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMinimumZoneSizePx(int size)
-{
-    size = qBound(50, size, 500); // Clamp to 50-500px
-    if (m_minimumZoneSizePx != size) {
-        m_minimumZoneSizePx = size;
-        Q_EMIT minimumZoneSizePxChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMinimumZoneDisplaySizePx(int size)
-{
-    size = qBound(1, size, 50); // Clamp to 1-50px
-    if (m_minimumZoneDisplaySizePx != size) {
-        m_minimumZoneDisplaySizePx = size;
-        Q_EMIT minimumZoneDisplaySizePxChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setKeepWindowsInZonesOnResolutionChange(bool keep)
-{
-    if (m_keepWindowsInZonesOnResolutionChange != keep) {
-        m_keepWindowsInZonesOnResolutionChange = keep;
-        Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMoveNewWindowsToLastZone(bool move)
-{
-    if (m_moveNewWindowsToLastZone != move) {
-        m_moveNewWindowsToLastZone = move;
-        Q_EMIT moveNewWindowsToLastZoneChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setRestoreOriginalSizeOnUnsnap(bool restore)
-{
-    if (m_restoreOriginalSizeOnUnsnap != restore) {
-        m_restoreOriginalSizeOnUnsnap = restore;
-        Q_EMIT restoreOriginalSizeOnUnsnapChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setStickyWindowHandling(StickyWindowHandling handling)
-{
-    if (m_stickyWindowHandling != handling) {
-        m_stickyWindowHandling = handling;
-        Q_EMIT stickyWindowHandlingChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Behavior bool setters (using DRY macros)
+SETTINGS_SETTER(bool, KeepWindowsInZonesOnResolutionChange, m_keepWindowsInZonesOnResolutionChange, keepWindowsInZonesOnResolutionChangeChanged)
+SETTINGS_SETTER(bool, MoveNewWindowsToLastZone, m_moveNewWindowsToLastZone, moveNewWindowsToLastZoneChanged)
+SETTINGS_SETTER(bool, RestoreOriginalSizeOnUnsnap, m_restoreOriginalSizeOnUnsnap, restoreOriginalSizeOnUnsnapChanged)
+SETTINGS_SETTER(StickyWindowHandling, StickyWindowHandling, m_stickyWindowHandling, stickyWindowHandlingChanged)
 
 void Settings::setStickyWindowHandlingInt(int handling)
 {
@@ -431,14 +269,8 @@ void Settings::setStickyWindowHandlingInt(int handling)
     }
 }
 
-void Settings::setRestoreWindowsToZonesOnLogin(bool restore)
-{
-    if (m_restoreWindowsToZonesOnLogin != restore) {
-        m_restoreWindowsToZonesOnLogin = restore;
-        Q_EMIT restoreWindowsToZonesOnLoginChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Session and exclusion setters (using DRY macros)
+SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
 
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
@@ -451,80 +283,16 @@ void Settings::setDefaultLayoutId(const QString& layoutId)
     }
 }
 
-void Settings::setExcludedApplications(const QStringList& apps)
-{
-    if (m_excludedApplications != apps) {
-        m_excludedApplications = apps;
-        Q_EMIT excludedApplicationsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
+SETTINGS_SETTER(const QStringList&, ExcludedWindowClasses, m_excludedWindowClasses, excludedWindowClassesChanged)
+SETTINGS_SETTER(bool, ExcludeTransientWindows, m_excludeTransientWindows, excludeTransientWindowsChanged)
+SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged, 0, 1000)
+SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged, 0, 1000)
 
-void Settings::setExcludedWindowClasses(const QStringList& classes)
-{
-    if (m_excludedWindowClasses != classes) {
-        m_excludedWindowClasses = classes;
-        Q_EMIT excludedWindowClassesChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setExcludeTransientWindows(bool exclude)
-{
-    if (m_excludeTransientWindows != exclude) {
-        m_excludeTransientWindows = exclude;
-        Q_EMIT excludeTransientWindowsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMinimumWindowWidth(int width)
-{
-    width = qBound(0, width, 1000); // Clamp to 0-1000 pixels (0 disables)
-    if (m_minimumWindowWidth != width) {
-        m_minimumWindowWidth = width;
-        Q_EMIT minimumWindowWidthChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMinimumWindowHeight(int height)
-{
-    height = qBound(0, height, 1000); // Clamp to 0-1000 pixels (0 disables)
-    if (m_minimumWindowHeight != height) {
-        m_minimumWindowHeight = height;
-        Q_EMIT minimumWindowHeightChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorEnabled(bool enabled)
-{
-    if (m_zoneSelectorEnabled != enabled) {
-        m_zoneSelectorEnabled = enabled;
-        Q_EMIT zoneSelectorEnabledChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorTriggerDistance(int distance)
-{
-    distance = qBound(10, distance, 200); // Clamp to 10-200 pixels
-    if (m_zoneSelectorTriggerDistance != distance) {
-        m_zoneSelectorTriggerDistance = distance;
-        Q_EMIT zoneSelectorTriggerDistanceChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorPosition(ZoneSelectorPosition position)
-{
-    if (m_zoneSelectorPosition != position) {
-        m_zoneSelectorPosition = position;
-        Q_EMIT zoneSelectorPositionChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Zone Selector setters (using DRY macros)
+SETTINGS_SETTER(bool, ZoneSelectorEnabled, m_zoneSelectorEnabled, zoneSelectorEnabledChanged)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorTriggerDistance, m_zoneSelectorTriggerDistance, zoneSelectorTriggerDistanceChanged, 10, 200)
+SETTINGS_SETTER(ZoneSelectorPosition, ZoneSelectorPosition, m_zoneSelectorPosition, zoneSelectorPositionChanged)
 
 void Settings::setZoneSelectorPositionInt(int position)
 {
@@ -534,14 +302,7 @@ void Settings::setZoneSelectorPositionInt(int position)
     }
 }
 
-void Settings::setZoneSelectorLayoutMode(ZoneSelectorLayoutMode mode)
-{
-    if (m_zoneSelectorLayoutMode != mode) {
-        m_zoneSelectorLayoutMode = mode;
-        Q_EMIT zoneSelectorLayoutModeChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, m_zoneSelectorLayoutMode, zoneSelectorLayoutModeChanged)
 
 void Settings::setZoneSelectorLayoutModeInt(int mode)
 {
@@ -550,53 +311,11 @@ void Settings::setZoneSelectorLayoutModeInt(int mode)
     }
 }
 
-void Settings::setZoneSelectorPreviewWidth(int width)
-{
-    width = qBound(80, width, 400);
-    if (m_zoneSelectorPreviewWidth != width) {
-        m_zoneSelectorPreviewWidth = width;
-        Q_EMIT zoneSelectorPreviewWidthChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorPreviewHeight(int height)
-{
-    height = qBound(60, height, 300);
-    if (m_zoneSelectorPreviewHeight != height) {
-        m_zoneSelectorPreviewHeight = height;
-        Q_EMIT zoneSelectorPreviewHeightChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorPreviewLockAspect(bool locked)
-{
-    if (m_zoneSelectorPreviewLockAspect != locked) {
-        m_zoneSelectorPreviewLockAspect = locked;
-        Q_EMIT zoneSelectorPreviewLockAspectChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorGridColumns(int columns)
-{
-    columns = qBound(1, columns, 10);
-    if (m_zoneSelectorGridColumns != columns) {
-        m_zoneSelectorGridColumns = columns;
-        Q_EMIT zoneSelectorGridColumnsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSelectorSizeMode(ZoneSelectorSizeMode mode)
-{
-    if (m_zoneSelectorSizeMode != mode) {
-        m_zoneSelectorSizeMode = mode;
-        Q_EMIT zoneSelectorSizeModeChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewWidth, m_zoneSelectorPreviewWidth, zoneSelectorPreviewWidthChanged, 80, 400)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewHeight, m_zoneSelectorPreviewHeight, zoneSelectorPreviewHeightChanged, 60, 300)
+SETTINGS_SETTER(bool, ZoneSelectorPreviewLockAspect, m_zoneSelectorPreviewLockAspect, zoneSelectorPreviewLockAspectChanged)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorGridColumns, m_zoneSelectorGridColumns, zoneSelectorGridColumnsChanged, 1, 10)
+SETTINGS_SETTER(ZoneSelectorSizeMode, ZoneSelectorSizeMode, m_zoneSelectorSizeMode, zoneSelectorSizeModeChanged)
 
 void Settings::setZoneSelectorSizeModeInt(int mode)
 {
@@ -605,63 +324,16 @@ void Settings::setZoneSelectorSizeModeInt(int mode)
     }
 }
 
-void Settings::setZoneSelectorMaxRows(int rows)
-{
-    rows = qBound(1, rows, 10);
-    if (m_zoneSelectorMaxRows != rows) {
-        m_zoneSelectorMaxRows = rows;
-        Q_EMIT zoneSelectorMaxRowsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged, 1, 10)
 
-// Shader Effects implementations
-void Settings::setEnableShaderEffects(bool enable)
-{
-    if (m_enableShaderEffects != enable) {
-        m_enableShaderEffects = enable;
-        Q_EMIT enableShaderEffectsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Shader Effects implementations (using DRY macros)
+SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
+SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged, 30, 144)
 
-void Settings::setShaderFrameRate(int fps)
-{
-    fps = qBound(30, fps, 144);
-    if (m_shaderFrameRate != fps) {
-        m_shaderFrameRate = fps;
-        Q_EMIT shaderFrameRateChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-// Global Shortcuts implementations
-void Settings::setOpenEditorShortcut(const QString& shortcut)
-{
-    if (m_openEditorShortcut != shortcut) {
-        m_openEditorShortcut = shortcut;
-        Q_EMIT openEditorShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setPreviousLayoutShortcut(const QString& shortcut)
-{
-    if (m_previousLayoutShortcut != shortcut) {
-        m_previousLayoutShortcut = shortcut;
-        Q_EMIT previousLayoutShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setNextLayoutShortcut(const QString& shortcut)
-{
-    if (m_nextLayoutShortcut != shortcut) {
-        m_nextLayoutShortcut = shortcut;
-        Q_EMIT nextLayoutShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Global Shortcuts implementations (using DRY macros)
+SETTINGS_SETTER(const QString&, OpenEditorShortcut, m_openEditorShortcut, openEditorShortcutChanged)
+SETTINGS_SETTER(const QString&, PreviousLayoutShortcut, m_previousLayoutShortcut, previousLayoutShortcutChanged)
+SETTINGS_SETTER(const QString&, NextLayoutShortcut, m_nextLayoutShortcut, nextLayoutShortcutChanged)
 
 void Settings::setQuickLayout1Shortcut(const QString& shortcut)
 {
@@ -746,142 +418,24 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
     }
 }
 
-// Keyboard Navigation Shortcuts implementations
-void Settings::setMoveWindowLeftShortcut(const QString& shortcut)
-{
-    if (m_moveWindowLeftShortcut != shortcut) {
-        m_moveWindowLeftShortcut = shortcut;
-        Q_EMIT moveWindowLeftShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Keyboard Navigation Shortcuts implementations (using DRY macros)
+SETTINGS_SETTER(const QString&, MoveWindowLeftShortcut, m_moveWindowLeftShortcut, moveWindowLeftShortcutChanged)
+SETTINGS_SETTER(const QString&, MoveWindowRightShortcut, m_moveWindowRightShortcut, moveWindowRightShortcutChanged)
+SETTINGS_SETTER(const QString&, MoveWindowUpShortcut, m_moveWindowUpShortcut, moveWindowUpShortcutChanged)
+SETTINGS_SETTER(const QString&, MoveWindowDownShortcut, m_moveWindowDownShortcut, moveWindowDownShortcutChanged)
+SETTINGS_SETTER(const QString&, FocusZoneLeftShortcut, m_focusZoneLeftShortcut, focusZoneLeftShortcutChanged)
+SETTINGS_SETTER(const QString&, FocusZoneRightShortcut, m_focusZoneRightShortcut, focusZoneRightShortcutChanged)
+SETTINGS_SETTER(const QString&, FocusZoneUpShortcut, m_focusZoneUpShortcut, focusZoneUpShortcutChanged)
+SETTINGS_SETTER(const QString&, FocusZoneDownShortcut, m_focusZoneDownShortcut, focusZoneDownShortcutChanged)
+SETTINGS_SETTER(const QString&, PushToEmptyZoneShortcut, m_pushToEmptyZoneShortcut, pushToEmptyZoneShortcutChanged)
+SETTINGS_SETTER(const QString&, RestoreWindowSizeShortcut, m_restoreWindowSizeShortcut, restoreWindowSizeShortcutChanged)
+SETTINGS_SETTER(const QString&, ToggleWindowFloatShortcut, m_toggleWindowFloatShortcut, toggleWindowFloatShortcutChanged)
 
-void Settings::setMoveWindowRightShortcut(const QString& shortcut)
-{
-    if (m_moveWindowRightShortcut != shortcut) {
-        m_moveWindowRightShortcut = shortcut;
-        Q_EMIT moveWindowRightShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMoveWindowUpShortcut(const QString& shortcut)
-{
-    if (m_moveWindowUpShortcut != shortcut) {
-        m_moveWindowUpShortcut = shortcut;
-        Q_EMIT moveWindowUpShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMoveWindowDownShortcut(const QString& shortcut)
-{
-    if (m_moveWindowDownShortcut != shortcut) {
-        m_moveWindowDownShortcut = shortcut;
-        Q_EMIT moveWindowDownShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setFocusZoneLeftShortcut(const QString& shortcut)
-{
-    if (m_focusZoneLeftShortcut != shortcut) {
-        m_focusZoneLeftShortcut = shortcut;
-        Q_EMIT focusZoneLeftShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setFocusZoneRightShortcut(const QString& shortcut)
-{
-    if (m_focusZoneRightShortcut != shortcut) {
-        m_focusZoneRightShortcut = shortcut;
-        Q_EMIT focusZoneRightShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setFocusZoneUpShortcut(const QString& shortcut)
-{
-    if (m_focusZoneUpShortcut != shortcut) {
-        m_focusZoneUpShortcut = shortcut;
-        Q_EMIT focusZoneUpShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setFocusZoneDownShortcut(const QString& shortcut)
-{
-    if (m_focusZoneDownShortcut != shortcut) {
-        m_focusZoneDownShortcut = shortcut;
-        Q_EMIT focusZoneDownShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setPushToEmptyZoneShortcut(const QString& shortcut)
-{
-    if (m_pushToEmptyZoneShortcut != shortcut) {
-        m_pushToEmptyZoneShortcut = shortcut;
-        Q_EMIT pushToEmptyZoneShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setRestoreWindowSizeShortcut(const QString& shortcut)
-{
-    if (m_restoreWindowSizeShortcut != shortcut) {
-        m_restoreWindowSizeShortcut = shortcut;
-        Q_EMIT restoreWindowSizeShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setToggleWindowFloatShortcut(const QString& shortcut)
-{
-    if (m_toggleWindowFloatShortcut != shortcut) {
-        m_toggleWindowFloatShortcut = shortcut;
-        Q_EMIT toggleWindowFloatShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-// Swap Window Shortcuts
-void Settings::setSwapWindowLeftShortcut(const QString& shortcut)
-{
-    if (m_swapWindowLeftShortcut != shortcut) {
-        m_swapWindowLeftShortcut = shortcut;
-        Q_EMIT swapWindowLeftShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setSwapWindowRightShortcut(const QString& shortcut)
-{
-    if (m_swapWindowRightShortcut != shortcut) {
-        m_swapWindowRightShortcut = shortcut;
-        Q_EMIT swapWindowRightShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setSwapWindowUpShortcut(const QString& shortcut)
-{
-    if (m_swapWindowUpShortcut != shortcut) {
-        m_swapWindowUpShortcut = shortcut;
-        Q_EMIT swapWindowUpShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setSwapWindowDownShortcut(const QString& shortcut)
-{
-    if (m_swapWindowDownShortcut != shortcut) {
-        m_swapWindowDownShortcut = shortcut;
-        Q_EMIT swapWindowDownShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Swap Window Shortcuts (using DRY macros)
+SETTINGS_SETTER(const QString&, SwapWindowLeftShortcut, m_swapWindowLeftShortcut, swapWindowLeftShortcutChanged)
+SETTINGS_SETTER(const QString&, SwapWindowRightShortcut, m_swapWindowRightShortcut, swapWindowRightShortcutChanged)
+SETTINGS_SETTER(const QString&, SwapWindowUpShortcut, m_swapWindowUpShortcut, swapWindowUpShortcutChanged)
+SETTINGS_SETTER(const QString&, SwapWindowDownShortcut, m_swapWindowDownShortcut, swapWindowDownShortcutChanged)
 
 // Snap to Zone by Number Shortcuts
 QString Settings::snapToZoneShortcut(int index) const
@@ -974,56 +528,19 @@ void Settings::setSnapToZone9Shortcut(const QString& shortcut)
     setSnapToZoneShortcut(8, shortcut);
 }
 
-// Rotate Windows Shortcuts
-void Settings::setRotateWindowsClockwiseShortcut(const QString& shortcut)
-{
-    if (m_rotateWindowsClockwiseShortcut != shortcut) {
-        m_rotateWindowsClockwiseShortcut = shortcut;
-        Q_EMIT rotateWindowsClockwiseShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Rotate Windows Shortcuts (using DRY macros)
+SETTINGS_SETTER(const QString&, RotateWindowsClockwiseShortcut, m_rotateWindowsClockwiseShortcut, rotateWindowsClockwiseShortcutChanged)
+SETTINGS_SETTER(const QString&, RotateWindowsCounterclockwiseShortcut, m_rotateWindowsCounterclockwiseShortcut, rotateWindowsCounterclockwiseShortcutChanged)
 
-void Settings::setRotateWindowsCounterclockwiseShortcut(const QString& shortcut)
-{
-    if (m_rotateWindowsCounterclockwiseShortcut != shortcut) {
-        m_rotateWindowsCounterclockwiseShortcut = shortcut;
-        Q_EMIT rotateWindowsCounterclockwiseShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-// Cycle Windows in Zone Shortcuts
-void Settings::setCycleWindowForwardShortcut(const QString& shortcut)
-{
-    if (m_cycleWindowForwardShortcut != shortcut) {
-        m_cycleWindowForwardShortcut = shortcut;
-        Q_EMIT cycleWindowForwardShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setCycleWindowBackwardShortcut(const QString& shortcut)
-{
-    if (m_cycleWindowBackwardShortcut != shortcut) {
-        m_cycleWindowBackwardShortcut = shortcut;
-        Q_EMIT cycleWindowBackwardShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Cycle Windows in Zone Shortcuts (using DRY macros)
+SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForwardShortcut, cycleWindowForwardShortcutChanged)
+SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut, cycleWindowBackwardShortcutChanged)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Autotiling Settings
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void Settings::setAutotileEnabled(bool enabled)
-{
-    if (m_autotileEnabled != enabled) {
-        m_autotileEnabled = enabled;
-        Q_EMIT autotileEnabledChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER(bool, AutotileEnabled, m_autotileEnabled, autotileEnabledChanged)
 
 void Settings::setAutotileAlgorithm(const QString& algorithm)
 {
@@ -1093,32 +610,10 @@ void Settings::setAutotileOuterGap(int gap)
     }
 }
 
-void Settings::setAutotileFocusNewWindows(bool focus)
-{
-    if (m_autotileFocusNewWindows != focus) {
-        m_autotileFocusNewWindows = focus;
-        Q_EMIT autotileFocusNewWindowsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileSmartGaps(bool smart)
-{
-    if (m_autotileSmartGaps != smart) {
-        m_autotileSmartGaps = smart;
-        Q_EMIT autotileSmartGapsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileInsertPosition(AutotileInsertPosition position)
-{
-    if (m_autotileInsertPosition != position) {
-        m_autotileInsertPosition = position;
-        Q_EMIT autotileInsertPositionChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Autotile bool setters (using DRY macros)
+SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
+SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
+SETTINGS_SETTER(AutotileInsertPosition, AutotileInsertPosition, m_autotileInsertPosition, autotileInsertPositionChanged)
 
 void Settings::setAutotileInsertPositionInt(int position)
 {
@@ -1127,170 +622,28 @@ void Settings::setAutotileInsertPositionInt(int position)
     }
 }
 
-void Settings::setAutotileToggleShortcut(const QString& shortcut)
-{
-    if (m_autotileToggleShortcut != shortcut) {
-        m_autotileToggleShortcut = shortcut;
-        Q_EMIT autotileToggleShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Autotile shortcut setters (using DRY macros)
+SETTINGS_SETTER(const QString&, AutotileToggleShortcut, m_autotileToggleShortcut, autotileToggleShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut, autotileFocusMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileSwapMasterShortcut, m_autotileSwapMasterShortcut, autotileSwapMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileIncMasterRatioShortcut, m_autotileIncMasterRatioShortcut, autotileIncMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileDecMasterRatioShortcut, m_autotileDecMasterRatioShortcut, autotileDecMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileIncMasterCountShortcut, m_autotileIncMasterCountShortcut, autotileIncMasterCountShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileDecMasterCountShortcut, m_autotileDecMasterCountShortcut, autotileDecMasterCountShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut, autotileRetileShortcutChanged)
 
-void Settings::setAutotileFocusMasterShortcut(const QString& shortcut)
-{
-    if (m_autotileFocusMasterShortcut != shortcut) {
-        m_autotileFocusMasterShortcut = shortcut;
-        Q_EMIT autotileFocusMasterShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Autotile animation and visual setters (using DRY macros)
+SETTINGS_SETTER(bool, AutotileAnimationsEnabled, m_autotileAnimationsEnabled, autotileAnimationsEnabledChanged)
+SETTINGS_SETTER_CLAMPED(AutotileAnimationDuration, m_autotileAnimationDuration, autotileAnimationDurationChanged, 50, 500)
+SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
+SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
+SETTINGS_SETTER(bool, AutotileShowActiveBorder, m_autotileShowActiveBorder, autotileShowActiveBorderChanged)
+SETTINGS_SETTER_CLAMPED(AutotileActiveBorderWidth, m_autotileActiveBorderWidth, autotileActiveBorderWidthChanged, 1, 10)
+SETTINGS_SETTER(bool, AutotileUseSystemBorderColor, m_autotileUseSystemBorderColor, autotileUseSystemBorderColorChanged)
 
-void Settings::setAutotileSwapMasterShortcut(const QString& shortcut)
-{
-    if (m_autotileSwapMasterShortcut != shortcut) {
-        m_autotileSwapMasterShortcut = shortcut;
-        Q_EMIT autotileSwapMasterShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileIncMasterRatioShortcut(const QString& shortcut)
-{
-    if (m_autotileIncMasterRatioShortcut != shortcut) {
-        m_autotileIncMasterRatioShortcut = shortcut;
-        Q_EMIT autotileIncMasterRatioShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileDecMasterRatioShortcut(const QString& shortcut)
-{
-    if (m_autotileDecMasterRatioShortcut != shortcut) {
-        m_autotileDecMasterRatioShortcut = shortcut;
-        Q_EMIT autotileDecMasterRatioShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileIncMasterCountShortcut(const QString& shortcut)
-{
-    if (m_autotileIncMasterCountShortcut != shortcut) {
-        m_autotileIncMasterCountShortcut = shortcut;
-        Q_EMIT autotileIncMasterCountShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileDecMasterCountShortcut(const QString& shortcut)
-{
-    if (m_autotileDecMasterCountShortcut != shortcut) {
-        m_autotileDecMasterCountShortcut = shortcut;
-        Q_EMIT autotileDecMasterCountShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileRetileShortcut(const QString& shortcut)
-{
-    if (m_autotileRetileShortcut != shortcut) {
-        m_autotileRetileShortcut = shortcut;
-        Q_EMIT autotileRetileShortcutChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileAnimationsEnabled(bool enabled)
-{
-    if (m_autotileAnimationsEnabled != enabled) {
-        m_autotileAnimationsEnabled = enabled;
-        Q_EMIT autotileAnimationsEnabledChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileAnimationDuration(int duration)
-{
-    // Clamp to reasonable range (50-500ms)
-    duration = qBound(50, duration, 500);
-    if (m_autotileAnimationDuration != duration) {
-        m_autotileAnimationDuration = duration;
-        Q_EMIT autotileAnimationDurationChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileFocusFollowsMouse(bool focus)
-{
-    if (m_autotileFocusFollowsMouse != focus) {
-        m_autotileFocusFollowsMouse = focus;
-        Q_EMIT autotileFocusFollowsMouseChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileRespectMinimumSize(bool respect)
-{
-    if (m_autotileRespectMinimumSize != respect) {
-        m_autotileRespectMinimumSize = respect;
-        Q_EMIT autotileRespectMinimumSizeChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileShowActiveBorder(bool show)
-{
-    if (m_autotileShowActiveBorder != show) {
-        m_autotileShowActiveBorder = show;
-        Q_EMIT autotileShowActiveBorderChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileActiveBorderWidth(int width)
-{
-    width = qBound(1, width, 10);
-    if (m_autotileActiveBorderWidth != width) {
-        m_autotileActiveBorderWidth = width;
-        Q_EMIT autotileActiveBorderWidthChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileUseSystemBorderColor(bool use)
-{
-    if (m_autotileUseSystemBorderColor != use) {
-        m_autotileUseSystemBorderColor = use;
-        Q_EMIT autotileUseSystemBorderColorChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileActiveBorderColor(const QColor& color)
-{
-    if (m_autotileActiveBorderColor != color) {
-        m_autotileActiveBorderColor = color;
-        Q_EMIT autotileActiveBorderColorChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileMonocleHideOthers(bool hide)
-{
-    if (m_autotileMonocleHideOthers != hide) {
-        m_autotileMonocleHideOthers = hide;
-        Q_EMIT autotileMonocleHideOthersChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileMonocleShowTabs(bool show)
-{
-    if (m_autotileMonocleShowTabs != show) {
-        m_autotileMonocleShowTabs = show;
-        Q_EMIT autotileMonocleShowTabsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+SETTINGS_SETTER(const QColor&, AutotileActiveBorderColor, m_autotileActiveBorderColor, autotileActiveBorderColorChanged)
+SETTINGS_SETTER(bool, AutotileMonocleHideOthers, m_autotileMonocleHideOthers, autotileMonocleHideOthersChanged)
+SETTINGS_SETTER(bool, AutotileMonocleShowTabs, m_autotileMonocleShowTabs, autotileMonocleShowTabsChanged)
 
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {

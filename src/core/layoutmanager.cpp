@@ -58,6 +58,53 @@ static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
     return it != layouts.end() ? *it : nullptr;
 }
 
+// DRY: Helper for validating layout assignment
+// Returns true if layoutId should be skipped (null or non-existent)
+bool LayoutManager::shouldSkipLayoutAssignment(const QUuid& layoutId, const QString& context) const
+{
+    if (layoutId.isNull()) {
+        // Empty/null means clear (handled by caller)
+        return true;
+    }
+    if (!layoutById(layoutId)) {
+        qCWarning(lcLayout) << "Skipping non-existent layout for" << context << ":" << layoutId;
+        return true;
+    }
+    return false;
+}
+
+// DRY: Helper for layout cycling (previous/next)
+// direction: -1 for previous, +1 for next
+Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
+{
+    if (m_layouts.isEmpty()) {
+        return nullptr;
+    }
+
+    // Use activeLayout as reference for cycling (not per-screen assignment)
+    Layout* currentLayout = m_activeLayout;
+    if (!currentLayout) {
+        currentLayout = layoutForScreen(screenName);
+    }
+    if (!currentLayout) {
+        currentLayout = m_layouts.first();
+    }
+
+    int currentIndex = m_layouts.indexOf(currentLayout);
+    if (currentIndex < 0) {
+        currentIndex = 0;
+    }
+
+    // Wrap around: +size ensures positive modulo for direction=-1
+    int newIndex = (currentIndex + direction + m_layouts.size()) % m_layouts.size();
+    Layout* newLayout = m_layouts.at(newIndex);
+
+    // Update both active layout and per-screen assignment
+    setActiveLayout(newLayout);
+    assignLayout(screenName, 0, QString(), newLayout);
+    return newLayout;
+}
+
 Layout* LayoutManager::layoutById(const QUuid& id) const
 {
     return findLayout(m_layouts, [&id](const Layout* l) {
@@ -348,15 +395,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignm
             qCWarning(lcLayout) << "Skipping assignment with empty screen name";
             continue;
         }
-
-        if (layoutId.isNull()) {
-            // Empty/null means clear (already removed above)
-            continue;
-        }
-
-        // Verify layout exists
-        if (!layoutById(layoutId)) {
-            qCWarning(lcLayout) << "Skipping non-existent layout for screen" << screenName << ":" << layoutId;
+        if (shouldSkipLayoutAssignment(layoutId, QStringLiteral("screen ") + screenName)) {
             continue;
         }
 
@@ -366,7 +405,6 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignm
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenName;
     }
 
-    // Save once at the end
     saveAssignments();
     qCDebug(lcLayout) << "Batch set" << count << "screen assignments";
 }
@@ -393,15 +431,8 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QU
             qCWarning(lcLayout) << "Skipping invalid desktop assignment:" << screenName << virtualDesktop;
             continue;
         }
-
-        if (layoutId.isNull()) {
-            // Empty/null means clear (already removed above)
-            continue;
-        }
-
-        // Verify layout exists
-        if (!layoutById(layoutId)) {
-            qCWarning(lcLayout) << "Skipping non-existent layout for" << screenName << "desktop" << virtualDesktop;
+        QString context = QStringLiteral("%1 desktop %2").arg(screenName).arg(virtualDesktop);
+        if (shouldSkipLayoutAssignment(layoutId, context)) {
             continue;
         }
 
@@ -411,7 +442,6 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QU
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenName << "desktop" << virtualDesktop;
     }
 
-    // Save once at the end
     saveAssignments();
     qCDebug(lcLayout) << "Batch set" << count << "desktop assignments";
 }
@@ -438,15 +468,8 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
             qCWarning(lcLayout) << "Skipping invalid activity assignment:" << screenName << activityId;
             continue;
         }
-
-        if (layoutId.isNull()) {
-            // Empty/null means clear (already removed above)
-            continue;
-        }
-
-        // Verify layout exists
-        if (!layoutById(layoutId)) {
-            qCWarning(lcLayout) << "Skipping non-existent layout for" << screenName << "activity" << activityId;
+        QString context = QStringLiteral("%1 activity %2").arg(screenName, activityId);
+        if (shouldSkipLayoutAssignment(layoutId, context)) {
             continue;
         }
 
@@ -456,7 +479,6 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenName << "activity" << activityId;
     }
 
-    // Save once at the end
     saveAssignments();
     qCDebug(lcLayout) << "Batch set" << count << "activity assignments";
 }
@@ -493,60 +515,12 @@ QHash<QPair<QString, QString>, QUuid> LayoutManager::activityAssignments() const
 
 void LayoutManager::cycleToPreviousLayout(const QString& screenName)
 {
-    if (m_layouts.isEmpty()) {
-        return;
-    }
-
-    // Use activeLayout as reference for cycling (not per-screen assignment)
-    Layout* currentLayout = m_activeLayout;
-    if (!currentLayout) {
-        currentLayout = layoutForScreen(screenName);
-    }
-    if (!currentLayout) {
-        currentLayout = m_layouts.first();
-    }
-
-    int currentIndex = m_layouts.indexOf(currentLayout);
-    if (currentIndex < 0) {
-        currentIndex = 0;
-    }
-
-    // Wrap around
-    int newIndex = (currentIndex - 1 + m_layouts.size()) % m_layouts.size();
-    Layout* newLayout = m_layouts.at(newIndex);
-
-    // Update both active layout and per-screen assignment
-    setActiveLayout(newLayout);
-    assignLayout(screenName, 0, QString(), newLayout);
+    cycleLayoutImpl(screenName, -1);
 }
 
 void LayoutManager::cycleToNextLayout(const QString& screenName)
 {
-    if (m_layouts.isEmpty()) {
-        return;
-    }
-
-    // Use activeLayout as reference for cycling (not per-screen assignment)
-    Layout* currentLayout = m_activeLayout;
-    if (!currentLayout) {
-        currentLayout = layoutForScreen(screenName);
-    }
-    if (!currentLayout) {
-        currentLayout = m_layouts.first();
-    }
-
-    int currentIndex = m_layouts.indexOf(currentLayout);
-    if (currentIndex < 0) {
-        currentIndex = 0;
-    }
-
-    // Wrap around
-    int newIndex = (currentIndex + 1) % m_layouts.size();
-    Layout* newLayout = m_layouts.at(newIndex);
-
-    // Update both active layout and per-screen assignment
-    setActiveLayout(newLayout);
-    assignLayout(screenName, 0, QString(), newLayout);
+    cycleLayoutImpl(screenName, +1);
 }
 
 void LayoutManager::createBuiltInLayouts()

@@ -185,6 +185,8 @@ private:
     void ensureLayoutDirectory();
     void loadLayoutsFromDirectory(const QString& directory);
     QString layoutFilePath(const QUuid& id) const;
+    Layout* cycleLayoutImpl(const QString& screenName, int direction);
+    bool shouldSkipLayoutAssignment(const QUuid& layoutId, const QString& context) const;
 
     ISettings* m_settings = nullptr;
     QString m_layoutDirectory;
