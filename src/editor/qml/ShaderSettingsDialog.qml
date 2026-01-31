@@ -136,6 +136,59 @@ Kirigami.Dialog {
         pendingParams = extractDefaults(shaderParams);
     }
 
+    function randomizeParameters() {
+        if (!editorController || shaderParams.length === 0) return;
+
+        var randomized = {};
+        for (var i = 0; i < shaderParams.length; i++) {
+            var param = shaderParams[i];
+            if (!param || param.id === undefined) continue;
+
+            var value;
+            switch (param.type) {
+                case "float":
+                    var minF = param.min !== undefined ? param.min : 0;
+                    var maxF = param.max !== undefined ? param.max : 1;
+                    value = minF + Math.random() * (maxF - minF);
+                    // Round to step if defined
+                    if (param.step !== undefined && param.step > 0) {
+                        value = Math.round(value / param.step) * param.step;
+                    }
+                    break;
+
+                case "int":
+                    var minI = param.min !== undefined ? param.min : 0;
+                    var maxI = param.max !== undefined ? param.max : 100;
+                    value = Math.floor(minI + Math.random() * (maxI - minI + 1));
+                    break;
+
+                case "bool":
+                    value = Math.random() < 0.5;
+                    break;
+
+                case "color":
+                    // Generate random RGB color
+                    var r = Math.floor(Math.random() * 256);
+                    var g = Math.floor(Math.random() * 256);
+                    var b = Math.floor(Math.random() * 256);
+                    value = "#" + r.toString(16).padStart(2, "0")
+                                + g.toString(16).padStart(2, "0")
+                                + b.toString(16).padStart(2, "0");
+                    break;
+
+                default:
+                    // Unknown type - use default if available
+                    value = param.default;
+                    break;
+            }
+
+            if (value !== undefined) {
+                randomized[param.id] = value;
+            }
+        }
+        pendingParams = randomized;
+    }
+
     // DRY: Shared defaults extraction logic
     function extractDefaults(params) {
         var defaults = {};
@@ -212,19 +265,30 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     standardButtons: Kirigami.Dialog.NoButton
 
-    footer: DialogButtonBox {
+    footer: RowLayout {
+        spacing: Kirigami.Units.smallSpacing
+
+        // Left side - Random button
+        Button {
+            text: i18nc("@action:button", "Random")
+            icon.name: "roll"
+            visible: root.shaderParams.length > 0
+            onClicked: root.randomizeParameters()
+        }
+
+        Item { Layout.fillWidth: true }
+
+        // Right side - Defaults and Apply
         Button {
             text: i18nc("@action:button", "Defaults")
             icon.name: "edit-undo"
             visible: root.shaderParams.length > 0
-            DialogButtonBox.buttonRole: DialogButtonBox.ResetRole
             onClicked: root.resetToDefaults()
         }
 
         Button {
             text: i18nc("@action:button", "Apply")
             icon.name: "dialog-ok-apply"
-            DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
             onClicked: {
                 root.applyChanges();
                 root.close();
