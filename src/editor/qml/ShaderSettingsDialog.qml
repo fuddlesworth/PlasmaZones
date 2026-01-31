@@ -415,7 +415,9 @@ Kirigami.Dialog {
                                             case "color": return colorParamComponent;
                                             case "bool": return boolParamComponent;
                                             case "int": return intParamComponent;
-                                            default: return null;
+                                            default:
+                                                console.warn("ShaderSettingsDialog: Unknown parameter type:", modelData.type, "for param:", modelData.id);
+                                                return null;
                                         }
                                     }
 
@@ -455,7 +457,9 @@ Kirigami.Dialog {
                             case "color": return colorParamComponent;
                             case "bool": return boolParamComponent;
                             case "int": return intParamComponent;
-                            default: return null;
+                            default:
+                                console.warn("ShaderSettingsDialog: Unknown parameter type:", modelData.type, "for param:", modelData.id);
+                                return null;
                         }
                     }
 
@@ -542,19 +546,29 @@ Kirigami.Dialog {
                         paramData.id,
                         paramData.default || "#ffffff"
                     );
-                    return Qt.color(colorStr);
+                    // Validate color string before parsing
+                    if (typeof colorStr !== "string" || colorStr.length === 0) {
+                        return "#ffffff";
+                    }
+                    var parsed = Qt.color(colorStr);
+                    return parsed.valid ? parsed : "#ffffff";
                 }
 
                 width: root.colorButtonSize
                 height: root.colorButtonSize
                 radius: Kirigami.Units.smallSpacing
                 color: currentColor
-                border.width: 1
+                border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
                 border.color: Kirigami.Theme.separatorColor
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
+
+                    // Accessibility for screen readers
+                    Accessible.name: i18nc("@action:button", "Choose %1 color", paramData ? (paramData.name || paramData.id) : "")
+                    Accessible.role: Accessible.Button
+
                     onClicked: {
                         if (!paramData) return;
                         shaderColorDialog.selectedColor = colorSwatch.currentColor;
