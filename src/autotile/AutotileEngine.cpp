@@ -265,14 +265,37 @@ void AutotileEngine::connectToSettings(Settings *settings)
 
     m_settings = settings;
 
-    // Enabled state - immediate effect, no debounce needed
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DRY macros for settings connections (local to this function)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Pattern 1: Update config field + schedule retile
+#define CONNECT_SETTING_RETILE(signal, field, getter) \
+    connect(settings, &Settings::signal, this, [this]() { \
+        if (m_settings) { \
+            m_config->field = m_settings->getter(); \
+            scheduleSettingsRetile(); \
+        } \
+    })
+
+    // Pattern 2: Update config field only (no retile)
+#define CONNECT_SETTING_NO_RETILE(signal, field, getter) \
+    connect(settings, &Settings::signal, this, [this]() { \
+        if (m_settings) { \
+            m_config->field = m_settings->getter(); \
+        } \
+    })
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Immediate-effect settings (no debounce)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
     connect(settings, &Settings::autotileEnabledChanged, this, [this]() {
         if (m_settings) {
             setEnabled(m_settings->autotileEnabled());
         }
     });
 
-    // Algorithm change - immediate effect
     connect(settings, &Settings::autotileAlgorithmChanged, this, [this]() {
         if (m_settings) {
             m_config->algorithmId = m_settings->autotileAlgorithm();
@@ -280,49 +303,29 @@ void AutotileEngine::connectToSettings(Settings *settings)
         }
     });
 
-    // Settings that require retile - use debounced timer
-    connect(settings, &Settings::autotileSplitRatioChanged, this, [this]() {
-        if (m_settings) {
-            m_config->splitRatio = m_settings->autotileSplitRatio();
-            scheduleSettingsRetile();
-        }
-    });
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Settings that require retile (debounced)
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    connect(settings, &Settings::autotileMasterCountChanged, this, [this]() {
-        if (m_settings) {
-            m_config->masterCount = m_settings->autotileMasterCount();
-            scheduleSettingsRetile();
-        }
-    });
+    CONNECT_SETTING_RETILE(autotileSplitRatioChanged, splitRatio, autotileSplitRatio);
+    CONNECT_SETTING_RETILE(autotileMasterCountChanged, masterCount, autotileMasterCount);
+    CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
+    CONNECT_SETTING_RETILE(autotileOuterGapChanged, outerGap, autotileOuterGap);
+    CONNECT_SETTING_RETILE(autotileSmartGapsChanged, smartGaps, autotileSmartGaps);
+    CONNECT_SETTING_RETILE(autotileRespectMinimumSizeChanged, respectMinimumSize, autotileRespectMinimumSize);
 
-    connect(settings, &Settings::autotileInnerGapChanged, this, [this]() {
-        if (m_settings) {
-            m_config->innerGap = m_settings->autotileInnerGap();
-            scheduleSettingsRetile();
-        }
-    });
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Settings that don't require retile (config update only)
+    // ═══════════════════════════════════════════════════════════════════════════════
 
-    connect(settings, &Settings::autotileOuterGapChanged, this, [this]() {
-        if (m_settings) {
-            m_config->outerGap = m_settings->autotileOuterGap();
-            scheduleSettingsRetile();
-        }
-    });
+    CONNECT_SETTING_NO_RETILE(autotileFocusNewWindowsChanged, focusNewWindows, autotileFocusNewWindows);
+    CONNECT_SETTING_NO_RETILE(autotileFocusFollowsMouseChanged, focusFollowsMouse, autotileFocusFollowsMouse);
+    CONNECT_SETTING_NO_RETILE(autotileShowActiveBorderChanged, showActiveBorder, autotileShowActiveBorder);
+    CONNECT_SETTING_NO_RETILE(autotileActiveBorderWidthChanged, activeBorderWidth, autotileActiveBorderWidth);
+    CONNECT_SETTING_NO_RETILE(autotileMonocleHideOthersChanged, monocleHideOthers, autotileMonocleHideOthers);
+    CONNECT_SETTING_NO_RETILE(autotileMonocleShowTabsChanged, monocleShowTabs, autotileMonocleShowTabs);
 
-    connect(settings, &Settings::autotileSmartGapsChanged, this, [this]() {
-        if (m_settings) {
-            m_config->smartGaps = m_settings->autotileSmartGaps();
-            scheduleSettingsRetile();
-        }
-    });
-
-    // Settings that don't require retile - just update config
-    connect(settings, &Settings::autotileFocusNewWindowsChanged, this, [this]() {
-        if (m_settings) {
-            m_config->focusNewWindows = m_settings->autotileFocusNewWindows();
-        }
-    });
-
+    // InsertPosition requires cast
     connect(settings, &Settings::autotileInsertPositionChanged, this, [this]() {
         if (m_settings) {
             m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(
@@ -330,40 +333,15 @@ void AutotileEngine::connectToSettings(Settings *settings)
         }
     });
 
-    // Additional settings that don't require retile
-    connect(settings, &Settings::autotileFocusFollowsMouseChanged, this, [this]() {
-        if (m_settings) {
-            m_config->focusFollowsMouse = m_settings->autotileFocusFollowsMouse();
-        }
-    });
-
-    connect(settings, &Settings::autotileRespectMinimumSizeChanged, this, [this]() {
-        if (m_settings) {
-            m_config->respectMinimumSize = m_settings->autotileRespectMinimumSize();
-            scheduleSettingsRetile(); // May affect layout calculations
-        }
-    });
-
-    connect(settings, &Settings::autotileShowActiveBorderChanged, this, [this]() {
-        if (m_settings) {
-            m_config->showActiveBorder = m_settings->autotileShowActiveBorder();
-        }
-    });
-
-    connect(settings, &Settings::autotileActiveBorderWidthChanged, this, [this]() {
-        if (m_settings) {
-            m_config->activeBorderWidth = m_settings->autotileActiveBorderWidth();
-        }
-    });
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Border color settings (conditional logic)
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     connect(settings, &Settings::autotileUseSystemBorderColorChanged, this, [this]() {
         if (m_settings) {
-            // Re-apply border color based on setting
-            if (m_settings->autotileUseSystemBorderColor()) {
-                m_config->activeBorderColor = m_settings->highlightColor();
-            } else {
-                m_config->activeBorderColor = m_settings->autotileActiveBorderColor();
-            }
+            m_config->activeBorderColor = m_settings->autotileUseSystemBorderColor()
+                ? m_settings->highlightColor()
+                : m_settings->autotileActiveBorderColor();
         }
     });
 
@@ -373,24 +351,14 @@ void AutotileEngine::connectToSettings(Settings *settings)
         }
     });
 
-    // Also update border color when system highlight changes (if using system color)
     connect(settings, &Settings::highlightColorChanged, this, [this]() {
         if (m_settings && m_settings->autotileUseSystemBorderColor()) {
             m_config->activeBorderColor = m_settings->highlightColor();
         }
     });
 
-    connect(settings, &Settings::autotileMonocleHideOthersChanged, this, [this]() {
-        if (m_settings) {
-            m_config->monocleHideOthers = m_settings->autotileMonocleHideOthers();
-        }
-    });
-
-    connect(settings, &Settings::autotileMonocleShowTabsChanged, this, [this]() {
-        if (m_settings) {
-            m_config->monocleShowTabs = m_settings->autotileMonocleShowTabs();
-        }
-    });
+#undef CONNECT_SETTING_RETILE
+#undef CONNECT_SETTING_NO_RETILE
 }
 
 void AutotileEngine::scheduleSettingsRetile()
@@ -469,12 +437,8 @@ void AutotileEngine::swapWindows(const QString &windowId1, const QString &window
 
 void AutotileEngine::promoteToMaster(const QString &windowId)
 {
-    const QString screenName = m_windowToScreen.value(windowId);
-    if (screenName.isEmpty()) {
-        return;
-    }
-
-    TilingState *state = stateForScreen(screenName);
+    QString screenName;
+    TilingState *state = stateForWindow(windowId, &screenName);
     if (!state) {
         return;
     }
@@ -485,12 +449,8 @@ void AutotileEngine::promoteToMaster(const QString &windowId)
 
 void AutotileEngine::demoteFromMaster(const QString &windowId)
 {
-    const QString screenName = m_windowToScreen.value(windowId);
-    if (screenName.isEmpty()) {
-        return;
-    }
-
-    TilingState *state = stateForScreen(screenName);
+    QString screenName;
+    TilingState *state = stateForWindow(windowId, &screenName);
     if (!state) {
         return;
     }
@@ -657,13 +617,11 @@ void AutotileEngine::toggleFocusedWindowFloat()
 
 void AutotileEngine::windowOpened(const QString &windowId, const QString &screenName)
 {
-    if (windowId.isEmpty()) {
-        qCWarning(lcAutotile) << "windowOpened called with empty windowId";
+    if (!warnIfEmptyWindowId(windowId, "windowOpened")) {
         return;
     }
 
     // Store screen mapping so onWindowAdded uses correct screen
-    // This solves the TODO in screenForWindow() which previously returned primary screen
     if (!screenName.isEmpty()) {
         m_windowToScreen[windowId] = screenName;
     }
@@ -672,8 +630,7 @@ void AutotileEngine::windowOpened(const QString &windowId, const QString &screen
 
 void AutotileEngine::windowClosed(const QString &windowId)
 {
-    if (windowId.isEmpty()) {
-        qCWarning(lcAutotile) << "windowClosed called with empty windowId";
+    if (!warnIfEmptyWindowId(windowId, "windowClosed")) {
         return;
     }
 
@@ -682,13 +639,11 @@ void AutotileEngine::windowClosed(const QString &windowId)
 
 void AutotileEngine::windowFocused(const QString &windowId, const QString &screenName)
 {
-    if (windowId.isEmpty()) {
-        qCWarning(lcAutotile) << "windowFocused called with empty windowId";
+    if (!warnIfEmptyWindowId(windowId, "windowFocused")) {
         return;
     }
 
     // Update screen mapping - always store when provided, even for new windows
-    // This handles edge cases where a window gets focused without going through windowOpened()
     if (!screenName.isEmpty()) {
         m_windowToScreen[windowId] = screenName;
     }
@@ -727,17 +682,13 @@ void AutotileEngine::onWindowRemoved(const QString &windowId)
 
 void AutotileEngine::onWindowFocused(const QString &windowId)
 {
-    // Update focused window in tiling state
-    const QString screenName = m_windowToScreen.value(windowId);
-    if (screenName.isEmpty()) {
+    TilingState *state = stateForWindow(windowId);
+    if (!state) {
         qWarning() << "AutotileEngine::onWindowFocused: unknown window" << windowId;
         return;
     }
 
-    TilingState *state = stateForScreen(screenName);
-    if (state) {
-        state->setFocusedWindow(windowId);
-    }
+    state->setFocusedWindow(windowId);
 }
 
 void AutotileEngine::onScreenGeometryChanged(const QString &screenName)
@@ -996,6 +947,35 @@ void AutotileEngine::applyToAllStates(const std::function<void(TilingState *)> &
     if (m_enabled) {
         retile();
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRY Helper Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* operation) const
+{
+    if (windowId.isEmpty()) {
+        qCWarning(lcAutotile) << operation << "called with empty windowId";
+        return false;
+    }
+    return true;
+}
+
+TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* outScreenName)
+{
+    const QString screenName = m_windowToScreen.value(windowId);
+    if (screenName.isEmpty()) {
+        if (outScreenName) {
+            outScreenName->clear();
+        }
+        return nullptr;
+    }
+
+    if (outScreenName) {
+        *outScreenName = screenName;
+    }
+    return stateForScreen(screenName);
 }
 
 } // namespace PlasmaZones

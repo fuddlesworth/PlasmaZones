@@ -26,6 +26,10 @@
 
 namespace PlasmaZones {
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Constructor and Signal Setup
+// ═══════════════════════════════════════════════════════════════════════════════
+
 LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
@@ -46,23 +50,17 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
 
 void LayoutAdaptor::connectLayoutManagerSignals()
 {
-    // Connect to LayoutManager signals (concrete type - ILayoutManager has no signals)
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &LayoutAdaptor::onActiveLayoutChanged);
-
     connect(m_layoutManager, &LayoutManager::layoutsChanged, this, &LayoutAdaptor::onLayoutsChanged);
-
     connect(m_layoutManager, &LayoutManager::layoutAssigned, this, &LayoutAdaptor::onLayoutAssigned);
 }
 
 void LayoutAdaptor::onActiveLayoutChanged(Layout* layout)
 {
-    // Invalidate active layout cache when it changes
     m_cachedActiveLayoutId = QUuid();
     m_cachedActiveLayoutJson.clear();
     if (layout) {
         Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-        // Emit activeLayoutIdChanged for KCM UI synchronization
-        // This allows settings panel to update selection when layout changes via hotkey
         qCDebug(lcDbusLayout) << "Emitting activeLayoutIdChanged D-Bus signal for:" << layout->id().toString();
         Q_EMIT activeLayoutIdChanged(layout->id().toString());
     }
@@ -70,7 +68,7 @@ void LayoutAdaptor::onActiveLayoutChanged(Layout* layout)
 
 void LayoutAdaptor::onLayoutsChanged()
 {
-    invalidateCache(); // Invalidate cache when layouts change
+    invalidateCache();
     Q_EMIT layoutListChanged();
 }
 
@@ -100,6 +98,107 @@ void LayoutAdaptor::invalidateCache()
     m_cachedLayoutJson.clear();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRY Helper Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, const QString& operation) const
+{
+    if (id.isEmpty()) {
+        qCWarning(lcDbusLayout) << "Cannot" << operation << "- empty ID";
+        return std::nullopt;
+    }
+
+    auto uuidOpt = Utils::parseUuid(id);
+    if (!uuidOpt) {
+        qCWarning(lcDbusLayout) << "Invalid UUID format for" << operation << ":" << id;
+        return std::nullopt;
+    }
+
+    return uuidOpt;
+}
+
+Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
+{
+    auto uuidOpt = parseAndValidateUuid(id, operation);
+    if (!uuidOpt) {
+        return nullptr;
+    }
+
+    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    if (!layout) {
+        qCWarning(lcDbusLayout) << "Cannot" << operation << "- layout not found:" << id;
+        return nullptr;
+    }
+
+    return layout;
+}
+
+bool LayoutAdaptor::validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const
+{
+    if (value.isEmpty()) {
+        qCWarning(lcDbusLayout) << "Cannot" << operation << "- empty" << paramName;
+        return false;
+    }
+    return true;
+}
+
+std::optional<QJsonObject> LayoutAdaptor::parseJsonObject(const QString& jsonString, const QString& operation) const
+{
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(jsonString.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcDbusLayout) << "Invalid JSON for" << operation << "- parse error:" << parseError.errorString()
+                                << "at offset" << parseError.offset;
+        return std::nullopt;
+    }
+
+    if (!doc.isObject()) {
+        qCWarning(lcDbusLayout) << "JSON for" << operation << "is not an object";
+        return std::nullopt;
+    }
+
+    return doc.object();
+}
+
+void LayoutAdaptor::launchEditor(const QStringList& args, const QString& description)
+{
+    static const QString editor = []() {
+        QString found = QStandardPaths::findExecutable(QStringLiteral("plasmazones-editor"));
+        if (!found.isEmpty()) {
+            return found;
+        }
+
+        QString appDir = QCoreApplication::applicationDirPath();
+        QString localEditor = appDir + QStringLiteral("/plasmazones-editor");
+        if (QFile::exists(localEditor)) {
+            return localEditor;
+        }
+
+        return QStringLiteral("plasmazones-editor");
+    }();
+
+    qCDebug(lcDbusLayout) << "Launching editor" << description;
+    if (!QProcess::startDetached(editor, args)) {
+        qCWarning(lcDbusLayout) << "Failed to launch editor" << description;
+    }
+}
+
+QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) const
+{
+    QJsonObject info;
+    info[QLatin1String("id")] = activityId;
+    if (m_activityManager) {
+        info[QLatin1String("name")] = m_activityManager->activityName(activityId);
+        info[QLatin1String("icon")] = m_activityManager->activityIcon(activityId);
+    }
+    return info;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout Queries
+// ═══════════════════════════════════════════════════════════════════════════════
+
 QString LayoutAdaptor::getActiveLayout()
 {
     auto* layout = m_layoutManager->activeLayout();
@@ -107,12 +206,10 @@ QString LayoutAdaptor::getActiveLayout()
         return QString();
     }
 
-    // Use cache if layout hasn't changed
     if (m_cachedActiveLayoutId == layout->id() && !m_cachedActiveLayoutJson.isEmpty()) {
         return m_cachedActiveLayoutJson;
     }
 
-    // Serialize and cache
     m_cachedActiveLayoutJson = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
     m_cachedActiveLayoutId = layout->id();
     return m_cachedActiveLayoutJson;
@@ -122,13 +219,10 @@ QStringList LayoutAdaptor::getLayoutList()
 {
     QStringList result;
 
-    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, ZoneSelectorController)
     const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
     for (const auto& entry : entries) {
         QJsonObject json = LayoutUtils::toJson(entry);
 
-        // Add additional fields specific to D-Bus that aren't in base LayoutUtils
-        // For manual layouts, include isSystem based on actual layout source path
         if (!entry.isAutotile) {
             auto uuidOpt = Utils::parseUuid(entry.id);
             if (uuidOpt) {
@@ -148,19 +242,12 @@ QStringList LayoutAdaptor::getLayoutList()
 
 QString LayoutAdaptor::getLayout(const QString& id)
 {
-    if (id.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Empty layout ID requested";
-        return QString();
-    }
-
-    auto uuidOpt = Utils::parseUuid(id);
+    auto uuidOpt = parseAndValidateUuid(id, QStringLiteral("get layout"));
     if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format:" << id;
         return QString();
     }
     QUuid uuid = *uuidOpt;
 
-    // Check cache first
     if (m_cachedLayoutJson.contains(uuid)) {
         return m_cachedLayoutJson[uuid];
     }
@@ -171,32 +258,23 @@ QString LayoutAdaptor::getLayout(const QString& id)
         return QString();
     }
 
-    // Serialize and cache
     QString json = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
     m_cachedLayoutJson[uuid] = json;
     return json;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout Management
+// ═══════════════════════════════════════════════════════════════════════════════
+
 void LayoutAdaptor::setActiveLayout(const QString& id)
 {
-    if (id.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot set active layout - empty ID";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(id);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for setActiveLayout:" << id;
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    auto* layout = getValidatedLayout(id, QStringLiteral("set active layout"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot set active layout - layout not found:" << id;
         return;
     }
 
-    m_layoutManager->setActiveLayoutById(*uuidOpt);
+    m_layoutManager->setActiveLayoutById(layout->id());
 }
 
 void LayoutAdaptor::applyQuickLayout(int number, const QString& screenName)
@@ -206,21 +284,17 @@ void LayoutAdaptor::applyQuickLayout(int number, const QString& screenName)
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 {
-    if (name.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot create layout - empty name";
+    if (!validateNonEmpty(name, QStringLiteral("name"), QStringLiteral("create layout"))) {
         return QString();
     }
 
-    // Use factory pattern to create layout (replaces if-else chain)
     Layout* layout = LayoutFactory::create(type, m_layoutManager);
-
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout of type:" << type;
         return QString();
     }
 
     layout->setName(name);
-    // Note: New layouts have no sourcePath, making them user layouts (not system)
     m_layoutManager->addLayout(layout);
     m_layoutManager->saveLayouts();
 
@@ -230,21 +304,8 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 
 void LayoutAdaptor::deleteLayout(const QString& id)
 {
-    if (id.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot delete layout - empty ID";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(id);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for deleteLayout:" << id;
-        return;
-    }
-    QUuid uuid = *uuidOpt;
-
-    auto* layout = m_layoutManager->layoutById(uuid);
+    auto* layout = getValidatedLayout(id, QStringLiteral("delete layout"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot delete layout - not found:" << id;
         return;
     }
 
@@ -253,8 +314,9 @@ void LayoutAdaptor::deleteLayout(const QString& id)
         return;
     }
 
+    QUuid uuid = layout->id();
     m_layoutManager->removeLayoutById(uuid);
-    // Remove from cache
+
     m_cachedLayoutJson.remove(uuid);
     if (m_cachedActiveLayoutId == uuid) {
         m_cachedActiveLayoutId = QUuid();
@@ -265,20 +327,8 @@ void LayoutAdaptor::deleteLayout(const QString& id)
 
 QString LayoutAdaptor::duplicateLayout(const QString& id)
 {
-    if (id.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot duplicate layout - empty ID";
-        return QString();
-    }
-
-    auto uuidOpt = Utils::parseUuid(id);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for duplicateLayout:" << id;
-        return QString();
-    }
-
-    auto* source = m_layoutManager->layoutById(*uuidOpt);
+    auto* source = getValidatedLayout(id, QStringLiteral("duplicate layout"));
     if (!source) {
-        qCWarning(lcDbusLayout) << "Cannot duplicate layout - not found:" << id;
         return QString();
     }
 
@@ -292,22 +342,21 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
     return duplicate->id().toString();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Import/Export
+// ═══════════════════════════════════════════════════════════════════════════════
+
 QString LayoutAdaptor::importLayout(const QString& filePath)
 {
-    if (filePath.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot import layout - empty file path";
+    if (!validateNonEmpty(filePath, QStringLiteral("file path"), QStringLiteral("import layout"))) {
         return QString();
     }
 
-    // Store layout count before import to find the new one
     int layoutCountBefore = m_layoutManager->layouts().size();
-
     m_layoutManager->importLayout(filePath);
 
-    // Find the newly imported layout (should be the last one added)
     const auto layouts = m_layoutManager->layouts();
     if (layouts.size() > layoutCountBefore) {
-        // The new layout is the last one in the list
         Layout* newLayout = layouts.last();
         qCDebug(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
         return newLayout->id().toString();
@@ -319,25 +368,12 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
 
 void LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePath)
 {
-    if (layoutId.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot export layout - empty layout ID";
+    if (!validateNonEmpty(filePath, QStringLiteral("file path"), QStringLiteral("export layout"))) {
         return;
     }
 
-    if (filePath.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot export layout - empty file path";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(layoutId);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for exportLayout:" << layoutId;
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("export layout"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot export layout - not found:" << layoutId;
         return;
     }
 
@@ -345,113 +381,28 @@ void LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePat
     qCDebug(lcDbusLayout) << "Exported layout" << layoutId << "to" << filePath;
 }
 
-QString LayoutAdaptor::getLayoutForScreen(const QString& screenName)
-{
-    auto* layout = m_layoutManager->layoutForScreen(screenName);
-    return layout ? layout->id().toString() : QString();
-}
-
-void LayoutAdaptor::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
-{
-    if (screenName.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty screen name";
-        return;
-    }
-
-    if (layoutId.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty layout ID";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(layoutId);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for assignLayoutToScreen:" << layoutId;
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
-    if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - not found:" << layoutId;
-        return;
-    }
-
-    m_layoutManager->assignLayoutById(screenName, 0, QString(), *uuidOpt);
-    m_layoutManager->saveAssignments(); // Persist to disk
-    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName;
-}
-
-void LayoutAdaptor::clearAssignment(const QString& screenName)
-{
-    m_layoutManager->clearAssignment(screenName);
-    m_layoutManager->saveAssignments(); // Persist to disk
-}
-
-void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
-{
-    QHash<QString, QUuid> parsedAssignments;
-
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenName = it.key();
-        QString layoutId = it.value().toString();
-
-        QUuid uuid;
-        if (!layoutId.isEmpty()) {
-            auto uuidOpt = Utils::parseUuid(layoutId);
-            if (!uuidOpt) {
-                qCWarning(lcDbusLayout) << "Invalid UUID format for screen" << screenName << ":" << layoutId;
-                continue;
-            }
-            uuid = *uuidOpt;
-        }
-        parsedAssignments[screenName] = uuid;
-    }
-
-    m_layoutManager->setAllScreenAssignments(parsedAssignments);
-    qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// Editor Support
+// ═══════════════════════════════════════════════════════════════════════════════
 
 bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 {
-    if (layoutJson.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot update layout - empty JSON";
+    if (!validateNonEmpty(layoutJson, QStringLiteral("JSON"), QStringLiteral("update layout"))) {
         return false;
     }
 
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcDbusLayout) << "Invalid layout JSON for update - parse error:" << parseError.errorString()
-                                << "at offset" << parseError.offset;
+    auto objOpt = parseJsonObject(layoutJson, QStringLiteral("update layout"));
+    if (!objOpt) {
         return false;
     }
-
-    if (!doc.isObject()) {
-        qCWarning(lcDbusLayout) << "Layout JSON is not an object";
-        return false;
-    }
-
-    QJsonObject obj = doc.object();
+    QJsonObject obj = *objOpt;
     QString idStr = obj[JsonKeys::Id].toString();
-    if (idStr.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Layout JSON missing ID";
-        return false;
-    }
 
-    auto idOpt = Utils::parseUuid(idStr);
-    if (!idOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID in layout JSON:" << idStr;
-        return false;
-    }
-    QUuid id = *idOpt;
-
-    auto* layout = m_layoutManager->layoutById(id);
+    auto* layout = getValidatedLayout(idStr, QStringLiteral("update layout"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Layout not found for update:" << id;
         return false;
     }
-
-    // System layouts can be edited - changes will be saved to user directory
-    // The layout's sourcePath will be updated when saved
+    QUuid layoutId = layout->id();
 
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
@@ -479,14 +430,12 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         zone->setRelativeGeometry(QRectF(relGeo[JsonKeys::X].toDouble(), relGeo[JsonKeys::Y].toDouble(),
                                          relGeo[JsonKeys::Width].toDouble(), relGeo[JsonKeys::Height].toDouble()));
 
-        // Appearance - load ALL appearance properties, not just colors
         QJsonObject appearance = zoneObj[JsonKeys::Appearance].toObject();
         if (!appearance.isEmpty()) {
             zone->setHighlightColor(QColor(appearance[JsonKeys::HighlightColor].toString()));
             zone->setInactiveColor(QColor(appearance[JsonKeys::InactiveColor].toString()));
             zone->setBorderColor(QColor(appearance[JsonKeys::BorderColor].toString()));
 
-            // Load optional appearance properties with defaults if missing
             if (appearance.contains(JsonKeys::ActiveOpacity)) {
                 zone->setActiveOpacity(appearance[JsonKeys::ActiveOpacity].toDouble());
             }
@@ -499,7 +448,6 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
             if (appearance.contains(JsonKeys::BorderRadius)) {
                 zone->setBorderRadius(appearance[JsonKeys::BorderRadius].toInt());
             }
-            // Load useCustomColors (was missing in an earlier version).
             if (appearance.contains(JsonKeys::UseCustomColors)) {
                 zone->setUseCustomColors(appearance[JsonKeys::UseCustomColors].toBool());
             }
@@ -510,98 +458,117 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
     m_layoutManager->saveLayouts();
 
-    // Invalidate cache for this layout
-    m_cachedLayoutJson.remove(id);
-    if (m_cachedActiveLayoutId == id) {
+    m_cachedLayoutJson.remove(layoutId);
+    if (m_cachedActiveLayoutId == layoutId) {
         m_cachedActiveLayoutId = QUuid();
         m_cachedActiveLayoutJson.clear();
     }
 
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-
     return true;
 }
 
 QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
 {
-    if (layoutJson.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot create layout - empty JSON";
+    if (!validateNonEmpty(layoutJson, QStringLiteral("JSON"), QStringLiteral("create layout from JSON"))) {
         return QString();
     }
 
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcDbusLayout) << "Invalid layout JSON for creation - parse error:" << parseError.errorString()
-                                << "at offset" << parseError.offset;
+    auto objOpt = parseJsonObject(layoutJson, QStringLiteral("create layout from JSON"));
+    if (!objOpt) {
         return QString();
     }
 
-    if (!doc.isObject()) {
-        qCWarning(lcDbusLayout) << "Layout JSON is not an object";
-        return QString();
-    }
-
-    auto* layout = Layout::fromJson(doc.object(), m_layoutManager);
+    auto* layout = Layout::fromJson(*objOpt, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";
         return QString();
     }
 
-    // Note: New layouts have no sourcePath, making them user layouts
     m_layoutManager->addLayout(layout);
     m_layoutManager->saveLayouts();
 
     qCDebug(lcDbusLayout) << "Created layout from JSON:" << layout->id();
-    // Use default toString() format (with braces) for consistency with other D-Bus methods
     return layout->id().toString();
 }
 
-static QString findEditorExecutable()
-{
-    // First try system PATH
-    QString editor = QStandardPaths::findExecutable(QStringLiteral("plasmazones-editor"));
-    if (!editor.isEmpty()) {
-        return editor;
-    }
-
-    // Try relative to the daemon executable
-    QString appDir = QCoreApplication::applicationDirPath();
-    QString localEditor = appDir + QStringLiteral("/plasmazones-editor");
-    if (QFile::exists(localEditor)) {
-        return localEditor;
-    }
-
-    // Fallback to hoping it's in PATH
-    return QStringLiteral("plasmazones-editor");
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// Editor Launch
+// ═══════════════════════════════════════════════════════════════════════════════
 
 void LayoutAdaptor::openEditor()
 {
-    QString editor = findEditorExecutable();
-    qCDebug(lcDbusLayout) << "Launching editor:" << editor;
-    if (!QProcess::startDetached(editor, QStringList())) {
-        qCWarning(lcDbusLayout) << "Failed to launch editor:" << editor;
-    }
+    launchEditor({}, QString());
 }
 
 void LayoutAdaptor::openEditorForScreen(const QString& screenName)
 {
-    QString editor = findEditorExecutable();
-    qCDebug(lcDbusLayout) << "Launching editor for screen:" << screenName;
-    if (!QProcess::startDetached(editor, QStringList{QStringLiteral("--screen"), screenName})) {
-        qCWarning(lcDbusLayout) << "Failed to launch editor for screen:" << screenName;
-    }
+    launchEditor({QStringLiteral("--screen"), screenName}, QStringLiteral("for screen: %1").arg(screenName));
 }
 
 void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
 {
-    QString editor = findEditorExecutable();
-    qCDebug(lcDbusLayout) << "Launching editor for layout:" << layoutId;
-    if (!QProcess::startDetached(editor, QStringList{QStringLiteral("--layout"), layoutId})) {
-        qCWarning(lcDbusLayout) << "Failed to launch editor for layout:" << layoutId;
-    }
+    launchEditor({QStringLiteral("--layout"), layoutId}, QStringLiteral("for layout: %1").arg(layoutId));
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen Assignments
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString LayoutAdaptor::getLayoutForScreen(const QString& screenName)
+{
+    auto* layout = m_layoutManager->layoutForScreen(screenName);
+    return layout ? layout->id().toString() : QString();
+}
+
+void LayoutAdaptor::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
+{
+    if (!validateNonEmpty(screenName, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
+        return;
+    }
+
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
+    if (!layout) {
+        return;
+    }
+
+    m_layoutManager->assignLayoutById(screenName, 0, QString(), layout->id());
+    m_layoutManager->saveAssignments();
+    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName;
+}
+
+void LayoutAdaptor::clearAssignment(const QString& screenName)
+{
+    m_layoutManager->clearAssignment(screenName);
+    m_layoutManager->saveAssignments();
+}
+
+void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
+{
+    QHash<QString, QUuid> parsedAssignments;
+
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        const QString& screenName = it.key();
+        QString layoutId = it.value().toString();
+
+        QUuid uuid;
+        if (!layoutId.isEmpty()) {
+            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch screen assignment"));
+            if (!uuidOpt) {
+                continue;
+            }
+            uuid = *uuidOpt;
+        }
+        parsedAssignments[screenName] = uuid;
+    }
+
+    m_layoutManager->setAllScreenAssignments(parsedAssignments);
+    qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Quick Layout Slots
+// ═══════════════════════════════════════════════════════════════════════════════
 
 QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
 {
@@ -611,10 +578,7 @@ QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
     }
 
     auto* layout = m_layoutManager->layoutForShortcut(slotNumber);
-    if (layout) {
-        return layout->id().toString();
-    }
-    return QString();
+    return layout ? layout->id().toString() : QString();
 }
 
 void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
@@ -626,9 +590,8 @@ void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 
     QUuid uuid;
     if (!layoutId.isEmpty()) {
-        auto uuidOpt = Utils::parseUuid(layoutId);
+        auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("set quick layout slot"));
         if (!uuidOpt) {
-            qCWarning(lcDbusLayout) << "Invalid UUID format:" << layoutId;
             return;
         }
         uuid = *uuidOpt;
@@ -636,8 +599,6 @@ void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 
     m_layoutManager->setQuickLayoutSlot(slotNumber, uuid);
     qCDebug(lcDbusLayout) << "Set quick layout slot" << slotNumber << "to" << layoutId;
-
-    // Notify listeners (e.g., KCM) that quick layout slots have changed
     Q_EMIT quickLayoutSlotsChanged();
 }
 
@@ -656,9 +617,8 @@ void LayoutAdaptor::setAllQuickLayoutSlots(const QVariantMap& slots)
         QString layoutId = it.value().toString();
         QUuid uuid;
         if (!layoutId.isEmpty()) {
-            auto uuidOpt = Utils::parseUuid(layoutId);
+            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch quick layout slot"));
             if (!uuidOpt) {
-                qCWarning(lcDbusLayout) << "Invalid UUID format for slot" << slotNumber << ":" << layoutId;
                 continue;
             }
             uuid = *uuidOpt;
@@ -668,8 +628,6 @@ void LayoutAdaptor::setAllQuickLayoutSlots(const QVariantMap& slots)
 
     m_layoutManager->setAllQuickLayoutSlots(parsedSlots);
     qCDebug(lcDbusLayout) << "Batch set" << parsedSlots.size() << "quick layout slots";
-
-    // Notify listeners (e.g., KCM) that quick layout slots have changed
     Q_EMIT quickLayoutSlotsChanged();
 }
 
@@ -683,7 +641,10 @@ QVariantMap LayoutAdaptor::getAllQuickLayoutSlots()
     return result;
 }
 
-// Per-virtual-desktop screen assignments
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-Virtual-Desktop Assignments
+// ═══════════════════════════════════════════════════════════════════════════════
+
 QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop)
 {
     auto* layout = m_layoutManager->layoutForScreen(screenName, virtualDesktop, QString());
@@ -692,38 +653,22 @@ QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenName, int 
 
 void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
 {
-    if (screenName.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty screen name";
+    if (!validateNonEmpty(screenName, QStringLiteral("screen name"), QStringLiteral("assign layout to desktop"))) {
         return;
     }
 
-    if (layoutId.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty layout ID";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(layoutId);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for assignLayoutToScreenDesktop:" << layoutId;
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - not found:" << layoutId;
         return;
     }
 
-    m_layoutManager->assignLayoutById(screenName, virtualDesktop, QString(), *uuidOpt);
-    m_layoutManager->saveAssignments(); // Persist to disk
-    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName << "on desktop"
-                          << virtualDesktop;
+    m_layoutManager->assignLayoutById(screenName, virtualDesktop, QString(), layout->id());
+    m_layoutManager->saveAssignments();
+    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName << "on desktop" << virtualDesktop;
 
-    // Trigger active layout update if this affects the current desktop
     if (m_virtualDesktopManager) {
         int currentDesktop = m_virtualDesktopManager->currentDesktop();
         if (virtualDesktop == 0 || virtualDesktop == currentDesktop) {
-            // Assignment affects current desktop - update active layout
             QMetaObject::invokeMethod(m_virtualDesktopManager, "updateActiveLayout", Qt::QueuedConnection);
         }
     }
@@ -732,7 +677,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenName, int v
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop)
 {
     m_layoutManager->clearAssignment(screenName, virtualDesktop, QString());
-    m_layoutManager->saveAssignments(); // Persist to disk
+    m_layoutManager->saveAssignments();
     qCDebug(lcDbusLayout) << "Cleared assignment for screen" << screenName << "on desktop" << virtualDesktop;
 }
 
@@ -746,7 +691,6 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
     QHash<QPair<QString, int>, QUuid> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        // Key format: "screenName:virtualDesktop"
         QStringList parts = it.key().split(QLatin1Char(':'));
         if (parts.size() != 2) {
             qCWarning(lcDbusLayout) << "Invalid desktop assignment key format:" << it.key();
@@ -764,9 +708,8 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
         QString layoutId = it.value().toString();
         QUuid uuid;
         if (!layoutId.isEmpty()) {
-            auto uuidOpt = Utils::parseUuid(layoutId);
+            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch desktop assignment"));
             if (!uuidOpt) {
-                qCWarning(lcDbusLayout) << "Invalid UUID format for desktop assignment:" << layoutId;
                 continue;
             }
             uuid = *uuidOpt;
@@ -778,46 +721,29 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
     qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "desktop assignments";
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual Desktop Info
+// ═══════════════════════════════════════════════════════════════════════════════
+
 int LayoutAdaptor::getVirtualDesktopCount()
 {
-    if (m_virtualDesktopManager) {
-        return m_virtualDesktopManager->desktopCount();
-    }
-    // Graceful fallback if VirtualDesktopManager not available
-    return 1;
+    return m_virtualDesktopManager ? m_virtualDesktopManager->desktopCount() : 1;
 }
 
 QStringList LayoutAdaptor::getVirtualDesktopNames()
 {
-    if (m_virtualDesktopManager) {
-        return m_virtualDesktopManager->desktopNames();
-    }
-    // Graceful fallback
-    return {QStringLiteral("Desktop 1")};
+    return m_virtualDesktopManager ? m_virtualDesktopManager->desktopNames() : QStringList{QStringLiteral("Desktop 1")};
 }
 
 QString LayoutAdaptor::getAllScreenAssignments()
 {
-    // Get assignments from the LayoutManager's internal storage
-    // Cast to LayoutManager to access the assignments hash
-    auto* layoutManager = qobject_cast<LayoutManager*>(m_layoutManager);
-    if (!layoutManager) {
-        qCWarning(lcDbusLayout) << "Cannot get screen assignments - LayoutManager cast failed";
-        return QStringLiteral("{}");
-    }
-
     QJsonObject root;
-
-    // Build JSON with screen -> desktop -> layoutId structure
-    // We need to iterate through all known screens and desktops
     const int desktopCount = getVirtualDesktopCount();
 
-    // Get all screens from Qt (best effort since we don't have direct access)
     for (QScreen* screen : Utils::allScreens()) {
         QString screenName = screen->name();
         QJsonObject screenObj;
 
-        // Check each specific desktop (0 = all desktops default, 1+ = specific desktops)
         for (int desktop = 0; desktop <= desktopCount; ++desktop) {
             auto* layout = m_layoutManager->layoutForScreen(screenName, desktop, QString());
             if (layout) {
@@ -838,15 +764,8 @@ QVariantMap LayoutAdaptor::getAllDesktopAssignments()
 {
     QVariantMap result;
 
-    auto* layoutManager = qobject_cast<LayoutManager*>(m_layoutManager);
-    if (!layoutManager) {
-        qCWarning(lcDbusLayout) << "Cannot get desktop assignments - LayoutManager cast failed";
-        return result;
-    }
-
-    const auto assignments = layoutManager->desktopAssignments();
+    const auto assignments = m_layoutManager->desktopAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        // Key format: "screenName:desktopNumber"
         QString key = QStringLiteral("%1:%2").arg(it.key().first).arg(it.key().second);
         result[key] = it.value().toString();
     }
@@ -858,15 +777,8 @@ QVariantMap LayoutAdaptor::getAllActivityAssignments()
 {
     QVariantMap result;
 
-    auto* layoutManager = qobject_cast<LayoutManager*>(m_layoutManager);
-    if (!layoutManager) {
-        qCWarning(lcDbusLayout) << "Cannot get activity assignments - LayoutManager cast failed";
-        return result;
-    }
-
-    const auto assignments = layoutManager->activityAssignments();
+    const auto assignments = m_layoutManager->activityAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        // Key format: "screenName:activityId"
         QString key = QStringLiteral("%1:%2").arg(it.key().first, it.key().second);
         result[key] = it.value().toString();
     }
@@ -880,7 +792,6 @@ QVariantMap LayoutAdaptor::getAllActivityAssignments()
 
 void LayoutAdaptor::setActivityManager(ActivityManager* am)
 {
-    // Disconnect from previous activity manager if any
     if (m_activityManager) {
         disconnect(m_activityManager, nullptr, this, nullptr);
     }
@@ -906,18 +817,12 @@ bool LayoutAdaptor::isActivitiesAvailable()
 
 QStringList LayoutAdaptor::getActivities()
 {
-    if (m_activityManager) {
-        return m_activityManager->activities();
-    }
-    return {};
+    return m_activityManager ? m_activityManager->activities() : QStringList{};
 }
 
 QString LayoutAdaptor::getCurrentActivity()
 {
-    if (m_activityManager) {
-        return m_activityManager->currentActivity();
-    }
-    return QString();
+    return m_activityManager ? m_activityManager->currentActivity() : QString();
 }
 
 QString LayoutAdaptor::getActivityInfo(const QString& activityId)
@@ -926,12 +831,7 @@ QString LayoutAdaptor::getActivityInfo(const QString& activityId)
         return QStringLiteral("{}");
     }
 
-    QJsonObject info;
-    info[QLatin1String("id")] = activityId;
-    info[QLatin1String("name")] = m_activityManager->activityName(activityId);
-    info[QLatin1String("icon")] = m_activityManager->activityIcon(activityId);
-
-    return QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(QJsonDocument(buildActivityInfoJson(activityId)).toJson(QJsonDocument::Compact));
 }
 
 QString LayoutAdaptor::getAllActivitiesInfo()
@@ -941,65 +841,43 @@ QString LayoutAdaptor::getAllActivitiesInfo()
     if (m_activityManager) {
         const auto activityIds = m_activityManager->activities();
         for (const QString& activityId : activityIds) {
-            QJsonObject info;
-            info[QLatin1String("id")] = activityId;
-            info[QLatin1String("name")] = m_activityManager->activityName(activityId);
-            info[QLatin1String("icon")] = m_activityManager->activityIcon(activityId);
-            array.append(info);
+            array.append(buildActivityInfoJson(activityId));
         }
     }
 
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
 }
 
-// Per-activity layout assignments (screen + activity, any desktop)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-Activity Assignments
+// ═══════════════════════════════════════════════════════════════════════════════
+
 QString LayoutAdaptor::getLayoutForScreenActivity(const QString& screenName, const QString& activityId)
 {
-    // Use desktop=0 (all desktops) with the specified activity
     auto* layout = m_layoutManager->layoutForScreen(screenName, 0, activityId);
     return layout ? layout->id().toString() : QString();
 }
 
 void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId, const QString& layoutId)
 {
-    if (screenName.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty screen name";
+    if (!validateNonEmpty(screenName, QStringLiteral("screen name"), QStringLiteral("assign layout to activity"))) {
+        return;
+    }
+    if (!validateNonEmpty(activityId, QStringLiteral("activity ID"), QStringLiteral("assign layout to activity"))) {
         return;
     }
 
-    if (activityId.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty activity ID";
-        return;
-    }
-
-    if (layoutId.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty layout ID";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(layoutId);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for assignLayoutToScreenActivity:" << layoutId;
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen activity"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - not found:" << layoutId;
         return;
     }
 
-    // Assign to screen + activity (desktop=0 means all desktops)
-    m_layoutManager->assignLayoutById(screenName, 0, activityId, *uuidOpt);
+    m_layoutManager->assignLayoutById(screenName, 0, activityId, layout->id());
     m_layoutManager->saveAssignments();
 
-    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName
-                          << "for activity" << activityId;
+    qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName << "for activity" << activityId;
 
-    // Trigger active layout update if this affects the current activity
     if (m_activityManager && m_activityManager->currentActivity() == activityId) {
-        // Layout assignment changed for current activity - trigger re-evaluation
-        // Use QueuedConnection to avoid potential reentrancy issues
         QMetaObject::invokeMethod(m_activityManager, &ActivityManager::updateActiveLayout, Qt::QueuedConnection);
     }
 }
@@ -1021,7 +899,6 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
     QHash<QPair<QString, QString>, QUuid> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        // Key format: "screenName:activityId"
         QStringList parts = it.key().split(QLatin1Char(':'));
         if (parts.size() != 2) {
             qCWarning(lcDbusLayout) << "Invalid activity assignment key format:" << it.key();
@@ -1038,9 +915,8 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         QString layoutId = it.value().toString();
         QUuid uuid;
         if (!layoutId.isEmpty()) {
-            auto uuidOpt = Utils::parseUuid(layoutId);
+            auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch activity assignment"));
             if (!uuidOpt) {
-                qCWarning(lcDbusLayout) << "Invalid UUID format for activity assignment:" << layoutId;
                 continue;
             }
             uuid = *uuidOpt;
@@ -1052,7 +928,10 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
     qCDebug(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "activity assignments";
 }
 
-// Full assignment (screen + desktop + activity)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Full Assignments (Screen + Desktop + Activity)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenName, int virtualDesktop, const QString& activityId)
 {
     auto* layout = m_layoutManager->layoutForScreen(screenName, virtualDesktop, activityId);
@@ -1062,35 +941,21 @@ QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenNa
 void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenName, int virtualDesktop,
                                                          const QString& activityId, const QString& layoutId)
 {
-    if (screenName.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty screen name";
+    if (!validateNonEmpty(screenName, QStringLiteral("screen name"), QStringLiteral("assign layout"))) {
         return;
     }
 
-    if (layoutId.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - empty layout ID";
-        return;
-    }
-
-    auto uuidOpt = Utils::parseUuid(layoutId);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for assignLayoutToScreenDesktopActivity:" << layoutId;
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop activity"));
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Cannot assign layout - not found:" << layoutId;
         return;
     }
 
-    m_layoutManager->assignLayoutById(screenName, virtualDesktop, activityId, *uuidOpt);
+    m_layoutManager->assignLayoutById(screenName, virtualDesktop, activityId, layout->id());
     m_layoutManager->saveAssignments();
 
     qCDebug(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName
                           << "desktop" << virtualDesktop << "activity" << activityId;
 
-    // Check if this affects current context
     bool affectsCurrentDesktop = (virtualDesktop == 0);
     bool affectsCurrentActivity = activityId.isEmpty();
 
@@ -1102,7 +967,6 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenNam
     }
 
     if (affectsCurrentDesktop && affectsCurrentActivity) {
-        // This assignment affects the current context - update active layout
         if (m_virtualDesktopManager) {
             QMetaObject::invokeMethod(m_virtualDesktopManager, "updateActiveLayout", Qt::QueuedConnection);
         }
