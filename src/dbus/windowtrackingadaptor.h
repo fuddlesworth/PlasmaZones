@@ -24,7 +24,7 @@ class ISettings;
 class VirtualDesktopManager;
 
 /**
- * @brief D-Bus adaptor for window-zone tracking (SRP)
+ * @brief D-Bus adaptor for window-zone tracking
  *
  * Provides D-Bus interface: org.plasmazones.WindowTracking
  * Single responsibility: Window-zone assignment tracking
@@ -499,7 +499,7 @@ private:
     static constexpr int MinVisibleHeight = 100;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods - Private
+    // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -541,7 +541,7 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SRP: Business logic service (ALL state is now managed by service)
+    // Business logic service
     // ═══════════════════════════════════════════════════════════════════════════════
     WindowTrackingService* m_service = nullptr;
 

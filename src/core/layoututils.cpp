@@ -26,7 +26,7 @@ QString UnifiedLayoutEntry::algorithmId() const
 namespace LayoutUtils {
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Zone conversion (DRY - single implementation for all consumers)
+// Zone conversion
 // ═══════════════════════════════════════════════════════════════════════════
 
 QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
@@ -95,7 +95,7 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Layout conversion (DRY - direct Layout* to QVariantMap)
+// Layout conversion
 // ═══════════════════════════════════════════════════════════════════════════
 
 QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)

@@ -12,7 +12,7 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Macros for repetitive setter patterns
+// Macros for setter patterns
 // Reduces boilerplate for layout property setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -123,7 +123,7 @@ Layout& Layout::operator=(const Layout& other)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Property Setters (using DRY macros)
+// Layout Property Setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Simple property setters

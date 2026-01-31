@@ -9,7 +9,7 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Macros for repetitive setter patterns
+// Macros for setter patterns
 // Reduces boilerplate for zone property setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -90,7 +90,7 @@ bool Zone::operator==(const Zone& other) const
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Property Setters (using DRY macros)
+// Zone Property Setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Simple property setters

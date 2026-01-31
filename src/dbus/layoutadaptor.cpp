@@ -99,7 +99,7 @@ void LayoutAdaptor::invalidateCache()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Helper Methods
+// Helper Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
 std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, const QString& operation) const

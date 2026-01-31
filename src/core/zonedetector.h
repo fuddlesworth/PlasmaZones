@@ -88,7 +88,7 @@ public:
     Q_INVOKABLE void highlightZones(const QVector<Zone*>& zones) override;
     Q_INVOKABLE void clearHighlights() override;
 
-    // Access to highlighter for direct use (SRP: delegate UI concerns)
+    // Access to highlighter for direct use
     class ZoneHighlighter* highlighter() const
     {
         return m_highlighter.get();
@@ -112,7 +112,7 @@ private:
     qreal m_edgeThreshold = 10.0; // Pixels for edge detection
     bool m_multiZoneEnabled = true;
 
-    // UI state management (separated concern - SRP)
+    // UI state management
     std::unique_ptr<class ZoneHighlighter> m_highlighter;
 };
 

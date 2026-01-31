@@ -60,9 +60,9 @@ void SettingsAdaptor::initializeRegistry()
 {
 // Register getters and setters for all settings
 // This registry pattern allows adding new settings without modifying setSetting()
-// Using macros to reduce repetition (DRY)
+// Using macros to reduce repetition
 
-// Helper macros for DRY pattern (reduces repetition)
+// Helper macros
 #define REGISTER_STRING_SETTING(name, getter, setter)                                                                  \
     m_getters[QStringLiteral(name)] = [this]() {                                                                       \
         return m_settings->getter();                                                                                   \
@@ -118,7 +118,7 @@ void SettingsAdaptor::initializeRegistry()
         return true;                                                                                                   \
     };
 
-    // Activation settings (DRY: using macros)
+    // Activation settings
     REGISTER_BOOL_SETTING("shiftDragToActivate", shiftDragToActivate, setShiftDragToActivate) // Deprecated
 
     // New modifier settings (enum as int)
@@ -162,13 +162,13 @@ void SettingsAdaptor::initializeRegistry()
 
     REGISTER_BOOL_SETTING("middleClickMultiZone", middleClickMultiZone, setMiddleClickMultiZone)
 
-    // Display settings (DRY: using macros)
+    // Display settings
     REGISTER_BOOL_SETTING("showZonesOnAllMonitors", showZonesOnAllMonitors, setShowZonesOnAllMonitors)
     REGISTER_BOOL_SETTING("showZoneNumbers", showZoneNumbers, setShowZoneNumbers)
     REGISTER_BOOL_SETTING("flashZonesOnSwitch", flashZonesOnSwitch, setFlashZonesOnSwitch)
     REGISTER_BOOL_SETTING("showOsdOnLayoutSwitch", showOsdOnLayoutSwitch, setShowOsdOnLayoutSwitch)
 
-    // Appearance settings (DRY: using macros)
+    // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
     REGISTER_COLOR_SETTING("highlightColor", highlightColor, setHighlightColor)
     REGISTER_COLOR_SETTING("inactiveColor", inactiveColor, setInactiveColor)
@@ -182,7 +182,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
 
-    // Zone settings (DRY: using macros)
+    // Zone settings
     REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
     REGISTER_INT_SETTING("outerGap", outerGap, setOuterGap)
     REGISTER_INT_SETTING("adjacentThreshold", adjacentThreshold, setAdjacentThreshold)
@@ -190,13 +190,13 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
     REGISTER_INT_SETTING("minimumZoneDisplaySizePx", minimumZoneDisplaySizePx, setMinimumZoneDisplaySizePx)
 
-    // Behavior settings (DRY: using macros)
+    // Behavior settings
     REGISTER_BOOL_SETTING("keepWindowsInZonesOnResolutionChange", keepWindowsInZonesOnResolutionChange,
                           setKeepWindowsInZonesOnResolutionChange)
     REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
 
-    // Exclusions (DRY: using macros)
+    // Exclusions
     REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
     REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)

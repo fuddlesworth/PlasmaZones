@@ -82,7 +82,7 @@ inline constexpr const char* DefaultBorderColor = "#CCFFFFFF";
 }
 
 /**
- * @brief JSON keys for serialization (DRY principle)
+ * @brief JSON keys for serialization
  */
 namespace JsonKeys {
 // Zone keys
@@ -151,7 +151,7 @@ inline constexpr QLatin1String Colors{"colors"};
 }
 
 /**
- * @brief Autotiling constants (DRY - used by TilingState, AutotileConfig, Settings)
+ * @brief Autotiling constants
  */
 namespace AutotileDefaults {
 // Split ratio bounds (master area percentage)
@@ -255,7 +255,7 @@ inline constexpr QLatin1String ThreeColumn{"three-column"};
  *
  * Autotile algorithms use prefixed IDs to distinguish them from manual layout UUIDs
  * in the zone selector. This namespace provides constants and helpers for working
- * with these IDs consistently (DRY principle).
+ * with these IDs consistently.
  */
 namespace LayoutId {
 inline constexpr QLatin1String AutotilePrefix{"autotile:"};

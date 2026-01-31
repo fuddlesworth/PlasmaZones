@@ -30,7 +30,7 @@ struct PLASMAZONES_EXPORT ColorImportResult {
  * - Pywal colors.json format
  * - Simple color list (one hex color per line)
  *
- * SRP: This class handles ONLY color file parsing and extraction.
+ * Handles color file parsing and extraction.
  * It does not modify settings or emit signals.
  */
 class PLASMAZONES_EXPORT ColorImporter

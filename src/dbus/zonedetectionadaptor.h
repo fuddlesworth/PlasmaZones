@@ -15,7 +15,7 @@ class ILayoutManager;
 class ISettings;
 
 /**
- * @brief D-Bus adaptor for zone detection operations (SRP)
+ * @brief D-Bus adaptor for zone detection operations
  *
  * Provides D-Bus interface: org.plasmazones.ZoneDetection
  * Single responsibility: Zone detection queries

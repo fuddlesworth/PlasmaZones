@@ -165,7 +165,7 @@ private:
     void destroyNavigationOsdWindow(QScreen* screen);
 
     /**
-     * @brief Prepare layout OSD window for display (DRY helper)
+     * @brief Prepare layout OSD window for display
      * @param window Output: the prepared window (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
@@ -174,7 +174,7 @@ private:
     bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio);
 
     /**
-     * @brief Create a QML window from a resource URL (DRY helper)
+     * @brief Create a QML window from a resource URL
      * @param qmlUrl QML resource URL (e.g., "qrc:/ui/ZoneOverlay.qml")
      * @param screen Screen to assign the window to
      * @param windowType Description for logging (e.g., "overlay", "zone selector")

@@ -50,7 +50,7 @@ Layout* LayoutManager::layout(int index) const
     return nullptr;
 }
 
-// DRY: Template helper for lookup methods
+// Template helper for lookup methods
 template<typename Predicate>
 static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
 {
@@ -58,7 +58,7 @@ static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
     return it != layouts.end() ? *it : nullptr;
 }
 
-// DRY: Helper for validating layout assignment
+// Helper for validating layout assignment
 // Returns true if layoutId should be skipped (null or non-existent)
 bool LayoutManager::shouldSkipLayoutAssignment(const QUuid& layoutId, const QString& context) const
 {
@@ -73,7 +73,7 @@ bool LayoutManager::shouldSkipLayoutAssignment(const QUuid& layoutId, const QStr
     return false;
 }
 
-// DRY: Helper for layout cycling (previous/next)
+// Helper for layout cycling
 // direction: -1 for previous, +1 for next
 Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
 {

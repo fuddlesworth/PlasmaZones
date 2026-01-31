@@ -925,7 +925,7 @@ public:
 
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods for load() - Consolidate repeated validation patterns
+    // Helper Methods for load()
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -980,7 +980,7 @@ private:
     bool m_showNavigationOsd = true;
     OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
 
-    // Appearance (DRY: use constants from Defaults namespace)
+    // Appearance
     bool m_useSystemColors = true;
     QColor m_highlightColor = Defaults::HighlightColor;
     QColor m_inactiveColor = Defaults::InactiveColor;
@@ -992,12 +992,12 @@ private:
     int m_borderRadius = Defaults::BorderRadius;
     bool m_enableBlur = true;
 
-    // Zone settings (DRY: use constants from Defaults namespace)
+    // Zone settings
     int m_zonePadding = Defaults::ZonePadding;
     int m_outerGap = Defaults::OuterGap;
     int m_adjacentThreshold = Defaults::AdjacentThreshold;
 
-    // Performance and behavior (DRY: use constants from Defaults namespace)
+    // Performance and behavior
     int m_pollIntervalMs = Defaults::PollIntervalMs;
     int m_minimumZoneSizePx = Defaults::MinimumZoneSizePx;
     int m_minimumZoneDisplaySizePx = Defaults::MinimumZoneDisplaySizePx;

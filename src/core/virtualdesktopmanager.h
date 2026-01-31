@@ -14,7 +14,7 @@ namespace PlasmaZones {
 class LayoutManager;
 
 /**
- * @brief Manages virtual desktop changes and layout switching (SRP)
+ * @brief Manages virtual desktop changes and layout switching
  *
  * Handles virtual desktop changes and automatically switches layouts
  * based on assignments. Follows Single Responsibility Principle.

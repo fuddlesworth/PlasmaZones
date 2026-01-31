@@ -188,7 +188,7 @@ private:
     void connectActivitySignals();
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods
+    // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -205,7 +205,7 @@ private:
      * @param operation Description for error logging
      * @return Layout pointer or nullptr on failure (logs warning)
      *
-     * DRY: Consolidates parseUuid + layoutById + error logging pattern.
+     * Consolidates parseUuid + layoutById + error logging.
      */
     Layout* getValidatedLayout(const QString& id, const QString& operation);
 

@@ -37,7 +37,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     Q_ASSERT(zoneDetector);
     Q_ASSERT(settings);
 
-    // SRP: Create business logic service (ALL state is managed by service)
+    // Create business logic service
     m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
 
     // Forward service signals to D-Bus
@@ -99,7 +99,7 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
 
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->assignWindowToZone(windowId, zoneId, screenName, currentDesktop);
 
     // Update last used zone (skip zone selector special IDs and auto-snapped windows)
@@ -123,7 +123,7 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
         return;
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->unassignWindow(windowId);
 
     qCDebug(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
@@ -134,7 +134,7 @@ void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky
     if (windowId.isEmpty()) {
         return;
     }
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->setWindowSticky(windowId, sticky);
 }
 
@@ -150,7 +150,7 @@ void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
         return;
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->unsnapForFloat(windowId);
 
     qCDebug(lcDbusWindow) << "Window" << windowId << "unsnapped for float from zone" << previousZoneId;
@@ -162,7 +162,7 @@ bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zo
         zoneIdOut.clear();
         return false;
     }
-    // SRP: Delegate to service
+    // Delegate to service
     zoneIdOut = m_service->preFloatZone(windowId);
     return !zoneIdOut.isEmpty();
 }
@@ -174,7 +174,7 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
     }
     // Only log if there was something to clear
     bool hadPreFloatZone = !m_service->preFloatZone(windowId).isEmpty();
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->clearPreFloatZone(windowId);
     if (hadPreFloatZone) {
         qCDebug(lcDbusWindow) << "Cleared pre-float zone for window" << windowId;
@@ -197,7 +197,7 @@ void WindowTrackingAdaptor::storePreSnapGeometry(const QString& windowId, int x,
         return;
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->storePreSnapGeometry(windowId, QRect(x, y, width, height));
     qCDebug(lcDbusWindow) << "Stored pre-snap geometry for window" << windowId;
 }
@@ -210,7 +210,7 @@ bool WindowTrackingAdaptor::getPreSnapGeometry(const QString& windowId, int& x, 
         return false;
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     auto geo = m_service->preSnapGeometry(windowId);
     if (!geo) {
         qCDebug(lcDbusWindow) << "No pre-snap geometry stored for window" << windowId;
@@ -230,7 +230,7 @@ bool WindowTrackingAdaptor::hasPreSnapGeometry(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->hasPreSnapGeometry(windowId);
 }
 
@@ -241,7 +241,7 @@ void WindowTrackingAdaptor::clearPreSnapGeometry(const QString& windowId)
     }
     // Only log if there was something to clear
     bool hadGeometry = m_service->hasPreSnapGeometry(windowId);
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->clearPreSnapGeometry(windowId);
     if (hadGeometry) {
         qCDebug(lcDbusWindow) << "Cleared pre-snap geometry for window" << windowId;
@@ -256,7 +256,7 @@ bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId,
         return false;
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     auto geo = m_service->validatedPreSnapGeometry(windowId);
     if (!geo) {
         return false;
@@ -295,7 +295,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         return;
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->windowClosed(windowId);
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 
@@ -341,7 +341,7 @@ QString WindowTrackingAdaptor::getZoneForWindow(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("get zone for window"))) {
         return QString();
     }
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->zoneForWindow(windowId);
 }
 
@@ -351,13 +351,13 @@ QStringList WindowTrackingAdaptor::getWindowsInZone(const QString& zoneId)
         qCWarning(lcDbusWindow) << "Cannot get windows in zone - empty zone ID";
         return QStringList();
     }
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->windowsInZone(zoneId);
 }
 
 QStringList WindowTrackingAdaptor::getSnappedWindows()
 {
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->snappedWindows();
 }
 
@@ -427,7 +427,7 @@ QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId
 
 QString WindowTrackingAdaptor::getLastUsedZoneId()
 {
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->lastUsedZoneId();
 }
 
@@ -441,7 +441,7 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    // SRP: Delegate calculation to service
+    // Delegate calculation to service
     SnapResult result = m_service->calculateSnapToLastZone(windowId, windowScreenName, sticky);
     if (!result.shouldSnap) {
         return;
@@ -477,7 +477,7 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
         return;
     }
 
-    // SRP: Delegate calculation to service
+    // Delegate calculation to service
     SnapResult result = m_service->calculateRestoreFromSession(windowId, screenName, sticky);
     if (!result.shouldSnap) {
         return;
@@ -501,13 +501,13 @@ void WindowTrackingAdaptor::recordSnapIntent(const QString& windowId, bool wasUs
     if (windowId.isEmpty()) {
         return;
     }
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->recordSnapIntent(windowId, wasUserInitiated);
 }
 
 QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
-    // SRP: Delegate to service
+    // Delegate to service
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
 
     if (geometries.isEmpty()) {
@@ -538,7 +538,7 @@ bool WindowTrackingAdaptor::isWindowFloating(const QString& windowId)
     if (windowId.isEmpty()) {
         return false;
     }
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->isWindowFloating(windowId);
 }
 
@@ -552,14 +552,14 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     if (!validateWindowId(windowId, QStringLiteral("set float state"))) {
         return;
     }
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->setWindowFloating(windowId, floating);
     qCDebug(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
 {
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->floatingWindows();
 }
 
@@ -593,7 +593,7 @@ void WindowTrackingAdaptor::pushToEmptyZone()
 {
     qCDebug(lcDbusWindow) << "pushToEmptyZone called";
 
-    // SRP: Delegate to service
+    // Delegate to service
     QString emptyZoneId = m_service->findEmptyZone();
     if (emptyZoneId.isEmpty()) {
         qCDebug(lcDbusWindow) << "No empty zone found";
@@ -683,7 +683,7 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
 {
     qCDebug(lcDbusWindow) << "rotateWindowsInLayout called, clockwise:" << clockwise;
 
-    // SRP: Delegate rotation calculation to service
+    // Delegate rotation calculation to service
     QVector<RotationEntry> rotationEntries = m_service->calculateRotation(clockwise);
 
     if (rotationEntries.isEmpty()) {
@@ -736,7 +736,7 @@ void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString
 
 QString WindowTrackingAdaptor::findEmptyZone()
 {
-    // SRP: Delegate to service
+    // Delegate to service
     return m_service->findEmptyZone();
 }
 
@@ -752,7 +752,7 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
         return QString();
     }
 
-    // SRP: Delegate to service
+    // Delegate to service
     QRect geo = m_service->zoneGeometry(zoneId, screenName);
     if (!geo.isValid()) {
         qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: invalid geometry for zone:" << zoneId;
@@ -768,7 +768,7 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
 
 void WindowTrackingAdaptor::onLayoutChanged()
 {
-    // SRP: Delegate to service
+    // Delegate to service
     m_service->onLayoutChanged();
 
     // After layout becomes available, notify effect about pending restores
@@ -993,7 +993,7 @@ void WindowTrackingAdaptor::scheduleSaveState()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Helper Methods
+// Helper Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
 Layout* WindowTrackingAdaptor::getValidatedActiveLayout(const QString& operation) const

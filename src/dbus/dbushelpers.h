@@ -17,7 +17,7 @@
 namespace PlasmaZones {
 
 /**
- * @brief Shared D-Bus adaptor helper functions (DRY)
+ * @brief Shared D-Bus adaptor helper functions
  *
  * Consolidates common validation patterns used across multiple D-Bus adaptors:
  * - UUID parsing and validation

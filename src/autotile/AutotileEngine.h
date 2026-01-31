@@ -437,7 +437,7 @@ private:
     void applyToAllStates(const std::function<void(TilingState *)> &operation);
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods
+    // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -469,7 +469,7 @@ private:
     QHash<QString, TilingState *> m_screenStates; // Owned via Qt parent (this)
     QHash<QString, QString> m_windowToScreen;     // windowId -> screenName
 
-    // Settings synchronization (SRP: engine owns its settings sync)
+    // Settings synchronization
     QPointer<Settings> m_settings;  // QPointer for safe access if Settings destroyed
     QTimer m_settingsRetileTimer;   // Debounce timer for settings changes
     bool m_pendingSettingsRetile = false;

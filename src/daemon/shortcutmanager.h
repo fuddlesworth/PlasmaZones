@@ -22,7 +22,7 @@ enum class NavigationDirection {
 };
 
 /**
- * @brief Manages global keyboard shortcuts (SRP)
+ * @brief Manages global keyboard shortcuts
  *
  * Handles registration and management of all global shortcuts
  * for PlasmaZones. Follows Single Responsibility Principle by

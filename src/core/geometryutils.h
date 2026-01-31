@@ -15,7 +15,7 @@ class Layout;
 class ISettings;
 
 /**
- * @brief Centralized geometry calculation utilities (DRY)
+ * @brief Centralized geometry calculation utilities
  *
  * Provides common geometry calculations to avoid duplication
  * across OverlayService, OverlayAdaptor, and other components.

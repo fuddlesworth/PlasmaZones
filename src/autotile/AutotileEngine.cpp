@@ -266,7 +266,7 @@ void AutotileEngine::connectToSettings(Settings *settings)
     m_settings = settings;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY macros for settings connections (local to this function)
+    // Macros for settings connections
     // ═══════════════════════════════════════════════════════════════════════════════
 
     // Pattern 1: Update config field + schedule retile
@@ -950,7 +950,7 @@ void AutotileEngine::applyToAllStates(const std::function<void(TilingState *)> &
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Helper Methods
+// Helper Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* operation) const

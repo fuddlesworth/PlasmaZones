@@ -129,7 +129,7 @@ public:
     TilingAlgorithm *defaultAlgorithm() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Preview utilities for unified layout model (DRY - shared by zone selector,
+    // Preview utilities for unified layout model (shared by zone selector,
     // overlay service, and daemon OSD)
     // ═══════════════════════════════════════════════════════════════════════════
 

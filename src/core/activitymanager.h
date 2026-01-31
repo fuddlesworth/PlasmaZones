@@ -14,7 +14,7 @@ class LayoutManager;
 class VirtualDesktopManager;
 
 /**
- * @brief Manages KDE Activities integration for activity-based layouts (SRP)
+ * @brief Manages KDE Activities integration for activity-based layouts
  *
  * Handles activity changes and automatically switches layouts
  * based on assignments. Follows Single Responsibility Principle.

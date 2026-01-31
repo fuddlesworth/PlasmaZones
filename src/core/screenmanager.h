@@ -18,7 +18,7 @@ class Layout;
 class OverlayService;
 
 /**
- * @brief Centralized screen management (SRP)
+ * @brief Centralized screen management
  *
  * Handles all screen-related operations:
  * - Screen monitoring (added/removed/changed)

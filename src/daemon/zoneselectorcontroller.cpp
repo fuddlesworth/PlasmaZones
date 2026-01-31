@@ -79,7 +79,7 @@ void ZoneSelectorController::setEnabled(bool enabled)
 
 QVariantList ZoneSelectorController::layouts() const
 {
-    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, LayoutAdaptor)
+    // Use shared utility to build unified layout list
     const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
     return LayoutUtils::toVariantList(entries);
 }

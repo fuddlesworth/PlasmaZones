@@ -100,7 +100,7 @@ void OverlayAdaptor::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
-// Window tracking and zone detection methods moved to separate adaptors (SRP)
+// Window tracking and zone detection methods moved to separate adaptors
 // See WindowTrackingAdaptor and ZoneDetectionAdaptor
 
 int OverlayAdaptor::getPollIntervalMs()

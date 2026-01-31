@@ -21,7 +21,7 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Macros for repetitive setter patterns
+// Macros for setter patterns
 // Reduces boilerplate for ~50+ setter methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -80,7 +80,7 @@ Settings::Settings(QObject* parent)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Helper Methods - Consolidate repeated validation patterns in load()
+// Helper Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
 int Settings::readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue,
@@ -176,7 +176,7 @@ void Settings::setMultiZoneModifierInt(int modifier)
     }
 }
 
-// Simple bool setters using DRY macro
+// Simple bool setters
 SETTINGS_SETTER(bool, MiddleClickMultiZone, m_middleClickMultiZone, middleClickMultiZoneChanged)
 SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
 SETTINGS_SETTER(const QStringList&, DisabledMonitors, m_disabledMonitors, disabledMonitorsChanged)
@@ -217,7 +217,7 @@ void Settings::setUseSystemColors(bool use)
     }
 }
 
-// Color setters using DRY macro
+// Color setters
 SETTINGS_SETTER(const QColor&, HighlightColor, m_highlightColor, highlightColorChanged)
 SETTINGS_SETTER(const QColor&, InactiveColor, m_inactiveColor, inactiveColorChanged)
 SETTINGS_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
@@ -243,7 +243,7 @@ void Settings::setInactiveOpacity(qreal opacity)
     }
 }
 
-// Border setters (using DRY macros - clamped with min 0)
+// Border setters (clamped with min 0)
 SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, 0, INT_MAX)
 SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, 0, INT_MAX)
 
@@ -255,7 +255,7 @@ SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged,
 SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
 SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, minimumZoneDisplaySizePxChanged, 1, 50)
 
-// Behavior bool setters (using DRY macros)
+// Behavior bool setters
 SETTINGS_SETTER(bool, KeepWindowsInZonesOnResolutionChange, m_keepWindowsInZonesOnResolutionChange, keepWindowsInZonesOnResolutionChangeChanged)
 SETTINGS_SETTER(bool, MoveNewWindowsToLastZone, m_moveNewWindowsToLastZone, moveNewWindowsToLastZoneChanged)
 SETTINGS_SETTER(bool, RestoreOriginalSizeOnUnsnap, m_restoreOriginalSizeOnUnsnap, restoreOriginalSizeOnUnsnapChanged)
@@ -269,7 +269,7 @@ void Settings::setStickyWindowHandlingInt(int handling)
     }
 }
 
-// Session and exclusion setters (using DRY macros)
+// Session and exclusion setters
 SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
 
 void Settings::setDefaultLayoutId(const QString& layoutId)
@@ -289,7 +289,7 @@ SETTINGS_SETTER(bool, ExcludeTransientWindows, m_excludeTransientWindows, exclud
 SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged, 0, 1000)
 SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged, 0, 1000)
 
-// Zone Selector setters (using DRY macros)
+// Zone Selector setters
 SETTINGS_SETTER(bool, ZoneSelectorEnabled, m_zoneSelectorEnabled, zoneSelectorEnabledChanged)
 SETTINGS_SETTER_CLAMPED(ZoneSelectorTriggerDistance, m_zoneSelectorTriggerDistance, zoneSelectorTriggerDistanceChanged, 10, 200)
 SETTINGS_SETTER(ZoneSelectorPosition, ZoneSelectorPosition, m_zoneSelectorPosition, zoneSelectorPositionChanged)
@@ -326,11 +326,11 @@ void Settings::setZoneSelectorSizeModeInt(int mode)
 
 SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged, 1, 10)
 
-// Shader Effects implementations (using DRY macros)
+// Shader Effects implementations
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
 SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged, 30, 144)
 
-// Global Shortcuts implementations (using DRY macros)
+// Global Shortcuts implementations
 SETTINGS_SETTER(const QString&, OpenEditorShortcut, m_openEditorShortcut, openEditorShortcutChanged)
 SETTINGS_SETTER(const QString&, PreviousLayoutShortcut, m_previousLayoutShortcut, previousLayoutShortcutChanged)
 SETTINGS_SETTER(const QString&, NextLayoutShortcut, m_nextLayoutShortcut, nextLayoutShortcutChanged)
@@ -418,7 +418,7 @@ void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
     }
 }
 
-// Keyboard Navigation Shortcuts implementations (using DRY macros)
+// Keyboard Navigation Shortcuts implementations
 SETTINGS_SETTER(const QString&, MoveWindowLeftShortcut, m_moveWindowLeftShortcut, moveWindowLeftShortcutChanged)
 SETTINGS_SETTER(const QString&, MoveWindowRightShortcut, m_moveWindowRightShortcut, moveWindowRightShortcutChanged)
 SETTINGS_SETTER(const QString&, MoveWindowUpShortcut, m_moveWindowUpShortcut, moveWindowUpShortcutChanged)
@@ -431,7 +431,7 @@ SETTINGS_SETTER(const QString&, PushToEmptyZoneShortcut, m_pushToEmptyZoneShortc
 SETTINGS_SETTER(const QString&, RestoreWindowSizeShortcut, m_restoreWindowSizeShortcut, restoreWindowSizeShortcutChanged)
 SETTINGS_SETTER(const QString&, ToggleWindowFloatShortcut, m_toggleWindowFloatShortcut, toggleWindowFloatShortcutChanged)
 
-// Swap Window Shortcuts (using DRY macros)
+// Swap Window Shortcuts
 SETTINGS_SETTER(const QString&, SwapWindowLeftShortcut, m_swapWindowLeftShortcut, swapWindowLeftShortcutChanged)
 SETTINGS_SETTER(const QString&, SwapWindowRightShortcut, m_swapWindowRightShortcut, swapWindowRightShortcutChanged)
 SETTINGS_SETTER(const QString&, SwapWindowUpShortcut, m_swapWindowUpShortcut, swapWindowUpShortcutChanged)
@@ -528,11 +528,11 @@ void Settings::setSnapToZone9Shortcut(const QString& shortcut)
     setSnapToZoneShortcut(8, shortcut);
 }
 
-// Rotate Windows Shortcuts (using DRY macros)
+// Rotate Windows Shortcuts
 SETTINGS_SETTER(const QString&, RotateWindowsClockwiseShortcut, m_rotateWindowsClockwiseShortcut, rotateWindowsClockwiseShortcutChanged)
 SETTINGS_SETTER(const QString&, RotateWindowsCounterclockwiseShortcut, m_rotateWindowsCounterclockwiseShortcut, rotateWindowsCounterclockwiseShortcutChanged)
 
-// Cycle Windows in Zone Shortcuts (using DRY macros)
+// Cycle Windows in Zone Shortcuts
 SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForwardShortcut, cycleWindowForwardShortcutChanged)
 SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut, cycleWindowBackwardShortcutChanged)
 
@@ -610,7 +610,7 @@ void Settings::setAutotileOuterGap(int gap)
     }
 }
 
-// Autotile bool setters (using DRY macros)
+// Autotile bool setters
 SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
 SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
 SETTINGS_SETTER(AutotileInsertPosition, AutotileInsertPosition, m_autotileInsertPosition, autotileInsertPositionChanged)
@@ -622,7 +622,7 @@ void Settings::setAutotileInsertPositionInt(int position)
     }
 }
 
-// Autotile shortcut setters (using DRY macros)
+// Autotile shortcut setters
 SETTINGS_SETTER(const QString&, AutotileToggleShortcut, m_autotileToggleShortcut, autotileToggleShortcutChanged)
 SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut, autotileFocusMasterShortcutChanged)
 SETTINGS_SETTER(const QString&, AutotileSwapMasterShortcut, m_autotileSwapMasterShortcut, autotileSwapMasterShortcutChanged)
@@ -632,7 +632,7 @@ SETTINGS_SETTER(const QString&, AutotileIncMasterCountShortcut, m_autotileIncMas
 SETTINGS_SETTER(const QString&, AutotileDecMasterCountShortcut, m_autotileDecMasterCountShortcut, autotileDecMasterCountShortcutChanged)
 SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut, autotileRetileShortcutChanged)
 
-// Autotile animation and visual setters (using DRY macros)
+// Autotile animation and visual setters
 SETTINGS_SETTER(bool, AutotileAnimationsEnabled, m_autotileAnimationsEnabled, autotileAnimationsEnabledChanged)
 SETTINGS_SETTER_CLAMPED(AutotileAnimationDuration, m_autotileAnimationDuration, autotileAnimationDurationChanged, 50, 500)
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
@@ -726,7 +726,7 @@ void Settings::load()
     // Appearance with validation (defaults from .kcfg via ConfigDefaults)
     m_useSystemColors = appearance.readEntry(QLatin1String("UseSystemColors"), ConfigDefaults::useSystemColors());
 
-    // Validate colors using DRY helper
+    // Validate colors
     m_highlightColor = readValidatedColor(appearance, "HighlightColor", ConfigDefaults::highlightColor(), "highlight");
     m_inactiveColor = readValidatedColor(appearance, "InactiveColor", ConfigDefaults::inactiveColor(), "inactive");
     m_borderColor = readValidatedColor(appearance, "BorderColor", ConfigDefaults::borderColor(), "border");
@@ -747,18 +747,18 @@ void Settings::load()
     }
     m_inactiveOpacity = inactiveOpacity;
 
-    // Validate dimensions (non-negative) using DRY helper with INT_MAX as upper bound
+    // Validate dimensions (non-negative) with INT_MAX as upper bound
     m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), 0, INT_MAX, "border width");
     m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, INT_MAX, "border radius");
 
     m_enableBlur = appearance.readEntry(QLatin1String("EnableBlur"), ConfigDefaults::enableBlur());
 
-    // Zones with validation (defaults from .kcfg via ConfigDefaults) using DRY helper
+    // Zones with validation (defaults from .kcfg via ConfigDefaults)
     m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, INT_MAX, "zone padding");
     m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, INT_MAX, "outer gap");
     m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 0, INT_MAX, "adjacent threshold");
 
-    // Performance and behavior settings with validation using DRY helper
+    // Performance and behavior settings with validation
     m_pollIntervalMs = readValidatedInt(zones, "PollIntervalMs", ConfigDefaults::pollIntervalMs(), 10, 1000, "poll interval");
     m_minimumZoneSizePx = readValidatedInt(zones, "MinimumZoneSizePx", ConfigDefaults::minimumZoneSizePx(), 50, 500, "minimum zone size");
     m_minimumZoneDisplaySizePx = readValidatedInt(zones, "MinimumZoneDisplaySizePx", ConfigDefaults::minimumZoneDisplaySizePx(), 1, 50, "minimum zone display size");
@@ -823,7 +823,7 @@ void Settings::load()
     m_openEditorShortcut = globalShortcuts.readEntry(QLatin1String("OpenEditorShortcut"), ConfigDefaults::openEditorShortcut());
     m_previousLayoutShortcut = globalShortcuts.readEntry(QLatin1String("PreviousLayoutShortcut"), QStringLiteral("Meta+Alt+["));
     m_nextLayoutShortcut = globalShortcuts.readEntry(QLatin1String("NextLayoutShortcut"), QStringLiteral("Meta+Alt+]"));
-    // Quick layout shortcuts - use DRY helper with ConfigDefaults
+    // Quick layout shortcuts
     const QString quickLayoutDefaults[9] = {
         ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
@@ -866,7 +866,7 @@ void Settings::load()
     m_swapWindowUpShortcut = navigationShortcuts.readEntry(QLatin1String("SwapWindowUp"), ConfigDefaults::swapWindowUpShortcut());
     m_swapWindowDownShortcut = navigationShortcuts.readEntry(QLatin1String("SwapWindowDown"), ConfigDefaults::swapWindowDownShortcut());
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9) - using DRY helper
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9) -
     const QString snapToZoneDefaults[9] = {
         ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
         ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
@@ -1132,7 +1132,7 @@ void Settings::save()
 
 void Settings::reset()
 {
-    // DRY: Clear all config groups and reload with defaults
+    // Clear all config groups and reload with defaults
     // This avoids duplicating ~160 lines of default assignments
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
 
@@ -1165,7 +1165,7 @@ void Settings::reset()
 
 void Settings::loadColorsFromFile(const QString& filePath)
 {
-    // Delegate to ColorImporter (SRP: color parsing is separate concern)
+    // Delegate to ColorImporter
     ColorImportResult result = ColorImporter::importFromFile(filePath);
     if (!result.success) {
         return;

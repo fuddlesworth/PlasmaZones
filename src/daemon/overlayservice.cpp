@@ -55,7 +55,7 @@ void writeQmlProperty(QObject* object, const QString& name, const QVariant& valu
     }
 }
 
-// Convert ZoneSelectorPosition to LayerShellQt anchors (DRY - extracted from createZoneSelectorWindow)
+// Convert ZoneSelectorPosition to LayerShellQt anchors
 LayerShellQt::Window::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
 {
     switch (pos) {
@@ -86,7 +86,7 @@ LayerShellQt::Window::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
     }
 }
 
-// Clean up all windows in a QHash map (DRY - used by destructor for all window types)
+// Clean up all windows in a QHash map
 template<typename K>
 void cleanupWindowMap(QHash<K, QQuickWindow*>& windowMap)
 {
@@ -100,7 +100,7 @@ void cleanupWindowMap(QHash<K, QQuickWindow*>& windowMap)
     windowMap.clear();
 }
 
-// Center an OSD/layer window on screen using LayerShellQt margins (DRY - used by layout and navigation OSD)
+// Center an OSD/layer window on screen using LayerShellQt margins
 void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, int osdWidth, int osdHeight)
 {
     if (!window) {
@@ -116,7 +116,7 @@ void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, in
     }
 }
 
-// Result of OSD window preparation (DRY - used by showLayoutOsd overloads)
+// Result of OSD window preparation
 struct OsdWindowSetup {
     QQuickWindow* window = nullptr;
     QRect screenGeom;
@@ -125,7 +125,7 @@ struct OsdWindowSetup {
     explicit operator bool() const { return window != nullptr; }
 };
 
-// Calculate OSD size and center window (DRY - used by showLayoutOsd overloads)
+// Calculate OSD size and center window
 void sizeAndCenterOsd(QQuickWindow* window, const QRect& screenGeom, qreal aspectRatio)
 {
     constexpr int osdWidth = 280;
@@ -1775,7 +1775,7 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 
 QVariantList OverlayService::buildLayoutsList() const
 {
-    // Use shared utility to build unified layout list (DRY - consolidates with Daemon, ZoneSelectorController, LayoutAdaptor)
+    // Use shared utility to build unified layout list
     const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
     return LayoutUtils::toVariantList(entries);
 }
