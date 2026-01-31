@@ -510,6 +510,15 @@ ScrollView {
                         onToggled: kcm.restoreOriginalSizeOnUnsnap = checked
                     }
 
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Session:")
+                        text: i18n("Restore windows to their zones after login")
+                        checked: kcm.restoreWindowsToZonesOnLogin
+                        onToggled: kcm.restoreWindowsToZonesOnLogin = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, windows return to their previous zones after logging in or restarting the session.")
+                    }
+
                     ComboBox {
                         id: stickyHandlingCombo
                         Kirigami.FormData.label: i18n("Sticky windows:")

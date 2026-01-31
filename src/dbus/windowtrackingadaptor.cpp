@@ -817,6 +817,12 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldRestore = false;
 
+    // Check if session restoration is enabled
+    if (m_settings && !m_settings->restoreWindowsToZonesOnLogin()) {
+        qCDebug(lcDbusWindow) << "Session zone restoration disabled by setting";
+        return;
+    }
+
     if (windowId.isEmpty()) {
         return;
     }

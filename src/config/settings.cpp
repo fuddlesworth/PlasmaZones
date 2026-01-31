@@ -393,6 +393,15 @@ void Settings::setStickyWindowHandlingInt(int handling)
     }
 }
 
+void Settings::setRestoreWindowsToZonesOnLogin(bool restore)
+{
+    if (m_restoreWindowsToZonesOnLogin != restore) {
+        m_restoreWindowsToZonesOnLogin = restore;
+        Q_EMIT restoreWindowsToZonesOnLoginChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
     // Normalize to default format (with braces) for consistent comparison
@@ -1446,6 +1455,7 @@ void Settings::load()
     m_stickyWindowHandling =
         static_cast<StickyWindowHandling>(qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
                                                  static_cast<int>(StickyWindowHandling::IgnoreAll)));
+    m_restoreWindowsToZonesOnLogin = behavior.readEntry("RestoreWindowsToZonesOnLogin", ConfigDefaults::restoreWindowsToZonesOnLogin());
     // Normalize UUID to default format (with braces) for consistent comparison
     // Handles migration from configs saved with WithoutBraces format
     m_defaultLayoutId = normalizeUuidString(behavior.readEntry("DefaultLayoutId", QString()));
@@ -1749,6 +1759,7 @@ void Settings::save()
     behavior.writeEntry("MoveNewToLastZone", m_moveNewWindowsToLastZone);
     behavior.writeEntry("RestoreSizeOnUnsnap", m_restoreOriginalSizeOnUnsnap);
     behavior.writeEntry("StickyWindowHandling", static_cast<int>(m_stickyWindowHandling));
+    behavior.writeEntry("RestoreWindowsToZonesOnLogin", m_restoreWindowsToZonesOnLogin);
     behavior.writeEntry("DefaultLayoutId", m_defaultLayoutId);
 
     // Exclusions
@@ -1907,6 +1918,7 @@ void Settings::reset()
     m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
     m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
     m_stickyWindowHandling = static_cast<StickyWindowHandling>(ConfigDefaults::stickyWindowHandling());
+    m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
     m_defaultLayoutId.clear();
 
     // Exclusions (from .kcfg via ConfigDefaults)

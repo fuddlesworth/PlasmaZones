@@ -180,6 +180,7 @@ Q_SIGNALS:
     void moveNewWindowsToLastZoneChanged();
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
+    void restoreWindowsToZonesOnLoginChanged();
     void defaultLayoutIdChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();

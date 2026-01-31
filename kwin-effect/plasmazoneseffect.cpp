@@ -363,12 +363,14 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
     QJsonArray geometries = doc.array();
     qCDebug(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
 
-    // Build a map of windowId -> EffectWindow for faster lookup
+    // Build a map of stableId -> EffectWindow for faster lookup
+    // Using stable IDs ensures windows can be found after session restore
     QHash<QString, KWin::EffectWindow*> windowMap;
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (w) {
-            windowMap[getWindowId(w)] = w;
+            QString stableId = extractStableId(getWindowId(w));
+            windowMap[stableId] = w;
         }
     }
 
@@ -380,12 +382,13 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
 
         QJsonObject obj = value.toObject();
         QString windowId = obj[QStringLiteral("windowId")].toString();
+        QString stableId = extractStableId(windowId);
         int x = obj[QStringLiteral("x")].toInt();
         int y = obj[QStringLiteral("y")].toInt();
         int width = obj[QStringLiteral("width")].toInt();
         int height = obj[QStringLiteral("height")].toInt();
 
-        KWin::EffectWindow* window = windowMap.value(windowId);
+        KWin::EffectWindow* window = windowMap.value(stableId);
         if (window && shouldHandleWindow(window)) {
             QRect newGeometry(x, y, width, height);
 
@@ -1394,12 +1397,15 @@ void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString
         return;
     }
 
-    // Build a map of windowId -> EffectWindow* for efficient lookup
+    // Build a map of stableId -> EffectWindow* for efficient lookup
+    // Using stable IDs (windowClass:resourceName without pointer address) ensures
+    // windows can be found even after session restore when pointer addresses change
     QHash<QString, KWin::EffectWindow*> windowMap;
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         if (w && shouldHandleWindow(w)) {
-            windowMap[getWindowId(w)] = w;
+            QString stableId = extractStableId(getWindowId(w));
+            windowMap[stableId] = w;
         }
     }
 
@@ -1423,15 +1429,17 @@ void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString
             continue;
         }
 
-        // Find the window
-        KWin::EffectWindow* window = windowMap.value(windowId);
+        // Extract stable ID for lookup (handles session restore where pointer addresses change)
+        QString stableId = extractStableId(windowId);
+
+        // Find the window using stable ID
+        KWin::EffectWindow* window = windowMap.value(stableId);
         if (!window) {
-            qCDebug(lcEffect) << "Window not found for rotation:" << windowId;
+            qCDebug(lcEffect) << "Window not found for rotation:" << windowId << "(stable:" << stableId << ")";
             continue;
         }
 
         // Check if window is floating - skip if so (double-check, daemon should filter these)
-        QString stableId = extractStableId(windowId);
         if (m_floatingWindows.contains(stableId)) {
             qCDebug(lcEffect) << "Window is floating, skipping rotation:" << windowId;
             continue;
