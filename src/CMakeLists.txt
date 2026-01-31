@@ -382,6 +382,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/PropertyPanel.qml
         editor/qml/ControlBar.qml
         editor/qml/DividerManager.qml
+        editor/qml/DividerHandle.qml
         editor/qml/ResizeHandles.qml
         editor/qml/ZoneContent.qml
         editor/qml/ActionButtons.qml

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "zonedetectionadaptor.h"
+#include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include "../core/layout.h"
 #include "../core/zone.h"
@@ -29,16 +30,14 @@ ZoneDetectionAdaptor::ZoneDetectionAdaptor(IZoneDetector* detector, ILayoutManag
 
 QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 {
-    auto* layout = m_layoutManager->activeLayout();
+    auto* layout = DbusHelpers::getActiveLayoutOrWarn(m_layoutManager, QStringLiteral("detect zone"));
     if (!layout) {
-        qCDebug(lcDbus) << "detectZoneAtPosition: no active layout";
         return QString();
     }
 
     // Get primary screen geometry
-    QScreen* screen = Utils::primaryScreen();
+    QScreen* screen = DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("detectZoneAtPosition"));
     if (!screen) {
-        qCWarning(lcDbus) << "detectZoneAtPosition: no primary screen";
         return QString();
     }
 
@@ -84,51 +83,16 @@ QString ZoneDetectionAdaptor::getZoneGeometry(const QString& zoneId)
 
 QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenName)
 {
-    if (zoneId.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot get zone geometry - empty zone ID";
-        return QString();
-    }
-
-    if (!m_layoutManager) {
-        qCWarning(lcDbus) << "Cannot get zone geometry - no layout manager";
-        return QString();
-    }
-
-    auto uuidOpt = Utils::parseUuid(zoneId);
-    if (!uuidOpt) {
-        qCWarning(lcDbus) << "Invalid UUID format for getZoneGeometry:" << zoneId;
-        return QString();
-    }
-    QUuid uuid = *uuidOpt;
-
     // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
-    Zone* zone = nullptr;
-
-    // First try the active layout
-    if (auto* activeLayout = m_layoutManager->activeLayout()) {
-        zone = activeLayout->zoneById(uuid);
-    }
-
-    // If not found in active layout, search all layouts
+    Zone* zone = DbusHelpers::findZoneInAnyLayout(m_layoutManager, zoneId, QStringLiteral("get zone geometry"));
     if (!zone) {
-        for (auto* layout : m_layoutManager->layouts()) {
-            zone = layout->zoneById(uuid);
-            if (zone) {
-                break;
-            }
-        }
-    }
-
-    if (!zone) {
-        qCWarning(lcDbus) << "Zone not found in any layout:" << zoneId;
         return QString();
     }
 
     // Find target screen - use specified screen name or fall back to primary
-    QScreen* screen = Utils::findScreenByName(screenName);
+    QScreen* screen = DbusHelpers::getScreenOrWarn(screenName, QStringLiteral("getZoneGeometryForScreen"));
     if (!screen) {
-        qCWarning(lcDbus) << "getZoneGeometryForScreen: screen not found:" << screenName;
         return QString();
     }
 
@@ -207,49 +171,21 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
 
 QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, const QString& direction)
 {
-    if (currentZoneId.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot get adjacent zone - empty zone ID";
+    if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get adjacent zone"))) {
         return QString();
     }
 
-    if (direction.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot get adjacent zone - empty direction";
-        return QString();
-    }
-
-    auto uuidOpt = Utils::parseUuid(currentZoneId);
-    if (!uuidOpt) {
-        qCWarning(lcDbus) << "Invalid UUID format for getAdjacentZone:" << currentZoneId;
-        return QString();
-    }
-
-    // Find the layout that contains this zone - it may be different from activeLayout
+    // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
-    Layout* layout = nullptr;
-    Zone* currentZone = nullptr;
-
-    // First try the active layout
-    layout = m_layoutManager->activeLayout();
-    if (layout) {
-        currentZone = layout->zoneById(*uuidOpt);
-    }
-
-    // If not found in active layout, search all layouts
-    // This handles per-screen layout assignments where the zone might be
-    // in a different layout than the "active" one
+    Zone* currentZone = DbusHelpers::findZoneInAnyLayout(m_layoutManager, currentZoneId, QStringLiteral("get adjacent zone"));
     if (!currentZone) {
-        for (auto* candidateLayout : m_layoutManager->layouts()) {
-            currentZone = candidateLayout->zoneById(*uuidOpt);
-            if (currentZone) {
-                layout = candidateLayout;
-                qCDebug(lcDbus) << "Found zone in layout" << layout->name() << "instead of active layout";
-                break;
-            }
-        }
+        return QString();
     }
 
-    if (!layout || !currentZone) {
-        qCWarning(lcDbus) << "Current zone not found in any layout:" << currentZoneId;
+    // Get the layout containing this zone
+    Layout* layout = qobject_cast<Layout*>(currentZone->parent());
+    if (!layout) {
+        qCWarning(lcDbus) << "Zone has no parent layout:" << currentZoneId;
         return QString();
     }
 
@@ -310,14 +246,12 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
 
 QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction)
 {
-    if (direction.isEmpty()) {
-        qCWarning(lcDbus) << "Cannot get first zone - empty direction";
+    if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
         return QString();
     }
 
-    auto* layout = m_layoutManager->activeLayout();
+    auto* layout = DbusHelpers::getActiveLayoutOrWarn(m_layoutManager, QStringLiteral("get first zone"));
     if (!layout || layout->zones().isEmpty()) {
-        qCWarning(lcDbus) << "Cannot get first zone - no layout or zones";
         return QString();
     }
 
@@ -394,12 +328,12 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries()
 {
     QStringList result;
 
-    auto* layout = m_layoutManager->activeLayout();
+    auto* layout = DbusHelpers::getActiveLayoutOrWarn(m_layoutManager, QStringLiteral("get all zone geometries"));
     if (!layout) {
         return result;
     }
 
-    QScreen* screen = Utils::primaryScreen();
+    QScreen* screen = DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"));
     if (!screen) {
         return result;
     }
