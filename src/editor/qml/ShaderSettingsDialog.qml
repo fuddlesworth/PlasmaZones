@@ -499,20 +499,34 @@ Kirigami.Dialog {
                     }
 
                     contentItem: Component {
-                        Kirigami.FormLayout {
+                        ColumnLayout {
                             Kirigami.Theme.inherit: true
+                            spacing: Kirigami.Units.smallSpacing
+
                             Repeater {
                                 model: paramSection.groupParams
 
-                                delegate: ParameterDelegate {
+                                delegate: RowLayout {
                                     required property var modelData
                                     required property int index
 
                                     Layout.fillWidth: true
-                                    Kirigami.FormData.label: modelData ? (modelData.name || modelData.id || "") : ""
-                                    Kirigami.Theme.inherit: true
+                                    spacing: Kirigami.Units.largeSpacing
 
-                                    paramData: modelData
+                                    Label {
+                                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+                                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                                        text: modelData ? (modelData.name || modelData.id || "") : ""
+                                        horizontalAlignment: Text.AlignRight
+                                        elide: Text.ElideRight
+                                    }
+
+                                    ParameterDelegate {
+                                        Layout.fillWidth: true
+                                        Kirigami.Theme.inherit: true
+                                        dialogRoot: root
+                                        paramData: modelData
+                                    }
                                 }
                             }
                         }
@@ -523,23 +537,38 @@ Kirigami.Dialog {
 
         // ═══════════════════════════════════════════════════════════════════
         // FLAT PARAMETERS - When no groups are defined
+        // Uses ColumnLayout instead of FormLayout to avoid attached property
+        // issues during Repeater model changes (FormLayout caches FormData refs)
         // ═══════════════════════════════════════════════════════════════════
-        Kirigami.FormLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             visible: root.hasShaderEffect && root.parameterGroups.length === 0 && root.shaderParams.length > 0
+            spacing: Kirigami.Units.smallSpacing
 
             Repeater {
                 model: root.parameterGroups.length === 0 ? root.shaderParams : []
 
-                delegate: ParameterDelegate {
+                delegate: RowLayout {
                     required property var modelData
                     required property int index
 
                     Layout.fillWidth: true
-                    Kirigami.FormData.label: modelData ? (modelData.name || modelData.id || "") : ""
-                    Kirigami.Theme.inherit: true
+                    spacing: Kirigami.Units.largeSpacing
 
-                    paramData: modelData
+                    Label {
+                        Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        text: modelData ? (modelData.name || modelData.id || "") : ""
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideRight
+                    }
+
+                    ParameterDelegate {
+                        Layout.fillWidth: true
+                        Kirigami.Theme.inherit: true
+                        dialogRoot: root
+                        paramData: modelData
+                    }
                 }
             }
         }

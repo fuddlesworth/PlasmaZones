@@ -19,17 +19,28 @@ Item {
     // Required parameter data from Repeater modelData
     property var paramData: null
 
-    // Reference to dialog root for accessing pendingParams and helper functions
-    readonly property var dialogRoot: {
+    // Dialog reference - passed explicitly from ShaderSettingsDialog
+    // This is more reliable than parent chain walking through Loaders/FormLayouts
+    property var dialogRoot: null
+
+    // Fallback: Walk parent chain if dialogRoot not passed explicitly
+    readonly property var resolvedDialogRoot: {
+        if (dialogRoot) return dialogRoot;
+        // Fallback parent chain walk
         var p = parent;
-        while (p && !p.hasOwnProperty("pendingParams")) {
+        while (p) {
+            if (typeof p.pendingParams !== "undefined" &&
+                typeof p.parameterValue === "function" &&
+                typeof p.setPendingParam === "function") {
+                return p;
+            }
             p = p.parent;
         }
-        return p;
+        return null;
     }
 
     // Track pendingParams changes to force value re-evaluation
-    readonly property var _pendingRef: dialogRoot ? dialogRoot.pendingParams : null
+    readonly property var _pendingRef: resolvedDialogRoot ? resolvedDialogRoot.pendingParams : null
 
     // Computed type for visibility switching
     readonly property string paramType: paramData ? (paramData.type || "") : ""
@@ -56,11 +67,14 @@ Item {
 
             value: {
                 void(paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.dialogRoot) return 0.5;
-                return paramDelegate.dialogRoot.parameterValue(
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot) return 0.5;
+                var val = paramDelegate.resolvedDialogRoot.parameterValue(
                     paramDelegate.paramData.id,
                     paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0.5
                 );
+                // Ensure number type for Slider
+                var num = Number(val);
+                return isNaN(num) ? 0.5 : num;
             }
 
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
@@ -68,8 +82,8 @@ Item {
             ToolTip.delay: Kirigami.Units.toolTipDelay
 
             onMoved: {
-                if (paramDelegate.paramData && paramDelegate.dialogRoot) {
-                    paramDelegate.dialogRoot.setPendingParam(paramDelegate.paramData.id, value);
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {
+                    paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
                 }
             }
         }
@@ -77,7 +91,7 @@ Item {
         Label {
             visible: paramDelegate.paramType === "float"
             text: floatSlider.value.toFixed(2)
-            Layout.preferredWidth: paramDelegate.dialogRoot ? paramDelegate.dialogRoot.sliderValueLabelWidth : 50
+            Layout.preferredWidth: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.sliderValueLabelWidth : 50
             horizontalAlignment: Text.AlignRight
             font: Kirigami.Theme.fixedWidthFont
         }
@@ -94,11 +108,14 @@ Item {
 
             value: {
                 void(paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.dialogRoot) return 0;
-                return paramDelegate.dialogRoot.parameterValue(
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot) return 0;
+                var val = paramDelegate.resolvedDialogRoot.parameterValue(
                     paramDelegate.paramData.id,
                     paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : 0
                 );
+                // Ensure integer type for SpinBox
+                var num = parseInt(val, 10);
+                return isNaN(num) ? 0 : num;
             }
 
             ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
@@ -106,8 +123,8 @@ Item {
             ToolTip.delay: Kirigami.Units.toolTipDelay
 
             onValueModified: {
-                if (paramDelegate.paramData && paramDelegate.dialogRoot) {
-                    paramDelegate.dialogRoot.setPendingParam(paramDelegate.paramData.id, value);
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {
+                    paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
                 }
             }
         }
@@ -128,16 +145,18 @@ Item {
 
             checked: {
                 void(paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.dialogRoot) return false;
-                return paramDelegate.dialogRoot.parameterValue(
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot) return false;
+                var val = paramDelegate.resolvedDialogRoot.parameterValue(
                     paramDelegate.paramData.id,
                     paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : false
                 );
+                // Ensure boolean type for CheckBox
+                return Boolean(val);
             }
 
             onToggled: {
-                if (paramDelegate.paramData && paramDelegate.dialogRoot) {
-                    paramDelegate.dialogRoot.setPendingParam(paramDelegate.paramData.id, checked);
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {
+                    paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, checked);
                 }
             }
         }
@@ -156,10 +175,10 @@ Item {
 
             property color currentColor: {
                 void(paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.dialogRoot) return "#ffffff";
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot) return "#ffffff";
                 var fallback = (typeof paramDelegate.paramData.default === "string" && paramDelegate.paramData.default.length > 0)
                     ? paramDelegate.paramData.default : "#ffffff";
-                var colorStr = paramDelegate.dialogRoot.parameterValue(paramDelegate.paramData.id, fallback);
+                var colorStr = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, fallback);
                 if (typeof colorStr !== "string" || colorStr.length === 0) {
                     return fallback;
                 }
@@ -167,12 +186,12 @@ Item {
                 return parsed.valid ? colorStr : fallback;
             }
 
-            width: paramDelegate.dialogRoot ? paramDelegate.dialogRoot.colorButtonSize : 36
+            width: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.colorButtonSize : 36
             height: width
             radius: Kirigami.Units.smallSpacing
             color: currentColor
             border.width: Math.max(1, Math.round(Kirigami.Units.devicePixelRatio))
-            border.color: paramDelegate.dialogRoot ? paramDelegate.dialogRoot.themeSeparatorColor : "#ccc"
+            border.color: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.themeSeparatorColor : "#ccc"
 
             MouseArea {
                 anchors.fill: parent
@@ -181,8 +200,8 @@ Item {
                 Accessible.role: Accessible.Button
 
                 onClicked: {
-                    if (!paramDelegate.paramData || !paramDelegate.dialogRoot) return;
-                    paramDelegate.dialogRoot.openColorDialog(paramDelegate.paramData.id, paramDelegate.paramData.name || paramDelegate.paramData.id, colorSwatch.currentColor);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot) return;
+                    paramDelegate.resolvedDialogRoot.openColorDialog(paramDelegate.paramData.id, paramDelegate.paramData.name || paramDelegate.paramData.id, colorSwatch.currentColor);
                 }
             }
         }
@@ -190,7 +209,7 @@ Item {
         Label {
             visible: paramDelegate.paramType === "color"
             text: colorSwatch.currentColor.toString().toUpperCase()
-            Layout.preferredWidth: paramDelegate.dialogRoot ? paramDelegate.dialogRoot.colorLabelWidth : 80
+            Layout.preferredWidth: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.colorLabelWidth : 80
             font: Kirigami.Theme.fixedWidthFont
             opacity: 0.7
         }
