@@ -49,6 +49,7 @@ public:
     static bool flashOnSwitch() { return instance().defaultFlashOnSwitchValue(); }
     static bool showOsdOnLayoutSwitch() { return instance().defaultShowOsdOnLayoutSwitchValue(); }
     static bool showNavigationOsd() { return instance().defaultShowNavigationOsdValue(); }
+    static int osdStyle() { return instance().defaultOsdStyleValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Appearance Settings
@@ -149,6 +150,67 @@ public:
 
     static int lastTilingMode() { return instance().defaultLastTilingModeValue(); }
     static QString lastAutotileAlgorithm() { return instance().defaultLastAutotileAlgorithmValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Global Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString openEditorShortcut() { return instance().defaultOpenEditorShortcutValue(); }
+    static QString quickLayout1Shortcut() { return instance().defaultQuickLayout1ShortcutValue(); }
+    static QString quickLayout2Shortcut() { return instance().defaultQuickLayout2ShortcutValue(); }
+    static QString quickLayout3Shortcut() { return instance().defaultQuickLayout3ShortcutValue(); }
+    static QString quickLayout4Shortcut() { return instance().defaultQuickLayout4ShortcutValue(); }
+    static QString quickLayout5Shortcut() { return instance().defaultQuickLayout5ShortcutValue(); }
+    static QString quickLayout6Shortcut() { return instance().defaultQuickLayout6ShortcutValue(); }
+    static QString quickLayout7Shortcut() { return instance().defaultQuickLayout7ShortcutValue(); }
+    static QString quickLayout8Shortcut() { return instance().defaultQuickLayout8ShortcutValue(); }
+    static QString quickLayout9Shortcut() { return instance().defaultQuickLayout9ShortcutValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Navigation Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString moveWindowLeftShortcut() { return instance().defaultMoveWindowLeftValue(); }
+    static QString moveWindowRightShortcut() { return instance().defaultMoveWindowRightValue(); }
+    static QString moveWindowUpShortcut() { return instance().defaultMoveWindowUpValue(); }
+    static QString moveWindowDownShortcut() { return instance().defaultMoveWindowDownValue(); }
+    static QString swapWindowLeftShortcut() { return instance().defaultSwapWindowLeftValue(); }
+    static QString swapWindowRightShortcut() { return instance().defaultSwapWindowRightValue(); }
+    static QString swapWindowUpShortcut() { return instance().defaultSwapWindowUpValue(); }
+    static QString swapWindowDownShortcut() { return instance().defaultSwapWindowDownValue(); }
+    static QString focusZoneLeftShortcut() { return instance().defaultFocusZoneLeftValue(); }
+    static QString focusZoneRightShortcut() { return instance().defaultFocusZoneRightValue(); }
+    static QString focusZoneUpShortcut() { return instance().defaultFocusZoneUpValue(); }
+    static QString focusZoneDownShortcut() { return instance().defaultFocusZoneDownValue(); }
+    static QString pushToEmptyZoneShortcut() { return instance().defaultPushToEmptyZoneValue(); }
+    static QString restoreWindowSizeShortcut() { return instance().defaultRestoreWindowSizeValue(); }
+    static QString toggleWindowFloatShortcut() { return instance().defaultToggleWindowFloatValue(); }
+    static QString snapToZone1Shortcut() { return instance().defaultSnapToZone1Value(); }
+    static QString snapToZone2Shortcut() { return instance().defaultSnapToZone2Value(); }
+    static QString snapToZone3Shortcut() { return instance().defaultSnapToZone3Value(); }
+    static QString snapToZone4Shortcut() { return instance().defaultSnapToZone4Value(); }
+    static QString snapToZone5Shortcut() { return instance().defaultSnapToZone5Value(); }
+    static QString snapToZone6Shortcut() { return instance().defaultSnapToZone6Value(); }
+    static QString snapToZone7Shortcut() { return instance().defaultSnapToZone7Value(); }
+    static QString snapToZone8Shortcut() { return instance().defaultSnapToZone8Value(); }
+    static QString snapToZone9Shortcut() { return instance().defaultSnapToZone9Value(); }
+    static QString rotateWindowsClockwiseShortcut() { return instance().defaultRotateWindowsClockwiseValue(); }
+    static QString rotateWindowsCounterclockwiseShortcut() { return instance().defaultRotateWindowsCounterclockwiseValue(); }
+    static QString cycleWindowForwardShortcut() { return instance().defaultCycleWindowForwardValue(); }
+    static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString autotileToggleShortcut() { return instance().defaultToggleShortcutValue(); }
+    static QString autotileFocusMasterShortcut() { return instance().defaultFocusMasterShortcutValue(); }
+    static QString autotileSwapMasterShortcut() { return instance().defaultSwapMasterShortcutValue(); }
+    static QString autotileIncMasterRatioShortcut() { return instance().defaultIncMasterRatioShortcutValue(); }
+    static QString autotileDecMasterRatioShortcut() { return instance().defaultDecMasterRatioShortcutValue(); }
+    static QString autotileIncMasterCountShortcut() { return instance().defaultIncMasterCountShortcutValue(); }
+    static QString autotileDecMasterCountShortcut() { return instance().defaultDecMasterCountShortcutValue(); }
+    static QString autotileRetileShortcut() { return instance().defaultRetileShortcutValue(); }
 
 private:
     // Lazily-initialized singleton instance

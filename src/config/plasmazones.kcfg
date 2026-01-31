@@ -72,6 +72,12 @@
       <label>Show OSD feedback when using keyboard navigation to move or focus windows between zones</label>
       <default>true</default>
     </entry>
+    <entry name="OsdStyle" type="Int">
+      <label>OSD notification style (0=Text, 1=Preview, 2=Compact)</label>
+      <default>1</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
@@ -218,13 +224,13 @@
       <label>Minimum window width for zone snapping (pixels)</label>
       <default>200</default>
       <min>0</min>
-      <max>1000</max>
+      <max>2000</max>
     </entry>
     <entry name="MinimumWindowHeight" type="Int">
       <label>Minimum window height for zone snapping (pixels)</label>
       <default>150</default>
       <min>0</min>
-      <max>1000</max>
+      <max>2000</max>
     </entry>
   </group>
 

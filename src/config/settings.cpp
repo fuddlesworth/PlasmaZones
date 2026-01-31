@@ -1321,9 +1321,10 @@ void Settings::load()
     m_flashZonesOnSwitch = display.readEntry("FlashOnSwitch", ConfigDefaults::flashOnSwitch());
     m_showOsdOnLayoutSwitch = display.readEntry("ShowOsdOnLayoutSwitch", ConfigDefaults::showOsdOnLayoutSwitch());
     m_showNavigationOsd = display.readEntry("ShowNavigationOsd", ConfigDefaults::showNavigationOsd());
-    int osdStyleInt = display.readEntry("OsdStyle", static_cast<int>(OsdStyle::Preview));
+    int osdStyleInt = display.readEntry("OsdStyle", ConfigDefaults::osdStyle());
     if (osdStyleInt < 0 || osdStyleInt > 2) {
-        osdStyleInt = static_cast<int>(OsdStyle::Preview);
+        qCWarning(lcConfig) << "Invalid OSD style:" << osdStyleInt << "using default";
+        osdStyleInt = ConfigDefaults::osdStyle();
     }
     m_osdStyle = static_cast<OsdStyle>(osdStyleInt);
 
@@ -1454,9 +1455,9 @@ void Settings::load()
     m_excludedWindowClasses = exclusions.readEntry("WindowClasses", QStringList());
     m_excludeTransientWindows = exclusions.readEntry("ExcludeTransientWindows", ConfigDefaults::excludeTransientWindows());
     int minWidth = exclusions.readEntry("MinimumWindowWidth", ConfigDefaults::minimumWindowWidth());
-    m_minimumWindowWidth = qBound(0, minWidth, 1000);
+    m_minimumWindowWidth = qBound(0, minWidth, 2000);  // Match kcfg max for 4K monitors
     int minHeight = exclusions.readEntry("MinimumWindowHeight", ConfigDefaults::minimumWindowHeight());
-    m_minimumWindowHeight = qBound(0, minHeight, 1000);
+    m_minimumWindowHeight = qBound(0, minHeight, 2000);  // Match kcfg max for 4K monitors
 
     // Zone Selector (defaults from .kcfg via ConfigDefaults)
     KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
@@ -1511,23 +1512,30 @@ void Settings::load()
     }
     m_zoneSelectorMaxRows = maxRows;
 
-    // Shader Effects
+    // Shader Effects (defaults from .kcfg via ConfigDefaults)
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
-    m_enableShaderEffects = shaders.readEntry("EnableShaderEffects", true);
-    m_shaderFrameRate = qBound(30, shaders.readEntry("ShaderFrameRate", 60), 144);
+    m_enableShaderEffects = shaders.readEntry("EnableShaderEffects", ConfigDefaults::enableShaderEffects());
+    m_shaderFrameRate = qBound(30, shaders.readEntry("ShaderFrameRate", ConfigDefaults::shaderFrameRate()), 144);
 
-    // Global Shortcuts
+    // Global Shortcuts (defaults from .kcfg via ConfigDefaults)
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
-    m_openEditorShortcut = globalShortcuts.readEntry("OpenEditorShortcut", QStringLiteral("Meta+Shift+E"));
+    m_openEditorShortcut = globalShortcuts.readEntry("OpenEditorShortcut", ConfigDefaults::openEditorShortcut());
     m_previousLayoutShortcut = globalShortcuts.readEntry("PreviousLayoutShortcut", QStringLiteral("Meta+Alt+["));
     m_nextLayoutShortcut = globalShortcuts.readEntry("NextLayoutShortcut", QStringLiteral("Meta+Alt+]"));
+    // Quick layout shortcuts - use ConfigDefaults for each
+    const QString quickLayoutDefaults[9] = {
+        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
+        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
+        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
+        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
+        ConfigDefaults::quickLayout9Shortcut()
+    };
     for (int i = 0; i < 9; ++i) {
         QString key = QStringLiteral("QuickLayout%1Shortcut").arg(i + 1);
-        QString defaultShortcut = QStringLiteral("Meta+Alt+%1").arg(i + 1);
-        m_quickLayoutShortcuts[i] = globalShortcuts.readEntry(key, defaultShortcut);
+        m_quickLayoutShortcuts[i] = globalShortcuts.readEntry(key, quickLayoutDefaults[i]);
     }
 
-    // Keyboard Navigation Shortcuts (Phase 1 features)
+    // Keyboard Navigation Shortcuts (defaults from .kcfg via ConfigDefaults)
     // Shortcut pattern philosophy for consistency and KDE conflict avoidance:
     //   Meta+Alt+{key}         = Layout operations ([, ], 1-9, Return, Escape, F)
     //   Meta+Alt+Shift+Arrow   = Window zone movement
@@ -1536,50 +1544,56 @@ void Settings::load()
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
     // we use Meta+Alt+Shift+Arrow instead.
     KConfigGroup navigationShortcuts = config->group(QStringLiteral("NavigationShortcuts"));
-    m_moveWindowLeftShortcut = navigationShortcuts.readEntry("MoveWindowLeft", QStringLiteral("Meta+Alt+Shift+Left"));
+    m_moveWindowLeftShortcut = navigationShortcuts.readEntry("MoveWindowLeft", ConfigDefaults::moveWindowLeftShortcut());
     m_moveWindowRightShortcut =
-        navigationShortcuts.readEntry("MoveWindowRight", QStringLiteral("Meta+Alt+Shift+Right"));
-    m_moveWindowUpShortcut = navigationShortcuts.readEntry("MoveWindowUp", QStringLiteral("Meta+Alt+Shift+Up"));
-    m_moveWindowDownShortcut = navigationShortcuts.readEntry("MoveWindowDown", QStringLiteral("Meta+Alt+Shift+Down"));
+        navigationShortcuts.readEntry("MoveWindowRight", ConfigDefaults::moveWindowRightShortcut());
+    m_moveWindowUpShortcut = navigationShortcuts.readEntry("MoveWindowUp", ConfigDefaults::moveWindowUpShortcut());
+    m_moveWindowDownShortcut = navigationShortcuts.readEntry("MoveWindowDown", ConfigDefaults::moveWindowDownShortcut());
     // Meta+Arrow conflicts with KDE's Quick Tile; we use Alt+Shift+Arrow instead.
-    m_focusZoneLeftShortcut = navigationShortcuts.readEntry("FocusZoneLeft", QStringLiteral("Alt+Shift+Left"));
-    m_focusZoneRightShortcut = navigationShortcuts.readEntry("FocusZoneRight", QStringLiteral("Alt+Shift+Right"));
-    m_focusZoneUpShortcut = navigationShortcuts.readEntry("FocusZoneUp", QStringLiteral("Alt+Shift+Up"));
-    m_focusZoneDownShortcut = navigationShortcuts.readEntry("FocusZoneDown", QStringLiteral("Alt+Shift+Down"));
-    m_pushToEmptyZoneShortcut = navigationShortcuts.readEntry("PushToEmptyZone", QStringLiteral("Meta+Alt+Return"));
-    m_restoreWindowSizeShortcut = navigationShortcuts.readEntry("RestoreWindowSize", QStringLiteral("Meta+Alt+Escape"));
-    m_toggleWindowFloatShortcut = navigationShortcuts.readEntry("ToggleWindowFloat", QStringLiteral("Meta+Alt+F"));
+    m_focusZoneLeftShortcut = navigationShortcuts.readEntry("FocusZoneLeft", ConfigDefaults::focusZoneLeftShortcut());
+    m_focusZoneRightShortcut = navigationShortcuts.readEntry("FocusZoneRight", ConfigDefaults::focusZoneRightShortcut());
+    m_focusZoneUpShortcut = navigationShortcuts.readEntry("FocusZoneUp", ConfigDefaults::focusZoneUpShortcut());
+    m_focusZoneDownShortcut = navigationShortcuts.readEntry("FocusZoneDown", ConfigDefaults::focusZoneDownShortcut());
+    m_pushToEmptyZoneShortcut = navigationShortcuts.readEntry("PushToEmptyZone", ConfigDefaults::pushToEmptyZoneShortcut());
+    m_restoreWindowSizeShortcut = navigationShortcuts.readEntry("RestoreWindowSize", ConfigDefaults::restoreWindowSizeShortcut());
+    m_toggleWindowFloatShortcut = navigationShortcuts.readEntry("ToggleWindowFloat", ConfigDefaults::toggleWindowFloatShortcut());
 
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
     // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
     m_swapWindowLeftShortcut =
-        navigationShortcuts.readEntry("SwapWindowLeft", QStringLiteral("Meta+Ctrl+Alt+Left"));
+        navigationShortcuts.readEntry("SwapWindowLeft", ConfigDefaults::swapWindowLeftShortcut());
     m_swapWindowRightShortcut =
-        navigationShortcuts.readEntry("SwapWindowRight", QStringLiteral("Meta+Ctrl+Alt+Right"));
-    m_swapWindowUpShortcut = navigationShortcuts.readEntry("SwapWindowUp", QStringLiteral("Meta+Ctrl+Alt+Up"));
-    m_swapWindowDownShortcut = navigationShortcuts.readEntry("SwapWindowDown", QStringLiteral("Meta+Ctrl+Alt+Down"));
+        navigationShortcuts.readEntry("SwapWindowRight", ConfigDefaults::swapWindowRightShortcut());
+    m_swapWindowUpShortcut = navigationShortcuts.readEntry("SwapWindowUp", ConfigDefaults::swapWindowUpShortcut());
+    m_swapWindowDownShortcut = navigationShortcuts.readEntry("SwapWindowDown", ConfigDefaults::swapWindowDownShortcut());
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9) - using ConfigDefaults
+    const QString snapToZoneDefaults[9] = {
+        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
+        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
+        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
+        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
+        ConfigDefaults::snapToZone9Shortcut()
+    };
     for (int i = 0; i < 9; ++i) {
         QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
-        QString defaultShortcut = QStringLiteral("Meta+Ctrl+%1").arg(i + 1);
-        m_snapToZoneShortcuts[i] = navigationShortcuts.readEntry(key, defaultShortcut);
+        m_snapToZoneShortcuts[i] = navigationShortcuts.readEntry(key, snapToZoneDefaults[i]);
     }
 
     // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
     // Rotates all windows in the current layout clockwise or counterclockwise
     m_rotateWindowsClockwiseShortcut =
-        navigationShortcuts.readEntry("RotateWindowsClockwise", QStringLiteral("Meta+Ctrl+]"));
+        navigationShortcuts.readEntry("RotateWindowsClockwise", ConfigDefaults::rotateWindowsClockwiseShortcut());
     m_rotateWindowsCounterclockwiseShortcut =
-        navigationShortcuts.readEntry("RotateWindowsCounterclockwise", QStringLiteral("Meta+Ctrl+["));
+        navigationShortcuts.readEntry("RotateWindowsCounterclockwise", ConfigDefaults::rotateWindowsCounterclockwiseShortcut());
 
     // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
     // Cycles focus between windows stacked in the same zone (monocle-style navigation)
     m_cycleWindowForwardShortcut =
-        navigationShortcuts.readEntry("CycleWindowForward", QStringLiteral("Meta+Alt+."));
+        navigationShortcuts.readEntry("CycleWindowForward", ConfigDefaults::cycleWindowForwardShortcut());
     m_cycleWindowBackwardShortcut =
-        navigationShortcuts.readEntry("CycleWindowBackward", QStringLiteral("Meta+Alt+,"));
+        navigationShortcuts.readEntry("CycleWindowBackward", ConfigDefaults::cycleWindowBackwardShortcut());
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (defaults from .kcfg via ConfigDefaults)
@@ -1660,16 +1674,16 @@ void Settings::load()
     m_autotileMonocleHideOthers = autotiling.readEntry("AutotileMonocleHideOthers", ConfigDefaults::autotileMonocleHideOthers());
     m_autotileMonocleShowTabs = autotiling.readEntry("AutotileMonocleShowTabs", ConfigDefaults::autotileMonocleShowTabs());
 
-    // Autotiling Shortcuts (Bismuth-compatible defaults)
+    // Autotiling Shortcuts (defaults from .kcfg via ConfigDefaults, Bismuth-compatible)
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
-    m_autotileToggleShortcut = autotileShortcuts.readEntry("ToggleShortcut", QStringLiteral("Meta+T"));
-    m_autotileFocusMasterShortcut = autotileShortcuts.readEntry("FocusMasterShortcut", QStringLiteral("Meta+M"));
-    m_autotileSwapMasterShortcut = autotileShortcuts.readEntry("SwapMasterShortcut", QStringLiteral("Meta+Return"));
-    m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry("IncMasterRatioShortcut", QStringLiteral("Meta+Shift+="));
-    m_autotileDecMasterRatioShortcut = autotileShortcuts.readEntry("DecMasterRatioShortcut", QStringLiteral("Meta+Shift+-"));
-    m_autotileIncMasterCountShortcut = autotileShortcuts.readEntry("IncMasterCountShortcut", QStringLiteral("Meta+Shift+I"));
-    m_autotileDecMasterCountShortcut = autotileShortcuts.readEntry("DecMasterCountShortcut", QStringLiteral("Meta+Shift+D"));
-    m_autotileRetileShortcut = autotileShortcuts.readEntry("RetileShortcut", QStringLiteral("Meta+Shift+R"));
+    m_autotileToggleShortcut = autotileShortcuts.readEntry("ToggleShortcut", ConfigDefaults::autotileToggleShortcut());
+    m_autotileFocusMasterShortcut = autotileShortcuts.readEntry("FocusMasterShortcut", ConfigDefaults::autotileFocusMasterShortcut());
+    m_autotileSwapMasterShortcut = autotileShortcuts.readEntry("SwapMasterShortcut", ConfigDefaults::autotileSwapMasterShortcut());
+    m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry("IncMasterRatioShortcut", ConfigDefaults::autotileIncMasterRatioShortcut());
+    m_autotileDecMasterRatioShortcut = autotileShortcuts.readEntry("DecMasterRatioShortcut", ConfigDefaults::autotileDecMasterRatioShortcut());
+    m_autotileIncMasterCountShortcut = autotileShortcuts.readEntry("IncMasterCountShortcut", ConfigDefaults::autotileIncMasterCountShortcut());
+    m_autotileDecMasterCountShortcut = autotileShortcuts.readEntry("DecMasterCountShortcut", ConfigDefaults::autotileDecMasterCountShortcut());
+    m_autotileRetileShortcut = autotileShortcuts.readEntry("RetileShortcut", ConfigDefaults::autotileRetileShortcut());
 
     // Apply system colors if enabled
     if (m_useSystemColors) {
@@ -1858,13 +1872,14 @@ void Settings::reset()
     m_multiZoneModifier = static_cast<DragModifier>(ConfigDefaults::multiZoneModifier());
     m_middleClickMultiZone = ConfigDefaults::middleClickMultiZone();
 
-    // Display settings
+    // Display settings (from .kcfg via ConfigDefaults)
     m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
     m_disabledMonitors.clear();
     m_showZoneNumbers = ConfigDefaults::showNumbers();
     m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
     m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
     m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
+    m_osdStyle = static_cast<OsdStyle>(ConfigDefaults::osdStyle());
 
     // Appearance defaults (from .kcfg via ConfigDefaults)
     m_useSystemColors = ConfigDefaults::useSystemColors();
@@ -1917,54 +1932,57 @@ void Settings::reset()
     m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
     m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
 
-    // Global Shortcuts defaults
-    m_openEditorShortcut = QStringLiteral("Meta+Shift+E");
+    // Global Shortcuts defaults (from .kcfg via ConfigDefaults)
+    m_openEditorShortcut = ConfigDefaults::openEditorShortcut();
     m_previousLayoutShortcut = QStringLiteral("Meta+Alt+[");
     m_nextLayoutShortcut = QStringLiteral("Meta+Alt+]");
-    for (int i = 0; i < 9; ++i) {
-        m_quickLayoutShortcuts[i] = QStringLiteral("Meta+Alt+%1").arg(i + 1);
-    }
+    m_quickLayoutShortcuts[0] = ConfigDefaults::quickLayout1Shortcut();
+    m_quickLayoutShortcuts[1] = ConfigDefaults::quickLayout2Shortcut();
+    m_quickLayoutShortcuts[2] = ConfigDefaults::quickLayout3Shortcut();
+    m_quickLayoutShortcuts[3] = ConfigDefaults::quickLayout4Shortcut();
+    m_quickLayoutShortcuts[4] = ConfigDefaults::quickLayout5Shortcut();
+    m_quickLayoutShortcuts[5] = ConfigDefaults::quickLayout6Shortcut();
+    m_quickLayoutShortcuts[6] = ConfigDefaults::quickLayout7Shortcut();
+    m_quickLayoutShortcuts[7] = ConfigDefaults::quickLayout8Shortcut();
+    m_quickLayoutShortcuts[8] = ConfigDefaults::quickLayout9Shortcut();
 
-    // Keyboard Navigation Shortcuts defaults (Phase 1 features)
-    // Shortcut pattern philosophy for consistency and KDE conflict avoidance:
-    //   Meta+Alt+{key}         = Layout operations ([, ], 1-9, Return, Escape, F)
-    //   Meta+Alt+Shift+Arrow   = Window zone movement
-    //   Alt+Shift+Arrow        = Focus zone navigation (lighter action, no Meta)
-    //   Meta+Ctrl+{1-9}        = Direct zone snapping
-    // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
-    // we use Meta+Alt+Shift+Arrow instead.
-    m_moveWindowLeftShortcut = QStringLiteral("Meta+Alt+Shift+Left");
-    m_moveWindowRightShortcut = QStringLiteral("Meta+Alt+Shift+Right");
-    m_moveWindowUpShortcut = QStringLiteral("Meta+Alt+Shift+Up");
-    m_moveWindowDownShortcut = QStringLiteral("Meta+Alt+Shift+Down");
-    // Meta+Arrow conflicts with KDE's Quick Tile; we use Alt+Shift+Arrow instead.
-    m_focusZoneLeftShortcut = QStringLiteral("Alt+Shift+Left");
-    m_focusZoneRightShortcut = QStringLiteral("Alt+Shift+Right");
-    m_focusZoneUpShortcut = QStringLiteral("Alt+Shift+Up");
-    m_focusZoneDownShortcut = QStringLiteral("Alt+Shift+Down");
-    m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Alt+Return");
-    m_restoreWindowSizeShortcut = QStringLiteral("Meta+Alt+Escape");
-    m_toggleWindowFloatShortcut = QStringLiteral("Meta+Alt+F");
+    // Keyboard Navigation Shortcuts defaults (from .kcfg via ConfigDefaults)
+    m_moveWindowLeftShortcut = ConfigDefaults::moveWindowLeftShortcut();
+    m_moveWindowRightShortcut = ConfigDefaults::moveWindowRightShortcut();
+    m_moveWindowUpShortcut = ConfigDefaults::moveWindowUpShortcut();
+    m_moveWindowDownShortcut = ConfigDefaults::moveWindowDownShortcut();
+    m_focusZoneLeftShortcut = ConfigDefaults::focusZoneLeftShortcut();
+    m_focusZoneRightShortcut = ConfigDefaults::focusZoneRightShortcut();
+    m_focusZoneUpShortcut = ConfigDefaults::focusZoneUpShortcut();
+    m_focusZoneDownShortcut = ConfigDefaults::focusZoneDownShortcut();
+    m_pushToEmptyZoneShortcut = ConfigDefaults::pushToEmptyZoneShortcut();
+    m_restoreWindowSizeShortcut = ConfigDefaults::restoreWindowSizeShortcut();
+    m_toggleWindowFloatShortcut = ConfigDefaults::toggleWindowFloatShortcut();
 
-    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
-    // Swaps focused window with window in adjacent zone
-    m_swapWindowLeftShortcut = QStringLiteral("Meta+Ctrl+Alt+Left");
-    m_swapWindowRightShortcut = QStringLiteral("Meta+Ctrl+Alt+Right");
-    m_swapWindowUpShortcut = QStringLiteral("Meta+Ctrl+Alt+Up");
-    m_swapWindowDownShortcut = QStringLiteral("Meta+Ctrl+Alt+Down");
+    // Swap Window Shortcuts (from .kcfg via ConfigDefaults)
+    m_swapWindowLeftShortcut = ConfigDefaults::swapWindowLeftShortcut();
+    m_swapWindowRightShortcut = ConfigDefaults::swapWindowRightShortcut();
+    m_swapWindowUpShortcut = ConfigDefaults::swapWindowUpShortcut();
+    m_swapWindowDownShortcut = ConfigDefaults::swapWindowDownShortcut();
 
-    // Snap to Zone by Number Shortcuts
-    for (int i = 0; i < 9; ++i) {
-        m_snapToZoneShortcuts[i] = QStringLiteral("Meta+Ctrl+%1").arg(i + 1);
-    }
+    // Snap to Zone by Number Shortcuts (from .kcfg via ConfigDefaults)
+    m_snapToZoneShortcuts[0] = ConfigDefaults::snapToZone1Shortcut();
+    m_snapToZoneShortcuts[1] = ConfigDefaults::snapToZone2Shortcut();
+    m_snapToZoneShortcuts[2] = ConfigDefaults::snapToZone3Shortcut();
+    m_snapToZoneShortcuts[3] = ConfigDefaults::snapToZone4Shortcut();
+    m_snapToZoneShortcuts[4] = ConfigDefaults::snapToZone5Shortcut();
+    m_snapToZoneShortcuts[5] = ConfigDefaults::snapToZone6Shortcut();
+    m_snapToZoneShortcuts[6] = ConfigDefaults::snapToZone7Shortcut();
+    m_snapToZoneShortcuts[7] = ConfigDefaults::snapToZone8Shortcut();
+    m_snapToZoneShortcuts[8] = ConfigDefaults::snapToZone9Shortcut();
 
-    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
-    m_rotateWindowsClockwiseShortcut = QStringLiteral("Meta+Ctrl+]");
-    m_rotateWindowsCounterclockwiseShortcut = QStringLiteral("Meta+Ctrl+[");
+    // Rotate Windows Shortcuts (from .kcfg via ConfigDefaults)
+    m_rotateWindowsClockwiseShortcut = ConfigDefaults::rotateWindowsClockwiseShortcut();
+    m_rotateWindowsCounterclockwiseShortcut = ConfigDefaults::rotateWindowsCounterclockwiseShortcut();
 
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
-    m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
-    m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
+    // Cycle Windows in Zone Shortcuts (from .kcfg via ConfigDefaults)
+    m_cycleWindowForwardShortcut = ConfigDefaults::cycleWindowForwardShortcut();
+    m_cycleWindowBackwardShortcut = ConfigDefaults::cycleWindowBackwardShortcut();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (from .kcfg via ConfigDefaults)
@@ -1995,15 +2013,15 @@ void Settings::reset()
     m_autotileMonocleHideOthers = ConfigDefaults::autotileMonocleHideOthers();
     m_autotileMonocleShowTabs = ConfigDefaults::autotileMonocleShowTabs();
 
-    // Autotiling Shortcuts (Bismuth-compatible defaults)
-    m_autotileToggleShortcut = QStringLiteral("Meta+T");
-    m_autotileFocusMasterShortcut = QStringLiteral("Meta+M");
-    m_autotileSwapMasterShortcut = QStringLiteral("Meta+Return");
-    m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+=");
-    m_autotileDecMasterRatioShortcut = QStringLiteral("Meta+Shift+-");
-    m_autotileIncMasterCountShortcut = QStringLiteral("Meta+Shift+I");
-    m_autotileDecMasterCountShortcut = QStringLiteral("Meta+Shift+D");
-    m_autotileRetileShortcut = QStringLiteral("Meta+Shift+R");
+    // Autotiling Shortcuts (from .kcfg via ConfigDefaults, Bismuth-compatible)
+    m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();
+    m_autotileFocusMasterShortcut = ConfigDefaults::autotileFocusMasterShortcut();
+    m_autotileSwapMasterShortcut = ConfigDefaults::autotileSwapMasterShortcut();
+    m_autotileIncMasterRatioShortcut = ConfigDefaults::autotileIncMasterRatioShortcut();
+    m_autotileDecMasterRatioShortcut = ConfigDefaults::autotileDecMasterRatioShortcut();
+    m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
+    m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
+    m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
 
     Q_EMIT settingsChanged();
 }
