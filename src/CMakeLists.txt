@@ -200,6 +200,13 @@ install(TARGETS plasmazones_core
 )
 
 # Daemon executable
+# Note: We need to add kcfg files here too because KConfigXT generates local symbols
+# that can't be exported from plasmazones_core shared library.
+kconfig_add_kcfg_files(plasmazones_daemon_kcfg_SRCS
+    config/plasmazones.kcfgc
+    GENERATE_MOC
+)
+
 set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/daemon.cpp
@@ -222,6 +229,8 @@ set(plasmazones_daemon_SRCS
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshadernode.h
     daemon/rendering/zoneshadernode.cpp
+    # KConfigXT-generated config class (for ConfigDefaults)
+    ${plasmazones_daemon_kcfg_SRCS}
 )
 
 # QML resources for the daemon overlay

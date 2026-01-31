@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "overlayservice.h"
+#include "../config/configdefaults.h"
 #include "../core/layout.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
@@ -151,9 +152,10 @@ ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen*
     const qreal screenAspectRatio =
         screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
 
-    // Determine size mode (Auto vs Manual)
-    const ZoneSelectorSizeMode sizeMode = settings ? settings->zoneSelectorSizeMode() : ZoneSelectorSizeMode::Auto;
-    const int maxRows = settings ? settings->zoneSelectorMaxRows() : 4;
+    // Determine size mode (Auto vs Manual) - use ConfigDefaults for null-safety
+    const ZoneSelectorSizeMode sizeMode = settings ? settings->zoneSelectorSizeMode()
+        : static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
+    const int maxRows = settings ? settings->zoneSelectorMaxRows() : ConfigDefaults::maxRows();
 
     if (sizeMode == ZoneSelectorSizeMode::Auto) {
         // Auto-sizing: Calculate preview size as ~10% of screen width, bounded 120-280px
@@ -183,7 +185,7 @@ ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen*
         layout.rows = safeLayoutCount;
     } else if (layoutMode == ZoneSelectorLayoutMode::Grid) {
         // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
-        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : 5;
+        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : ConfigDefaults::gridColumns();
         layout.columns = std::max(1, gridColumns);
         layout.rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / layout.columns));
     } else {

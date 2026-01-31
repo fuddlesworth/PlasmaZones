@@ -271,20 +271,26 @@ PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality f
 ### Architecture Overview
 - **ISettings interface** (`interfaces.h`): Abstract interface declaring all settings methods and signals
 - **Settings class** (`settings.h/cpp`): Concrete implementation with KConfig persistence
-- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema defining settings structure
+- **kcfg schema** (`plasmazones.kcfg`): KConfigXT XML schema defining settings structure - **SINGLE SOURCE OF TRUTH for defaults**
 - **kcfgc config** (`plasmazones.kcfgc`): Code generator configuration (generates PlasmaZonesConfig)
+- **ConfigDefaults class** (`configdefaults.h`): Static wrapper exposing .kcfg defaults via `ConfigDefaults::xxx()` methods
 
-**Note on KConfigXT Generated Class:**
-The kcfgc generates a `PlasmaZonesConfig` class, but it is NOT currently used. The Settings class
-manually reads/writes using KConfig APIs for greater control over validation and migration.
-The kcfg file serves primarily as documentation and could enable future auto-generation.
-When adding settings, update kcfg for documentation but implement in Settings.cpp manually.
+**KConfigXT and ConfigDefaults Usage:**
+The kcfgc generates a `PlasmaZonesConfig` class with `defaultXxxValue()` methods. The `ConfigDefaults`
+wrapper class provides static access to these generated defaults. The Settings class uses `ConfigDefaults`
+for all default values in `load()` and `reset()` methods, ensuring the .kcfg file is the single source
+of truth for all user-configurable settings.
+
+**When to use which:**
+- `ConfigDefaults::xxx()` - For settings defaults (config module and daemon)
+- `Defaults::xxx` (constants.h) - For core module structural constants (zone.h, layout.cpp, geometryutils.cpp)
+  that cannot depend on the config module. These should match the corresponding .kcfg values.
 
 ### Adding a New Setting (Complete Workflow)
 
 When adding a new setting, you MUST update ALL of these files in order:
 
-1. **`plasmazones.kcfg`** - Add entry to appropriate group:
+1. **`plasmazones.kcfg`** - Add entry to appropriate group (SINGLE SOURCE OF TRUTH):
    ```xml
    <group name="GroupName">
      <entry name="SettingName" type="String">
@@ -294,13 +300,18 @@ When adding a new setting, you MUST update ALL of these files in order:
    </group>
    ```
 
-2. **`interfaces.h`** - Add signal declaration to ISettings:
+2. **`configdefaults.h`** - Add static accessor for the default value:
+   ```cpp
+   static QString settingName() { return instance().defaultSettingNameValue(); }
+   ```
+
+3. **`interfaces.h`** - Add signal declaration to ISettings:
    ```cpp
    Q_SIGNALS:
        void settingNameChanged();  // Past tense verb
    ```
 
-3. **`settings.h`** - Add Q_PROPERTY, getter, setter, and member variable:
+4. **`settings.h`** - Add Q_PROPERTY, getter, setter, and member variable:
    ```cpp
    // In Q_PROPERTY section:
    Q_PROPERTY(QString settingName READ settingName WRITE setSettingName NOTIFY settingNameChanged)
@@ -309,11 +320,11 @@ When adding a new setting, you MUST update ALL of these files in order:
    QString settingName() const { return m_settingName; }
    void setSettingName(const QString &value);
 
-   // In private section:
+   // In private section (note: member initializer is fallback only):
    QString m_settingName = QStringLiteral("DefaultValue");
    ```
 
-4. **`settings.cpp`** - Add setter implementation, load/save/reset logic:
+5. **`settings.cpp`** - Add setter implementation, load/save/reset logic using ConfigDefaults:
    ```cpp
    // Setter (check value changed before emitting):
    void Settings::setSettingName(const QString &value) {
@@ -324,16 +335,16 @@ When adding a new setting, you MUST update ALL of these files in order:
        }
    }
 
-   // In load():
+   // In load() - use ConfigDefaults for default:
    KConfigGroup group = config->group(QStringLiteral("GroupName"));
-   m_settingName = group.readEntry("SettingName", QStringLiteral("DefaultValue"));
+   m_settingName = group.readEntry("SettingName", ConfigDefaults::settingName());
 
    // In save():
    KConfigGroup group = config->group(QStringLiteral("GroupName"));
    group.writeEntry("SettingName", m_settingName);
 
-   // In reset():
-   m_settingName = QStringLiteral("DefaultValue");
+   // In reset() - use ConfigDefaults for default:
+   m_settingName = ConfigDefaults::settingName();
    ```
 
 ### KConfigXT (kcfg) Conventions
@@ -508,9 +519,12 @@ TODO: Consider having EditorController get zonePadding via D-Bus from Settings i
 - ❌ **DON'T** emit signals without checking if value actually changed
 - ❌ **DON'T** forget to update ShortcutManager when adding new global shortcuts
 - ❌ **DON'T** add Editor group settings to Settings class (use EditorController)
+- ❌ **DON'T** use hardcoded default values in load()/reset() - use `ConfigDefaults::xxx()`
+- ❌ **DON'T** forget to add ConfigDefaults accessor when adding new settings to kcfg
 - ✅ **DO** keep kcfg key names matching settings.cpp for backward compatibility
 - ✅ **DO** add signals to ISettings interface (not just Settings class)
-- ✅ **DO** use `QStringLiteral()` for default values in member initializers
+- ✅ **DO** use `ConfigDefaults::xxx()` for defaults in load() and reset() methods
+- ✅ **DO** add static accessor to `configdefaults.h` for each new kcfg entry
 - ✅ **DO** emit both specific signal AND `settingsChanged()` in setters
 - ✅ **DO** use `Q_EMIT` macro (not just `emit`)
 

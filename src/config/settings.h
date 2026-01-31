@@ -973,6 +973,9 @@ private:
     int m_minimumWindowHeight = 150;
 
     // Zone Selector
+    // Note: These member initializers are fallbacks only. Actual defaults come from
+    // plasmazones.kcfg via ConfigDefaults. See reset() and load() methods.
+    // If you change a default here, also update plasmazones.kcfg to match.
     bool m_zoneSelectorEnabled = true;
     int m_zoneSelectorTriggerDistance = 50; // pixels from edge to trigger
     ZoneSelectorPosition m_zoneSelectorPosition = ZoneSelectorPosition::Top;
@@ -984,7 +987,7 @@ private:
     bool m_zoneSelectorPreviewLockAspect = true;
     int m_zoneSelectorGridColumns = 5; // grid columns (Manual mode)
 
-    // Shader Effects
+    // Shader Effects (defaults from plasmazones.kcfg via ConfigDefaults)
     bool m_enableShaderEffects = true;
     int m_shaderFrameRate = 60;
 

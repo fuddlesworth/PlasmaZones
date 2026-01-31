@@ -72,6 +72,12 @@
       <label>Show OSD feedback when using keyboard navigation to move or focus windows between zones</label>
       <default>true</default>
     </entry>
+    <entry name="OsdStyle" type="Int">
+      <label>OSD notification style (0=Text, 1=Preview, 2=Compact)</label>
+      <default>1</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
@@ -209,6 +215,22 @@
     <entry name="WindowClasses" type="StringList">
       <label>Window classes excluded from zone snapping</label>
       <default></default>
+    </entry>
+    <entry name="ExcludeTransientWindows" type="Bool">
+      <label>Exclude transient/dialog windows from zone snapping</label>
+      <default>true</default>
+    </entry>
+    <entry name="MinimumWindowWidth" type="Int">
+      <label>Minimum window width for zone snapping (pixels)</label>
+      <default>200</default>
+      <min>0</min>
+      <max>2000</max>
+    </entry>
+    <entry name="MinimumWindowHeight" type="Int">
+      <label>Minimum window height for zone snapping (pixels)</label>
+      <default>150</default>
+      <min>0</min>
+      <max>2000</max>
     </entry>
   </group>
 
@@ -469,10 +491,10 @@
       <max>200</max>
     </entry>
     <entry name="Position" type="Int">
-      <label>Zone selector position (0=Top,1=Bottom,2=Left,3=Right)</label>
-      <default>0</default>
+      <label>Zone selector position (0=TopLeft,1=Top,2=TopRight,3=Left,5=Right,6=BottomLeft,7=Bottom,8=BottomRight)</label>
+      <default>1</default>
       <min>0</min>
-      <max>3</max>
+      <max>8</max>
     </entry>
     <entry name="LayoutMode" type="Int">
       <label>Zone selector layout mode (0=Grid,1=Horizontal,2=Vertical)</label>
