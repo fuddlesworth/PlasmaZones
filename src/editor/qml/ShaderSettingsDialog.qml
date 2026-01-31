@@ -265,33 +265,41 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     standardButtons: Kirigami.Dialog.NoButton
 
-    footer: RowLayout {
-        spacing: Kirigami.Units.smallSpacing
+    footer: Item {
+        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
+        implicitWidth: footerLayout.implicitWidth
 
-        // Left side - Random button
-        Button {
-            text: i18nc("@action:button", "Random")
-            icon.name: "roll"
-            visible: root.shaderParams.length > 0
-            onClicked: root.randomizeParameters()
-        }
+        RowLayout {
+            id: footerLayout
+            anchors.fill: parent
+            anchors.margins: Kirigami.Units.largeSpacing
+            spacing: Kirigami.Units.smallSpacing
 
-        Item { Layout.fillWidth: true }
+            // Left side - Random button
+            Button {
+                text: i18nc("@action:button", "Random")
+                icon.name: "roll"
+                visible: root.shaderParams.length > 0
+                onClicked: root.randomizeParameters()
+            }
 
-        // Right side - Defaults and Apply
-        Button {
-            text: i18nc("@action:button", "Defaults")
-            icon.name: "edit-undo"
-            visible: root.shaderParams.length > 0
-            onClicked: root.resetToDefaults()
-        }
+            Item { Layout.fillWidth: true }
 
-        Button {
-            text: i18nc("@action:button", "Apply")
-            icon.name: "dialog-ok-apply"
-            onClicked: {
-                root.applyChanges();
-                root.close();
+            // Right side - Defaults and Apply
+            Button {
+                text: i18nc("@action:button", "Defaults")
+                icon.name: "edit-undo"
+                visible: root.shaderParams.length > 0
+                onClicked: root.resetToDefaults()
+            }
+
+            Button {
+                text: i18nc("@action:button", "Apply")
+                icon.name: "dialog-ok-apply"
+                onClicked: {
+                    root.applyChanges();
+                    root.close();
+                }
             }
         }
     }
