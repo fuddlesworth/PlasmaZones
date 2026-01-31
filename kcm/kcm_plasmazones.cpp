@@ -259,6 +259,10 @@ int KCMPlasmaZones::stickyWindowHandling() const
 {
     return static_cast<int>(m_settings->stickyWindowHandling());
 }
+bool KCMPlasmaZones::restoreWindowsToZonesOnLogin() const
+{
+    return m_settings->restoreWindowsToZonesOnLogin();
+}
 QString KCMPlasmaZones::defaultLayoutId() const
 {
     return m_settings->defaultLayoutId();
@@ -716,6 +720,15 @@ void KCMPlasmaZones::setStickyWindowHandling(int handling)
     if (static_cast<int>(m_settings->stickyWindowHandling()) != clamped) {
         m_settings->setStickyWindowHandling(static_cast<StickyWindowHandling>(clamped));
         Q_EMIT stickyWindowHandlingChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setRestoreWindowsToZonesOnLogin(bool restore)
+{
+    if (m_settings->restoreWindowsToZonesOnLogin() != restore) {
+        m_settings->setRestoreWindowsToZonesOnLogin(restore);
+        Q_EMIT restoreWindowsToZonesOnLoginChanged();
         setNeedsSave(true);
     }
 }

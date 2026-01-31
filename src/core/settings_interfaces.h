@@ -201,6 +201,8 @@ public:
     virtual void setRestoreOriginalSizeOnUnsnap(bool restore) = 0;
     virtual StickyWindowHandling stickyWindowHandling() const = 0;
     virtual void setStickyWindowHandling(StickyWindowHandling handling) = 0;
+    virtual bool restoreWindowsToZonesOnLogin() const = 0;
+    virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
 };
 
 /**

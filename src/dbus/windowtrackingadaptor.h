@@ -376,6 +376,21 @@ Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
+     * @brief Emitted when pending window restores become available
+     *
+     * This signal is emitted when:
+     * 1. The active layout becomes available after startup
+     * 2. There are pending zone assignments waiting to be applied
+     *
+     * The KWin effect should respond by calling restoreToPersistedZone()
+     * for all visible windows that haven't yet been tracked.
+     *
+     * @note This solves startup timing issues where windows appear before
+     * the daemon has fully initialized its layout.
+     */
+    void pendingRestoresAvailable();
+
+    /**
      * @brief Navigation feedback signal for UI/audio feedback
      * @param success Whether the navigation succeeded
      * @param action Action attempted (e.g., "move", "focus", "push", "restore", "float")

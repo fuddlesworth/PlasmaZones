@@ -90,6 +90,7 @@ public:
     static bool moveNewWindowsToLastZone() { return instance().defaultMoveNewToLastZoneValue(); }
     static bool restoreOriginalSizeOnUnsnap() { return instance().defaultRestoreSizeOnUnsnapValue(); }
     static int stickyWindowHandling() { return instance().defaultStickyWindowHandlingValue(); }
+    static bool restoreWindowsToZonesOnLogin() { return instance().defaultRestoreWindowsToZonesOnLoginValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Exclusion Settings

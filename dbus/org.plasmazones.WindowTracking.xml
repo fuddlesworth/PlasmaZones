@@ -280,6 +280,9 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Reason string (e.g. no adjacent zone)."/>
             </arg>
         </signal>
+        <signal name="pendingRestoresAvailable">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's layout becomes available and there are pending zone restores. The KWin effect should retry restoring untracked windows when receiving this signal."/>
+        </signal>
 
         <!-- Phase 2.1: Window Event Methods and Signals for Autotiling -->
         <method name="windowAdded">

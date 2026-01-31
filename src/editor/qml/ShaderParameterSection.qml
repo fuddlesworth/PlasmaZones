@@ -96,7 +96,7 @@ ColumnLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 1
-                color: Kirigami.Theme.separatorColor
+                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: root.expanded
                 opacity: 0.5
             }
@@ -137,6 +137,9 @@ ColumnLayout {
             width: parent.width
             // Keep active during collapse animation so content is visible while shrinking
             active: root.expanded || contentContainer.implicitHeight > 0
+
+            // Ensure Kirigami theme context propagates to loaded content
+            Kirigami.Theme.inherit: true
 
             // Fade content along with height animation
             opacity: root.expanded ? 1.0 : 0.0
