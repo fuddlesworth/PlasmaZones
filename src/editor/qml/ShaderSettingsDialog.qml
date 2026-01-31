@@ -22,6 +22,7 @@ Kirigami.Dialog {
     title: i18nc("@title:window", "Shader Settings")
     preferredWidth: Kirigami.Units.gridUnit * 28
     preferredHeight: Kirigami.Units.gridUnit * 30
+    padding: Kirigami.Units.largeSpacing
 
     // ═══════════════════════════════════════════════════════════════════════
     // CONSTANTS
@@ -302,6 +303,7 @@ Kirigami.Dialog {
                 }
 
                 ScrollView {
+                    id: descriptionScrollView
                     anchors.fill: parent
                     anchors.margins: Kirigami.Units.smallSpacing
                     clip: true
@@ -309,10 +311,8 @@ Kirigami.Dialog {
                     ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
                     ScrollBar.vertical.policy: ScrollBar.AsNeeded
 
-                    contentWidth: availableWidth
-
                     Label {
-                        width: parent.width
+                        width: descriptionScrollView.availableWidth
                         text: root.currentShaderInfo?.description
                               || i18nc("@info:placeholder", "No description available")
                         wrapMode: Text.WordWrap
