@@ -1,0 +1,116 @@
+{
+    "id": "toxic-circuit",
+    "name": "Toxic Circuit",
+    "description": "Cyberpunk venom overlay with glowing circuit traces, toxic drip effects, digital corruption, and neon shimmer - inspired by Neon Venom aesthetic",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "renderType": "rendernode",
+    "fragmentShader": "effect.glsl",
+    "vertexShader": "zone.vert.glsl",
+    "parameters": [
+        {
+            "id": "circuitDensity",
+            "name": "Circuit Density",
+            "type": "float",
+            "slot": 0,
+            "default": 12.0,
+            "min": 4.0,
+            "max": 20.0
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse Speed",
+            "type": "float",
+            "slot": 1,
+            "default": 1.0,
+            "min": 0.3,
+            "max": 3.0
+        },
+        {
+            "id": "dripIntensity",
+            "name": "Toxic Drip",
+            "type": "float",
+            "slot": 2,
+            "default": 0.2,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "glitchAmount",
+            "name": "Digital Glitch",
+            "type": "float",
+            "slot": 3,
+            "default": 0.08,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "glowStrength",
+            "name": "Neon Glow",
+            "type": "float",
+            "slot": 4,
+            "default": 1.0,
+            "min": 0.3,
+            "max": 3.0
+        },
+        {
+            "id": "smogDensity",
+            "name": "Smog Haze",
+            "type": "float",
+            "slot": 5,
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "chromaShift",
+            "name": "Chromatic Shift",
+            "type": "float",
+            "slot": 6,
+            "default": 3.0,
+            "min": 0.0,
+            "max": 15.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Fill Opacity",
+            "type": "float",
+            "slot": 7,
+            "default": 0.7,
+            "min": 0.3,
+            "max": 0.9
+        },
+        {
+            "id": "edgeGlowStrength",
+            "name": "Edge Glow",
+            "type": "float",
+            "slot": 8,
+            "default": 0.35,
+            "min": 0.0,
+            "max": 0.8
+        },
+        {
+            "id": "mouseInfluenceStrength",
+            "name": "Mouse Influence",
+            "type": "float",
+            "slot": 9,
+            "default": 1.5,
+            "min": 0.5,
+            "max": 3.0
+        },
+        {
+            "id": "toxicGreen",
+            "name": "Toxic Green",
+            "type": "color",
+            "slot": 0,
+            "default": "#39FF14"
+        },
+        {
+            "id": "electricPurple",
+            "name": "Electric Purple",
+            "type": "color",
+            "slot": 1,
+            "default": "#BF00FF"
+        }
+    ]
+}

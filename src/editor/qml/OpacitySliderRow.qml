@@ -57,16 +57,13 @@ RowLayout {
         from: 0
         to: 100
         stepSize: 1
-        value: (opacitySliderRow.opacityValue !== undefined)
-               ? (opacitySliderRow.opacityValue * 100)
-               : (opacitySliderRow.defaultOpacity * 100)
+        value: opacitySliderRow.opacityValue * 100
         enabled: opacitySliderRow.sliderEnabled
         Accessible.name: opacitySliderRow.accessibleName
         ToolTip.text: opacitySliderRow.toolTipText
-        ToolTip.visible: hovered && toolTipText !== ""
+        ToolTip.visible: hovered && opacitySliderRow.toolTipText !== ""
 
         onMoved: {
-            // Use Qt.callLater to avoid binding context issues
             Qt.callLater(function() {
                 opacitySliderRow.opacityEdited(slider.value / 100);
             });

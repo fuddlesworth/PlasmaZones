@@ -1,0 +1,155 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#version 330 core
+
+in vec2 vTexCoord;
+out vec4 fragColor;
+
+layout(std140) uniform ZoneUniforms {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    float iTime;
+    float iTimeDelta;
+    int iFrame;
+    vec2 iResolution;
+    int zoneCount;
+    int highlightedCount;
+    vec4 iMouse;
+    vec4 customParams[4];
+    vec4 customColors[8];
+    vec4 zoneRects[64];
+    vec4 zoneFillColors[64];
+    vec4 zoneBorderColors[64];
+    vec4 zoneParams[64];
+};
+
+/*
+ * FRACTAL FLOW - Shadertoy Conversion
+ * Organic fractal-like flowing pattern with iterative distortion
+ * Adapted from Shadertoy: void mainImage(out vec4 o, vec2 u)
+ *
+ * Parameters:
+ *   customParams[0].x = fillOpacity (0.3-0.95) - Zone fill opacity
+ *   customParams[0].y = speed (0.5-2.0) - Animation speed
+ *   customParams[0].z = scale (0.1-0.5) - Coordinate scale (larger = more zoomed out)
+ *   customParams[1].x = iterations (10.0-25.0) - Loop iterations (more = denser detail)
+ *   customColors[0] = primary tint - Colorizes the effect
+ */
+
+float sdRoundedBox(vec2 p, vec2 b, float r) {
+    vec2 q = abs(p) - b + r;
+    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+}
+
+// Shadertoy-derived: iterative distortion loop. iterCount controls detail (more = denser).
+// Constants (7, 5, 1.5, 9, 11, 40, 1e2, 25.6, 164, 250, 1.35) are from original; tune speed,
+// coordScale and iterCount for user control. Loop is dynamic so very high iterCount can be costly.
+vec4 sampleFractalFlow(vec2 localFragCoord, vec2 zoneSize, float iTime, float coordScale, float iterCount) {
+    vec2 v = zoneSize;
+    vec2 u = coordScale * (localFragCoord + localFragCoord - v) / v.y;
+
+    vec4 z = vec4(1.0, 2.0, 3.0, 0.0);
+    vec4 o = z;
+
+    float a = 0.5;
+    float t = iTime;
+    for (float i = 1.0; i < iterCount; i += 1.0) {
+        t += 1.0;
+        a += 0.03;
+        v = cos(t - 7.0 * u * pow(a, i)) - 5.0 * u;
+
+        float denom = length((1.0 + i * dot(v, v)) * sin(1.5 * u / (0.5 - dot(u, u)) - 9.0 * u.yx + t));
+        o += (1.0 + cos(z + t)) / max(denom, 1e-6);
+
+        u *= mat2(cos(i + 0.02 * t - z.wxzw * 11.0));
+        u += tanh(40.0 * dot(u, u) * cos(1e2 * u.yx + t)) / 2e2 + 0.2 * a * u + cos(4.0 / exp(dot(o, o) / 1e2) + t) / 3e2;
+    }
+
+    vec4 oClamped = max(o, 0.001);
+    o = 25.6 / (min(oClamped, 13.0) + 164.0 / oClamped) - dot(u, u) / 250.0;
+    o = clamp(o, 0.0, 1e4);
+    return vec4(min(o.rgb * 1.35, 1.0), 1.0);
+}
+
+vec4 renderFractalFlowZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
+    float borderRadius = max(params.x, 6.0);
+    float borderWidth = max(params.y, 2.5);
+
+    float fillOpacity = customParams[0].x > 0.01 ? customParams[0].x : 0.75;
+    float speed = customParams[0].y > 0.01 ? customParams[0].y : 1.0;
+    float coordScale = customParams[0].z > 0.01 ? customParams[0].z : 0.25;
+    float iterCount = customParams[1].x > 1.0 ? customParams[1].x : 22.0;
+    float borderGlowStrength = customParams[1].y > 0.01 ? customParams[1].y : 0.4;
+    float glowSize = customParams[1].z > 0.5 ? customParams[1].z : 8.0;
+
+    vec2 rectPos = rect.xy * iResolution;
+    vec2 rectSize = rect.zw * iResolution;
+    vec2 center = rectPos + rectSize * 0.5;
+    vec2 p = fragCoord - center;
+    vec2 localFragCoord = fragCoord - rectPos;
+
+    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+
+    vec3 tint = customColors[0].rgb;
+    if (length(tint) < 0.01)
+        tint = vec3(1.0, 1.0, 1.0);
+
+    if (isHighlighted) {
+        fillOpacity = min(fillOpacity + 0.1, 0.98);
+        speed *= 1.2;
+        tint = mix(tint, vec3(1.0), 0.2);
+    }
+
+    vec4 result = vec4(0.0);
+
+    if (d < 0.0) {
+        vec4 raw = sampleFractalFlow(localFragCoord, rectSize, iTime * speed, coordScale, iterCount);
+        result.rgb = raw.rgb * tint;
+        result.a = fillOpacity;
+    }
+
+    float borderDist = abs(d);
+    if (borderDist < borderWidth + 2.0) {
+        float border = 1.0 - smoothstep(0.0, borderWidth, borderDist);
+        vec3 borderClr = length(borderColor.rgb) > 0.01 ? borderColor.rgb : tint;
+        result.rgb = mix(result.rgb, borderClr, border);
+        result.a = max(result.a, border * 0.98);
+    }
+
+    if (isHighlighted && d > 0.0 && d < 20.0) {
+        float glow = exp(-d / glowSize) * borderGlowStrength;
+        result.rgb += tint * glow;
+        result.a = max(result.a, glow * 0.5);
+    }
+
+    return result;
+}
+
+void main() {
+    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec4 color = vec4(0.0);
+
+    if (zoneCount == 0) {
+        fragColor = vec4(0.0);
+        return;
+    }
+
+    for (int i = 0; i < zoneCount && i < 64; i++) {
+        vec4 rect = zoneRects[i];
+        if (rect.z <= 0.0 || rect.w <= 0.0)
+            continue;
+
+        vec4 zoneColor = renderFractalFlowZone(fragCoord, rect, zoneFillColors[i], zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
+
+        float srcA = zoneColor.a;
+        float dstA = color.a;
+        float outA = srcA + dstA * (1.0 - srcA);
+        if (outA > 0.0) {
+            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
+        }
+        color.a = outA;
+    }
+
+    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+}

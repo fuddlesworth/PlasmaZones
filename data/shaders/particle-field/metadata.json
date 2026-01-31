@@ -63,6 +63,24 @@
             "max": 1.0
         },
         {
+            "id": "fillDarkness",
+            "name": "Fill Darkness",
+            "type": "float",
+            "slot": 6,
+            "default": 0.1,
+            "min": 0.0,
+            "max": 0.4
+        },
+        {
+            "id": "particleBrightness",
+            "name": "Particle Brightness",
+            "type": "float",
+            "slot": 7,
+            "default": 0.25,
+            "min": 0.05,
+            "max": 0.6
+        },
+        {
             "id": "particleColor",
             "name": "Particle Color",
             "type": "color",

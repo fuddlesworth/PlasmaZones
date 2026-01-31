@@ -142,7 +142,8 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Highlight:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     baseColor: propertyPanel.multiHighlightColor
-                    opacityMultiplier: multiActiveOpacitySlider.opacityValue
+                    // Safe reference - multiActiveOpacitySlider is defined later in file
+                    opacityMultiplier: multiActiveOpacitySlider ? multiActiveOpacitySlider.opacityValue : propertyPanel.defaultOpacity
                     isMultiMode: true
                     accessibleName: i18nc("@label", "Highlight color picker for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Choose highlight color for all selected zones")
@@ -156,7 +157,8 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Inactive:")
                     visible: panelMode === "multiple" && multiUseCustomColorsCheck.checked
                     baseColor: propertyPanel.multiInactiveColor
-                    opacityMultiplier: multiInactiveOpacitySlider.opacityValue
+                    // Safe reference - multiInactiveOpacitySlider is defined later in file
+                    opacityMultiplier: multiInactiveOpacitySlider ? multiInactiveOpacitySlider.opacityValue : propertyPanel.defaultInactiveOpacity
                     isMultiMode: true
                     accessibleName: i18nc("@label", "Inactive color picker for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Choose inactive color for all selected zones")
@@ -395,7 +397,8 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Highlight:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     baseColor: getZoneColor("highlightColor")
-                    opacityMultiplier: activeOpacitySlider.opacityValue
+                    // Safe reference - activeOpacitySlider is defined later in file
+                    opacityMultiplier: activeOpacitySlider ? activeOpacitySlider.opacityValue : propertyPanel.defaultOpacity
                     isMultiMode: false
                     accessibleName: i18nc("@label", "Highlight color picker")
                     toolTipText: i18nc("@info:tooltip", "Choose color for highlighted/active zones")
@@ -412,7 +415,8 @@ Rectangle {
                     Kirigami.FormData.label: i18nc("@label", "Inactive:")
                     visible: panelMode === "single" && selectedZone !== null && useCustomColorsCheck.checked
                     baseColor: getZoneColor("inactiveColor")
-                    opacityMultiplier: inactiveOpacitySlider.opacityValue
+                    // Safe reference - inactiveOpacitySlider is defined later in file
+                    opacityMultiplier: inactiveOpacitySlider ? inactiveOpacitySlider.opacityValue : propertyPanel.defaultInactiveOpacity
                     isMultiMode: false
                     accessibleName: i18nc("@label", "Inactive color picker")
                     toolTipText: i18nc("@info:tooltip", "Choose color for non-selected zones")

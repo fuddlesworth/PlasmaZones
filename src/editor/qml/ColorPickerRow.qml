@@ -55,19 +55,32 @@ RowLayout {
 
     spacing: Kirigami.Units.smallSpacing
 
-    ColorPreviewButton {
+    // Color preview button - inline Rectangle matching main branch structure
+    Rectangle {
         id: colorPreview
 
-        displayColor: Qt.rgba(
+        width: colorPickerRow.buttonSize
+        height: colorPickerRow.buttonSize
+        radius: Kirigami.Units.smallSpacing
+        border.color: Kirigami.Theme.disabledTextColor
+        border.width: 1
+        color: Qt.rgba(
             colorPickerRow.baseColor.r,
             colorPickerRow.baseColor.g,
             colorPickerRow.baseColor.b,
             colorPickerRow.baseColor.a * colorPickerRow.opacityMultiplier
         )
-        buttonSize: colorPickerRow.buttonSize
-        accessibleName: colorPickerRow.accessibleName
-        toolTipText: colorPickerRow.toolTipText
-        onClicked: colorPickerRow.colorButtonClicked()
+        Accessible.name: colorPickerRow.accessibleName
+        ToolTip.text: colorPickerRow.toolTipText
+        ToolTip.visible: colorPreviewMouseArea.containsMouse && colorPickerRow.toolTipText !== ""
+
+        MouseArea {
+            id: colorPreviewMouseArea
+            anchors.fill: parent
+            cursorShape: Qt.PointingHandCursor
+            hoverEnabled: true
+            onClicked: colorPickerRow.colorButtonClicked()
+        }
     }
 
     Label {

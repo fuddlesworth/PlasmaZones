@@ -1,0 +1,64 @@
+{
+    "id": "rotating-tiles",
+    "name": "Rotating Tiles",
+    "description": "Rotating tiled grid with radial wave; tile edges pulse from center. Adapted from Shadertoy.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "renderType": "rendernode",
+    "fragmentShader": "effect.glsl",
+    "vertexShader": "zone.vert.glsl",
+    "parameters": [
+        {
+            "id": "tileScale",
+            "name": "Tile Scale",
+            "type": "float",
+            "slot": 0,
+            "default": 20.0,
+            "min": 10.0,
+            "max": 40.0
+        },
+        {
+            "id": "speed",
+            "name": "Animation Speed",
+            "type": "float",
+            "slot": 1,
+            "default": 1.0,
+            "min": 0.5,
+            "max": 2.0
+        },
+        {
+            "id": "radialWaveScale",
+            "name": "Radial Wave Scale",
+            "type": "float",
+            "slot": 2,
+            "default": 20.0,
+            "min": 10.0,
+            "max": 40.0
+        },
+        {
+            "id": "baseAngle",
+            "name": "Base Angle (degrees)",
+            "type": "float",
+            "slot": 3,
+            "default": 30.0,
+            "min": -180.0,
+            "max": 180.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Fill Opacity",
+            "type": "float",
+            "slot": 4,
+            "default": 0.9,
+            "min": 0.5,
+            "max": 1.0
+        },
+        {
+            "id": "tint",
+            "name": "Color Tint",
+            "type": "color",
+            "slot": 0,
+            "default": "#ffffff"
+        }
+    ]
+}

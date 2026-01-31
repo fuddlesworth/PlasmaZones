@@ -107,6 +107,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     
     float fillOpacity = customParams[2].x > 0.1 ? customParams[2].x : 0.85;
     float borderGlow = customParams[2].y;
+    float edgeFadeStart = customParams[2].z < 0.0 ? customParams[2].z : -30.0;
+    float borderBrightness = customParams[2].w > 0.1 ? customParams[2].w : 1.3;
     
     // Convert rect to pixel coordinates
     vec2 rectPos = rect.xy * iResolution;
@@ -134,7 +136,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     vec3 palC = customColors[2].rgb;
     vec3 palD = customColors[3].rgb;
     
-    // Use defaults if colors not set
+    // IQ palette: when palette colors are unset, palA/palB become gray (brightness/saturation);
+    // set palette colors in the UI for full control.
     if (length(palA) < 0.01) palA = vec3(brightness);
     if (length(palB) < 0.01) palB = vec3(saturation);
     if (length(palC) < 0.01) palC = vec3(1.0);
@@ -165,7 +168,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         }
         
         // Edge darkening for depth
-        float edgeFade = smoothstep(0.0, -30.0, d);
+        float edgeFade = smoothstep(0.0, edgeFadeStart, d);
         col *= mix(0.7, 1.0, edgeFade);
         
         result.rgb = col;
@@ -182,7 +185,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float angle = atan(p.y, p.x);
         float borderFlow = fbm(vec2(angle * 2.0, time * 0.5), 3);
         vec3 borderCol = palette(borderFlow * contrast, palA, palB, palC, palD);
-        borderCol *= 1.3; // Brighter border
+        borderCol *= borderBrightness;
         
         result.rgb = mix(result.rgb, borderCol, border * 0.95);
         result.a = max(result.a, border * 0.98);
@@ -220,9 +223,14 @@ void main() {
         vec4 zoneColor = renderCosmicZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
         
-        // Alpha compositing
-        color.rgb = mix(color.rgb, zoneColor.rgb, zoneColor.a);
-        color.a = max(color.a, zoneColor.a);
+        // Alpha compositing (over operator for overlapping zones)
+        float srcA = zoneColor.a;
+        float dstA = color.a;
+        float outA = srcA + dstA * (1.0 - srcA);
+        if (outA > 0.0) {
+            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
+        }
+        color.a = outA;
     }
     
     fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);

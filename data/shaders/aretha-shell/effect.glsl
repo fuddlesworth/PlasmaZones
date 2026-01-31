@@ -488,9 +488,14 @@ void main() {
         vec4 zoneColor = renderArethaZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], isHighlighted);
         
-        // Alpha compositing
-        color.rgb = mix(color.rgb, zoneColor.rgb, zoneColor.a);
-        color.a = max(color.a, zoneColor.a);
+        // Alpha compositing (over operator for overlapping zones)
+        float srcA = zoneColor.a;
+        float dstA = color.a;
+        float outA = srcA + dstA * (1.0 - srcA);
+        if (outA > 0.0) {
+            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
+        }
+        color.a = outA;
     }
     
     fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);

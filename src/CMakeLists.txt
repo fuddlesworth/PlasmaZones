@@ -402,6 +402,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/TemplatePreview.qml
         editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
+        editor/qml/ParameterDelegate.qml
         # SRP-extracted components from PropertyPanel
         editor/qml/ColorUtils.js
         editor/qml/ColorPickerRow.qml

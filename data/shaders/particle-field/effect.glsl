@@ -64,6 +64,8 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float glowAmount = customParams[0].w > 0.1 ? customParams[0].w : 1.2;
     float fillOpacity = customParams[1].x > 0.01 ? customParams[1].x : 0.25;
     float borderGlow = customParams[1].y > 0.1 ? customParams[1].y : 0.7;
+    float fillDarkness = customParams[1].z > 0.001 ? customParams[1].z : 0.1;
+    float particleBrightness = customParams[1].w > 0.01 ? customParams[1].w : 0.25;
     
     vec2 rectPos = rect.xy * iResolution;
     vec2 rectSize = rect.zw * iResolution;
@@ -92,7 +94,7 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     
     // Dark fill
     if (d < 0.0) {
-        result.rgb = particleColor * 0.1;
+        result.rgb = particleColor * fillDarkness;
         result.a = fillOpacity;
     }
     
@@ -100,12 +102,13 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float time = iTime * particleSpeed;
     float particleField = 0.0;
     
-    // Scale particle count by zone area for consistent density feel
-    // A 200x200 zone is our baseline, larger zones get proportionally more particles
+    // Scale particle count by zone area for consistent density feel.
+    // Baseline: 40000 = 200x200 px zone; sqrt so density doesn't explode on large zones.
+    // Caps: numParticles <= 200 (performance), particleField <= 3.5 (avoid brightness blowout).
     float zoneArea = rectSize.x * rectSize.y;
-    float areaScale = sqrt(zoneArea / 40000.0); // sqrt so it doesn't explode for large zones
+    float areaScale = sqrt(zoneArea / 40000.0);
     int numParticles = int(particleDensity * max(areaScale, 0.5));
-    numParticles = min(numParticles, 200); // Cap to prevent performance issues
+    numParticles = min(numParticles, 200);
     
     for (int i = 0; i < numParticles && i < 200; i++) {
         float fi = float(i);
@@ -140,12 +143,12 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         particleField += (particle * 1.2 + glow * glowAmount) * (0.6 + randOffset.y * 0.4);
     }
     
-    // Apply particles
+    // Apply particles (cap 3.5 avoids brightness blowout when many particles overlap)
     if (d < 0.0) {
-        particleField = min(particleField, 3.5); // Higher cap for denser particle fields
+        particleField = min(particleField, 3.5);
         vec3 pColor = particleColor * particleField;
         // White core for bright particles
-        pColor = mix(pColor, vec3(1.0), particleField * 0.25);
+        pColor = mix(pColor, vec3(1.0), particleField * particleBrightness);
         result.rgb += pColor;
         result.a = max(result.a, min(particleField * 0.6 + 0.1, 0.95));
     }
@@ -185,8 +188,14 @@ void main() {
         vec4 zoneColor = renderParticleZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
         
-        color.rgb = mix(color.rgb, zoneColor.rgb, zoneColor.a);
-        color.a = max(color.a, zoneColor.a);
+        // Alpha compositing (over operator for overlapping zones)
+        float srcA = zoneColor.a;
+        float dstA = color.a;
+        float outA = srcA + dstA * (1.0 - srcA);
+        if (outA > 0.0) {
+            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
+        }
+        color.a = outA;
     }
     
     fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);

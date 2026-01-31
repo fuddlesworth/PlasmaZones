@@ -44,7 +44,9 @@ float getSweepIntensity(){ return customParams[0].w > 0.01 ? customParams[0].w :
 float getSweepWidth()    { return customParams[1].x > 0.01 ? customParams[1].x : 0.15; }
 float getBorderWidth()   { return customParams[1].y > 0.1 ? customParams[1].y : 2.0; }
 float getSweepInterval() { return customParams[1].z > 0.1 ? customParams[1].z : 3.0; }
+// 0 = linear gradient blend, non-zero = smooth step; no default so 0 is valid (linear)
 float getBlendMode()     { return customParams[1].w; }
+float getShimmerIntensity() { return customParams[2].x > 0.001 ? customParams[2].x : 0.08; }
 
 // Color 0: Gradient start color (default: deep blue-purple)
 vec3 getColor1() {
@@ -118,12 +120,13 @@ float sweepEffect(vec2 uv, float time, float interval, float width) {
 
 // Subtle shimmer/sparkle overlay
 float shimmer(vec2 uv, float time) {
+    float intensity = getShimmerIntensity();
     float s1 = sin(uv.x * 25.0 + time * 2.0) * 0.5 + 0.5;
     float s2 = sin(uv.y * 30.0 - time * 1.5) * 0.5 + 0.5;
     float s3 = sin((uv.x + uv.y) * 20.0 + time * 3.0) * 0.5 + 0.5;
-    
+
     float combined = s1 * s2 * s3;
-    return pow(combined, 4.0) * 0.08;  // Very subtle
+    return pow(combined, 4.0) * intensity;
 }
 
 vec4 renderAuroraSweepZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {

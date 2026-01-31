@@ -87,6 +87,16 @@
             "default": true
         },
         {
+            "id": "shimmerIntensity",
+            "name": "Shimmer",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 8,
+            "default": 0.08,
+            "min": 0.0,
+            "max": 0.3
+        },
+        {
             "id": "gradientStart",
             "name": "Gradient Start",
             "group": "Colors",
