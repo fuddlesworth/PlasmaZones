@@ -164,6 +164,18 @@ private:
     void createNavigationOsdWindow(QScreen* screen);
     void destroyNavigationOsdWindow(QScreen* screen);
 
+    /**
+     * @brief Create a QML window from a resource URL (DRY helper)
+     * @param qmlUrl QML resource URL (e.g., "qrc:/ui/ZoneOverlay.qml")
+     * @param screen Screen to assign the window to
+     * @param windowType Description for logging (e.g., "overlay", "zone selector")
+     * @return Created window with C++ ownership, or nullptr on failure
+     *
+     * Handles common QML window creation: component loading, error checking,
+     * QQuickWindow casting, ownership, and screen assignment.
+     */
+    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType);
+
     // Shader support methods
     bool useShaderOverlay() const;
     bool canUseShaders() const;
