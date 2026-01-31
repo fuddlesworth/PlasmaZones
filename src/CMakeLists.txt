@@ -386,6 +386,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/HelpDialogContent.qml
         editor/qml/TemplatePreview.qml
         editor/qml/ShaderParameterSection.qml
+        editor/qml/ShaderSettingsDialog.qml
     )
 
 target_link_libraries(plasmazones-editor
