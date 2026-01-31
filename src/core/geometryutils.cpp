@@ -8,6 +8,7 @@
 #include "constants.h"
 #include "screenmanager.h"
 #include <QScreen>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -180,6 +181,22 @@ int getEffectiveOuterGap(Layout* layout, ISettings* settings)
     }
     // Last resort: use default constant
     return Defaults::OuterGap;
+}
+
+QRectF extractZoneGeometry(const QVariantMap& zone)
+{
+    return QRectF(zone.value(QLatin1String("x")).toDouble(),
+                  zone.value(QLatin1String("y")).toDouble(),
+                  zone.value(QLatin1String("width")).toDouble(),
+                  zone.value(QLatin1String("height")).toDouble());
+}
+
+void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
+{
+    zone[QLatin1String("x")] = rect.x();
+    zone[QLatin1String("y")] = rect.y();
+    zone[QLatin1String("width")] = rect.width();
+    zone[QLatin1String("height")] = rect.height();
 }
 
 } // namespace GeometryUtils

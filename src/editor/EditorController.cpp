@@ -1073,8 +1073,7 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
  */
 void EditorController::updateZoneColor(const QString& zoneId, const QString& colorType, const QString& color)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot update zone color - undo controller or zone manager is null";
+    if (!servicesReady("update zone color")) {
         return;
     }
 
@@ -1097,8 +1096,7 @@ void EditorController::updateZoneColor(const QString& zoneId, const QString& col
 
 void EditorController::updateZoneAppearance(const QString& zoneId, const QString& propertyName, const QVariant& value)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot update zone appearance - undo controller or zone manager is null";
+    if (!servicesReady("update zone appearance")) {
         return;
     }
 
@@ -1124,8 +1122,7 @@ void EditorController::updateZoneAppearance(const QString& zoneId, const QString
  */
 void EditorController::deleteZone(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot delete zone - undo controller or zone manager is null";
+    if (!servicesReady("delete zone")) {
         return;
     }
 
@@ -1179,8 +1176,7 @@ QVariantMap EditorController::findAdjacentZones(const QString& zoneId)
  */
 bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qreal mouseY)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot expand zone - undo controller or zone manager is null";
+    if (!servicesReady("expand zone")) {
         return false;
     }
 
@@ -1233,8 +1229,7 @@ QVariantMap EditorController::calculateFillRegion(const QString& zoneId, qreal m
  */
 void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot delete zone with fill - undo controller or zone manager is null";
+    if (!servicesReady("delete zone with fill")) {
         return;
     }
 
@@ -1277,96 +1272,53 @@ void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 // Z-ORDER OPERATIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-void EditorController::bringToFront(const QString& zoneId)
+void EditorController::changeZOrderImpl(const QString& zoneId, ZOrderOp op, const QString& actionName)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
+    if (!servicesReady("change z-order")) {
         return;
     }
 
-    // Get old zones list
     QVariantList oldZones = m_zoneManager->zones();
 
-    // Perform operation
-    m_zoneManager->bringToFront(zoneId);
+    switch (op) {
+    case ZOrderOp::BringToFront:
+        m_zoneManager->bringToFront(zoneId);
+        break;
+    case ZOrderOp::SendToBack:
+        m_zoneManager->sendToBack(zoneId);
+        break;
+    case ZOrderOp::BringForward:
+        m_zoneManager->bringForward(zoneId);
+        break;
+    case ZOrderOp::SendBackward:
+        m_zoneManager->sendBackward(zoneId);
+        break;
+    }
 
-    // Get new zones list
     QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Bring to Front"));
+    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones, actionName);
     m_undoController->push(command);
     markUnsaved();
+}
+
+void EditorController::bringToFront(const QString& zoneId)
+{
+    changeZOrderImpl(zoneId, ZOrderOp::BringToFront, i18nc("@action", "Bring to Front"));
 }
 
 void EditorController::sendToBack(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
-        return;
-    }
-
-    // Get old zones list
-    QVariantList oldZones = m_zoneManager->zones();
-
-    // Perform operation
-    m_zoneManager->sendToBack(zoneId);
-
-    // Get new zones list
-    QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Send to Back"));
-    m_undoController->push(command);
-    markUnsaved();
+    changeZOrderImpl(zoneId, ZOrderOp::SendToBack, i18nc("@action", "Send to Back"));
 }
 
 void EditorController::bringForward(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
-        return;
-    }
-
-    // Get old zones list
-    QVariantList oldZones = m_zoneManager->zones();
-
-    // Perform operation
-    m_zoneManager->bringForward(zoneId);
-
-    // Get new zones list
-    QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Bring Forward"));
-    m_undoController->push(command);
-    markUnsaved();
+    changeZOrderImpl(zoneId, ZOrderOp::BringForward, i18nc("@action", "Bring Forward"));
 }
 
 void EditorController::sendBackward(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot change z-order - undo controller or zone manager is null";
-        return;
-    }
-
-    // Get old zones list
-    QVariantList oldZones = m_zoneManager->zones();
-
-    // Perform operation
-    m_zoneManager->sendBackward(zoneId);
-
-    // Get new zones list
-    QVariantList newZones = m_zoneManager->zones();
-
-    // Create and push command
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones,
-                                            i18nc("@action", "Send Backward"));
-    m_undoController->push(command);
-    markUnsaved();
+    changeZOrderImpl(zoneId, ZOrderOp::SendBackward, i18nc("@action", "Send Backward"));
 }
 
 /**
@@ -1376,8 +1328,7 @@ void EditorController::sendBackward(const QString& zoneId)
  */
 QString EditorController::duplicateZone(const QString& zoneId)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot duplicate zone - undo controller or zone manager is null";
+    if (!servicesReady("duplicate zone")) {
         return QString();
     }
 
@@ -1516,8 +1467,7 @@ void EditorController::applyTemplate(const QString& templateType, int columns, i
  */
 void EditorController::clearAllZones()
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot clear zones - undo controller or zone manager is null";
+    if (!servicesReady("clear zones")) {
         return;
     }
 
@@ -1609,6 +1559,15 @@ void EditorController::markUnsaved()
         m_hasUnsavedChanges = true;
         Q_EMIT hasUnsavedChangesChanged();
     }
+}
+
+bool EditorController::servicesReady(const char* operation) const
+{
+    if (!m_undoController || !m_zoneManager) {
+        qCWarning(lcEditor) << "Cannot" << operation << "- undo controller or zone manager is null";
+        return false;
+    }
+    return true;
 }
 
 /**
@@ -2736,8 +2695,7 @@ QVariantList EditorController::getZonesSharingEdge(const QString& zoneId, qreal 
  */
 QString EditorController::splitZone(const QString& zoneId, bool horizontal)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "Cannot split zone - undo controller or zone manager is null";
+    if (!servicesReady("split zone")) {
         return QString();
     }
 
@@ -2785,8 +2743,7 @@ QString EditorController::splitZone(const QString& zoneId, bool horizontal)
 void EditorController::resizeZonesAtDivider(const QString& zoneId1, const QString& zoneId2, qreal newDividerX,
                                             qreal newDividerY, bool isVertical)
 {
-    if (!m_undoController || !m_zoneManager) {
-        qCWarning(lcEditor) << "UndoController or ZoneManager not initialized";
+    if (!servicesReady("resize zones at divider")) {
         return;
     }
 

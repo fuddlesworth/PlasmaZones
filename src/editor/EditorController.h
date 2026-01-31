@@ -428,6 +428,26 @@ private:
     void markUnsaved();
 
     /**
+     * @brief Z-order operation types for changeZOrderImpl
+     */
+    enum class ZOrderOp { BringToFront, SendToBack, BringForward, SendBackward };
+
+    /**
+     * @brief Internal implementation for all z-order operations
+     * @param zoneId Zone to modify
+     * @param op Z-order operation to perform
+     * @param actionName Undo action display name (already translated)
+     */
+    void changeZOrderImpl(const QString& zoneId, ZOrderOp op, const QString& actionName);
+
+    /**
+     * @brief Check if required services are ready for operations
+     * @param operation Description of the operation (for logging)
+     * @return true if both m_undoController and m_zoneManager are valid
+     */
+    bool servicesReady(const char* operation) const;
+
+    /**
      * @brief Loads editor settings from KConfig
      */
     void loadEditorSettings();

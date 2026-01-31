@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QRectF>
 #include <QScreen>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -127,6 +128,25 @@ PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settin
  * to apply differentiated gaps.
  */
 PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
+
+/**
+ * @brief Extract geometry as QRectF from a zone QVariantMap
+ * @param zone Zone data map containing x, y, width, height keys
+ * @return QRectF with the zone's geometry
+ *
+ * Used by EditorController and serialization code to avoid repeating
+ * the x/y/width/height extraction pattern.
+ */
+PLASMAZONES_EXPORT QRectF extractZoneGeometry(const QVariantMap& zone);
+
+/**
+ * @brief Set geometry fields in a zone QVariantMap from a QRectF
+ * @param zone Zone data map to modify
+ * @param rect Geometry to set
+ *
+ * Sets x, y, width, height keys in the zone map.
+ */
+PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
 
 } // namespace GeometryUtils
 
