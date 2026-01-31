@@ -490,6 +490,15 @@ private Q_SLOTS:
 
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
+    // Constants
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    // Minimum visible area for isGeometryOnScreen check (pixels)
+    // A window must have at least this much area visible on a screen to be considered "on screen"
+    static constexpr int MinVisibleWidth = 100;
+    static constexpr int MinVisibleHeight = 100;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
     // DRY Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
 

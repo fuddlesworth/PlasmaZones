@@ -172,9 +172,13 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
+    // Only log if there was something to clear
+    bool hadPreFloatZone = !m_service->preFloatZone(windowId).isEmpty();
     // SRP: Delegate to service
     m_service->clearPreFloatZone(windowId);
-    qCDebug(lcDbusWindow) << "Cleared pre-float zone for window" << windowId;
+    if (hadPreFloatZone) {
+        qCDebug(lcDbusWindow) << "Cleared pre-float zone for window" << windowId;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -235,9 +239,13 @@ void WindowTrackingAdaptor::clearPreSnapGeometry(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("clear pre-snap geometry"))) {
         return;
     }
+    // Only log if there was something to clear
+    bool hadGeometry = m_service->hasPreSnapGeometry(windowId);
     // SRP: Delegate to service
     m_service->clearPreSnapGeometry(windowId);
-    qCDebug(lcDbusWindow) << "Cleared pre-snap geometry for window" << windowId;
+    if (hadGeometry) {
+        qCDebug(lcDbusWindow) << "Cleared pre-snap geometry for window" << windowId;
+    }
 }
 
 bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId, int& x, int& y, int& width, int& height)
@@ -270,7 +278,7 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
     QRect geometry(x, y, width, height);
     for (QScreen* screen : Utils::allScreens()) {
         QRect intersection = screen->geometry().intersected(geometry);
-        if (intersection.width() >= 100 && intersection.height() >= 100) {
+        if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
             return true;
         }
     }
