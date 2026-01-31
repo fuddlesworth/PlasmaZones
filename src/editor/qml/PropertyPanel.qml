@@ -189,7 +189,7 @@ Rectangle {
                     sliderEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Active opacity for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set active opacity for all selected zones (0-100%)")
-                    onOpacityChanged: function(value) {
+                    onOpacityEdited: function(value) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("activeOpacity", value);
                     }
@@ -204,7 +204,7 @@ Rectangle {
                     sliderEnabled: editorController !== null
                     accessibleName: i18nc("@label", "Inactive opacity for all selected zones")
                     toolTipText: i18nc("@info:tooltip", "Set inactive opacity for all selected zones (0-100%)")
-                    onOpacityChanged: function(value) {
+                    onOpacityEdited: function(value) {
                         if (editorController)
                             editorController.updateSelectedZonesAppearance("inactiveOpacity", value);
                     }
@@ -450,7 +450,7 @@ Rectangle {
                     sliderEnabled: selectedZone !== null && editorController !== null
                     accessibleName: i18nc("@label", "Zone active opacity")
                     toolTipText: i18nc("@info:tooltip", "Adjust zone opacity when highlighted (0-100%)")
-                    onOpacityChanged: function(value) {
+                    onOpacityEdited: function(value) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "activeOpacity", value);
                     }
@@ -465,7 +465,7 @@ Rectangle {
                     sliderEnabled: selectedZone !== null && editorController !== null
                     accessibleName: i18nc("@label", "Zone inactive opacity")
                     toolTipText: i18nc("@info:tooltip", "Adjust zone opacity when not highlighted (0-100%)")
-                    onOpacityChanged: function(value) {
+                    onOpacityEdited: function(value) {
                         if (selectedZoneId && editorController)
                             editorController.updateZoneAppearance(selectedZoneId, "inactiveOpacity", value);
                     }

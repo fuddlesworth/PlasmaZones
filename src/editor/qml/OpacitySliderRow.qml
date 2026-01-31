@@ -44,8 +44,9 @@ RowLayout {
     /**
      * @brief Emitted when the user moves the slider (not on programmatic changes)
      * @param value The new opacity value (0-1 scale)
+     * Note: Named 'opacityEdited' to avoid conflict with Item.opacity's built-in opacityChanged signal
      */
-    signal opacityChanged(real value)
+    signal opacityEdited(real value)
 
     spacing: Kirigami.Units.smallSpacing
 
@@ -67,7 +68,7 @@ RowLayout {
         onMoved: {
             // Use Qt.callLater to avoid binding context issues
             Qt.callLater(function() {
-                opacitySliderRow.opacityChanged(slider.value / 100);
+                opacitySliderRow.opacityEdited(slider.value / 100);
             });
         }
     }
