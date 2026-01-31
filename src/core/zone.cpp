@@ -8,6 +8,43 @@
 
 namespace PlasmaZones {
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// DRY Macros for repetitive setter patterns
+// Reduces boilerplate for zone property setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Simple setter: if changed, update member and emit signal
+#define ZONE_SETTER(Type, name, member, signal) \
+    void Zone::set##name(Type value) \
+    { \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+        } \
+    }
+
+// Clamped int setter with minimum of 0
+#define ZONE_SETTER_MIN_ZERO(name, member, signal) \
+    void Zone::set##name(int value) \
+    { \
+        value = qMax(0, value); \
+        if (member != value) { \
+            member = value; \
+            Q_EMIT signal(); \
+        } \
+    }
+
+// Clamped qreal setter for opacity (0.0-1.0) with fuzzy compare
+#define ZONE_SETTER_OPACITY(name, member, signal) \
+    void Zone::set##name(qreal opacity) \
+    { \
+        opacity = qBound(0.0, opacity, 1.0); \
+        if (!qFuzzyCompare(member, opacity)) { \
+            member = opacity; \
+            Q_EMIT signal(); \
+        } \
+    }
+
 Zone::Zone(QObject* parent)
     : QObject(parent)
     , m_id(QUuid::createUuid())
@@ -52,121 +89,33 @@ bool Zone::operator==(const Zone& other) const
     return m_id == other.m_id;
 }
 
-void Zone::setName(const QString& name)
-{
-    if (m_name != name) {
-        m_name = name;
-        Q_EMIT nameChanged();
-    }
-}
+// ═══════════════════════════════════════════════════════════════════════════════
+// Zone Property Setters (using DRY macros)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-void Zone::setGeometry(const QRectF& geometry)
-{
-    if (m_geometry != geometry) {
-        m_geometry = geometry;
-        Q_EMIT geometryChanged();
-    }
-}
+// Simple property setters
+ZONE_SETTER(const QString&, Name, m_name, nameChanged)
+ZONE_SETTER(const QRectF&, Geometry, m_geometry, geometryChanged)
+ZONE_SETTER(const QRectF&, RelativeGeometry, m_relativeGeometry, relativeGeometryChanged)
+ZONE_SETTER(int, ZoneNumber, m_zoneNumber, zoneNumberChanged)
+ZONE_SETTER(const QString&, Shortcut, m_shortcut, shortcutChanged)
 
-void Zone::setRelativeGeometry(const QRectF& relativeGeometry)
-{
-    if (m_relativeGeometry != relativeGeometry) {
-        m_relativeGeometry = relativeGeometry;
-        Q_EMIT relativeGeometryChanged();
-    }
-}
+// Color setters
+ZONE_SETTER(const QColor&, HighlightColor, m_highlightColor, highlightColorChanged)
+ZONE_SETTER(const QColor&, InactiveColor, m_inactiveColor, inactiveColorChanged)
+ZONE_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
 
-void Zone::setZoneNumber(int number)
-{
-    if (m_zoneNumber != number) {
-        m_zoneNumber = number;
-        Q_EMIT zoneNumberChanged();
-    }
-}
+// Opacity setters (clamped 0.0-1.0 with fuzzy compare)
+ZONE_SETTER_OPACITY(ActiveOpacity, m_activeOpacity, activeOpacityChanged)
+ZONE_SETTER_OPACITY(InactiveOpacity, m_inactiveOpacity, inactiveOpacityChanged)
 
-void Zone::setShortcut(const QString& shortcut)
-{
-    if (m_shortcut != shortcut) {
-        m_shortcut = shortcut;
-        Q_EMIT shortcutChanged();
-    }
-}
+// Border setters (clamped min 0)
+ZONE_SETTER_MIN_ZERO(BorderWidth, m_borderWidth, borderWidthChanged)
+ZONE_SETTER_MIN_ZERO(BorderRadius, m_borderRadius, borderRadiusChanged)
 
-void Zone::setHighlightColor(const QColor& color)
-{
-    if (m_highlightColor != color) {
-        m_highlightColor = color;
-        Q_EMIT highlightColorChanged();
-    }
-}
-
-void Zone::setInactiveColor(const QColor& color)
-{
-    if (m_inactiveColor != color) {
-        m_inactiveColor = color;
-        Q_EMIT inactiveColorChanged();
-    }
-}
-
-void Zone::setBorderColor(const QColor& color)
-{
-    if (m_borderColor != color) {
-        m_borderColor = color;
-        Q_EMIT borderColorChanged();
-    }
-}
-
-void Zone::setActiveOpacity(qreal opacity)
-{
-    opacity = qBound(0.0, opacity, 1.0);
-    if (!qFuzzyCompare(m_activeOpacity, opacity)) {
-        m_activeOpacity = opacity;
-        Q_EMIT activeOpacityChanged();
-    }
-}
-
-void Zone::setInactiveOpacity(qreal opacity)
-{
-    opacity = qBound(0.0, opacity, 1.0);
-    if (!qFuzzyCompare(m_inactiveOpacity, opacity)) {
-        m_inactiveOpacity = opacity;
-        Q_EMIT inactiveOpacityChanged();
-    }
-}
-
-void Zone::setBorderWidth(int width)
-{
-    width = qMax(0, width);
-    if (m_borderWidth != width) {
-        m_borderWidth = width;
-        Q_EMIT borderWidthChanged();
-    }
-}
-
-void Zone::setBorderRadius(int radius)
-{
-    radius = qMax(0, radius);
-    if (m_borderRadius != radius) {
-        m_borderRadius = radius;
-        Q_EMIT borderRadiusChanged();
-    }
-}
-
-void Zone::setHighlighted(bool highlighted)
-{
-    if (m_isHighlighted != highlighted) {
-        m_isHighlighted = highlighted;
-        Q_EMIT highlightedChanged();
-    }
-}
-
-void Zone::setUseCustomColors(bool useCustom)
-{
-    if (m_useCustomColors != useCustom) {
-        m_useCustomColors = useCustom;
-        Q_EMIT useCustomColorsChanged();
-    }
-}
+// Bool setters
+ZONE_SETTER(bool, Highlighted, m_isHighlighted, highlightedChanged)
+ZONE_SETTER(bool, UseCustomColors, m_useCustomColors, useCustomColorsChanged)
 
 bool Zone::containsPoint(const QPointF& point) const
 {
