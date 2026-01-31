@@ -8,8 +8,7 @@
  * - Layouts: View, create, edit, import/export layouts
  * - Editor: Keyboard shortcuts and snapping settings
  * - Assignments: Monitor, activity, and quick layout assignments
- * - Appearance: Color and style customization
- * - Behavior: Window snapping options
+ * - Zones: Appearance and behavior settings (merged for consistency)
  * - Zone Selector: Zone selector popup settings
  * - Exclusions: Apps and windows to exclude from snapping
  */
@@ -134,12 +133,8 @@ KCM.AbstractKCM {
                 icon.name: "view-list-details"
             }
             TabButton {
-                text: i18n("Appearance")
-                icon.name: "preferences-desktop-color"
-            }
-            TabButton {
-                text: i18n("Behavior")
-                icon.name: "preferences-system-windows-behavior"
+                text: i18n("Zones")
+                icon.name: "preferences-desktop-tweaks"
             }
             TabButton {
                 text: i18n("Zone Selector")
@@ -220,11 +215,12 @@ KCM.AbstractKCM {
             constants: constants
         }
 
-        // TAB 4: APPEARANCE
-        AppearanceTab {
-            id: appearanceTab
+        // TAB 4: ZONES (merged Appearance + Behavior)
+        ZonesTab {
+            id: zonesTab
             kcm: root.kcmModule
             constants: constants
+            isCurrentTab: stackLayout.currentIndex === 3
 
             onRequestHighlightColorDialog: {
                 highlightColorDialog.selectedColor = kcm.highlightColor
@@ -241,21 +237,14 @@ KCM.AbstractKCM {
             onRequestColorFileDialog: colorFileDialog.open()
         }
 
-        // TAB 5: BEHAVIOR
-        BehaviorTab {
-            kcm: root.kcmModule
-            constants: constants
-            isCurrentTab: stackLayout.currentIndex === 4
-        }
-
-        // TAB 6: ZONE SELECTOR
+        // TAB 5: ZONE SELECTOR
         ZoneSelectorTab {
             kcm: root.kcmModule
             constants: constants
             screenAspectRatio: root.screenAspectRatio
         }
 
-        // TAB 7: EXCLUSIONS
+        // TAB 6: EXCLUSIONS
         ExclusionsTab {
             kcm: root.kcmModule
             constants: constants
