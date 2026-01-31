@@ -285,42 +285,28 @@ Kirigami.Dialog {
             // ═══════════════════════════════════════════════════════════════
             // FIXED-HEIGHT DESCRIPTION AREA
             // Prevents layout shifts when switching between shaders with
-            // different description lengths. Uses ScrollView for overflow.
+            // different description lengths.
             // ═══════════════════════════════════════════════════════════════
-            Item {
+            Label {
                 Kirigami.FormData.label: ""
                 Layout.fillWidth: true
                 // Reserve space for ~3 lines of description text
                 Layout.preferredHeight: Kirigami.Units.gridUnit * 3.5
+                Layout.maximumHeight: Kirigami.Units.gridUnit * 3.5
                 visible: root.hasShaderEffect
 
-                // Subtle background to indicate bounded area
-                Rectangle {
-                    anchors.fill: parent
-                    color: Kirigami.Theme.backgroundColor
-                    opacity: 0.3
-                    radius: Kirigami.Units.smallSpacing
+                text: {
+                    if (!root.currentShaderInfo) return i18nc("@info:placeholder", "No description available");
+                    var desc = root.currentShaderInfo.description;
+                    return desc ? desc : i18nc("@info:placeholder", "No description available");
                 }
-
-                ScrollView {
-                    id: descriptionScrollView
-                    anchors.fill: parent
-                    anchors.margins: Kirigami.Units.smallSpacing
-                    clip: true
-
-                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-                    ScrollBar.vertical.policy: ScrollBar.AsNeeded
-
-                    Label {
-                        width: descriptionScrollView.availableWidth
-                        text: root.currentShaderInfo?.description
-                              || i18nc("@info:placeholder", "No description available")
-                        wrapMode: Text.WordWrap
-                        opacity: root.currentShaderInfo?.description ? 0.8 : 0.5
-                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
-                        font.italic: !root.currentShaderInfo?.description
-                    }
-                }
+                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
+                maximumLineCount: 3
+                opacity: (root.currentShaderInfo && root.currentShaderInfo.description) ? 0.8 : 0.5
+                font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                font.italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
+                verticalAlignment: Text.AlignTop
             }
 
             // Author/version metadata (fixed single line, elides if too long)
