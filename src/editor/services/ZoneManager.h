@@ -16,7 +16,6 @@
 
 namespace PlasmaZones {
 
-// Forward declaration for SRP helper
 class ZoneAutoFiller;
 
 /**
@@ -24,8 +23,7 @@ class ZoneAutoFiller;
  *
  * Handles zone creation, updates, deletion, duplication, and splitting.
  * Maintains the zones list and emits signals for zone changes.
- *
- * Auto-fill operations are delegated to ZoneAutoFiller (SRP).
+ * Auto-fill operations are handled by ZoneAutoFiller.
  */
 class ZoneManager : public QObject
 {
@@ -61,7 +59,7 @@ public:
     QVector<QPair<QString, QRectF>> collectGeometriesAtDivider(const QString& zoneId1, const QString& zoneId2,
                                                                bool isVertical);
 
-    // Auto-fill operations (delegated to ZoneAutoFiller - SRP)
+    // Auto-fill operations (handled by ZoneAutoFiller)
     /**
      * @brief Find zones adjacent to the given zone
      * @param zoneId The zone to find neighbors for
@@ -96,15 +94,13 @@ public:
     void deleteZoneWithFill(const QString& zoneId, bool autoFill = true);
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods - Public for use by helper classes
+    // Helper Methods - Public for use by helper classes
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
      * @brief Extract geometry from a zone map as QRectF
      * @param zone The zone QVariantMap
      * @return QRectF with x, y, width, height
-     *
-     * DRY: Consolidates the repeated pattern of extracting geometry fields.
      */
     QRectF extractZoneGeometry(const QVariantMap& zone) const;
 
@@ -112,8 +108,6 @@ public:
      * @brief Get validated zone by ID with logging on failure
      * @param zoneId Zone ID to look up
      * @return Optional containing zone data, or empty on failure (logs warning)
-     *
-     * DRY: Consolidates findZoneIndex + validation + logging pattern.
      */
     std::optional<QVariantMap> getValidatedZone(const QString& zoneId) const;
 
@@ -192,7 +186,6 @@ Q_SIGNALS:
     void zonesModified(); // Generic signal for any zone modification
 
 private:
-    // Friend class for SRP helper
     friend class ZoneAutoFiller;
 
     /**
@@ -206,7 +199,7 @@ private:
     void renumberZones();
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods - Private
+    // Private Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -221,8 +214,6 @@ private:
      * @brief Validate and clamp zone geometry to valid bounds
      * @param x, y, width, height Input geometry (may be invalid)
      * @return ValidatedGeometry with clamped values and isValid flag
-     *
-     * DRY: Consolidates geometry validation repeated in addZone, updateZoneGeometry, etc.
      */
     ValidatedGeometry validateAndClampGeometry(qreal x, qreal y, qreal width, qreal height) const;
 
@@ -244,15 +235,11 @@ private:
      * @param type The type of signal to emit
      * @param zoneId The zone ID
      * @param includeModified Whether to also emit zonesModified signal
-     *
-     * DRY: Consolidates the repeated if(batch) {...} else {...} pattern.
      */
     void emitZoneSignal(SignalType type, const QString& zoneId, bool includeModified = true);
 
     /**
      * @brief Update z-order values for all zones
-     *
-     * DRY: Consolidates the loop that updates zOrder after reordering.
      */
     void updateAllZOrderValues();
 
@@ -263,7 +250,6 @@ private:
     QString m_defaultInactiveColor;
     QString m_defaultBorderColor;
 
-    // Auto-fill helper (SRP - initialized after colors are set)
     std::unique_ptr<ZoneAutoFiller> m_autoFiller;
 
     // Batch update support

@@ -9,8 +9,6 @@ import "ColorUtils.js" as ColorUtils
  * @brief Reusable color dialog for zone color selection
  *
  * Wraps ColorDialog with ARGB conversion and optional auto-update from zone changes.
- *
- * SRP: Single responsibility - color selection dialog with ARGB support.
  */
 ColorDialog {
     id: zoneColorDialog

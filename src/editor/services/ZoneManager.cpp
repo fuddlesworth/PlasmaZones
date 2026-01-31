@@ -15,7 +15,7 @@
 using namespace PlasmaZones;
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY HELPER METHOD IMPLEMENTATIONS
+// HELPER METHOD IMPLEMENTATIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QRectF ZoneManager::extractZoneGeometry(const QVariantMap& zone) const
@@ -1051,7 +1051,7 @@ void ZoneManager::renumberZones()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AUTO-FILL OPERATIONS (delegated to ZoneAutoFiller - SRP)
+// AUTO-FILL OPERATIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
 QVariantMap ZoneManager::findAdjacentZones(const QString& zoneId, qreal threshold)

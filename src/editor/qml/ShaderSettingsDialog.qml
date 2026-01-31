@@ -213,7 +213,7 @@ Kirigami.Dialog {
         pendingParams = randomized;
     }
 
-    // DRY: Shared defaults extraction logic
+    // Extract default values from parameter definitions
     function extractDefaults(params) {
         var defaults = {};
         if (!params) return defaults;

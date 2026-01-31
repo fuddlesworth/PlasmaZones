@@ -10,8 +10,6 @@ import org.kde.kirigami as Kirigami
  * @brief Reusable opacity slider row with percentage label
  *
  * Contains a slider (0-100) and a percentage label showing the current value.
- *
- * SRP: Single responsibility - opacity slider UI row.
  */
 RowLayout {
     id: opacitySliderRow

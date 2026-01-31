@@ -9,8 +9,6 @@ import org.kde.kirigami as Kirigami
  * @brief Reusable spinbox for appearance settings (border width, radius, etc.)
  *
  * Wraps SpinBox with common configuration and emits valueModified signal.
- *
- * SRP: Single responsibility - numeric input for appearance properties.
  */
 SpinBox {
     id: appearanceSpinBox

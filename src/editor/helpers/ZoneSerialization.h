@@ -11,9 +11,8 @@ namespace PlasmaZones {
 /**
  * @brief Zone serialization utilities for clipboard and import/export
  *
- * Centralizes zone ⇄ JSON conversion to avoid duplication across
- * clipboard operations, import/export, and other persistence needs.
- * Fixes DRY violation where the same zone property set was duplicated.
+ * Centralizes zone ⇄ JSON conversion for clipboard operations,
+ * import/export, and other persistence needs.
  */
 namespace ZoneSerialization {
 

@@ -12,8 +12,6 @@ import "ColorUtils.js" as ColorUtils
  *
  * Contains a color preview button and either a hex code label (single mode)
  * or a "Click to set" hint (multi mode).
- *
- * SRP: Single responsibility - color picker UI row.
  */
 RowLayout {
     id: colorPickerRow

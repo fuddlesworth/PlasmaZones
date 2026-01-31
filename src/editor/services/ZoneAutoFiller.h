@@ -16,13 +16,9 @@ class ZoneManager;
 /**
  * @brief Handles auto-fill and space-finding operations for zones
  *
- * SRP: This class is responsible ONLY for:
- * - Finding empty space in layouts
- * - Expanding zones to fill available space
- * - Smart fill algorithms
- * - Finding adjacent zones
- *
- * It delegates actual zone modifications back to ZoneManager.
+ * Responsible for finding empty space in layouts, expanding zones to fill
+ * available space, smart fill algorithms, and finding adjacent zones.
+ * Delegates actual zone modifications back to ZoneManager.
  */
 class ZoneAutoFiller : public QObject
 {
@@ -97,7 +93,7 @@ private:
      * @param excludeZoneIndex Zone index to exclude from collision checks
      * @return Best region as QRectF, or invalid rect if none found
      *
-     * DRY: This consolidates the algorithm shared by smartFillZone and calculateFillRegion
+     * Used by both smartFillZone and calculateFillRegion.
      */
     QRectF findBestEmptyRegion(qreal targetX, qreal targetY, int excludeZoneIndex) const;
 

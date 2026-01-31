@@ -13,9 +13,8 @@ import "ColorUtils.js" as ColorUtils
  * Displays and allows editing of zone properties when a zone is selected.
  * Includes name, number, appearance settings, and delete action.
  *
- * SRP: This component handles panel layout and coordination.
- * Color utilities extracted to ColorUtils.js
- * UI components extracted to ColorPickerRow, OpacitySliderRow, etc.
+ * Color utilities live in ColorUtils.js; individual controls are in
+ * ColorPickerRow, OpacitySliderRow, etc.
  */
 Rectangle {
     id: propertyPanel
