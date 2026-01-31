@@ -20,13 +20,7 @@ UpdateZoneNameCommand::UpdateZoneNameCommand(QPointer<ZoneManager> zoneManager, 
 
 void UpdateZoneNameCommand::undo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for undo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->updateZoneName(m_zoneId, m_oldName);
@@ -34,13 +28,7 @@ void UpdateZoneNameCommand::undo()
 
 void UpdateZoneNameCommand::redo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for redo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->updateZoneName(m_zoneId, m_newName);

@@ -19,13 +19,7 @@ FillZoneCommand::FillZoneCommand(QPointer<ZoneManager> zoneManager, const QStrin
 
 void FillZoneCommand::undo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for undo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->updateZoneGeometry(m_zoneId, m_oldGeometry.x(), m_oldGeometry.y(), m_oldGeometry.width(),
@@ -34,13 +28,7 @@ void FillZoneCommand::undo()
 
 void FillZoneCommand::redo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for redo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     m_zoneManager->updateZoneGeometry(m_zoneId, m_newGeometry.x(), m_newGeometry.y(), m_newGeometry.width(),

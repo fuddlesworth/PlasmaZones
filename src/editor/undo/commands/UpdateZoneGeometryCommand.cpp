@@ -20,13 +20,7 @@ UpdateZoneGeometryCommand::UpdateZoneGeometryCommand(QPointer<ZoneManager> zoneM
 
 void UpdateZoneGeometryCommand::undo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for undo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     // Use batch so emissions happen in endBatchUpdate, after the undo stack has
@@ -39,13 +33,7 @@ void UpdateZoneGeometryCommand::undo()
 
 void UpdateZoneGeometryCommand::redo()
 {
-    if (!m_zoneManager || m_zoneId.isEmpty()) {
-        return;
-    }
-    // Validate zone exists before update
-    QVariantMap zone = m_zoneManager->getZoneById(m_zoneId);
-    if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found for redo:" << m_zoneId;
+    if (!validateZoneExists(m_zoneId)) {
         return;
     }
     // Use batch for consistency with undo() and with DividerResizeCommand, BatchUpdateAppearanceCommand, etc.
