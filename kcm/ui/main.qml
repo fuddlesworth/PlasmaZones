@@ -134,7 +134,7 @@ KCM.AbstractKCM {
             }
             TabButton {
                 text: i18n("Zones")
-                icon.name: "preferences-desktop-tweaks"
+                icon.name: "view-split-left-right"
             }
             TabButton {
                 text: i18n("Zone Selector")
