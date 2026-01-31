@@ -101,12 +101,27 @@ Kirigami.Dialog {
     }
 
     function initializePendingParamsForShader() {
-        var info = currentShaderInfo;
-        if (!info || !info.parameters) {
+        // Get params directly by ID to avoid stale computed property values
+        // When onPendingShaderIdChanged fires, currentShaderInfo may not have updated yet
+        var params = getShaderParamsById(pendingShaderId);
+        if (!params || params.length === 0) {
             pendingParams = {};
             return;
         }
-        pendingParams = extractDefaults(info.parameters);
+        pendingParams = extractDefaults(params);
+    }
+
+    // Helper to get shader parameters directly by ID, avoiding computed property timing issues
+    function getShaderParamsById(shaderId) {
+        if (!editorController || !shaderId) return [];
+        var shaders = editorController.availableShaders;
+        if (!shaders) return [];
+        for (var i = 0; i < shaders.length; i++) {
+            if (shaders[i] && shaders[i].id === shaderId) {
+                return shaders[i].parameters || [];
+            }
+        }
+        return [];
     }
 
     function setPendingParam(paramId, value) {
@@ -572,6 +587,8 @@ Kirigami.Dialog {
 
         RowLayout {
             property var paramData
+            // Track pendingParams changes to force value re-evaluation
+            readonly property var _pendingRef: root.pendingParams
 
             Kirigami.Theme.inherit: true
             Layout.fillWidth: true
@@ -585,13 +602,16 @@ Kirigami.Dialog {
                 to: paramData && paramData.max !== undefined ? paramData.max : 1
                 stepSize: paramData && paramData.step !== undefined ? paramData.step : 0.01
 
-                value: paramData ? root.parameterValue(
-                    paramData.id,
-                    paramData.default !== undefined ? paramData.default : 0.5
-                ) : 0.5
+                value: {
+                    void(parent._pendingRef); // Force re-eval when pendingParams changes
+                    return paramData ? root.parameterValue(
+                        paramData.id,
+                        paramData.default !== undefined ? paramData.default : 0.5
+                    ) : 0.5;
+                }
 
                 ToolTip.text: paramData ? (paramData.description || "") : ""
-                ToolTip.visible: hovered && paramData !== null && paramData !== undefined && Boolean(paramData.description)
+                ToolTip.visible: hovered && paramData && paramData.description
                 ToolTip.delay: Kirigami.Units.toolTipDelay
 
                 onMoved: {
@@ -615,6 +635,8 @@ Kirigami.Dialog {
 
         RowLayout {
             property var paramData
+            // Track pendingParams changes to force value re-evaluation
+            readonly property var _pendingRef: root.pendingParams
 
             Kirigami.Theme.inherit: true
             Layout.fillWidth: true
@@ -624,6 +646,7 @@ Kirigami.Dialog {
                 id: colorSwatch
 
                 property color currentColor: {
+                    void(parent._pendingRef); // Force re-eval when pendingParams changes
                     if (!paramData) return "#ffffff";
                     var fallback = (typeof paramData.default === "string" && paramData.default.length > 0)
                         ? paramData.default : "#ffffff";
@@ -678,6 +701,8 @@ Kirigami.Dialog {
 
         RowLayout {
             property var paramData
+            // Track pendingParams changes to force value re-evaluation
+            readonly property var _pendingRef: root.pendingParams
 
             Kirigami.Theme.inherit: true
             Layout.fillWidth: true
@@ -685,10 +710,13 @@ Kirigami.Dialog {
 
             CheckBox {
                 text: paramData ? (paramData.description || "") : ""
-                checked: paramData ? root.parameterValue(
-                    paramData.id,
-                    paramData.default !== undefined ? paramData.default : false
-                ) : false
+                checked: {
+                    void(parent._pendingRef); // Force re-eval when pendingParams changes
+                    return paramData ? root.parameterValue(
+                        paramData.id,
+                        paramData.default !== undefined ? paramData.default : false
+                    ) : false;
+                }
 
                 onToggled: {
                     if (paramData) {
@@ -706,6 +734,8 @@ Kirigami.Dialog {
 
         RowLayout {
             property var paramData
+            // Track pendingParams changes to force value re-evaluation
+            readonly property var _pendingRef: root.pendingParams
 
             Kirigami.Theme.inherit: true
             Layout.fillWidth: true
@@ -715,13 +745,16 @@ Kirigami.Dialog {
                 from: paramData && paramData.min !== undefined ? paramData.min : 0
                 to: paramData && paramData.max !== undefined ? paramData.max : 100
 
-                value: paramData ? root.parameterValue(
-                    paramData.id,
-                    paramData.default !== undefined ? paramData.default : 0
-                ) : 0
+                value: {
+                    void(parent._pendingRef); // Force re-eval when pendingParams changes
+                    return paramData ? root.parameterValue(
+                        paramData.id,
+                        paramData.default !== undefined ? paramData.default : 0
+                    ) : 0;
+                }
 
                 ToolTip.text: paramData ? (paramData.description || "") : ""
-                ToolTip.visible: hovered && paramData !== null && paramData !== undefined && Boolean(paramData.description)
+                ToolTip.visible: hovered && paramData && paramData.description
                 ToolTip.delay: Kirigami.Units.toolTipDelay
 
                 onValueModified: {
