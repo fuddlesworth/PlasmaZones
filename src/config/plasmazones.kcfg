@@ -491,10 +491,10 @@
       <max>200</max>
     </entry>
     <entry name="Position" type="Int">
-      <label>Zone selector position (0=Top,1=Bottom,2=Left,3=Right)</label>
-      <default>0</default>
+      <label>Zone selector position (0=TopLeft,1=Top,2=TopRight,3=Left,5=Right,6=BottomLeft,7=Bottom,8=BottomRight)</label>
+      <default>1</default>
       <min>0</min>
-      <max>3</max>
+      <max>8</max>
     </entry>
     <entry name="LayoutMode" type="Int">
       <label>Zone selector layout mode (0=Grid,1=Horizontal,2=Vertical)</label>
