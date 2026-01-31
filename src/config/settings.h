@@ -19,13 +19,9 @@ namespace PlasmaZones {
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
-// Forward declaration for friend class
-class SettingsPersistence;
-
 class PLASMAZONES_EXPORT Settings : public ISettings
 {
     Q_OBJECT
-    friend class SettingsPersistence;
 
     // Activation settings
     Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
