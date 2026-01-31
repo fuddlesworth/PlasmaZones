@@ -295,14 +295,14 @@ Kirigami.Dialog {
                 Layout.maximumHeight: Kirigami.Units.gridUnit * 4.5
                 visible: root.hasShaderEffect
 
-                ColumnLayout {
+                Column {
                     anchors.fill: parent
                     spacing: Kirigami.Units.smallSpacing
 
-                    // Description text
+                    // Description text - use explicit width for word wrap to work
                     Label {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        width: parent.width
+                        height: parent.height - metadataLabel.height - parent.spacing
 
                         text: {
                             if (!root.currentShaderInfo) return i18nc("@info:placeholder", "No description available");
@@ -316,11 +316,13 @@ Kirigami.Dialog {
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         font.italic: !(root.currentShaderInfo && root.currentShaderInfo.description)
                         verticalAlignment: Text.AlignTop
+                        clip: true
                     }
 
                     // Author/version metadata
                     Label {
-                        Layout.fillWidth: true
+                        id: metadataLabel
+                        width: parent.width
 
                         text: {
                             if (!root.currentShaderInfo) return "";
