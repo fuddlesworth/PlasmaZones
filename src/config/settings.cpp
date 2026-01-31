@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settings.h"
+#include "configdefaults.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include <KConfig>
@@ -1457,56 +1458,56 @@ void Settings::load()
     int minHeight = exclusions.readEntry("MinimumWindowHeight", 150);
     m_minimumWindowHeight = qBound(0, minHeight, 1000);
 
-    // Zone Selector
+    // Zone Selector (defaults from .kcfg via ConfigDefaults)
     KConfigGroup zoneSelector = config->group(QStringLiteral("ZoneSelector"));
-    m_zoneSelectorEnabled = zoneSelector.readEntry("Enabled", true);
-    int triggerDistance = zoneSelector.readEntry("TriggerDistance", 50);
+    m_zoneSelectorEnabled = zoneSelector.readEntry("Enabled", ConfigDefaults::zoneSelectorEnabled());
+    int triggerDistance = zoneSelector.readEntry("TriggerDistance", ConfigDefaults::triggerDistance());
     if (triggerDistance < 10 || triggerDistance > 200) {
         qCWarning(lcConfig) << "Invalid zone selector trigger distance:" << triggerDistance
                             << "using default (must be 10-200px)";
-        triggerDistance = 50;
+        triggerDistance = ConfigDefaults::triggerDistance();
     }
     m_zoneSelectorTriggerDistance = triggerDistance;
-    int selectorPos = zoneSelector.readEntry("Position", static_cast<int>(ZoneSelectorPosition::Top));
+    int selectorPos = zoneSelector.readEntry("Position", ConfigDefaults::position());
     // Valid positions are 0-8 except 4 (center)
     if (selectorPos >= 0 && selectorPos <= 8 && selectorPos != 4) {
         m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(selectorPos);
     } else {
-        m_zoneSelectorPosition = ZoneSelectorPosition::Top;
+        m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
     }
-    int selectorMode = zoneSelector.readEntry("LayoutMode", static_cast<int>(ZoneSelectorLayoutMode::Grid));
+    int selectorMode = zoneSelector.readEntry("LayoutMode", ConfigDefaults::layoutMode());
     m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(
         qBound(0, selectorMode, static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    int previewWidth = zoneSelector.readEntry("PreviewWidth", 180);
+    int previewWidth = zoneSelector.readEntry("PreviewWidth", ConfigDefaults::previewWidth());
     if (previewWidth < 80 || previewWidth > 400) {
         qCWarning(lcConfig) << "Invalid zone selector preview width:" << previewWidth << "using default (80-400px)";
-        previewWidth = 180;
+        previewWidth = ConfigDefaults::previewWidth();
     }
     m_zoneSelectorPreviewWidth = previewWidth;
-    int previewHeight = zoneSelector.readEntry("PreviewHeight", 101);
+    int previewHeight = zoneSelector.readEntry("PreviewHeight", ConfigDefaults::previewHeight());
     if (previewHeight < 60 || previewHeight > 300) {
         qCWarning(lcConfig) << "Invalid zone selector preview height:" << previewHeight << "using default (60-300px)";
-        previewHeight = 101;
+        previewHeight = ConfigDefaults::previewHeight();
     }
     m_zoneSelectorPreviewHeight = previewHeight;
-    m_zoneSelectorPreviewLockAspect = zoneSelector.readEntry("PreviewLockAspect", true);
-    int gridColumns = zoneSelector.readEntry("GridColumns", 5);
+    m_zoneSelectorPreviewLockAspect = zoneSelector.readEntry("PreviewLockAspect", ConfigDefaults::previewLockAspect());
+    int gridColumns = zoneSelector.readEntry("GridColumns", ConfigDefaults::gridColumns());
     if (gridColumns < 1 || gridColumns > 10) {
         qCWarning(lcConfig) << "Invalid zone selector grid columns:" << gridColumns << "using default (1-10)";
-        gridColumns = 5;
+        gridColumns = ConfigDefaults::gridColumns();
     }
     m_zoneSelectorGridColumns = gridColumns;
 
     // Size mode (Auto/Manual)
-    int sizeMode = zoneSelector.readEntry("SizeMode", static_cast<int>(ZoneSelectorSizeMode::Auto));
+    int sizeMode = zoneSelector.readEntry("SizeMode", ConfigDefaults::sizeMode());
     m_zoneSelectorSizeMode =
         static_cast<ZoneSelectorSizeMode>(qBound(0, sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual)));
 
     // Max visible rows before scrolling (Auto mode)
-    int maxRows = zoneSelector.readEntry("MaxRows", 4);
+    int maxRows = zoneSelector.readEntry("MaxRows", ConfigDefaults::maxRows());
     if (maxRows < 1 || maxRows > 10) {
         qCWarning(lcConfig) << "Invalid zone selector max rows:" << maxRows << "using default (1-10)";
-        maxRows = 4;
+        maxRows = ConfigDefaults::maxRows();
     }
     m_zoneSelectorMaxRows = maxRows;
 
@@ -1896,21 +1897,21 @@ void Settings::reset()
     m_minimumWindowWidth = 200;
     m_minimumWindowHeight = 150;
 
-    // Zone Selector defaults
-    m_zoneSelectorEnabled = true;
-    m_zoneSelectorTriggerDistance = 50;
-    m_zoneSelectorPosition = ZoneSelectorPosition::Top;
-    m_zoneSelectorLayoutMode = ZoneSelectorLayoutMode::Grid; // Grid is better UX for multiple layouts
-    m_zoneSelectorPreviewWidth = 180;
-    m_zoneSelectorPreviewHeight = 101;
-    m_zoneSelectorPreviewLockAspect = true;
-    m_zoneSelectorGridColumns = 5;
-    m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto; // Auto-calculate sizes from screen
-    m_zoneSelectorMaxRows = 4; // Max visible rows before scrolling
+    // Zone Selector defaults (from .kcfg via ConfigDefaults)
+    m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
+    m_zoneSelectorTriggerDistance = ConfigDefaults::triggerDistance();
+    m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
+    m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(ConfigDefaults::layoutMode());
+    m_zoneSelectorPreviewWidth = ConfigDefaults::previewWidth();
+    m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
+    m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
+    m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
+    m_zoneSelectorSizeMode = static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
+    m_zoneSelectorMaxRows = ConfigDefaults::maxRows();
 
-    // Shader Effects defaults
-    m_enableShaderEffects = true;
-    m_shaderFrameRate = 60;
+    // Shader Effects defaults (from .kcfg via ConfigDefaults)
+    m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
+    m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
 
     // Global Shortcuts defaults
     m_openEditorShortcut = QStringLiteral("Meta+Shift+E");

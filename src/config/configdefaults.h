@@ -1,0 +1,163 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include "plasmazones.h"  // Generated from plasmazones.kcfg via KConfigXT
+
+#include <QColor>
+#include <QString>
+
+namespace PlasmaZones {
+
+/**
+ * @brief Provides static access to default configuration values
+ *
+ * This class wraps the KConfigXT-generated PlasmaZonesConfig class to provide
+ * static access to default values. The .kcfg file is the SINGLE SOURCE OF TRUTH
+ * for all defaults - this class simply exposes those generated defaults.
+ *
+ * Usage:
+ *   int cols = ConfigDefaults::gridColumns();  // Returns 5 (from .kcfg)
+ *   int rows = ConfigDefaults::maxRows();      // Returns 4 (from .kcfg)
+ *
+ * Benefits:
+ * - Single source of truth (.kcfg file)
+ * - Compile-time type safety
+ * - No magic numbers scattered across codebase
+ * - Changes to .kcfg automatically propagate everywhere
+ */
+class ConfigDefaults
+{
+public:
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Activation Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool shiftDrag() { return instance().defaultShiftDragValue(); }
+    static int dragActivationModifier() { return instance().defaultDragActivationModifierValue(); }
+    static int skipSnapModifier() { return instance().defaultSkipSnapModifierValue(); }
+    static int multiZoneModifier() { return instance().defaultMultiZoneModifierValue(); }
+    static bool middleClickMultiZone() { return instance().defaultMiddleClickMultiZoneValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Display Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool showOnAllMonitors() { return instance().defaultShowOnAllMonitorsValue(); }
+    static bool showNumbers() { return instance().defaultShowNumbersValue(); }
+    static bool flashOnSwitch() { return instance().defaultFlashOnSwitchValue(); }
+    static bool showOsdOnLayoutSwitch() { return instance().defaultShowOsdOnLayoutSwitchValue(); }
+    static bool showNavigationOsd() { return instance().defaultShowNavigationOsdValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Appearance Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool useSystemColors() { return instance().defaultUseSystemColorsValue(); }
+    static QColor highlightColor() { return instance().defaultHighlightColorValue(); }
+    static QColor inactiveColor() { return instance().defaultInactiveColorValue(); }
+    static QColor borderColor() { return instance().defaultBorderColorValue(); }
+    static QColor numberColor() { return instance().defaultNumberColorValue(); }
+    static double activeOpacity() { return instance().defaultActiveOpacityValue(); }
+    static double inactiveOpacity() { return instance().defaultInactiveOpacityValue(); }
+    static int borderWidth() { return instance().defaultBorderWidthValue(); }
+    static int borderRadius() { return instance().defaultBorderRadiusValue(); }
+    static bool enableBlur() { return instance().defaultEnableBlurValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Zone Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static int zonePadding() { return instance().defaultPaddingValue(); }
+    static int outerGap() { return instance().defaultOuterGapValue(); }
+    static int adjacentThreshold() { return instance().defaultAdjacentThresholdValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Performance Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static int pollIntervalMs() { return instance().defaultPollIntervalMsValue(); }
+    static int minimumZoneSizePx() { return instance().defaultMinimumZoneSizePxValue(); }
+    static int minimumZoneDisplaySizePx() { return instance().defaultMinimumZoneDisplaySizePxValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window Behavior Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool keepWindowsInZonesOnResolutionChange() { return instance().defaultKeepOnResolutionChangeValue(); }
+    static bool moveNewWindowsToLastZone() { return instance().defaultMoveNewToLastZoneValue(); }
+    static bool restoreOriginalSizeOnUnsnap() { return instance().defaultRestoreSizeOnUnsnapValue(); }
+    static int stickyWindowHandling() { return instance().defaultStickyWindowHandlingValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Exclusion Settings
+    // Note: MinimumWindowWidth, MinimumWindowHeight, ExcludeTransientWindows
+    // are not in .kcfg - see constants.h Defaults:: namespace for these
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Zone Selector Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool zoneSelectorEnabled() { return instance().defaultEnabledValue(); }
+    static int triggerDistance() { return instance().defaultTriggerDistanceValue(); }
+    static int position() { return instance().defaultPositionValue(); }
+    static int layoutMode() { return instance().defaultLayoutModeValue(); }
+    static int sizeMode() { return instance().defaultSizeModeValue(); }
+    static int maxRows() { return instance().defaultMaxRowsValue(); }
+    static int previewWidth() { return instance().defaultPreviewWidthValue(); }
+    static int previewHeight() { return instance().defaultPreviewHeightValue(); }
+    static bool previewLockAspect() { return instance().defaultPreviewLockAspectValue(); }
+    static int gridColumns() { return instance().defaultGridColumnsValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Shader Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool enableShaderEffects() { return instance().defaultEnableShaderEffectsValue(); }
+    static int shaderFrameRate() { return instance().defaultShaderFrameRateValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool autotileEnabled() { return instance().defaultAutotileEnabledValue(); }
+    static QString autotileAlgorithm() { return instance().defaultAutotileAlgorithmValue(); }
+    static double autotileSplitRatio() { return instance().defaultAutotileSplitRatioValue(); }
+    static int autotileMasterCount() { return instance().defaultAutotileMasterCountValue(); }
+    static int autotileInnerGap() { return instance().defaultAutotileInnerGapValue(); }
+    static int autotileOuterGap() { return instance().defaultAutotileOuterGapValue(); }
+    static bool autotileFocusNewWindows() { return instance().defaultAutotileFocusNewWindowsValue(); }
+    static bool autotileSmartGaps() { return instance().defaultAutotileSmartGapsValue(); }
+    static int autotileInsertPosition() { return instance().defaultAutotileInsertPositionValue(); }
+    static bool autotileAnimationsEnabled() { return instance().defaultAutotileAnimationsEnabledValue(); }
+    static int autotileAnimationDuration() { return instance().defaultAutotileAnimationDurationValue(); }
+    static bool autotileFocusFollowsMouse() { return instance().defaultAutotileFocusFollowsMouseValue(); }
+    static bool autotileRespectMinimumSize() { return instance().defaultAutotileRespectMinimumSizeValue(); }
+    static bool autotileShowActiveBorder() { return instance().defaultAutotileShowActiveBorderValue(); }
+    static int autotileActiveBorderWidth() { return instance().defaultAutotileActiveBorderWidthValue(); }
+    static bool autotileUseSystemBorderColor() { return instance().defaultAutotileUseSystemBorderColorValue(); }
+    static bool autotileMonocleHideOthers() { return instance().defaultAutotileMonocleHideOthersValue(); }
+    static bool autotileMonocleShowTabs() { return instance().defaultAutotileMonocleShowTabsValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Mode Tracking Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static int lastTilingMode() { return instance().defaultLastTilingModeValue(); }
+    static QString lastAutotileAlgorithm() { return instance().defaultLastAutotileAlgorithmValue(); }
+
+private:
+    // Lazily-initialized singleton instance
+    static PlasmaZonesConfig& instance()
+    {
+        static PlasmaZonesConfig config;
+        return config;
+    }
+
+    // Non-instantiable
+    ConfigDefaults() = delete;
+};
+
+} // namespace PlasmaZones

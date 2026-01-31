@@ -34,6 +34,9 @@ Window {
     property real screenAspectRatio: 16 / 9
     property int screenWidth: 1920 // Actual screen width for scaling
     // Selector configuration from settings
+    // Note: These are fallback defaults that match plasmazones.kcfg.
+    // C++ (OverlayService) sets these properties with actual settings values.
+    // See ConfigDefaults class for the single source of truth.
     property int selectorPosition: 0
     property int selectorLayoutMode: 1
     property int selectorGridColumns: 5
