@@ -37,6 +37,8 @@ set(plasmazones_core_SRCS
     core/platform.h
     core/geometryutils.cpp
     core/geometryutils.h
+    core/dbusvariantutils.cpp
+    core/dbusvariantutils.h
     core/zone.cpp
     core/zone.h
     core/layout.cpp
@@ -296,6 +298,12 @@ set(plasmazones_editor_SRCS
     editor/main.cpp
     editor/EditorController.cpp
     editor/EditorController.h
+    editor/helpers/ZoneSerialization.cpp
+    editor/helpers/ZoneSerialization.h
+    editor/helpers/SettingsDbusQueries.cpp
+    editor/helpers/SettingsDbusQueries.h
+    editor/helpers/ShaderDbusQueries.cpp
+    editor/helpers/ShaderDbusQueries.h
     editor/services/ILayoutService.h
     editor/services/DBusLayoutService.cpp
     editor/services/DBusLayoutService.h

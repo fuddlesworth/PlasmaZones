@@ -31,6 +31,10 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "../core/dbusvariantutils.h"
+#include "helpers/ZoneSerialization.h"
+#include "helpers/SettingsDbusQueries.h"
+#include "helpers/ShaderDbusQueries.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -40,7 +44,6 @@
 #include <QClipboard>
 #include <QMimeData>
 #include <QGuiApplication>
-#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -54,87 +57,6 @@
 #include <utility>
 
 namespace PlasmaZones {
-
-// D-Bus wraps nested maps/lists in QDBusArgument which is read-only.
-// QML chokes on these, so we recursively unwrap everything to plain QVariants.
-// qdbus_cast won't help here - it only handles top-level types.
-static QVariant convertDbusArgument(const QVariant& value)
-{
-    // Handle QDBusArgument wrapper - extract to plain types first
-    if (value.canConvert<QDBusArgument>()) {
-        const QDBusArgument arg = value.value<QDBusArgument>();
-        switch (arg.currentType()) {
-        case QDBusArgument::MapType: {
-            // Extract the entire map at once, then recursively convert values
-            QVariantMap map;
-            arg >> map;
-            QVariantMap result;
-            for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-                result.insert(it.key(), convertDbusArgument(it.value()));
-            }
-            return result;
-        }
-        case QDBusArgument::ArrayType: {
-            // Extract the entire list at once using operator>>, which is more
-            // reliable than beginArray()/endArray() for nested structures
-            QVariantList list;
-            arg >> list;
-            QVariantList result;
-            result.reserve(list.size());
-            for (const QVariant& item : list) {
-                result.append(convertDbusArgument(item));
-            }
-            return result;
-        }
-        case QDBusArgument::StructureType: {
-            // Handle D-Bus structures (less common, but can occur)
-            QVariantList structData;
-            arg >> structData;
-            QVariantList result;
-            result.reserve(structData.size());
-            for (const QVariant& item : structData) {
-                result.append(convertDbusArgument(item));
-            }
-            return result;
-        }
-        case QDBusArgument::BasicType:
-        case QDBusArgument::VariantType: {
-            // Basic types can be extracted directly
-            QVariant extracted;
-            arg >> extracted;
-            return extracted;
-        }
-        default:
-            // Unknown type - return as-is (may cause issues, but log for debugging)
-            qCWarning(lcEditor) << "Unhandled QDBusArgument type:" << arg.currentType();
-            return value;
-        }
-    }
-
-    // Handle QVariantList that might contain nested QDBusArgument objects
-    if (value.typeId() == QMetaType::QVariantList) {
-        const QVariantList list = value.toList();
-        QVariantList result;
-        result.reserve(list.size());
-        for (const QVariant& item : list) {
-            result.append(convertDbusArgument(item));
-        }
-        return result;
-    }
-
-    // Handle QVariantMap that might contain nested QDBusArgument objects
-    if (value.typeId() == QMetaType::QVariantMap) {
-        const QVariantMap map = value.toMap();
-        QVariantMap result;
-        for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
-            result.insert(it.key(), convertDbusArgument(it.value()));
-        }
-        return result;
-    }
-
-    // Plain types pass through unchanged
-    return value;
-}
 
 EditorController::EditorController(QObject* parent)
     : QObject(parent)
@@ -381,24 +303,7 @@ void EditorController::clearOuterGapOverride()
 
 void EditorController::refreshGlobalZonePadding()
 {
-    int newValue = PlasmaZones::Defaults::ZonePadding;
-
-    QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
-        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QDBusVariant> reply =
-            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("zonePadding"));
-        if (reply.isValid()) {
-            int value = reply.value().variant().toInt();
-            if (value >= 0) {
-                newValue = value;
-            }
-        }
-    }
+    int newValue = SettingsDbusQueries::queryGlobalZonePadding();
 
     if (m_cachedGlobalZonePadding != newValue) {
         m_cachedGlobalZonePadding = newValue;
@@ -408,24 +313,7 @@ void EditorController::refreshGlobalZonePadding()
 
 void EditorController::refreshGlobalOuterGap()
 {
-    int newValue = PlasmaZones::Defaults::OuterGap;
-
-    QDBusInterface settingsIface(
-        QString::fromLatin1(PlasmaZones::DBus::ServiceName),
-        QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-        QString::fromLatin1(PlasmaZones::DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QDBusVariant> reply =
-            settingsIface.call(QStringLiteral("getSetting"), QStringLiteral("outerGap"));
-        if (reply.isValid()) {
-            int value = reply.value().variant().toInt();
-            if (value >= 0) {
-                newValue = value;
-            }
-        }
-    }
+    int newValue = SettingsDbusQueries::queryGlobalOuterGap();
 
     if (m_cachedGlobalOuterGap != newValue) {
         m_cachedGlobalOuterGap = newValue;
@@ -440,21 +328,7 @@ UndoController* EditorController::undoController() const
 bool EditorController::canPaste() const
 {
     QClipboard* clipboard = QGuiApplication::clipboard();
-    QString clipboardText = clipboard->text();
-
-    if (clipboardText.isEmpty()) {
-        return false;
-    }
-
-    // Quick validation - check if it's valid JSON with our format
-    QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8());
-    if (doc.isNull() || !doc.isObject()) {
-        return false;
-    }
-
-    QJsonObject clipboardData = doc.object();
-    return clipboardData[QLatin1String("application")].toString() == QLatin1String("PlasmaZones")
-        && clipboardData[QLatin1String("dataType")].toString() == QLatin1String("zones");
+    return ZoneSerialization::isValidClipboardFormat(clipboard->text());
 }
 
 // Property setters
@@ -3024,105 +2898,6 @@ void EditorController::onClipboardChanged()
     }
 }
 
-QString EditorController::serializeZonesToClipboard(const QVariantList& zones)
-{
-    QJsonObject clipboardData;
-    clipboardData[QLatin1String("version")] = QLatin1String("1.0");
-    clipboardData[QLatin1String("application")] = QLatin1String("PlasmaZones");
-    clipboardData[QLatin1String("dataType")] = QLatin1String("zones");
-
-    QJsonArray zonesArray;
-    for (const QVariant& zoneVar : zones) {
-        QVariantMap zone = zoneVar.toMap();
-        QJsonObject zoneObj;
-
-        // Generate new UUID for paste (preserve original ID in metadata)
-        zoneObj[QLatin1String("id")] = QUuid::createUuid().toString();
-        zoneObj[QLatin1String("name")] = zone[JsonKeys::Name].toString();
-        zoneObj[QLatin1String("zoneNumber")] = zone[JsonKeys::ZoneNumber].toInt();
-        zoneObj[QLatin1String("x")] = zone[JsonKeys::X].toDouble();
-        zoneObj[QLatin1String("y")] = zone[JsonKeys::Y].toDouble();
-        zoneObj[QLatin1String("width")] = zone[JsonKeys::Width].toDouble();
-        zoneObj[QLatin1String("height")] = zone[JsonKeys::Height].toDouble();
-
-        // Appearance properties
-        zoneObj[QLatin1String("highlightColor")] = zone[JsonKeys::HighlightColor].toString();
-        zoneObj[QLatin1String("inactiveColor")] = zone[JsonKeys::InactiveColor].toString();
-        zoneObj[QLatin1String("borderColor")] = zone[JsonKeys::BorderColor].toString();
-        zoneObj[QLatin1String("activeOpacity")] =
-            zone.contains(JsonKeys::ActiveOpacity) ? zone[JsonKeys::ActiveOpacity].toDouble() : Defaults::Opacity;
-        zoneObj[QLatin1String("inactiveOpacity")] = zone.contains(JsonKeys::InactiveOpacity)
-            ? zone[JsonKeys::InactiveOpacity].toDouble()
-            : Defaults::InactiveOpacity;
-        zoneObj[QLatin1String("borderWidth")] =
-            zone.contains(JsonKeys::BorderWidth) ? zone[JsonKeys::BorderWidth].toInt() : Defaults::BorderWidth;
-        zoneObj[QLatin1String("borderRadius")] =
-            zone.contains(JsonKeys::BorderRadius) ? zone[JsonKeys::BorderRadius].toInt() : Defaults::BorderRadius;
-
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
-        zoneObj[QLatin1String("useCustomColors")] =
-            zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
-        zoneObj[QLatin1String("shortcut")] =
-            zone.contains(JsonKeys::Shortcut) ? zone[JsonKeys::Shortcut].toString() : QString();
-
-        zonesArray.append(zoneObj);
-    }
-    clipboardData[QLatin1String("zones")] = zonesArray;
-
-    QJsonDocument doc(clipboardData);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-}
-
-QVariantList EditorController::deserializeZonesFromClipboard(const QString& clipboardText)
-{
-    QJsonDocument doc = QJsonDocument::fromJson(clipboardText.toUtf8());
-    if (doc.isNull() || !doc.isObject()) {
-        return QVariantList();
-    }
-
-    QJsonObject clipboardData = doc.object();
-
-    // Validate clipboard format
-    if (clipboardData[QLatin1String("application")].toString() != QLatin1String("PlasmaZones")
-        || clipboardData[QLatin1String("dataType")].toString() != QLatin1String("zones")) {
-        return QVariantList();
-    }
-
-    QJsonArray zonesArray = clipboardData[QLatin1String("zones")].toArray();
-    QVariantList zones;
-
-    for (const QJsonValue& zoneVal : zonesArray) {
-        QJsonObject zoneObj = zoneVal.toObject();
-        QVariantMap zone;
-
-        // Convert JSON to QVariantMap format used by ZoneManager
-        zone[JsonKeys::Id] = zoneObj[QLatin1String("id")].toString();
-        zone[JsonKeys::Name] = zoneObj[QLatin1String("name")].toString();
-        zone[JsonKeys::ZoneNumber] = zoneObj[QLatin1String("zoneNumber")].toInt();
-        zone[JsonKeys::X] = zoneObj[QLatin1String("x")].toDouble();
-        zone[JsonKeys::Y] = zoneObj[QLatin1String("y")].toDouble();
-        zone[JsonKeys::Width] = zoneObj[QLatin1String("width")].toDouble();
-        zone[JsonKeys::Height] = zoneObj[QLatin1String("height")].toDouble();
-
-        // Appearance properties
-        zone[JsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();
-        zone[JsonKeys::InactiveColor] = zoneObj[QLatin1String("inactiveColor")].toString();
-        zone[JsonKeys::BorderColor] = zoneObj[QLatin1String("borderColor")].toString();
-        zone[JsonKeys::ActiveOpacity] = zoneObj[QLatin1String("activeOpacity")].toDouble(Defaults::Opacity);
-        zone[JsonKeys::InactiveOpacity] = zoneObj[QLatin1String("inactiveOpacity")].toDouble(Defaults::InactiveOpacity);
-        zone[JsonKeys::BorderWidth] = zoneObj[QLatin1String("borderWidth")].toInt(Defaults::BorderWidth);
-        zone[JsonKeys::BorderRadius] = zoneObj[QLatin1String("borderRadius")].toInt(Defaults::BorderRadius);
-
-        QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
-        zone[useCustomColorsKey] = zoneObj[QLatin1String("useCustomColors")].toBool(false);
-        zone[JsonKeys::Shortcut] = zoneObj[QLatin1String("shortcut")].toString();
-
-        zones.append(zone);
-    }
-
-    return zones;
-}
-
 void EditorController::copyZones(const QStringList& zoneIds)
 {
     if (!m_zoneManager) {
@@ -3153,8 +2928,8 @@ void EditorController::copyZones(const QStringList& zoneIds)
         return;
     }
 
-    // Serialize to JSON
-    QString jsonData = serializeZonesToClipboard(zonesToCopy);
+    // Serialize to JSON using helper
+    QString jsonData = ZoneSerialization::serializeZonesToClipboard(zonesToCopy);
 
     // Copy to clipboard
     QClipboard* clipboard = QGuiApplication::clipboard();
@@ -3217,8 +2992,8 @@ QStringList EditorController::pasteZones(bool withOffset)
         return QStringList();
     }
 
-    // Deserialize zones
-    QVariantList zonesToPaste = deserializeZonesFromClipboard(clipboardText);
+    // Deserialize zones using helper
+    QVariantList zonesToPaste = ZoneSerialization::deserializeZonesFromClipboard(clipboardText);
     if (zonesToPaste.isEmpty()) {
         return QStringList();
     }
@@ -3408,75 +3183,16 @@ void EditorController::resetShaderParameters()
 
 void EditorController::refreshAvailableShaders()
 {
-    // Query daemon's ShaderRegistry via SettingsAdaptor D-Bus
-    QDBusInterface settingsIface(QStringLiteral("org.plasmazones"), QStringLiteral("/PlasmaZones"),
-                                 QStringLiteral("org.plasmazones.Settings"), QDBusConnection::sessionBus());
+    m_shadersEnabled = ShaderDbusQueries::queryShadersEnabled();
+    m_availableShaders = ShaderDbusQueries::queryAvailableShaders();
 
-    if (!settingsIface.isValid()) {
-        qCWarning(lcEditor) << "Cannot query shaders: daemon D-Bus interface unavailable";
-        m_availableShaders.clear();
-        m_shadersEnabled = false;
-        Q_EMIT availableShadersChanged();
-        Q_EMIT shadersEnabledChanged();
-        return;
-    }
-
-    // Check if shaders are supported (system capability, not user preference)
-    QDBusReply<bool> enabledReply = settingsIface.call(QStringLiteral("shadersEnabled"));
-    m_shadersEnabled = enabledReply.isValid() && enabledReply.value();
-
-    // Get available shaders list
-    QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
-    if (reply.isValid()) {
-        m_availableShaders.clear();
-
-        // D-Bus returns nested structures (QVariantMap, QVariantList) as QDBusArgument
-        // Use convertDbusArgument to recursively convert them to proper Qt types
-        for (const QVariant& item : reply.value()) {
-            QVariant converted = convertDbusArgument(item);
-            if (converted.typeId() == QMetaType::QVariantMap) {
-                QVariantMap map = converted.toMap();
-                // Validate that required fields exist
-                if (map.contains(QLatin1String("id")) && map.contains(QLatin1String("name"))) {
-                    m_availableShaders.append(map);
-                } else {
-                    qCWarning(lcEditor) << "Shader entry missing required fields (id/name):" << map;
-                }
-            } else {
-                qCWarning(lcEditor) << "Unexpected shader list item type after conversion:" << converted.typeName();
-            }
-        }
-
-        qCDebug(lcEditor) << "Loaded" << m_availableShaders.size() << "shaders";
-        Q_EMIT availableShadersChanged();
-    } else {
-        qCWarning(lcEditor) << "D-Bus availableShaders call failed:" << reply.error().message();
-        m_availableShaders.clear();
-        Q_EMIT availableShadersChanged();
-    }
-
+    Q_EMIT availableShadersChanged();
     Q_EMIT shadersEnabledChanged();
 }
 
 QVariantMap EditorController::getShaderInfo(const QString& shaderId) const
 {
-    if (ShaderRegistry::isNoneShader(shaderId)) {
-        return QVariantMap();
-    }
-
-    QDBusInterface settingsIface(QStringLiteral("org.plasmazones"), QStringLiteral("/PlasmaZones"),
-                                 QStringLiteral("org.plasmazones.Settings"), QDBusConnection::sessionBus());
-
-    if (settingsIface.isValid()) {
-        QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("shaderInfo"), shaderId);
-        if (reply.isValid()) {
-            // D-Bus may return nested structures as QDBusArgument - convert recursively
-            QVariant converted = convertDbusArgument(QVariant::fromValue(reply.value()));
-            return converted.toMap();
-        }
-        qCWarning(lcEditor) << "D-Bus shaderInfo call failed:" << reply.error().message();
-    }
-    return QVariantMap();
+    return ShaderDbusQueries::queryShaderInfo(shaderId);
 }
 
 } // namespace PlasmaZones

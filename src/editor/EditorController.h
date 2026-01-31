@@ -446,20 +446,6 @@ private:
     void onClipboardChanged();
 
     /**
-     * @brief Serializes zones to JSON format for clipboard
-     * @param zones List of zones to serialize
-     * @return JSON string containing zone data
-     */
-    QString serializeZonesToClipboard(const QVariantList& zones);
-
-    /**
-     * @brief Deserializes zones from clipboard JSON format
-     * @param clipboardText JSON string from clipboard
-     * @return List of zones, or empty list if invalid data
-     */
-    QVariantList deserializeZonesFromClipboard(const QString& clipboardText);
-
-    /**
      * @brief Gets shader info from daemon via D-Bus
      * @param shaderId Shader ID to query
      * @return Shader metadata as QVariantMap, or empty map if not found
