@@ -483,7 +483,7 @@ private:
     QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {}) const;
 
     /**
-     * @brief Get Editor config group from plasmazonesrc (DRY helper)
+     * @brief Get Editor config group from plasmazonesrc
      * @return KConfigGroup for the Editor section
      */
     static KConfigGroup editorConfigGroup();

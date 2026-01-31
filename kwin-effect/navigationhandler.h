@@ -22,7 +22,7 @@ class PlasmaZonesEffect;
 /**
  * @brief Handles keyboard navigation operations for PlasmaZones
  *
- * SRP: This class is responsible ONLY for processing keyboard navigation
+ * Processes keyboard navigation
  * commands (move, focus, swap, rotate, cycle, restore, float toggle).
  *
  * It delegates window lookups and geometry application back to the effect.

@@ -10,7 +10,7 @@ import ".."
 /**
  * @brief Layouts tab - View, create, edit, import/export layouts
  *
- * Refactored to follow SRP:
+ * * Refactored for better organization:
  * - LayoutToolbar handles action buttons
  * - LayoutGridDelegate handles individual card rendering
  * - This component handles overall layout and coordination

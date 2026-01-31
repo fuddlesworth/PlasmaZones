@@ -19,7 +19,7 @@ class PlasmaZonesEffect;
 /**
  * @brief Tracks window drag state and detects drag start/move/stop
  *
- * SRP: This class is responsible ONLY for:
+ * Responsible for:
  * - Tracking which window is being dragged
  * - Detecting drag start, movement, and stop
  * - Managing cursor position during drag

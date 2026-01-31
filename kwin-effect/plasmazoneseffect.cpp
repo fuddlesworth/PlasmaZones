@@ -33,7 +33,7 @@ Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Template helpers to reduce code duplication (DRY principle)
+// Template helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
@@ -91,7 +91,7 @@ static T loadDBusSetting(QDBusInterface& settingsInterface, const QString& key, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DRY Helper Method Implementations
+// Helper Method Implementations
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QRect PlasmaZonesEffect::parseZoneGeometry(const QString& json) const
@@ -324,7 +324,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 {
-    // SRP: Delegate to helpers
+    // Delegate to helpers
     m_dragTracker->handleWindowClosed(w);
 
     // Clean up floating window tracking using stable ID
@@ -342,7 +342,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
     // Phase 2.1: Notify daemon of window activation for autotiling focus tracking
-    // Filtering is handled internally by notifyWindowActivated (SRP)
+    // Filtering handled by notifyWindowActivated
     notifyWindowActivated(w);
 }
 
@@ -515,7 +515,7 @@ void PlasmaZonesEffect::slotSettingsChanged()
 
 void PlasmaZonesEffect::pollWindowMoves()
 {
-    // SRP: Delegate to DragTracker (signals connected in constructor)
+    // Delegate to DragTracker
     m_dragTracker->pollWindowMoves();
 }
 
@@ -654,7 +654,7 @@ bool PlasmaZonesEffect::ensureWindowTrackingReady(const char* methodName)
 
 void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
 {
-    // SRP: Delegate to NavigationHandler
+    // Delegate to NavigationHandler
     m_navigationHandler->syncFloatingWindowsFromDaemon();
 }
 
@@ -811,13 +811,13 @@ void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& acti
 
 void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry)
 {
-    // SRP: Delegate to NavigationHandler
+    // Delegate to NavigationHandler
     m_navigationHandler->handleMoveWindowToZone(targetZoneId, zoneGeometry);
 }
 
 void PlasmaZonesEffect::slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId)
 {
-    // SRP: Delegate to NavigationHandler
+    // Delegate to NavigationHandler
     m_navigationHandler->handleFocusWindowInZone(targetZoneId, windowId);
 }
 
@@ -1202,7 +1202,7 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 {
-    // Consistent filtering with notifyWindowAdded (SRP: filtering responsibility in notify method)
+    // Consistent filtering with notifyWindowAdded
     if (!w || !shouldHandleWindow(w)) {
         return;
     }

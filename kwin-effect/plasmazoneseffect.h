@@ -18,7 +18,7 @@
 
 namespace PlasmaZones {
 
-// Forward declarations for SRP helper classes
+// Forward declarations for helper classes
 class NavigationHandler;
 class WindowAnimator;
 class DragTracker;
@@ -110,12 +110,12 @@ private:
      * @brief Ensure WindowTracking D-Bus interface is ready for use
      * @param methodName Name of the calling method (for debug logging)
      * @return true if interface is valid and ready, false otherwise
-     * @note DRY helper - consolidates repeated interface validation pattern
+     * Consolidates interface validation pattern
      */
     bool ensureWindowTrackingReady(const char* methodName);
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // DRY Helper Methods - Consolidate repeated patterns
+    // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
@@ -206,7 +206,7 @@ public Q_SLOTS:
     bool borderActivated(KWin::ElectricBorder border) override;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SRP: Helper class access methods
+    // Helper class access methods
     // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
@@ -217,13 +217,13 @@ public:
     Qt::KeyboardModifiers currentModifiers() const { return m_currentModifiers; }
 
 private:
-    // Friend classes for SRP helpers (they need access to private methods)
+    // Friend classes for helpers
     friend class NavigationHandler;
     friend class WindowAnimator;
     friend class DragTracker;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // SRP Helper class instances
+    // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<WindowAnimator> m_windowAnimator;

@@ -66,7 +66,7 @@ struct WindowAnimation {
 /**
  * @brief Manages autotile window animations
  *
- * SRP: This class is responsible ONLY for:
+ * Responsible for:
  * - Tracking animation state for windows
  * - Computing interpolated geometry during animations
  * - Determining when animations are complete

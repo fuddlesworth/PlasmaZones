@@ -10,7 +10,7 @@ import org.kde.kirigami as Kirigami
  * @brief Data-driven toolbar for layout management actions
  *
  * Single Responsibility: Provide layout action buttons.
- * Follows DRY by using a model-driven approach instead of 7 separate Button definitions.
+ * * Uses a model-driven approach instead of separate Button definitions.
  */
 RowLayout {
     id: root
