@@ -35,6 +35,7 @@
 #include "helpers/ZoneSerialization.h"
 #include "helpers/SettingsDbusQueries.h"
 #include "helpers/ShaderDbusQueries.h"
+#include "helpers/BatchOperationScope.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -101,12 +102,7 @@ EditorController::EditorController(QObject* parent)
         // Remove zone from selection if it was selected
         if (m_selectedZoneIds.contains(zoneId)) {
             m_selectedZoneIds.removeAll(zoneId);
-            QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-            if (m_selectedZoneId != newSelectedId) {
-                m_selectedZoneId = newSelectedId;
-                Q_EMIT selectedZoneIdChanged();
-            }
-            Q_EMIT selectedZoneIdsChanged();
+            syncSelectionSignals();
         }
         Q_EMIT zoneRemoved(zoneId);
     });
@@ -1141,12 +1137,7 @@ void EditorController::deleteZone(const QString& zoneId)
     // Update selection state
     if (m_selectedZoneIds.contains(zoneId)) {
         m_selectedZoneIds.removeAll(zoneId);
-        QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-        if (m_selectedZoneId != newSelectedId) {
-            m_selectedZoneId = newSelectedId;
-            Q_EMIT selectedZoneIdChanged();
-        }
-        Q_EMIT selectedZoneIdsChanged();
+        syncSelectionSignals();
     }
 
     markUnsaved();
@@ -1257,12 +1248,7 @@ void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
     // Update selection state
     if (m_selectedZoneIds.contains(zoneId)) {
         m_selectedZoneIds.removeAll(zoneId);
-        QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-        if (m_selectedZoneId != newSelectedId) {
-            m_selectedZoneId = newSelectedId;
-            Q_EMIT selectedZoneIdChanged();
-        }
-        Q_EMIT selectedZoneIdsChanged();
+        syncSelectionSignals();
     }
 
     markUnsaved();
@@ -1570,6 +1556,16 @@ bool EditorController::servicesReady(const char* operation) const
     return true;
 }
 
+void EditorController::syncSelectionSignals()
+{
+    QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
+    if (m_selectedZoneId != newSelectedId) {
+        m_selectedZoneId = newSelectedId;
+        Q_EMIT selectedZoneIdChanged();
+    }
+    Q_EMIT selectedZoneIdsChanged();
+}
+
 /**
  * @brief Selects the next zone in the zone list
  * @return Zone ID of the newly selected zone, or empty string if no zones
@@ -1800,15 +1796,7 @@ void EditorController::removeFromSelection(const QString& zoneId)
     }
 
     m_selectedZoneIds.removeAll(zoneId);
-
-    // Update single selection for backward compatibility
-    QString newSelectedId = m_selectedZoneIds.isEmpty() ? QString() : m_selectedZoneIds.first();
-    if (m_selectedZoneId != newSelectedId) {
-        m_selectedZoneId = newSelectedId;
-        Q_EMIT selectedZoneIdChanged();
-    }
-
-    Q_EMIT selectedZoneIdsChanged();
+    syncSelectionSignals();
 }
 
 void EditorController::toggleSelection(const QString& zoneId)
@@ -1979,18 +1967,13 @@ void EditorController::deleteSelectedZones()
     // Copy list since we'll modify it during deletion
     QStringList zonesToDelete = m_selectedZoneIds;
 
-    // Use macro for single undo step
-    m_undoController->beginMacro(i18nc("@action", "Delete %1 Zones", zonesToDelete.count()));
-
-    // Use batch update to defer signals until all zones are deleted
-    m_zoneManager->beginBatchUpdate();
-
-    for (const QString& zoneId : zonesToDelete) {
-        deleteZone(zoneId);
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Delete %1 Zones", zonesToDelete.count()));
+        for (const QString& zoneId : zonesToDelete) {
+            deleteZone(zoneId);
+        }
     }
-
-    m_zoneManager->endBatchUpdate();
-    m_undoController->endMacro();
 
     // Clear selection (already done by deleteZone removing individual zones)
     clearSelection();
@@ -2012,21 +1995,16 @@ QStringList EditorController::duplicateSelectedZones()
     QStringList zonesToDuplicate = m_selectedZoneIds;
     QStringList newZoneIds;
 
-    // Use macro for single undo step
-    m_undoController->beginMacro(i18nc("@action", "Duplicate %1 Zones", zonesToDuplicate.count()));
-
-    // Use batch update to defer signals until all zones are duplicated
-    m_zoneManager->beginBatchUpdate();
-
-    for (const QString& zoneId : zonesToDuplicate) {
-        QString newId = duplicateZone(zoneId);
-        if (!newId.isEmpty()) {
-            newZoneIds.append(newId);
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Duplicate %1 Zones", zonesToDuplicate.count()));
+        for (const QString& zoneId : zonesToDuplicate) {
+            QString newId = duplicateZone(zoneId);
+            if (!newId.isEmpty()) {
+                newZoneIds.append(newId);
+            }
         }
     }
-
-    m_zoneManager->endBatchUpdate();
-    m_undoController->endMacro();
 
     // Select all duplicated zones
     if (!newZoneIds.isEmpty()) {
@@ -2100,23 +2078,19 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         }
     }
 
-    // Apply movement using macro for single undo
-    m_undoController->beginMacro(i18nc("@action", "Move %1 Zones", zonesToMove.count()));
-
-    // Use batch update to defer signals until all zones are moved
-    m_zoneManager->beginBatchUpdate();
-
-    for (const auto& pair : zonesToMove) {
-        const QString& zoneId = pair.first;
-        const QVariantMap& zone = pair.second;
-        qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
-        qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
-        updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
-                           true); // Skip snapping for keyboard
+    // Apply movement using RAII scope for undo macro and batch update
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Move %1 Zones", zonesToMove.count()));
+        for (const auto& pair : zonesToMove) {
+            const QString& zoneId = pair.first;
+            const QVariantMap& zone = pair.second;
+            qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
+            qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
+            updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
+                               true); // Skip snapping for keyboard
+        }
     }
-
-    m_zoneManager->endBatchUpdate();
-    m_undoController->endMacro();
     return true;
 }
 
@@ -2146,67 +2120,61 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
 
     const qreal minSize = 0.05; // Minimum 5% size
 
-    // Apply resize using macro for single undo
-    m_undoController->beginMacro(i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
+        for (const auto& pair : zonesToResize) {
+            const QString& zoneId = pair.first;
+            const QVariantMap& zone = pair.second;
+            qreal x = zone[JsonKeys::X].toDouble();
+            qreal y = zone[JsonKeys::Y].toDouble();
+            qreal width = zone[JsonKeys::Width].toDouble();
+            qreal height = zone[JsonKeys::Height].toDouble();
 
-    // Use batch update to defer signals until all zones are resized
-    m_zoneManager->beginBatchUpdate();
+            // Apply resize based on direction (same logic as resizeSelectedZone)
+            // Left/Up = shrink, Right/Down = grow (intuitive behavior)
+            switch (direction) {
+            case 0: // Left (shrink width)
+                width = qMax(minSize, width - step);
+                break;
+            case 1: // Right (grow width)
+                width = qMin(1.0 - x, width + step);
+                break;
+            case 2: // Up (shrink height)
+                height = qMax(minSize, height - step);
+                break;
+            case 3: // Down (grow height)
+                height = qMin(1.0 - y, height + step);
+                break;
+            default:
+                continue;
+            }
 
-    for (const auto& pair : zonesToResize) {
-        const QString& zoneId = pair.first;
-        const QVariantMap& zone = pair.second;
-        qreal x = zone[JsonKeys::X].toDouble();
-        qreal y = zone[JsonKeys::Y].toDouble();
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
-
-        // Apply resize based on direction (same logic as resizeSelectedZone)
-        // Left/Up = shrink, Right/Down = grow (intuitive behavior)
-        switch (direction) {
-        case 0: // Left (shrink width)
-            width = qMax(minSize, width - step);
-            break;
-        case 1: // Right (grow width)
-            width = qMin(1.0 - x, width + step);
-            break;
-        case 2: // Up (shrink height)
-            height = qMax(minSize, height - step);
-            break;
-        case 3: // Down (grow height)
-            height = qMin(1.0 - y, height + step);
-            break;
-        default:
-            continue;
-        }
-
-        // Ensure minimum size
-        if (width < minSize)
-            width = minSize;
-        if (height < minSize)
-            height = minSize;
-
-        // Clamp to valid bounds
-        if (x + width > 1.0) {
-            width = 1.0 - x;
-            if (width < minSize) {
+            // Ensure minimum size
+            if (width < minSize)
                 width = minSize;
-                x = 1.0 - minSize;
-            }
-        }
-        if (y + height > 1.0) {
-            height = 1.0 - y;
-            if (height < minSize) {
+            if (height < minSize)
                 height = minSize;
-                y = 1.0 - minSize;
+
+            // Clamp to valid bounds
+            if (x + width > 1.0) {
+                width = 1.0 - x;
+                if (width < minSize) {
+                    width = minSize;
+                    x = 1.0 - minSize;
+                }
             }
+            if (y + height > 1.0) {
+                height = 1.0 - y;
+                if (height < minSize) {
+                    height = minSize;
+                    y = 1.0 - minSize;
+                }
+            }
+
+            updateZoneGeometry(zoneId, x, y, width, height, true); // Skip snapping for keyboard
         }
-
-        updateZoneGeometry(zoneId, x, y, width, height, true); // Skip snapping for keyboard
     }
-
-    m_zoneManager->endBatchUpdate();
-
-    m_undoController->endMacro();
     return true;
 }
 
@@ -2919,18 +2887,13 @@ void EditorController::cutZones(const QStringList& zoneIds)
     copyZones(zoneIds);
 
     // Then delete with undo macro for single undo step
-    m_undoController->beginMacro(i18nc("@action", "Cut %1 Zones", zoneIds.count()));
-
-    // Use batch update to defer signals until all zones are deleted
-    m_zoneManager->beginBatchUpdate();
-
-    for (const QString& zoneId : zoneIds) {
-        deleteZone(zoneId);
+    {
+        BatchOperationScope scope(m_undoController, m_zoneManager,
+                                  i18nc("@action", "Cut %1 Zones", zoneIds.count()));
+        for (const QString& zoneId : zoneIds) {
+            deleteZone(zoneId);
+        }
     }
-
-    m_zoneManager->endBatchUpdate();
-
-    m_undoController->endMacro();
 }
 
 QStringList EditorController::pasteZones(bool withOffset)

@@ -448,6 +448,15 @@ private:
     bool servicesReady(const char* operation) const;
 
     /**
+     * @brief Sync single-selection with multi-selection and emit signals
+     *
+     * Updates m_selectedZoneId to match first item in m_selectedZoneIds
+     * and emits the appropriate changed signals. Call after modifying
+     * m_selectedZoneIds directly.
+     */
+    void syncSelectionSignals();
+
+    /**
      * @brief Loads editor settings from KConfig
      */
     void loadEditorSettings();
