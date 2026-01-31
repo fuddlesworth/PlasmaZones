@@ -2685,13 +2685,13 @@ void EditorController::loadEditorSettings()
     refreshGlobalOuterGap();
 
     // Load snapping settings (backward compatible with single SnapInterval)
-    bool gridEnabled = editorGroup.readEntry("GridSnappingEnabled", true);
-    bool edgeEnabled = editorGroup.readEntry("EdgeSnappingEnabled", true);
+    bool gridEnabled = editorGroup.readEntry(QLatin1String("GridSnappingEnabled"), true);
+    bool edgeEnabled = editorGroup.readEntry(QLatin1String("EdgeSnappingEnabled"), true);
 
     // Try to load separate X and Y intervals, fall back to single interval for backward compatibility
-    qreal snapIntX = editorGroup.readEntry("SnapIntervalX", -1.0);
-    qreal snapIntY = editorGroup.readEntry("SnapIntervalY", -1.0);
-    qreal snapInt = editorGroup.readEntry("SnapInterval", EditorConstants::DefaultSnapInterval);
+    qreal snapIntX = editorGroup.readEntry(QLatin1String("SnapIntervalX"), -1.0);
+    qreal snapIntY = editorGroup.readEntry(QLatin1String("SnapIntervalY"), -1.0);
+    qreal snapInt = editorGroup.readEntry(QLatin1String("SnapInterval"), EditorConstants::DefaultSnapInterval);
 
     // If separate intervals not found, use the single interval for both
     if (snapIntX < 0.0)
@@ -2716,7 +2716,7 @@ void EditorController::loadEditorSettings()
 
     // Load app-specific keyboard shortcuts with validation
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
-    QString duplicateShortcut = editorGroup.readEntry("EditorDuplicateShortcut", QStringLiteral("Ctrl+D"));
+    QString duplicateShortcut = editorGroup.readEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
     if (duplicateShortcut.isEmpty()) {
         qCWarning(lcEditor) << "Invalid editor duplicate shortcut (empty), using default";
         duplicateShortcut = QStringLiteral("Ctrl+D");
@@ -2727,7 +2727,7 @@ void EditorController::loadEditorSettings()
     }
 
     QString splitHorizontalShortcut =
-        editorGroup.readEntry("EditorSplitHorizontalShortcut", QStringLiteral("Ctrl+Shift+H"));
+        editorGroup.readEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
     if (splitHorizontalShortcut.isEmpty()) {
         qCWarning(lcEditor) << "Invalid editor split horizontal shortcut (empty), using default";
         splitHorizontalShortcut = QStringLiteral("Ctrl+Shift+H");
@@ -2738,7 +2738,7 @@ void EditorController::loadEditorSettings()
     }
 
     // Note: Default changed from Ctrl+Shift+V to Ctrl+Alt+V to avoid conflict with Paste with Offset
-    QString splitVerticalShortcut = editorGroup.readEntry("EditorSplitVerticalShortcut", QStringLiteral("Ctrl+Alt+V"));
+    QString splitVerticalShortcut = editorGroup.readEntry(QLatin1String("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
     if (splitVerticalShortcut.isEmpty()) {
         qCWarning(lcEditor) << "Invalid editor split vertical shortcut (empty), using default";
         splitVerticalShortcut = QStringLiteral("Ctrl+Alt+V");
@@ -2748,7 +2748,7 @@ void EditorController::loadEditorSettings()
         Q_EMIT editorSplitVerticalShortcutChanged();
     }
 
-    QString fillShortcut = editorGroup.readEntry("EditorFillShortcut", QStringLiteral("Ctrl+Shift+F"));
+    QString fillShortcut = editorGroup.readEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
     if (fillShortcut.isEmpty()) {
         qCWarning(lcEditor) << "Invalid editor fill shortcut (empty), using default";
         fillShortcut = QStringLiteral("Ctrl+Shift+F");
@@ -2759,20 +2759,20 @@ void EditorController::loadEditorSettings()
     }
 
     // Load snap override modifier
-    int snapOverrideMod = editorGroup.readEntry("SnapOverrideModifier", 0x02000000);
+    int snapOverrideMod = editorGroup.readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000);
     if (m_snapOverrideModifier != snapOverrideMod) {
         m_snapOverrideModifier = snapOverrideMod;
         Q_EMIT snapOverrideModifierChanged();
     }
 
     // Load fill-on-drop settings
-    bool fillOnDropEn = editorGroup.readEntry("FillOnDropEnabled", true);
+    bool fillOnDropEn = editorGroup.readEntry(QLatin1String("FillOnDropEnabled"), true);
     if (m_fillOnDropEnabled != fillOnDropEn) {
         m_fillOnDropEnabled = fillOnDropEn;
         Q_EMIT fillOnDropEnabledChanged();
     }
 
-    int fillOnDropMod = editorGroup.readEntry("FillOnDropModifier", 0x04000000); // Default: Ctrl
+    int fillOnDropMod = editorGroup.readEntry(QLatin1String("FillOnDropModifier"), 0x04000000); // Default: Ctrl
     if (m_fillOnDropModifier != fillOnDropMod) {
         m_fillOnDropModifier = fillOnDropMod;
         Q_EMIT fillOnDropModifierChanged();
@@ -2786,34 +2786,34 @@ void EditorController::saveEditorSettings()
 
     // Save snapping settings (save both separate intervals and single for backward compatibility)
     if (m_snappingService) {
-        editorGroup.writeEntry("GridSnappingEnabled", m_snappingService->gridSnappingEnabled());
-        editorGroup.writeEntry("EdgeSnappingEnabled", m_snappingService->edgeSnappingEnabled());
-        editorGroup.writeEntry("SnapIntervalX", m_snappingService->snapIntervalX());
-        editorGroup.writeEntry("SnapIntervalY", m_snappingService->snapIntervalY());
+        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_snappingService->gridSnappingEnabled());
+        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_snappingService->edgeSnappingEnabled());
+        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snappingService->snapIntervalX());
+        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snappingService->snapIntervalY());
         // Also save single interval for backward compatibility
-        editorGroup.writeEntry("SnapInterval", m_snappingService->snapIntervalX());
+        editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snappingService->snapIntervalX());
     } else {
         // Fallback if service not initialized
-        editorGroup.writeEntry("GridSnappingEnabled", m_gridSnappingEnabled);
-        editorGroup.writeEntry("EdgeSnappingEnabled", m_edgeSnappingEnabled);
-        editorGroup.writeEntry("SnapIntervalX", m_snapIntervalX);
-        editorGroup.writeEntry("SnapIntervalY", m_snapIntervalY);
-        editorGroup.writeEntry("SnapInterval", m_snapInterval); // For backward compatibility
+        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), m_gridSnappingEnabled);
+        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), m_edgeSnappingEnabled);
+        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), m_snapIntervalX);
+        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), m_snapIntervalY);
+        editorGroup.writeEntry(QLatin1String("SnapInterval"), m_snapInterval); // For backward compatibility
     }
 
     // Save app-specific keyboard shortcuts
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
-    editorGroup.writeEntry("EditorDuplicateShortcut", m_editorDuplicateShortcut);
-    editorGroup.writeEntry("EditorSplitHorizontalShortcut", m_editorSplitHorizontalShortcut);
-    editorGroup.writeEntry("EditorSplitVerticalShortcut", m_editorSplitVerticalShortcut);
-    editorGroup.writeEntry("EditorFillShortcut", m_editorFillShortcut);
+    editorGroup.writeEntry(QLatin1String("EditorDuplicateShortcut"), m_editorDuplicateShortcut);
+    editorGroup.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), m_editorSplitHorizontalShortcut);
+    editorGroup.writeEntry(QLatin1String("EditorSplitVerticalShortcut"), m_editorSplitVerticalShortcut);
+    editorGroup.writeEntry(QLatin1String("EditorFillShortcut"), m_editorFillShortcut);
 
     // Save snap override modifier
-    editorGroup.writeEntry("SnapOverrideModifier", m_snapOverrideModifier);
+    editorGroup.writeEntry(QLatin1String("SnapOverrideModifier"), m_snapOverrideModifier);
 
     // Save fill-on-drop settings
-    editorGroup.writeEntry("FillOnDropEnabled", m_fillOnDropEnabled);
-    editorGroup.writeEntry("FillOnDropModifier", m_fillOnDropModifier);
+    editorGroup.writeEntry(QLatin1String("FillOnDropEnabled"), m_fillOnDropEnabled);
+    editorGroup.writeEntry(QLatin1String("FillOnDropModifier"), m_fillOnDropModifier);
 
     config->sync();
 }

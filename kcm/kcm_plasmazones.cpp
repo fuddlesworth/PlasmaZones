@@ -338,14 +338,14 @@ QString KCMPlasmaZones::editorDuplicateShortcut() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("EditorDuplicateShortcut", QStringLiteral("Ctrl+D"));
+    return editorGroup.readEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
 }
 
 QString KCMPlasmaZones::editorSplitHorizontalShortcut() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("EditorSplitHorizontalShortcut", QStringLiteral("Ctrl+Shift+H"));
+    return editorGroup.readEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
 }
 
 QString KCMPlasmaZones::editorSplitVerticalShortcut() const
@@ -353,14 +353,14 @@ QString KCMPlasmaZones::editorSplitVerticalShortcut() const
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
     // Note: Default changed from Ctrl+Shift+V to Ctrl+Alt+V to avoid conflict with Paste with Offset
-    return editorGroup.readEntry("EditorSplitVerticalShortcut", QStringLiteral("Ctrl+Alt+V"));
+    return editorGroup.readEntry(QLatin1String("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"));
 }
 
 QString KCMPlasmaZones::editorFillShortcut() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("EditorFillShortcut", QStringLiteral("Ctrl+Shift+F"));
+    return editorGroup.readEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
 }
 
 // Editor snapping settings getters (read from KConfig Editor group)
@@ -368,24 +368,24 @@ bool KCMPlasmaZones::editorGridSnappingEnabled() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("GridSnappingEnabled", true);
+    return editorGroup.readEntry(QLatin1String("GridSnappingEnabled"), true);
 }
 
 bool KCMPlasmaZones::editorEdgeSnappingEnabled() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("EdgeSnappingEnabled", true);
+    return editorGroup.readEntry(QLatin1String("EdgeSnappingEnabled"), true);
 }
 
 qreal KCMPlasmaZones::editorSnapIntervalX() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    qreal intervalX = editorGroup.readEntry("SnapIntervalX", -1.0);
+    qreal intervalX = editorGroup.readEntry(QLatin1String("SnapIntervalX"), -1.0);
     if (intervalX < 0.0) {
         // Fall back to single SnapInterval for backward compatibility
-        intervalX = editorGroup.readEntry("SnapInterval", 0.1);
+        intervalX = editorGroup.readEntry(QLatin1String("SnapInterval"), 0.1);
     }
     return intervalX;
 }
@@ -394,10 +394,10 @@ qreal KCMPlasmaZones::editorSnapIntervalY() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    qreal intervalY = editorGroup.readEntry("SnapIntervalY", -1.0);
+    qreal intervalY = editorGroup.readEntry(QLatin1String("SnapIntervalY"), -1.0);
     if (intervalY < 0.0) {
         // Fall back to single SnapInterval for backward compatibility
-        intervalY = editorGroup.readEntry("SnapInterval", 0.1);
+        intervalY = editorGroup.readEntry(QLatin1String("SnapInterval"), 0.1);
     }
     return intervalY;
 }
@@ -406,7 +406,7 @@ int KCMPlasmaZones::editorSnapOverrideModifier() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("SnapOverrideModifier", 0x02000000); // Qt::ShiftModifier
+    return editorGroup.readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000); // Qt::ShiftModifier
 }
 
 // Fill on drop getters (read from KConfig Editor group)
@@ -414,14 +414,14 @@ bool KCMPlasmaZones::fillOnDropEnabled() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("FillOnDropEnabled", true);
+    return editorGroup.readEntry(QLatin1String("FillOnDropEnabled"), true);
 }
 
 int KCMPlasmaZones::fillOnDropModifier() const
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    return editorGroup.readEntry("FillOnDropModifier", 0x04000000); // Qt::ControlModifier
+    return editorGroup.readEntry(QLatin1String("FillOnDropModifier"), 0x04000000); // Qt::ControlModifier
 }
 
 // Layouts getter
@@ -886,7 +886,7 @@ void KCMPlasmaZones::setEditorDuplicateShortcut(const QString& shortcut)
     if (editorDuplicateShortcut() != shortcut) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("EditorDuplicateShortcut", shortcut);
+        editorGroup.writeEntry(QLatin1String("EditorDuplicateShortcut"), shortcut);
         config->sync();
         Q_EMIT editorDuplicateShortcutChanged();
         setNeedsSave(true);
@@ -898,7 +898,7 @@ void KCMPlasmaZones::setEditorSplitHorizontalShortcut(const QString& shortcut)
     if (editorSplitHorizontalShortcut() != shortcut) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("EditorSplitHorizontalShortcut", shortcut);
+        editorGroup.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), shortcut);
         config->sync();
         Q_EMIT editorSplitHorizontalShortcutChanged();
         setNeedsSave(true);
@@ -910,7 +910,7 @@ void KCMPlasmaZones::setEditorSplitVerticalShortcut(const QString& shortcut)
     if (editorSplitVerticalShortcut() != shortcut) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("EditorSplitVerticalShortcut", shortcut);
+        editorGroup.writeEntry(QLatin1String("EditorSplitVerticalShortcut"), shortcut);
         config->sync();
         Q_EMIT editorSplitVerticalShortcutChanged();
         setNeedsSave(true);
@@ -922,7 +922,7 @@ void KCMPlasmaZones::setEditorFillShortcut(const QString& shortcut)
     if (editorFillShortcut() != shortcut) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("EditorFillShortcut", shortcut);
+        editorGroup.writeEntry(QLatin1String("EditorFillShortcut"), shortcut);
         config->sync();
         Q_EMIT editorFillShortcutChanged();
         setNeedsSave(true);
@@ -935,7 +935,7 @@ void KCMPlasmaZones::setEditorGridSnappingEnabled(bool enabled)
     if (editorGridSnappingEnabled() != enabled) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("GridSnappingEnabled", enabled);
+        editorGroup.writeEntry(QLatin1String("GridSnappingEnabled"), enabled);
         config->sync();
         Q_EMIT editorGridSnappingEnabledChanged();
         setNeedsSave(true);
@@ -947,7 +947,7 @@ void KCMPlasmaZones::setEditorEdgeSnappingEnabled(bool enabled)
     if (editorEdgeSnappingEnabled() != enabled) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("EdgeSnappingEnabled", enabled);
+        editorGroup.writeEntry(QLatin1String("EdgeSnappingEnabled"), enabled);
         config->sync();
         Q_EMIT editorEdgeSnappingEnabledChanged();
         setNeedsSave(true);
@@ -960,7 +960,7 @@ void KCMPlasmaZones::setEditorSnapIntervalX(qreal interval)
     if (!qFuzzyCompare(editorSnapIntervalX(), interval)) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("SnapIntervalX", interval);
+        editorGroup.writeEntry(QLatin1String("SnapIntervalX"), interval);
         config->sync();
         Q_EMIT editorSnapIntervalXChanged();
         setNeedsSave(true);
@@ -973,7 +973,7 @@ void KCMPlasmaZones::setEditorSnapIntervalY(qreal interval)
     if (!qFuzzyCompare(editorSnapIntervalY(), interval)) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("SnapIntervalY", interval);
+        editorGroup.writeEntry(QLatin1String("SnapIntervalY"), interval);
         config->sync();
         Q_EMIT editorSnapIntervalYChanged();
         setNeedsSave(true);
@@ -985,7 +985,7 @@ void KCMPlasmaZones::setEditorSnapOverrideModifier(int modifier)
     if (editorSnapOverrideModifier() != modifier) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("SnapOverrideModifier", modifier);
+        editorGroup.writeEntry(QLatin1String("SnapOverrideModifier"), modifier);
         config->sync();
         Q_EMIT editorSnapOverrideModifierChanged();
         setNeedsSave(true);
@@ -998,7 +998,7 @@ void KCMPlasmaZones::setFillOnDropEnabled(bool enabled)
     if (fillOnDropEnabled() != enabled) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("FillOnDropEnabled", enabled);
+        editorGroup.writeEntry(QLatin1String("FillOnDropEnabled"), enabled);
         config->sync();
         Q_EMIT fillOnDropEnabledChanged();
         setNeedsSave(true);
@@ -1010,7 +1010,7 @@ void KCMPlasmaZones::setFillOnDropModifier(int modifier)
     if (fillOnDropModifier() != modifier) {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-        editorGroup.writeEntry("FillOnDropModifier", modifier);
+        editorGroup.writeEntry(QLatin1String("FillOnDropModifier"), modifier);
         config->sync();
         Q_EMIT fillOnDropModifierChanged();
         setNeedsSave(true);
@@ -1453,12 +1453,12 @@ void KCMPlasmaZones::resetEditorShortcuts()
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
 
-    editorGroup.writeEntry("EditorDuplicateShortcut", QStringLiteral("Ctrl+D"));
-    editorGroup.writeEntry("EditorSplitHorizontalShortcut", QStringLiteral("Ctrl+Shift+H"));
+    editorGroup.writeEntry(QLatin1String("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"));
+    editorGroup.writeEntry(QLatin1String("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"));
     editorGroup.writeEntry(
-        "EditorSplitVerticalShortcut",
+        QLatin1String("EditorSplitVerticalShortcut"),
         QStringLiteral("Ctrl+Alt+V")); // Note: Changed from Ctrl+Shift+V to avoid conflict with Paste with Offset
-    editorGroup.writeEntry("EditorFillShortcut", QStringLiteral("Ctrl+Shift+F"));
+    editorGroup.writeEntry(QLatin1String("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"));
 
     config->sync();
 
