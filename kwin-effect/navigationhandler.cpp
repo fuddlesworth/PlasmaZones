@@ -7,6 +7,8 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QDBusInterface>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
 #include <QDBusReply>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -595,20 +597,24 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& stableId)
         return;
     }
 
-    // Query daemon for this specific window's floating state
-    // The daemon's isWindowFloating now accepts any windowId format
-    QDBusMessage reply = iface->call(QStringLiteral("queryWindowFloating"), stableId);
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return;
-    }
+    // Use ASYNC D-Bus call to avoid blocking the compositor thread
+    // Synchronous calls in slotWindowAdded can cause freezes during startup
+    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("queryWindowFloating"), stableId);
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    bool isFloating = reply.arguments().at(0).toBool();
-    if (isFloating) {
-        m_floatingWindows.insert(stableId);
-        qCDebug(lcEffect) << "Synced floating state for window" << stableId << "- is floating";
-    } else {
-        m_floatingWindows.remove(stableId);
-    }
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, stableId](QDBusPendingCallWatcher* w) {
+        QDBusPendingReply<bool> reply = *w;
+        if (reply.isValid()) {
+            bool isFloating = reply.value();
+            if (isFloating) {
+                m_floatingWindows.insert(stableId);
+                qCDebug(lcEffect) << "Synced floating state for window" << stableId << "- is floating";
+            } else {
+                m_floatingWindows.remove(stableId);
+            }
+        }
+        w->deleteLater();
+    });
 }
 
 } // namespace PlasmaZones
