@@ -23,7 +23,7 @@ Build-Depends:
  libkf6notifications-dev,
  libkf6colorscheme-dev,
  kwin-dev,
- layer-shell-qt-dev,
+ liblayershellqtinterface-dev,
  libplasmaactivities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones

@@ -110,7 +110,7 @@ Features:
 %systemd_user_postun_with_restart plasmazones.service
 
 %files
-%license COPYING
+%license LICENSE
 %doc README.md
 
 # Executables
@@ -126,16 +126,15 @@ Features:
 # KCM (System Settings module)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones.so
 
-# QML modules
+# QML modules (KDE KCM QML files)
 %{_libdir}/qt6/qml/org/kde/kcms/plasmazones/
-%{_libdir}/qt6/qml/org/plasmazones/
 
 # D-Bus interfaces
 %{_datadir}/dbus-1/interfaces/org.plasmazones.*.xml
 
 # Desktop files
-%{_datadir}/applications/org.kde.plasmazones-editor.desktop
-%{_datadir}/kservices6/kcm_plasmazones.desktop
+%{_datadir}/applications/org.plasmazones.editor.desktop
+%{_datadir}/applications/org.plasmazones.daemon.desktop
 
 # Data files
 %{_datadir}/plasmazones/
@@ -149,19 +148,14 @@ Features:
 # KConfig
 %{_datadir}/config.kcfg/plasmazones.kcfg
 
-# Notifications
-%{_datadir}/knotifications6/plasmazones.notifyrc
-
 # Systemd user service
 %{_userunitdir}/plasmazones.service
 
-# Translations
+# Translations (optional - may not exist yet)
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
-%{_datadir}/locale/*/LC_MESSAGES/plasmazones-editor.mo
-%{_datadir}/locale/*/LC_MESSAGES/kcm_plasmazones.mo
 
 %changelog
-* Sat Feb 01 2026 fuddlesworth - 1.2.0-1
+* Sat Feb  1 2026 fuddlesworth - 1.2.0-1
 - Initial RPM package
 - Wayland-only release (X11 support removed)
 - KDE Plasma 6 / KF6 / Qt6 required
