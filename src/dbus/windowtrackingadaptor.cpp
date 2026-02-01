@@ -333,8 +333,10 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenName;
 
     // Update last-used zone when focusing a snapped window
+    // Skip auto-snapped windows - only user-focused windows should update the tracking
     QString zoneId = m_service->zoneForWindow(windowId);
-    if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()) {
+    if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()
+        && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = Utils::extractWindowClass(windowId);
         int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
         m_service->updateLastUsedZone(zoneId, screenName, windowClass, currentDesktop);

@@ -81,13 +81,23 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
 
 void WindowTrackingService::unassignWindow(const QString& windowId)
 {
-    // Only emit signal if window was actually assigned (.cursorrules compliance)
-    if (m_windowZoneAssignments.remove(windowId) == 0) {
+    // Get the zone before removing (needed for last-used zone check)
+    QString previousZoneId = m_windowZoneAssignments.take(windowId);
+    if (previousZoneId.isEmpty()) {
         return;  // Window wasn't assigned, nothing to do
     }
 
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
+
+    // Clear last-used zone if we're unsnapping from it
+    // This preserves last-used zone when unsnapping a different window
+    if (!m_lastUsedZoneId.isEmpty() && previousZoneId == m_lastUsedZoneId) {
+        m_lastUsedZoneId.clear();
+        m_lastUsedScreenName.clear();
+        m_lastUsedZoneClass.clear();
+        m_lastUsedDesktop = 0;
+    }
 
     // Don't remove from pending - keep for session restore
     // (pending is keyed by stable ID anyway)
