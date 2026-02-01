@@ -311,11 +311,26 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Check if we should auto-snap new windows to last used zone
     // Use stricter filter - only normal application windows, NOT dialogs/utilities
     if (shouldAutoSnapWindow(w) && !w->isMinimized()) {
+        // Don't auto-snap if there's already another window of the same class
+        // with a different PID. This prevents unwanted snapping when another app
+        // spawns a window (e.g., Cachy Update spawning a Ghostty terminal).
+        if (hasOtherWindowOfClassWithDifferentPid(w)) {
+            qCDebug(lcEffect) << "Skipping auto-snap for" << w->windowClass()
+                              << "- another window of same class exists with different PID";
+            return;
+        }
+
         // Use QPointer to safely handle window destruction during the delay
         // Raw pointer capture would become dangling if window closes before timer fires
         QPointer<KWin::EffectWindow> safeWindow = w;
         QTimer::singleShot(100, this, [this, safeWindow]() {
             if (safeWindow && shouldAutoSnapWindow(safeWindow)) {
+                // Re-check PID condition after delay (windows might have changed)
+                if (hasOtherWindowOfClassWithDifferentPid(safeWindow)) {
+                    qCDebug(lcEffect) << "Skipping auto-snap for" << safeWindow->windowClass()
+                                      << "after delay - another window of same class exists with different PID";
+                    return;
+                }
                 callSnapToLastZone(safeWindow);
             }
         });
@@ -625,6 +640,36 @@ bool PlasmaZonesEffect::shouldAutoSnapWindow(KWin::EffectWindow* w) const
     }
 
     return true;
+}
+
+bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return false;
+    }
+
+    QString windowClass = w->windowClass();
+    pid_t windowPid = w->pid();
+
+    // Check all existing windows for same class but different PID
+    // This detects when another app (e.g., Cachy Update) spawns a window
+    // of a class that the user has previously snapped (e.g., Ghostty)
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* other : windows) {
+        if (other == w) {
+            continue; // Skip self
+        }
+        if (!shouldHandleWindow(other)) {
+            continue; // Skip non-managed windows
+        }
+        if (other->windowClass() == windowClass && other->pid() != windowPid) {
+            // Found another window of the same class with different PID
+            // This means the new window was likely spawned by a different app
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void PlasmaZonesEffect::ensureDBusInterface()

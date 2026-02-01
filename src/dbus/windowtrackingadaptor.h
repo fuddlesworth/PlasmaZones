@@ -488,6 +488,14 @@ private Q_SLOTS:
      */
     void onLayoutChanged();
 
+    /**
+     * @brief Handle panel geometry becoming ready
+     *
+     * Called when ScreenManager reports panel geometry is known.
+     * If there are pending restores waiting for geometry, emits pendingRestoresAvailable.
+     */
+    void onPanelGeometryReady();
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Constants
@@ -550,6 +558,25 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
     void scheduleSaveState();
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Startup timing coordination
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Try to emit pendingRestoresAvailable if conditions are met
+     *
+     * Conditions required:
+     * 1. Layout is available with pending restores
+     * 2. Panel geometry has been received by ScreenManager
+     *
+     * This prevents windows from restoring with incorrect geometry
+     * before panel positions are known.
+     */
+    void tryEmitPendingRestoresAvailable();
+
+    bool m_hasPendingRestores = false;  // True if layout has pending restores waiting
+    bool m_pendingRestoresEmitted = false;  // True if we already emitted pendingRestoresAvailable
 };
 
 } // namespace PlasmaZones

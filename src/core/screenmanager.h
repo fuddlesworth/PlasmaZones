@@ -88,6 +88,24 @@ public:
      */
     static QRect actualAvailableGeometry(QScreen* screen);
 
+    /**
+     * @brief Check if panel geometry has been received (static for D-Bus adaptor access)
+     *
+     * Returns true after the first D-Bus panel query has completed.
+     * Use this to check if actualAvailableGeometry() will return
+     * accurate results that account for panels.
+     *
+     * @return true if panel geometry is known, false if not yet received or no ScreenManager instance
+     */
+    static bool isPanelGeometryReady();
+
+    /**
+     * @brief Get the global ScreenManager instance
+     *
+     * @return Pointer to the ScreenManager instance, or nullptr if not initialized
+     */
+    static ScreenManager* instance();
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a screen is added
@@ -114,6 +132,15 @@ Q_SIGNALS:
      * @param availableGeometry New available geometry
      */
     void availableGeometryChanged(QScreen* screen, const QRect& availableGeometry);
+
+    /**
+     * @brief Emitted once when panel geometry becomes known for the first time
+     *
+     * This signal is emitted after the first successful D-Bus panel query.
+     * Components that need accurate panel geometry (like window restoration)
+     * should wait for this signal before performing geometry-dependent operations.
+     */
+    void panelGeometryReady();
 
 private Q_SLOTS:
     void onScreenAdded(QScreen* screen);
@@ -164,6 +191,7 @@ private:
 
     bool m_running = false;
     bool m_dbusQueryPending = false;
+    bool m_panelGeometryReceived = false;  // True after first panel D-Bus query completes
     QVector<QScreen*> m_trackedScreens;
     QMap<int, ScreenPanelOffsets> m_panelOffsets;
 

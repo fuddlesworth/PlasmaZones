@@ -338,6 +338,12 @@ void ScreenManager::queryKdePlasmaPanels()
         for (auto* screen : m_trackedScreens) {
             calculateAvailableGeometry(screen);
         }
+        // Still emit panelGeometryReady so components don't hang waiting
+        if (!m_panelGeometryReceived) {
+            m_panelGeometryReceived = true;
+            qCDebug(lcScreen) << "Panel geometry ready (no Plasma shell) - emitting signal";
+            Q_EMIT panelGeometryReady();
+        }
         return;
     }
 
@@ -435,6 +441,13 @@ void ScreenManager::queryKdePlasmaPanels()
             calculateAvailableGeometry(screen);
         }
 
+        // Emit panelGeometryReady on first successful query
+        if (!m_panelGeometryReceived) {
+            m_panelGeometryReceived = true;
+            qCDebug(lcScreen) << "Panel geometry ready - emitting signal";
+            Q_EMIT panelGeometryReady();
+        }
+
         // Cleanup
         delete plasmaShell;
         w->deleteLater();
@@ -491,6 +504,16 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen)
 
     // No sensor data and Qt doesn't know - return full screen
     return screenGeom;
+}
+
+bool ScreenManager::isPanelGeometryReady()
+{
+    return s_instance && s_instance->m_panelGeometryReceived;
+}
+
+ScreenManager* ScreenManager::instance()
+{
+    return s_instance;
 }
 
 void ScreenManager::onScreenAdded(QScreen* screen)

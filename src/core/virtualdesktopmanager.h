@@ -108,6 +108,7 @@ private:
     int m_desktopCount = 1;
     QStringList m_desktopNames;
     QStringList m_desktopIds; // KWin desktop UUIDs (maps position to id)
+    uint m_refreshGeneration = 0; // Guards against stale async D-Bus callbacks
 };
 
 } // namespace PlasmaZones

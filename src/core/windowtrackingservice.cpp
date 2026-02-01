@@ -463,8 +463,19 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    // Use GeometryUtils to calculate absolute geometry from relative geometry
-    QRectF geoF = GeometryUtils::calculateZoneGeometryInAvailableArea(zone, screen);
+    // Get the layout to access per-layout gap overrides
+    Layout* layout = m_layoutManager->activeLayout();
+
+    // Use getZoneGeometryWithGaps to apply zonePadding and outerGap
+    // This ensures restored windows use the same geometry as drag-snapped windows
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+
+    qCDebug(lcCore) << "zoneGeometry for" << zoneId << "on screen" << screen->name()
+                    << "- zonePadding:" << zonePadding << "outerGap:" << outerGap
+                    << "- result:" << geoF.toRect();
+
     return geoF.toRect();
 }
 

@@ -10,6 +10,8 @@
 #include <QDBusArgument>
 #include <QDBusMessage>
 #include <QDBusVariant>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
 #include <QGuiApplication>
 #include <QScreen>
 
@@ -106,35 +108,48 @@ void VirtualDesktopManager::refreshFromKWin()
 
     // desktops property - array of structs (position, id, name)
     // Use raw D-Bus message to avoid QDBusInterface::property() triggering type conversion warnings
-    m_desktopNames.clear();
-    m_desktopIds.clear();
-
-    // Store (position, id, name) tuples for sorting
-    struct DesktopInfo
-    {
-        int position;
-        QString id;
-        QString name;
-    };
-    QList<DesktopInfo> desktops;
-
-    // Use raw D-Bus call instead of QDBusInterface::property() to avoid QDBusRawType warning
+    // Use ASYNC call to avoid blocking the main thread during startup
     QDBusMessage getDesktopsMsg =
         QDBusMessage::createMethodCall(QStringLiteral("org.kde.KWin"), QStringLiteral("/VirtualDesktopManager"),
                                        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     getDesktopsMsg << QStringLiteral("org.kde.KWin.VirtualDesktopManager") << QStringLiteral("desktops");
 
-    QDBusMessage desktopsReply = QDBusConnection::sessionBus().call(getDesktopsMsg, QDBus::Block, 1000);
-    if (desktopsReply.type() == QDBusMessage::ReplyMessage && !desktopsReply.arguments().isEmpty()) {
-        // The reply is a QDBusVariant containing the actual value
-        // We need to carefully extract without triggering type conversion issues
-        const QList<QVariant> replyArgs = desktopsReply.arguments();
-        const QVariant& outerVariant = replyArgs.at(0);
+    // Increment generation to invalidate any pending callbacks from previous refreshFromKWin() calls
+    // This prevents race conditions when refreshFromKWin() is called rapidly (e.g., multiple desktop
+    // created/removed signals in quick succession)
+    ++m_refreshGeneration;
+    const uint thisGeneration = m_refreshGeneration;
 
-        // Extract the inner variant from the QDBusVariant wrapper
-        // Use data() to get a pointer to the actual QDBusArgument without conversion
-        if (outerVariant.userType() == qMetaTypeId<QDBusVariant>()) {
-            const QDBusVariant& dbusVariant = *static_cast<const QDBusVariant*>(outerVariant.constData());
+    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(getDesktopsMsg);
+    QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, currentId, thisGeneration](QDBusPendingCallWatcher* w) {
+        // Check if this callback is stale (a newer refresh was started)
+        if (thisGeneration != m_refreshGeneration) {
+            qCDebug(lcCore) << "Ignoring stale virtual desktop refresh callback";
+            w->deleteLater();
+            return;
+        }
+
+        QDBusPendingReply<QDBusVariant> reply = *w;
+
+        // Clear and prepare for new data
+        m_desktopNames.clear();
+        m_desktopIds.clear();
+
+        // Store (position, id, name) tuples for sorting
+        struct DesktopInfo
+        {
+            int position;
+            QString id;
+            QString name;
+        };
+        QList<DesktopInfo> desktops;
+
+        if (reply.isValid()) {
+            // The reply is a QDBusVariant containing the actual value
+            // We need to carefully extract without triggering type conversion issues
+            const QDBusVariant& dbusVariant = reply.value();
             const QVariant& innerVariant = dbusVariant.variant();
 
             if (innerVariant.userType() == qMetaTypeId<QDBusArgument>()) {
@@ -166,27 +181,31 @@ void VirtualDesktopManager::refreshFromKWin()
                     qCDebug(lcCore) << "Desktop" << (desktop.position + 1) << "id=" << desktop.id << "name=" << name;
                 }
             }
+        } else {
+            qCDebug(lcCore) << "Failed to get virtual desktops:" << reply.error().message();
         }
-    }
 
-    // Update count if desktops property gave us more accurate info
-    if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
-        m_desktopCount = m_desktopIds.size();
-    }
-
-    // Convert current UUID to 1-based position
-    if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
-        int idx = m_desktopIds.indexOf(currentId);
-        if (idx >= 0) {
-            m_currentDesktop = idx + 1; // Convert to 1-based
-            qCDebug(lcCore) << "Current desktop =" << m_currentDesktop << "(id=" << currentId << ")";
+        // Update count if desktops property gave us more accurate info
+        if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
+            m_desktopCount = m_desktopIds.size();
         }
-    }
 
-    // Fallback if we couldn't get names
-    while (m_desktopNames.size() < m_desktopCount) {
-        m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
-    }
+        // Convert current UUID to 1-based position
+        if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
+            int idx = m_desktopIds.indexOf(currentId);
+            if (idx >= 0) {
+                m_currentDesktop = idx + 1; // Convert to 1-based
+                qCDebug(lcCore) << "Current desktop =" << m_currentDesktop << "(id=" << currentId << ")";
+            }
+        }
+
+        // Fallback if we couldn't get names
+        while (m_desktopNames.size() < m_desktopCount) {
+            m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
+        }
+
+        w->deleteLater();
+    });
 }
 
 void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
