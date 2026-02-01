@@ -163,15 +163,15 @@ generated in C++ (OverlayService) and must use `i18n()` from `KLocalizedString`.
 
 ### 4.2 Phase 2: Rich Window Context (Medium Effort)
 
-#### 4.2.1 Window Titles in Zones
+#### 4.2.1 App Names in Zones
 
-Show truncated window titles in each zone.
+Show app names for windows in each zone.
 
 ```
 ┌──────────────┬──────────────┐
 │ 1            │ 2            │
 │ Firefox      │ VS Code      │
-│              │ Terminal...  │  ← Truncated if stacked
+│              │ Terminal     │  ← List stacked apps
 ├──────────────┼──────────────┤
 │ 3            │ 4            │
 │ Dolphin      │ (empty)      │
@@ -179,15 +179,16 @@ Show truncated window titles in each zone.
 ```
 
 **Implementation:**
-- Add `zoneWindows` property: `[{zoneIndex, title, appId, isActive}]`
+- Add `zoneWindows` property: `[{zoneIndex, appName, appId, isActive}]`
 - WindowTracker provides window-to-zone mapping
-- Truncate with ellipsis if title > zone width
+- Use app name (e.g., "Firefox"), not window title (e.g., "GitHub - Mozilla Firefox")
+- Truncate with ellipsis if name > zone width
 - Show "(empty)" or leave blank for empty zones
-- Stack titles vertically if multiple windows (max 2-3 visible)
+- Stack names vertically if multiple windows (max 2-3 visible, then "+N more")
 
-#### 4.2.2 Window Thumbnails
+#### 4.2.2 Window Thumbnails (Opt-in)
 
-Show miniature window previews in each zone.
+Show miniature window previews in each zone. **Disabled by default** for performance.
 
 ```
 ┌──────────────┬──────────────┐
@@ -206,7 +207,7 @@ Show miniature window previews in each zone.
 - Use KWin's window thumbnail API (`PlasmaCore.WindowThumbnail`)
 - Scale thumbnails to fit zone preview area
 - Cache thumbnails to avoid re-rendering on every show
-- Add setting to enable/disable (performance consideration)
+- **Opt-in setting** (default: false) — user enables if desired
 - Fallback to app icon if thumbnail unavailable
 
 ---
@@ -230,7 +231,7 @@ Frame 1:              Frame 2:              Frame 3:
 - Add `animateFrom` and `animateTo` zone indices
 - Animate a "ghost" rectangle from source to destination
 - Use spring animation for natural feel
-- Duration: 200-300ms
+- **Match KWin's window animation speed** for consistency
 - Only for move/swap/push actions
 
 #### 4.3.2 Multi-Monitor Layout Overview
@@ -731,17 +732,17 @@ Before merging any OSD enhancement PR, verify:
 
 ---
 
-## 10. Open Questions
+## 10. Design Decisions
 
-1. **Thumbnail performance**: Should thumbnails be opt-in only, or should we detect system capability and auto-disable on low-end hardware?
+1. **Thumbnail performance**: Opt-in setting (default: off). Users enable if they want thumbnails.
 
-2. **Multi-monitor OSD**: When switching layouts, show OSD on all monitors simultaneously or just the active one?
+2. **Multi-monitor OSD**: Follow existing `showZonesOnAllMonitors` setting pattern. Same behavior as zone overlay.
 
-3. **Animation duration**: Should movement preview animations match KWin's window animation speed setting, or use independent timing?
+3. **Animation duration**: Match KWin's window animation speed setting for consistency.
 
-4. **Window title truncation**: How many characters before truncating? Should we use app name or window title (or both)?
+4. **Window display**: Show app name (not window title). Shorter and more recognizable.
 
-5. **Stacked window display**: When a zone has multiple windows, show just the count badge, or also list window names (space permitting)?
+5. **Stacked window display**: List window names in zone (space permitting), not just count badge.
 
 ---
 
