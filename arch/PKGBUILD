@@ -39,11 +39,10 @@ source=(
     "kbuildsycoca.hook"
     "plasmazones-refresh-sycoca"
 )
-# SHA256 sums - update after tagging release
 sha256sums=(
-    'SKIP'  # Will be updated after first release
-    'SKIP'
-    'SKIP'
+    '1836cc5877937666e1b139a4219d3a7cbf124551abc211e8ede5b09907403ae8'
+    '8bd1b7fe1ca040f18fc0aa95f5da775cdbc1b090a23f63d8e16dd572cbba3c80'
+    'f128058da53fd97e6a35718348fefa219b6352517bd13f6a1039368872cb0b6d'
 )
 install=plasmazones.install
 
