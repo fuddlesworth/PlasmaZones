@@ -10,7 +10,7 @@ post_install() {
     echo "  PlasmaZones installed successfully!"
     echo "══════════════════════════════════════════════════════════════════"
     echo ""
-    echo "  Settings: System Settings → Window Management → PlasmaZones"
+    echo "  Settings: System Settings -> Window Management -> PlasmaZones"
     echo ""
     echo "  To enable the daemon:"
     echo "      systemctl --user enable --now plasmazones.service"

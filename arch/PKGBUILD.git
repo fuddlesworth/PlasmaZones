@@ -1,8 +1,11 @@
 # Maintainer: fuddlesworth
+# PlasmaZones (git version) - FancyZones-style window tiling for KDE Plasma
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 pkgname=plasmazones-git
 pkgver=1.2.0.r0.g0000000
 pkgrel=1
-pkgdesc="FancyZones-style window tiling for KDE Plasma"
+pkgdesc="FancyZones-style window tiling for KDE Plasma (git version)"
 arch=('x86_64')
 url="https://github.com/fuddlesworth/PlasmaZones"
 license=('GPL-3.0-or-later')
@@ -25,6 +28,7 @@ makedepends=(
     'git'
     'cmake'
     'extra-cmake-modules'
+    'qt6-tools'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'
@@ -32,7 +36,7 @@ optdepends=(
 provides=('plasmazones')
 conflicts=('plasmazones')
 source=(
-    "${pkgname}::git+${url}.git"
+    "$pkgname::git+$url.git"
     "kbuildsycoca.hook"
     "plasmazones-refresh-sycoca"
 )
@@ -53,6 +57,7 @@ build() {
     cmake -B build -S "$pkgname" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DBUILD_TESTING=OFF \
         -Wno-dev
     cmake --build build --parallel

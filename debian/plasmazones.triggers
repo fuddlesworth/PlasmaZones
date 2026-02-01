@@ -1,0 +1,4 @@
+# Trigger KDE sycoca cache rebuild when package is installed/removed
+interest-noawait /usr/share/applications
+interest-noawait /usr/share/kservices6
+interest-noawait /usr/lib/*/qt6/plugins/plasma/kcms

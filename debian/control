@@ -1,0 +1,55 @@
+Source: plasmazones
+Section: kde
+Priority: optional
+Maintainer: fuddlesworth
+Build-Depends:
+ debhelper-compat (= 13),
+ cmake (>= 3.16),
+ ninja-build,
+ extra-cmake-modules (>= 6.0.0),
+ gettext,
+ pkg-kde-tools,
+ qt6-base-dev (>= 6.6.0),
+ qt6-declarative-dev,
+ qt6-tools-dev,
+ libkf6config-dev (>= 6.0.0),
+ libkf6configwidgets-dev,
+ libkf6coreaddons-dev,
+ libkf6dbusaddons-dev,
+ libkf6i18n-dev,
+ libkf6kcmutils-dev,
+ libkf6windowsystem-dev,
+ libkf6globalaccel-dev,
+ libkf6notifications-dev,
+ libkf6colorscheme-dev,
+ kwin-dev,
+ layer-shell-qt-dev,
+ libplasmaactivities-dev,
+Standards-Version: 4.6.2
+Homepage: https://github.com/fuddlesworth/PlasmaZones
+Vcs-Git: https://github.com/fuddlesworth/PlasmaZones.git
+Vcs-Browser: https://github.com/fuddlesworth/PlasmaZones
+Rules-Requires-Root: no
+
+Package: plasmazones
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+ kwin-common (>= 4:6.0.0),
+ layer-shell-qt,
+Recommends:
+ systemd,
+Suggests:
+ plasma-activities,
+Description: FancyZones-style window tiling for KDE Plasma
+ PlasmaZones brings FancyZones-style window management to KDE Plasma 6.
+ It allows users to create custom zone layouts and snap windows using
+ drag-and-drop or keyboard shortcuts.
+ .
+ Features include:
+  - Custom zone layout editor
+  - KWin effect for visual feedback during window dragging
+  - Keyboard navigation between zones
+  - Per-monitor and per-activity layouts
+  - System Settings integration (KCM)
