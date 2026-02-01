@@ -1011,7 +1011,7 @@ private:
     bool m_showOsdOnLayoutSwitch = true;
     bool m_showNavigationOsd = true;
     OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
-    bool m_showZoneShortcutsInOsd = true;
+    bool m_showZoneShortcutsInOsd = false;
     bool m_showContextHintsInOsd = true;
     int m_osdWindowCountThreshold = 1;
     bool m_showWindowTitlesInOsd = true;

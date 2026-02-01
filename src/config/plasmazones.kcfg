@@ -80,7 +80,7 @@
     </entry>
     <entry name="ShowZoneShortcutsInOsd" type="Bool">
       <label>Show zone keyboard shortcuts (Meta+1, Meta+2, etc.) in OSD zone previews</label>
-      <default>true</default>
+      <default>false</default>
     </entry>
     <entry name="ShowContextHintsInOsd" type="Bool">
       <label>Show contextual action hints in OSD (e.g., undo shortcuts after moves)</label>
