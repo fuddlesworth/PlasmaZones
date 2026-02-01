@@ -135,6 +135,7 @@ Features:
 # Desktop files
 %{_datadir}/applications/org.plasmazones.editor.desktop
 %{_datadir}/applications/org.plasmazones.daemon.desktop
+%{_datadir}/applications/kcm_plasmazones.desktop
 
 # Data files
 %{_datadir}/plasmazones/

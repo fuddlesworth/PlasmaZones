@@ -52,6 +52,7 @@ jobs:
         run: |
           apt-get install -y --no-install-recommends \
             cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
+            build-essential pkg-kde-tools \
             devscripts debhelper fakeroot dpkg-dev \
             qt6-base-dev qt6-declarative-dev qt6-tools-dev \
             kwin-dev libwayland-dev libepoxy-dev libdrm-dev \
