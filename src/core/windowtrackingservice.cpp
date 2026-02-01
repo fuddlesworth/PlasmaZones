@@ -506,11 +506,17 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
         }
     }
 
-    // Build window -> zone mapping for ALL snapped windows
+    // Build window -> zone mapping for snapped windows (excluding floating windows)
     // This handles windows that may have been restored with zone IDs that need format normalization
     QVector<QPair<QString, int>> windowZoneIndices; // windowId, current zone index
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
+        // Skip floating windows - they should not participate in rotation
+        if (m_floatingWindows.contains(it.key())) {
+            qCDebug(lcCore) << "Window" << it.key() << "is floating - skipping rotation";
+            continue;
+        }
+
         QString storedZoneId = it.value();
         int zoneIndex = -1;
 
@@ -597,8 +603,11 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 {
     // Persist the zone assignment to pending BEFORE removing from active tracking.
     // This ensures the window can be restored to its zone when reopened.
+    // BUT: Don't persist if the window is floating - floating windows should stay floating
+    // and not be auto-snapped when reopened.
     QString zoneId = m_windowZoneAssignments.value(windowId);
-    if (!zoneId.isEmpty() && !zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+    bool isFloating = m_floatingWindows.contains(windowId);
+    if (!zoneId.isEmpty() && !zoneId.startsWith(QStringLiteral("zoneselector-")) && !isFloating) {
         QString stableId = Utils::extractStableId(windowId);
         if (!stableId.isEmpty()) {
             m_pendingZoneAssignments[stableId] = zoneId;
