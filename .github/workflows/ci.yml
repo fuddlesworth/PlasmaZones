@@ -40,7 +40,7 @@ jobs:
             libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
             libkf6notifications-dev libkf6colorscheme-dev \
-            layer-shell-qt-dev libplasma-activities-dev
+            liblayershellqtinterface-dev libplasmaactivities-dev
 
       - name: Configure
         run: |
