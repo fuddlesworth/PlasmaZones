@@ -194,9 +194,9 @@ Item {
                 id: windowCountBadge
                 anchors.top: parent.top
                 anchors.right: parent.right
-                anchors.margins: 2
-                width: badgeLabel.width + 6
-                height: badgeLabel.height + 4
+                anchors.margins: Kirigami.Units.smallSpacing / 2
+                width: badgeLabel.width + Kirigami.Units.smallSpacing * 1.5
+                height: badgeLabel.height + Kirigami.Units.smallSpacing
                 radius: height / 2
                 color: Kirigami.Theme.highlightColor
                 visible: zoneRect.zoneWindowCount > root.windowCountThreshold && parent.width >= 24
@@ -205,7 +205,7 @@ Item {
                     id: badgeLabel
                     anchors.centerIn: parent
                     text: zoneRect.zoneWindowCount
-                    font.pixelSize: Math.max(8, Math.min(parent.parent.width, parent.parent.height) * 0.18)
+                    font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 2, Math.min(parent.parent.width, parent.parent.height) * 0.18)
                     font.bold: true
                     color: Kirigami.Theme.highlightedTextColor
                 }
@@ -217,14 +217,18 @@ Item {
 
             // Shortcut label (bottom-left corner)
             Label {
+                id: shortcutLabel
                 anchors.bottom: parent.bottom
                 anchors.left: parent.left
-                anchors.margins: 3
-                text: "⌘" + (index + 1)
-                font.pixelSize: Math.max(7, Math.min(parent.width, parent.height) * 0.15)
+                anchors.margins: Kirigami.Units.smallSpacing * 0.75
+                text: i18n("Meta+%1", index + 1)
+                font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 1.75, Math.min(parent.width, parent.height) * 0.15)
                 color: Kirigami.Theme.textColor
                 opacity: 0.5
                 visible: root.showShortcutLabels && parent.width >= 32 && parent.height >= 24 && index < 9
+
+                Accessible.role: Accessible.StaticText
+                Accessible.name: i18n("Keyboard shortcut: Meta+%1", index + 1)
             }
 
             // Active window zone indicator (additional border glow)

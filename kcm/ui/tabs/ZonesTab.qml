@@ -333,6 +333,35 @@ ScrollView {
                             kcm.osdStyle = index + osdStyleText
                         }
                     }
+
+                    // Visual preview OSD enhancements (only shown when preview style)
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("OSD details:")
+                        text: i18n("Show keyboard shortcuts (Meta+1, Meta+2, etc.)")
+                        checked: kcm.showZoneShortcutsInOsd
+                        onToggled: kcm.showZoneShortcutsInOsd = checked
+                        enabled: osdStyleCombo.currentIndex === 1 && (showOsdCheckbox.checked || kcm.showNavigationOsd)
+                    }
+
+                    CheckBox {
+                        text: i18n("Show context hints")
+                        checked: kcm.showContextHintsInOsd
+                        onToggled: kcm.showContextHintsInOsd = checked
+                        enabled: osdStyleCombo.currentIndex === 1 && (showOsdCheckbox.checked || kcm.showNavigationOsd)
+                    }
+
+                    SpinBox {
+                        Kirigami.FormData.label: i18n("Window count badges:")
+                        from: 1
+                        to: 10
+                        value: kcm.osdWindowCountThreshold
+                        onValueModified: kcm.osdWindowCountThreshold = value
+                        enabled: osdStyleCombo.currentIndex === 1 && (showOsdCheckbox.checked || kcm.showNavigationOsd)
+                        // Show badge when zone has more than X windows
+                        textFromValue: function(value) {
+                            return i18n("Show when > %1", value)
+                        }
+                    }
                 }
             }
         }

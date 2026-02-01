@@ -184,6 +184,18 @@ int KCMPlasmaZones::osdStyle() const
 {
     return m_settings->osdStyleInt();
 }
+bool KCMPlasmaZones::showZoneShortcutsInOsd() const
+{
+    return m_settings->showZoneShortcutsInOsd();
+}
+bool KCMPlasmaZones::showContextHintsInOsd() const
+{
+    return m_settings->showContextHintsInOsd();
+}
+int KCMPlasmaZones::osdWindowCountThreshold() const
+{
+    return m_settings->osdWindowCountThreshold();
+}
 
 // Appearance getters
 bool KCMPlasmaZones::useSystemColors() const
@@ -533,6 +545,30 @@ void KCMPlasmaZones::setOsdStyle(int style)
     if (m_settings->osdStyleInt() != style) {
         m_settings->setOsdStyleInt(style);
         Q_EMIT osdStyleChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setShowZoneShortcutsInOsd(bool show)
+{
+    if (m_settings->showZoneShortcutsInOsd() != show) {
+        m_settings->setShowZoneShortcutsInOsd(show);
+        Q_EMIT showZoneShortcutsInOsdChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setShowContextHintsInOsd(bool show)
+{
+    if (m_settings->showContextHintsInOsd() != show) {
+        m_settings->setShowContextHintsInOsd(show);
+        Q_EMIT showContextHintsInOsdChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setOsdWindowCountThreshold(int threshold)
+{
+    if (m_settings->osdWindowCountThreshold() != threshold) {
+        m_settings->setOsdWindowCountThreshold(threshold);
+        Q_EMIT osdWindowCountThresholdChanged();
         setNeedsSave(true);
     }
 }
@@ -1211,6 +1247,9 @@ void KCMPlasmaZones::defaults()
     Q_EMIT flashZonesOnSwitchChanged();
     Q_EMIT showOsdOnLayoutSwitchChanged();
     Q_EMIT showNavigationOsdChanged();
+    Q_EMIT showZoneShortcutsInOsdChanged();
+    Q_EMIT showContextHintsInOsdChanged();
+    Q_EMIT osdWindowCountThresholdChanged();
     Q_EMIT useSystemColorsChanged();
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
