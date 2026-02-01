@@ -31,6 +31,7 @@
 #include <QMutexLocker>
 #include "../core/logging.h"
 #include <KLocalizedContext>
+#include <KLocalizedString>
 #include <cmath>
 
 #include <LayerShellQt/Window>
@@ -2071,6 +2072,13 @@ void OverlayService::showLayoutOsd(Layout* layout)
     writeQmlProperty(window, QStringLiteral("category"), 0);
     writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
 
+    // OSD enhancement properties
+    writeQmlProperty(window, QStringLiteral("contextHint"), determineContextHint(QLatin1String("layout"), 0));
+    writeQmlProperty(window, QStringLiteral("showContextHint"),
+                     m_settings ? m_settings->showContextHintsInOsd() : true);
+    writeQmlProperty(window, QStringLiteral("showZoneShortcuts"),
+                     m_settings ? m_settings->showZoneShortcutsInOsd() : true);
+
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
@@ -2096,6 +2104,13 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("category"), category);
     writeQmlProperty(window, QStringLiteral("zones"), zones);
+
+    // OSD enhancement properties
+    writeQmlProperty(window, QStringLiteral("contextHint"), determineContextHint(QLatin1String("layout"), category));
+    writeQmlProperty(window, QStringLiteral("showContextHint"),
+                     m_settings ? m_settings->showContextHintsInOsd() : true);
+    writeQmlProperty(window, QStringLiteral("showZoneShortcuts"),
+                     m_settings ? m_settings->showZoneShortcutsInOsd() : true);
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
@@ -2236,6 +2251,51 @@ void OverlayService::hideNavigationOsd()
             QMetaObject::invokeMethod(window, "hide");
         }
     }
+}
+
+QString OverlayService::determineContextHint(const QString& action, int category) const
+{
+    // Check if context hints are enabled
+    if (m_settings && !m_settings->showContextHintsInOsd()) {
+        return QString();
+    }
+
+    // Determine hint based on action and category
+    if (action == QLatin1String("layout") || action.isEmpty()) {
+        if (category == 1) {
+            // Autotile layout
+            return i18n("Drag windows to auto-arrange");
+        } else {
+            // Manual layout
+            return i18n("Meta+[1-9] to snap windows");
+        }
+    }
+
+    if (action == QLatin1String("move")) {
+        return i18n("Meta+Z to cycle windows");
+    }
+
+    if (action == QLatin1String("swap")) {
+        return i18n("Windows swapped");
+    }
+
+    if (action == QLatin1String("push")) {
+        return i18n("Meta+Z to cycle in zone");
+    }
+
+    if (action == QLatin1String("snap")) {
+        return i18n("Meta+Alt+Escape to restore size");
+    }
+
+    if (action == QLatin1String("rotate")) {
+        return i18n("Meta+Ctrl+[ or ] to rotate");
+    }
+
+    if (action == QLatin1String("cycle")) {
+        return i18n("Continue with Meta+Alt+. or ,");
+    }
+
+    return QString();
 }
 
 void OverlayService::createNavigationOsdWindow(QScreen* screen)

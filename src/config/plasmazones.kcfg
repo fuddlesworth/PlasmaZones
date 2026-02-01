@@ -78,6 +78,20 @@
       <min>0</min>
       <max>2</max>
     </entry>
+    <entry name="ShowZoneShortcutsInOsd" type="Bool">
+      <label>Show zone keyboard shortcuts (Meta+1, Meta+2, etc.) in OSD zone previews</label>
+      <default>true</default>
+    </entry>
+    <entry name="ShowContextHintsInOsd" type="Bool">
+      <label>Show contextual action hints in OSD (e.g., undo shortcuts after moves)</label>
+      <default>true</default>
+    </entry>
+    <entry name="OsdWindowCountThreshold" type="Int">
+      <label>Minimum window count per zone to show badge (1 = show when more than 1 window)</label>
+      <default>1</default>
+      <min>1</min>
+      <max>10</max>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

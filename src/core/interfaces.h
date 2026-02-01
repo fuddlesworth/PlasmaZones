@@ -155,6 +155,9 @@ Q_SIGNALS:
     void showOsdOnLayoutSwitchChanged();
     void showNavigationOsdChanged();
     void osdStyleChanged();
+    void showZoneShortcutsInOsdChanged();
+    void showContextHintsInOsdChanged();
+    void osdWindowCountThresholdChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();
     void inactiveColorChanged();

@@ -23,6 +23,21 @@ Window {
     // Layout category: 0=Manual, 1=Autotile (matches LayoutCategory enum in C++)
     property int category: 0
 
+    // Context hint (e.g., "Meta+[1-9] to snap windows")
+    property string contextHint: ""
+
+    // Whether to show the context hint
+    property bool showContextHint: true
+
+    // Window counts per zone (for badge display)
+    property var windowCounts: []
+
+    // Active window's zone index (-1 for none)
+    property int activeWindowZoneIndex: -1
+
+    // Whether to show zone shortcut labels
+    property bool showZoneShortcuts: true
+
     // Screen info for aspect ratio (bounded to prevent layout issues)
     property real screenAspectRatio: 16 / 9
     readonly property real safeAspectRatio: Math.max(0.5, Math.min(4.0, screenAspectRatio))
@@ -171,7 +186,7 @@ Window {
 
         anchors.centerIn: parent
         width: previewContainer.width + Kirigami.Units.gridUnit * 3
-        height: previewContainer.height + nameLabelRow.height + Kirigami.Units.gridUnit * 3
+        height: previewContainer.height + nameLabelRow.height + (hintLabel.visible ? hintLabel.height + Kirigami.Units.smallSpacing : 0) + Kirigami.Units.gridUnit * 3
         color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.15)
@@ -208,6 +223,10 @@ Window {
                 inactiveOpacity: 0.3
                 activeOpacity: 0.6
                 animationDuration: 150
+                // OSD enhancement properties
+                windowCounts: root.windowCounts
+                activeWindowZoneIndex: root.activeWindowZoneIndex
+                showShortcutLabels: root.showZoneShortcuts
             }
 
         }
@@ -240,6 +259,23 @@ Window {
                 color: textColor
                 horizontalAlignment: Text.AlignHCenter
             }
+        }
+
+        // Context hint label
+        Label {
+            id: hintLabel
+
+            anchors.top: nameLabelRow.bottom
+            anchors.topMargin: Kirigami.Units.smallSpacing
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: root.contextHint
+            font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+            color: Kirigami.Theme.disabledTextColor
+            horizontalAlignment: Text.AlignHCenter
+            visible: root.showContextHint && root.contextHint.length > 0
+
+            Accessible.role: Accessible.StaticText
+            Accessible.name: root.contextHint
         }
 
     }

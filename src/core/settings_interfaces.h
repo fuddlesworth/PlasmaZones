@@ -70,6 +70,12 @@ public:
     virtual void setShowNavigationOsd(bool show) = 0;
     virtual OsdStyle osdStyle() const = 0;
     virtual void setOsdStyle(OsdStyle style) = 0;
+    virtual bool showZoneShortcutsInOsd() const = 0;
+    virtual void setShowZoneShortcutsInOsd(bool show) = 0;
+    virtual bool showContextHintsInOsd() const = 0;
+    virtual void setShowContextHintsInOsd(bool show) = 0;
+    virtual int osdWindowCountThreshold() const = 0;
+    virtual void setOsdWindowCountThreshold(int threshold) = 0;
 
     // Appearance settings
     virtual bool useSystemColors() const = 0;

@@ -48,6 +48,12 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY
                    showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
+    Q_PROPERTY(bool showZoneShortcutsInOsd READ showZoneShortcutsInOsd WRITE setShowZoneShortcutsInOsd NOTIFY
+                   showZoneShortcutsInOsdChanged)
+    Q_PROPERTY(bool showContextHintsInOsd READ showContextHintsInOsd WRITE setShowContextHintsInOsd NOTIFY
+                   showContextHintsInOsdChanged)
+    Q_PROPERTY(int osdWindowCountThreshold READ osdWindowCountThreshold WRITE setOsdWindowCountThreshold NOTIFY
+                   osdWindowCountThresholdChanged)
 
     // Appearance (ricer-friendly)
     Q_PROPERTY(bool useSystemColors READ useSystemColors WRITE setUseSystemColors NOTIFY useSystemColorsChanged)
@@ -356,6 +362,24 @@ public:
         return static_cast<int>(m_osdStyle);
     }
     void setOsdStyleInt(int style);
+
+    bool showZoneShortcutsInOsd() const override
+    {
+        return m_showZoneShortcutsInOsd;
+    }
+    void setShowZoneShortcutsInOsd(bool show) override;
+
+    bool showContextHintsInOsd() const override
+    {
+        return m_showContextHintsInOsd;
+    }
+    void setShowContextHintsInOsd(bool show) override;
+
+    int osdWindowCountThreshold() const override
+    {
+        return m_osdWindowCountThreshold;
+    }
+    void setOsdWindowCountThreshold(int threshold) override;
 
     bool useSystemColors() const override
     {
@@ -979,6 +1003,9 @@ private:
     bool m_showOsdOnLayoutSwitch = true;
     bool m_showNavigationOsd = true;
     OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
+    bool m_showZoneShortcutsInOsd = true;
+    bool m_showContextHintsInOsd = true;
+    int m_osdWindowCountThreshold = 1;
 
     // Appearance
     bool m_useSystemColors = true;

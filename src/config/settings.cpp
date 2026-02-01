@@ -205,6 +205,33 @@ void Settings::setOsdStyleInt(int style)
     setOsdStyle(static_cast<OsdStyle>(style));
 }
 
+void Settings::setShowZoneShortcutsInOsd(bool show)
+{
+    if (m_showZoneShortcutsInOsd != show) {
+        m_showZoneShortcutsInOsd = show;
+        Q_EMIT showZoneShortcutsInOsdChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setShowContextHintsInOsd(bool show)
+{
+    if (m_showContextHintsInOsd != show) {
+        m_showContextHintsInOsd = show;
+        Q_EMIT showContextHintsInOsdChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setOsdWindowCountThreshold(int threshold)
+{
+    if (m_osdWindowCountThreshold != threshold) {
+        m_osdWindowCountThreshold = threshold;
+        Q_EMIT osdWindowCountThresholdChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setUseSystemColors(bool use)
 {
     if (m_useSystemColors != use) {
@@ -722,6 +749,9 @@ void Settings::load()
     m_showOsdOnLayoutSwitch = display.readEntry(QLatin1String("ShowOsdOnLayoutSwitch"), ConfigDefaults::showOsdOnLayoutSwitch());
     m_showNavigationOsd = display.readEntry(QLatin1String("ShowNavigationOsd"), ConfigDefaults::showNavigationOsd());
     m_osdStyle = static_cast<OsdStyle>(readValidatedInt(display, "OsdStyle", ConfigDefaults::osdStyle(), 0, 2, "OSD style"));
+    m_showZoneShortcutsInOsd = display.readEntry(QLatin1String("ShowZoneShortcutsInOsd"), ConfigDefaults::showZoneShortcutsInOsd());
+    m_showContextHintsInOsd = display.readEntry(QLatin1String("ShowContextHintsInOsd"), ConfigDefaults::showContextHintsInOsd());
+    m_osdWindowCountThreshold = readValidatedInt(display, "OsdWindowCountThreshold", ConfigDefaults::osdWindowCountThreshold(), 1, 10, "OSD window count threshold");
 
     // Appearance with validation (defaults from .kcfg via ConfigDefaults)
     m_useSystemColors = appearance.readEntry(QLatin1String("UseSystemColors"), ConfigDefaults::useSystemColors());
@@ -988,6 +1018,9 @@ void Settings::save()
     display.writeEntry(QLatin1String("ShowOsdOnLayoutSwitch"), m_showOsdOnLayoutSwitch);
     display.writeEntry(QLatin1String("ShowNavigationOsd"), m_showNavigationOsd);
     display.writeEntry(QLatin1String("OsdStyle"), static_cast<int>(m_osdStyle));
+    display.writeEntry(QLatin1String("ShowZoneShortcutsInOsd"), m_showZoneShortcutsInOsd);
+    display.writeEntry(QLatin1String("ShowContextHintsInOsd"), m_showContextHintsInOsd);
+    display.writeEntry(QLatin1String("OsdWindowCountThreshold"), m_osdWindowCountThreshold);
 
     // Appearance
     appearance.writeEntry(QLatin1String("UseSystemColors"), m_useSystemColors);

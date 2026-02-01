@@ -107,6 +107,14 @@ public:
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason);
 
+    /**
+     * @brief Determine the context hint to display in OSD based on action
+     * @param action The action that was performed (layout, move, swap, etc.)
+     * @param category Layout category (0=Manual, 1=Autotile)
+     * @return Localized hint string, or empty if no hint should be shown
+     */
+    QString determineContextHint(const QString& action, int category) const;
+
 public Q_SLOTS:
     void hideLayoutOsd();
     void hideNavigationOsd();

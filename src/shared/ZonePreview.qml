@@ -34,6 +34,10 @@ Item {
 
     id: root
 
+    // Accessibility
+    Accessible.role: Accessible.Graphic
+    Accessible.name: i18n("Layout preview showing %1 zones", zones ? zones.length : 0)
+
     /// Array of zone objects with relativeGeometry: { x, y, width, height }
     required property var zones
     /// Whether this preview is in "active/selected" state (affects coloring)
@@ -56,6 +60,14 @@ Item {
     property bool interactive: false
     /// Whether all zones highlight together (for autotile layouts)
     property bool highlightAllZones: false
+    /// Array of window counts per zone (e.g., [0, 2, 1, 3])
+    property var windowCounts: []
+    /// Index of the zone containing the active/focused window (-1 for none)
+    property int activeWindowZoneIndex: -1
+    /// Minimum window count to show a badge (default: show when > 1 window)
+    property int windowCountThreshold: 1
+    /// Whether to show zone shortcut labels (Meta+1, Meta+2, etc.)
+    property bool showShortcutLabels: false
     /// Zone fill opacity when not active/hovered
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
@@ -98,6 +110,25 @@ Item {
                 : root.selectedZoneIndex === index
             // Track per-zone hover state
             property bool isZoneHovered: root.interactive && zoneMouseArea.containsMouse
+            // Check if this is the active window's zone
+            property bool isActiveWindowZone: root.activeWindowZoneIndex === index
+            // Get window count for this zone
+            property int zoneWindowCount: root.windowCounts[index] || 0
+
+            // Accessibility for each zone
+            Accessible.role: root.interactive ? Accessible.Button : Accessible.Graphic
+            Accessible.name: {
+                if (root.interactive) {
+                    return i18n("Zone %1. Click to move window here.", index + 1)
+                }
+                if (zoneWindowCount === 0) {
+                    return i18n("Zone %1, empty", index + 1)
+                }
+                if (zoneWindowCount === 1) {
+                    return i18n("Zone %1, 1 window", index + 1)
+                }
+                return i18n("Zone %1, %2 windows", index + 1, zoneWindowCount)
+            }
 
             // Detect screen boundaries (tolerance 0.01)
             readonly property real edgeTolerance: 0.01
@@ -156,6 +187,59 @@ Item {
 
                 }
 
+            }
+
+            // Window count badge (top-right corner)
+            Rectangle {
+                id: windowCountBadge
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: 2
+                width: badgeLabel.width + 6
+                height: badgeLabel.height + 4
+                radius: height / 2
+                color: Kirigami.Theme.highlightColor
+                visible: zoneRect.zoneWindowCount > root.windowCountThreshold && parent.width >= 24
+
+                Label {
+                    id: badgeLabel
+                    anchors.centerIn: parent
+                    text: zoneRect.zoneWindowCount
+                    font.pixelSize: Math.max(8, Math.min(parent.parent.width, parent.parent.height) * 0.18)
+                    font.bold: true
+                    color: Kirigami.Theme.highlightedTextColor
+                }
+
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animationDuration }
+                }
+            }
+
+            // Shortcut label (bottom-left corner)
+            Label {
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.margins: 3
+                text: "⌘" + (index + 1)
+                font.pixelSize: Math.max(7, Math.min(parent.width, parent.height) * 0.15)
+                color: Kirigami.Theme.textColor
+                opacity: 0.5
+                visible: root.showShortcutLabels && parent.width >= 32 && parent.height >= 24 && index < 9
+            }
+
+            // Active window zone indicator (additional border glow)
+            Rectangle {
+                anchors.fill: parent
+                color: "transparent"
+                border.color: Kirigami.Theme.highlightColor
+                border.width: 3
+                radius: parent.radius
+                visible: zoneRect.isActiveWindowZone
+                opacity: 0.8
+
+                Behavior on opacity {
+                    NumberAnimation { duration: root.animationDuration }
+                }
             }
 
             // Mouse interaction for zone selection (only when interactive)

@@ -50,6 +50,9 @@ public:
     static bool showOsdOnLayoutSwitch() { return instance().defaultShowOsdOnLayoutSwitchValue(); }
     static bool showNavigationOsd() { return instance().defaultShowNavigationOsdValue(); }
     static int osdStyle() { return instance().defaultOsdStyleValue(); }
+    static bool showZoneShortcutsInOsd() { return instance().defaultShowZoneShortcutsInOsdValue(); }
+    static bool showContextHintsInOsd() { return instance().defaultShowContextHintsInOsdValue(); }
+    static int osdWindowCountThreshold() { return instance().defaultOsdWindowCountThresholdValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Appearance Settings
