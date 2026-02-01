@@ -75,6 +75,17 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
         return;
     }
 
+    // Check if this was an auto-snap (restore from session or snap to last zone)
+    // and clear the flag. Auto-snapped windows don't update last-used zone tracking.
+    bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
+
+    // If NOT auto-snapped (user explicitly snapped), clear any stale pending
+    // assignment from a previous session. This prevents the window from restoring
+    // to the wrong zone if it's closed and reopened.
+    if (!wasAutoSnapped) {
+        m_service->clearStalePendingAssignment(windowId);
+    }
+
     // Determine screen for this zone
     QString screenName;
     if (m_layoutManager) {
@@ -103,7 +114,7 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     m_service->assignWindowToZone(windowId, zoneId, screenName, currentDesktop);
 
     // Update last used zone (skip zone selector special IDs and auto-snapped windows)
-    if (!zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+    if (!zoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
         QString windowClass = Utils::extractWindowClass(windowId);
         m_service->updateLastUsedZone(zoneId, screenName, windowClass, currentDesktop);
     }
@@ -453,6 +464,9 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
     snapHeight = result.geometry.height();
     shouldSnap = true;
 
+    // Mark as auto-snapped so windowSnapped() won't update last-used zone or clear pending
+    m_service->markAsAutoSnapped(windowId);
+
     // Track the assignment
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
@@ -488,6 +502,12 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
     snapWidth = result.geometry.width();
     snapHeight = result.geometry.height();
     shouldRestore = true;
+
+    // Mark as auto-snapped so windowSnapped() won't update last-used zone or clear pending
+    m_service->markAsAutoSnapped(windowId);
+
+    // Consume the pending assignment so other windows of the same class won't restore to this zone
+    m_service->consumePendingAssignment(windowId);
 
     // Track the assignment
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;

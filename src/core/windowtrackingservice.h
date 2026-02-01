@@ -230,6 +230,55 @@ public:
     void updateLastUsedZone(const QString& zoneId, const QString& screenName,
                             const QString& windowClass, int virtualDesktop);
 
+    /**
+     * @brief Clear stale pending assignment for a window
+     *
+     * When a user explicitly snaps a window, this clears any stale pending
+     * assignment from a previous session. This prevents the window from
+     * restoring to the wrong zone if it's closed and reopened.
+     *
+     * @param windowId Full window ID
+     * @return true if a stale pending assignment was cleared
+     */
+    bool clearStalePendingAssignment(const QString& windowId);
+
+    /**
+     * @brief Mark a window as auto-snapped
+     *
+     * Auto-snapped windows should not update the last-used zone tracking
+     * when snapped. This prevents unwanted zone changes when windows are
+     * automatically restored on open.
+     *
+     * @param windowId Full window ID
+     */
+    void markAsAutoSnapped(const QString& windowId);
+
+    /**
+     * @brief Check if a window was auto-snapped
+     * @param windowId Full window ID
+     * @return true if the window was auto-snapped (not user-initiated)
+     */
+    bool isAutoSnapped(const QString& windowId) const;
+
+    /**
+     * @brief Clear auto-snapped flag for a window
+     * @param windowId Full window ID
+     * @return true if the window had the auto-snapped flag
+     */
+    bool clearAutoSnapped(const QString& windowId);
+
+    /**
+     * @brief Consume pending zone assignment after successful restore
+     *
+     * After a window is successfully restored to its persisted zone, the pending
+     * assignment should be removed so that:
+     * 1. The same window won't be restored again if reopened
+     * 2. Other windows of the same class won't incorrectly restore to this zone
+     *
+     * @param windowId Full window ID
+     */
+    void consumePendingAssignment(const QString& windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
     // ═══════════════════════════════════════════════════════════════════════════

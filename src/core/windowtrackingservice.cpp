@@ -60,7 +60,7 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
         return;
     }
 
-    // Only emit signal if value actually changed (.cursorrules compliance)
+    // Only emit signal if value actually changed
     QString previousZone = m_windowZoneAssignments.value(windowId);
     bool zoneChanged = (previousZone != zoneId);
 
@@ -68,11 +68,10 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
     m_windowScreenAssignments[windowId] = screenName;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
-    // Also store by stable ID for session persistence
-    QString stableId = Utils::extractStableId(windowId);
-    m_pendingZoneAssignments[stableId] = zoneId;
-    m_pendingZoneScreens[stableId] = screenName;
-    m_pendingZoneDesktops[stableId] = virtualDesktop;
+    // NOTE: Do NOT store to m_pendingZoneAssignments here!
+    // Pending assignments are for session persistence and should only be populated
+    // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
+    // windows to auto-restore on open, even when they shouldn't.
 
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, zoneId);
@@ -356,6 +355,50 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
     scheduleSaveState();
 }
 
+bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
+{
+    // When a user explicitly snaps a window, clear any stale pending assignment
+    // from a previous session. This prevents the window from restoring to the
+    // wrong zone if it's closed and reopened.
+    QString stableId = Utils::extractStableId(windowId);
+    bool hadPending = m_pendingZoneAssignments.remove(stableId) > 0;
+    if (hadPending) {
+        m_pendingZoneScreens.remove(stableId);
+        m_pendingZoneDesktops.remove(stableId);
+        qCDebug(lcCore) << "Cleared stale pending assignment for" << stableId;
+        scheduleSaveState();
+    }
+    return hadPending;
+}
+
+void WindowTrackingService::markAsAutoSnapped(const QString& windowId)
+{
+    if (!windowId.isEmpty()) {
+        m_autoSnappedWindows.insert(windowId);
+    }
+}
+
+bool WindowTrackingService::isAutoSnapped(const QString& windowId) const
+{
+    return m_autoSnappedWindows.contains(windowId);
+}
+
+bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
+{
+    return m_autoSnappedWindows.remove(windowId);
+}
+
+void WindowTrackingService::consumePendingAssignment(const QString& windowId)
+{
+    QString stableId = Utils::extractStableId(windowId);
+    if (m_pendingZoneAssignments.remove(stableId) > 0) {
+        m_pendingZoneScreens.remove(stableId);
+        m_pendingZoneDesktops.remove(stableId);
+        qCDebug(lcCore) << "Consumed pending assignment for" << stableId;
+        scheduleSaveState();
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -496,9 +539,36 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
 
 void WindowTrackingService::windowClosed(const QString& windowId)
 {
-    // Don't remove from pending assignments - keep for session restore
-    // (Those are keyed by stable ID)
+    // Persist the zone assignment to pending BEFORE removing from active tracking.
+    // This ensures the window can be restored to its zone when reopened.
+    QString zoneId = m_windowZoneAssignments.value(windowId);
+    if (!zoneId.isEmpty() && !zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+        QString stableId = Utils::extractStableId(windowId);
+        if (!stableId.isEmpty()) {
+            m_pendingZoneAssignments[stableId] = zoneId;
 
+            QString screenName = m_windowScreenAssignments.value(windowId);
+            if (!screenName.isEmpty()) {
+                m_pendingZoneScreens[stableId] = screenName;
+            } else {
+                m_pendingZoneScreens.remove(stableId);
+            }
+
+            int desktop = m_windowDesktopAssignments.value(windowId, 0);
+            if (desktop <= 0 && m_virtualDesktopManager) {
+                desktop = m_virtualDesktopManager->currentDesktop();
+            }
+            if (desktop > 0) {
+                m_pendingZoneDesktops[stableId] = desktop;
+            } else {
+                m_pendingZoneDesktops.remove(stableId);
+            }
+
+            qCDebug(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId;
+        }
+    }
+
+    // Now clean up active tracking state
     m_windowZoneAssignments.remove(windowId);
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
