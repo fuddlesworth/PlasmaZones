@@ -12,16 +12,53 @@ on:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
-  # KDE Neon / Debian Build - DISABLED
+  # Ubuntu 24.10 Build (has KDE Plasma 6 / KF6)
   # ═══════════════════════════════════════════════════════════════════════════
-  # Note: Ubuntu 24.04 LTS ships with KDE5, not KDE6. KDE Neon has different
-  # package names than standard Debian. Debian/Ubuntu .deb packages should be
-  # built manually or via a dedicated PPA until package names are standardized.
-  # See: debian/ directory for packaging files.
-  #
-  # For now, primary distribution targets are:
-  # - Arch Linux (AUR): arch/PKGBUILD
-  # - Fedora (Copr): rpm/plasmazones.spec
+  # Note: Ubuntu 24.04 LTS ships with KDE5. Ubuntu 24.10+ has KF6 in official repos.
+  build-ubuntu:
+    name: Ubuntu 24.10 (Oracular)
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:oracular
+
+    steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get install -y --no-install-recommends \
+            cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev \
+            kwin-dev libwayland-dev libepoxy-dev libdrm-dev \
+            libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
+            libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
+            libkf6windowsystem-dev libkf6globalaccel-dev \
+            libkf6notifications-dev libkf6colorscheme-dev \
+            layer-shell-qt-dev libplasma-activities-dev
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DBUILD_TESTING=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Install (dry-run)
+        run: DESTDIR="${PWD}/install" cmake --install build
+
+      - name: Verify installed files
+        run: |
+          echo "=== Installed files ==="
+          find install -type f | head -50
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Fedora Build
