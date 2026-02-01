@@ -10,6 +10,7 @@
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/TilingAlgorithm.h"
+#include "../core/windowtrackingservice.h"
 #include "../core/platform.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
@@ -970,6 +971,11 @@ void OverlayService::setAutotileEngine(AutotileEngine* engine)
     m_autotileEngine = engine;
 }
 
+void OverlayService::setWindowTrackingService(WindowTrackingService* service)
+{
+    m_windowTrackingService = service;
+}
+
 void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
@@ -1633,6 +1639,16 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     QVariantList patched = patchZonesWithHighlight(zones, window);
     window->setProperty("zones", patched);
 
+    // Build and set window context for OSD (Phase 2: window counts and app names per zone)
+    QVariantList windowCounts;
+    QVariantList windowAppNames;
+    int activeWindowZoneIndex = -1;
+    buildWindowContext(patched, windowCounts, windowAppNames, activeWindowZoneIndex);
+    window->setProperty("windowCounts", windowCounts);
+    window->setProperty("windowAppNames", windowAppNames);
+    window->setProperty("activeWindowZoneIndex", activeWindowZoneIndex);
+    window->setProperty("showWindowTitles", m_settings ? m_settings->showWindowTitlesInOsd() : true);
+
     // Shader overlay: zoneCount, highlightedCount, zoneDataVersion
     if (useShaderOverlay()) {
         int highlightedCount = 0;
@@ -1779,6 +1795,72 @@ QVariantList OverlayService::buildLayoutsList() const
     // Use shared utility to build unified layout list
     const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
     return LayoutUtils::toVariantList(entries);
+}
+
+void OverlayService::buildWindowContext(const QVariantList& zones, QVariantList& windowCounts,
+                                        QVariantList& windowAppNames, int& activeWindowZoneIndex) const
+{
+    windowCounts.clear();
+    windowAppNames.clear();
+    activeWindowZoneIndex = -1;
+
+    if (!m_windowTrackingService) {
+        // No tracking service - return empty counts
+        for (int i = 0; i < zones.size(); ++i) {
+            windowCounts.append(0);
+            windowAppNames.append(QStringList());
+        }
+        return;
+    }
+
+    // Get all zone assignments to find active window's zone
+    // TODO: When we have access to the active window ID from KWin, we can determine
+    // which zone contains the currently focused window. For now, just populate counts.
+
+    for (int i = 0; i < zones.size(); ++i) {
+        const QVariantMap zone = zones[i].toMap();
+        const QString zoneId = zone.value(QLatin1String("id")).toString();
+
+        if (zoneId.isEmpty()) {
+            windowCounts.append(0);
+            windowAppNames.append(QStringList());
+            continue;
+        }
+
+        // Get windows in this zone
+        const QStringList windows = m_windowTrackingService->windowsInZone(zoneId);
+        windowCounts.append(windows.size());
+
+        // Extract app names from window IDs and deduplicate with counts
+        // Window ID format: windowClass:resourceName:internalId
+        // App name is the first component (windowClass)
+        QHash<QString, int> appCounts;
+        for (const QString& windowId : windows) {
+            const int colonIdx = windowId.indexOf(QLatin1Char(':'));
+            QString appName;
+            if (colonIdx > 0) {
+                appName = windowId.left(colonIdx);
+            } else if (colonIdx == 0) {
+                // Edge case: ID starts with colon, use second component
+                const int secondColon = windowId.indexOf(QLatin1Char(':'), 1);
+                appName = secondColon > 1 ? windowId.mid(1, secondColon - 1) : windowId;
+            } else {
+                appName = windowId; // Fallback: use full ID
+            }
+            appCounts[appName]++;
+        }
+
+        // Build deduplicated app names list with counts for duplicates
+        QStringList appNames;
+        for (auto it = appCounts.constBegin(); it != appCounts.constEnd(); ++it) {
+            if (it.value() > 1) {
+                appNames.append(QStringLiteral("%1 (%2)").arg(it.key()).arg(it.value()));
+            } else {
+                appNames.append(it.key());
+            }
+        }
+        windowAppNames.append(QVariant::fromValue(appNames));
+    }
 }
 
 bool OverlayService::hasSelectedZone() const
@@ -1982,6 +2064,16 @@ void OverlayService::updateZonesForAllWindows()
         window->setProperty("zones", patched);
         window->setProperty("zoneCount", patched.size());
         window->setProperty("highlightedCount", highlightedCount);
+
+        // Build and set window context for OSD
+        QVariantList windowCounts;
+        QVariantList windowAppNames;
+        int activeWindowZoneIndex = -1;
+        buildWindowContext(patched, windowCounts, windowAppNames, activeWindowZoneIndex);
+        window->setProperty("windowCounts", windowCounts);
+        window->setProperty("windowAppNames", windowAppNames);
+        window->setProperty("activeWindowZoneIndex", activeWindowZoneIndex);
+        window->setProperty("showWindowTitles", m_settings ? m_settings->showWindowTitlesInOsd() : true);
     }
 
     ++m_zoneDataVersion;
@@ -2066,11 +2158,12 @@ void OverlayService::showLayoutOsd(Layout* layout)
         return;
     }
 
+    QVariantList zonesList = LayoutUtils::zonesToVariantList(layout, ZoneField::Full);
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("category"), 0);
-    writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
+    writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // OSD enhancement properties
     writeQmlProperty(window, QStringLiteral("contextHint"), determineContextHint(QLatin1String("layout"), 0));
@@ -2078,6 +2171,19 @@ void OverlayService::showLayoutOsd(Layout* layout)
                      m_settings ? m_settings->showContextHintsInOsd() : true);
     writeQmlProperty(window, QStringLiteral("showZoneShortcuts"),
                      m_settings ? m_settings->showZoneShortcutsInOsd() : true);
+
+    // Window context (Phase 2): window counts and app names per zone
+    QVariantList windowCounts;
+    QVariantList windowAppNames;
+    int activeWindowZoneIndex = -1;
+    buildWindowContext(zonesList, windowCounts, windowAppNames, activeWindowZoneIndex);
+    writeQmlProperty(window, QStringLiteral("windowCounts"), windowCounts);
+    writeQmlProperty(window, QStringLiteral("windowAppNames"), windowAppNames);
+    writeQmlProperty(window, QStringLiteral("activeWindowZoneIndex"), activeWindowZoneIndex);
+    writeQmlProperty(window, QStringLiteral("windowCountThreshold"),
+                     m_settings ? m_settings->osdWindowCountThreshold() : 1);
+    writeQmlProperty(window, QStringLiteral("showWindowTitles"),
+                     m_settings ? m_settings->showWindowTitlesInOsd() : true);
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
@@ -2111,6 +2217,19 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
                      m_settings ? m_settings->showContextHintsInOsd() : true);
     writeQmlProperty(window, QStringLiteral("showZoneShortcuts"),
                      m_settings ? m_settings->showZoneShortcutsInOsd() : true);
+
+    // Window context (Phase 2): window counts and app names per zone
+    QVariantList windowCounts;
+    QVariantList windowAppNames;
+    int activeWindowZoneIndex = -1;
+    buildWindowContext(zones, windowCounts, windowAppNames, activeWindowZoneIndex);
+    writeQmlProperty(window, QStringLiteral("windowCounts"), windowCounts);
+    writeQmlProperty(window, QStringLiteral("windowAppNames"), windowAppNames);
+    writeQmlProperty(window, QStringLiteral("activeWindowZoneIndex"), activeWindowZoneIndex);
+    writeQmlProperty(window, QStringLiteral("windowCountThreshold"),
+                     m_settings ? m_settings->osdWindowCountThreshold() : 1);
+    writeQmlProperty(window, QStringLiteral("showWindowTitles"),
+                     m_settings ? m_settings->showWindowTitlesInOsd() : true);
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");

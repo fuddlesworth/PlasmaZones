@@ -24,6 +24,7 @@ namespace PlasmaZones {
 
 class Zone;
 class TilingAlgorithm;
+class WindowTrackingService;
 
 /**
  * @brief Manages zone overlay windows
@@ -68,6 +69,7 @@ public:
     void setSettings(ISettings* settings);
     void setLayoutManager(ILayoutManager* layoutManager);
     void setAutotileEngine(class AutotileEngine* engine);
+    void setWindowTrackingService(WindowTrackingService* service);
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
@@ -131,6 +133,19 @@ private:
     QVariantList buildLayoutsList() const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
+    /**
+     * @brief Build window context for OSD display
+     * @param zones List of zones (from buildZonesList)
+     * @param windowCounts Output: window count per zone index
+     * @param windowAppNames Output: app names per zone (list of string lists)
+     * @param activeWindowZoneIndex Output: index of zone with active window (-1 if none)
+     *
+     * Queries WindowTrackingService to get window counts per zone and find which
+     * zone contains the currently active/focused window.
+     */
+    void buildWindowContext(const QVariantList& zones, QVariantList& windowCounts,
+                            QVariantList& windowAppNames, int& activeWindowZoneIndex) const;
+
     std::unique_ptr<QQmlEngine> m_engine;
     QHash<QScreen*, QQuickWindow*> m_overlayWindows;
     QHash<QScreen*, QQuickWindow*> m_zoneSelectorWindows;
@@ -138,6 +153,7 @@ private:
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
     class AutotileEngine* m_autotileEngine = nullptr;
+    WindowTrackingService* m_windowTrackingService = nullptr;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;

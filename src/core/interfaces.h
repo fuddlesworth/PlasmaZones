@@ -158,6 +158,7 @@ Q_SIGNALS:
     void showZoneShortcutsInOsdChanged();
     void showContextHintsInOsdChanged();
     void osdWindowCountThresholdChanged();
+    void showWindowTitlesInOsdChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();
     void inactiveColorChanged();

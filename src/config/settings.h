@@ -54,6 +54,8 @@ class PLASMAZONES_EXPORT Settings : public ISettings
                    showContextHintsInOsdChanged)
     Q_PROPERTY(int osdWindowCountThreshold READ osdWindowCountThreshold WRITE setOsdWindowCountThreshold NOTIFY
                    osdWindowCountThresholdChanged)
+    Q_PROPERTY(bool showWindowTitlesInOsd READ showWindowTitlesInOsd WRITE setShowWindowTitlesInOsd NOTIFY
+                   showWindowTitlesInOsdChanged)
 
     // Appearance (ricer-friendly)
     Q_PROPERTY(bool useSystemColors READ useSystemColors WRITE setUseSystemColors NOTIFY useSystemColorsChanged)
@@ -380,6 +382,12 @@ public:
         return m_osdWindowCountThreshold;
     }
     void setOsdWindowCountThreshold(int threshold) override;
+
+    bool showWindowTitlesInOsd() const override
+    {
+        return m_showWindowTitlesInOsd;
+    }
+    void setShowWindowTitlesInOsd(bool show) override;
 
     bool useSystemColors() const override
     {
@@ -1006,6 +1014,7 @@ private:
     bool m_showZoneShortcutsInOsd = true;
     bool m_showContextHintsInOsd = true;
     int m_osdWindowCountThreshold = 1;
+    bool m_showWindowTitlesInOsd = true;
 
     // Appearance
     bool m_useSystemColors = true;

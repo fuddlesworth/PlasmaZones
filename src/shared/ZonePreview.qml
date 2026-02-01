@@ -62,10 +62,14 @@ Item {
     property bool highlightAllZones: false
     /// Array of window counts per zone (e.g., [0, 2, 1, 3])
     property var windowCounts: []
+    /// Array of app names per zone (e.g., [["Firefox"], ["Dolphin", "Kate"]])
+    property var windowAppNames: []
     /// Index of the zone containing the active/focused window (-1 for none)
     property int activeWindowZoneIndex: -1
     /// Minimum window count to show a badge (default: show when > 1 window)
     property int windowCountThreshold: 1
+    /// Whether to show app names in zone badges
+    property bool showWindowTitles: true
     /// Whether to show zone shortcut labels (Meta+1, Meta+2, etc.)
     property bool showShortcutLabels: false
     /// Zone fill opacity when not active/hovered
@@ -114,6 +118,8 @@ Item {
             property bool isActiveWindowZone: root.activeWindowZoneIndex === index
             // Get window count for this zone
             property int zoneWindowCount: root.windowCounts[index] || 0
+            // Get app names for this zone
+            property var zoneAppNames: root.windowAppNames[index] || []
 
             // Accessibility for each zone
             Accessible.role: root.interactive ? Accessible.Button : Accessible.Graphic
@@ -125,7 +131,8 @@ Item {
                     return i18n("Zone %1, empty", index + 1)
                 }
                 if (zoneWindowCount === 1) {
-                    return i18n("Zone %1, 1 window", index + 1)
+                    const appName = zoneAppNames.length > 0 ? zoneAppNames[0] : ""
+                    return appName ? i18n("Zone %1, %2", index + 1, appName) : i18n("Zone %1, 1 window", index + 1)
                 }
                 return i18n("Zone %1, %2 windows", index + 1, zoneWindowCount)
             }
@@ -195,19 +202,62 @@ Item {
                 anchors.top: parent.top
                 anchors.right: parent.right
                 anchors.margins: Kirigami.Units.smallSpacing / 2
-                width: badgeLabel.width + Kirigami.Units.smallSpacing * 1.5
-                height: badgeLabel.height + Kirigami.Units.smallSpacing
-                radius: height / 2
+                width: badgeContent.width + Kirigami.Units.smallSpacing * 1.5
+                height: badgeContent.height + Kirigami.Units.smallSpacing
+                radius: root.showWindowTitles ? Kirigami.Units.smallSpacing : height / 2
                 color: Kirigami.Theme.highlightColor
                 visible: zoneRect.zoneWindowCount > root.windowCountThreshold && parent.width >= 24
 
-                Label {
-                    id: badgeLabel
+                Column {
+                    id: badgeContent
                     anchors.centerIn: parent
-                    text: zoneRect.zoneWindowCount
-                    font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 2, Math.min(parent.parent.width, parent.parent.height) * 0.18)
-                    font.bold: true
-                    color: Kirigami.Theme.highlightedTextColor
+                    spacing: 0
+
+                    // Maximum app names to show before truncating
+                    readonly property int maxAppNames: 3
+
+                    // Show app names list when enabled (limited to maxAppNames), otherwise just count
+                    Repeater {
+                        model: root.showWindowTitles ? zoneRect.zoneAppNames.slice(0, badgeContent.maxAppNames) : []
+                        Label {
+                            required property string modelData
+                            text: modelData
+                            font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 1.5, Math.min(zoneRect.width, zoneRect.height) * 0.12)
+                            font.bold: true
+                            color: Kirigami.Theme.highlightedTextColor
+                            elide: Text.ElideRight
+                            width: Math.min(implicitWidth, zoneRect.width * 0.6)
+
+                            Accessible.role: Accessible.StaticText
+                            Accessible.name: modelData
+                        }
+                    }
+
+                    // Overflow indicator when more apps than maxAppNames
+                    Label {
+                        visible: root.showWindowTitles && zoneRect.zoneAppNames.length > badgeContent.maxAppNames
+                        text: i18n("+%1 more", zoneRect.zoneAppNames.length - badgeContent.maxAppNames)
+                        font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 1.25, Math.min(zoneRect.width, zoneRect.height) * 0.10)
+                        font.italic: true
+                        color: Kirigami.Theme.highlightedTextColor
+                        opacity: 0.8
+
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: i18n("%1 more applications", zoneRect.zoneAppNames.length - badgeContent.maxAppNames)
+                    }
+
+                    // Fallback: show count when not showing titles or no app names
+                    Label {
+                        id: badgeLabel
+                        text: zoneRect.zoneWindowCount
+                        font.pixelSize: Math.max(Kirigami.Units.smallSpacing * 2, Math.min(zoneRect.width, zoneRect.height) * 0.18)
+                        font.bold: true
+                        color: Kirigami.Theme.highlightedTextColor
+                        visible: !root.showWindowTitles || zoneRect.zoneAppNames.length === 0
+
+                        Accessible.role: Accessible.StaticText
+                        Accessible.name: i18n("%1 windows in zone", zoneRect.zoneWindowCount)
+                    }
                 }
 
                 Behavior on opacity {

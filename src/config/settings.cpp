@@ -232,6 +232,15 @@ void Settings::setOsdWindowCountThreshold(int threshold)
     }
 }
 
+void Settings::setShowWindowTitlesInOsd(bool show)
+{
+    if (m_showWindowTitlesInOsd != show) {
+        m_showWindowTitlesInOsd = show;
+        Q_EMIT showWindowTitlesInOsdChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setUseSystemColors(bool use)
 {
     if (m_useSystemColors != use) {
@@ -752,6 +761,7 @@ void Settings::load()
     m_showZoneShortcutsInOsd = display.readEntry(QLatin1String("ShowZoneShortcutsInOsd"), ConfigDefaults::showZoneShortcutsInOsd());
     m_showContextHintsInOsd = display.readEntry(QLatin1String("ShowContextHintsInOsd"), ConfigDefaults::showContextHintsInOsd());
     m_osdWindowCountThreshold = readValidatedInt(display, "OsdWindowCountThreshold", ConfigDefaults::osdWindowCountThreshold(), 1, 10, "OSD window count threshold");
+    m_showWindowTitlesInOsd = display.readEntry(QLatin1String("ShowWindowTitlesInOsd"), ConfigDefaults::showWindowTitlesInOsd());
 
     // Appearance with validation (defaults from .kcfg via ConfigDefaults)
     m_useSystemColors = appearance.readEntry(QLatin1String("UseSystemColors"), ConfigDefaults::useSystemColors());
@@ -1021,6 +1031,7 @@ void Settings::save()
     display.writeEntry(QLatin1String("ShowZoneShortcutsInOsd"), m_showZoneShortcutsInOsd);
     display.writeEntry(QLatin1String("ShowContextHintsInOsd"), m_showContextHintsInOsd);
     display.writeEntry(QLatin1String("OsdWindowCountThreshold"), m_osdWindowCountThreshold);
+    display.writeEntry(QLatin1String("ShowWindowTitlesInOsd"), m_showWindowTitlesInOsd);
 
     // Appearance
     appearance.writeEntry(QLatin1String("UseSystemColors"), m_useSystemColors);

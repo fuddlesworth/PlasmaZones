@@ -76,6 +76,8 @@ public:
     virtual void setShowContextHintsInOsd(bool show) = 0;
     virtual int osdWindowCountThreshold() const = 0;
     virtual void setOsdWindowCountThreshold(int threshold) = 0;
+    virtual bool showWindowTitlesInOsd() const = 0;
+    virtual void setShowWindowTitlesInOsd(bool show) = 0;
 
     // Appearance settings
     virtual bool useSystemColors() const = 0;

@@ -53,6 +53,7 @@ public:
     static bool showZoneShortcutsInOsd() { return instance().defaultShowZoneShortcutsInOsdValue(); }
     static bool showContextHintsInOsd() { return instance().defaultShowContextHintsInOsdValue(); }
     static int osdWindowCountThreshold() { return instance().defaultOsdWindowCountThresholdValue(); }
+    static bool showWindowTitlesInOsd() { return instance().defaultShowWindowTitlesInOsdValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Appearance Settings

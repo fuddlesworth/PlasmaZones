@@ -32,8 +32,17 @@ Window {
     // Window counts per zone (for badge display)
     property var windowCounts: []
 
+    // App names per zone (list of string lists)
+    property var windowAppNames: []
+
     // Active window's zone index (-1 for none)
     property int activeWindowZoneIndex: -1
+
+    // Minimum window count to show badge (default: show when > 1 window)
+    property int windowCountThreshold: 1
+
+    // Whether to show app names in zone badges
+    property bool showWindowTitles: true
 
     // Whether to show zone shortcut labels
     property bool showZoneShortcuts: true
@@ -225,7 +234,10 @@ Window {
                 animationDuration: 150
                 // OSD enhancement properties
                 windowCounts: root.windowCounts
+                windowAppNames: root.windowAppNames
                 activeWindowZoneIndex: root.activeWindowZoneIndex
+                windowCountThreshold: root.windowCountThreshold
+                showWindowTitles: root.showWindowTitles
                 showShortcutLabels: root.showZoneShortcuts
             }
 

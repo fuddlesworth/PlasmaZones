@@ -210,6 +210,9 @@ bool Daemon::init()
     // Overlay needs autotile state to show correct active layout in zone selector
     m_overlayService->setAutotileEngine(m_autotileEngine.get());
 
+    // Overlay needs window tracking for window context in OSD (Phase 2 enhancements)
+    m_overlayService->setWindowTrackingService(m_windowTrackingService.get());
+
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {

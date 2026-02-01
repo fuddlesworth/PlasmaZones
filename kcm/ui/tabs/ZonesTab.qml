@@ -350,6 +350,13 @@ ScrollView {
                         enabled: osdStyleCombo.currentIndex === 1 && (showOsdCheckbox.checked || kcm.showNavigationOsd)
                     }
 
+                    CheckBox {
+                        text: i18n("Show app names in zone badges")
+                        checked: kcm.showWindowTitlesInOsd
+                        onToggled: kcm.showWindowTitlesInOsd = checked
+                        enabled: osdStyleCombo.currentIndex === 1 && (showOsdCheckbox.checked || kcm.showNavigationOsd)
+                    }
+
                     SpinBox {
                         Kirigami.FormData.label: i18n("Window count badges:")
                         from: 1

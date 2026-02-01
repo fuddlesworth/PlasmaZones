@@ -196,6 +196,10 @@ int KCMPlasmaZones::osdWindowCountThreshold() const
 {
     return m_settings->osdWindowCountThreshold();
 }
+bool KCMPlasmaZones::showWindowTitlesInOsd() const
+{
+    return m_settings->showWindowTitlesInOsd();
+}
 
 // Appearance getters
 bool KCMPlasmaZones::useSystemColors() const
@@ -569,6 +573,14 @@ void KCMPlasmaZones::setOsdWindowCountThreshold(int threshold)
     if (m_settings->osdWindowCountThreshold() != threshold) {
         m_settings->setOsdWindowCountThreshold(threshold);
         Q_EMIT osdWindowCountThresholdChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setShowWindowTitlesInOsd(bool show)
+{
+    if (m_settings->showWindowTitlesInOsd() != show) {
+        m_settings->setShowWindowTitlesInOsd(show);
+        Q_EMIT showWindowTitlesInOsdChanged();
         setNeedsSave(true);
     }
 }

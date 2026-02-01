@@ -67,6 +67,8 @@ class KCMPlasmaZones : public KQuickConfigModule
                    showContextHintsInOsdChanged)
     Q_PROPERTY(int osdWindowCountThreshold READ osdWindowCountThreshold WRITE setOsdWindowCountThreshold NOTIFY
                    osdWindowCountThresholdChanged)
+    Q_PROPERTY(bool showWindowTitlesInOsd READ showWindowTitlesInOsd WRITE setShowWindowTitlesInOsd NOTIFY
+                   showWindowTitlesInOsdChanged)
 
     // Appearance
     Q_PROPERTY(bool useSystemColors READ useSystemColors WRITE setUseSystemColors NOTIFY useSystemColorsChanged)
@@ -204,6 +206,7 @@ public:
     bool showZoneShortcutsInOsd() const;
     bool showContextHintsInOsd() const;
     int osdWindowCountThreshold() const;
+    bool showWindowTitlesInOsd() const;
     bool useSystemColors() const;
     QColor highlightColor() const;
     QColor inactiveColor() const;
@@ -284,6 +287,7 @@ public:
     void setShowZoneShortcutsInOsd(bool show);
     void setShowContextHintsInOsd(bool show);
     void setOsdWindowCountThreshold(int threshold);
+    void setShowWindowTitlesInOsd(bool show);
     void setUseSystemColors(bool use);
     void setHighlightColor(const QColor& color);
     void setInactiveColor(const QColor& color);
@@ -409,6 +413,7 @@ Q_SIGNALS:
     void showZoneShortcutsInOsdChanged();
     void showContextHintsInOsdChanged();
     void osdWindowCountThresholdChanged();
+    void showWindowTitlesInOsdChanged();
     void useSystemColorsChanged();
     void highlightColorChanged();
     void inactiveColorChanged();

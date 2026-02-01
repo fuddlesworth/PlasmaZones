@@ -92,6 +92,10 @@
       <min>1</min>
       <max>10</max>
     </entry>
+    <entry name="ShowWindowTitlesInOsd" type="Bool">
+      <label>Show app names in OSD zone badges when multiple windows are present</label>
+      <default>true</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
