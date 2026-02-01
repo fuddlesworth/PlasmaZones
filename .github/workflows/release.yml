@@ -30,56 +30,15 @@ jobs:
           echo "Version: $VERSION"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (KDE Neon - Ubuntu with KF6)
+  # Debian Package Build - DISABLED
   # ═══════════════════════════════════════════════════════════════════════════
-  # Note: Standard Ubuntu 24.04 ships with KDE5. KDE Neon provides KDE6/KF6.
-  build-deb:
-    name: Build .deb (KDE Neon)
-    needs: version
-    runs-on: ubuntu-latest
-    container:
-      image: invent-registry.kde.org/neon/docker-images/plasma:unstable
-
-    steps:
-      - name: Install prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            git ca-certificates
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        run: |
-          sudo apt-get install -y --no-install-recommends \
-            cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
-            devscripts debhelper fakeroot dpkg-dev \
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev \
-            kwin-dev libwayland-dev libepoxy-dev libdrm-dev \
-            libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
-            libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
-            libkf6windowsystem-dev libkf6globalaccel-dev \
-            libkf6notifications-dev libkf6colorscheme-dev \
-            layer-shell-qt-dev libplasma-activities-dev
-
-      - name: Update changelog version
-        run: |
-          VERSION="${{ needs.version.outputs.version }}"
-          sed -i "1s/([^)]*)/($VERSION-1)/" debian/changelog
-
-      - name: Build Debian package
-        run: |
-          dpkg-buildpackage -us -uc -b
-          mkdir -p dist
-          mv ../*.deb dist/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: deb-ubuntu-24.04
-          path: dist/*.deb
-          retention-days: 30
+  # Note: Ubuntu 24.04 LTS ships with KDE5, not KDE6. KDE Neon has different
+  # package names. Debian/Ubuntu users should build from source using the
+  # debian/ directory until KF6 is available in standard repos (Ubuntu 25.04+).
+  #
+  # To build manually:
+  #   dpkg-buildpackage -us -uc -b
+  #   sudo dpkg -i ../plasmazones_*.deb
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Build RPM Package
@@ -258,7 +217,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-deb, build-rpm, build-arch]
+    needs: [version, build-rpm, build-arch]
     runs-on: ubuntu-latest
 
     steps:
@@ -294,10 +253,12 @@ jobs:
           sudo pacman -U plasmazones-${{ needs.version.outputs.version }}-1-x86_64.pkg.tar.zst
           ```
 
-          **Ubuntu/Debian:**
+          **Ubuntu/Debian (build from source):**
           ```bash
-          sudo dpkg -i plasmazones_${{ needs.version.outputs.version }}-1_amd64.deb
-          sudo apt-get install -f  # Install dependencies if needed
+          # Requires Ubuntu 25.04+ or KDE Neon for KF6 packages
+          git clone https://github.com/fuddlesworth/PlasmaZones
+          cd PlasmaZones && dpkg-buildpackage -us -uc -b
+          sudo dpkg -i ../plasmazones_*.deb
           ```
 
           **Fedora:**
@@ -334,7 +295,6 @@ jobs:
           draft: false
           prerelease: ${{ contains(needs.version.outputs.version, 'alpha') || contains(needs.version.outputs.version, 'beta') || contains(needs.version.outputs.version, 'rc') }}
           files: |
-            artifacts/**/*.deb
             artifacts/**/*.rpm
             artifacts/**/*.pkg.tar.zst
           generate_release_notes: false
