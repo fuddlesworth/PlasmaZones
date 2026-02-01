@@ -13,14 +13,14 @@ usr/lib/*/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones.so
 
 # QML modules
 usr/lib/*/qt6/qml/org/kde/kcms/plasmazones/
-usr/lib/*/qt6/qml/org/plasmazones/
 
 # D-Bus interfaces
 usr/share/dbus-1/interfaces/org.plasmazones.*.xml
 
 # Desktop files
-usr/share/applications/org.kde.plasmazones-editor.desktop
-usr/share/kservices6/kcm_plasmazones.desktop
+usr/share/applications/org.plasmazones.editor.desktop
+usr/share/applications/org.plasmazones.daemon.desktop
+usr/share/applications/kcm_plasmazones.desktop
 
 # Data files
 usr/share/plasmazones/
@@ -31,9 +31,6 @@ usr/share/icons/hicolor-light/scalable/apps/plasmazones*.svg
 
 # KConfig
 usr/share/config.kcfg/plasmazones.kcfg
-
-# Notifications
-usr/share/knotifications6/plasmazones.notifyrc
 
 # Systemd user service
 usr/lib/systemd/user/plasmazones.service
