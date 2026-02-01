@@ -12,14 +12,14 @@ on:
 
 jobs:
   # ═══════════════════════════════════════════════════════════════════════════
-  # Ubuntu 24.10 Build (has KDE Plasma 6 / KF6)
+  # Ubuntu 25.10 Build (has KDE Plasma 6 / KF6)
   # ═══════════════════════════════════════════════════════════════════════════
-  # Note: Ubuntu 24.04 LTS ships with KDE5. Ubuntu 24.10+ has KF6 in official repos.
+  # Note: Ubuntu 24.04 LTS ships with KDE5. Ubuntu 25.10+ has KF6 in official repos.
   build-ubuntu:
-    name: Ubuntu 24.10 (Oracular)
+    name: Ubuntu 25.10 (Questing)
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:oracular
+      image: ubuntu:questing
 
     steps:
       - name: Install prerequisites

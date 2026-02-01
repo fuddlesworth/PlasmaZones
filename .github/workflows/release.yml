@@ -30,14 +30,14 @@ jobs:
           echo "Version: $VERSION"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (Ubuntu 24.10 - has KF6)
+  # Build Debian Package (Ubuntu 25.10 - has KF6)
   # ═══════════════════════════════════════════════════════════════════════════
   build-deb:
-    name: Build .deb (Ubuntu 24.10)
+    name: Build .deb (Ubuntu 25.10)
     needs: version
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:oracular
+      image: ubuntu:questing
 
     steps:
       - name: Install prerequisites
@@ -75,7 +75,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: deb-ubuntu-24.10
+          name: deb-ubuntu-25.10
           path: dist/*.deb
           retention-days: 30
 
@@ -292,7 +292,7 @@ jobs:
           sudo pacman -U plasmazones-${{ needs.version.outputs.version }}-1-x86_64.pkg.tar.zst
           ```
 
-          **Ubuntu/Debian (24.10+):**
+          **Ubuntu/Debian (25.10+):**
           ```bash
           sudo dpkg -i plasmazones_${{ needs.version.outputs.version }}-1_amd64.deb
           sudo apt-get install -f  # Install dependencies if needed
