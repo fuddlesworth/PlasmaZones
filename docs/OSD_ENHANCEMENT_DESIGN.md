@@ -32,11 +32,12 @@ This document proposes a phased enhancement plan to transform the OSD from a pas
 | Issue | Impact |
 |-------|--------|
 | **No window context** | Users can't see which windows are in which zones |
-| **No interaction** | OSD is display-only; users must use keyboard commands |
 | **No guidance** | New users don't learn shortcuts from the OSD |
 | **No state awareness** | Can't tell which zone is active or has focus |
-| **Covers active work** | Fixed center positioning may obscure important content |
 | **Stacked windows invisible** | No indication when zones contain multiple windows |
+
+**Note:** Interactive zone selection is handled by the Zone Selector (shown during drag).
+The OSD is purely for visual feedback after actions.
 
 ### User Pain Points
 
@@ -52,10 +53,11 @@ This document proposes a phased enhancement plan to transform the OSD from a pas
 1. **Informative**: Show window state, not just zone geometry
 2. **Educational**: Teach shortcuts through contextual hints
 3. **Responsive**: Reflect actual window positions in real-time
-4. **Non-intrusive**: Smart positioning to avoid covering active work
-5. **Optionally Interactive**: Allow click-to-move for mouse users
-6. **Accessible**: Screen reader support, high contrast, keyboard dismissal
-7. **Performant**: No perceptible lag; smooth animations
+4. **Accessible**: Screen reader support, high contrast, keyboard dismissal
+5. **Performant**: No perceptible lag; smooth animations
+
+**Note:** Interactive zone selection is handled by the Zone Selector component.
+The OSD focuses purely on visual feedback.
 
 ---
 
@@ -207,63 +209,6 @@ Show miniature window previews in each zone.
 - Add setting to enable/disable (performance consideration)
 - Fallback to app icon if thumbnail unavailable
 
-#### 4.2.3 Smart OSD Positioning
-
-Position OSD to avoid covering the active window.
-
-**Algorithm:**
-1. Get active window geometry
-2. Calculate available quadrants (top-left, top-right, bottom-left, bottom-right)
-3. Choose quadrant with most available space
-4. If all quadrants overlap, use center with reduced opacity
-
-```
-┌────────────────────────────────────────┐
-│                                        │
-│   ┌─────────┐                          │
-│   │   OSD   │    ┌──────────────────┐  │
-│   └─────────┘    │  Active Window   │  │
-│                  │                  │  │
-│                  └──────────────────┘  │
-│                                        │
-└────────────────────────────────────────┘
-      ↑ OSD moves to avoid active window
-```
-
-**Implementation:**
-- Add `smartPositioning` setting (default: true)
-- OverlayService calculates position before showing
-- Pass `osdX`, `osdY` properties to QML
-- Smooth animation when position changes
-
-#### 4.2.4 Clickable Zones (Interactive Mode)
-
-Allow clicking a zone to move the active window there.
-
-```
-┌─────────────────────────────────────┐
-│  Click a zone to move window there  │  ← Header instruction
-├─────────┬─────────┬─────────────────┤
-│    1    │    2    │                 │
-│  hover  │         │       3         │
-│ [glow]  │         │                 │
-├─────────┴─────────┤                 │
-│         4         │                 │
-└───────────────────┴─────────────────┘
-```
-
-**Implementation:**
-- Add `interactive` boolean property
-- Enable MouseArea on each zone in ZonePreview
-- Hover effect: slight scale (1.05x) + highlight border
-- On click: call `snapWindowToZone(zoneIndex)` via D-Bus
-- Dismiss OSD after successful snap
-- Add "Click to move" header text when interactive
-
-**Activation:**
-- Hold Meta key while OSD is showing, OR
-- New shortcut (e.g., Meta+Shift+Space) for "interactive layout OSD"
-
 ---
 
 ### 4.3 Phase 3: Advanced Features (Higher Effort)
@@ -288,46 +233,7 @@ Frame 1:              Frame 2:              Frame 3:
 - Duration: 200-300ms
 - Only for move/swap/push actions
 
-#### 4.3.2 Quick Undo Action
-
-Show last action with undo button.
-
-```
-┌─────────────────────────────────┐
-│  ← Moved to Zone 2              │
-│  ─────────────────────────────  │
-│  [Undo]  [Dismiss]              │  ← Clickable buttons
-└─────────────────────────────────┘
-```
-
-**Implementation:**
-- Track last navigation action in WindowTrackingAdaptor
-- Add "Undo" button to Navigation OSD
-- Undo restores window to previous zone
-- Undo available for: move, swap, push, snap
-- Clear undo state after 10 seconds or next action
-
-#### 4.3.3 Zone Hover Expansion (Stacked Windows)
-
-Hover a zone to see all stacked windows.
-
-```
-Normal:                     On Hover over Zone 2:
-┌─────────┬─────────┐      ┌─────────┬─────────────────┐
-│    1    │  2 ⬡3   │  →   │    1    │ VS Code         │
-├─────────┼─────────┤      ├─────────┤ Terminal        │
-│    3    │    4    │      │    3    │ Firefox         │
-└─────────┴─────────┘      └─────────┴─────────────────┘
-                                       ↑ Expanded list
-```
-
-**Implementation:**
-- Add hover delay (300ms) before expansion
-- Show scrollable list if > 5 windows
-- Click window title to focus it
-- Keyboard navigation within expanded list
-
-#### 4.3.4 Multi-Monitor Layout Overview
+#### 4.3.2 Multi-Monitor Layout Overview
 
 Show layouts across all monitors in a unified view.
 
@@ -410,65 +316,6 @@ Failure State:
 └────────────────────────────────┘
 ```
 
-### 5.3 Interactive OSD
-
-```
-┌─────────────────────────────────────────┐
-│  Click a zone to move "Firefox" there   │  ← i18n("Click a zone to move \"%1\" there", windowTitle)
-│                                         │
-│   ┌──────────┬──────────┬──────────┐   │
-│   │          │          │          │   │
-│   │    1     │    2     │          │   │
-│   │  [hover] │          │    3     │   │
-│   ├──────────┴──────────┤          │   │
-│   │                     │          │   │
-│   │         4           │          │   │
-│   │                     │          │   │
-│   └─────────────────────┴──────────┘   │
-│                                         │
-│   Press Escape to cancel                │  ← i18n("Press Escape to cancel")
-│                                         │
-└─────────────────────────────────────────┘
-
-Zone Hover State (all colors from Kirigami.Theme):
-  - Border: 2px Kirigami.Theme.highlightColor
-  - Background: Kirigami.Theme.highlightColor with Qt.alpha(color, 0.2)
-  - Scale: 1.02x
-  - Cursor: Qt.PointingHandCursor
-```
-
-**QML Implementation:**
-```qml
-// Header text
-Label {
-    text: i18n("Click a zone to move \"%1\" there", activeWindowTitle)
-    color: Kirigami.Theme.textColor
-}
-
-// Zone hover effect
-Rectangle {
-    id: zoneRect
-    color: hovered ? Qt.alpha(Kirigami.Theme.highlightColor, 0.2)
-                   : "transparent"
-    border.color: hovered ? Kirigami.Theme.highlightColor
-                          : Kirigami.Theme.disabledTextColor
-    border.width: hovered ? 2 : 1
-
-    Behavior on color { ColorAnimation { duration: 150 } }
-    Behavior on border.color { ColorAnimation { duration: 150 } }
-
-    scale: hovered ? 1.02 : 1.0
-    Behavior on scale { NumberAnimation { duration: 150 } }
-}
-
-// Footer text
-Label {
-    text: i18n("Press Escape to cancel")
-    color: Kirigami.Theme.disabledTextColor
-    font: Kirigami.Theme.smallFont
-}
-```
-
 ---
 
 ## 6. Technical Implementation
@@ -486,7 +333,6 @@ Label {
                     ┌───────────▼─────────────┐
                     │   OverlayService        │
                     │   - buildZoneContext()  │
-                    │   - calculatePosition() │
                     │   - determineHint()     │
                     └───────────┬─────────────┘
                                 │
@@ -497,8 +343,6 @@ Label {
                     │   - activeZoneIndex     │
                     │   - windowCounts[]      │
                     │   - contextHint         │
-                    │   - interactive         │
-                    │   - osdPosition         │
                     └─────────────────────────┘
 ```
 
@@ -513,12 +357,6 @@ property int activeZoneIndex: -1        // Currently focused zone
 property bool showShortcuts: true       // Show Meta+N hints
 property bool showThumbnails: false     // Show window previews
 property var zoneWindows: []            // [{zone, title, windowId, isActive}]
-property bool interactive: false        // Enable click-to-snap
-
-// New signals (past-tense naming per .cursorrules)
-signal zoneClicked(int zoneIndex)       // Emitted when zone is clicked
-signal zoneHovered(int zoneIndex)       // Emitted when zone hover starts
-signal zoneHoverExited(int zoneIndex)   // Emitted when zone hover ends
 
 // Accessibility (required per .cursorrules)
 Accessible.role: Accessible.Graphic
@@ -528,11 +366,8 @@ Accessible.name: i18n("Zone layout preview")
 **Accessibility Requirements for Zone Items:**
 ```qml
 // Each zone Rectangle in the Repeater must have:
-Accessible.role: interactive ? Accessible.Button : Accessible.Graphic
+Accessible.role: Accessible.Graphic
 Accessible.name: {
-    if (interactive) {
-        return i18n("Zone %1. Click to move window here.", zoneIndex + 1)
-    }
     var count = windowCounts[zoneIndex] || 0
     if (count === 0) return i18n("Zone %1, empty", zoneIndex + 1)
     if (count === 1) return i18n("Zone %1, 1 window", zoneIndex + 1)
@@ -545,7 +380,6 @@ Accessible.name: {
 ```cpp
 // New methods (using Qt6 string literal conventions per .cursorrules)
 QVariantMap buildZoneContext(Layout* layout);
-QPoint calculateSmartPosition(QScreen* screen, const QRect& activeWindow);
 QString determineContextHint(const QString& action, bool success);
 
 // Enhanced showLayoutOsd
@@ -590,49 +424,6 @@ QVariantMap OverlayService::buildZoneContext(Layout* layout)
 }
 ```
 
-**LayerShellQt Positioning Constraint:**
-Smart positioning must work within LayerShellQt's anchor system. Instead of absolute
-positioning, use anchor combinations:
-- Default: Centered (no anchors, or all anchors with margins)
-- Avoid top-left window: Anchor to bottom-right
-- Avoid top-right window: Anchor to bottom-left
-- etc.
-
-```cpp
-void OverlayService::applySmartPositioning(QQuickWindow* osdWindow, const QRect& avoidRect)
-{
-    auto* layerShell = LayerShellQt::Window::get(osdWindow);
-    if (!layerShell) return;
-
-    // Determine which quadrant the active window is in
-    QScreen* screen = osdWindow->screen();
-    QPoint screenCenter = screen->geometry().center();
-    bool windowInTopHalf = avoidRect.center().y() < screenCenter.y();
-    bool windowInLeftHalf = avoidRect.center().x() < screenCenter.x();
-
-    // Position OSD in opposite quadrant
-    LayerShellQt::Window::Anchors anchors;
-    if (windowInTopHalf) {
-        anchors |= LayerShellQt::Window::AnchorBottom;
-    } else {
-        anchors |= LayerShellQt::Window::AnchorTop;
-    }
-    if (windowInLeftHalf) {
-        anchors |= LayerShellQt::Window::AnchorRight;
-    } else {
-        anchors |= LayerShellQt::Window::AnchorLeft;
-    }
-
-    layerShell->setAnchors(anchors);
-    layerShell->setMargins(QMargins(
-        Kirigami::Units::gridUnit() * 2,
-        Kirigami::Units::gridUnit() * 2,
-        Kirigami::Units::gridUnit() * 2,
-        Kirigami::Units::gridUnit() * 2
-    ));
-}
-```
-
 #### New Settings (Complete KConfigXT Workflow)
 
 **IMPORTANT**: Per .cursorrules, new settings MUST follow the complete workflow:
@@ -657,14 +448,6 @@ kcfg → configdefaults.h → interfaces.h → settings.h → settings.cpp
     <label>Show contextual action hints in OSD</label>
     <default>true</default>
   </entry>
-  <entry name="EnableInteractiveOsd" type="Bool">
-    <label>Enable click-to-snap in OSD</label>
-    <default>true</default>
-  </entry>
-  <entry name="EnableSmartOsdPositioning" type="Bool">
-    <label>Position OSD to avoid covering active window</label>
-    <default>true</default>
-  </entry>
   <entry name="OsdWindowCountThreshold" type="Int">
     <label>Minimum window count to show badge</label>
     <default>1</default>
@@ -681,8 +464,6 @@ static bool showWindowTitlesInOsd() { return instance().defaultShowWindowTitlesI
 static bool showWindowThumbnailsInOsd() { return instance().defaultShowWindowThumbnailsInOsdValue(); }
 static bool showZoneShortcutsInOsd() { return instance().defaultShowZoneShortcutsInOsdValue(); }
 static bool showContextHintsInOsd() { return instance().defaultShowContextHintsInOsdValue(); }
-static bool enableInteractiveOsd() { return instance().defaultEnableInteractiveOsdValue(); }
-static bool enableSmartOsdPositioning() { return instance().defaultEnableSmartOsdPositioningValue(); }
 static int osdWindowCountThreshold() { return instance().defaultOsdWindowCountThresholdValue(); }
 ```
 
@@ -693,8 +474,6 @@ Q_SIGNALS:
     void showWindowThumbnailsInOsdChanged();
     void showZoneShortcutsInOsdChanged();
     void showContextHintsInOsdChanged();
-    void enableInteractiveOsdChanged();
-    void enableSmartOsdPositioningChanged();
     void osdWindowCountThresholdChanged();
 ```
 
@@ -720,8 +499,6 @@ bool m_showWindowTitlesInOsd = true;
 bool m_showWindowThumbnailsInOsd = false;
 bool m_showZoneShortcutsInOsd = true;
 bool m_showContextHintsInOsd = true;
-bool m_enableInteractiveOsd = true;
-bool m_enableSmartOsdPositioning = true;
 int m_osdWindowCountThreshold = 1;
 ```
 
@@ -769,32 +546,22 @@ m_showWindowTitlesInOsd = ConfigDefaults::showWindowTitlesInOsd();
 |---------|----------------|
 | Screen reader | Add `Accessible.name` and `Accessible.role` to all elements |
 | High contrast | Respect `Kirigami.Theme` colors exclusively (no hardcoded colors) |
-| Keyboard dismiss | Add Escape key handler (requires focus mode) |
+| Keyboard dismiss | Escape key auto-dismisses OSD |
 | Reduced motion | Check `Kirigami.Units.longDuration` for animation prefs |
-| Focus indicators | Visible focus ring on interactive elements |
 
 **Required Accessible Properties per .cursorrules:**
 ```qml
-// Every interactive element MUST have:
-Accessible.role: Accessible.Button  // or appropriate role
-Accessible.name: i18n("Description for screen readers")
-
 // Zone preview container:
 Accessible.role: Accessible.Graphic
 Accessible.name: i18n("Layout preview showing %1 zones", zones.length)
 
-// Each clickable zone (when interactive):
-Accessible.role: Accessible.Button
-Accessible.name: i18n("Zone %1, click to move window", index + 1)
-Accessible.onPressAction: zoneClicked(index)
+// Each zone:
+Accessible.role: Accessible.Graphic
+Accessible.name: i18n("Zone %1, %2 windows", index + 1, windowCount)
 
 // Action hints:
 Accessible.role: Accessible.StaticText
 Accessible.name: contextHint  // Already i18n wrapped from C++
-
-// Dismiss button (if added):
-Accessible.role: Accessible.Button
-Accessible.name: i18n("Dismiss")
 ```
 
 ### 6.5 CMake Registration (CRITICAL)
@@ -839,10 +606,9 @@ Add new section to PlasmaZones KCM:
 │ ┌─────────────────────────────────────────────────┐│
 │ │ ☑ Show OSD when switching layouts               ││
 │ │ ☑ Show window titles in zones                   ││
-│ │ ☐ Show window thumbnails (may affect performance)│
+│ │ ☐ Show window thumbnails (may affect performance)││
 │ │ ☑ Show zone shortcuts (Meta+1, Meta+2, etc.)    ││
 │ │ ☑ Show contextual hints                         ││
-│ │ ☑ Smart positioning (avoid active window)       ││
 │ │                                                 ││
 │ │ Display duration: [====●=====] 1.5s             ││
 │ └─────────────────────────────────────────────────┘│
@@ -851,15 +617,8 @@ Add new section to PlasmaZones KCM:
 │ ┌─────────────────────────────────────────────────┐│
 │ │ ☑ Show OSD for navigation actions               ││
 │ │ ☑ Show zone preview on success                  ││
-│ │ ☑ Show undo hint after moves                    ││
 │ │                                                 ││
 │ │ Display duration: [===●======] 1.0s             ││
-│ └─────────────────────────────────────────────────┘│
-│                                                     │
-│ Interactive Mode                                    │
-│ ┌─────────────────────────────────────────────────┐│
-│ │ ☑ Enable click-to-snap in OSD                   ││
-│ │ Activation: [Hold Meta ▼] while OSD is visible  ││
 │ └─────────────────────────────────────────────────┘│
 │                                                     │
 └─────────────────────────────────────────────────────┘
@@ -899,13 +658,12 @@ Add new section to PlasmaZones KCM:
 
 | Task | Files Modified |
 |------|----------------|
+| Wire windowCounts from WindowTracker | `src/daemon/overlayservice.cpp` |
+| Wire activeWindowZoneIndex from WindowTracker | `src/daemon/overlayservice.cpp` |
 | Add window-to-zone tracking | `src/daemon/windowtracker.cpp`, `src/daemon/windowtracker.h` |
 | Build zoneWindows context | `src/daemon/overlayservice.cpp`, `src/daemon/overlayservice.h` |
 | Add window titles to ZonePreview | `src/shared/ZonePreview.qml` |
 | Add window thumbnails (optional) | `src/shared/ZonePreview.qml` |
-| Implement smart positioning (LayerShellQt) | `src/daemon/overlayservice.cpp` |
-| Add interactive mode | `src/shared/ZonePreview.qml`, `src/ui/LayoutOsd.qml` |
-| Add click-to-snap D-Bus call | `src/daemon/overlayservice.cpp`, `src/dbus/windowtrackingadaptor.cpp` |
 | **Settings - Phase 2** (kcfg workflow) | All 5 config files |
 | Update KCM UI for new settings | `kcm/contents/ui/main.qml` |
 
@@ -914,17 +672,13 @@ Add new section to PlasmaZones KCM:
 **Settings to add in Phase 2:**
 - `ShowWindowTitlesInOsd` (bool, default: true)
 - `ShowWindowThumbnailsInOsd` (bool, default: false)
-- `EnableInteractiveOsd` (bool, default: true)
-- `EnableSmartOsdPositioning` (bool, default: true)
 
 ### Phase 3: Advanced Features
-**Estimated Scope: Large**
+**Estimated Scope: Medium**
 
 | Task | Files Modified |
 |------|----------------|
 | Animated movement preview | `src/ui/NavigationOsd.qml` |
-| Undo action support | `src/dbus/windowtrackingadaptor.cpp`, `src/ui/NavigationOsd.qml` |
-| Zone hover expansion | `src/shared/ZonePreview.qml` |
 | Multi-monitor overview | **New:** `src/ui/GlobalLayoutOsd.qml` |
 | **Register new QML in CMake** | `src/CMakeLists.txt` |
 
@@ -979,17 +733,15 @@ Before merging any OSD enhancement PR, verify:
 
 ## 10. Open Questions
 
-1. **Thumbnail performance**: Should thumbnails be opt-in only, or should we detect system capability?
+1. **Thumbnail performance**: Should thumbnails be opt-in only, or should we detect system capability and auto-disable on low-end hardware?
 
-2. **Interactive mode activation**: Hold Meta vs. dedicated shortcut vs. always-on?
+2. **Multi-monitor OSD**: When switching layouts, show OSD on all monitors simultaneously or just the active one?
 
-3. **Undo scope**: Should undo work across all navigation actions or just moves?
+3. **Animation duration**: Should movement preview animations match KWin's window animation speed setting, or use independent timing?
 
-4. **Multi-monitor OSD**: Show on all monitors simultaneously or just the active one?
+4. **Window title truncation**: How many characters before truncating? Should we use app name or window title (or both)?
 
-5. **Animation duration**: Should movement animations match KWin's window animation speed?
-
-6. **LayerShellQt anchoring**: Is quadrant-based positioning sufficient, or do we need pixel-precise placement (which may require different Wayland approach)?
+5. **Stacked window display**: When a zone has multiple windows, show just the count badge, or also list window names (space permitting)?
 
 ---
 
@@ -999,7 +751,6 @@ Before merging any OSD enhancement PR, verify:
 |--------|--------|
 | OSD provides actionable information | Users can identify window locations without switching |
 | Reduced shortcut learning curve | New users discover shortcuts from OSD hints |
-| Click-to-snap adoption | >30% of OSD interactions use click mode |
 | Performance impact | <5ms additional latency on OSD show |
 | User satisfaction | Positive feedback on enhanced OSD utility |
 
