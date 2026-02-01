@@ -1,0 +1,339 @@
+# PlasmaZones Release Pipeline
+# Builds distribution packages when a version tag is pushed
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Extract version from tag
+  # ═══════════════════════════════════════════════════════════════════════════
+  version:
+    name: Extract Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Build Debian Package
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-deb:
+    name: Build .deb (Ubuntu 24.04)
+    needs: version
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+
+    steps:
+      - name: Install prerequisites
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git ca-certificates sudo
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get install -y --no-install-recommends \
+            cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
+            devscripts debhelper fakeroot dpkg-dev \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev \
+            kwin-dev \
+            libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
+            libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
+            libkf6windowsystem-dev libkf6globalaccel-dev \
+            libkf6notifications-dev libkf6colorscheme-dev \
+            layer-shell-qt-dev libplasmaactivities-dev
+
+      - name: Update changelog version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "1s/([^)]*)/($VERSION-1)/" debian/changelog
+
+      - name: Build Debian package
+        run: |
+          dpkg-buildpackage -us -uc -b
+          mkdir -p dist
+          mv ../*.deb dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-ubuntu-24.04
+          path: dist/*.deb
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Build RPM Package
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-rpm:
+    name: Build .rpm (Fedora 41)
+    needs: version
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:41
+
+    steps:
+      - name: Install prerequisites
+        run: dnf install -y git rpm-build rpmdevtools
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            cmake ninja-build extra-cmake-modules gettext gcc-c++ \
+            qt6-qtbase-devel qt6-qtbase-private-devel \
+            qt6-qtdeclarative-devel qt6-qttools-devel \
+            kwin-devel \
+            kf6-kconfig-devel kf6-kconfigwidgets-devel \
+            kf6-kcoreaddons-devel kf6-kdbusaddons-devel \
+            kf6-ki18n-devel kf6-kcmutils-devel \
+            kf6-kwindowsystem-devel kf6-kglobalaccel-devel \
+            kf6-knotifications-devel kf6-kcolorscheme-devel \
+            layer-shell-qt-devel plasma-activities-devel
+
+      - name: Setup rpmbuild
+        run: rpmdev-setuptree
+
+      - name: Create source tarball
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          mkdir -p PlasmaZones-${VERSION}
+          # Copy source files (exclude .git and build artifacts)
+          tar --exclude='.git' --exclude='build' -cf - . | tar -xf - -C PlasmaZones-${VERSION}/
+          tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
+
+      - name: Update spec version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          sed -i "s/^Version:.*/Version:        $VERSION/" rpm/plasmazones.spec
+
+      - name: Build RPM
+        run: |
+          cp rpm/plasmazones.spec ~/rpmbuild/SPECS/
+          rpmbuild -bb ~/rpmbuild/SPECS/plasmazones.spec
+          mkdir -p dist
+          cp ~/rpmbuild/RPMS/*/*.rpm dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-fedora-41
+          path: dist/*.rpm
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Build Arch Package
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-arch:
+    name: Build .pkg.tar.zst (Arch)
+    needs: version
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Setup build environment
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm base-devel git sudo namcap
+
+          # Create non-root user (makepkg refuses to run as root)
+          useradd -m builder
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          pacman -S --noconfirm --needed \
+            cmake ninja extra-cmake-modules gettext \
+            qt6-base qt6-declarative qt6-tools \
+            kwin \
+            kconfig kconfigwidgets kcoreaddons kdbusaddons \
+            ki18n kcmutils kwindowsystem kglobalaccel \
+            knotifications kcolorscheme \
+            layer-shell-qt plasma-activities
+
+      - name: Prepare PKGBUILD
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          cd arch
+
+          # Update version in PKGBUILD
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+
+          # For CI, build from local source instead of downloading tarball
+          # Create a modified PKGBUILD that uses local source
+          cat > PKGBUILD.ci << 'PKGBUILD_EOF'
+          # CI Build - uses local source
+          pkgname=plasmazones
+          pkgver=${{ needs.version.outputs.version }}
+          pkgrel=1
+          pkgdesc="FancyZones-style window tiling for KDE Plasma"
+          arch=('x86_64')
+          url="https://github.com/fuddlesworth/PlasmaZones"
+          license=('GPL-3.0-or-later')
+          depends=(
+              'qt6-base' 'qt6-declarative'
+              'kconfig' 'kconfigwidgets' 'kcoreaddons' 'kdbusaddons'
+              'ki18n' 'kcmutils' 'kwindowsystem' 'kglobalaccel'
+              'knotifications' 'kcolorscheme' 'layer-shell-qt'
+          )
+          makedepends=('cmake' 'extra-cmake-modules' 'qt6-tools' 'ninja')
+          optdepends=('plasma-activities: activity-based layouts')
+          source=()
+          sha256sums=()
+          install=plasmazones.install
+
+          build() {
+              cd "$startdir/.."
+              cmake -B build -G Ninja \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DCMAKE_INSTALL_PREFIX=/usr \
+                  -DCMAKE_INSTALL_LIBDIR=lib \
+                  -DBUILD_TESTING=OFF \
+                  -Wno-dev
+              cmake --build build --parallel
+          }
+
+          package() {
+              cd "$startdir/.."
+              DESTDIR="$pkgdir" cmake --install build
+
+              # Install pacman hooks
+              install -Dm644 arch/kbuildsycoca.hook \
+                  "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
+              install -Dm755 arch/plasmazones-refresh-sycoca \
+                  "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
+          }
+          PKGBUILD_EOF
+
+      - name: Build package
+        run: |
+          chown -R builder:builder .
+          cd arch
+          su builder -c "makepkg -p PKGBUILD.ci -sf --noconfirm"
+
+      - name: Validate package
+        run: |
+          cd arch
+          namcap *.pkg.tar.zst || true
+
+      - name: Move artifacts
+        run: |
+          mkdir -p dist
+          mv arch/*.pkg.tar.zst dist/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: dist/*.pkg.tar.zst
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Create GitHub Release
+  # ═══════════════════════════════════════════════════════════════════════════
+  release:
+    name: Create GitHub Release
+    needs: [version, build-deb, build-rpm, build-arch]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+
+          # Get commits since last tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          cat > release_notes.md << 'NOTES_EOF'
+          ## PlasmaZones v${{ needs.version.outputs.version }}
+
+          ### Installation
+
+          **Arch Linux:**
+          ```bash
+          # Download and install
+          sudo pacman -U plasmazones-${{ needs.version.outputs.version }}-1-x86_64.pkg.tar.zst
+          ```
+
+          **Ubuntu/Debian:**
+          ```bash
+          sudo dpkg -i plasmazones_${{ needs.version.outputs.version }}-1_amd64.deb
+          sudo apt-get install -f  # Install dependencies if needed
+          ```
+
+          **Fedora:**
+          ```bash
+          sudo dnf install plasmazones-${{ needs.version.outputs.version }}-1.fc41.x86_64.rpm
+          ```
+
+          ### Post-Installation
+
+          ```bash
+          # Enable the daemon
+          systemctl --user enable --now plasmazones.service
+
+          # Open settings
+          systemsettings kcm_plasmazones
+          ```
+
+          ### Changes
+
+          NOTES_EOF
+
+          # Add commit log
+          if [ -n "$PREV_TAG" ]; then
+            git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD >> release_notes.md
+          else
+            git log --pretty=format:"- %s (%h)" -20 >> release_notes.md
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: PlasmaZones v${{ needs.version.outputs.version }}
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(needs.version.outputs.version, 'alpha') || contains(needs.version.outputs.version, 'beta') || contains(needs.version.outputs.version, 'rc') }}
+          files: |
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.pkg.tar.zst
+          generate_release_notes: false
