@@ -494,13 +494,48 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
         return a->zoneNumber() < b->zoneNumber();
     });
 
-    // Build window -> zone mapping for occupied zones
-    QVector<QPair<QString, int>> windowZoneIndices; // windowId, current zone index
+    // Build a map from zone ID (with and without braces) to zone index for flexible matching
+    QHash<QString, int> zoneIdToIndex;
     for (int i = 0; i < zones.size(); ++i) {
         QString zoneId = zones[i]->id().toString();
-        QStringList windows = windowsInZone(zoneId);
-        for (const QString& windowId : windows) {
-            windowZoneIndices.append({windowId, i});
+        zoneIdToIndex[zoneId] = i;
+        // Also add without braces for format-agnostic matching
+        QString withoutBraces = zones[i]->id().toString(QUuid::WithoutBraces);
+        if (withoutBraces != zoneId) {
+            zoneIdToIndex[withoutBraces] = i;
+        }
+    }
+
+    // Build window -> zone mapping for ALL snapped windows
+    // This handles windows that may have been restored with zone IDs that need format normalization
+    QVector<QPair<QString, int>> windowZoneIndices; // windowId, current zone index
+    for (auto it = m_windowZoneAssignments.constBegin();
+         it != m_windowZoneAssignments.constEnd(); ++it) {
+        QString storedZoneId = it.value();
+        int zoneIndex = -1;
+
+        // Try direct match first
+        if (zoneIdToIndex.contains(storedZoneId)) {
+            zoneIndex = zoneIdToIndex.value(storedZoneId);
+        } else {
+            // Try matching by parsing as UUID (handles format differences)
+            QUuid storedUuid = QUuid::fromString(storedZoneId);
+            if (!storedUuid.isNull()) {
+                // Search for matching zone by UUID
+                for (int i = 0; i < zones.size(); ++i) {
+                    if (zones[i]->id() == storedUuid) {
+                        zoneIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (zoneIndex >= 0) {
+            windowZoneIndices.append({it.key(), zoneIndex});
+        } else {
+            qCDebug(lcCore) << "Window" << it.key() << "has zone ID" << storedZoneId
+                           << "not found in active layout - skipping rotation";
         }
     }
 
