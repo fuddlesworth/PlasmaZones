@@ -192,15 +192,21 @@ std::optional<QRect> WindowTrackingService::validatedPreSnapGeometry(const QStri
 
 bool WindowTrackingService::isWindowFloating(const QString& windowId) const
 {
-    return m_floatingWindows.contains(windowId);
+    // Use stableId for consistent matching across sessions
+    // m_floatingWindows stores stableIds for persistence
+    QString stableId = Utils::extractStableId(windowId);
+    return m_floatingWindows.contains(stableId);
 }
 
 void WindowTrackingService::setWindowFloating(const QString& windowId, bool floating)
 {
+    // Use stableId for consistent matching across sessions
+    // This ensures floating state persists when windows are reopened
+    QString stableId = Utils::extractStableId(windowId);
     if (floating) {
-        m_floatingWindows.insert(windowId);
+        m_floatingWindows.insert(stableId);
     } else {
-        m_floatingWindows.remove(windowId);
+        m_floatingWindows.remove(stableId);
     }
     scheduleSaveState();
 }
@@ -312,6 +318,15 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
                                                                const QString& screenName,
                                                                bool isSticky) const
 {
+    QString stableId = Utils::extractStableId(windowId);
+
+    // Check if window was floating - floating windows should NOT be auto-snapped
+    // They should remain floating when reopened
+    if (m_floatingWindows.contains(stableId)) {
+        qCDebug(lcCore) << "Window" << stableId << "was floating - skipping session restore";
+        return SnapResult::noSnap();
+    }
+
     // Check sticky window handling
     if (isSticky && m_settings) {
         auto handling = m_settings->stickyWindowHandling();
@@ -319,8 +334,6 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
             return SnapResult::noSnap();
         }
     }
-
-    QString stableId = Utils::extractStableId(windowId);
 
     // Check for pending assignment
     if (!m_pendingZoneAssignments.contains(stableId)) {
@@ -512,7 +525,9 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
         // Skip floating windows - they should not participate in rotation
-        if (m_floatingWindows.contains(it.key())) {
+        // Use stableId for consistent matching (m_floatingWindows stores stableIds)
+        QString stableId = Utils::extractStableId(it.key());
+        if (m_floatingWindows.contains(stableId)) {
             qCDebug(lcCore) << "Window" << it.key() << "is floating - skipping rotation";
             continue;
         }
@@ -601,14 +616,16 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
 
 void WindowTrackingService::windowClosed(const QString& windowId)
 {
+    QString stableId = Utils::extractStableId(windowId);
+
     // Persist the zone assignment to pending BEFORE removing from active tracking.
     // This ensures the window can be restored to its zone when reopened.
     // BUT: Don't persist if the window is floating - floating windows should stay floating
     // and not be auto-snapped when reopened.
     QString zoneId = m_windowZoneAssignments.value(windowId);
-    bool isFloating = m_floatingWindows.contains(windowId);
+    // Use stableId for consistent floating check (m_floatingWindows stores stableIds)
+    bool isFloating = m_floatingWindows.contains(stableId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(QStringLiteral("zoneselector-")) && !isFloating) {
-        QString stableId = Utils::extractStableId(windowId);
         if (!stableId.isEmpty()) {
             m_pendingZoneAssignments[stableId] = zoneId;
 
@@ -633,17 +650,19 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         }
     }
 
-    // Now clean up active tracking state
+    // Now clean up active tracking state (but NOT floating state - that's keyed by stableId
+    // and should persist across window close/reopen cycles)
     m_windowZoneAssignments.remove(windowId);
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
     m_preSnapGeometries.remove(windowId);
-    m_floatingWindows.remove(windowId);
+    // NOTE: Don't remove from m_floatingWindows here - it's keyed by stableId and should
+    // persist so the window stays floating when reopened
     m_windowStickyStates.remove(windowId);
     m_autoSnappedWindows.remove(windowId);
 
-    QString stableId = Utils::extractStableId(windowId);
-    m_preFloatZoneAssignments.remove(stableId);
+    // NOTE: Keep m_preFloatZoneAssignments for the stableId so unfloating after reopen works
+    // m_preFloatZoneAssignments.remove(stableId);  // REMOVED - preserves pre-float zone
 
     scheduleSaveState();
 }

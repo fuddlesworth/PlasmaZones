@@ -927,13 +927,22 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
     // Note: Other last-used fields would need accessors in service
 
-    // Save floating windows
+    // Save floating windows (already stored as stableIds in service)
     QJsonArray floatingArray;
-    for (const QString& windowId : m_service->floatingWindows()) {
-        floatingArray.append(windowId);
+    for (const QString& stableId : m_service->floatingWindows()) {
+        floatingArray.append(stableId);
     }
     tracking.writeEntry(QStringLiteral("FloatingWindows"),
                         QString::fromUtf8(QJsonDocument(floatingArray).toJson(QJsonDocument::Compact)));
+
+    // Save pre-float zone assignments (for unfloating after session restore)
+    QJsonObject preFloatZonesObj;
+    for (auto it = m_service->preFloatZoneAssignments().constBegin();
+         it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
+        preFloatZonesObj[it.key()] = it.value();
+    }
+    tracking.writeEntry(QStringLiteral("PreFloatZoneAssignments"),
+                        QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
     // Save user-snapped classes
     QJsonArray userSnappedArray;
@@ -1041,6 +1050,22 @@ void WindowTrackingAdaptor::loadState()
         }
     }
     m_service->setFloatingWindows(floatingWindows);
+
+    // Load pre-float zone assignments (for unfloating after session restore)
+    QHash<QString, QString> preFloatZones;
+    QString preFloatJson = tracking.readEntry(QStringLiteral("PreFloatZoneAssignments"), QString());
+    if (!preFloatJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(preFloatJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isString()) {
+                    preFloatZones[it.key()] = it.value().toString();
+                }
+            }
+        }
+    }
+    m_service->setPreFloatZoneAssignments(preFloatZones);
 
     // Load user-snapped classes
     QSet<QString> userSnappedClasses;

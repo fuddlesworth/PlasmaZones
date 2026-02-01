@@ -576,11 +576,39 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
     m_floatingWindows.clear();
 
     for (const QString& windowId : floatingIds) {
+        // Daemon now stores stableIds directly, but handle both formats for safety
         QString stableId = m_effect->extractStableId(windowId);
         m_floatingWindows.insert(stableId);
     }
 
     qCDebug(lcEffect) << "Synced" << m_floatingWindows.size() << "floating windows from daemon";
+}
+
+void NavigationHandler::syncFloatingStateForWindow(const QString& stableId)
+{
+    if (stableId.isEmpty()) {
+        return;
+    }
+
+    auto* iface = m_effect->windowTrackingInterface();
+    if (!iface || !iface->isValid()) {
+        return;
+    }
+
+    // Query daemon for this specific window's floating state
+    // The daemon's isWindowFloating now accepts any windowId format
+    QDBusMessage reply = iface->call(QStringLiteral("queryWindowFloating"), stableId);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return;
+    }
+
+    bool isFloating = reply.arguments().at(0).toBool();
+    if (isFloating) {
+        m_floatingWindows.insert(stableId);
+        qCDebug(lcEffect) << "Synced floating state for window" << stableId << "- is floating";
+    } else {
+        m_floatingWindows.remove(stableId);
+    }
 }
 
 } // namespace PlasmaZones

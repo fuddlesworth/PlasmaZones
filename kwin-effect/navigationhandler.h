@@ -48,6 +48,7 @@ public:
     bool isWindowFloating(const QString& stableId) const;
     void setWindowFloating(const QString& stableId, bool floating);
     void syncFloatingWindowsFromDaemon();
+    void syncFloatingStateForWindow(const QString& stableId);
 
     // Access to floating set for effect
     const QSet<QString>& floatingWindows() const { return m_floatingWindows; }

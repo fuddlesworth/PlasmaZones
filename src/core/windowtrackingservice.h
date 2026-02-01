@@ -412,6 +412,16 @@ public:
      */
     void setFloatingWindows(const QSet<QString>& windows) { m_floatingWindows = windows; }
 
+    /**
+     * @brief Get pre-float zone assignments for persistence
+     */
+    const QHash<QString, QString>& preFloatZoneAssignments() const { return m_preFloatZoneAssignments; }
+
+    /**
+     * @brief Set pre-float zone assignments (loaded from KConfig by adaptor)
+     */
+    void setPreFloatZoneAssignments(const QHash<QString, QString>& assignments) { m_preFloatZoneAssignments = assignments; }
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a window's zone assignment changes

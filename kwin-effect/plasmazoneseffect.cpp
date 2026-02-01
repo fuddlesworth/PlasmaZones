@@ -308,6 +308,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // Phase 2.1: Notify daemon for autotiling (before auto-snap logic)
     notifyWindowAdded(w);
 
+    // Sync floating state for this window from daemon
+    // This ensures windows that were floating when closed remain floating when reopened
+    QString windowId = getWindowId(w);
+    QString stableId = extractStableId(windowId);
+    m_navigationHandler->syncFloatingStateForWindow(stableId);
+
     // Check if we should auto-snap new windows to last used zone
     // Use stricter filter - only normal application windows, NOT dialogs/utilities
     if (shouldAutoSnapWindow(w) && !w->isMinimized()) {
@@ -342,10 +348,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Delegate to helpers
     m_dragTracker->handleWindowClosed(w);
 
-    // Clean up floating window tracking using stable ID
-    QString windowId = getWindowId(w);
-    QString stableId = extractStableId(windowId);
-    m_navigationHandler->setWindowFloating(stableId, false);
+    // NOTE: Don't clear floating state here - it should persist across window close/reopen
+    // The daemon preserves floating state (keyed by stableId) so the window stays floating
+    // when reopened. The effect's local cache will be synced in slotWindowAdded().
 
     // Clean up any pending autotile animations
     m_windowAnimator->removeAnimation(w);
