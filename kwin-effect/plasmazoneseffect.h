@@ -72,6 +72,7 @@ private Q_SLOTS:
     // Phase 2.3: Autotile geometry and focus handlers
     void slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height);
     void slotAutotileFocusWindowRequested(const QString& windowId);
+    void slotAutotileEnabledChanged(bool enabled);
 
     // Phase 1 Keyboard Navigation handlers
     void slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);

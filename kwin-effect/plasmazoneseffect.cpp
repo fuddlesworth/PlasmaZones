@@ -1391,7 +1391,30 @@ void PlasmaZonesEffect::connectAutotileSignals()
         QStringLiteral("focusWindowRequested"), this,
         SLOT(slotAutotileFocusWindowRequested(QString)));
 
+    // Connect to enabledChanged to register existing windows when autotiling is enabled
+    QDBusConnection::sessionBus().connect(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+        QStringLiteral("enabledChanged"), this,
+        SLOT(slotAutotileEnabledChanged(bool)));
+
     qCDebug(lcEffect) << "Connected to autotile D-Bus signals";
+}
+
+void PlasmaZonesEffect::slotAutotileEnabledChanged(bool enabled)
+{
+    qCDebug(lcEffect) << "Autotile enabled changed:" << enabled;
+
+    if (enabled) {
+        // When autotiling is enabled, notify daemon about all existing windows
+        // so they can be tiled immediately
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : windows) {
+            if (shouldHandleWindow(w) && !w->isMinimized()) {
+                notifyWindowAdded(w);
+            }
+        }
+        qCDebug(lcEffect) << "Notified daemon about" << windows.size() << "existing windows for autotiling";
+    }
 }
 
 void PlasmaZonesEffect::loadAutotileSettings()
