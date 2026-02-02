@@ -74,12 +74,14 @@ jobs:
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
           mv ../*.deb dist/
+          # Include debug symbol packages (.ddeb) if generated
+          mv ../*.ddeb dist/ 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: deb-ubuntu-25.10
-          path: dist/*.deb
+          path: dist/*.*deb
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════
@@ -335,7 +337,7 @@ jobs:
           draft: false
           prerelease: ${{ contains(needs.version.outputs.version, 'alpha') || contains(needs.version.outputs.version, 'beta') || contains(needs.version.outputs.version, 'rc') }}
           files: |
-            artifacts/**/*.deb
+            artifacts/**/*.*deb
             artifacts/**/*.rpm
             artifacts/**/*.pkg.tar.zst
           generate_release_notes: false
