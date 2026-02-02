@@ -77,7 +77,7 @@ ScrollView {
                     // Centered position picker with description
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: positionPicker.height + 50
+                        Layout.preferredHeight: positionPicker.height + Kirigami.Units.gridUnit * 4
 
                         PositionPicker {
                             id: positionPicker
@@ -104,7 +104,7 @@ ScrollView {
                     // Trigger distance - centered like position picker
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: triggerColumn.implicitHeight + 50
+                        Layout.preferredHeight: triggerColumn.implicitHeight + Kirigami.Units.gridUnit * 2
 
                         ColumnLayout {
                             id: triggerColumn

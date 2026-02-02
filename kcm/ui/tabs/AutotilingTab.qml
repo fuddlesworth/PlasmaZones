@@ -39,7 +39,6 @@ ScrollView {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
             text: i18n("Autotiling automatically arranges windows using tiling algorithms. When enabled, manual zone layouts are suspended.")
-            visible: true
         }
 
         // Enable toggle - prominent at top
@@ -76,7 +75,7 @@ ScrollView {
                     // Live preview - centered at top
                     Item {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: root.constants.algorithmPreviewHeight + 50
+                        Layout.preferredHeight: root.constants.algorithmPreviewHeight + Kirigami.Units.gridUnit * 4
 
                         // Preview container
                         Item {
@@ -131,6 +130,9 @@ ScrollView {
                             currentIndex: indexForValue(kcm.autotileAlgorithm)
                             onActivated: kcm.autotileAlgorithm = currentValue
 
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("Select how windows are automatically arranged on screen")
+
                             function indexForValue(value) {
                                 for (let i = 0; i < model.length; i++) {
                                     if (model[i].id === value) return i
@@ -179,6 +181,9 @@ ScrollView {
                                 to: 6
                                 stepSize: 1
                                 value: 4
+
+                                ToolTip.visible: hovered && root.isCurrentTab
+                                ToolTip.text: i18n("Adjust number of windows shown in the preview above")
                             }
 
                             Label {
@@ -260,6 +265,48 @@ ScrollView {
                                 ToolTip.visible: hovered && root.isCurrentTab
                                 ToolTip.text: i18n("Number of windows in the master area")
                             }
+                        }
+                    }
+
+                    // ─────────────────────────────────────────────────────────────
+                    // Algorithm-specific settings (monocle)
+                    // ─────────────────────────────────────────────────────────────
+                    ColumnLayout {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 20, parent.width)
+                        spacing: Kirigami.Units.smallSpacing
+                        visible: kcm.autotileAlgorithm === "monocle"
+
+                        Kirigami.Separator {
+                            Layout.fillWidth: true
+                            Layout.topMargin: Kirigami.Units.smallSpacing
+                        }
+
+                        Label {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: i18n("Monocle Options")
+                            font.bold: true
+                        }
+
+                        CheckBox {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: i18n("Minimize non-focused windows")
+                            checked: kcm.autotileMonocleHideOthers
+                            onToggled: kcm.autotileMonocleHideOthers = checked
+
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("When enabled, windows not in focus are minimized. Otherwise they remain behind the focused window.")
+                        }
+
+                        CheckBox {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: i18n("Show tab bar for window switching")
+                            checked: kcm.autotileMonocleShowTabs
+                            onToggled: kcm.autotileMonocleShowTabs = checked
+
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("Display a tab bar to quickly switch between monocle windows")
                         }
                     }
                 }
@@ -510,46 +557,6 @@ ScrollView {
                             text: Math.round(animationDurationSlider.value) + " ms"
                             Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
                         }
-                    }
-                }
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════
-        // MONOCLE MODE CARD
-        // ═══════════════════════════════════════════════════════════════════════
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: monocleCard.implicitHeight
-            visible: kcm.autotileAlgorithm === "monocle"
-
-            Kirigami.Card {
-                id: monocleCard
-                anchors.fill: parent
-                enabled: kcm.autotileEnabled
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Monocle Mode")
-                    padding: Kirigami.Units.smallSpacing
-                }
-
-                contentItem: Kirigami.FormLayout {
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Other windows:")
-                        text: i18n("Minimize non-focused windows")
-                        checked: kcm.autotileMonocleHideOthers
-                        onToggled: kcm.autotileMonocleHideOthers = checked
-
-                        ToolTip.visible: hovered && root.isCurrentTab
-                        ToolTip.text: i18n("When enabled, windows not in focus are minimized. Otherwise they remain behind the focused window.")
-                    }
-
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Tab bar:")
-                        text: i18n("Show tab bar for window switching")
-                        checked: kcm.autotileMonocleShowTabs
-                        onToggled: kcm.autotileMonocleShowTabs = checked
                     }
                 }
             }
