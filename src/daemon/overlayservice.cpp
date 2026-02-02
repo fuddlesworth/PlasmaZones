@@ -1290,7 +1290,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
 
-    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager).size();
+    const bool includeAutotile = m_settings && m_settings->autotileEnabled();
+    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, includeAutotile).size();
     updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
 
     window->setVisible(false);
@@ -1775,8 +1776,9 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 
 QVariantList OverlayService::buildLayoutsList() const
 {
-    // Use shared utility to build unified layout list
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+    // Only include autotile layouts if autotiling is enabled in settings
+    const bool includeAutotile = m_settings && m_settings->autotileEnabled();
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, includeAutotile);
     return LayoutUtils::toVariantList(entries);
 }
 

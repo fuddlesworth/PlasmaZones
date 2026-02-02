@@ -122,7 +122,7 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 // Unified layout list building
 // ═══════════════════════════════════════════════════════════════════════════
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager)
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -148,27 +148,29 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
         }
     }
 
-    // Add autotile algorithms
-    auto* registry = AlgorithmRegistry::instance();
-    if (registry) {
-        const QStringList algorithmIds = registry->availableAlgorithms();
-        for (const QString& algorithmId : algorithmIds) {
-            TilingAlgorithm* algo = registry->algorithm(algorithmId);
-            if (!algo) {
-                continue;
+    // Add autotile algorithms (only if enabled)
+    if (includeAutotile) {
+        auto* registry = AlgorithmRegistry::instance();
+        if (registry) {
+            const QStringList algorithmIds = registry->availableAlgorithms();
+            for (const QString& algorithmId : algorithmIds) {
+                TilingAlgorithm* algo = registry->algorithm(algorithmId);
+                if (!algo) {
+                    continue;
+                }
+
+                UnifiedLayoutEntry entry;
+                entry.id = LayoutId::makeAutotileId(algorithmId);
+                entry.name = algo->name();
+                entry.description = algo->description();
+                entry.isAutotile = true;
+                entry.zoneCount = 0; // Dynamic
+
+                // Use AlgorithmRegistry's shared preview generation
+                entry.zones = AlgorithmRegistry::generatePreviewZones(algo);
+
+                list.append(entry);
             }
-
-            UnifiedLayoutEntry entry;
-            entry.id = LayoutId::makeAutotileId(algorithmId);
-            entry.name = algo->name();
-            entry.description = algo->description();
-            entry.isAutotile = true;
-            entry.zoneCount = 0; // Dynamic
-
-            // Use AlgorithmRegistry's shared preview generation
-            entry.zones = AlgorithmRegistry::generatePreviewZones(algo);
-
-            list.append(entry);
         }
     }
 
