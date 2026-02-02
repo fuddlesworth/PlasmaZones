@@ -50,18 +50,21 @@ Item {
     property int minZoneSize: 8
     /// Whether to show zone numbers
     property bool showZoneNumbers: true
-    /// Auto-detect monocle layout (all zones have same full-screen geometry)
+    /// Auto-detect monocle layout (all zones start at origin and cover most of screen)
     readonly property bool isMonocleLayout: {
         if (!zones || zones.length <= 1) return false;
-        // Check if all zones have nearly identical full-screen geometry
+        // Check if all zones start at origin (0,0) - monocle pattern with C++ applied offset
+        // C++ already shrinks zones for preview (width decreasing by 6% per zone)
         for (let i = 0; i < zones.length; i++) {
             const geo = zones[i].relativeGeometry || {};
             const x = geo.x || 0;
             const y = geo.y || 0;
             const w = geo.width || 1;
             const h = geo.height || 1;
-            // If any zone doesn't cover most of the screen, it's not monocle
-            if (w < 0.9 || h < 0.9) return false;
+            // All monocle zones start at origin and are large (first zone is full-screen)
+            if (x > 0.01 || y > 0.01) return false;
+            // First zone must be nearly full-screen
+            if (i === 0 && (w < 0.9 || h < 0.9)) return false;
         }
         return true;
     }
@@ -144,14 +147,12 @@ Item {
             readonly property real rightGap: (relX + relWidth) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
             readonly property real bottomGap: (relY + relHeight) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
 
-            // Monocle offset - show stacked windows effect (matching AlgorithmPreview)
-            readonly property real monocleOffset: root.isMonocleLayout ? index * 0.03 : 0
-
-            // Position and size with differentiated gaps (or monocle offset)
-            x: root.isMonocleLayout ? monocleOffset * root.width : (relX * root.width + leftGap)
-            y: root.isMonocleLayout ? monocleOffset * root.height : (relY * root.height + topGap)
-            width: root.isMonocleLayout ? Math.max(root.minZoneSize, (1 - monocleOffset * 2) * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
-            height: root.isMonocleLayout ? Math.max(root.minZoneSize, (1 - monocleOffset * 2) * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+            // Position and size - for monocle, C++ already applies offset, so just use raw geometry
+            // For other layouts, apply edge gaps and zone padding
+            x: root.isMonocleLayout ? (relX * root.width) : (relX * root.width + leftGap)
+            y: root.isMonocleLayout ? (relY * root.height) : (relY * root.height + topGap)
+            width: root.isMonocleLayout ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+            height: root.isMonocleLayout ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
             // Scale on hover (only if hoverScale > 1.0)
             scale: isZoneHovered && root.hoverScale > 1.0 ? root.hoverScale : 1.0
             z: isZoneHovered ? 10 : 1
