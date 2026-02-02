@@ -372,6 +372,11 @@ public:
     const QHash<QString, int>& pendingDesktopAssignments() const { return m_pendingZoneDesktops; }
 
     /**
+     * @brief Get pending layout assignments (for layout validation on restore)
+     */
+    const QHash<QString, QString>& pendingLayoutAssignments() const { return m_pendingZoneLayouts; }
+
+    /**
      * @brief Get user-snapped classes
      */
     const QSet<QString>& userSnappedClasses() const { return m_userSnappedClasses; }
@@ -390,6 +395,11 @@ public:
      * @brief Set pending desktop assignments
      */
     void setPendingDesktopAssignments(const QHash<QString, int>& assignments) { m_pendingZoneDesktops = assignments; }
+
+    /**
+     * @brief Set pending layout assignments (loaded from KConfig by adaptor)
+     */
+    void setPendingLayoutAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneLayouts = assignments; }
 
     /**
      * @brief Set pre-snap geometries (loaded from KConfig by adaptor)
@@ -473,6 +483,7 @@ private:
     QHash<QString, QString> m_pendingZoneAssignments;  // stableId -> zoneId
     QHash<QString, QString> m_pendingZoneScreens;      // stableId -> screenName
     QHash<QString, int> m_pendingZoneDesktops;         // stableId -> desktop
+    QHash<QString, QString> m_pendingZoneLayouts;      // stableId -> layoutId (for layout validation on restore)
 
     // Pre-float zone (for unfloat restore)
     QHash<QString, QString> m_preFloatZoneAssignments;

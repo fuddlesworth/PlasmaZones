@@ -937,6 +937,16 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("PendingWindowDesktopAssignments"),
                         QString::fromUtf8(QJsonDocument(pendingDesktopAssignmentsObj).toJson(QJsonDocument::Compact)));
 
+    // Save pending layout assignments (for layout validation on restore)
+    QJsonObject pendingLayoutAssignmentsObj;
+    for (auto it = m_service->pendingLayoutAssignments().constBegin(); it != m_service->pendingLayoutAssignments().constEnd(); ++it) {
+        if (!it.value().isEmpty()) {
+            pendingLayoutAssignmentsObj[it.key()] = it.value();
+        }
+    }
+    tracking.writeEntry(QStringLiteral("PendingWindowLayoutAssignments"),
+                        QString::fromUtf8(QJsonDocument(pendingLayoutAssignmentsObj).toJson(QJsonDocument::Compact)));
+
     // Save pre-snap geometries
     QJsonObject geometriesObj;
     for (auto it = m_service->preSnapGeometries().constBegin(); it != m_service->preSnapGeometries().constEnd(); ++it) {
@@ -1033,6 +1043,22 @@ void WindowTrackingAdaptor::loadState()
         }
     }
     m_service->setPendingDesktopAssignments(pendingDesktops);
+
+    // Load pending layout assignments (for layout validation on restore)
+    QHash<QString, QString> pendingLayouts;
+    QString pendingLayoutsJson = tracking.readEntry(QStringLiteral("PendingWindowLayoutAssignments"), QString());
+    if (!pendingLayoutsJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(pendingLayoutsJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isString()) {
+                    pendingLayouts[it.key()] = it.value().toString();
+                }
+            }
+        }
+    }
+    m_service->setPendingLayoutAssignments(pendingLayouts);
 
     // Load pre-snap geometries
     QHash<QString, QRect> preSnapGeometries;

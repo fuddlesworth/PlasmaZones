@@ -391,6 +391,55 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     QString zoneId = m_pendingZoneAssignments.value(stableId);
     QString savedScreen = m_pendingZoneScreens.value(stableId, screenName);
 
+    // BUG FIX: Verify layout context matches before restoring
+    // Without this check, windows would restore even if the current layout is different
+    // from the layout that was active when the window was saved
+
+    // Check if the current layout matches the saved layout
+    // Use layoutForScreen() for proper multi-screen support - each screen can have
+    // a different layout assigned, so we compare against the layout for the saved screen/desktop
+    QString savedLayoutId = m_pendingZoneLayouts.value(stableId);
+    if (!savedLayoutId.isEmpty() && m_layoutManager) {
+        int savedDesktop = m_pendingZoneDesktops.value(stableId, 0);
+
+        // Get the layout for the saved screen/desktop context (not just activeLayout)
+        Layout* currentLayout = m_layoutManager->layoutForScreen(savedScreen, savedDesktop, QString());
+        if (!currentLayout) {
+            // Fallback to active layout if no screen-specific assignment
+            currentLayout = m_layoutManager->activeLayout();
+        }
+
+        if (!currentLayout) {
+            // No layout available at all - cannot validate, skip restore to be safe
+            qCDebug(lcCore) << "Window" << stableId << "cannot validate layout (no current layout)"
+                            << "- skipping session restore";
+            return SnapResult::noSnap();
+        }
+
+        // Use QUuid comparison to avoid string format issues (with/without braces)
+        QUuid savedUuid = QUuid::fromString(savedLayoutId);
+        if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
+            qCDebug(lcCore) << "Window" << stableId << "was saved with layout" << savedLayoutId
+                            << "but current layout for screen" << savedScreen << "desktop" << savedDesktop
+                            << "is" << currentLayout->id().toString()
+                            << "- skipping session restore";
+            return SnapResult::noSnap();
+        }
+    }
+
+    // Check virtual desktop match (unless sticky or desktop 0 = all)
+    // This mirrors the check in calculateSnapToLastZone() for consistency
+    int savedDesktop = m_pendingZoneDesktops.value(stableId, 0);
+    if (!isSticky && m_virtualDesktopManager && savedDesktop > 0) {
+        int currentDesktop = m_virtualDesktopManager->currentDesktop();
+        if (currentDesktop != savedDesktop) {
+            qCDebug(lcCore) << "Window" << stableId << "was saved on desktop" << savedDesktop
+                            << "but current desktop is" << currentDesktop
+                            << "- skipping session restore";
+            return SnapResult::noSnap();
+        }
+    }
+
     // Calculate geometry
     QRect geo = zoneGeometry(zoneId, savedScreen);
     if (!geo.isValid()) {
@@ -436,6 +485,7 @@ bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
     if (hadPending) {
         m_pendingZoneScreens.remove(stableId);
         m_pendingZoneDesktops.remove(stableId);
+        m_pendingZoneLayouts.remove(stableId);
         qCDebug(lcCore) << "Cleared stale pending assignment for" << stableId;
         scheduleSaveState();
     }
@@ -465,6 +515,7 @@ void WindowTrackingService::consumePendingAssignment(const QString& windowId)
     if (m_pendingZoneAssignments.remove(stableId) > 0) {
         m_pendingZoneScreens.remove(stableId);
         m_pendingZoneDesktops.remove(stableId);
+        m_pendingZoneLayouts.remove(stableId);
         qCDebug(lcCore) << "Consumed pending assignment for" << stableId;
         scheduleSaveState();
     }
@@ -692,7 +743,27 @@ void WindowTrackingService::windowClosed(const QString& windowId)
                 m_pendingZoneDesktops.remove(stableId);
             }
 
-            qCDebug(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId;
+            // Save the layout ID to ensure we only restore if the same layout is active
+            // This prevents restoring windows to wrong zones when layouts have been changed
+            // Use layoutForScreen() for proper multi-screen support - different screens can have
+            // different layouts assigned, so we need to save the layout for THIS screen/desktop context
+            Layout* contextLayout = nullptr;
+            if (m_layoutManager) {
+                contextLayout = m_layoutManager->layoutForScreen(screenName, desktop, QString());
+                if (!contextLayout) {
+                    // Fallback to active layout if no screen-specific assignment
+                    contextLayout = m_layoutManager->activeLayout();
+                }
+            }
+            if (contextLayout) {
+                m_pendingZoneLayouts[stableId] = contextLayout->id().toString();
+            } else {
+                m_pendingZoneLayouts.remove(stableId);
+            }
+
+            qCDebug(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId
+                            << "screen:" << screenName << "desktop:" << desktop
+                            << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"));
         }
     }
 
