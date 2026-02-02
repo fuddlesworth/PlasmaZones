@@ -205,6 +205,10 @@ private:
     // This allows matching windows across KWin restarts
     static QString extractStableId(const QString& windowId);
 
+    // Check if a window ID is malformed (empty class from transient/popup windows)
+    // These look like " : :123" or ": :456" and cause autotiling issues
+    static bool isMalformedWindowId(const QString& windowId);
+
     // reserveScreenEdges() and unreserveScreenEdges() have been removed. The daemon
     // disables KWin Quick Tile via kwriteconfig6. Reserving edges would turn on the
     // electric edge effect, which we don't want.

@@ -10,6 +10,10 @@
 #include "autotile/algorithms/MasterStackAlgorithm.h"
 #include "autotile/algorithms/ColumnsAlgorithm.h"
 #include "autotile/algorithms/BSPAlgorithm.h"
+#include "autotile/algorithms/RowsAlgorithm.h"
+#include "autotile/algorithms/FibonacciAlgorithm.h"
+#include "autotile/algorithms/MonocleAlgorithm.h"
+#include "autotile/algorithms/ThreeColumnAlgorithm.h"
 #include "core/constants.h"
 
 using namespace PlasmaZones;
@@ -116,15 +120,64 @@ private Q_SLOTS:
         QVERIFY(algo->supportsSplitRatio());
     }
 
+    void testBuiltIn_rowsRegistered()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::Rows);
+
+        QVERIFY(algo != nullptr);
+        QCOMPARE(algo->name(), QStringLiteral("Rows"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(!algo->supportsSplitRatio());
+    }
+
+    void testBuiltIn_fibonacciRegistered()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::Fibonacci);
+
+        QVERIFY(algo != nullptr);
+        QCOMPARE(algo->name(), QStringLiteral("Fibonacci"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(algo->supportsSplitRatio());
+    }
+
+    void testBuiltIn_monocleRegistered()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::Monocle);
+
+        QVERIFY(algo != nullptr);
+        QCOMPARE(algo->name(), QStringLiteral("Monocle"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(!algo->supportsSplitRatio());
+    }
+
+    void testBuiltIn_threeColumnRegistered()
+    {
+        auto *registry = AlgorithmRegistry::instance();
+        auto *algo = registry->algorithm(DBus::AutotileAlgorithm::ThreeColumn);
+
+        QVERIFY(algo != nullptr);
+        QCOMPARE(algo->name(), QStringLiteral("Three Column"));
+        QVERIFY(!algo->supportsMasterCount());
+        QVERIFY(algo->supportsSplitRatio());
+    }
+
     void testBuiltIn_allThreeRegistered()
     {
         auto *registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
+        // All 7 built-in algorithms should be registered
         QVERIFY(available.contains(DBus::AutotileAlgorithm::MasterStack));
         QVERIFY(available.contains(DBus::AutotileAlgorithm::Columns));
         QVERIFY(available.contains(DBus::AutotileAlgorithm::BSP));
-        QCOMPARE(available.size(), 3);
+        QVERIFY(available.contains(DBus::AutotileAlgorithm::Rows));
+        QVERIFY(available.contains(DBus::AutotileAlgorithm::Fibonacci));
+        QVERIFY(available.contains(DBus::AutotileAlgorithm::Monocle));
+        QVERIFY(available.contains(DBus::AutotileAlgorithm::ThreeColumn));
+        QCOMPARE(available.size(), 7);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -174,6 +227,10 @@ private Q_SLOTS:
         QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::MasterStack));
         QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Columns));
         QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::BSP));
+        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Rows));
+        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Fibonacci));
+        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::Monocle));
+        QVERIFY(registry->hasAlgorithm(DBus::AutotileAlgorithm::ThreeColumn));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("nonexistent")));
     }
 
@@ -182,7 +239,7 @@ private Q_SLOTS:
         auto *registry = AlgorithmRegistry::instance();
         auto all = registry->allAlgorithms();
 
-        QCOMPARE(all.size(), 3);
+        QCOMPARE(all.size(), 7);
 
         // All should be valid pointers
         for (auto *algo : all) {
@@ -345,11 +402,16 @@ private Q_SLOTS:
         auto *registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
-        // Built-in registration order: MasterStack, Columns, BSP
-        QCOMPARE(available.size(), 3);
+        // Built-in registration order by priority:
+        // MasterStack(10), Columns(20), Rows(25), BSP(30), Fibonacci(35), Monocle(40), ThreeColumn(45)
+        QCOMPARE(available.size(), 7);
         QCOMPARE(available[0], DBus::AutotileAlgorithm::MasterStack);
         QCOMPARE(available[1], DBus::AutotileAlgorithm::Columns);
-        QCOMPARE(available[2], DBus::AutotileAlgorithm::BSP);
+        QCOMPARE(available[2], DBus::AutotileAlgorithm::Rows);
+        QCOMPARE(available[3], DBus::AutotileAlgorithm::BSP);
+        QCOMPARE(available[4], DBus::AutotileAlgorithm::Fibonacci);
+        QCOMPARE(available[5], DBus::AutotileAlgorithm::Monocle);
+        QCOMPARE(available[6], DBus::AutotileAlgorithm::ThreeColumn);
     }
 
     void testOrder_matchesAllAlgorithms()

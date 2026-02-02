@@ -160,4 +160,11 @@ bool WindowAnimator::hasCancelledTarget(KWin::EffectWindow* window) const
     return m_cancelledTargets.contains(window);
 }
 
+void WindowAnimator::windowRemoved(KWin::EffectWindow* window)
+{
+    // Clean up all tracking data for this window
+    m_animations.remove(window);
+    m_cancelledTargets.remove(window);
+}
+
 } // namespace PlasmaZones

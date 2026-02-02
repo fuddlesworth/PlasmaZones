@@ -285,6 +285,43 @@ inline QString extractStableId(const QString& windowId)
 }
 
 /**
+ * @brief Check if a window ID is malformed (empty class)
+ *
+ * Malformed window IDs come from transient/popup windows with empty windowClass.
+ * They look like " : :123456" or ": :123" and cause autotiling issues.
+ *
+ * @param windowId Full window ID or stable ID to check
+ * @return true if the ID is malformed and should be rejected
+ */
+inline bool isMalformedWindowId(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return true;
+    }
+
+    // Check for IDs starting with space (empty class before first colon)
+    if (windowId.startsWith(QLatin1Char(' '))) {
+        return true;
+    }
+
+    // Check for IDs starting with colon (no class at all)
+    if (windowId.startsWith(QLatin1Char(':'))) {
+        return true;
+    }
+
+    // Check stable ID for same patterns
+    QString stableId = extractStableId(windowId);
+    if (stableId != windowId) {
+        if (stableId.isEmpty() || stableId == QLatin1String(":") ||
+            stableId.startsWith(QLatin1Char(' ')) || stableId.startsWith(QLatin1Char(':'))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
  * @brief Extract window class from a window ID or stable ID
  *
  * Window class is the first component before the first colon.

@@ -17,6 +17,7 @@
 #include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/screenmanager.h"
+#include "core/utils.h"
 #include "core/windowtrackingservice.h"
 #include "core/zone.h"
 
@@ -879,13 +880,8 @@ void AutotileEngine::applyTiling(const QString &screenName)
 
 bool AutotileEngine::shouldTileWindow(const QString &windowId) const
 {
-    if (windowId.isEmpty()) {
-        return false;
-    }
-
-    // Reject malformed window IDs with empty class (transient/popup windows)
-    // These look like " : :94483229079904" and cause zone count mismatches
-    if (windowId.startsWith(QLatin1Char(' ')) || windowId.startsWith(QLatin1Char(':'))) {
+    // Reject empty or malformed window IDs (transient/popup windows with empty class)
+    if (Utils::isMalformedWindowId(windowId)) {
         qCDebug(lcAutotile) << "Rejecting malformed window ID (empty class):" << windowId;
         return false;
     }

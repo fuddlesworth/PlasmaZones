@@ -559,12 +559,15 @@ void PlasmaZonesEffect::slotServiceOwnerChanged(const QString& serviceName, cons
         // Re-register all existing windows with daemon for autotiling
         // This handles the case where daemon restarted while windows were open
         const auto windows = KWin::effects->stackingOrder();
+        int registeredCount = 0;
         for (KWin::EffectWindow* w : windows) {
             if (shouldHandleWindow(w) && !w->isMinimized() && !w->windowClass().isEmpty()) {
                 notifyWindowAdded(w);
+                registeredCount++;
             }
         }
-        qCInfo(lcEffect) << "Re-registered" << windows.size() << "windows with restarted daemon";
+        qCInfo(lcEffect) << "Re-registered" << registeredCount << "windows with restarted daemon"
+                        << "(total windows:" << windows.size() << ")";
 
     } else if (!oldOwner.isEmpty() && newOwner.isEmpty()) {
         // Daemon stopped
@@ -1379,6 +1382,37 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
     return windowId;
 }
 
+bool PlasmaZonesEffect::isMalformedWindowId(const QString& windowId)
+{
+    // Malformed window IDs come from transient/popup windows with empty windowClass.
+    // They look like " : :123456" or ": :123" and cause autotiling issues.
+
+    if (windowId.isEmpty()) {
+        return true;
+    }
+
+    // Check for IDs starting with space (empty class before first colon)
+    if (windowId.startsWith(QLatin1Char(' '))) {
+        return true;
+    }
+
+    // Check for IDs starting with colon (no class at all)
+    if (windowId.startsWith(QLatin1Char(':'))) {
+        return true;
+    }
+
+    // Check stable ID for same patterns
+    QString stableId = extractStableId(windowId);
+    if (stableId != windowId) {
+        if (stableId.isEmpty() || stableId == QLatin1String(":") ||
+            stableId.startsWith(QLatin1Char(' ')) || stableId.startsWith(QLatin1Char(':'))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Phase 2.1: Window Event Notifications for Autotiling
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1404,7 +1438,7 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
     QString screenName = getWindowScreenName(w);
 
     // Double-check the ID isn't malformed (defensive)
-    if (windowId.isEmpty() || windowId.startsWith(QLatin1Char(' ')) || windowId.startsWith(QLatin1Char(':'))) {
+    if (isMalformedWindowId(windowId)) {
         qCDebug(lcEffect) << "Skipping windowAdded for malformed window ID:" << windowId;
         return;
     }
@@ -1494,27 +1528,23 @@ void PlasmaZonesEffect::connectAutotileSignals()
 
     // Query current autotile enabled state to handle startup race condition
     // The daemon may have emitted enabledChanged(true) before we connected
-    auto* autotileInterface = new QDBusInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-                                                  QDBusConnection::sessionBus(), this);
-    if (autotileInterface->isValid()) {
-        // Read the 'enabled' property asynchronously
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            QStringLiteral("org.freedesktop.DBus.Properties"),
-            QStringLiteral("Get"));
-        msg << DBus::Interface::Autotile << QStringLiteral("enabled");
-        QDBusPendingCall enabledCall = QDBusConnection::sessionBus().asyncCall(msg);
-        auto* enabledWatcher = new QDBusPendingCallWatcher(enabledCall, this);
-        connect(enabledWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QDBusVariant> reply = *w;
-            if (reply.isValid() && reply.value().variant().toBool()) {
-                qCDebug(lcEffect) << "Autotile already enabled at startup, registering existing windows";
-                slotAutotileEnabledChanged(true);
-            }
-        });
-    }
-    autotileInterface->deleteLater();
+    // Note: We use D-Bus message directly instead of QDBusInterface to avoid
+    // lifetime issues with async calls
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath,
+        QStringLiteral("org.freedesktop.DBus.Properties"),
+        QStringLiteral("Get"));
+    msg << DBus::Interface::Autotile << QStringLiteral("enabled");
+    QDBusPendingCall enabledCall = QDBusConnection::sessionBus().asyncCall(msg);
+    auto* enabledWatcher = new QDBusPendingCallWatcher(enabledCall, this);
+    connect(enabledWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QDBusVariant> reply = *w;
+        if (reply.isValid() && reply.value().variant().toBool()) {
+            qCDebug(lcEffect) << "Autotile already enabled at startup, registering existing windows";
+            slotAutotileEnabledChanged(true);
+        }
+    });
 }
 
 void PlasmaZonesEffect::slotAutotileEnabledChanged(bool enabled)
@@ -1640,9 +1670,7 @@ void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int
     qCDebug(lcEffect) << "Autotile window requested:" << windowId << "geometry:" << QRect(x, y, width, height);
 
     // Reject malformed window IDs (transient windows with empty class)
-    // These look like " : :94483229079904" and cause lookup failures
-    QString stableId = extractStableId(windowId);
-    if (stableId.isEmpty() || stableId.startsWith(QLatin1Char(' ')) || stableId == QLatin1String(":")) {
+    if (isMalformedWindowId(windowId)) {
         qCDebug(lcEffect) << "Rejecting malformed window ID (empty class):" << windowId;
         return;
     }

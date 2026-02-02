@@ -110,6 +110,9 @@ public:
     QRect takeCancelledTarget(KWin::EffectWindow* window);
     bool hasCancelledTarget(KWin::EffectWindow* window) const;
 
+    // Clean up all data for a window (call when window is closed)
+    void windowRemoved(KWin::EffectWindow* window);
+
 private:
     QHash<KWin::EffectWindow*, WindowAnimation> m_animations;
     QHash<KWin::EffectWindow*, QRect> m_cancelledTargets;  // Targets from cancelled animations
