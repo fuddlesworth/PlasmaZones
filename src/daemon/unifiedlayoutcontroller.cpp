@@ -43,6 +43,13 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, A
             m_cacheValid = false;
             Q_EMIT layoutsChanged();
         });
+
+        // Also connect to settingsChanged - this is emitted when Settings::load() is called
+        // (e.g., when KCM saves settings), which doesn't emit individual property signals
+        connect(m_settings, &Settings::settingsChanged, this, [this]() {
+            m_cacheValid = false;
+            Q_EMIT layoutsChanged();
+        });
     }
 
     // Sync when autotile changes externally

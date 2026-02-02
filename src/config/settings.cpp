@@ -665,6 +665,11 @@ bool Settings::isWindowExcluded(const QString& appName, const QString& windowCla
 void Settings::load()
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+
+    // Force re-read from disk - KSharedConfig caches in memory, so when KCM writes
+    // to disk and daemon calls load(), we need to invalidate the cache first
+    config->reparseConfiguration();
+
     KConfigGroup activation = config->group(QStringLiteral("Activation"));
     KConfigGroup display = config->group(QStringLiteral("Display"));
     KConfigGroup appearance = config->group(QStringLiteral("Appearance"));

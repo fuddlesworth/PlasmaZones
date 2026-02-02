@@ -191,7 +191,7 @@ Item {
                 font.bold: true
                 color: Kirigami.Theme.textColor
                 opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
-                visible: root.showZoneNumbers && !root.isMonocleLayout && parent.width >= 16 && parent.height >= 16
+                visible: root.showZoneNumbers && (!root.isMonocleLayout || index === root.zones.length - 1) && parent.width >= 16 && parent.height >= 16
 
                 Behavior on opacity {
                     NumberAnimation {
