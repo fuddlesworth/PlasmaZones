@@ -87,7 +87,7 @@ Features:
 
 %build
 %cmake -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DBUILD_TESTING=OFF
 %cmake_build
 
