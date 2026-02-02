@@ -80,6 +80,10 @@ KCM.AbstractKCM {
         readonly property real priorityGridSecondaryRatio: 0.33
         readonly property real focusSideRatio: 0.15
         readonly property real focusMainRatio: 0.70
+
+        // Autotiling algorithm preview dimensions
+        readonly property int algorithmPreviewWidth: 280
+        readonly property int algorithmPreviewHeight: 160
     }
 
     header: ColumnLayout {
@@ -137,16 +141,16 @@ KCM.AbstractKCM {
                 icon.name: "view-split-left-right"
             }
             TabButton {
+                text: i18n("Autotiling")
+                icon.name: "window-duplicate"
+            }
+            TabButton {
                 text: i18n("Display")
                 icon.name: "select-rectangular"
             }
             TabButton {
                 text: i18n("Exclusions")
                 icon.name: "dialog-cancel-symbolic"
-            }
-            TabButton {
-                text: i18n("Autotiling")
-                icon.name: "window-duplicate"
             }
         }
     }
@@ -241,31 +245,31 @@ KCM.AbstractKCM {
             onRequestColorFileDialog: colorFileDialog.open()
         }
 
-        // TAB 5: ZONE SELECTOR
-        DisplayTab {
-            kcm: root.kcmModule
-            constants: constants
-            screenAspectRatio: root.screenAspectRatio
-            isCurrentTab: stackLayout.currentIndex === 4
-        }
-
-        // TAB 6: EXCLUSIONS
-        ExclusionsTab {
-            kcm: root.kcmModule
-            constants: constants
-        }
-
-        // TAB 7: AUTOTILING
+        // TAB 5: AUTOTILING
         AutotilingTab {
             id: autotilingTab
             kcm: root.kcmModule
             constants: constants
-            isCurrentTab: stackLayout.currentIndex === 6
+            isCurrentTab: stackLayout.currentIndex === 4
 
             onRequestActiveBorderColorDialog: {
                 autotileBorderColorDialog.selectedColor = kcm.autotileActiveBorderColor
                 autotileBorderColorDialog.open()
             }
+        }
+
+        // TAB 6: DISPLAY (Zone Selector)
+        DisplayTab {
+            kcm: root.kcmModule
+            constants: constants
+            screenAspectRatio: root.screenAspectRatio
+            isCurrentTab: stackLayout.currentIndex === 5
+        }
+
+        // TAB 7: EXCLUSIONS
+        ExclusionsTab {
+            kcm: root.kcmModule
+            constants: constants
         }
     }
 
