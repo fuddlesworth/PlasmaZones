@@ -242,14 +242,13 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
         QVariantMap relGeoMap;
 
         if (applyMonocleOffset) {
-            // For monocle preview: use asymmetric offset so zone centers don't overlap.
-            // Shrink from bottom-right only, which shifts each zone's center diagonally
-            // toward top-left, making all zone number labels visible.
-            const qreal shrink = i * MonoclePreviewOffset * 2;
-            relGeoMap[QStringLiteral("x")] = 0.0;
-            relGeoMap[QStringLiteral("y")] = 0.0;
-            relGeoMap[QStringLiteral("width")] = 1.0 - shrink;
-            relGeoMap[QStringLiteral("height")] = 1.0 - shrink;
+            // For monocle preview: center each window with progressive offset
+            // Matches AlgorithmPreview.qml visualization
+            const qreal offset = i * MonoclePreviewOffset;
+            relGeoMap[QStringLiteral("x")] = offset;
+            relGeoMap[QStringLiteral("y")] = offset;
+            relGeoMap[QStringLiteral("width")] = 1.0 - offset * 2;
+            relGeoMap[QStringLiteral("height")] = 1.0 - offset * 2;
         } else {
             relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
             relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
