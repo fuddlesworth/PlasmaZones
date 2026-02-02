@@ -194,8 +194,10 @@ $RECYCLE.BIN/
 # -----------------------------------------------------------------------------
 # Testing and Coverage
 # -----------------------------------------------------------------------------
-# Test executables
+# Test executables (but not test source files)
 test_*
+!test_*.cpp
+!test_*.h
 *_test
 *_tests
 
