@@ -69,6 +69,8 @@ jobs:
 
       - name: Build Debian package
         run: |
+          # dpkg-buildpackage expects debian/ at project root
+          ln -s packaging/debian debian
           dpkg-buildpackage -us -uc -b
           mkdir -p dist
           mv ../*.deb dist/
@@ -207,7 +209,7 @@ jobs:
           install=plasmazones.install
 
           build() {
-              cd "$startdir/.."
+              cd "$startdir/../.."
               cmake -B build -G Ninja \
                   -DCMAKE_BUILD_TYPE=Release \
                   -DCMAKE_INSTALL_PREFIX=/usr \
@@ -218,7 +220,7 @@ jobs:
           }
 
           package() {
-              cd "$startdir/.."
+              cd "$startdir/../.."
               DESTDIR="$pkgdir" cmake --install build
 
               # Install pacman hooks
