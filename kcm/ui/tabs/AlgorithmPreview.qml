@@ -11,6 +11,13 @@ import org.kde.kirigami as Kirigami
  *
  * Renders a preview of how windows would be arranged with
  * the given algorithm settings.
+ *
+ * NOTE: This component implements simplified versions of the tiling algorithms
+ * for preview purposes only. The actual tiling is performed by C++ algorithm
+ * classes (MasterStackAlgorithm, BSPAlgorithm, FibonacciAlgorithm, etc.).
+ * These QML previews are intentionally kept simple and may not reflect all
+ * edge cases or algorithm-specific behaviors. They are designed to give users
+ * a quick visual understanding of each algorithm's general layout pattern.
  */
 Item {
     id: root

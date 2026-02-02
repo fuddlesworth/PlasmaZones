@@ -50,11 +50,13 @@ Item {
     property int minZoneSize: 8
     /// Whether to show zone numbers
     property bool showZoneNumbers: true
-    /// Auto-detect monocle layout (centered zones that overlap significantly)
+    /// Auto-detect monocle layout (stacked full-screen zones with small offsets)
     readonly property bool isMonocleLayout: {
         if (!zones || zones.length <= 1) return false;
-        // Check if first zone is nearly full-screen and all zones are centered
-        // Monocle pattern: x ≈ y, w ≈ h, and zones are centered (x ≈ (1-w)/2)
+        // Monocle pattern detection:
+        // - First zone is nearly full-screen (w >= 0.9, h >= 0.9)
+        // - All zones are horizontally centered: x ≈ (1-w)/2
+        // - All zones have symmetric positioning: x ≈ y (equal margins)
         for (let i = 0; i < zones.length; i++) {
             const geo = zones[i].relativeGeometry || {};
             const x = geo.x || 0;
@@ -63,9 +65,10 @@ Item {
             const h = geo.height || 1;
             // First zone must be nearly full-screen
             if (i === 0 && (w < 0.9 || h < 0.9)) return false;
-            // All zones must be roughly square and centered (monocle pattern)
+            // Zone must be horizontally centered
             const expectedX = (1 - w) / 2;
             if (Math.abs(x - expectedX) > 0.02) return false;
+            // Zone must have symmetric positioning (equal x and y margins)
             if (Math.abs(x - y) > 0.02) return false;
         }
         return true;
