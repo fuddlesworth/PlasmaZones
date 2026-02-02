@@ -139,33 +139,70 @@ bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 
 void WindowTrackingService::storePreSnapGeometry(const QString& windowId, const QRect& geometry)
 {
+    // Use stableId for consistent matching across sessions
+    // This allows pre-snap geometry to persist when windows are closed and reopened
+    QString stableId = Utils::extractStableId(windowId);
+
+    // Validate stableId - empty means malformed windowId
+    if (stableId.isEmpty()) {
+        qCWarning(lcCore) << "Cannot store pre-snap geometry: empty stableId from windowId" << windowId;
+        return;
+    }
+
     // Only store on FIRST snap - don't overwrite when moving A→B
-    if (m_preSnapGeometries.contains(windowId)) {
+    if (m_preSnapGeometries.contains(stableId)) {
         return;
     }
 
     if (geometry.isValid()) {
-        m_preSnapGeometries[windowId] = geometry;
+        m_preSnapGeometries[stableId] = geometry;
+
+        // Memory cleanup: limit pre-snap geometry cache to prevent unbounded growth
+        // Keep max 100 entries, removing oldest when exceeded (simple LRU approximation)
+        static constexpr int MaxPreSnapGeometries = 100;
+        if (m_preSnapGeometries.size() > MaxPreSnapGeometries) {
+            // Remove first entry (oldest in insertion order for QHash)
+            auto it = m_preSnapGeometries.begin();
+            if (it != m_preSnapGeometries.end()) {
+                m_preSnapGeometries.erase(it);
+            }
+        }
+
         scheduleSaveState();
     }
 }
 
 std::optional<QRect> WindowTrackingService::preSnapGeometry(const QString& windowId) const
 {
-    if (m_preSnapGeometries.contains(windowId)) {
-        return m_preSnapGeometries.value(windowId);
+    // Use stableId for consistent matching across sessions
+    QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty()) {
+        return std::nullopt;
+    }
+    if (m_preSnapGeometries.contains(stableId)) {
+        return m_preSnapGeometries.value(stableId);
     }
     return std::nullopt;
 }
 
 bool WindowTrackingService::hasPreSnapGeometry(const QString& windowId) const
 {
-    return m_preSnapGeometries.contains(windowId);
+    // Use stableId for consistent matching across sessions
+    QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty()) {
+        return false;
+    }
+    return m_preSnapGeometries.contains(stableId);
 }
 
 void WindowTrackingService::clearPreSnapGeometry(const QString& windowId)
 {
-    if (m_preSnapGeometries.remove(windowId) > 0) {
+    // Use stableId for consistent matching across sessions
+    QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty()) {
+        return;
+    }
+    if (m_preSnapGeometries.remove(stableId) > 0) {
         scheduleSaveState();
     }
 }
@@ -222,9 +259,12 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
 
     // Save zone for restore on unfloat
     if (m_windowZoneAssignments.contains(windowId)) {
-        m_preFloatZoneAssignments[stableId] = m_windowZoneAssignments.value(windowId);
+        QString zoneId = m_windowZoneAssignments.value(windowId);
+        m_preFloatZoneAssignments[stableId] = zoneId;
+        qCDebug(lcCore) << "Saved pre-float zone for" << stableId << "->" << zoneId;
         unassignWindow(windowId);
     }
+    // Note: If window not in assignments, it's already unsnapped - no action needed
 }
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
@@ -493,10 +533,6 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
     QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
 
-    qCDebug(lcCore) << "zoneGeometry for" << zoneId << "on screen" << screen->name()
-                    << "- zonePadding:" << zonePadding << "outerGap:" << outerGap
-                    << "- result:" << geoF.toRect();
-
     return geoF.toRect();
 }
 
@@ -660,12 +696,14 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         }
     }
 
-    // Now clean up active tracking state (but NOT floating state - that's keyed by stableId
-    // and should persist across window close/reopen cycles)
+    // Now clean up active tracking state (but NOT floating state, pre-snap geometry, or
+    // pre-float zone - those are keyed by stableId and should persist across window
+    // close/reopen cycles for proper session restore behavior)
     m_windowZoneAssignments.remove(windowId);
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
-    m_preSnapGeometries.remove(windowId);
+    // NOTE: Don't remove from m_preSnapGeometries here - it's now keyed by stableId and should
+    // persist so floating after reopen restores to the original pre-snap size
     // NOTE: Don't remove from m_floatingWindows here - it's keyed by stableId and should
     // persist so the window stays floating when reopened
     m_windowStickyStates.remove(windowId);

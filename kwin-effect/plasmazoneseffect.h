@@ -83,6 +83,7 @@ private Q_SLOTS:
     void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
+    void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
 
 private:
     // Window management

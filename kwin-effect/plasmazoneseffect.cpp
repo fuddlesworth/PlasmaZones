@@ -60,36 +60,6 @@ static void ensureInterface(InterfacePtr& interface, const QString& interfaceNam
     }
 }
 
-/**
- * @brief Load a setting from D-Bus with proper QDBusVariant unwrapping
- * @tparam T The type to convert the setting to
- * @param settingsInterface Reference to the settings D-Bus interface
- * @param key The setting key name
- * @param defaultValue Default value if the setting can't be loaded
- * @return The setting value or defaultValue on failure
- *
- * Consolidates the repeated pattern of calling getSetting, checking the reply,
- * and unwrapping QDBusVariant if needed.
- */
-template<typename T>
-static T loadDBusSetting(QDBusInterface& settingsInterface, const QString& key, T defaultValue)
-{
-    if (!settingsInterface.isValid()) {
-        return defaultValue;
-    }
-
-    QDBusMessage reply = settingsInterface.call(QStringLiteral("getSetting"), key);
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return defaultValue;
-    }
-
-    QVariant value = reply.arguments().at(0);
-    if (value.canConvert<QDBusVariant>()) {
-        return value.value<QDBusVariant>().variant().value<T>();
-    }
-    return value.value<T>();
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Helper Method Implementations
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -730,22 +700,79 @@ void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
 
 void PlasmaZonesEffect::loadExclusionSettings()
 {
-    // Query exclusion settings from daemon via D-Bus
-    QDBusInterface settingsInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
-                                     QDBusConnection::sessionBus());
+    // Set sensible defaults immediately - don't block compositor startup waiting for daemon
+    // These will be updated asynchronously when the daemon responds
+    m_excludeTransientWindows = true;
+    m_minimumWindowWidth = 200;
+    m_minimumWindowHeight = 150;
 
-    if (!settingsInterface.isValid()) {
-        qCDebug(lcEffect) << "Cannot load exclusion settings - daemon not available yet";
+    // Create interface for async calls
+    auto* settingsInterface = new QDBusInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                                  QDBusConnection::sessionBus(), this);
+
+    if (!settingsInterface->isValid()) {
+        qCDebug(lcEffect) << "Cannot load exclusion settings - daemon not available yet, using defaults";
+        settingsInterface->deleteLater();
         return;
     }
 
-    // Load all exclusion settings using the template helper
-    m_excludeTransientWindows = loadDBusSetting<bool>(settingsInterface, QStringLiteral("excludeTransientWindows"), true);
-    m_minimumWindowWidth = loadDBusSetting<int>(settingsInterface, QStringLiteral("minimumWindowWidth"), 200);
-    m_minimumWindowHeight = loadDBusSetting<int>(settingsInterface, QStringLiteral("minimumWindowHeight"), 150);
+    // Load settings asynchronously to avoid blocking KWin startup
+    // Each setting is loaded independently so partial failures don't block others
 
-    qCDebug(lcEffect) << "Loaded exclusion settings: excludeTransient=" << m_excludeTransientWindows
-                      << "minWidth=" << m_minimumWindowWidth << "minHeight=" << m_minimumWindowHeight;
+    // Load excludeTransientWindows
+    QDBusPendingCall excludeCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("excludeTransientWindows"));
+    auto* excludeWatcher = new QDBusPendingCallWatcher(excludeCall, this);
+    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            if (value.canConvert<QDBusVariant>()) {
+                m_excludeTransientWindows = value.value<QDBusVariant>().variant().toBool();
+            } else {
+                m_excludeTransientWindows = value.toBool();
+            }
+            qCDebug(lcEffect) << "Loaded excludeTransientWindows:" << m_excludeTransientWindows;
+        }
+    });
+
+    // Load minimumWindowWidth
+    QDBusPendingCall widthCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowWidth"));
+    auto* widthWatcher = new QDBusPendingCallWatcher(widthCall, this);
+    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            if (value.canConvert<QDBusVariant>()) {
+                m_minimumWindowWidth = value.value<QDBusVariant>().variant().toInt();
+            } else {
+                m_minimumWindowWidth = value.toInt();
+            }
+            qCDebug(lcEffect) << "Loaded minimumWindowWidth:" << m_minimumWindowWidth;
+        }
+    });
+
+    // Load minimumWindowHeight
+    QDBusPendingCall heightCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowHeight"));
+    auto* heightWatcher = new QDBusPendingCallWatcher(heightCall, this);
+    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, settingsInterface](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            if (value.canConvert<QDBusVariant>()) {
+                m_minimumWindowHeight = value.value<QDBusVariant>().variant().toInt();
+            } else {
+                m_minimumWindowHeight = value.toInt();
+            }
+            qCDebug(lcEffect) << "Loaded minimumWindowHeight:" << m_minimumWindowHeight;
+        }
+        // Clean up the interface after the last setting is loaded
+        settingsInterface->deleteLater();
+    });
+
+    qCDebug(lcEffect) << "Loading exclusion settings asynchronously, using defaults until loaded";
 }
 
 void PlasmaZonesEffect::connectNavigationSignals()
@@ -782,6 +809,11 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("pendingRestoresAvailable"), this,
                                           SLOT(slotPendingRestoresAvailable()));
+
+    // Connect to floating state changes to keep local cache in sync
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("windowFloatingChanged"), this,
+                                          SLOT(slotWindowFloatingChanged(QString, bool)));
 
     qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
@@ -936,31 +968,70 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
 {
     qCDebug(lcEffect) << "Pending restores available - retrying restoration for all visible windows";
 
-    // The daemon's layout is now available and there are pending zone assignments
-    // Iterate through all visible windows and try to restore them
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* window : windows) {
-        if (!window || !shouldHandleWindow(window)) {
-            continue;
-        }
-
-        // Skip minimized or invisible windows
-        if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
-            continue;
-        }
-
-        // Check if this window is already tracked (has a zone assignment)
-        // If already tracked, skip - no need to restore again
-        QString windowId = getWindowId(window);
-        QString existingZoneId = queryZoneForWindow(windowId);
-        if (!existingZoneId.isEmpty()) {
-            continue; // Already tracked
-        }
-
-        // Window is not tracked - try to restore it
-        qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
-        callSnapToLastZone(window);
+    if (!ensureWindowTrackingReady("pending restores")) {
+        return;
     }
+
+    // Use ASYNC batch call to get all tracked windows at once
+    // This avoids N sync D-Bus calls (one per window) that could freeze compositor during startup
+    QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getSnappedWindows"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<QStringList> reply = *w;
+        QSet<QString> trackedStableIds;
+
+        if (reply.isValid()) {
+            // Extract stable IDs from tracked windows for comparison
+            // Window IDs include pointer addresses which change, but stable IDs persist
+            const QStringList trackedWindows = reply.value();
+            for (const QString& windowId : trackedWindows) {
+                QString stableId = extractStableId(windowId);
+                if (!stableId.isEmpty()) {
+                    trackedStableIds.insert(stableId);
+                }
+            }
+            qCDebug(lcEffect) << "Got" << trackedStableIds.size() << "tracked windows from daemon";
+        } else {
+            qCWarning(lcEffect) << "Failed to get tracked windows:" << reply.error().message();
+            // Continue anyway - will try to restore all windows (daemon will handle duplicates)
+        }
+
+        // Now iterate through all visible windows and restore untracked ones
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* window : windows) {
+            if (!window || !shouldHandleWindow(window)) {
+                continue;
+            }
+
+            // Skip minimized or invisible windows
+            if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+                continue;
+            }
+
+            // Check if this window is already tracked using local set lookup (O(1))
+            QString windowId = getWindowId(window);
+            QString stableId = extractStableId(windowId);
+            if (trackedStableIds.contains(stableId)) {
+                continue; // Already tracked
+            }
+
+            // Window is not tracked - try to restore it
+            qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
+            callSnapToLastZone(window);
+        }
+    });
+}
+
+void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& stableId, bool isFloating)
+{
+    // Update local floating cache when daemon notifies us of state changes
+    // This keeps the effect's cache in sync with the daemon, preventing
+    // inverted toggle behavior when a floating window is drag-snapped.
+    qCDebug(lcEffect) << "Floating state changed for" << stableId << "- isFloating:" << isFloating;
+    m_navigationHandler->setWindowFloating(stableId, isFloating);
 }
 
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
@@ -1325,27 +1396,63 @@ void PlasmaZonesEffect::connectAutotileSignals()
 
 void PlasmaZonesEffect::loadAutotileSettings()
 {
-    // Query autotile settings from daemon via D-Bus
-    QDBusInterface settingsInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
-                                     QDBusConnection::sessionBus());
+    // Set sensible defaults immediately - don't block compositor startup waiting for daemon
+    m_windowAnimator->setAnimationsEnabled(true);
+    m_windowAnimator->setAnimationDuration(150);
 
-    if (!settingsInterface.isValid()) {
-        qCDebug(lcEffect) << "Cannot load autotile settings - daemon not available yet";
+    // Create interface for async calls
+    auto* settingsInterface = new QDBusInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                                  QDBusConnection::sessionBus(), this);
+
+    if (!settingsInterface->isValid()) {
+        qCDebug(lcEffect) << "Cannot load autotile settings - daemon not available yet, using defaults";
+        settingsInterface->deleteLater();
         return;
     }
 
-    // Load animation enabled setting (default true)
-    bool animationsEnabled = loadDBusSetting<bool>(
-        settingsInterface, QStringLiteral("autotileAnimationsEnabled"), true);
-    m_windowAnimator->setAnimationsEnabled(animationsEnabled);
+    // Load settings asynchronously to avoid blocking KWin startup
 
-    // Load animation duration setting (default 150ms)
-    int animationDuration = loadDBusSetting<int>(
-        settingsInterface, QStringLiteral("autotileAnimationDuration"), 150);
-    m_windowAnimator->setAnimationDuration(static_cast<qreal>(animationDuration));
+    // Load autotileAnimationsEnabled
+    QDBusPendingCall animEnabledCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("autotileAnimationsEnabled"));
+    auto* animEnabledWatcher = new QDBusPendingCallWatcher(animEnabledCall, this);
+    connect(animEnabledWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            bool enabled;
+            if (value.canConvert<QDBusVariant>()) {
+                enabled = value.value<QDBusVariant>().variant().toBool();
+            } else {
+                enabled = value.toBool();
+            }
+            m_windowAnimator->setAnimationsEnabled(enabled);
+            qCDebug(lcEffect) << "Loaded autotileAnimationsEnabled:" << enabled;
+        }
+    });
 
-    qCDebug(lcEffect) << "Loaded autotile settings: animationsEnabled=" << m_windowAnimator->animationsEnabled()
-                      << "animationDuration=" << m_windowAnimator->animationDuration() << "ms";
+    // Load autotileAnimationDuration
+    QDBusPendingCall animDurationCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("autotileAnimationDuration"));
+    auto* animDurationWatcher = new QDBusPendingCallWatcher(animDurationCall, this);
+    connect(animDurationWatcher, &QDBusPendingCallWatcher::finished, this, [this, settingsInterface](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            int duration;
+            if (value.canConvert<QDBusVariant>()) {
+                duration = value.value<QDBusVariant>().variant().toInt();
+            } else {
+                duration = value.toInt();
+            }
+            m_windowAnimator->setAnimationDuration(static_cast<qreal>(duration));
+            qCDebug(lcEffect) << "Loaded autotileAnimationDuration:" << duration << "ms";
+        }
+        // Clean up the interface after the last setting is loaded
+        settingsInterface->deleteLater();
+    });
+
+    qCDebug(lcEffect) << "Loading autotile settings asynchronously, using defaults until loaded";
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const

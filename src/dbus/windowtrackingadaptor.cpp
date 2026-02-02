@@ -93,6 +93,19 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
         return;
     }
 
+    // BUG FIX: If window was floating, clear the floating state since it's now being snapped.
+    // This handles the case where a window was floating (from session restore or explicit float),
+    // and then the user drag-snaps it to a zone. Without this, toggle-float would be inverted
+    // because the daemon still thought the window was floating.
+    if (m_service->isWindowFloating(windowId)) {
+        qCDebug(lcDbusWindow) << "Window" << windowId << "was floating, clearing floating state for snap";
+        m_service->setWindowFloating(windowId, false);
+        // Also clear the pre-float zone since we're starting fresh
+        m_service->clearPreFloatZone(windowId);
+        // Notify effect so it can update its local cache
+        Q_EMIT windowFloatingChanged(Utils::extractStableId(windowId), false);
+    }
+
     // Check if this was an auto-snap (restore from session or snap to last zone)
     // and clear the flag. Auto-snapped windows don't update last-used zone tracking.
     bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
@@ -176,6 +189,7 @@ void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
     QString previousZoneId = m_service->zoneForWindow(windowId);
     if (previousZoneId.isEmpty()) {
         // Window was not snapped - no-op
+        qCDebug(lcDbusWindow) << "windowUnsnappedForFloat: window not in any zone:" << windowId;
         return;
     }
 
@@ -188,11 +202,13 @@ void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
 bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneIdOut)
 {
     if (windowId.isEmpty()) {
+        qCDebug(lcDbusWindow) << "getPreFloatZone: empty windowId";
         zoneIdOut.clear();
         return false;
     }
     // Delegate to service
     zoneIdOut = m_service->preFloatZone(windowId);
+    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneIdOut.isEmpty() << "zone:" << zoneIdOut;
     return !zoneIdOut.isEmpty();
 }
 
@@ -595,6 +611,8 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     // Delegate to service
     m_service->setWindowFloating(windowId, floating);
     qCDebug(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
+    // Notify effect so it can update its local cache
+    Q_EMIT windowFloatingChanged(Utils::extractStableId(windowId), floating);
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
