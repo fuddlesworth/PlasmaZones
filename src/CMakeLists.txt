@@ -80,6 +80,14 @@ set(plasmazones_core_SRCS
     autotile/algorithms/ColumnsAlgorithm.cpp
     autotile/algorithms/BSPAlgorithm.h
     autotile/algorithms/BSPAlgorithm.cpp
+    autotile/algorithms/MonocleAlgorithm.h
+    autotile/algorithms/MonocleAlgorithm.cpp
+    autotile/algorithms/RowsAlgorithm.h
+    autotile/algorithms/RowsAlgorithm.cpp
+    autotile/algorithms/FibonacciAlgorithm.h
+    autotile/algorithms/FibonacciAlgorithm.cpp
+    autotile/algorithms/ThreeColumnAlgorithm.h
+    autotile/algorithms/ThreeColumnAlgorithm.cpp
     autotile/AlgorithmRegistry.h
     autotile/AlgorithmRegistry.cpp
     dbus/layoutadaptor.cpp

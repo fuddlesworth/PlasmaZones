@@ -50,6 +50,29 @@ Item {
     property int minZoneSize: 8
     /// Whether to show zone numbers
     property bool showZoneNumbers: true
+    /// Auto-detect monocle layout (stacked full-screen zones with small offsets)
+    readonly property bool isMonocleLayout: {
+        if (!zones || zones.length <= 1) return false;
+        // Monocle pattern detection:
+        // - First zone is nearly full-screen (w >= 0.9, h >= 0.9)
+        // - All zones are horizontally centered: x ≈ (1-w)/2
+        // - All zones have symmetric positioning: x ≈ y (equal margins)
+        for (let i = 0; i < zones.length; i++) {
+            const geo = zones[i].relativeGeometry || {};
+            const x = geo.x || 0;
+            const y = geo.y || 0;
+            const w = geo.width || 1;
+            const h = geo.height || 1;
+            // First zone must be nearly full-screen
+            if (i === 0 && (w < 0.9 || h < 0.9)) return false;
+            // Zone must be horizontally centered
+            const expectedX = (1 - w) / 2;
+            if (Math.abs(x - expectedX) > 0.02) return false;
+            // Zone must have symmetric positioning (equal x and y margins)
+            if (Math.abs(x - y) > 0.02) return false;
+        }
+        return true;
+    }
     /// Animation duration in milliseconds
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
@@ -129,11 +152,12 @@ Item {
             readonly property real rightGap: (relX + relWidth) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
             readonly property real bottomGap: (relY + relHeight) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
 
-            // Position and size with differentiated gaps
-            x: relX * root.width + leftGap
-            y: relY * root.height + topGap
-            width: Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
-            height: Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+            // Position and size - for monocle, C++ already applies offset, so just use raw geometry
+            // For other layouts, apply edge gaps and zone padding
+            x: root.isMonocleLayout ? (relX * root.width) : (relX * root.width + leftGap)
+            y: root.isMonocleLayout ? (relY * root.height) : (relY * root.height + topGap)
+            width: root.isMonocleLayout ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+            height: root.isMonocleLayout ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
             // Scale on hover (only if hoverScale > 1.0)
             scale: isZoneHovered && root.hoverScale > 1.0 ? root.hoverScale : 1.0
             z: isZoneHovered ? 10 : 1
@@ -170,7 +194,7 @@ Item {
                 font.bold: true
                 color: Kirigami.Theme.textColor
                 opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
-                visible: root.showZoneNumbers && parent.width >= 16 && parent.height >= 16
+                visible: root.showZoneNumbers && (!root.isMonocleLayout || index === root.zones.length - 1) && parent.width >= 16 && parent.height >= 16
 
                 Behavior on opacity {
                     NumberAnimation {

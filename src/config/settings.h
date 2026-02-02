@@ -1061,7 +1061,7 @@ private:
     QString m_focusZoneDownShortcut = QStringLiteral("Alt+Shift+Down");
     QString m_pushToEmptyZoneShortcut = QStringLiteral("Meta+Alt+Return");
     QString m_restoreWindowSizeShortcut = QStringLiteral("Meta+Alt+Escape");
-    QString m_toggleWindowFloatShortcut = QStringLiteral("Meta+Alt+F");
+    QString m_toggleWindowFloatShortcut = QStringLiteral("Meta+F");
 
     // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
     // Swaps focused window with window in adjacent zone
@@ -1118,9 +1118,9 @@ private:
     bool m_autotileMonocleShowTabs = true;
 
     // Autotiling Keyboard Shortcuts (Bismuth-compatible defaults)
-    QString m_autotileToggleShortcut = QStringLiteral("Meta+T");
-    QString m_autotileFocusMasterShortcut = QStringLiteral("Meta+M");
-    QString m_autotileSwapMasterShortcut = QStringLiteral("Meta+Return");
+    QString m_autotileToggleShortcut = QStringLiteral("Meta+Alt+T");
+    QString m_autotileFocusMasterShortcut = QStringLiteral("Meta+Shift+M");
+    QString m_autotileSwapMasterShortcut = QStringLiteral("Meta+Shift+Return");
     QString m_autotileIncMasterRatioShortcut = QStringLiteral("Meta+Shift+=");
     QString m_autotileDecMasterRatioShortcut = QStringLiteral("Meta+Shift+-");
     QString m_autotileIncMasterCountShortcut = QStringLiteral("Meta+Shift+I");

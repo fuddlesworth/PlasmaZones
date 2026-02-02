@@ -92,9 +92,11 @@ namespace LayoutUtils {
  * autotile algorithms (in registration order).
  *
  * @param layoutManager Layout manager interface (can be nullptr)
+ * @param includeAutotile Whether to include autotile algorithms (default: true)
  * @return Vector of unified layout entries
  */
-PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager);
+PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
+                                                                       bool includeAutotile = true);
 
 /**
  * @brief Convert a unified layout entry to QVariantMap for QML

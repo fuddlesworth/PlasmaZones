@@ -37,6 +37,21 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, A
         });
     }
 
+    // Invalidate cache when autotile enabled setting changes
+    if (m_settings) {
+        connect(m_settings, &Settings::autotileEnabledChanged, this, [this]() {
+            m_cacheValid = false;
+            Q_EMIT layoutsChanged();
+        });
+
+        // Also connect to settingsChanged - this is emitted when Settings::load() is called
+        // (e.g., when KCM saves settings), which doesn't emit individual property signals
+        connect(m_settings, &Settings::settingsChanged, this, [this]() {
+            m_cacheValid = false;
+            Q_EMIT layoutsChanged();
+        });
+    }
+
     // Sync when autotile changes externally
     if (m_autotileEngine) {
         connect(m_autotileEngine, &AutotileEngine::enabledChanged, this, [this](bool enabled) {
@@ -79,7 +94,9 @@ std::optional<UnifiedLayoutEntry> UnifiedLayoutController::currentLayout() const
 QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
-        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+        // Only include autotile layouts if autotiling is enabled in settings
+        const bool includeAutotile = m_settings && m_settings->autotileEnabled();
+        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, includeAutotile);
         m_cacheValid = true;
     }
     return m_cachedLayouts;
