@@ -341,8 +341,8 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // The daemon preserves floating state (keyed by stableId) so the window stays floating
     // when reopened. The effect's local cache will be synced in slotWindowAdded().
 
-    // Clean up any pending autotile animations
-    m_windowAnimator->removeAnimation(w);
+    // Clean up all window animator tracking data (animations and cancelled targets)
+    m_windowAnimator->windowRemoved(w);
 
     // Phase 2.1: Notify daemon for autotiling and cleanup
     notifyWindowClosed(w);
@@ -1725,6 +1725,7 @@ void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const 
     }
 
     // Don't apply geometry during user interaction - would interfere with drag/resize
+    // Note: This is defense-in-depth; callers should also check before calling this method
     if (window->isUserMove() || window->isUserResize()) {
         qCDebug(lcEffect) << "Window in user operation, skipping autotile for" << window->caption();
         return;

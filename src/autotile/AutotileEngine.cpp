@@ -683,6 +683,9 @@ void AutotileEngine::windowFocused(const QString &windowId, const QString &scree
         }
 
         // Retile both affected screens
+        // Note: This triggers two retile operations per cross-screen focus change.
+        // If rapid cross-screen focus changes cause performance issues, consider
+        // adding debouncing or coalescing multiple retile requests.
         retileAfterOperation(previousScreen, true);
         retileAfterOperation(screenName, true);
     }
