@@ -816,20 +816,24 @@ void WindowDragAdaptor::resetDragState()
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)
 {
-    // Delegate to overload using current member variables
+    // Delegate to overload - wasSnapped param is now unused but kept for compatibility
     tryStorePreSnapGeometry(windowId, m_wasSnapped, m_originalGeometry);
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wasSnapped, const QRect& originalGeometry)
 {
-    // Store pre-snap geometry on FIRST snap only (for restore on unsnap)
-    // The storePreSnapGeometry method handles the "already stored" case internally,
-    // so calling it multiple times for A→B snaps is safe and won't overwrite.
+    Q_UNUSED(wasSnapped)
+    // Store pre-snap geometry for restore on unsnap/float.
+    // The storePreSnapGeometry method handles the "already stored" case internally
+    // (only stores on FIRST snap, won't overwrite when moving A→B).
     //
-    // This overload accepts captured values to prevent race conditions when called
-    // from dragStopped() - another drag could modify m_wasSnapped/m_originalGeometry
-    // between the time dragStopped() is invoked and when it actually executes.
-    if (!wasSnapped && m_windowTracking && originalGeometry.isValid()) {
+    // BUG FIX: Previously we skipped this call if wasSnapped was true, but this caused
+    // a race condition: when floating a window and quickly drag-snapping it, the async
+    // D-Bus calls (windowUnsnappedForFloat, setWindowFloating, clearPreSnapGeometry)
+    // might not have completed, causing wasSnapped to incorrectly be true. This meant
+    // the floating geometry was never stored, so the second float couldn't restore it.
+    // By always calling the daemon, we let the service's internal check handle it correctly.
+    if (m_windowTracking && originalGeometry.isValid()) {
         m_windowTracking->storePreSnapGeometry(windowId, originalGeometry.x(), originalGeometry.y(),
                                                originalGeometry.width(), originalGeometry.height());
     }

@@ -383,6 +383,20 @@ Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
     /**
+     * @brief Emitted when a window's floating state changes
+     *
+     * The KWin effect should listen to this to keep its local floating cache in sync.
+     * This is emitted when:
+     * - A floating window is snapped (floating cleared automatically)
+     * - toggleWindowFloat changes the state
+     * - setWindowFloating is called explicitly
+     *
+     * @param windowId Window identifier (stable ID portion)
+     * @param isFloating The new floating state
+     */
+    void windowFloatingChanged(const QString& windowId, bool isFloating);
+
+    /**
      * @brief Emitted when pending window restores become available
      *
      * This signal is emitted when:

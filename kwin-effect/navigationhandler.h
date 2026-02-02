@@ -54,6 +54,10 @@ public:
     const QSet<QString>& floatingWindows() const { return m_floatingWindows; }
 
 private:
+    // Internal helper for float toggle - called after daemon state is synced
+    void executeFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
+                            const QString& stableId, const QString& screenName, bool newFloatState);
+
     PlasmaZonesEffect* m_effect;
     QSet<QString> m_floatingWindows;
 };

@@ -783,6 +783,11 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("pendingRestoresAvailable"), this,
                                           SLOT(slotPendingRestoresAvailable()));
 
+    // Connect to floating state changes to keep local cache in sync
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("windowFloatingChanged"), this,
+                                          SLOT(slotWindowFloatingChanged(QString, bool)));
+
     qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
@@ -936,31 +941,70 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
 {
     qCDebug(lcEffect) << "Pending restores available - retrying restoration for all visible windows";
 
-    // The daemon's layout is now available and there are pending zone assignments
-    // Iterate through all visible windows and try to restore them
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* window : windows) {
-        if (!window || !shouldHandleWindow(window)) {
-            continue;
-        }
-
-        // Skip minimized or invisible windows
-        if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
-            continue;
-        }
-
-        // Check if this window is already tracked (has a zone assignment)
-        // If already tracked, skip - no need to restore again
-        QString windowId = getWindowId(window);
-        QString existingZoneId = queryZoneForWindow(windowId);
-        if (!existingZoneId.isEmpty()) {
-            continue; // Already tracked
-        }
-
-        // Window is not tracked - try to restore it
-        qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
-        callSnapToLastZone(window);
+    if (!ensureWindowTrackingReady("pending restores")) {
+        return;
     }
+
+    // Use ASYNC batch call to get all tracked windows at once
+    // This avoids N sync D-Bus calls (one per window) that could freeze compositor during startup
+    QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getSnappedWindows"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<QStringList> reply = *w;
+        QSet<QString> trackedStableIds;
+
+        if (reply.isValid()) {
+            // Extract stable IDs from tracked windows for comparison
+            // Window IDs include pointer addresses which change, but stable IDs persist
+            const QStringList trackedWindows = reply.value();
+            for (const QString& windowId : trackedWindows) {
+                QString stableId = extractStableId(windowId);
+                if (!stableId.isEmpty()) {
+                    trackedStableIds.insert(stableId);
+                }
+            }
+            qCDebug(lcEffect) << "Got" << trackedStableIds.size() << "tracked windows from daemon";
+        } else {
+            qCWarning(lcEffect) << "Failed to get tracked windows:" << reply.error().message();
+            // Continue anyway - will try to restore all windows (daemon will handle duplicates)
+        }
+
+        // Now iterate through all visible windows and restore untracked ones
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* window : windows) {
+            if (!window || !shouldHandleWindow(window)) {
+                continue;
+            }
+
+            // Skip minimized or invisible windows
+            if (window->isMinimized() || !window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+                continue;
+            }
+
+            // Check if this window is already tracked using local set lookup (O(1))
+            QString windowId = getWindowId(window);
+            QString stableId = extractStableId(windowId);
+            if (trackedStableIds.contains(stableId)) {
+                continue; // Already tracked
+            }
+
+            // Window is not tracked - try to restore it
+            qCDebug(lcEffect) << "Retrying restoration for untracked window:" << windowId;
+            callSnapToLastZone(window);
+        }
+    });
+}
+
+void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& stableId, bool isFloating)
+{
+    // Update local floating cache when daemon notifies us of state changes
+    // This keeps the effect's cache in sync with the daemon, preventing
+    // inverted toggle behavior when a floating window is drag-snapped.
+    qCDebug(lcEffect) << "Floating state changed for" << stableId << "- isFloating:" << isFloating;
+    m_navigationHandler->setWindowFloating(stableId, isFloating);
 }
 
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
