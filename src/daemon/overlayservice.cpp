@@ -901,6 +901,7 @@ void OverlayService::setSettings(ISettings* settings)
     if (m_settings != settings) {
         // Disconnect from old settings signals
         if (m_settings) {
+            disconnect(m_settings, &ISettings::autotileEnabledChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
         }
 
@@ -908,6 +909,14 @@ void OverlayService::setSettings(ISettings* settings)
 
         // Connect to new settings signals
         if (m_settings) {
+            // Update zone selector when autotile enabled setting changes
+            connect(m_settings, &ISettings::autotileEnabledChanged, this, [this]() {
+                // Refresh zone selector windows to include/exclude autotile layouts
+                for (QScreen* screen : m_zoneSelectorWindows.keys()) {
+                    updateZoneSelectorWindow(screen);
+                }
+            });
+
             connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
                 // When shader effects setting changes, recreate overlay windows if visible
                 // to switch between shader and non-shader overlay types
