@@ -1851,30 +1851,6 @@ QVariantList KCMPlasmaZones::availableAlgorithms() const
     return algorithms;
 }
 
-void KCMPlasmaZones::resetAutotileShortcuts()
-{
-    // Reset all autotile shortcuts to defaults
-    m_settings->setAutotileToggleShortcut(QStringLiteral("Meta+T"));
-    m_settings->setAutotileFocusMasterShortcut(QStringLiteral("Meta+M"));
-    m_settings->setAutotileSwapMasterShortcut(QStringLiteral("Meta+Return"));
-    m_settings->setAutotileIncMasterRatioShortcut(QStringLiteral("Meta+Shift+="));
-    m_settings->setAutotileDecMasterRatioShortcut(QStringLiteral("Meta+Shift+-"));
-    m_settings->setAutotileIncMasterCountShortcut(QStringLiteral("Meta+Shift+I"));
-    m_settings->setAutotileDecMasterCountShortcut(QStringLiteral("Meta+Shift+D"));
-    m_settings->setAutotileRetileShortcut(QStringLiteral("Meta+Shift+R"));
-
-    // Emit all signals to update UI
-    Q_EMIT autotileToggleShortcutChanged();
-    Q_EMIT autotileFocusMasterShortcutChanged();
-    Q_EMIT autotileSwapMasterShortcutChanged();
-    Q_EMIT autotileIncMasterRatioShortcutChanged();
-    Q_EMIT autotileDecMasterRatioShortcutChanged();
-    Q_EMIT autotileIncMasterCountShortcutChanged();
-    Q_EMIT autotileDecMasterCountShortcutChanged();
-    Q_EMIT autotileRetileShortcutChanged();
-
-    setNeedsSave(true);
-}
 
 // Daemon status methods
 bool KCMPlasmaZones::isDaemonRunning() const

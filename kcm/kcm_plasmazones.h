@@ -461,7 +461,6 @@ public Q_SLOTS:
 
     // Autotiling
     Q_INVOKABLE QVariantList availableAlgorithms() const;
-    Q_INVOKABLE void resetAutotileShortcuts();
 
     // Screen assignments (legacy - applies to all desktops)
     Q_INVOKABLE void assignLayoutToScreen(const QString& screenName, const QString& layoutId);

@@ -353,7 +353,7 @@
     </entry>
     <entry name="ToggleWindowFloat" type="String">
       <label>Shortcut to toggle floating state for active window</label>
-      <default>Meta+Alt+F</default>
+      <default>Meta+F</default>
     </entry>
 
     <!-- Snap to zone by number (Meta+Ctrl+{1-9}) -->
@@ -694,15 +694,15 @@
   <group name="AutotileShortcuts">
     <entry name="ToggleShortcut" type="String">
       <label>Toggle autotiling on/off</label>
-      <default>Meta+T</default>
+      <default>Meta+Alt+T</default>
     </entry>
     <entry name="FocusMasterShortcut" type="String">
       <label>Focus the master window</label>
-      <default>Meta+M</default>
+      <default>Meta+Shift+M</default>
     </entry>
     <entry name="SwapMasterShortcut" type="String">
       <label>Swap focused window with master</label>
-      <default>Meta+Return</default>
+      <default>Meta+Shift+Return</default>
     </entry>
     <entry name="IncMasterRatioShortcut" type="String">
       <label>Increase master area ratio</label>

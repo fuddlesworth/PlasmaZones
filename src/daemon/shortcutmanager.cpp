@@ -23,13 +23,18 @@ namespace PlasmaZones {
  * @param objectName QStringLiteral object name for KGlobalAccel
  * @param settingsGetter Settings method to get the shortcut string
  * @param slot Slot to connect to QAction::triggered
+ *
+ * Note: We set the default shortcut first, then call setGlobalShortcut which will
+ * load the user's customized shortcut if one exists, or use the default otherwise.
  */
 #define SETUP_SHORTCUT(actionMember, i18nName, objectName, settingsGetter, slot) \
     do { \
         if (!actionMember) { \
             actionMember = new QAction(i18n(i18nName), this); \
             actionMember->setObjectName(QStringLiteral(objectName)); \
-            KGlobalAccel::setGlobalShortcut(actionMember, QKeySequence(m_settings->settingsGetter())); \
+            const QKeySequence shortcut(m_settings->settingsGetter()); \
+            KGlobalAccel::self()->setDefaultShortcut(actionMember, {shortcut}); \
+            KGlobalAccel::setGlobalShortcut(actionMember, shortcut); \
             connect(actionMember, &QAction::triggered, this, slot); \
         } \
     } while (0)

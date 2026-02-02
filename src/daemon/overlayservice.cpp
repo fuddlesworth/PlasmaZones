@@ -4,6 +4,7 @@
 #include "overlayservice.h"
 #include "../config/configdefaults.h"
 #include "../core/layout.h"
+#include "../core/layoutmanager.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
@@ -974,12 +975,76 @@ void OverlayService::setSettings(ISettings* settings)
 
 void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
 {
+    // Disconnect from old layout manager if exists
+    if (m_layoutManager) {
+        auto* oldManager = dynamic_cast<LayoutManager*>(m_layoutManager);
+        if (oldManager) {
+            disconnect(oldManager, &LayoutManager::activeLayoutChanged, this, nullptr);
+            disconnect(oldManager, &LayoutManager::layoutAssigned, this, nullptr);
+        }
+    }
+
     m_layoutManager = layoutManager;
+
+    // Connect to layout change signals from the concrete LayoutManager
+    // ILayoutManager is a pure interface without signals, so we need to cast
+    if (m_layoutManager) {
+        auto* manager = dynamic_cast<LayoutManager*>(m_layoutManager);
+        if (manager) {
+            // Update zone selector and overlay windows when active layout changes (via shortcuts, etc.)
+            connect(manager, &LayoutManager::activeLayoutChanged, this, [this](Layout* /*layout*/) {
+                for (QScreen* screen : m_zoneSelectorWindows.keys()) {
+                    updateZoneSelectorWindow(screen);
+                }
+                for (QScreen* screen : m_overlayWindows.keys()) {
+                    updateOverlayWindow(screen);
+                }
+            });
+
+            // Update zone selector and overlay windows when a layout is assigned to a screen
+            connect(manager, &LayoutManager::layoutAssigned, this, [this](const QString& /*screenName*/, Layout* /*layout*/) {
+                for (QScreen* screen : m_zoneSelectorWindows.keys()) {
+                    updateZoneSelectorWindow(screen);
+                }
+                for (QScreen* screen : m_overlayWindows.keys()) {
+                    updateOverlayWindow(screen);
+                }
+            });
+        }
+    }
 }
 
 void OverlayService::setAutotileEngine(AutotileEngine* engine)
 {
+    // Disconnect from old engine if exists
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &AutotileEngine::enabledChanged, this, nullptr);
+        disconnect(m_autotileEngine, &AutotileEngine::algorithmChanged, this, nullptr);
+    }
+
     m_autotileEngine = engine;
+
+    // Connect to autotile state change signals to update zone selector
+    // When autotile is enabled/disabled or algorithm changes, the active layout indicator needs to update
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &AutotileEngine::enabledChanged, this, [this](bool /*enabled*/) {
+            for (QScreen* screen : m_zoneSelectorWindows.keys()) {
+                updateZoneSelectorWindow(screen);
+            }
+            for (QScreen* screen : m_overlayWindows.keys()) {
+                updateOverlayWindow(screen);
+            }
+        });
+
+        connect(m_autotileEngine, &AutotileEngine::algorithmChanged, this, [this](const QString& /*algorithmId*/) {
+            for (QScreen* screen : m_zoneSelectorWindows.keys()) {
+                updateZoneSelectorWindow(screen);
+            }
+            for (QScreen* screen : m_overlayWindows.keys()) {
+                updateOverlayWindow(screen);
+            }
+        });
+    }
 }
 
 void OverlayService::setCurrentVirtualDesktop(int desktop)
@@ -1361,17 +1426,25 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     QVariantList layouts = buildLayoutsList();
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
-    // Set active layout ID - autotile takes precedence when enabled, else screen-specific manual layout
+    // Set active layout ID - autotile takes precedence when enabled, else use currently active layout
     QString activeLayoutId;
     if (m_autotileEngine && m_autotileEngine->isEnabled()) {
         activeLayoutId = LayoutId::makeAutotileId(m_autotileEngine->algorithm());
     } else if (m_layoutManager) {
-        Layout* screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-        if (screenLayout) {
-            activeLayoutId = screenLayout->id().toString();
-        } else if (m_layout) {
-            activeLayoutId = m_layout->id().toString();
+        // Prefer the currently active layout (set via shortcut or zone selector selection)
+        // Fall back to screen assignment only if no active layout is set
+        Layout* activeLayout = m_layoutManager->activeLayout();
+        if (activeLayout) {
+            activeLayoutId = activeLayout->id().toString();
+        } else {
+            // No active layout - try screen-specific assignment
+            Layout* screenLayout =
+                m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+            if (screenLayout) {
+                activeLayoutId = screenLayout->id().toString();
+            } else if (m_layout) {
+                activeLayoutId = m_layout->id().toString();
+            }
         }
     } else if (m_layout) {
         activeLayoutId = m_layout->id().toString();
@@ -1597,10 +1670,14 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     }
 
     // Get the layout for this screen to use layout-specific settings
+    // Prefer the currently active layout, fall back to screen assignment
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        screenLayout = m_layoutManager->activeLayout();
+        if (!screenLayout) {
+            screenLayout =
+                m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        }
     }
     if (!screenLayout) {
         screenLayout = m_layout;
@@ -1673,15 +1750,19 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
         return zonesList;
     }
 
-    // Get the layout assigned to this specific screen, desktop, and activity
-    // This allows different monitors, virtual desktops, and activities to have different layouts
+    // Get the currently active layout first, then fall back to screen-specific assignment
+    // This ensures the overlay shows the layout selected via shortcuts or zone selector
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        screenLayout = m_layoutManager->activeLayout();
+        if (!screenLayout) {
+            // Fall back to screen-specific assignment if no active layout is set
+            screenLayout =
+                m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        }
     }
 
-    // Fall back to the global active layout if no screen-specific assignment
+    // Fall back to the global layout if nothing else is set
     if (!screenLayout) {
         screenLayout = m_layout;
     }
