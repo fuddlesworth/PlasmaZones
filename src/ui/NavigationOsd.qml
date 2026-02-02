@@ -6,7 +6,6 @@ import QtQuick.Controls
 import QtQuick.Effects
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
-import org.plasmazones.common as QFZCommon
 
 /**
  * Navigation OSD Window - Shows brief feedback when using keyboard navigation
@@ -21,15 +20,13 @@ Window {
     // Navigation feedback data
     property bool success: true
     property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle"
-    property string reason: "" // Failure reason if !success
+    property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
 
-    // Zone data for preview
+    // Zone data
     property var zones: []
-    property string highlightedZoneId: "" // Zone to highlight in preview
-
-    // Screen info for aspect ratio (bounded to prevent layout issues)
-    property real screenAspectRatio: 16 / 9
-    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4.0, screenAspectRatio))
+    property var highlightedZoneIds: [] // Zone IDs involved (target zones)
+    property string sourceZoneId: ""    // Source zone for move/swap operations
+    property int windowCount: 1         // Number of windows affected (for rotation)
 
     // Timing
     property int displayDuration: 1000 // ms before auto-hide (shorter than layout OSD)
@@ -42,46 +39,107 @@ Window {
     property color highlightColor: Kirigami.Theme.highlightColor
     property color errorColor: Kirigami.Theme.negativeTextColor
 
-    // Computed properties
-    readonly property string directionText: {
-        // Action-based messages for keyboard navigation feedback
-        if (action === "move") {
-            return success ? i18n("Moved") : i18n("No zone")
-        } else if (action === "focus") {
-            return success ? i18n("Focus") : i18n("No zone")
-        } else if (action === "push") {
-            return success ? i18n("Pushed") : i18n("No empty zone")
-        } else if (action === "restore") {
-            return success ? i18n("Restored") : i18n("Failed")
-        } else if (action === "float") {
-            return success ? i18n("Floating") : i18n("Failed")
-        } else if (action === "snap") {
-            return success ? i18n("Snapped") : i18n("Failed")
-        } else if (action === "swap") {
-            return success ? i18n("Swapped") : i18n("Failed")
-        } else if (action === "rotate") {
-            return success ? i18n("Rotated") : i18n("Failed")
-        } else if (action === "cycle") {
-            return success ? i18n("Focus") : i18n("Failed")
-        } else {
-            // Note: "autotile" and "algorithm" actions now use LayoutOsd with visual preview
-            return success ? i18n("Done") : i18n("Failed")
+    // Helper function to normalize UUID format for comparison
+    // Handles both "{uuid}" and "uuid" formats by stripping braces
+    function normalizeUuid(uuid) {
+        if (!uuid) return "";
+        var s = String(uuid);
+        // Remove leading/trailing braces if present
+        if (s.startsWith("{") && s.endsWith("}")) {
+            return s.substring(1, s.length - 1).toLowerCase();
         }
+        return s.toLowerCase();
     }
 
-    readonly property string directionArrow: {
-        // Try to extract direction from reason (e.g., "no_adjacent_zone_left" -> "←")
-        if (reason.indexOf("left") >= 0) {
-            return "←"
-        } else if (reason.indexOf("right") >= 0) {
-            return "→"
-        } else if (reason.indexOf("up") >= 0) {
-            return "↑"
-        } else if (reason.indexOf("down") >= 0) {
-            return "↓"
+    // Helper function to get zone number from zone ID
+    function getZoneNumber(zoneId) {
+        if (!zoneId || !zones || zones.length === 0) return -1;
+        var normalizedTarget = normalizeUuid(zoneId);
+        for (var i = 0; i < zones.length; i++) {
+            var zone = zones[i];
+            var id = zone.zoneId || zone.id || "";
+            // Compare normalized UUIDs to handle format differences
+            if (normalizeUuid(id) === normalizedTarget) {
+                return zone.zoneNumber !== undefined ? zone.zoneNumber : (i + 1);
+            }
         }
-        // Default: no arrow
-        return ""
+        return -1;
+    }
+
+    // Get target zone number (first highlighted zone)
+    readonly property int targetZoneNumber: {
+        if (highlightedZoneIds && highlightedZoneIds.length > 0) {
+            return getZoneNumber(highlightedZoneIds[0]);
+        }
+        return -1;
+    }
+
+    // Get source zone number
+    readonly property int sourceZoneNumber: getZoneNumber(sourceZoneId)
+
+    // Computed message text - informative zone-based messages
+    readonly property string messageText: {
+        if (!success) {
+            // Failure messages
+            if (action === "move" || action === "focus") {
+                return i18n("No zone in that direction")
+            } else if (action === "push") {
+                return i18n("No empty zone available")
+            } else if (action === "rotate") {
+                return i18n("Nothing to rotate")
+            } else if (action === "swap") {
+                return i18n("Nothing to swap")
+            } else {
+                return i18n("Failed")
+            }
+        }
+
+        // Success messages with zone numbers
+        if (action === "rotate") {
+            var arrow = (reason === "clockwise") ? "↻" : "↺";
+            if (windowCount > 1) {
+                return arrow + " " + i18np("Rotated %1 window", "Rotated %1 windows", windowCount);
+            } else {
+                return arrow + " " + i18n("Rotated");
+            }
+        } else if (action === "move") {
+            if (targetZoneNumber > 0) {
+                return i18n("→ Zone %1", targetZoneNumber);
+            }
+            return i18n("Moved");
+        } else if (action === "focus") {
+            if (targetZoneNumber > 0) {
+                return i18n("Focus: Zone %1", targetZoneNumber);
+            }
+            return i18n("Focus");
+        } else if (action === "swap") {
+            if (sourceZoneNumber > 0 && targetZoneNumber > 0) {
+                return i18n("Zone %1 ↔ Zone %2", sourceZoneNumber, targetZoneNumber);
+            }
+            return i18n("Swapped");
+        } else if (action === "push") {
+            if (targetZoneNumber > 0) {
+                return i18n("→ Zone %1", targetZoneNumber);
+            }
+            return i18n("Pushed");
+        } else if (action === "restore") {
+            return i18n("Restored");
+        } else if (action === "float") {
+            // Show different message based on float state from reason field
+            if (reason === "unfloated") {
+                return i18n("Snapped");
+            }
+            return i18n("Floating");
+        } else if (action === "snap") {
+            if (targetZoneNumber > 0) {
+                return i18n("Snapped: Zone %1", targetZoneNumber);
+            }
+            return i18n("Snapped");
+        } else if (action === "cycle") {
+            return i18n("Next window");
+        } else {
+            return i18n("Done");
+        }
     }
 
     // Signals
@@ -220,61 +278,26 @@ Window {
             Accessible.description: i18n("Brief feedback when using keyboard navigation to move or focus windows between zones")
 
             anchors.centerIn: parent
-        width: previewContainer.visible ? previewContainer.width + Kirigami.Units.gridUnit * 3 : Math.max(messageLabel.width + Kirigami.Units.gridUnit * 2, 200)
-        height: previewContainer.height + messageLabel.height + Kirigami.Units.gridUnit * 3
+            // Text-only: size based on message content
+            width: Math.max(messageLabel.implicitWidth + Kirigami.Units.gridUnit * 3, 160)
+            height: messageLabel.implicitHeight + Kirigami.Units.gridUnit * 2.5
         color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)
         radius: Kirigami.Units.gridUnit * 1.5
         border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.15)
         border.width: 1
 
-        // Zone preview (matches LayoutOsd size and style)
-        Item {
-            id: previewContainer
+        // Message label - informative text-based feedback
+        Label {
+            id: messageLabel
+
+            Accessible.name: root.messageText
 
             anchors.top: parent.top
             anchors.topMargin: Kirigami.Units.gridUnit * 1.5
             anchors.horizontalCenter: parent.horizontalCenter
-            width: root.success && zones.length > 0 ? 200 : 0
-            height: root.success && zones.length > 0 ? Math.round(200 / root.safeAspectRatio) : 0
-            visible: root.success && zones.length > 0
-
-            // Background for preview area
-            Rectangle {
-                anchors.fill: parent
-                color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.08)
-                radius: Kirigami.Units.smallSpacing
-            }
-
-            // Zone preview using shared component (matches LayoutOsd settings)
-            QFZCommon.ZonePreview {
-                anchors.fill: parent
-                anchors.margins: 4
-                zones: root.zones
-                isHovered: false
-                isActive: true
-                zonePadding: 2
-                edgeGap: 2
-                minZoneSize: 12
-                showZoneNumbers: true
-                inactiveOpacity: 0.3
-                activeOpacity: 0.6
-                animationDuration: 150
-            }
-
-        }
-
-        // Message label (matches LayoutOsd nameLabel format)
-        Label {
-            id: messageLabel
-
-            Accessible.name: root.directionArrow !== "" ? (root.directionArrow + " " + root.directionText) : root.directionText
-
-            anchors.top: previewContainer.visible ? previewContainer.bottom : parent.top
-            anchors.topMargin: previewContainer.visible ? Kirigami.Units.gridUnit : Kirigami.Units.gridUnit * 1.5
-            anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
-            text: root.directionArrow !== "" ? (root.directionArrow + " " + root.directionText) : root.directionText
-            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.2
+            text: root.messageText
+            font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.3
             font.weight: Font.Medium
             color: root.success ? textColor : errorColor
             horizontalAlignment: Text.AlignHCenter

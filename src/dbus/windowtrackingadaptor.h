@@ -141,10 +141,15 @@ public Q_SLOTS:
      * @param success Whether the navigation succeeded
      * @param action Action attempted (e.g., "move", "focus", "swap")
      * @param reason Failure reason if !success
+     * @param sourceZoneId Source zone ID for OSD highlighting (optional)
+     * @param targetZoneId Target zone ID for OSD highlighting (optional)
+     * @param screenName Screen name where navigation occurred (for OSD placement)
      * @note This method is called by KWin effect to report navigation results.
      *       It emits the Qt navigationFeedback signal which triggers the OSD.
      */
-    void reportNavigationFeedback(bool success, const QString& action, const QString& reason);
+    void reportNavigationFeedback(bool success, const QString& action, const QString& reason,
+                                  const QString& sourceZoneId, const QString& targetZoneId,
+                                  const QString& screenName);
 
     /**
      * Get validated pre-snap geometry, ensuring it's within visible screen bounds
@@ -397,8 +402,13 @@ Q_SIGNALS:
      * @param success Whether the navigation succeeded
      * @param action Action attempted (e.g., "move", "focus", "push", "restore", "float")
      * @param reason Failure reason if !success (e.g., "no_adjacent_zone", "no_empty_zone", "not_snapped")
+     * @param sourceZoneId Source zone ID for OSD highlighting
+     * @param targetZoneId Target zone ID for OSD highlighting
+     * @param screenName Screen name where navigation occurred (for OSD placement)
      */
-    void navigationFeedback(bool success, const QString& action, const QString& reason);
+    void navigationFeedback(bool success, const QString& action, const QString& reason,
+                            const QString& sourceZoneId, const QString& targetZoneId,
+                            const QString& screenName);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Phase 2.1: Window Event Signals for Autotiling

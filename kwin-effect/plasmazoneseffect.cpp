@@ -882,13 +882,16 @@ QString PlasmaZonesEffect::getWindowScreenName(KWin::EffectWindow* w) const
     return QString();
 }
 
-void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason)
+void PlasmaZonesEffect::emitNavigationFeedback(bool success, const QString& action, const QString& reason,
+                                               const QString& sourceZoneId, const QString& targetZoneId,
+                                               const QString& screenName)
 {
     // Call D-Bus method on daemon to report navigation feedback (can't emit signals on another service's interface)
     if (!ensureWindowTrackingReady("report navigation feedback")) {
         return;
     }
-    m_windowTrackingInterface->asyncCall(QStringLiteral("reportNavigationFeedback"), success, action, reason);
+    m_windowTrackingInterface->asyncCall(QStringLiteral("reportNavigationFeedback"), success, action, reason,
+                                         sourceZoneId, targetZoneId, screenName);
 }
 
 void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry)

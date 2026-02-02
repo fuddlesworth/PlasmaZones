@@ -2146,7 +2146,9 @@ void OverlayService::destroyLayoutOsdWindow(QScreen* screen)
     }
 }
 
-void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason)
+void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
+                                       const QString& sourceZoneId, const QString& targetZoneId,
+                                       const QString& screenName)
 {
     // Only show OSD for successful actions - failures (no windows, no zones, etc.) don't need feedback
     if (!success) {
@@ -2170,10 +2172,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationReason = reason;
     m_lastNavigationTime.restart();
 
-    // Show on primary screen only for OSD
-    QScreen* screen = Utils::primaryScreen();
+    // Show on the screen where the navigation occurred, fallback to primary
+    QScreen* screen = Utils::findScreenByName(screenName);
     if (!screen) {
-        qCWarning(lcOverlay) << "No primary screen for navigation OSD";
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        qCWarning(lcOverlay) << "No screen available for navigation OSD";
         return;
     }
 
@@ -2195,27 +2200,49 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
+    // Process reason field - for rotation, extract window count
+    // Format: "clockwise:N" or "counterclockwise:N" where N is actual rotated window count
+    int windowCount = 1;
+    QString displayReason = reason;
+    if (action == QStringLiteral("rotate") && reason.contains(QLatin1Char(':'))) {
+        QStringList parts = reason.split(QLatin1Char(':'));
+        if (parts.size() >= 2) {
+            displayReason = parts.at(0); // "clockwise" or "counterclockwise"
+            bool ok = false;
+            int count = parts.at(1).toInt(&ok);
+            if (ok && count > 0) {
+                windowCount = count;
+            }
+        }
+    }
+
     // Set OSD data
     writeQmlProperty(window, QStringLiteral("success"), success);
     writeQmlProperty(window, QStringLiteral("action"), action);
-    writeQmlProperty(window, QStringLiteral("reason"), reason);
+    writeQmlProperty(window, QStringLiteral("reason"), displayReason);
+    writeQmlProperty(window, QStringLiteral("windowCount"), windowCount);
 
-    // Use shared LayoutUtils with full zone fields for OSD rendering
-    QVariantList zonesList = LayoutUtils::zonesToVariantList(m_layout, ZoneField::Full);
+    // Pass source zone ID for swap operations
+    writeQmlProperty(window, QStringLiteral("sourceZoneId"), sourceZoneId);
+
+    // Build highlighted zone IDs list (target zones)
+    QStringList highlightedZoneIds;
+    if (!targetZoneId.isEmpty()) {
+        highlightedZoneIds.append(targetZoneId);
+    }
+    writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), highlightedZoneIds);
+
+    // Use shared LayoutUtils with minimal fields for zone number lookup
+    // (only need zoneId and zoneNumber, not name/appearance)
+    QVariantList zonesList = LayoutUtils::zonesToVariantList(m_layout, ZoneField::Minimal);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
-    // Get screen geometry for aspect ratio
+    // Get screen geometry for window positioning
     const QRect screenGeom = screen->geometry();
-    qreal aspectRatio =
-        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-    aspectRatio = qBound(0.5, aspectRatio, 4.0);
-    writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
 
-    // Set explicit window size before positioning
-    const int osdWidth = 280; // Same as LayoutOsd
-    const int osdHeight = success && !zonesList.isEmpty()
-        ? static_cast<int>(200 / aspectRatio) + 80 // preview height + margins + label (matches LayoutOsd)
-        : 80; // message only + margins
+    // Set explicit window size before positioning - text-only OSD
+    const int osdWidth = 240; // Compact width for text
+    const int osdHeight = 70; // Text message + margins
     window->setWidth(osdWidth);
     window->setHeight(osdHeight);
     centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
@@ -2226,7 +2253,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Show with animation
     QMetaObject::invokeMethod(window, "show");
 
-    qCDebug(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action << "reason=" << reason;
+    qCDebug(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action
+                       << "reason=" << reason << "highlightedZones=" << highlightedZoneIds;
 }
 
 void OverlayService::hideNavigationOsd()
