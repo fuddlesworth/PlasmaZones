@@ -144,6 +144,10 @@ KCM.AbstractKCM {
                 text: i18n("Exclusions")
                 icon.name: "dialog-cancel-symbolic"
             }
+            TabButton {
+                text: i18n("Autotiling")
+                icon.name: "window-duplicate"
+            }
         }
     }
 
@@ -250,6 +254,19 @@ KCM.AbstractKCM {
             kcm: root.kcmModule
             constants: constants
         }
+
+        // TAB 7: AUTOTILING
+        AutotilingTab {
+            id: autotilingTab
+            kcm: root.kcmModule
+            constants: constants
+            isCurrentTab: stackLayout.currentIndex === 6
+
+            onRequestActiveBorderColorDialog: {
+                autotileBorderColorDialog.selectedColor = kcm.autotileActiveBorderColor
+                autotileBorderColorDialog.open()
+            }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -273,6 +290,12 @@ KCM.AbstractKCM {
         id: borderColorDialog
         title: i18n("Choose Border Color")
         onAccepted: kcm.borderColor = selectedColor
+    }
+
+    ColorDialog {
+        id: autotileBorderColorDialog
+        title: i18n("Choose Autotile Border Color")
+        onAccepted: kcm.autotileActiveBorderColor = selectedColor
     }
 
     // File dialogs
