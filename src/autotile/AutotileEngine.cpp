@@ -110,6 +110,17 @@ void AutotileEngine::setEnabled(bool enabled)
     }
 }
 
+void AutotileEngine::activate()
+{
+    // Always emit enabledChanged(true) to ensure KWin effect registers windows,
+    // even if autotiling is already enabled. This handles:
+    // 1. Race condition at startup (effect may not be connected when initial signal fires)
+    // 2. User selecting an autotile layout when already in autotile mode
+    m_enabled = true;
+    Q_EMIT enabledChanged(true);
+    retile();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Algorithm selection
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -643,10 +654,38 @@ void AutotileEngine::windowFocused(const QString &windowId, const QString &scree
         return;
     }
 
-    // Update screen mapping - always store when provided, even for new windows
+    // Check if window moved to a different screen
+    QString previousScreen = m_windowToScreen.value(windowId);
+    bool screenChanged = !screenName.isEmpty() && !previousScreen.isEmpty() && screenName != previousScreen;
+
+    // Update screen mapping - always store when provided
     if (!screenName.isEmpty()) {
         m_windowToScreen[windowId] = screenName;
     }
+
+    // If window moved to a different screen, migrate it between TilingStates
+    if (screenChanged && m_enabled) {
+        qCInfo(lcAutotile) << "Window" << windowId << "moved from screen" << previousScreen << "to" << screenName;
+
+        // Remove from old screen's TilingState
+        TilingState *oldState = m_screenStates.value(previousScreen);
+        if (oldState) {
+            oldState->removeWindow(windowId);
+        }
+
+        // Add to new screen's TilingState (if window should be tiled)
+        if (shouldTileWindow(windowId)) {
+            TilingState *newState = stateForScreen(screenName);
+            if (newState && !newState->tiledWindows().contains(windowId)) {
+                newState->addWindow(windowId);
+            }
+        }
+
+        // Retile both affected screens
+        retileAfterOperation(previousScreen, true);
+        retileAfterOperation(screenName, true);
+    }
+
     onWindowFocused(windowId);
 }
 
@@ -722,8 +761,10 @@ bool AutotileEngine::insertWindow(const QString &windowId, const QString &screen
         return false;
     }
 
-    // Check if window already tracked
-    if (m_windowToScreen.contains(windowId)) {
+    // Check if window already in this screen's tiling state
+    // Note: We check the TilingState, not m_windowToScreen, because windowOpened()
+    // adds to m_windowToScreen before calling this method (for screenForWindow() lookup)
+    if (state->tiledWindows().contains(windowId) || state->isFloating(windowId)) {
         return false;
     }
 
@@ -839,6 +880,13 @@ void AutotileEngine::applyTiling(const QString &screenName)
 bool AutotileEngine::shouldTileWindow(const QString &windowId) const
 {
     if (windowId.isEmpty()) {
+        return false;
+    }
+
+    // Reject malformed window IDs with empty class (transient/popup windows)
+    // These look like " : :94483229079904" and cause zone count mismatches
+    if (windowId.startsWith(QLatin1Char(' ')) || windowId.startsWith(QLatin1Char(':'))) {
+        qCDebug(lcAutotile) << "Rejecting malformed window ID (empty class):" << windowId;
         return false;
     }
 

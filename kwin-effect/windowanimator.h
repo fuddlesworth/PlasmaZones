@@ -106,8 +106,13 @@ public:
     // Redirect animation to new target (for rapid geometry changes)
     void redirectAnimation(KWin::EffectWindow* window, const QRect& newTarget);
 
+    // Get and clear cancelled animation target (for applying after user operation ends)
+    QRect takeCancelledTarget(KWin::EffectWindow* window);
+    bool hasCancelledTarget(KWin::EffectWindow* window) const;
+
 private:
     QHash<KWin::EffectWindow*, WindowAnimation> m_animations;
+    QHash<KWin::EffectWindow*, QRect> m_cancelledTargets;  // Targets from cancelled animations
     bool m_enabled = true;
     qreal m_duration = 150.0;
 };

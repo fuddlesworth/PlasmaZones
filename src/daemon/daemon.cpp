@@ -555,7 +555,8 @@ void Daemon::start()
     connect(m_overlayService.get(), &OverlayService::autotileLayoutSelected, this, [this](const QString& algorithmId) {
         if (m_autotileEngine) {
             m_autotileEngine->setAlgorithm(algorithmId);
-            m_autotileEngine->setEnabled(true);
+            // Use activate() to ensure KWin effect registers windows even if already enabled
+            m_autotileEngine->activate();
             qCInfo(lcDaemon) << "Autotile layout selected from zone selector:" << algorithmId;
             showAutotileOsd(algorithmId);
             // Update mode tracker
@@ -592,8 +593,8 @@ void Daemon::start()
             [this](const QString& windowId, const QString& algorithmId) {
                 if (m_autotileEngine) {
                     m_autotileEngine->setAlgorithm(algorithmId);
-                    m_autotileEngine->setEnabled(true);
-                    m_autotileEngine->retile(QString());
+                    // Use activate() to ensure KWin effect registers windows even if already enabled
+                    m_autotileEngine->activate();
                     qCInfo(lcDaemon) << "Window dropped on autotile layout:" << algorithmId
                                     << "- enabling and retiling for window" << windowId;
                     showAutotileOsd(algorithmId);
@@ -640,7 +641,8 @@ void Daemon::start()
             // Switching TO autotile mode
             QString algorithmId = m_modeTracker->lastAutotileAlgorithm();
             m_autotileEngine->setAlgorithm(algorithmId);
-            m_autotileEngine->setEnabled(true);
+            // Use activate() to ensure KWin effect registers windows even if already enabled
+            m_autotileEngine->activate();
             qCInfo(lcDaemon) << "Smart toggle: switched to Autotile mode -" << algorithmId;
             showAutotileOsd(algorithmId);
         } else {

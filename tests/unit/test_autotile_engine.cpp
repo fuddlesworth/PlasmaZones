@@ -97,6 +97,49 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Activate tests (always emits signal, even when already enabled)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testActivate_fromDisabled()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
+
+        engine.activate();
+
+        QVERIFY(engine.isEnabled());
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toBool(), true);
+    }
+
+    void testActivate_alreadyEnabledStillEmitsSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.setEnabled(true);  // First, enable normally
+        QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
+
+        engine.activate();  // Already enabled, but should still emit
+
+        QVERIFY(engine.isEnabled());
+        QCOMPARE(spy.count(), 1);  // Signal should be emitted
+        QCOMPARE(spy.first().first().toBool(), true);
+    }
+
+    void testActivate_multipleCallsEmitMultipleSignals()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        engine.setEnabled(true);
+        QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
+
+        engine.activate();
+        engine.activate();
+        engine.activate();
+
+        QVERIFY(engine.isEnabled());
+        QCOMPARE(spy.count(), 3);  // Each activate emits a signal
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Algorithm selection tests
     // ═══════════════════════════════════════════════════════════════════════════
 

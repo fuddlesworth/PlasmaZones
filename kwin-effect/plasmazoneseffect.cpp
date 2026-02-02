@@ -206,6 +206,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                           QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
     qCDebug(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
 
+    // Monitor D-Bus service for daemon restart - reconnect signals when daemon comes back
+    QDBusConnection::sessionBus().connect(
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/org/freedesktop/DBus"),
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("NameOwnerChanged"),
+        this, SLOT(slotServiceOwnerChanged(QString, QString, QString)));
+
     // Connect to keyboard navigation D-Bus signals (Phase 1)
     connectNavigationSignals();
 
@@ -523,10 +529,73 @@ void PlasmaZonesEffect::slotSettingsChanged()
     loadAutotileSettings();
 }
 
+void PlasmaZonesEffect::slotServiceOwnerChanged(const QString& serviceName, const QString& oldOwner, const QString& newOwner)
+{
+    // Only care about our daemon service
+    if (serviceName != DBus::ServiceName) {
+        return;
+    }
+
+    if (oldOwner.isEmpty() && !newOwner.isEmpty()) {
+        // Daemon started (or restarted)
+        qCInfo(lcEffect) << "PlasmaZones daemon started/restarted - reconnecting signals and reloading settings";
+
+        // Reset D-Bus interfaces so they get recreated on next use
+        m_dbusInterface.reset();
+        m_windowTrackingInterface.reset();
+        m_zoneDetectionInterface.reset();
+
+        // Reconnect all D-Bus signals (they may have been lost)
+        connectNavigationSignals();
+        connectAutotileSignals();
+
+        // Reload settings from daemon
+        loadExclusionSettings();
+        loadAutotileSettings();
+
+        // Sync floating window state
+        syncFloatingWindowsFromDaemon();
+
+        // Re-register all existing windows with daemon for autotiling
+        // This handles the case where daemon restarted while windows were open
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : windows) {
+            if (shouldHandleWindow(w) && !w->isMinimized() && !w->windowClass().isEmpty()) {
+                notifyWindowAdded(w);
+            }
+        }
+        qCInfo(lcEffect) << "Re-registered" << windows.size() << "windows with restarted daemon";
+
+    } else if (!oldOwner.isEmpty() && newOwner.isEmpty()) {
+        // Daemon stopped
+        qCWarning(lcEffect) << "PlasmaZones daemon stopped - functionality will be limited until it restarts";
+    }
+}
+
 void PlasmaZonesEffect::pollWindowMoves()
 {
     // Delegate to DragTracker
     m_dragTracker->pollWindowMoves();
+
+    // Check for windows that stopped being in user move/resize and have cancelled animation targets
+    // This handles the case where autotile sent geometry during a user drag, animation was cancelled,
+    // and now the drag has ended - we should apply the target geometry
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || !m_windowAnimator->hasCancelledTarget(w)) {
+            continue;
+        }
+
+        // If window is no longer being moved/resized, apply the cancelled target
+        if (!w->isUserMove() && !w->isUserResize()) {
+            QRect targetGeometry = m_windowAnimator->takeCancelledTarget(w);
+            if (targetGeometry.isValid() && shouldHandleWindow(w) && !w->isFullScreen()) {
+                qCDebug(lcEffect) << "Applying cancelled animation target after user operation:"
+                                  << targetGeometry << "for" << w->caption();
+                applySnapGeometry(w, targetGeometry);
+            }
+        }
+    }
 }
 
 QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
@@ -1248,7 +1317,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         return;
     }
 
-    qCDebug(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geometry;
+    qCInfo(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geometry;
 
     // In KWin 6, we use the window's moveResize methods
     // First, we need to check if the window is in a valid state
@@ -1320,12 +1389,25 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
         return;
     }
 
+    // Skip windows with empty windowClass (transient popups, tooltips, etc.)
+    // These generate malformed IDs like " : :123" that cause autotiling issues
+    if (w->windowClass().isEmpty()) {
+        qCDebug(lcEffect) << "Skipping windowAdded for window with empty class:" << w->caption();
+        return;
+    }
+
     if (!ensureWindowTrackingReady("notify windowAdded")) {
         return;
     }
 
     QString windowId = getWindowId(w);
     QString screenName = getWindowScreenName(w);
+
+    // Double-check the ID isn't malformed (defensive)
+    if (windowId.isEmpty() || windowId.startsWith(QLatin1Char(' ')) || windowId.startsWith(QLatin1Char(':'))) {
+        qCDebug(lcEffect) << "Skipping windowAdded for malformed window ID:" << windowId;
+        return;
+    }
 
     // Track this window so we only send windowClosed for windows we've notified about
     m_notifiedWindows.insert(windowId);
@@ -1381,39 +1463,83 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 void PlasmaZonesEffect::connectAutotileSignals()
 {
     // Connect to Autotile D-Bus signals for window geometry and focus requests
-    QDBusConnection::sessionBus().connect(
+    bool tileConnected = QDBusConnection::sessionBus().connect(
         DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
         QStringLiteral("windowTileRequested"), this,
         SLOT(slotAutotileWindowRequested(QString, int, int, int, int)));
 
-    QDBusConnection::sessionBus().connect(
+    bool focusConnected = QDBusConnection::sessionBus().connect(
         DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
         QStringLiteral("focusWindowRequested"), this,
         SLOT(slotAutotileFocusWindowRequested(QString)));
 
     // Connect to enabledChanged to register existing windows when autotiling is enabled
-    QDBusConnection::sessionBus().connect(
+    bool enabledConnected = QDBusConnection::sessionBus().connect(
         DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
         QStringLiteral("enabledChanged"), this,
         SLOT(slotAutotileEnabledChanged(bool)));
 
-    qCDebug(lcEffect) << "Connected to autotile D-Bus signals";
+    if (!tileConnected) {
+        qCWarning(lcEffect) << "Failed to connect to windowTileRequested D-Bus signal";
+    }
+    if (!focusConnected) {
+        qCWarning(lcEffect) << "Failed to connect to focusWindowRequested D-Bus signal";
+    }
+    if (!enabledConnected) {
+        qCWarning(lcEffect) << "Failed to connect to enabledChanged D-Bus signal";
+    }
+
+    qCInfo(lcEffect) << "Autotile D-Bus signal connections: tile=" << tileConnected
+                     << "focus=" << focusConnected << "enabled=" << enabledConnected;
+
+    // Query current autotile enabled state to handle startup race condition
+    // The daemon may have emitted enabledChanged(true) before we connected
+    auto* autotileInterface = new QDBusInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                                                  QDBusConnection::sessionBus(), this);
+    if (autotileInterface->isValid()) {
+        // Read the 'enabled' property asynchronously
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath,
+            QStringLiteral("org.freedesktop.DBus.Properties"),
+            QStringLiteral("Get"));
+        msg << DBus::Interface::Autotile << QStringLiteral("enabled");
+        QDBusPendingCall enabledCall = QDBusConnection::sessionBus().asyncCall(msg);
+        auto* enabledWatcher = new QDBusPendingCallWatcher(enabledCall, this);
+        connect(enabledWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<QDBusVariant> reply = *w;
+            if (reply.isValid() && reply.value().variant().toBool()) {
+                qCDebug(lcEffect) << "Autotile already enabled at startup, registering existing windows";
+                slotAutotileEnabledChanged(true);
+            }
+        });
+    }
+    autotileInterface->deleteLater();
 }
 
 void PlasmaZonesEffect::slotAutotileEnabledChanged(bool enabled)
 {
-    qCDebug(lcEffect) << "Autotile enabled changed:" << enabled;
+    qCInfo(lcEffect) << "Autotile enabled changed:" << enabled;
 
     if (enabled) {
         // When autotiling is enabled, notify daemon about all existing windows
         // so they can be tiled immediately
         const auto windows = KWin::effects->stackingOrder();
+        int registeredCount = 0;
         for (KWin::EffectWindow* w : windows) {
-            if (shouldHandleWindow(w) && !w->isMinimized()) {
-                notifyWindowAdded(w);
+            // Skip windows that shouldn't be tiled
+            if (!shouldHandleWindow(w) || w->isMinimized()) {
+                continue;
             }
+            // Skip windows with empty class (transient/popup)
+            if (w->windowClass().isEmpty()) {
+                continue;
+            }
+            notifyWindowAdded(w);
+            registeredCount++;
         }
-        qCDebug(lcEffect) << "Notified daemon about" << windows.size() << "existing windows for autotiling";
+        qCInfo(lcEffect) << "Registered" << registeredCount << "existing windows for autotiling"
+                        << "(total windows:" << windows.size() << ")";
     }
 }
 
@@ -1485,17 +1611,41 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
     }
 
     const auto windows = KWin::effects->stackingOrder();
+
+    // First pass: exact match (fast path)
     for (KWin::EffectWindow* w : windows) {
         if (w && getWindowId(w) == windowId) {
             return w;
         }
     }
+
+    // Second pass: match by stableId (handles pointer address changes)
+    // This is critical for autotiling where daemon may have stored an older pointer address
+    QString targetStableId = extractStableId(windowId);
+    if (!targetStableId.isEmpty() && targetStableId != windowId) {
+        for (KWin::EffectWindow* w : windows) {
+            if (w && extractStableId(getWindowId(w)) == targetStableId) {
+                qCDebug(lcEffect) << "Found window by stableId fallback:" << targetStableId;
+                return w;
+            }
+        }
+    }
+
+    qCDebug(lcEffect) << "Window not found by ID or stableId:" << windowId;
     return nullptr;
 }
 
 void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height)
 {
     qCDebug(lcEffect) << "Autotile window requested:" << windowId << "geometry:" << QRect(x, y, width, height);
+
+    // Reject malformed window IDs (transient windows with empty class)
+    // These look like " : :94483229079904" and cause lookup failures
+    QString stableId = extractStableId(windowId);
+    if (stableId.isEmpty() || stableId.startsWith(QLatin1Char(' ')) || stableId == QLatin1String(":")) {
+        qCDebug(lcEffect) << "Rejecting malformed window ID (empty class):" << windowId;
+        return;
+    }
 
     KWin::EffectWindow* window = findWindowById(windowId);
     if (!window) {
@@ -1509,7 +1659,14 @@ void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int
         return;
     }
 
+    // Skip windows being dragged/resized by user - prevents flickering during manual operations
+    if (window->isUserMove() || window->isUserResize()) {
+        qCDebug(lcEffect) << "Window in user operation, skipping autotile request:" << windowId;
+        return;
+    }
+
     QRect geometry(x, y, width, height);
+    qCInfo(lcEffect) << "Applying autotile geometry to:" << window->caption();
     applyAutotileGeometry(window, geometry, m_windowAnimator->animationsEnabled());
 }
 
@@ -1529,19 +1686,25 @@ void PlasmaZonesEffect::slotAutotileFocusWindowRequested(const QString& windowId
 
 void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const QRect& geometry, bool animate)
 {
-    if (!window || !geometry.isValid()) {
+    if (!window) {
+        qCDebug(lcEffect) << "applyAutotileGeometry: null window";
+        return;
+    }
+
+    if (!geometry.isValid()) {
+        qCDebug(lcEffect) << "applyAutotileGeometry: invalid geometry" << geometry;
         return;
     }
 
     // Don't apply geometry during user interaction - would interfere with drag/resize
     if (window->isUserMove() || window->isUserResize()) {
-        qCDebug(lcEffect) << "Window in user operation, skipping autotile";
+        qCDebug(lcEffect) << "Window in user operation, skipping autotile for" << window->caption();
         return;
     }
 
     // Don't animate fullscreen windows
     if (window->isFullScreen()) {
-        qCDebug(lcEffect) << "Skipping autotile for fullscreen window";
+        qCDebug(lcEffect) << "Skipping autotile for fullscreen window" << window->caption();
         return;
     }
 
@@ -1549,6 +1712,8 @@ void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const 
 
     // If not animating or geometry is the same, apply directly
     if (!animate || currentGeometry.toRect() == geometry) {
+        qCDebug(lcEffect) << "Applying geometry directly (animate=" << animate
+                         << ", same=" << (currentGeometry.toRect() == geometry) << ")";
         m_windowAnimator->removeAnimation(window);
         applySnapGeometry(window, geometry);
         return;
@@ -1562,13 +1727,19 @@ void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const 
 
     // If already animating to different target, redirect the animation
     if (m_windowAnimator->hasAnimation(window)) {
+        qCDebug(lcEffect) << "Redirecting existing animation to new target" << geometry;
         m_windowAnimator->redirectAnimation(window, geometry);
         return;
     }
 
     // Start new animation
     if (m_windowAnimator->startAnimation(window, currentGeometry, geometry)) {
-        qCDebug(lcEffect) << "Started autotile animation for window from" << currentGeometry << "to" << geometry;
+        qCDebug(lcEffect) << "Started autotile animation for" << window->caption()
+                         << "from" << currentGeometry << "to" << geometry;
+    } else {
+        // Animation failed to start (disabled or geometry edge case) - apply directly
+        qCDebug(lcEffect) << "Animation failed to start, applying geometry directly for" << window->caption();
+        applySnapGeometry(window, geometry);
     }
 }
 

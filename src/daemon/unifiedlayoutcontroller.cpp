@@ -195,7 +195,8 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
 
         if (m_autotileEngine) {
             m_autotileEngine->setAlgorithm(algorithmId);
-            m_autotileEngine->setEnabled(true);
+            // Use activate() to ensure KWin effect registers windows even if already enabled
+            m_autotileEngine->activate();
             setCurrentLayoutId(entry.id);
             qCInfo(lcDaemon) << "Applied unified layout (autotile):" << entry.name;
             Q_EMIT autotileApplied(algorithmId);

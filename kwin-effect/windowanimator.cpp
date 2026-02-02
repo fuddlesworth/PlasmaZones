@@ -49,11 +49,13 @@ bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QRectF& st
 void WindowAnimator::removeAnimation(KWin::EffectWindow* window)
 {
     m_animations.remove(window);
+    m_cancelledTargets.remove(window);  // Also clean up any cancelled target
 }
 
 void WindowAnimator::clear()
 {
     m_animations.clear();
+    m_cancelledTargets.clear();
 }
 
 bool WindowAnimator::isAnimationComplete(KWin::EffectWindow* window) const
@@ -87,6 +89,15 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
 {
     auto it = m_animations.find(window);
     if (it == m_animations.end()) {
+        return;
+    }
+
+    // Don't apply animation transforms during user drag/resize - prevents flickering
+    // Store final geometry before cancelling so caller can apply it if needed
+    if (window->isUserMove() || window->isUserResize()) {
+        // Store the target geometry in case the caller wants to apply it later
+        m_cancelledTargets[window] = it->endGeometry.toRect();
+        m_animations.erase(it);  // Cancel animation during user operation
         return;
     }
 
@@ -137,6 +148,16 @@ void WindowAnimator::redirectAnimation(KWin::EffectWindow* window, const QRect& 
     *it = anim;
 
     qCDebug(lcEffect) << "Redirected animation from" << anim.startGeometry << "to" << newTarget;
+}
+
+QRect WindowAnimator::takeCancelledTarget(KWin::EffectWindow* window)
+{
+    return m_cancelledTargets.take(window);
+}
+
+bool WindowAnimator::hasCancelledTarget(KWin::EffectWindow* window) const
+{
+    return m_cancelledTargets.contains(window);
 }
 
 } // namespace PlasmaZones

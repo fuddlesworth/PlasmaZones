@@ -92,6 +92,17 @@ public:
      */
     void setEnabled(bool enabled);
 
+    /**
+     * @brief Activate autotiling, ensuring KWin effect is notified
+     *
+     * Unlike setEnabled(true), this method always emits enabledChanged(true)
+     * and triggers a retile, even if autotiling is already enabled. This ensures
+     * the KWin effect receives the signal and registers existing windows.
+     *
+     * Use this method when the user explicitly selects an autotile layout.
+     */
+    void activate();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Algorithm selection
     // ═══════════════════════════════════════════════════════════════════════════

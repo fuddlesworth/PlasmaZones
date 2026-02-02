@@ -1148,6 +1148,16 @@ bool WindowTrackingAdaptor::validateWindowId(const QString& windowId, const QStr
         qCWarning(lcDbusWindow) << "Cannot" << operation << "- empty window ID";
         return false;
     }
+
+    // Reject malformed window IDs with empty class (transient/popup windows)
+    // These look like " : :94483229079904" or ": :123" and cause autotiling issues
+    QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty() || stableId.startsWith(QLatin1Char(' ')) ||
+        stableId.startsWith(QLatin1Char(':')) || stableId == QLatin1String(":")) {
+        qCDebug(lcDbusWindow) << "Rejecting malformed window ID (empty class) for" << operation << ":" << windowId;
+        return false;
+    }
+
     return true;
 }
 

@@ -68,6 +68,7 @@ private Q_SLOTS:
                           Qt::KeyboardModifiers oldmodifiers);
     void slotScreenGeometryChanged();
     void slotSettingsChanged();
+    void slotServiceOwnerChanged(const QString& serviceName, const QString& oldOwner, const QString& newOwner);
 
     // Phase 2.3: Autotile geometry and focus handlers
     void slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height);
