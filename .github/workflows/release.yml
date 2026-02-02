@@ -65,7 +65,7 @@ jobs:
       - name: Update changelog version
         run: |
           VERSION="${{ needs.version.outputs.version }}"
-          sed -i "1s/([^)]*)/($VERSION-1)/" debian/changelog
+          sed -i "1s/([^)]*)/($VERSION-1)/" packaging/debian/changelog
 
       - name: Build Debian package
         run: |
@@ -125,11 +125,11 @@ jobs:
       - name: Update spec version
         run: |
           VERSION="${{ needs.version.outputs.version }}"
-          sed -i "s/^Version:.*/Version:        $VERSION/" rpm/plasmazones.spec
+          sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
 
       - name: Build RPM
         run: |
-          cp rpm/plasmazones.spec ~/rpmbuild/SPECS/
+          cp packaging/rpm/plasmazones.spec ~/rpmbuild/SPECS/
           rpmbuild -bb ~/rpmbuild/SPECS/plasmazones.spec
           mkdir -p dist
           cp ~/rpmbuild/RPMS/*/*.rpm dist/
@@ -178,7 +178,7 @@ jobs:
       - name: Prepare PKGBUILD
         run: |
           VERSION="${{ needs.version.outputs.version }}"
-          cd arch
+          cd packaging/arch
 
           # Update version in PKGBUILD
           sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
@@ -222,9 +222,9 @@ jobs:
               DESTDIR="$pkgdir" cmake --install build
 
               # Install pacman hooks
-              install -Dm644 arch/kbuildsycoca.hook \
+              install -Dm644 packaging/arch/kbuildsycoca.hook \
                   "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
-              install -Dm755 arch/plasmazones-refresh-sycoca \
+              install -Dm755 packaging/arch/plasmazones-refresh-sycoca \
                   "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
           }
           PKGBUILD_EOF
@@ -232,18 +232,18 @@ jobs:
       - name: Build package
         run: |
           chown -R builder:builder .
-          cd arch
+          cd packaging/arch
           su builder -c "makepkg -p PKGBUILD.ci -sf --noconfirm"
 
       - name: Validate package
         run: |
-          cd arch
+          cd packaging/arch
           namcap *.pkg.tar.zst || true
 
       - name: Move artifacts
         run: |
           mkdir -p dist
-          mv arch/*.pkg.tar.zst dist/
+          mv packaging/arch/*.pkg.tar.zst dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
