@@ -1,18 +1,16 @@
 {
     "KPlugin": {
-        "Name": "PlasmaZones",
+        "Category": "Window Management",
         "Description": "FancyZones-style window snapping with modifier key detection",
-        "Icon": "plasmazones",
+        "EnabledByDefault": false,
+        "Id": "plasmazones",
+        "License": "GPL",
+        "Name": "PlasmaZones",
         "Authors": [
             {
                 "Name": "fuddlesworth"
             }
-        ],
-        "License": "GPL-3.0-or-later",
-        "Version": "1.2.0",
-        "Website": "https://github.com/plasmazones/plasmazones",
-        "Category": "Window Management",
-        "EnabledByDefault": false
+        ]
     },
     "org.kde.kwin.effect": {
         "enabledByDefaultMethod": true
