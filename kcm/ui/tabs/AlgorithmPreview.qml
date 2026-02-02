@@ -263,7 +263,7 @@ Item {
             border.width: 1
             radius: 2
 
-            // Window number label
+            // Window number label (hidden for monocle since they overlap)
             Label {
                 anchors.centerIn: parent
                 text: index + 1
@@ -271,6 +271,7 @@ Item {
                 font.bold: true
                 color: Kirigami.Theme.textColor
                 opacity: 0.8
+                visible: root.algorithmId !== "monocle"
             }
 
             // Master indicator for first window(s)

@@ -182,6 +182,33 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     pending.clear();
 }
 
+namespace {
+/// Offset per zone for monocle preview (3% = 0.03)
+constexpr qreal MonoclePreviewOffset = 0.03;
+
+/**
+ * @brief Check if all zones have identical geometry (monocle-style)
+ *
+ * Monocle algorithm returns all windows at fullscreen, which would cause
+ * zone numbers to stack on top of each other in preview. We detect this
+ * and apply visual offsets.
+ */
+bool areAllZonesIdentical(const QVector<QRect> &zones)
+{
+    if (zones.size() <= 1) {
+        return false; // Nothing to offset for single zone
+    }
+
+    const QRect &first = zones.first();
+    for (int i = 1; i < zones.size(); ++i) {
+        if (zones[i] != first) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
 QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
 {
     QVariantList list;
@@ -199,6 +226,10 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
 
     QVector<QRect> zones = algorithm->calculateZones(PreviewWindowCount, previewRect, previewState);
 
+    // Detect monocle-style layouts where all zones are identical (would cause
+    // overlapping zone numbers). Apply visual offset for preview purposes.
+    const bool applyMonocleOffset = areAllZonesIdentical(zones);
+
     for (int i = 0; i < zones.size(); ++i) {
         const QRect &zone = zones[i];
         QVariantMap zoneMap;
@@ -209,10 +240,22 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
 
         // Convert to relative geometry (0.0 - 1.0)
         QVariantMap relGeoMap;
-        relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
-        relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
-        relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
-        relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
+
+        if (applyMonocleOffset) {
+            // For monocle preview: use asymmetric offset so zone centers don't overlap.
+            // Shrink from bottom-right only, which shifts each zone's center diagonally
+            // toward top-left, making all zone number labels visible.
+            const qreal shrink = i * MonoclePreviewOffset * 2;
+            relGeoMap[QStringLiteral("x")] = 0.0;
+            relGeoMap[QStringLiteral("y")] = 0.0;
+            relGeoMap[QStringLiteral("width")] = 1.0 - shrink;
+            relGeoMap[QStringLiteral("height")] = 1.0 - shrink;
+        } else {
+            relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
+            relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
+            relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
+            relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
+        }
         zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
 
         zoneMap[QStringLiteral("useCustomColors")] = false;
