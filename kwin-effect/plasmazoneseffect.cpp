@@ -118,6 +118,10 @@ QString PlasmaZonesEffect::queryZoneForWindow(const QString& windowId)
         return QString();
     }
 
+    // NOTE: This remains synchronous because it's used in user-triggered navigation
+    // handlers that need the result immediately. The latency is acceptable since
+    // it only blocks during user actions, not during startup.
+    // For startup paths, use async alternatives with callbacks.
     QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneForWindow"), windowId);
     if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
         return msg.arguments().at(0).toString();
@@ -135,20 +139,29 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
         return;
     }
 
-    QDBusMessage checkMsg = m_windowTrackingInterface->call(QStringLiteral("hasPreSnapGeometry"), windowId);
-    bool hasGeometry = false;
-    if (checkMsg.type() == QDBusMessage::ReplyMessage && !checkMsg.arguments().isEmpty()) {
-        hasGeometry = checkMsg.arguments().at(0).toBool();
-    }
+    // Use ASYNC D-Bus call to check if geometry exists, then store if not
+    // Use QPointer to safely handle window destruction during async call
+    QPointer<KWin::EffectWindow> safeWindow = w;
+    QString capturedWindowId = windowId;
 
-    if (!hasGeometry) {
-        QRectF currentGeom = w->frameGeometry();
-        m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), windowId,
-                                             static_cast<int>(currentGeom.x()), static_cast<int>(currentGeom.y()),
-                                             static_cast<int>(currentGeom.width()),
-                                             static_cast<int>(currentGeom.height()));
-        qCDebug(lcEffect) << "Stored pre-snap geometry for window" << windowId;
-    }
+    QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(QStringLiteral("hasPreSnapGeometry"), windowId);
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow, capturedWindowId](QDBusPendingCallWatcher* watcher) {
+        watcher->deleteLater();
+
+        QDBusPendingReply<bool> reply = *watcher;
+        bool hasGeometry = reply.isValid() && reply.value();
+
+        if (!hasGeometry && safeWindow && m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+            QRectF currentGeom = safeWindow->frameGeometry();
+            m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), capturedWindowId,
+                                                 static_cast<int>(currentGeom.x()), static_cast<int>(currentGeom.y()),
+                                                 static_cast<int>(currentGeom.width()),
+                                                 static_cast<int>(currentGeom.height()));
+            qCDebug(lcEffect) << "Stored pre-snap geometry for window" << capturedWindowId;
+        }
+    });
 }
 
 QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap(bool filterHandleable) const
@@ -466,64 +479,71 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
         return;
     }
 
-    QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getUpdatedWindowGeometries"));
+    // Use ASYNC D-Bus call to avoid blocking the compositor thread
+    QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getUpdatedWindowGeometries"));
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    if (msg.type() != QDBusMessage::ReplyMessage || msg.arguments().isEmpty()) {
-        qCDebug(lcEffect) << "No window geometries to update";
-        return;
-    }
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
 
-    QString geometriesJson = msg.arguments().at(0).toString();
-    if (geometriesJson.isEmpty() || geometriesJson == QStringLiteral("[]")) {
-        qCDebug(lcEffect) << "Empty geometries list from daemon";
-        return;
-    }
-
-    // Parse JSON array of window geometries
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcEffect) << "Failed to parse window geometries:" << parseError.errorString();
-        return;
-    }
-
-    QJsonArray geometries = doc.array();
-    qCDebug(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
-
-    // Build a map of stableId -> EffectWindow for faster lookup
-    // Using stable IDs ensures windows can be found after session restore
-    // Note: We don't filter handleable here since we want ALL windows for geometry updates
-    QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap(false);
-
-    // Apply new geometries to windows
-    for (const QJsonValue& value : geometries) {
-        if (!value.isObject()) {
-            continue;
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isValid()) {
+            qCDebug(lcEffect) << "No window geometries to update";
+            return;
         }
 
-        QJsonObject obj = value.toObject();
-        QString windowId = obj[QStringLiteral("windowId")].toString();
-        QString stableId = extractStableId(windowId);
-        int x = obj[QStringLiteral("x")].toInt();
-        int y = obj[QStringLiteral("y")].toInt();
-        int width = obj[QStringLiteral("width")].toInt();
-        int height = obj[QStringLiteral("height")].toInt();
+        QString geometriesJson = reply.value();
+        if (geometriesJson.isEmpty() || geometriesJson == QStringLiteral("[]")) {
+            qCDebug(lcEffect) << "Empty geometries list from daemon";
+            return;
+        }
 
-        KWin::EffectWindow* window = windowMap.value(stableId);
-        if (window && shouldHandleWindow(window)) {
-            QRect newGeometry(x, y, width, height);
+        // Parse JSON array of window geometries
+        QJsonParseError parseError;
+        QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
+        if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+            qCWarning(lcEffect) << "Failed to parse window geometries:" << parseError.errorString();
+            return;
+        }
 
-            // Only apply if the geometry actually changed
-            QRectF currentWindowGeometry = window->frameGeometry();
-            if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
-                qCDebug(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
-                                  << newGeometry;
-                applySnapGeometry(window, newGeometry);
-            } else {
-                qCDebug(lcEffect) << "Window" << windowId << "already at target geometry, skipping";
+        QJsonArray geometries = doc.array();
+        qCDebug(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
+
+        // Build a map of stableId -> EffectWindow for faster lookup
+        // Using stable IDs ensures windows can be found after session restore
+        // Note: We don't filter handleable here since we want ALL windows for geometry updates
+        QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap(false);
+
+        // Apply new geometries to windows
+        for (const QJsonValue& value : geometries) {
+            if (!value.isObject()) {
+                continue;
+            }
+
+            QJsonObject obj = value.toObject();
+            QString windowId = obj[QStringLiteral("windowId")].toString();
+            QString stableId = extractStableId(windowId);
+            int x = obj[QStringLiteral("x")].toInt();
+            int y = obj[QStringLiteral("y")].toInt();
+            int width = obj[QStringLiteral("width")].toInt();
+            int height = obj[QStringLiteral("height")].toInt();
+
+            KWin::EffectWindow* window = windowMap.value(stableId);
+            if (window && shouldHandleWindow(window)) {
+                QRect newGeometry(x, y, width, height);
+
+                // Only apply if the geometry actually changed
+                QRectF currentWindowGeometry = window->frameGeometry();
+                if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
+                    qCDebug(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
+                                      << newGeometry;
+                    applySnapGeometry(window, newGeometry);
+                } else {
+                    qCDebug(lcEffect) << "Window" << windowId << "already at target geometry, skipping";
+                }
             }
         }
-    }
+    });
 }
 
 void PlasmaZonesEffect::slotSettingsChanged()
@@ -793,6 +813,10 @@ QString PlasmaZonesEffect::queryAdjacentZone(const QString& currentZoneId, const
         return QString();
     }
 
+    // NOTE: This remains synchronous because it's used in user-triggered navigation
+    // handlers that need the result immediately for decision making.
+    // The latency is acceptable since it only blocks during keyboard navigation,
+    // not during startup or window lifecycle events.
     QDBusMessage msg = m_zoneDetectionInterface->call(QStringLiteral("getAdjacentZone"), currentZoneId, direction);
 
     if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
@@ -808,6 +832,10 @@ QString PlasmaZonesEffect::queryFirstZoneInDirection(const QString& direction)
         return QString();
     }
 
+    // NOTE: This remains synchronous because it's used in user-triggered navigation
+    // handlers that need the result immediately for decision making.
+    // The latency is acceptable since it only blocks during keyboard navigation,
+    // not during startup or window lifecycle events.
     QDBusMessage msg = m_zoneDetectionInterface->call(QStringLiteral("getFirstZoneInDirection"), direction);
 
     if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
@@ -827,6 +855,10 @@ QString PlasmaZonesEffect::queryZoneGeometryForScreen(const QString& zoneId, con
         return QString();
     }
 
+    // NOTE: This remains synchronous because it's used in user-triggered navigation
+    // handlers that need geometry data immediately for window placement.
+    // The latency is acceptable since it only blocks during keyboard navigation,
+    // not during startup or window lifecycle events.
     // Use the screen-aware version for multi-monitor support
     QDBusMessage msg = m_windowTrackingInterface->call(QStringLiteral("getZoneGeometryForScreen"), zoneId, screenName);
 
