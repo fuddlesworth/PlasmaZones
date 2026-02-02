@@ -97,6 +97,9 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
         QStringLiteral("screenLayoutChanged"), this, SLOT(onScreenLayoutChanged(QString, QString)));
 
+    // Reload layouts when autotile enabled setting changes (to filter autotile layouts)
+    connect(this, &KCMPlasmaZones::autotileEnabledChanged, this, &KCMPlasmaZones::loadLayouts);
+
     // Listen for quick layout slot changes (e.g., when slots are modified externally)
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
@@ -1985,10 +1988,22 @@ void KCMPlasmaZones::loadLayouts()
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QStringList layoutJsonList = reply.arguments().first().toStringList();
+        // Check if autotiling is enabled to decide whether to include autotile layouts
+        const bool includeAutotile = m_settings->autotileEnabled();
+
         for (const QString& layoutJson : layoutJsonList) {
             QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
             if (!doc.isNull() && doc.isObject()) {
-                newLayouts.append(doc.object().toVariantMap());
+                QVariantMap layoutMap = doc.object().toVariantMap();
+                // Filter out autotile layouts if autotiling is disabled
+                // Autotile layouts have category == 1 (LayoutCategory::Autotile)
+                if (!includeAutotile) {
+                    int category = layoutMap.value(QStringLiteral("category"), 0).toInt();
+                    if (category == 1) {
+                        continue;  // Skip autotile layout
+                    }
+                }
+                newLayouts.append(layoutMap);
             }
         }
     }
