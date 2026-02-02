@@ -143,6 +143,12 @@ void WindowTrackingService::storePreSnapGeometry(const QString& windowId, const 
     // This allows pre-snap geometry to persist when windows are closed and reopened
     QString stableId = Utils::extractStableId(windowId);
 
+    // Validate stableId - empty means malformed windowId
+    if (stableId.isEmpty()) {
+        qCWarning(lcCore) << "Cannot store pre-snap geometry: empty stableId from windowId" << windowId;
+        return;
+    }
+
     // Only store on FIRST snap - don't overwrite when moving A→B
     if (m_preSnapGeometries.contains(stableId)) {
         return;
@@ -150,6 +156,18 @@ void WindowTrackingService::storePreSnapGeometry(const QString& windowId, const 
 
     if (geometry.isValid()) {
         m_preSnapGeometries[stableId] = geometry;
+
+        // Memory cleanup: limit pre-snap geometry cache to prevent unbounded growth
+        // Keep max 100 entries, removing oldest when exceeded (simple LRU approximation)
+        static constexpr int MaxPreSnapGeometries = 100;
+        if (m_preSnapGeometries.size() > MaxPreSnapGeometries) {
+            // Remove first entry (oldest in insertion order for QHash)
+            auto it = m_preSnapGeometries.begin();
+            if (it != m_preSnapGeometries.end()) {
+                m_preSnapGeometries.erase(it);
+            }
+        }
+
         scheduleSaveState();
     }
 }
@@ -158,6 +176,9 @@ std::optional<QRect> WindowTrackingService::preSnapGeometry(const QString& windo
 {
     // Use stableId for consistent matching across sessions
     QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty()) {
+        return std::nullopt;
+    }
     if (m_preSnapGeometries.contains(stableId)) {
         return m_preSnapGeometries.value(stableId);
     }
@@ -168,6 +189,9 @@ bool WindowTrackingService::hasPreSnapGeometry(const QString& windowId) const
 {
     // Use stableId for consistent matching across sessions
     QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty()) {
+        return false;
+    }
     return m_preSnapGeometries.contains(stableId);
 }
 
@@ -175,6 +199,9 @@ void WindowTrackingService::clearPreSnapGeometry(const QString& windowId)
 {
     // Use stableId for consistent matching across sessions
     QString stableId = Utils::extractStableId(windowId);
+    if (stableId.isEmpty()) {
+        return;
+    }
     if (m_preSnapGeometries.remove(stableId) > 0) {
         scheduleSaveState();
     }
@@ -236,20 +263,14 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         m_preFloatZoneAssignments[stableId] = zoneId;
         qCDebug(lcCore) << "Saved pre-float zone for" << stableId << "->" << zoneId;
         unassignWindow(windowId);
-    } else {
-        qCDebug(lcCore) << "unsnapForFloat: window not in assignments:" << windowId;
-        qCDebug(lcCore) << "  stableId:" << stableId;
-        qCDebug(lcCore) << "  current assignments:" << m_windowZoneAssignments.keys();
     }
+    // Note: If window not in assignments, it's already unsnapped - no action needed
 }
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
 {
     QString stableId = Utils::extractStableId(windowId);
-    QString zone = m_preFloatZoneAssignments.value(stableId);
-    qCDebug(lcCore) << "preFloatZone lookup for" << stableId << "->" << zone;
-    qCDebug(lcCore) << "  all preFloatZoneAssignments:" << m_preFloatZoneAssignments;
-    return zone;
+    return m_preFloatZoneAssignments.value(stableId);
 }
 
 void WindowTrackingService::clearPreFloatZone(const QString& windowId)
@@ -511,10 +532,6 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
     int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
     QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
-
-    qCDebug(lcCore) << "zoneGeometry for" << zoneId << "on screen" << screen->name()
-                    << "- zonePadding:" << zonePadding << "outerGap:" << outerGap
-                    << "- result:" << geoF.toRect();
 
     return geoF.toRect();
 }
