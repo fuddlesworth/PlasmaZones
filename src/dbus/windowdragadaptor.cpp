@@ -13,6 +13,7 @@
 #include "../core/utils.h"
 #include "../core/constants.h"
 #include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/AutotileEngine.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
@@ -48,6 +49,11 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     // Uses LayoutManager (concrete) because ILayoutManager is a pure interface without signals
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowDragAdaptor::onLayoutChanged);
     connect(m_layoutManager, &LayoutManager::layoutAssigned, this, &WindowDragAdaptor::onLayoutChanged);
+}
+
+void WindowDragAdaptor::setAutotileEngine(AutotileEngine* engine)
+{
+    m_autotileEngine = engine;
 }
 
 QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
@@ -409,6 +415,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
     bool zoneActivationHeld = checkModifier(dragActivationMod, mods);
     bool multiZoneModifierHeld = checkModifier(multiZoneMod, mods);
+
+    // When autotiling is enabled, skip modifier-based overlay entirely
+    // Manual zone placement is not needed in autotile mode - windows are automatically tiled
+    // The zone selector (triggered by screen edge proximity) is still available for layout switching
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        hideOverlayAndClearZoneState();
+        return;
+    }
 
     // Multi-zone modifier takes precedence (Ctrl+Alt by default)
     if (multiZoneModifierHeld) {

@@ -23,6 +23,7 @@ class LayoutManager; // Concrete type needed for signal connections
 class ISettings;
 class Zone;
 class WindowTrackingAdaptor;
+class AutotileEngine;
 
 /**
  * @brief D-Bus adaptor for window drag handling
@@ -44,6 +45,16 @@ public:
     explicit WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* detector, LayoutManager* layoutManager,
                                ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
+
+    /**
+     * @brief Set the autotile engine for checking autotile state during drags
+     *
+     * When autotiling is enabled, the modifier-based overlay is suppressed
+     * since manual zone placement is not needed.
+     *
+     * @param engine Autotile engine (may be nullptr to disable check)
+     */
+    void setAutotileEngine(AutotileEngine* engine);
 
 public Q_SLOTS:
     /**
@@ -126,6 +137,7 @@ private:
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
+    AutotileEngine* m_autotileEngine = nullptr;
 
     // Current drag state
     QString m_draggedWindowId;

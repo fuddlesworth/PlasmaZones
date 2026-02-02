@@ -210,6 +210,13 @@ bool Daemon::init()
     // Overlay needs autotile state to show correct active layout in zone selector
     m_overlayService->setAutotileEngine(m_autotileEngine.get());
 
+    // Window drag adaptor needs autotile state to suppress overlay during autotile mode
+    m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
+
+    // Window tracking adaptor needs autotile engine for direct notification of window events
+    // This provides a more reliable path than signal connections
+    m_windowTrackingAdaptor->setAutotileEngine(m_autotileEngine.get());
+
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
     if (!bus.isConnected()) {
@@ -554,6 +561,13 @@ void Daemon::start()
     // Connect zone selector autotile selection (click)
     connect(m_overlayService.get(), &OverlayService::autotileLayoutSelected, this, [this](const QString& algorithmId) {
         if (m_autotileEngine) {
+            // Persist settings so new windows will also be tiled
+            if (m_settings) {
+                m_settings->setAutotileAlgorithm(algorithmId);
+                m_settings->setAutotileEnabled(true);
+                m_settings->save();
+            }
+
             m_autotileEngine->setAlgorithm(algorithmId);
             // Use activate() to ensure KWin effect registers windows even if already enabled
             m_autotileEngine->activate();
@@ -576,6 +590,11 @@ void Daemon::start()
             // Disable autotile when switching to manual layout
             if (m_autotileEngine && m_autotileEngine->isEnabled()) {
                 m_autotileEngine->setEnabled(false);
+                // Persist settings so autotile stays disabled
+                if (m_settings) {
+                    m_settings->setAutotileEnabled(false);
+                    m_settings->save();
+                }
                 qCInfo(lcDaemon) << "Disabling autotile - switching to manual layout";
             }
             m_layoutManager->setActiveLayout(layout);
@@ -592,9 +611,33 @@ void Daemon::start()
     connect(m_windowDragAdaptor, &WindowDragAdaptor::autotileDropRequested, this,
             [this](const QString& windowId, const QString& algorithmId) {
                 if (m_autotileEngine) {
+                    // Update settings to persist the autotile state
+                    // This ensures new windows will also be tiled (not just the dropped window)
+                    if (m_settings) {
+                        m_settings->setAutotileAlgorithm(algorithmId);
+                        m_settings->setAutotileEnabled(true);
+                        m_settings->save();
+                        qCInfo(lcDaemon) << "Persisted autotile settings: algorithm=" << algorithmId << "enabled=true";
+                    }
+
                     m_autotileEngine->setAlgorithm(algorithmId);
                     // Use activate() to ensure KWin effect registers windows even if already enabled
                     m_autotileEngine->activate();
+
+                    // Explicitly add the dropped window to ensure it's tiled immediately
+                    // This avoids the race condition where retile() completes before the
+                    // KWin effect sends windowAdded events via D-Bus
+                    QString screenName;
+                    QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+                    if (screen) {
+                        screenName = screen->name();
+                    } else if (Utils::primaryScreen()) {
+                        screenName = Utils::primaryScreen()->name();
+                    }
+                    if (!screenName.isEmpty() && !windowId.isEmpty()) {
+                        m_autotileEngine->windowOpened(windowId, screenName);
+                    }
+
                     qCInfo(lcDaemon) << "Window dropped on autotile layout:" << algorithmId
                                     << "- enabling and retiling for window" << windowId;
                     showAutotileOsd(algorithmId);
@@ -602,18 +645,21 @@ void Daemon::start()
             });
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Phase 2.1: Connect window events to AutotileEngine
+    // Phase 2.1: Window events → AutotileEngine
     // ═══════════════════════════════════════════════════════════════════════════════
-    // WindowTrackingAdaptor receives window events from KWin via D-Bus and emits signals.
-    // Connect these to AutotileEngine so it knows about windows for tiling.
+    // WindowTrackingAdaptor receives window events from KWin via D-Bus and notifies
+    // the AutotileEngine DIRECTLY via the setAutotileEngine() call in init() above.
+    //
+    // IMPORTANT: Signal connections are NOT used because:
+    // 1. Direct calls are more reliable (no signal/slot overhead)
+    // 2. Prevents double-notifications that caused KDE login freezes
+    //    (the direct call + signal connection would call windowOpened() twice)
+    //
+    // The windowAddedEvent/windowRemovedEvent/windowActivatedEvent signals still
+    // exist for other consumers, but AutotileEngine is notified directly instead.
     if (m_autotileEngine) {
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowAddedEvent,
-                m_autotileEngine.get(), &AutotileEngine::windowOpened);
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowRemovedEvent,
-                m_autotileEngine.get(), &AutotileEngine::windowClosed);
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowActivatedEvent,
-                m_autotileEngine.get(), &AutotileEngine::windowFocused);
-        qCDebug(lcDaemon) << "Connected window tracking events to AutotileEngine";
+        qCInfo(lcDaemon) << "Window tracking → AutotileEngine: using direct notification"
+                         << "(m_windowTrackingAdaptor->setAutotileEngine() configured in init())";
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -643,11 +689,27 @@ void Daemon::start()
             m_autotileEngine->setAlgorithm(algorithmId);
             // Use activate() to ensure KWin effect registers windows even if already enabled
             m_autotileEngine->activate();
+
+            // Persist settings so new windows are auto-tiled
+            if (m_settings) {
+                m_settings->setAutotileAlgorithm(algorithmId);
+                m_settings->setAutotileEnabled(true);
+                m_settings->save();
+                qCInfo(lcDaemon) << "Smart toggle: persisted autotile settings: algorithm=" << algorithmId;
+            }
+
             qCInfo(lcDaemon) << "Smart toggle: switched to Autotile mode -" << algorithmId;
             showAutotileOsd(algorithmId);
         } else {
             // Switching TO manual mode
             m_autotileEngine->setEnabled(false);
+
+            // Persist settings so new windows use manual layout
+            if (m_settings) {
+                m_settings->setAutotileEnabled(false);
+                m_settings->save();
+                qCInfo(lcDaemon) << "Smart toggle: persisted manual mode settings";
+            }
 
             // Restore last manual layout if available
             QString layoutId = m_modeTracker->lastManualLayoutId();

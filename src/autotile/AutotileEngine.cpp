@@ -633,6 +633,9 @@ void AutotileEngine::windowOpened(const QString &windowId, const QString &screen
         return;
     }
 
+    qCInfo(lcAutotile) << "windowOpened:" << windowId << "screen:" << screenName
+                       << "enabled:" << m_enabled;
+
     // Store screen mapping so onWindowAdded uses correct screen
     if (!screenName.isEmpty()) {
         m_windowToScreen[windowId] = screenName;
@@ -699,16 +702,29 @@ void AutotileEngine::windowFocused(const QString &windowId, const QString &scree
 
 void AutotileEngine::onWindowAdded(const QString &windowId)
 {
-    if (!m_enabled || !shouldTileWindow(windowId)) {
+    if (!m_enabled) {
+        qCDebug(lcAutotile) << "onWindowAdded: skipping" << windowId << "- autotile not enabled";
+        return;
+    }
+
+    if (!shouldTileWindow(windowId)) {
+        qCDebug(lcAutotile) << "onWindowAdded: skipping" << windowId << "- shouldTileWindow returned false";
         return;
     }
 
     const QString screenName = screenForWindow(windowId);
     if (screenName.isEmpty()) {
+        qCWarning(lcAutotile) << "onWindowAdded: skipping" << windowId << "- empty screen name";
         return;
     }
 
+    qCInfo(lcAutotile) << "onWindowAdded: inserting" << windowId << "on screen" << screenName;
     const bool inserted = insertWindow(windowId, screenName);
+    if (inserted) {
+        qCInfo(lcAutotile) << "onWindowAdded: window inserted, retiling screen" << screenName;
+    } else {
+        qCDebug(lcAutotile) << "onWindowAdded: window already tracked or insert failed";
+    }
     retileAfterOperation(screenName, inserted);
 }
 

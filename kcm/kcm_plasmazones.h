@@ -612,6 +612,8 @@ private Q_SLOTS:
     void onSettingsChanged();
     void onCurrentActivityChanged(const QString& activityId);
     void onActivitiesChanged();
+    void onAutotileEnabledChanged(bool enabled);
+    void onAutotileAlgorithmChanged(const QString& algorithmId);
 
 private:
     void notifyDaemon();

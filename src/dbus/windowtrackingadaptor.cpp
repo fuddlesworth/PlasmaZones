@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "../autotile/AutotileEngine.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
@@ -344,8 +345,18 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     m_service->windowClosed(windowId);
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 
-    // Emit window removed event for autotiling consumers
+    // Directly notify autotile engine (more reliable than signal connection)
+    if (m_autotileEngine) {
+        m_autotileEngine->windowClosed(windowId);
+    }
+
+    // Also emit signal for any other consumers
     Q_EMIT windowRemovedEvent(windowId);
+}
+
+void WindowTrackingAdaptor::setAutotileEngine(AutotileEngine* engine)
+{
+    m_autotileEngine = engine;
 }
 
 void WindowTrackingAdaptor::windowAdded(const QString& windowId, const QString& screenName)
@@ -354,7 +365,14 @@ void WindowTrackingAdaptor::windowAdded(const QString& windowId, const QString& 
         return;
     }
 
-    qCDebug(lcDbusWindow) << "Window added:" << windowId << "on screen" << screenName;
+    qCInfo(lcDbusWindow) << "Window added (D-Bus):" << windowId << "on screen" << screenName;
+
+    // Directly notify autotile engine (more reliable than signal connection)
+    if (m_autotileEngine) {
+        m_autotileEngine->windowOpened(windowId, screenName);
+    }
+
+    // Also emit signal for any other consumers
     Q_EMIT windowAddedEvent(windowId, screenName);
 }
 
@@ -376,6 +394,12 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         m_service->updateLastUsedZone(zoneId, screenName, windowClass, currentDesktop);
     }
 
+    // Directly notify autotile engine (more reliable than signal connection)
+    if (m_autotileEngine) {
+        m_autotileEngine->windowFocused(windowId, screenName);
+    }
+
+    // Also emit signal for any other consumers
     Q_EMIT windowActivatedEvent(windowId, screenName);
 }
 

@@ -1446,8 +1446,19 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
     // Track this window so we only send windowClosed for windows we've notified about
     m_notifiedWindows.insert(windowId);
 
-    qCDebug(lcEffect) << "Notifying daemon: windowAdded" << windowId << "on screen" << screenName;
-    m_windowTrackingInterface->asyncCall(QStringLiteral("windowAdded"), windowId, screenName);
+    qCInfo(lcEffect) << "Notifying daemon: windowAdded" << windowId << "on screen" << screenName;
+    QDBusPendingCall call = m_windowTrackingInterface->asyncCall(QStringLiteral("windowAdded"), windowId, screenName);
+
+    // Check for async call errors (helps debug D-Bus issues)
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher* w) {
+        QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "windowAdded D-Bus call failed for" << windowId
+                                << ":" << reply.error().message();
+        }
+        w->deleteLater();
+    });
 }
 
 void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)

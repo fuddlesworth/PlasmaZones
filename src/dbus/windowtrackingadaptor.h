@@ -22,6 +22,7 @@ class Zone;
 class IZoneDetector;
 class ISettings;
 class VirtualDesktopManager;
+class AutotileEngine;
 
 /**
  * @brief D-Bus adaptor for window-zone tracking
@@ -38,6 +39,17 @@ public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override = default;
+
+    /**
+     * @brief Set the autotile engine for direct window event notification
+     *
+     * When set, windowAdded/windowClosed/windowActivated D-Bus calls will
+     * directly notify the autotile engine in addition to emitting Qt signals.
+     * This provides a more reliable path than signal connections.
+     *
+     * @param engine Autotile engine (may be nullptr to disable)
+     */
+    void setAutotileEngine(AutotileEngine* engine);
 
 public Q_SLOTS:
     // Window snapping notifications (from KWin script)
@@ -576,6 +588,11 @@ private:
     // Business logic service
     // ═══════════════════════════════════════════════════════════════════════════════
     WindowTrackingService* m_service = nullptr;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Autotile engine (for direct notification of window events)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    AutotileEngine* m_autotileEngine = nullptr;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: KConfig save/load)

@@ -110,6 +110,15 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
                                           QString(DBus::Interface::Settings), QStringLiteral("settingsChanged"), this,
                                           SLOT(onSettingsChanged()));
 
+    // Listen for autotile state changes from daemon (e.g., via smart toggle or zone selector)
+    // This updates the KCM to reflect the current autotile state when changed externally
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QStringLiteral("org.plasmazones.Autotile"), QStringLiteral("enabledChanged"),
+                                          this, SLOT(onAutotileEnabledChanged(bool)));
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QStringLiteral("org.plasmazones.Autotile"), QStringLiteral("algorithmChanged"),
+                                          this, SLOT(onAutotileAlgorithmChanged(QString)));
+
     // Listen for virtual desktop count changes
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
@@ -2129,6 +2138,28 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT zoneSelectorGridColumnsChanged();
         Q_EMIT zoneSelectorSizeModeChanged();
         Q_EMIT zoneSelectorMaxRowsChanged();
+    }
+}
+
+void KCMPlasmaZones::onAutotileEnabledChanged(bool enabled)
+{
+    // When autotile enabled state changes externally (e.g., via smart toggle or zone selector),
+    // update the KCM to reflect the current state
+    if (m_settings && m_settings->autotileEnabled() != enabled) {
+        m_settings->setAutotileEnabled(enabled);
+        Q_EMIT autotileEnabledChanged();
+        qCDebug(lcKcm) << "Autotile enabled changed externally to:" << enabled;
+    }
+}
+
+void KCMPlasmaZones::onAutotileAlgorithmChanged(const QString& algorithmId)
+{
+    // When autotile algorithm changes externally (e.g., via smart toggle or zone selector),
+    // update the KCM to reflect the current algorithm
+    if (m_settings && m_settings->autotileAlgorithm() != algorithmId) {
+        m_settings->setAutotileAlgorithm(algorithmId);
+        Q_EMIT autotileAlgorithmChanged();
+        qCDebug(lcKcm) << "Autotile algorithm changed externally to:" << algorithmId;
     }
 }
 
