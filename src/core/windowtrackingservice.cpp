@@ -266,6 +266,14 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
         return SnapResult::noSnap();
     }
 
+    // Check if window was floating - floating windows should NOT be auto-snapped
+    // They should remain floating when reopened
+    QString stableId = Utils::extractStableId(windowId);
+    if (m_floatingWindows.contains(stableId)) {
+        qCDebug(lcCore) << "Window" << stableId << "was floating - skipping snap to last zone";
+        return SnapResult::noSnap();
+    }
+
     // Check sticky window handling
     if (isSticky && m_settings) {
         auto handling = m_settings->stickyWindowHandling();
@@ -567,6 +575,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
             ? (currentIdx + 1) % zones.size()
             : (currentIdx - 1 + zones.size()) % zones.size();
 
+        Zone* sourceZone = zones[currentIdx];
         Zone* targetZone = zones[targetIdx];
         QString screenName = m_windowScreenAssignments.value(pair.first);
         QRect geo = zoneGeometry(targetZone->id().toString(), screenName);
@@ -574,6 +583,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
         if (geo.isValid()) {
             RotationEntry entry;
             entry.windowId = pair.first;
+            entry.sourceZoneId = sourceZone->id().toString();
             entry.targetZoneId = targetZone->id().toString();
             entry.targetGeometry = geo;
             result.append(entry);

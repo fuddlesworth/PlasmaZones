@@ -186,8 +186,13 @@ private:
      * @param success Whether the action succeeded
      * @param action The action type (e.g., "move", "focus", "push", "restore", "float")
      * @param reason Failure reason if !success (e.g., "no_window", "no_adjacent_zone")
+     * @param sourceZoneId Optional source zone ID for OSD highlighting
+     * @param targetZoneId Optional target zone ID for OSD highlighting
+     * @param screenName Screen name where navigation occurred (for OSD placement)
      */
-    void emitNavigationFeedback(bool success, const QString& action, const QString& reason = QString());
+    void emitNavigationFeedback(bool success, const QString& action, const QString& reason = QString(),
+                                const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
+                                const QString& screenName = QString());
 
     // Apply snap geometry to window
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry);

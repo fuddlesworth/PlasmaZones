@@ -724,10 +724,11 @@ void Daemon::start()
 
     // Connect navigation feedback signal to show OSD (Qt signal from WindowTrackingAdaptor)
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
-            [this](bool success, const QString& action, const QString& reason) {
+            [this](bool success, const QString& action, const QString& reason,
+                   const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName) {
                 // Only show OSD if setting is enabled
                 if (m_settings && m_settings->showNavigationOsd()) {
-                    m_overlayService->showNavigationOsd(success, action, reason);
+                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
                 }
             });
 

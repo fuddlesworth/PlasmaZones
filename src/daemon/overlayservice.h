@@ -105,7 +105,9 @@ public:
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category);
 
     // Navigation OSD (feedback for keyboard navigation)
-    void showNavigationOsd(bool success, const QString& action, const QString& reason);
+    void showNavigationOsd(bool success, const QString& action, const QString& reason,
+                           const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
+                           const QString& screenName = QString());
 
 public Q_SLOTS:
     void hideLayoutOsd();

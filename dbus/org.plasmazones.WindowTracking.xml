@@ -252,6 +252,15 @@
             <arg name="reason" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Reason string (e.g. no adjacent zone)."/>
             </arg>
+            <arg name="sourceZoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Source zone ID for OSD highlighting (optional)."/>
+            </arg>
+            <arg name="targetZoneId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Target zone ID for OSD highlighting (optional)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name where navigation occurred (for OSD placement)."/>
+            </arg>
         </method>
         <signal name="windowZoneChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's zone assignment changes."/>
@@ -278,6 +287,15 @@
             </arg>
             <arg name="reason" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Reason string (e.g. no adjacent zone)."/>
+            </arg>
+            <arg name="sourceZoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Source zone ID for OSD highlighting."/>
+            </arg>
+            <arg name="targetZoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Target zone ID for OSD highlighting."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name where navigation occurred (for OSD placement)."/>
             </arg>
         </signal>
         <signal name="pendingRestoresAvailable">

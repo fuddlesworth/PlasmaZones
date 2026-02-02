@@ -56,6 +56,8 @@ Item {
     property bool interactive: false
     /// Whether all zones highlight together (for autotile layouts)
     property bool highlightAllZones: false
+    /// Array of zone IDs to highlight (for navigation OSD zone highlighting)
+    property var highlightedZoneIds: []
     /// Zone fill opacity when not active/hovered
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
@@ -92,10 +94,31 @@ Item {
             property real relY: relGeo.y || 0
             property real relWidth: relGeo.width || 0.25
             property real relHeight: relGeo.height || 1
-            // Check if this zone is selected (or all zones if highlightAllZones)
-            property bool isZoneSelected: root.highlightAllZones
-                ? root.selectedZoneIndex >= 0
-                : root.selectedZoneIndex === index
+            // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
+            property bool isZoneSelected: {
+                // Option 1: Highlight all zones when any is selected (autotile mode)
+                if (root.highlightAllZones && root.selectedZoneIndex >= 0) {
+                    return true;
+                }
+                // Option 2: Highlight by index (layout selector mode)
+                if (root.selectedZoneIndex === index) {
+                    return true;
+                }
+                // Option 3: Highlight by zone ID (navigation OSD mode)
+                // Note: QStringList from C++ becomes QVariantList in QML, so we need
+                // to iterate and compare strings explicitly (indexOf may not work)
+                if (root.highlightedZoneIds && root.highlightedZoneIds.length > 0) {
+                    var zoneId = modelData.zoneId || modelData.id || "";
+                    if (zoneId !== "") {
+                        for (var i = 0; i < root.highlightedZoneIds.length; i++) {
+                            if (String(root.highlightedZoneIds[i]) === String(zoneId)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
             // Track per-zone hover state
             property bool isZoneHovered: root.interactive && zoneMouseArea.containsMouse
 

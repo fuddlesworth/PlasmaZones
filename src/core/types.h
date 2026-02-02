@@ -131,6 +131,7 @@ struct PLASMAZONES_EXPORT NavigationCommand
 struct PLASMAZONES_EXPORT RotationEntry
 {
     QString windowId;           ///< Window to move
+    QString sourceZoneId;       ///< Zone window is moving from (for OSD highlighting)
     QString targetZoneId;       ///< Zone to move to
     QRect targetGeometry;       ///< Target geometry in pixels
 };

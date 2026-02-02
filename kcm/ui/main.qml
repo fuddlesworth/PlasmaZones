@@ -9,7 +9,7 @@
  * - Editor: Keyboard shortcuts and snapping settings
  * - Assignments: Monitor, activity, and quick layout assignments
  * - Zones: Appearance and behavior settings (merged for consistency)
- * - Zone Selector: Zone selector popup settings
+ * - Display: Zone selector popup and OSD settings
  * - Exclusions: Apps and windows to exclude from snapping
  */
 import QtQuick
@@ -137,7 +137,7 @@ KCM.AbstractKCM {
                 icon.name: "view-split-left-right"
             }
             TabButton {
-                text: i18n("Zone Selector")
+                text: i18n("Display")
                 icon.name: "select-rectangular"
             }
             TabButton {
@@ -238,7 +238,7 @@ KCM.AbstractKCM {
         }
 
         // TAB 5: ZONE SELECTOR
-        ZoneSelectorTab {
+        DisplayTab {
             kcm: root.kcmModule
             constants: constants
             screenAspectRatio: root.screenAspectRatio
