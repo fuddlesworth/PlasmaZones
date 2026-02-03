@@ -90,7 +90,11 @@ find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
     Gui
     DBus
     Widgets
+    ShaderTools
 )
+# GuiPrivate (QRhi) and ShaderToolsPrivate (QShaderBaker) required for daemon zone overlay
+find_package(Qt6GuiPrivate CONFIG REQUIRED)
+find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 
 # Optional: Qt6::ShaderTools for shader effects support
 # RenderNode shaders use raw GLSL - no Qt6::ShaderTools compilation needed
@@ -332,6 +336,8 @@ install(DIRECTORY data/shaders/
     FILES_MATCHING
     PATTERN "metadata.json"
     PATTERN "*.glsl"
+    PATTERN "*.vert"
+    PATTERN "*.frag"
     PATTERN "preview.png"
 )
 

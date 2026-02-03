@@ -29,6 +29,7 @@ BuildRequires:  qt6-qtbase-devel >= 6.6.0
 BuildRequires:  qt6-qtbase-private-devel
 BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qttools-devel
+BuildRequires:  qt6-qtshadertools-devel
 
 # KDE Frameworks 6
 BuildRequires:  kf6-kconfig-devel >= 6.0.0
@@ -56,6 +57,7 @@ BuildRequires:  systemd-rpm-macros
 # Runtime dependencies
 Requires:       qt6-qtbase >= 6.6.0
 Requires:       qt6-qtdeclarative
+Requires:       qt6-qtshadertools
 Requires:       kf6-kconfig
 Requires:       kf6-kconfigwidgets
 Requires:       kf6-kcoreaddons

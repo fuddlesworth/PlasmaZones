@@ -1,17 +1,17 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 330 core
+#version 450
 
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texCoord;
 
-out vec2 vTexCoord;
-out float vMouseInfluence;   // How much this vertex is affected by mouse
-out float vDistortAmount;    // Distortion intensity for fragment shader
-out vec2 vDisplacement;      // Displacement vector for visual effects
+layout(location = 0) out vec2 vTexCoord;
+layout(location = 1) out float vMouseInfluence;
+layout(location = 2) out float vDistortAmount;
+layout(location = 3) out vec2 vDisplacement;
 
-layout(std140) uniform ZoneUniforms {
+layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;

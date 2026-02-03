@@ -22,7 +22,7 @@ namespace ShaderDbusQueries {
  * @brief Query whether shaders are enabled on the system
  * @return true if shaders are enabled and supported, false otherwise
  *
- * This reflects system capability (OpenGL support, etc.), not user preference.
+ * This reflects system capability (RHI/shader support), not user preference.
  */
 bool queryShadersEnabled();
 

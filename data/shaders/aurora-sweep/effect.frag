@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 330 core
+#version 450
 
 // Aurora Sweep - Clean gradient with animated light sweep
 // Elegant, minimal overlay effect with smooth color transitions
 
-in vec2 vTexCoord;
-out vec4 fragColor;
+layout(location = 0) in vec2 vTexCoord;
 
-layout(std140) uniform ZoneUniforms {
+layout(location = 0) out vec4 fragColor;
+
+layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;

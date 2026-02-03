@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "zoneshaderitem.h"
-#include "zoneshadernode.h"
+#include "zoneshadernodebase.h"
+#include "zoneshadernoderhi.h"
 
 #include <QDebug>
 #include <QFile>
@@ -460,16 +461,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 {
     Q_UNUSED(data)
 
-    // Don't render if item has no size
     if (width() <= 0 || height() <= 0) {
         delete oldNode;
         return nullptr;
     }
 
-    // Create node if it doesn't exist
-    ZoneShaderNode* node = static_cast<ZoneShaderNode*>(oldNode);
+    ZoneShaderNodeBase* node = static_cast<ZoneShaderNodeBase*>(oldNode);
     if (!node) {
-        node = new ZoneShaderNode(this);
+        node = new ZoneShaderNodeRhi(this);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -523,12 +522,13 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 fragPath = QLatin1Char(':') + m_shaderSource.path();
             }
 
-            // Derive vertex shader path from fragment shader path
-            // Fragment: .../effect.glsl -> Vertex: .../zone.vert.glsl
+            // Derive vertex shader path: zone.vert (fallback to legacy zone.vert.glsl for compatibility)
             QString vertPath;
             if (!fragPath.isEmpty()) {
-                QFileInfo fragInfo(fragPath);
-                vertPath = fragInfo.absolutePath() + QStringLiteral("/zone.vert.glsl");
+                const QString dir = QFileInfo(fragPath).absolutePath();
+                const QString vertDefault = dir + QStringLiteral("/zone.vert");
+                const QString vertLegacy = dir + QStringLiteral("/zone.vert.glsl");
+                vertPath = QFile::exists(vertDefault) ? vertDefault : vertLegacy;
             }
 
             // Clear old shader sources before loading new ones
@@ -545,7 +545,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 }
             } else {
                 // Vertex shader is required - fail if not found
-                qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found:" << vertPath;
+                if (vertPath.isEmpty()) {
+                    qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found (cannot derive path - fragment path is empty)";
+                } else {
+                    const QString dir = QFileInfo(fragPath).absolutePath();
+                    qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found: expected zone.vert or zone.vert.glsl in" << dir;
+                }
                 loaded = false;
             }
 
