@@ -6,7 +6,7 @@
 # Clean build: mock -r fedora-41-x86_64 plasmazones-1.2.0-1.fc41.src.rpm
 
 Name:           plasmazones
-Version:        1.2.0
+Version:        1.3.3
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -156,6 +156,11 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Tue Feb  3 2026 fuddlesworth - 1.3.3-1
+- Build/install only installs files; packaging handles sycoca and daemon enable
+- Resnap-to-new-layout shortcut and shortcut consolidation (PR #75)
+- Logging alignment and PR review fixes
+
 * Sat Feb  1 2026 fuddlesworth - 1.2.0-1
 - Initial RPM package
 - Wayland-only release (X11 support removed)
