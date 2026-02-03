@@ -545,7 +545,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 }
             } else {
                 // Vertex shader is required - fail if not found
-                qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found:" << vertPath;
+                if (vertPath.isEmpty()) {
+                    qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found (cannot derive path - fragment path is empty)";
+                } else {
+                    const QString dir = QFileInfo(fragPath).absolutePath();
+                    qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found: expected zone.vert or zone.vert.glsl in" << dir;
+                }
                 loaded = false;
             }
 
