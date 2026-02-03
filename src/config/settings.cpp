@@ -594,7 +594,7 @@ void Settings::load()
         m_dragActivationModifier =
             static_cast<DragModifier>(qBound(0, dragMod, static_cast<int>(DragModifier::CtrlAltMeta)));
     }
-    qCDebug(lcConfig) << "Loaded DragActivationModifier=" << static_cast<int>(m_dragActivationModifier);
+    qCDebug(lcConfig) << "Loaded DragActivationModifier= " << static_cast<int>(m_dragActivationModifier);
 
     // Skip-snap modifier: hold this to move window without snapping
     int skipMod = activation.readEntry(QLatin1String("SkipSnapModifier"), ConfigDefaults::skipSnapModifier());
@@ -607,7 +607,7 @@ void Settings::load()
         multiZoneMod = ConfigDefaults::multiZoneModifier();
     }
     m_multiZoneModifier = static_cast<DragModifier>(multiZoneMod);
-    qCDebug(lcConfig) << "Loaded MultiZoneModifier=" << multiZoneMod;
+    qCDebug(lcConfig) << "Loaded MultiZoneModifier= " << multiZoneMod;
 
     m_middleClickMultiZone = activation.readEntry(QLatin1String("MiddleClickMultiZone"), ConfigDefaults::middleClickMultiZone());
 

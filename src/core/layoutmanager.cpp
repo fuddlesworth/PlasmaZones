@@ -571,10 +571,10 @@ void LayoutManager::loadLayouts(const QString& defaultLayoutId)
     for (const QString& dir : allDirs) {
         int beforeCount = m_layouts.size();
         loadLayoutsFromDirectory(dir);
-        qCDebug(lcLayout) << "Loaded" << (m_layouts.size() - beforeCount) << "layouts from:" << dir;
+        qCDebug(lcLayout) << "Loaded layouts= " << (m_layouts.size() - beforeCount) << " from= " << dir;
     }
 
-    qCDebug(lcLayout) << "Total layouts loaded:" << m_layouts.size();
+    qCDebug(lcLayout) << "Total layouts= " << m_layouts.size();
 
     // Sort by defaultOrder (from layout JSON) so the preferred default is first when defaultLayoutId is empty
     std::stable_sort(m_layouts.begin(), m_layouts.end(), [](Layout* a, Layout* b) {
@@ -590,9 +590,9 @@ void LayoutManager::loadLayouts(const QString& defaultLayoutId)
         if (!initial) {
             initial = m_layouts.first();
         }
-        qCInfo(lcLayout) << "Active layout:" << initial->name()
-                         << "id=" << initial->id().toString()
-                         << "zones=" << initial->zoneCount();
+        qCInfo(lcLayout) << "Active layout name= " << initial->name()
+                         << " id= " << initial->id().toString()
+                         << " zones= " << initial->zoneCount();
         setActiveLayout(initial);
     }
 
@@ -664,8 +664,8 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                 // No duplicate - add the layout
                 m_layouts.append(layout);
                 connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
-                qCDebug(lcLayout) << "Loaded layout:" << layout->name() << "with" << layout->zoneCount() << "zones"
-                                  << (layout->isSystemLayout() ? "(system)" : "(custom)") << "from" << filePath;
+                qCDebug(lcLayout) << "  Loaded layout name= " << layout->name() << " zones= " << layout->zoneCount()
+                                  << " source= " << (layout->isSystemLayout() ? "system" : "user") << " from= " << filePath;
             } else {
                 // Duplicate ID found - user layouts (from .local) should override system layouts
                 // Since we load system directories first, then user directories,
@@ -677,16 +677,15 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                     m_layouts.replace(index, layout);
                     connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
                     delete existing;
-                    qCDebug(lcLayout) << "User layout overrides system layout:" << layout->name() << "from" << filePath;
+                    qCDebug(lcLayout) << "  User layout overrides system layout name= " << layout->name() << " from= " << filePath;
                 } else {
                     // Same source type or system trying to override user - skip
-                    qCDebug(lcLayout) << "Skipping duplicate layout:" << layout->name() << "(ID:" << layout->id()
-                                      << ")";
+                    qCDebug(lcLayout) << "  Skipping duplicate layout name= " << layout->name() << " id= " << layout->id();
                     delete layout;
                 }
             }
         } else {
-            qCWarning(lcLayout) << "Skipping invalid layout:" << entry << "(empty name or no zones)";
+            qCWarning(lcLayout) << "Skipping invalid layout entry= " << entry << " reason= empty name or no zones";
             delete layout;
         }
     }
@@ -811,15 +810,14 @@ void LayoutManager::loadAssignments()
         m_quickLayoutShortcuts[number] = layoutId;
     }
 
-    qCInfo(lcLayout) << "Loaded" << m_assignments.size() << "layout assignments and"
-                     << m_quickLayoutShortcuts.size() << "quick shortcuts";
+    qCInfo(lcLayout) << "Loaded assignments= " << m_assignments.size() << " quickShortcuts= " << m_quickLayoutShortcuts.size();
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         Layout* layout = layoutById(it.value());
         QString layoutName = layout ? layout->name() : QStringLiteral("(unknown)");
-        qCInfo(lcLayout) << "  Assignment: screen=" << it.key().screenName
-                         << "desktop=" << it.key().virtualDesktop
-                         << "activity=" << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
-                         << "-> layout" << layoutName;
+        qCInfo(lcLayout) << "  Assignment screen= " << it.key().screenName
+                         << " desktop= " << it.key().virtualDesktop
+                         << " activity= " << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
+                         << " layout= " << layoutName;
     }
 }
 

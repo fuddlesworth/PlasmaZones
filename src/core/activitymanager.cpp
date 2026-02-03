@@ -201,7 +201,7 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
     }
 
     m_currentActivity = activityId;
-    qCDebug(lcCore) << "Activity changed to:" << activityId << "(" << activityName(activityId) << ")";
+    qCDebug(lcCore) << "Activity changed activity= " << activityId << " name= " << activityName(activityId);
 
     updateActiveLayout();
     Q_EMIT currentActivityChanged(activityId);
@@ -209,13 +209,13 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
 
 void ActivityManager::onActivityAdded(const QString& activityId)
 {
-    qCDebug(lcCore) << "Activity added:" << activityId << "(" << activityName(activityId) << ")";
+    qCDebug(lcCore) << "Activity added activity= " << activityId << " name= " << activityName(activityId);
     Q_EMIT activitiesChanged();
 }
 
 void ActivityManager::onActivityRemoved(const QString& activityId)
 {
-    qCDebug(lcCore) << "Activity removed:" << activityId;
+    qCDebug(lcCore) << "Activity removed activity= " << activityId;
     Q_EMIT activitiesChanged();
 }
 

@@ -51,7 +51,7 @@ void ModeTracker::load()
 
     m_lastManualLayoutId = group.readEntry(QStringLiteral("LastManualLayoutId"), QString());
 
-    qCInfo(lcDaemon) << "ModeTracker loaded - lastLayout:" << m_lastManualLayoutId;
+    qCInfo(lcDaemon) << "ModeTracker loaded lastLayout= " << m_lastManualLayoutId;
 }
 
 void ModeTracker::save()

@@ -314,7 +314,7 @@ void Layout::recalculateZoneGeometries(const QRectF& screenGeometry)
     }
     m_lastRecalcGeometry = screenGeometry;
 
-    qCDebug(lcLayout) << "recalculateZoneGeometries for" << m_name << "with screenGeometry:" << screenGeometry;
+    qCDebug(lcLayout) << "recalculateZoneGeometries layout= " << m_name << " screenGeometry= " << screenGeometry;
     for (auto* zone : m_zones) {
         QRectF absGeometry = zone->calculateAbsoluteGeometry(screenGeometry);
         zone->setGeometry(absGeometry);

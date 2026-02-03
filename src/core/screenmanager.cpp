@@ -229,8 +229,8 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
         }
     }
 
-    qCDebug(lcScreen) << "calculateAvailableGeometry - Qt screen index mapping:" << screen->name() << "-> index"
-                      << screenIndex << "(total screens:" << screenList.size() << ")";
+    qCDebug(lcScreen) << "calculateAvailableGeometry screen= " << screen->name() << " index= " << screenIndex
+                      << " totalScreens= " << screenList.size();
 
     int topOffset = 0;
     int bottomOffset = 0;
@@ -317,8 +317,8 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
 
     QString source =
         hasSensorData ? QStringLiteral("sensor") : (hasDbusData ? QStringLiteral("D-Bus") : QStringLiteral("fallback"));
-    qCDebug(lcScreen) << "calculateAvailableGeometry:" << screenKey << "screen:" << screenGeom
-                      << "available:" << availGeom << "source:" << source;
+    qCDebug(lcScreen) << "calculateAvailableGeometry screen= " << screenKey << " screenGeom= " << screenGeom
+                      << " available= " << availGeom << " source= " << source;
 
     // Update cache and emit signal
     s_availableGeometryCache.insert(screenKey, availGeom);
@@ -392,7 +392,7 @@ void ScreenManager::queryKdePlasmaPanels()
 
         if (reply.isValid()) {
             QString output = reply.value();
-            qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply:" << output;
+            qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply= " << output;
 
             // Parse the output: PANEL:screenIndex:location:offset:floating
             // The offset is calculated from actual panel geometry (includes thickness + floating gap)
@@ -407,8 +407,8 @@ void ScreenManager::queryKdePlasmaPanels()
                 int totalOffset = match.captured(3).toInt();
                 bool isFloating = !match.captured(4).isEmpty() && match.captured(4).toInt() != 0;
 
-                qCDebug(lcScreen) << "  Parsed panel: screen" << screenIndex << location
-                                  << "offset=" << totalOffset << "floating=" << isFloating;
+                qCDebug(lcScreen) << "  Parsed panel screen= " << screenIndex << " location= " << location
+                                  << " offset= " << totalOffset << " floating= " << isFloating;
 
                 if (!m_panelOffsets.contains(screenIndex)) {
                     m_panelOffsets.insert(screenIndex, ScreenPanelOffsets{});
@@ -431,9 +431,8 @@ void ScreenManager::queryKdePlasmaPanels()
 
         // Log final panel offsets
         for (auto it = m_panelOffsets.constBegin(); it != m_panelOffsets.constEnd(); ++it) {
-            qCDebug(lcScreen) << "  Screen" << it.key() << "panel offsets:"
-                              << "T" << it.value().top << "B" << it.value().bottom << "L" << it.value().left << "R"
-                              << it.value().right;
+            qCDebug(lcScreen) << "  Screen " << it.key() << " panel offsets T= " << it.value().top << " B= " << it.value().bottom
+                              << " L= " << it.value().left << " R= " << it.value().right;
         }
 
         // Now recalculate geometry for all screens with updated panel data
@@ -467,8 +466,8 @@ void ScreenManager::onSensorGeometryChanged(QScreen* screen)
     }
 
     QRect sensorGeom = sensor->geometry();
-    qCDebug(lcScreen) << "onSensorGeometryChanged:" << screen->name() << "sensorGeometry:" << sensorGeom
-                      << "screenGeometry:" << screen->geometry();
+    qCDebug(lcScreen) << "onSensorGeometryChanged screen= " << screen->name() << " sensorGeometry= " << sensorGeom
+                      << " screenGeometry= " << screen->geometry();
 
     if (!sensorGeom.isValid() || sensorGeom.width() <= 0 || sensorGeom.height() <= 0) {
         return;

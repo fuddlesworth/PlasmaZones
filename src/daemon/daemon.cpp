@@ -107,8 +107,8 @@ bool Daemon::init()
     if (m_layoutManager->activeLayout()) {
         m_overlayService->setLayout(m_layoutManager->activeLayout());
         m_zoneDetector->setLayout(m_layoutManager->activeLayout());
-        qCDebug(lcDaemon) << "Overlay configured with layout:" << m_layoutManager->activeLayout()->name()
-                          << "zones:" << m_layoutManager->activeLayout()->zoneCount();
+        qCDebug(lcDaemon) << "Overlay configured layout= " << m_layoutManager->activeLayout()->name()
+                          << " zones= " << m_layoutManager->activeLayout()->zoneCount();
     } else {
         qCWarning(lcDaemon) << "No active layout available for overlay";
     }
@@ -242,7 +242,7 @@ bool Daemon::init()
         return false;
     }
 
-    qCInfo(lcDaemon) << "D-Bus service registered successfully:" << DBus::ServiceName << "at" << DBus::ObjectPath;
+    qCInfo(lcDaemon) << "D-Bus service registered service= " << DBus::ServiceName << " path= " << DBus::ObjectPath;
 
     // Connect overlay adaptor signals to daemon overlay control
     connect(m_overlayAdaptor, &OverlayAdaptor::overlayVisibilityChanged, this, [this](bool visible) {
@@ -671,8 +671,8 @@ void Daemon::processPendingGeometryUpdates()
         const QString& screenName = it.key();
         const QRect& availableGeometry = it.value();
 
-        qCDebug(lcDaemon) << "Processing geometry update for" << screenName
-                          << "availableGeometry:" << availableGeometry;
+        qCDebug(lcDaemon) << "Processing geometry update screen= " << screenName
+                          << " availableGeometry= " << availableGeometry;
 
         // Recalculate zone geometries for active layout at most once (primary screen, or first).
         // Active layout is global; recalc'ing per-screen overwrites each time (last-wins bug).

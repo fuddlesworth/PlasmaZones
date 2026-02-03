@@ -31,6 +31,12 @@
  *   qCInfo     - Significant operational events (startup, shutdown, layout loaded)
  *   qCWarning  - Recoverable errors, invalid input, missing resources
  *   qCCritical - System failures preventing normal operation
+ *
+ * Log Message Format (keep output consistent and grep-friendly):
+ *   - Key-value pairs: use "key= " << value so output is "key= value" (one space after =).
+ *   - Same for multiple keys: "label key1= " << v1 << " key2= " << v2.
+ *   - Sub-items (e.g. list entries): start message with "  " and use same key= pattern.
+ *   - Use consistent names across categories: screen=, layout=, zone=, id=, name=, etc.
  */
 
 namespace PlasmaZones {

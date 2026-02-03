@@ -1032,7 +1032,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 {
     if (m_currentActivity != activityId) {
         m_currentActivity = activityId;
-        qCDebug(lcOverlay) << "Activity changed to" << activityId;
+        qCDebug(lcOverlay) << "Activity changed activity= " << activityId;
 
         // Update zone selector windows with the new active layout for this activity
         if (!m_zoneSelectorWindows.isEmpty()) {

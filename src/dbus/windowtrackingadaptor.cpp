@@ -536,7 +536,7 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
 
-    qCDebug(lcDbusWindow) << "Restoring window" << windowId << "to persisted zone" << result.zoneId;
+    qCDebug(lcDbusWindow) << "Restoring window window= " << windowId << " zone= " << result.zoneId;
 }
 
 void WindowTrackingAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
@@ -1159,9 +1159,9 @@ void WindowTrackingAdaptor::loadState()
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
 
-    qCInfo(lcDbusWindow) << "Loaded state from KConfig -" << pendingZones.size() << "pending zone assignments";
+    qCInfo(lcDbusWindow) << "Loaded state from KConfig pendingAssignments= " << pendingZones.size();
     for (auto it = pendingZones.constBegin(); it != pendingZones.constEnd(); ++it) {
-        qCInfo(lcDbusWindow) << "  Pending snap:" << it.key() << "-> zone" << it.value();
+        qCInfo(lcDbusWindow) << "  Pending snap window= " << it.key() << " zone= " << it.value();
     }
     if (!pendingZones.isEmpty()) {
         m_hasPendingRestores = true;
