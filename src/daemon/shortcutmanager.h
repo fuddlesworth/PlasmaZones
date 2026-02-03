@@ -125,6 +125,14 @@ Q_SIGNALS:
      */
     void cycleWindowsInZoneRequested(bool forward);
 
+    /**
+     * @brief Emitted when resnap to new layout is requested
+     *
+     * Resnaps all windows from the previous layout to the current layout
+     * (by zone number with cycling when fewer zones).
+     */
+    void resnapToNewLayoutRequested();
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -189,6 +197,10 @@ private Q_SLOTS:
     void updateCycleWindowForwardShortcut();
     void updateCycleWindowBackwardShortcut();
 
+    // Resnap to New Layout
+    void onResnapToNewLayout();
+    void updateResnapToNewLayoutShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -198,6 +210,7 @@ private:
     void setupSnapToZoneShortcuts();
     void setupRotateWindowsShortcuts();
     void setupCycleWindowsShortcuts();
+    void setupResnapToNewLayoutShortcut();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -236,6 +249,9 @@ private:
     // Cycle Windows in Zone actions
     QAction* m_cycleWindowForwardAction = nullptr;
     QAction* m_cycleWindowBackwardAction = nullptr;
+
+    // Resnap to New Layout action
+    QAction* m_resnapToNewLayoutAction = nullptr;
 };
 
 } // namespace PlasmaZones

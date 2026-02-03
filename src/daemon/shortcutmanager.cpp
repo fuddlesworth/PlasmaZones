@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "shortcutmanager.h"
+#include "../config/configdefaults.h"
 #include "../config/settings.h"
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
@@ -21,19 +22,21 @@ namespace PlasmaZones {
  * @param actionMember Pointer to QAction* member variable
  * @param i18nName Translatable display name for the action
  * @param objectName QStringLiteral object name for KGlobalAccel
- * @param settingsGetter Settings method to get the shortcut string
+ * @param getterName Method name (must exist on both ConfigDefaults and Settings)
  * @param slot Slot to connect to QAction::triggered
  *
- * Note: We set the default shortcut first, then call setGlobalShortcut which will
- * load the user's customized shortcut if one exists, or use the default otherwise.
+ * Uses ConfigDefaults::getterName() for setDefaultShortcut so System Settings
+ * shows the true app default when resetting. Uses m_settings->getterName() for
+ * the actual shortcut (user's config or default).
  */
-#define SETUP_SHORTCUT(actionMember, i18nName, objectName, settingsGetter, slot) \
+#define SETUP_SHORTCUT(actionMember, i18nName, objectName, getterName, slot) \
     do { \
         if (!actionMember) { \
             actionMember = new QAction(i18n(i18nName), this); \
             actionMember->setObjectName(QStringLiteral(objectName)); \
-            const QKeySequence shortcut(m_settings->settingsGetter()); \
-            KGlobalAccel::self()->setDefaultShortcut(actionMember, {shortcut}); \
+            const QKeySequence defaultShortcut(ConfigDefaults::getterName()); \
+            const QKeySequence shortcut(m_settings->getterName()); \
+            KGlobalAccel::self()->setDefaultShortcut(actionMember, {defaultShortcut}); \
             KGlobalAccel::setGlobalShortcut(actionMember, shortcut); \
             connect(actionMember, &QAction::triggered, this, slot); \
         } \
@@ -127,6 +130,9 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::cycleWindowForwardShortcutChanged, this, &ShortcutManager::updateCycleWindowForwardShortcut);
     connect(m_settings, &Settings::cycleWindowBackwardShortcutChanged, this, &ShortcutManager::updateCycleWindowBackwardShortcut);
 
+    // Resnap to New Layout shortcut
+    connect(m_settings, &Settings::resnapToNewLayoutShortcutChanged, this, &ShortcutManager::updateResnapToNewLayoutShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -153,6 +159,7 @@ void ShortcutManager::registerShortcuts()
     setupSnapToZoneShortcuts();
     setupRotateWindowsShortcuts();
     setupCycleWindowsShortcuts();
+    setupResnapToNewLayoutShortcut();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -198,6 +205,9 @@ void ShortcutManager::updateShortcuts()
     // Rotate Windows shortcuts
     updateRotateWindowsClockwiseShortcut();
     updateRotateWindowsCounterclockwiseShortcut();
+
+    // Resnap to New Layout shortcut
+    updateResnapToNewLayoutShortcut();
 
     // Cycle Windows in Zone shortcuts
     updateCycleWindowForwardShortcut();
@@ -251,6 +261,9 @@ void ShortcutManager::unregisterShortcuts()
     // Cycle Windows in Zone actions
     DELETE_SHORTCUT(m_cycleWindowForwardAction);
     DELETE_SHORTCUT(m_cycleWindowBackwardAction);
+
+    // Resnap to New Layout action
+    DELETE_SHORTCUT(m_resnapToNewLayoutAction);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -302,13 +315,20 @@ void ShortcutManager::setupQuickLayoutShortcuts()
     qDeleteAll(m_quickLayoutActions);
     m_quickLayoutActions.clear();
 
-    // Register quick layout shortcuts (read from settings)
+    const QString quickLayoutDefaults[] = {
+        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
+        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
+        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
+        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
+        ConfigDefaults::quickLayout9Shortcut()
+    };
+
     for (int i = 0; i < 9; ++i) {
         auto* quickAction = new QAction(i18n("Apply Layout %1", i + 1), this);
         quickAction->setObjectName(QStringLiteral("quick_layout_%1").arg(i + 1));
+        KGlobalAccel::self()->setDefaultShortcut(quickAction, {QKeySequence(quickLayoutDefaults[i])});
         KGlobalAccel::setGlobalShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
 
-        // Use lambda to capture the number (1-based for user display)
         const int layoutNumber = i + 1;
         connect(quickAction, &QAction::triggered, this, [this, layoutNumber]() {
             onQuickLayout(layoutNumber);
@@ -371,13 +391,20 @@ void ShortcutManager::setupSnapToZoneShortcuts()
     qDeleteAll(m_snapToZoneActions);
     m_snapToZoneActions.clear();
 
-    // Register snap-to-zone shortcuts (Meta+Ctrl+1-9)
+    const QString snapToZoneDefaults[] = {
+        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
+        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
+        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
+        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
+        ConfigDefaults::snapToZone9Shortcut()
+    };
+
     for (int i = 0; i < 9; ++i) {
         auto* snapAction = new QAction(i18n("Snap to Zone %1", i + 1), this);
         snapAction->setObjectName(QStringLiteral("snap_to_zone_%1").arg(i + 1));
+        KGlobalAccel::self()->setDefaultShortcut(snapAction, {QKeySequence(snapToZoneDefaults[i])});
         KGlobalAccel::setGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
 
-        // Use lambda to capture the zone number (1-based for user display)
         const int zoneNumber = i + 1;
         connect(snapAction, &QAction::triggered, this, [this, zoneNumber]() {
             onSnapToZone(zoneNumber);
@@ -407,6 +434,14 @@ void ShortcutManager::setupCycleWindowsShortcuts()
                    cycleWindowBackwardShortcut, &ShortcutManager::onCycleWindowBackward);
 
     qCInfo(lcShortcuts) << "Cycle windows shortcuts registered (Meta+Alt+. / Meta+Alt+,)";
+}
+
+void ShortcutManager::setupResnapToNewLayoutShortcut()
+{
+    SETUP_SHORTCUT(m_resnapToNewLayoutAction, "Resnap Windows to New Layout", "resnap_to_new_layout",
+                   resnapToNewLayoutShortcut, &ShortcutManager::onResnapToNewLayout);
+
+    qCInfo(lcShortcuts) << "Resnap to new layout shortcut registered (Meta+Ctrl+Z)";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -549,6 +584,12 @@ void ShortcutManager::onCycleWindowBackward()
     Q_EMIT cycleWindowsInZoneRequested(false);
 }
 
+void ShortcutManager::onResnapToNewLayout()
+{
+    qCDebug(lcShortcuts) << "Resnap to new layout triggered";
+    Q_EMIT resnapToNewLayoutRequested();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Update Shortcut Methods
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -677,6 +718,11 @@ void ShortcutManager::updateCycleWindowForwardShortcut()
 void ShortcutManager::updateCycleWindowBackwardShortcut()
 {
     UPDATE_SHORTCUT(m_cycleWindowBackwardAction, cycleWindowBackwardShortcut);
+}
+
+void ShortcutManager::updateResnapToNewLayoutShortcut()
+{
+    UPDATE_SHORTCUT(m_resnapToNewLayoutAction, resnapToNewLayoutShortcut);
 }
 
 // Undefine macros to keep them local to this file

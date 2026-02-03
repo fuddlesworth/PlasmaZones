@@ -292,6 +292,18 @@ public Q_SLOTS:
     void cycleWindowsInZone(bool forward);
 
     /**
+     * @brief Resnap all windows from the previous layout to the current layout
+     *
+     * When switching layouts (e.g. A -> B), windows that were snapped to layout A
+     * are remapped to layout B by zone number: 1->1, 2->2, etc. If the new layout
+     * has fewer zones, cycles: e.g. 5 zones -> 3 zones means zone 4->1, 5->2.
+     *
+     * @note Only works if layout was switched recently; buffers windows on layout change.
+     * @note Emits resnapToNewLayoutRequested signal for KWin effect to handle
+     */
+    void resnapToNewLayout();
+
+    /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
      * @return true if window is floating
@@ -458,6 +470,13 @@ Q_SIGNALS:
      * @note The KWin effect will determine the active window and cycle within its zone
      */
     void cycleWindowsInZoneRequested(const QString& directive, const QString& unused);
+
+    /**
+     * @brief Request to resnap windows from previous layout to current layout
+     * @param resnapData JSON array of window moves: [{windowId, targetZoneId, x, y, w, h}, ...]
+     * @note Same format as rotateWindowsRequested; KWin effect applies geometries and calls windowSnapped
+     */
+    void resnapToNewLayoutRequested(const QString& resnapData);
 
 private Q_SLOTS:
     /**

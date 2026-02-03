@@ -2228,19 +2228,22 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    // Process reason field - for rotation, extract window count
-    // Format: "clockwise:N" or "counterclockwise:N" where N is actual rotated window count
+    // Process reason field - for rotation/resnap, extract window count
+    // Format: "clockwise:N" or "counterclockwise:N" or "resnap:N" where N is window count
     int windowCount = 1;
     QString displayReason = reason;
-    if (action == QStringLiteral("rotate") && reason.contains(QLatin1Char(':'))) {
+    if (reason.contains(QLatin1Char(':'))) {
         QStringList parts = reason.split(QLatin1Char(':'));
         if (parts.size() >= 2) {
-            displayReason = parts.at(0); // "clockwise" or "counterclockwise"
             bool ok = false;
             int count = parts.at(1).toInt(&ok);
             if (ok && count > 0) {
                 windowCount = count;
             }
+            if (action == QStringLiteral("rotate")) {
+                displayReason = parts.at(0); // "clockwise" or "counterclockwise"
+            }
+            // resnap keeps full reason for displayReason (optional)
         }
     }
 

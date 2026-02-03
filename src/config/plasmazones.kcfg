@@ -239,12 +239,20 @@
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
-       Global Shortcuts (KGlobalAccel)
+       Global Shortcuts (KGlobalAccel) - all KGlobalAccel shortcuts in one group
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="GlobalShortcuts">
     <entry name="OpenEditorShortcut" type="String">
       <label>Shortcut to open layout editor</label>
       <default>Meta+Shift+E</default>
+    </entry>
+    <entry name="PreviousLayoutShortcut" type="String">
+      <label>Shortcut to switch to previous layout</label>
+      <default>Meta+Alt+[</default>
+    </entry>
+    <entry name="NextLayoutShortcut" type="String">
+      <label>Shortcut to switch to next layout</label>
+      <default>Meta+Alt+]</default>
     </entry>
     <entry name="QuickLayout1Shortcut" type="String">
       <label>Shortcut to apply quick layout 1</label>
@@ -282,12 +290,7 @@
       <label>Shortcut to apply quick layout 9</label>
       <default>Meta+Alt+9</default>
     </entry>
-  </group>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════════════
-       Navigation Shortcuts (keyboard navigation, snap to zone by number)
-       ═══════════════════════════════════════════════════════════════════════════════ -->
-  <group name="NavigationShortcuts">
     <!-- Move window to adjacent zone (Meta+Alt+Shift+Arrow) -->
     <entry name="MoveWindowLeft" type="String">
       <label>Shortcut to move active window to adjacent zone on the left</label>
@@ -412,6 +415,12 @@
     <entry name="CycleWindowBackward" type="String">
       <label>Shortcut to cycle focus to previous window in the same zone</label>
       <default>Meta+Alt+,</default>
+    </entry>
+
+    <!-- Resnap to New Layout (after layout switch). Meta+Ctrl+Z avoids Spectacle (Meta+Alt+R), easy pinky key -->
+    <entry name="ResnapToNewLayoutShortcut" type="String">
+      <label>Shortcut to resnap windows from previous layout to current layout</label>
+      <default>Meta+Ctrl+Z</default>
     </entry>
   </group>
 

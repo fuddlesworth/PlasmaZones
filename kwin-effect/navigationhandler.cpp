@@ -873,6 +873,94 @@ void NavigationHandler::handleRotateWindows(bool clockwise, const QString& rotat
     }
 }
 
+void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
+{
+    qCDebug(lcEffect) << "Resnap to new layout requested";
+
+    KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
+    QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(resnapData.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("parse_error"),
+                                         QString(), QString(), screenName);
+        return;
+    }
+
+    QJsonArray resnapArray = doc.array();
+    if (resnapArray.isEmpty()) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows"),
+                                         QString(), QString(), screenName);
+        return;
+    }
+
+    auto* iface = m_effect->windowTrackingInterface();
+    if (!iface || !iface->isValid()) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("dbus_error"),
+                                         QString(), QString(), screenName);
+        return;
+    }
+
+    QHash<QString, KWin::EffectWindow*> windowMap = m_effect->buildWindowMap();
+    int successCount = 0;
+    QString firstTargetZoneId;
+
+    for (const QJsonValue& value : resnapArray) {
+        if (!value.isObject()) {
+            continue;
+        }
+
+        QJsonObject moveObj = value.toObject();
+        QString windowId = moveObj[QLatin1String("windowId")].toString();
+        QString targetZoneId = moveObj[QLatin1String("targetZoneId")].toString();
+        int x = moveObj[QLatin1String("x")].toInt();
+        int y = moveObj[QLatin1String("y")].toInt();
+        int width = moveObj[QLatin1String("width")].toInt();
+        int height = moveObj[QLatin1String("height")].toInt();
+
+        if (windowId.isEmpty() || targetZoneId.isEmpty()) {
+            continue;
+        }
+
+        QString stableId = m_effect->extractStableId(windowId);
+        KWin::EffectWindow* window = windowMap.value(stableId);
+
+        if (!window) {
+            continue;
+        }
+
+        if (isWindowFloating(stableId)) {
+            continue;
+        }
+
+        // Only resnap windows on current desktop (and activity) - user expects to see them move
+        if (!window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
+            continue;
+        }
+
+        // Use full windowId from KWin for daemon tracking (JSON may contain stableId for pending entries)
+        QString fullWindowId = m_effect->getWindowId(window);
+        m_effect->ensurePreSnapGeometryStored(window, fullWindowId);
+        m_effect->applySnapGeometry(window, QRect(x, y, width, height));
+        iface->asyncCall(QStringLiteral("windowSnapped"), fullWindowId, targetZoneId);
+        ++successCount;
+
+        if (successCount == 1) {
+            firstTargetZoneId = targetZoneId;
+        }
+    }
+
+    if (successCount > 0) {
+        QString reason = QStringLiteral("resnap:%1").arg(successCount);
+        m_effect->emitNavigationFeedback(true, QStringLiteral("resnap"), reason,
+                                         QString(), firstTargetZoneId, screenName);
+    } else {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_resnaps"),
+                                         QString(), QString(), screenName);
+    }
+}
+
 void NavigationHandler::handleCycleWindowsInZone(const QString& directive, const QString& unused)
 {
     Q_UNUSED(unused)

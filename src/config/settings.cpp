@@ -535,6 +535,7 @@ SETTINGS_SETTER(const QString&, RotateWindowsCounterclockwiseShortcut, m_rotateW
 // Cycle Windows in Zone Shortcuts
 SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForwardShortcut, cycleWindowForwardShortcutChanged)
 SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut, cycleWindowBackwardShortcutChanged)
+SETTINGS_SETTER(const QString&, ResnapToNewLayoutShortcut, m_resnapToNewLayoutShortcut, resnapToNewLayoutShortcutChanged)
 
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
@@ -714,11 +715,11 @@ void Settings::load()
     m_enableShaderEffects = shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
     m_shaderFrameRate = qBound(30, shaders.readEntry(QLatin1String("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
 
-    // Global Shortcuts (defaults from .kcfg via ConfigDefaults)
+    // Global Shortcuts (all KGlobalAccel shortcuts in one group)
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
     m_openEditorShortcut = globalShortcuts.readEntry(QLatin1String("OpenEditorShortcut"), ConfigDefaults::openEditorShortcut());
-    m_previousLayoutShortcut = globalShortcuts.readEntry(QLatin1String("PreviousLayoutShortcut"), QStringLiteral("Meta+Alt+["));
-    m_nextLayoutShortcut = globalShortcuts.readEntry(QLatin1String("NextLayoutShortcut"), QStringLiteral("Meta+Alt+]"));
+    m_previousLayoutShortcut = globalShortcuts.readEntry(QLatin1String("PreviousLayoutShortcut"), ConfigDefaults::previousLayoutShortcut());
+    m_nextLayoutShortcut = globalShortcuts.readEntry(QLatin1String("NextLayoutShortcut"), ConfigDefaults::nextLayoutShortcut());
     // Quick layout shortcuts
     const QString quickLayoutDefaults[9] = {
         ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
@@ -729,40 +730,22 @@ void Settings::load()
     };
     loadIndexedShortcuts(globalShortcuts, QStringLiteral("QuickLayout%1Shortcut"), m_quickLayoutShortcuts, quickLayoutDefaults);
 
-    // Keyboard Navigation Shortcuts (defaults from .kcfg via ConfigDefaults)
-    // Shortcut pattern philosophy for consistency and KDE conflict avoidance:
-    //   Meta+Alt+{key}         = Layout operations ([, ], 1-9, Return, Escape, F)
-    //   Meta+Alt+Shift+Arrow   = Window zone movement
-    //   Alt+Shift+Arrow        = Focus zone navigation (lighter action, no Meta)
-    //   Meta+Ctrl+{1-9}        = Direct zone snapping
-    // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
-    // we use Meta+Alt+Shift+Arrow instead.
-    KConfigGroup navigationShortcuts = config->group(QStringLiteral("NavigationShortcuts"));
-    m_moveWindowLeftShortcut = navigationShortcuts.readEntry(QLatin1String("MoveWindowLeft"), ConfigDefaults::moveWindowLeftShortcut());
-    m_moveWindowRightShortcut =
-        navigationShortcuts.readEntry(QLatin1String("MoveWindowRight"), ConfigDefaults::moveWindowRightShortcut());
-    m_moveWindowUpShortcut = navigationShortcuts.readEntry(QLatin1String("MoveWindowUp"), ConfigDefaults::moveWindowUpShortcut());
-    m_moveWindowDownShortcut = navigationShortcuts.readEntry(QLatin1String("MoveWindowDown"), ConfigDefaults::moveWindowDownShortcut());
-    // Meta+Arrow conflicts with KDE's Quick Tile; we use Alt+Shift+Arrow instead.
-    m_focusZoneLeftShortcut = navigationShortcuts.readEntry(QLatin1String("FocusZoneLeft"), ConfigDefaults::focusZoneLeftShortcut());
-    m_focusZoneRightShortcut = navigationShortcuts.readEntry(QLatin1String("FocusZoneRight"), ConfigDefaults::focusZoneRightShortcut());
-    m_focusZoneUpShortcut = navigationShortcuts.readEntry(QLatin1String("FocusZoneUp"), ConfigDefaults::focusZoneUpShortcut());
-    m_focusZoneDownShortcut = navigationShortcuts.readEntry(QLatin1String("FocusZoneDown"), ConfigDefaults::focusZoneDownShortcut());
-    m_pushToEmptyZoneShortcut = navigationShortcuts.readEntry(QLatin1String("PushToEmptyZone"), ConfigDefaults::pushToEmptyZoneShortcut());
-    m_restoreWindowSizeShortcut = navigationShortcuts.readEntry(QLatin1String("RestoreWindowSize"), ConfigDefaults::restoreWindowSizeShortcut());
-    m_toggleWindowFloatShortcut = navigationShortcuts.readEntry(QLatin1String("ToggleWindowFloat"), ConfigDefaults::toggleWindowFloatShortcut());
+    m_moveWindowLeftShortcut = globalShortcuts.readEntry(QLatin1String("MoveWindowLeft"), ConfigDefaults::moveWindowLeftShortcut());
+    m_moveWindowRightShortcut = globalShortcuts.readEntry(QLatin1String("MoveWindowRight"), ConfigDefaults::moveWindowRightShortcut());
+    m_moveWindowUpShortcut = globalShortcuts.readEntry(QLatin1String("MoveWindowUp"), ConfigDefaults::moveWindowUpShortcut());
+    m_moveWindowDownShortcut = globalShortcuts.readEntry(QLatin1String("MoveWindowDown"), ConfigDefaults::moveWindowDownShortcut());
+    m_focusZoneLeftShortcut = globalShortcuts.readEntry(QLatin1String("FocusZoneLeft"), ConfigDefaults::focusZoneLeftShortcut());
+    m_focusZoneRightShortcut = globalShortcuts.readEntry(QLatin1String("FocusZoneRight"), ConfigDefaults::focusZoneRightShortcut());
+    m_focusZoneUpShortcut = globalShortcuts.readEntry(QLatin1String("FocusZoneUp"), ConfigDefaults::focusZoneUpShortcut());
+    m_focusZoneDownShortcut = globalShortcuts.readEntry(QLatin1String("FocusZoneDown"), ConfigDefaults::focusZoneDownShortcut());
+    m_pushToEmptyZoneShortcut = globalShortcuts.readEntry(QLatin1String("PushToEmptyZone"), ConfigDefaults::pushToEmptyZoneShortcut());
+    m_restoreWindowSizeShortcut = globalShortcuts.readEntry(QLatin1String("RestoreWindowSize"), ConfigDefaults::restoreWindowSizeShortcut());
+    m_toggleWindowFloatShortcut = globalShortcuts.readEntry(QLatin1String("ToggleWindowFloat"), ConfigDefaults::toggleWindowFloatShortcut());
+    m_swapWindowLeftShortcut = globalShortcuts.readEntry(QLatin1String("SwapWindowLeft"), ConfigDefaults::swapWindowLeftShortcut());
+    m_swapWindowRightShortcut = globalShortcuts.readEntry(QLatin1String("SwapWindowRight"), ConfigDefaults::swapWindowRightShortcut());
+    m_swapWindowUpShortcut = globalShortcuts.readEntry(QLatin1String("SwapWindowUp"), ConfigDefaults::swapWindowUpShortcut());
+    m_swapWindowDownShortcut = globalShortcuts.readEntry(QLatin1String("SwapWindowDown"), ConfigDefaults::swapWindowDownShortcut());
 
-    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
-    // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
-    // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
-    m_swapWindowLeftShortcut =
-        navigationShortcuts.readEntry(QLatin1String("SwapWindowLeft"), ConfigDefaults::swapWindowLeftShortcut());
-    m_swapWindowRightShortcut =
-        navigationShortcuts.readEntry(QLatin1String("SwapWindowRight"), ConfigDefaults::swapWindowRightShortcut());
-    m_swapWindowUpShortcut = navigationShortcuts.readEntry(QLatin1String("SwapWindowUp"), ConfigDefaults::swapWindowUpShortcut());
-    m_swapWindowDownShortcut = navigationShortcuts.readEntry(QLatin1String("SwapWindowDown"), ConfigDefaults::swapWindowDownShortcut());
-
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9) -
     const QString snapToZoneDefaults[9] = {
         ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
         ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
@@ -770,21 +753,18 @@ void Settings::load()
         ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
         ConfigDefaults::snapToZone9Shortcut()
     };
-    loadIndexedShortcuts(navigationShortcuts, QStringLiteral("SnapToZone%1"), m_snapToZoneShortcuts, snapToZoneDefaults);
+    loadIndexedShortcuts(globalShortcuts, QStringLiteral("SnapToZone%1"), m_snapToZoneShortcuts, snapToZoneDefaults);
 
-    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
-    // Rotates all windows in the current layout clockwise or counterclockwise
     m_rotateWindowsClockwiseShortcut =
-        navigationShortcuts.readEntry(QLatin1String("RotateWindowsClockwise"), ConfigDefaults::rotateWindowsClockwiseShortcut());
+        globalShortcuts.readEntry(QLatin1String("RotateWindowsClockwise"), ConfigDefaults::rotateWindowsClockwiseShortcut());
     m_rotateWindowsCounterclockwiseShortcut =
-        navigationShortcuts.readEntry(QLatin1String("RotateWindowsCounterclockwise"), ConfigDefaults::rotateWindowsCounterclockwiseShortcut());
-
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
-    // Cycles focus between windows stacked in the same zone (monocle-style navigation)
+        globalShortcuts.readEntry(QLatin1String("RotateWindowsCounterclockwise"), ConfigDefaults::rotateWindowsCounterclockwiseShortcut());
     m_cycleWindowForwardShortcut =
-        navigationShortcuts.readEntry(QLatin1String("CycleWindowForward"), ConfigDefaults::cycleWindowForwardShortcut());
+        globalShortcuts.readEntry(QLatin1String("CycleWindowForward"), ConfigDefaults::cycleWindowForwardShortcut());
     m_cycleWindowBackwardShortcut =
-        navigationShortcuts.readEntry(QLatin1String("CycleWindowBackward"), ConfigDefaults::cycleWindowBackwardShortcut());
+        globalShortcuts.readEntry(QLatin1String("CycleWindowBackward"), ConfigDefaults::cycleWindowBackwardShortcut());
+    m_resnapToNewLayoutShortcut =
+        globalShortcuts.readEntry(QLatin1String("ResnapToNewLayoutShortcut"), ConfigDefaults::resnapToNewLayoutShortcut());
 
     // Apply system colors if enabled
     if (m_useSystemColors) {
@@ -878,49 +858,37 @@ void Settings::save()
     shaders.writeEntry(QLatin1String("EnableShaderEffects"), m_enableShaderEffects);
     shaders.writeEntry(QLatin1String("ShaderFrameRate"), m_shaderFrameRate);
 
-    // Global Shortcuts
+    // Global Shortcuts (all KGlobalAccel shortcuts in one group)
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
     globalShortcuts.writeEntry(QLatin1String("OpenEditorShortcut"), m_openEditorShortcut);
     globalShortcuts.writeEntry(QLatin1String("PreviousLayoutShortcut"), m_previousLayoutShortcut);
     globalShortcuts.writeEntry(QLatin1String("NextLayoutShortcut"), m_nextLayoutShortcut);
     for (int i = 0; i < 9; ++i) {
-        QString key = QStringLiteral("QuickLayout%1Shortcut").arg(i + 1);
-        globalShortcuts.writeEntry(key, m_quickLayoutShortcuts[i]);
+        globalShortcuts.writeEntry(QStringLiteral("QuickLayout%1Shortcut").arg(i + 1), m_quickLayoutShortcuts[i]);
     }
-
-    // Keyboard Navigation Shortcuts (Phase 1 features)
-    KConfigGroup navigationShortcuts = config->group(QStringLiteral("NavigationShortcuts"));
-    navigationShortcuts.writeEntry(QLatin1String("MoveWindowLeft"), m_moveWindowLeftShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("MoveWindowRight"), m_moveWindowRightShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("MoveWindowUp"), m_moveWindowUpShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("MoveWindowDown"), m_moveWindowDownShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("FocusZoneLeft"), m_focusZoneLeftShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("FocusZoneRight"), m_focusZoneRightShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("FocusZoneUp"), m_focusZoneUpShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("FocusZoneDown"), m_focusZoneDownShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("PushToEmptyZone"), m_pushToEmptyZoneShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("RestoreWindowSize"), m_restoreWindowSizeShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("ToggleWindowFloat"), m_toggleWindowFloatShortcut);
-
-    // Swap Window Shortcuts
-    navigationShortcuts.writeEntry(QLatin1String("SwapWindowLeft"), m_swapWindowLeftShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("SwapWindowRight"), m_swapWindowRightShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("SwapWindowUp"), m_swapWindowUpShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("SwapWindowDown"), m_swapWindowDownShortcut);
-
-    // Snap to Zone by Number Shortcuts
+    globalShortcuts.writeEntry(QLatin1String("MoveWindowLeft"), m_moveWindowLeftShortcut);
+    globalShortcuts.writeEntry(QLatin1String("MoveWindowRight"), m_moveWindowRightShortcut);
+    globalShortcuts.writeEntry(QLatin1String("MoveWindowUp"), m_moveWindowUpShortcut);
+    globalShortcuts.writeEntry(QLatin1String("MoveWindowDown"), m_moveWindowDownShortcut);
+    globalShortcuts.writeEntry(QLatin1String("FocusZoneLeft"), m_focusZoneLeftShortcut);
+    globalShortcuts.writeEntry(QLatin1String("FocusZoneRight"), m_focusZoneRightShortcut);
+    globalShortcuts.writeEntry(QLatin1String("FocusZoneUp"), m_focusZoneUpShortcut);
+    globalShortcuts.writeEntry(QLatin1String("FocusZoneDown"), m_focusZoneDownShortcut);
+    globalShortcuts.writeEntry(QLatin1String("PushToEmptyZone"), m_pushToEmptyZoneShortcut);
+    globalShortcuts.writeEntry(QLatin1String("RestoreWindowSize"), m_restoreWindowSizeShortcut);
+    globalShortcuts.writeEntry(QLatin1String("ToggleWindowFloat"), m_toggleWindowFloatShortcut);
+    globalShortcuts.writeEntry(QLatin1String("SwapWindowLeft"), m_swapWindowLeftShortcut);
+    globalShortcuts.writeEntry(QLatin1String("SwapWindowRight"), m_swapWindowRightShortcut);
+    globalShortcuts.writeEntry(QLatin1String("SwapWindowUp"), m_swapWindowUpShortcut);
+    globalShortcuts.writeEntry(QLatin1String("SwapWindowDown"), m_swapWindowDownShortcut);
     for (int i = 0; i < 9; ++i) {
-        QString key = QStringLiteral("SnapToZone%1").arg(i + 1);
-        navigationShortcuts.writeEntry(key, m_snapToZoneShortcuts[i]);
+        globalShortcuts.writeEntry(QStringLiteral("SnapToZone%1").arg(i + 1), m_snapToZoneShortcuts[i]);
     }
-
-    // Rotate Windows Shortcuts
-    navigationShortcuts.writeEntry(QLatin1String("RotateWindowsClockwise"), m_rotateWindowsClockwiseShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("RotateWindowsCounterclockwise"), m_rotateWindowsCounterclockwiseShortcut);
-
-    // Cycle Windows in Zone Shortcuts
-    navigationShortcuts.writeEntry(QLatin1String("CycleWindowForward"), m_cycleWindowForwardShortcut);
-    navigationShortcuts.writeEntry(QLatin1String("CycleWindowBackward"), m_cycleWindowBackwardShortcut);
+    globalShortcuts.writeEntry(QLatin1String("RotateWindowsClockwise"), m_rotateWindowsClockwiseShortcut);
+    globalShortcuts.writeEntry(QLatin1String("RotateWindowsCounterclockwise"), m_rotateWindowsCounterclockwiseShortcut);
+    globalShortcuts.writeEntry(QLatin1String("CycleWindowForward"), m_cycleWindowForwardShortcut);
+    globalShortcuts.writeEntry(QLatin1String("CycleWindowBackward"), m_cycleWindowBackwardShortcut);
+    globalShortcuts.writeEntry(QLatin1String("ResnapToNewLayoutShortcut"), m_resnapToNewLayoutShortcut);
 
     config->sync();
 }
@@ -941,8 +909,7 @@ void Settings::reset()
         QStringLiteral("Exclusions"),
         QStringLiteral("ZoneSelector"),
         QStringLiteral("Shaders"),
-        QStringLiteral("GlobalShortcuts"),
-        QStringLiteral("NavigationShortcuts")
+        QStringLiteral("GlobalShortcuts")
     };
 
     for (const QString& groupName : groups) {

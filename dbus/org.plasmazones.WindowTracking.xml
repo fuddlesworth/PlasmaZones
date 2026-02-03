@@ -298,6 +298,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen name where navigation occurred (for OSD placement)."/>
             </arg>
         </signal>
+        <signal name="resnapToNewLayoutRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when resnapToNewLayout is called. JSON array of window moves for KWin to apply."/>
+            <arg name="resnapData" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array [{windowId, targetZoneId, x, y, width, height}, ...]"/>
+            </arg>
+        </signal>
         <signal name="pendingRestoresAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's layout becomes available and there are pending zone restores. The KWin effect should retry restoring untracked windows when receiving this signal."/>
         </signal>
@@ -325,6 +331,9 @@
             <arg name="screenName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
             </arg>
+        </method>
+        <method name="resnapToNewLayout">
+            <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout. Maps by zone number (1-&gt;1, 2-&gt;2) with cycling when new layout has fewer zones. Call after switching layouts."/>
         </method>
         <method name="setWindowSticky">
             <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>

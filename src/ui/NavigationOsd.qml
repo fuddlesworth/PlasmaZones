@@ -137,6 +137,11 @@ Window {
             return i18n("Snapped");
         } else if (action === "cycle") {
             return i18n("Next window");
+        } else if (action === "resnap") {
+            if (windowCount > 1) {
+                return i18np("Resnapped %1 window", "Resnapped %1 windows", windowCount);
+            }
+            return i18n("Resnapped");
         } else {
             return i18n("Done");
         }

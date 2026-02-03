@@ -220,6 +220,10 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString cycleWindowBackwardShortcut READ cycleWindowBackwardShortcut WRITE setCycleWindowBackwardShortcut
                    NOTIFY cycleWindowBackwardShortcutChanged)
 
+    // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
+    Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
+                   NOTIFY resnapToNewLayoutShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -783,6 +787,11 @@ public:
         return m_cycleWindowBackwardShortcut;
     }
     void setCycleWindowBackwardShortcut(const QString& shortcut);
+    QString resnapToNewLayoutShortcut() const
+    {
+        return m_resnapToNewLayoutShortcut;
+    }
+    void setResnapToNewLayoutShortcut(const QString& shortcut);
 
     // Persistence
     void load() override;
@@ -959,6 +968,9 @@ private:
     // Cycles focus between windows stacked in the same zone (monocle-style navigation)
     QString m_cycleWindowForwardShortcut = QStringLiteral("Meta+Alt+.");
     QString m_cycleWindowBackwardShortcut = QStringLiteral("Meta+Alt+,");
+
+    // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
+    QString m_resnapToNewLayoutShortcut = QStringLiteral("Meta+Ctrl+Z");
 
 };
 
