@@ -81,9 +81,6 @@ KCM.AbstractKCM {
         readonly property real focusSideRatio: 0.15
         readonly property real focusMainRatio: 0.70
 
-        // Autotiling algorithm preview dimensions
-        readonly property int algorithmPreviewWidth: 280
-        readonly property int algorithmPreviewHeight: 160
     }
 
     header: ColumnLayout {
@@ -139,10 +136,6 @@ KCM.AbstractKCM {
             TabButton {
                 text: i18n("Zones")
                 icon.name: "view-split-left-right"
-            }
-            TabButton {
-                text: i18n("Autotiling")
-                icon.name: "window-duplicate"
             }
             TabButton {
                 text: i18n("Display")
@@ -245,28 +238,15 @@ KCM.AbstractKCM {
             onRequestColorFileDialog: colorFileDialog.open()
         }
 
-        // TAB 5: AUTOTILING
-        AutotilingTab {
-            id: autotilingTab
-            kcm: root.kcmModule
-            constants: constants
-            isCurrentTab: stackLayout.currentIndex === 4
-
-            onRequestActiveBorderColorDialog: {
-                autotileBorderColorDialog.selectedColor = kcm.autotileActiveBorderColor
-                autotileBorderColorDialog.open()
-            }
-        }
-
-        // TAB 6: DISPLAY (Zone Selector)
+        // TAB 5: DISPLAY (Zone Selector)
         DisplayTab {
             kcm: root.kcmModule
             constants: constants
             screenAspectRatio: root.screenAspectRatio
-            isCurrentTab: stackLayout.currentIndex === 5
+            isCurrentTab: stackLayout.currentIndex === 4
         }
 
-        // TAB 7: EXCLUSIONS
+        // TAB 6: EXCLUSIONS
         ExclusionsTab {
             kcm: root.kcmModule
             constants: constants
@@ -294,12 +274,6 @@ KCM.AbstractKCM {
         id: borderColorDialog
         title: i18n("Choose Border Color")
         onAccepted: kcm.borderColor = selectedColor
-    }
-
-    ColorDialog {
-        id: autotileBorderColorDialog
-        title: i18n("Choose Autotile Border Color")
-        onAccepted: kcm.autotileActiveBorderColor = selectedColor
     }
 
     // File dialogs

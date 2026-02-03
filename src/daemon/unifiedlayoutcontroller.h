@@ -12,32 +12,23 @@
 namespace PlasmaZones {
 
 class LayoutManager;
-class AutotileEngine;
 class Settings;
 class Layout;
 
 /**
- * @brief Controller for unified layout management (manual layouts + autotile algorithms)
+ * @brief Controller for unified layout management (manual layouts)
  *
- * Extracted from Daemon. Handles:
+ * Handles:
  * - Quick layout switching (Meta+1-9)
  * - Layout cycling (Meta+[/])
- * - ID-based layout tracking (more robust than index-based)
+ * - ID-based layout tracking
  *
  * Usage:
  * @code
- * auto *controller = new UnifiedLayoutController(layoutManager, autotileEngine, settings, parent);
- *
- * // Quick layout switch
- * controller->applyLayoutByNumber(1);  // First layout
- *
- * // Cycling
+ * auto *controller = new UnifiedLayoutController(layoutManager, settings, parent);
+ * controller->applyLayoutByNumber(1);
  * controller->cycleNext();
- * controller->cyclePrevious();
- *
- * // Connect OSD signals
  * connect(controller, &UnifiedLayoutController::layoutApplied, this, &Daemon::showLayoutOsd);
- * connect(controller, &UnifiedLayoutController::autotileApplied, this, &Daemon::showAutotileOsd);
  * @endcode
  *
  * @note Thread Safety: All methods should be called from the main thread.
@@ -48,8 +39,7 @@ class UnifiedLayoutController : public QObject
     Q_PROPERTY(QString currentLayoutId READ currentLayoutId NOTIFY currentLayoutIdChanged)
 
 public:
-    explicit UnifiedLayoutController(LayoutManager* layoutManager, AutotileEngine* autotileEngine,
-                                     Settings* settings, QObject* parent = nullptr);
+    explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings, QObject* parent = nullptr);
     ~UnifiedLayoutController() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -57,9 +47,7 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Get the current layout ID
-     *
-     * Returns either a layout UUID or "autotile:<algorithm-id>".
+     * @brief Get the current layout ID (layout UUID).
      */
     QString currentLayoutId() const { return m_currentLayoutId; }
 
@@ -95,7 +83,7 @@ public:
     /**
      * @brief Apply layout by ID
      *
-     * @param layoutId Layout UUID or "autotile:<algorithm-id>"
+     * @param layoutId Layout UUID
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutById(const QString& layoutId);
@@ -153,11 +141,6 @@ Q_SIGNALS:
     void layoutApplied(Layout* layout);
 
     /**
-     * @brief Emitted when an autotile algorithm is applied (for OSD)
-     */
-    void autotileApplied(const QString& algorithmId);
-
-    /**
      * @brief Emitted when layout list changes
      */
     void layoutsChanged();
@@ -179,7 +162,6 @@ private:
     int findCurrentIndex() const;
 
     QPointer<LayoutManager> m_layoutManager;
-    QPointer<AutotileEngine> m_autotileEngine;
     QPointer<Settings> m_settings;
 
     QString m_currentLayoutId;

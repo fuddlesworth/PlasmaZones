@@ -111,8 +111,7 @@ class PLASMAZONES_EXPORT ISettings : public QObject,
                                      public IWindowExclusionSettings,
                                      public IZoneSelectorSettings,
                                      public IWindowBehaviorSettings,
-                                     public IDefaultLayoutSettings,
-                                     public IAutotileSettings
+                                     public IDefaultLayoutSettings
 {
     Q_OBJECT
 
@@ -247,40 +246,6 @@ Q_SIGNALS:
     void cycleWindowForwardShortcutChanged();
     void cycleWindowBackwardShortcutChanged();
 
-    // Autotiling Settings
-    void autotileEnabledChanged();
-    void autotileAlgorithmChanged();
-    void autotileSplitRatioChanged();
-    void autotileMasterCountChanged();
-    void autotileInnerGapChanged();
-    void autotileOuterGapChanged();
-    void autotileFocusNewWindowsChanged();
-    void autotileSmartGapsChanged();
-    void autotileInsertPositionChanged();
-
-    // Autotile Animation Settings
-    void autotileAnimationsEnabledChanged();
-    void autotileAnimationDurationChanged();
-
-    // Additional Autotiling Settings
-    void autotileFocusFollowsMouseChanged();
-    void autotileRespectMinimumSizeChanged();
-    void autotileShowActiveBorderChanged();
-    void autotileActiveBorderWidthChanged();
-    void autotileUseSystemBorderColorChanged();
-    void autotileActiveBorderColorChanged();
-    void autotileMonocleHideOthersChanged();
-    void autotileMonocleShowTabsChanged();
-
-    // Autotiling Shortcuts
-    void autotileToggleShortcutChanged();
-    void autotileFocusMasterShortcutChanged();
-    void autotileSwapMasterShortcutChanged();
-    void autotileIncMasterRatioShortcutChanged();
-    void autotileDecMasterRatioShortcutChanged();
-    void autotileIncMasterCountShortcutChanged();
-    void autotileDecMasterCountShortcutChanged();
-    void autotileRetileShortcutChanged();
 };
 
 /**
@@ -478,12 +443,6 @@ Q_SIGNALS:
     void multiZoneActivated(const QVector<Zone*>& zones);
     void zoneSelectorVisibilityChanged(bool visible);
     void zoneSelectorZoneSelected(int zoneIndex);
-
-    /**
-     * @brief Emitted when an autotile layout is selected from the zone selector
-     * @param algorithmId The ID of the autotile algorithm (e.g., "master-stack", "bsp")
-     */
-    void autotileLayoutSelected(const QString& algorithmId);
 
     /**
      * @brief Emitted when a manual layout is selected from the zone selector

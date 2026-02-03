@@ -18,9 +18,6 @@ RowLayout {
     required property var kcm
     required property var currentLayout  // Currently selected layout or null
 
-    // Helper to check if current layout is an autotile algorithm (not editable)
-    readonly property bool isAutotile: currentLayout?.category === 1
-
     // Signals for actions that require dialog handling in parent
     signal requestDeleteLayout(var layout)
     signal requestImportLayout()
@@ -41,23 +38,23 @@ RowLayout {
             {
                 text: i18n("Edit"),
                 icon: "document-edit",
-                enabled: root.currentLayout !== null && !root.isAutotile,
+                enabled: root.currentLayout !== null,
                 action: () => { if (root.currentLayout) root.kcm.editLayout(root.currentLayout.id) },
-                tooltip: root.isAutotile ? i18n("Autotile algorithms cannot be edited") : ""
+                tooltip: ""
             },
             {
                 text: i18n("Duplicate"),
                 icon: "edit-copy",
-                enabled: root.currentLayout !== null && !root.isAutotile,
+                enabled: root.currentLayout !== null,
                 action: () => { if (root.currentLayout) root.kcm.duplicateLayout(root.currentLayout.id) },
-                tooltip: root.isAutotile ? i18n("Autotile algorithms cannot be duplicated") : ""
+                tooltip: ""
             },
             {
                 text: i18n("Delete"),
                 icon: "edit-delete",
-                enabled: root.currentLayout !== null && !root.currentLayout?.isSystem && !root.isAutotile,
+                enabled: root.currentLayout !== null && !root.currentLayout?.isSystem,
                 action: () => { if (root.currentLayout) root.requestDeleteLayout(root.currentLayout) },
-                tooltip: root.isAutotile ? i18n("Autotile algorithms cannot be deleted") : i18n("Delete the selected layout")
+                tooltip: i18n("Delete the selected layout")
             },
             {
                 text: i18n("Set as Default"),
@@ -92,10 +89,7 @@ RowLayout {
     Button {
         text: i18n("Export")
         icon.name: "document-export"
-        enabled: root.currentLayout !== null && !root.isAutotile
+        enabled: root.currentLayout !== null
         onClicked: { if (root.currentLayout) root.requestExportLayout(root.currentLayout.id) }
-
-        ToolTip.visible: root.isAutotile && hovered
-        ToolTip.text: i18n("Autotile algorithms cannot be exported")
     }
 }

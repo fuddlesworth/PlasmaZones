@@ -112,27 +112,13 @@ public Q_SLOTS:
      * Clean up all tracking data for a closed window
      * @param windowId Window ID that was closed
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
-     * @note This also emits windowRemovedEvent for autotiling consumers
      */
     void windowClosed(const QString& windowId);
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Phase 2.1: Window Event Methods for Autotiling
-    // ═══════════════════════════════════════════════════════════════════════════
-
     /**
-     * Notify daemon that a new window was added (for autotiling)
-     * @param windowId Window identifier from KWin
-     * @param screenName Screen where the window appeared
-     * @note Emits windowAddedEvent signal for autotiling consumers
-     */
-    void windowAdded(const QString& windowId, const QString& screenName);
-
-    /**
-     * Notify daemon that a window was activated/focused (for autotiling focus tracking)
+     * Notify daemon that a window was activated/focused
      * @param windowId Window identifier from KWin
      * @param screenName Screen where the window is located
-     * @note Emits windowActivatedEvent signal for autotiling consumers
      */
     void windowActivated(const QString& windowId, const QString& screenName);
 
@@ -423,30 +409,6 @@ Q_SIGNALS:
     void navigationFeedback(bool success, const QString& action, const QString& reason,
                             const QString& sourceZoneId, const QString& targetZoneId,
                             const QString& screenName);
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Phase 2.1: Window Event Signals for Autotiling
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Emitted when a new window is added (for autotiling consumers)
-     * @param windowId Window identifier from KWin
-     * @param screenName Screen where the window appeared
-     */
-    void windowAddedEvent(const QString& windowId, const QString& screenName);
-
-    /**
-     * @brief Emitted when a window is closed (for autotiling consumers)
-     * @param windowId Window identifier from KWin
-     */
-    void windowRemovedEvent(const QString& windowId);
-
-    /**
-     * @brief Emitted when a window is activated/focused (for autotiling focus tracking)
-     * @param windowId Window identifier from KWin
-     * @param screenName Screen where the window is located
-     */
-    void windowActivatedEvent(const QString& windowId, const QString& screenName);
 
     // Phase 1 Keyboard Navigation signals (for KWin script)
     /**

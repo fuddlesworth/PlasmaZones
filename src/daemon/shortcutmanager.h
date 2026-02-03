@@ -125,47 +125,6 @@ Q_SIGNALS:
      */
     void cycleWindowsInZoneRequested(bool forward);
 
-    // Phase 3.1: Autotile keyboard shortcut signals
-    /**
-     * @brief Emitted when toggle autotiling is requested
-     */
-    void toggleAutotileRequested();
-
-    /**
-     * @brief Emitted when focus master window is requested
-     */
-    void focusMasterRequested();
-
-    /**
-     * @brief Emitted when swap with master is requested
-     */
-    void swapMasterRequested();
-
-    /**
-     * @brief Emitted when increase master ratio is requested
-     */
-    void incMasterRatioRequested();
-
-    /**
-     * @brief Emitted when decrease master ratio is requested
-     */
-    void decMasterRatioRequested();
-
-    /**
-     * @brief Emitted when increase master count is requested
-     */
-    void incMasterCountRequested();
-
-    /**
-     * @brief Emitted when decrease master count is requested
-     */
-    void decMasterCountRequested();
-
-    /**
-     * @brief Emitted when force retile is requested
-     */
-    void retileRequested();
-
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -230,26 +189,6 @@ private Q_SLOTS:
     void updateCycleWindowForwardShortcut();
     void updateCycleWindowBackwardShortcut();
 
-    // Phase 3.1: Autotile shortcut slots
-    void onToggleAutotile();
-    void onFocusMaster();
-    void onSwapMaster();
-    void onIncMasterRatio();
-    void onDecMasterRatio();
-    void onIncMasterCount();
-    void onDecMasterCount();
-    void onRetile();
-
-    // Phase 3.1: Autotile shortcut update handlers
-    void updateToggleAutotileShortcut();
-    void updateFocusMasterShortcut();
-    void updateSwapMasterShortcut();
-    void updateIncMasterRatioShortcut();
-    void updateDecMasterRatioShortcut();
-    void updateIncMasterCountShortcut();
-    void updateDecMasterCountShortcut();
-    void updateRetileShortcut();
-
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -259,7 +198,6 @@ private:
     void setupSnapToZoneShortcuts();
     void setupRotateWindowsShortcuts();
     void setupCycleWindowsShortcuts();
-    void setupAutotileShortcuts();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -298,16 +236,6 @@ private:
     // Cycle Windows in Zone actions
     QAction* m_cycleWindowForwardAction = nullptr;
     QAction* m_cycleWindowBackwardAction = nullptr;
-
-    // Phase 3.1: Autotile shortcut actions
-    QAction* m_toggleAutotileAction = nullptr;
-    QAction* m_focusMasterAction = nullptr;
-    QAction* m_swapMasterAction = nullptr;
-    QAction* m_incMasterRatioAction = nullptr;
-    QAction* m_decMasterRatioAction = nullptr;
-    QAction* m_incMasterCountAction = nullptr;
-    QAction* m_decMasterCountAction = nullptr;
-    QAction* m_retileAction = nullptr;
 };
 
 } // namespace PlasmaZones

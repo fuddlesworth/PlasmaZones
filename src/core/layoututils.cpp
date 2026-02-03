@@ -6,22 +6,12 @@
 #include "interfaces.h"
 #include "layout.h"
 #include "zone.h"
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
 
 #include <QColor>
 #include <QJsonArray>
 #include <QUuid>
 
 namespace PlasmaZones {
-
-QString UnifiedLayoutEntry::algorithmId() const
-{
-    if (!isAutotile) {
-        return QString();
-    }
-    return LayoutId::extractAlgorithmId(id);
-}
 
 namespace LayoutUtils {
 
@@ -122,11 +112,10 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 // Unified layout list building
 // ═══════════════════════════════════════════════════════════════════════════
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile)
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager)
 {
     QVector<UnifiedLayoutEntry> list;
 
-    // Add manual layouts first
     if (layoutManager) {
         const auto layouts = layoutManager->layouts();
         for (Layout* layout : layouts) {
@@ -138,39 +127,10 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
             entry.id = layout->id().toString();
             entry.name = layout->name();
             entry.description = layout->description();
-            entry.isAutotile = false;
             entry.zoneCount = layout->zoneCount();
-
-            // Use shared zone conversion with minimal fields (for preview thumbnails)
             entry.zones = zonesToVariantList(layout, ZoneField::Minimal);
 
             list.append(entry);
-        }
-    }
-
-    // Add autotile algorithms (only if enabled)
-    if (includeAutotile) {
-        auto* registry = AlgorithmRegistry::instance();
-        if (registry) {
-            const QStringList algorithmIds = registry->availableAlgorithms();
-            for (const QString& algorithmId : algorithmIds) {
-                TilingAlgorithm* algo = registry->algorithm(algorithmId);
-                if (!algo) {
-                    continue;
-                }
-
-                UnifiedLayoutEntry entry;
-                entry.id = LayoutId::makeAutotileId(algorithmId);
-                entry.name = algo->name();
-                entry.description = algo->description();
-                entry.isAutotile = true;
-                entry.zoneCount = 0; // Dynamic
-
-                // Use AlgorithmRegistry's shared preview generation
-                entry.zones = AlgorithmRegistry::generatePreviewZones(algo);
-
-                list.append(entry);
-            }
         }
     }
 
@@ -185,10 +145,10 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Id] = entry.id;
     map[Name] = entry.name;
     map[Description] = entry.description;
-    map[Type] = entry.isAutotile ? -1 : 0; // -1 for autotile, 0 for custom
+    map[Type] = 0;
     map[ZoneCount] = entry.zoneCount;
     map[Zones] = entry.zones;
-    map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
+    map[Category] = static_cast<int>(LayoutCategory::Manual);
 
     return map;
 }
@@ -214,9 +174,9 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Name] = entry.name;
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
-    json[IsSystem] = entry.isAutotile; // Autotile algorithms are "system" layouts
-    json[Type] = entry.isAutotile ? -1 : 0;
-    json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
+    json[IsSystem] = false;
+    json[Type] = 0;
+    json[Category] = static_cast<int>(LayoutCategory::Manual);
 
     // Convert zones to JSON array
     QJsonArray zonesArray;

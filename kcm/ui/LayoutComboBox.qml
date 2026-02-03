@@ -13,8 +13,7 @@ import org.plasmazones.common as QFZCommon
  * This component eliminates duplication of the layout model building logic
  * across MonitorAssignments, ActivityAssignments, and QuickLayoutSlots.
  *
- * Supports both manual layouts and autotile algorithms (unified layout model).
- * Category: 0 = Manual, 1 = Autotile
+ * Category: 0 = Manual
  *
  * The "Default" option resolves to the actual default layout for preview.
  */
@@ -110,8 +109,6 @@ ComboBox {
         required property var modelData
         required property int index
 
-        // Helper properties for readability
-        readonly property bool isAutotile: modelData.category === 1
         readonly property bool hasLayout: modelData.layout != null
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
 
@@ -195,15 +192,8 @@ ComboBox {
                         } else if (!hasLayout) {
                             return i18n("No default configured")
                         } else if (isDefaultOption) {
-                            // For "Default" option, show what it resolves to
                             let layoutName = modelData.layout?.name || ""
-                            if (isAutotile) {
-                                return i18n("→ %1 (dynamic)", layoutName)
-                            } else {
-                                return i18n("→ %1 (%2 zones)", layoutName, modelData.layout?.zoneCount || 0)
-                            }
-                        } else if (isAutotile) {
-                            return i18n("Dynamic zones")
+                            return i18n("→ %1 (%2 zones)", layoutName, modelData.layout?.zoneCount || 0)
                         } else {
                             return i18n("%1 zones", modelData.layout?.zoneCount || 0)
                         }

@@ -340,22 +340,8 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         return;
     }
 
-    // Delegate to service
     m_service->windowClosed(windowId);
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
-
-    // Emit window removed event for autotiling consumers
-    Q_EMIT windowRemovedEvent(windowId);
-}
-
-void WindowTrackingAdaptor::windowAdded(const QString& windowId, const QString& screenName)
-{
-    if (!validateWindowId(windowId, QStringLiteral("process windowAdded"))) {
-        return;
-    }
-
-    qCDebug(lcDbusWindow) << "Window added:" << windowId << "on screen" << screenName;
-    Q_EMIT windowAddedEvent(windowId, screenName);
 }
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenName)
@@ -375,8 +361,6 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
         m_service->updateLastUsedZone(zoneId, screenName, windowClass, currentDesktop);
     }
-
-    Q_EMIT windowActivatedEvent(windowId, screenName);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

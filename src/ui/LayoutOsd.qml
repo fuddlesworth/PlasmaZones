@@ -20,7 +20,7 @@ Window {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: []
-    // Layout category: 0=Manual, 1=Autotile (matches LayoutCategory enum in C++)
+    // Layout category: 0=Manual (matches LayoutCategory in C++)
     property int category: 0
 
     // Screen info for aspect ratio (bounded to prevent layout issues)

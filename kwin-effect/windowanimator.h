@@ -17,10 +17,9 @@ class WindowPaintData;
 namespace PlasmaZones {
 
 /**
- * @brief Animation data for autotile window geometry transitions
+ * @brief Animation data for window geometry transitions
  *
- * Stores the start/end geometry and progress for smooth window animations
- * when autotiling moves windows to their calculated positions.
+ * Stores the start/end geometry and progress for smooth window animations.
  */
 struct WindowAnimation {
     QRectF startGeometry;   ///< Window geometry at animation start
@@ -64,14 +63,10 @@ struct WindowAnimation {
 };
 
 /**
- * @brief Manages autotile window animations
+ * @brief Manages window geometry animations
  *
- * Responsible for:
- * - Tracking animation state for windows
- * - Computing interpolated geometry during animations
- * - Determining when animations are complete
- *
- * It does NOT apply geometry directly - the effect handles that.
+ * Tracks animation state, computes interpolated geometry, and determines
+ * when animations are complete. The effect applies geometry directly.
  */
 class WindowAnimator : public QObject
 {

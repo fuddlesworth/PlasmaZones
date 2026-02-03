@@ -351,7 +351,6 @@ Window {
                         property string layoutName: modelData.name || ("Layout " + (index + 1))
                         property var layoutZones: modelData.zones || []
                         property int layoutCategory: modelData.category !== undefined ? modelData.category : 0
-                        property bool isAutotile: layoutCategory === 1
                         property bool isActive: layoutId === root.activeLayoutId
                         property bool hasSelectedZone: root.selectedLayoutId === layoutId
 
@@ -367,21 +366,6 @@ Window {
                             width: root.indicatorWidth
                             height: root.indicatorHeight
                             anchors.top: parent.top
-
-                            // Autotile: whole-preview MouseArea (in front, captures all hover/click)
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                enabled: indicator.isAutotile
-                                z: 50
-                                onEntered: {
-                                    if (indicator.isAutotile) {
-                                        root.selectedLayoutId = indicator.layoutId;
-                                        root.selectedZoneIndex = 0;
-                                        root.zoneSelected(indicator.layoutId, 0, {"x": 0, "y": 0, "width": 1, "height": 1});
-                                    }
-                                }
-                            }
 
                             // Background for the indicator - shows active layout and hover states
                             Rectangle {
@@ -526,30 +510,27 @@ Window {
                                 zones: indicator.layoutZones
                                 interactive: true
                                 showZoneNumbers: true
-                                highlightAllZones: indicator.isAutotile
+                                highlightAllZones: false
                                 selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
                                 isHovered: indicator.hasSelectedZone
                                 isActive: indicator.isActive
                                 zonePadding: 1
                                 edgeGap: 1
                                 minZoneSize: 8
-                                // Colors from root
                                 highlightColor: root.highlightColor
                                 inactiveColor: root.inactiveColor
                                 borderColor: root.borderColor
                                 inactiveOpacity: root.inactiveOpacity
                                 activeOpacity: root.activeOpacity
-                                // Scale on hover for manual layouts only
-                                hoverScale: indicator.isAutotile ? 1.0 : 1.05
+                                hoverScale: 1.05
                                 animationDuration: animationConstants.normalDuration
 
                                 onZoneHovered: function(index) {
                                     root.selectedLayoutId = indicator.layoutId;
-                                    root.selectedZoneIndex = indicator.isAutotile ? 0 : index;
+                                    root.selectedZoneIndex = index;
                                     var zone = indicator.layoutZones[index];
                                     var relGeo = zone ? (zone.relativeGeometry || {}) : {};
-                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex,
-                                                     indicator.isAutotile ? {"x": 0, "y": 0, "width": 1, "height": 1} : relGeo);
+                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
                                 }
                             }
 

@@ -77,7 +77,7 @@ Item {
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
     property bool interactive: false
-    /// Whether all zones highlight together (for autotile layouts)
+    /// Whether all zones highlight together when any is selected
     property bool highlightAllZones: false
     /// Array of zone IDs to highlight (for navigation OSD zone highlighting)
     property var highlightedZoneIds: []
@@ -119,7 +119,7 @@ Item {
             property real relHeight: relGeo.height || 1
             // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
             property bool isZoneSelected: {
-                // Option 1: Highlight all zones when any is selected (autotile mode)
+                // Highlight all zones when any is selected (highlightAllZones mode)
                 if (root.highlightAllZones && root.selectedZoneIndex >= 0) {
                     return true;
                 }

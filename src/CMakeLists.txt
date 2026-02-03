@@ -65,31 +65,6 @@ set(plasmazones_core_SRCS
     config/settings.h
     config/colorimporter.cpp
     config/colorimporter.h
-    # Autotiling support
-    autotile/TilingAlgorithm.h
-    autotile/TilingAlgorithm.cpp
-    autotile/TilingState.h
-    autotile/TilingState.cpp
-    autotile/AutotileConfig.h
-    autotile/AutotileConfig.cpp
-    autotile/AutotileEngine.h
-    autotile/AutotileEngine.cpp
-    autotile/algorithms/MasterStackAlgorithm.h
-    autotile/algorithms/MasterStackAlgorithm.cpp
-    autotile/algorithms/ColumnsAlgorithm.h
-    autotile/algorithms/ColumnsAlgorithm.cpp
-    autotile/algorithms/BSPAlgorithm.h
-    autotile/algorithms/BSPAlgorithm.cpp
-    autotile/algorithms/MonocleAlgorithm.h
-    autotile/algorithms/MonocleAlgorithm.cpp
-    autotile/algorithms/RowsAlgorithm.h
-    autotile/algorithms/RowsAlgorithm.cpp
-    autotile/algorithms/FibonacciAlgorithm.h
-    autotile/algorithms/FibonacciAlgorithm.cpp
-    autotile/algorithms/ThreeColumnAlgorithm.h
-    autotile/algorithms/ThreeColumnAlgorithm.cpp
-    autotile/AlgorithmRegistry.h
-    autotile/AlgorithmRegistry.cpp
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp
@@ -100,8 +75,6 @@ set(plasmazones_core_SRCS
     dbus/zonedetectionadaptor.h
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor.h
-    dbus/autotileadaptor.cpp
-    dbus/autotileadaptor.h
     dbus/screenadaptor.cpp
     dbus/screenadaptor.h
     dbus/windowdragadaptor.cpp
@@ -234,8 +207,6 @@ set(plasmazones_daemon_SRCS
     # Mode tracking and smart toggle (Unified Layout Model)
     daemon/modetracker.cpp
     daemon/modetracker.h
-    daemon/contextawareshortcutrouter.cpp
-    daemon/contextawareshortcutrouter.h
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
     # Shader rendering system

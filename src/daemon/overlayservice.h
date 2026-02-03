@@ -23,7 +23,6 @@ class QTimer;
 namespace PlasmaZones {
 
 class Zone;
-class TilingAlgorithm;
 
 /**
  * @brief Manages zone overlay windows
@@ -67,7 +66,6 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(ILayoutManager* layoutManager);
-    void setAutotileEngine(class AutotileEngine* engine);
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
@@ -101,7 +99,6 @@ public:
 
     // Layout OSD (visual preview when switching layouts)
     void showLayoutOsd(Layout* layout);
-    // Overload for showing autotile algorithms as layouts (unified layout model)
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category);
 
     // Navigation OSD (feedback for keyboard navigation)
@@ -131,7 +128,6 @@ private:
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
-    class AutotileEngine* m_autotileEngine = nullptr;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;

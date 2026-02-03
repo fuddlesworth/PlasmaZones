@@ -127,16 +127,6 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::cycleWindowForwardShortcutChanged, this, &ShortcutManager::updateCycleWindowForwardShortcut);
     connect(m_settings, &Settings::cycleWindowBackwardShortcutChanged, this, &ShortcutManager::updateCycleWindowBackwardShortcut);
 
-    // Phase 3.1: Autotile shortcuts
-    connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
-    connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this, &ShortcutManager::updateFocusMasterShortcut);
-    connect(m_settings, &Settings::autotileSwapMasterShortcutChanged, this, &ShortcutManager::updateSwapMasterShortcut);
-    connect(m_settings, &Settings::autotileIncMasterRatioShortcutChanged, this, &ShortcutManager::updateIncMasterRatioShortcut);
-    connect(m_settings, &Settings::autotileDecMasterRatioShortcutChanged, this, &ShortcutManager::updateDecMasterRatioShortcut);
-    connect(m_settings, &Settings::autotileIncMasterCountShortcutChanged, this, &ShortcutManager::updateIncMasterCountShortcut);
-    connect(m_settings, &Settings::autotileDecMasterCountShortcutChanged, this, &ShortcutManager::updateDecMasterCountShortcut);
-    connect(m_settings, &Settings::autotileRetileShortcutChanged, this, &ShortcutManager::updateRetileShortcut);
-
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -163,7 +153,6 @@ void ShortcutManager::registerShortcuts()
     setupSnapToZoneShortcuts();
     setupRotateWindowsShortcuts();
     setupCycleWindowsShortcuts();
-    setupAutotileShortcuts();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -214,15 +203,6 @@ void ShortcutManager::updateShortcuts()
     updateCycleWindowForwardShortcut();
     updateCycleWindowBackwardShortcut();
 
-    // Phase 3.1: Autotile shortcuts
-    updateToggleAutotileShortcut();
-    updateFocusMasterShortcut();
-    updateSwapMasterShortcut();
-    updateIncMasterRatioShortcut();
-    updateDecMasterRatioShortcut();
-    updateIncMasterCountShortcut();
-    updateDecMasterCountShortcut();
-    updateRetileShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -271,16 +251,6 @@ void ShortcutManager::unregisterShortcuts()
     // Cycle Windows in Zone actions
     DELETE_SHORTCUT(m_cycleWindowForwardAction);
     DELETE_SHORTCUT(m_cycleWindowBackwardAction);
-
-    // Phase 3.1: Autotile actions
-    DELETE_SHORTCUT(m_toggleAutotileAction);
-    DELETE_SHORTCUT(m_focusMasterAction);
-    DELETE_SHORTCUT(m_swapMasterAction);
-    DELETE_SHORTCUT(m_incMasterRatioAction);
-    DELETE_SHORTCUT(m_decMasterRatioAction);
-    DELETE_SHORTCUT(m_incMasterCountAction);
-    DELETE_SHORTCUT(m_decMasterCountAction);
-    DELETE_SHORTCUT(m_retileAction);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -439,28 +409,6 @@ void ShortcutManager::setupCycleWindowsShortcuts()
     qCInfo(lcShortcuts) << "Cycle windows shortcuts registered (Meta+Alt+. / Meta+Alt+,)";
 }
 
-void ShortcutManager::setupAutotileShortcuts()
-{
-    SETUP_SHORTCUT(m_toggleAutotileAction, "Toggle Autotiling", "toggle_autotile",
-                   autotileToggleShortcut, &ShortcutManager::onToggleAutotile);
-    SETUP_SHORTCUT(m_focusMasterAction, "Focus Master Window", "focus_master",
-                   autotileFocusMasterShortcut, &ShortcutManager::onFocusMaster);
-    SETUP_SHORTCUT(m_swapMasterAction, "Swap with Master", "swap_master",
-                   autotileSwapMasterShortcut, &ShortcutManager::onSwapMaster);
-    SETUP_SHORTCUT(m_incMasterRatioAction, "Increase Master Ratio", "inc_master_ratio",
-                   autotileIncMasterRatioShortcut, &ShortcutManager::onIncMasterRatio);
-    SETUP_SHORTCUT(m_decMasterRatioAction, "Decrease Master Ratio", "dec_master_ratio",
-                   autotileDecMasterRatioShortcut, &ShortcutManager::onDecMasterRatio);
-    SETUP_SHORTCUT(m_incMasterCountAction, "Increase Master Count", "inc_master_count",
-                   autotileIncMasterCountShortcut, &ShortcutManager::onIncMasterCount);
-    SETUP_SHORTCUT(m_decMasterCountAction, "Decrease Master Count", "dec_master_count",
-                   autotileDecMasterCountShortcut, &ShortcutManager::onDecMasterCount);
-    SETUP_SHORTCUT(m_retileAction, "Retile Windows", "retile",
-                   autotileRetileShortcut, &ShortcutManager::onRetile);
-
-    qCInfo(lcShortcuts) << "Autotile shortcuts registered (Meta+T, Meta+Space, Meta+M, etc.)";
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Slot Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -602,58 +550,6 @@ void ShortcutManager::onCycleWindowBackward()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Autotile Slot Handlers
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void ShortcutManager::onToggleAutotile()
-{
-    qCDebug(lcShortcuts) << "Toggle autotile triggered";
-    Q_EMIT toggleAutotileRequested();
-}
-
-void ShortcutManager::onFocusMaster()
-{
-    qCDebug(lcShortcuts) << "Focus master triggered";
-    Q_EMIT focusMasterRequested();
-}
-
-void ShortcutManager::onSwapMaster()
-{
-    qCDebug(lcShortcuts) << "Swap master triggered";
-    Q_EMIT swapMasterRequested();
-}
-
-void ShortcutManager::onIncMasterRatio()
-{
-    qCDebug(lcShortcuts) << "Increase master ratio triggered";
-    Q_EMIT incMasterRatioRequested();
-}
-
-void ShortcutManager::onDecMasterRatio()
-{
-    qCDebug(lcShortcuts) << "Decrease master ratio triggered";
-    Q_EMIT decMasterRatioRequested();
-}
-
-void ShortcutManager::onIncMasterCount()
-{
-    qCDebug(lcShortcuts) << "Increase master count triggered";
-    Q_EMIT incMasterCountRequested();
-}
-
-void ShortcutManager::onDecMasterCount()
-{
-    qCDebug(lcShortcuts) << "Decrease master count triggered";
-    Q_EMIT decMasterCountRequested();
-}
-
-void ShortcutManager::onRetile()
-{
-    qCDebug(lcShortcuts) << "Retile triggered";
-    Q_EMIT retileRequested();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // Update Shortcut Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -781,46 +677,6 @@ void ShortcutManager::updateCycleWindowForwardShortcut()
 void ShortcutManager::updateCycleWindowBackwardShortcut()
 {
     UPDATE_SHORTCUT(m_cycleWindowBackwardAction, cycleWindowBackwardShortcut);
-}
-
-void ShortcutManager::updateToggleAutotileShortcut()
-{
-    UPDATE_SHORTCUT(m_toggleAutotileAction, autotileToggleShortcut);
-}
-
-void ShortcutManager::updateFocusMasterShortcut()
-{
-    UPDATE_SHORTCUT(m_focusMasterAction, autotileFocusMasterShortcut);
-}
-
-void ShortcutManager::updateSwapMasterShortcut()
-{
-    UPDATE_SHORTCUT(m_swapMasterAction, autotileSwapMasterShortcut);
-}
-
-void ShortcutManager::updateIncMasterRatioShortcut()
-{
-    UPDATE_SHORTCUT(m_incMasterRatioAction, autotileIncMasterRatioShortcut);
-}
-
-void ShortcutManager::updateDecMasterRatioShortcut()
-{
-    UPDATE_SHORTCUT(m_decMasterRatioAction, autotileDecMasterRatioShortcut);
-}
-
-void ShortcutManager::updateIncMasterCountShortcut()
-{
-    UPDATE_SHORTCUT(m_incMasterCountAction, autotileIncMasterCountShortcut);
-}
-
-void ShortcutManager::updateDecMasterCountShortcut()
-{
-    UPDATE_SHORTCUT(m_decMasterCountAction, autotileDecMasterCountShortcut);
-}
-
-void ShortcutManager::updateRetileShortcut()
-{
-    UPDATE_SHORTCUT(m_retileAction, autotileRetileShortcut);
 }
 
 // Undefine macros to keep them local to this file

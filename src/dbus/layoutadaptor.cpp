@@ -14,8 +14,6 @@
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include "../core/utils.h"
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -223,14 +221,12 @@ QStringList LayoutAdaptor::getLayoutList()
     for (const auto& entry : entries) {
         QJsonObject json = LayoutUtils::toJson(entry);
 
-        if (!entry.isAutotile) {
-            auto uuidOpt = Utils::parseUuid(entry.id);
-            if (uuidOpt) {
-                Layout* layout = m_layoutManager->layoutById(*uuidOpt);
-                if (layout) {
-                    json[JsonKeys::IsSystem] = layout->isSystemLayout();
-                    json[JsonKeys::Type] = static_cast<int>(layout->type());
-                }
+        auto uuidOpt = Utils::parseUuid(entry.id);
+        if (uuidOpt) {
+            Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+            if (layout) {
+                json[JsonKeys::IsSystem] = layout->isSystemLayout();
+                json[JsonKeys::Type] = static_cast<int>(layout->type());
             }
         }
 
