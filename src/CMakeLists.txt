@@ -59,6 +59,8 @@ set(plasmazones_core_SRCS
     core/zonehighlighter.h
     core/shaderregistry.cpp
     core/shaderregistry.h
+    core/shaderincluderesolver.cpp
+    core/shaderincluderesolver.h
     core/modifierutils.cpp
     core/modifierutils.h
     config/settings.cpp

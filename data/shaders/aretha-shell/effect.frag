@@ -92,15 +92,8 @@ const vec3 gradeMid       = vec3(0.000, 0.620, 0.741);  // Teal midtones
 const vec3 gradeHighlight = vec3(0.333, 0.667, 1.000);  // Cyan highlights
 
 // === UTILITIES ===
-float hash(float n) { return fract(sin(n) * 43758.5453); }
-float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+#include <common.glsl>
 float luminance(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-
-// Signed distance to rounded rectangle
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
 
 // === LAYER 1: NEON COLOR GRADE ===
 vec3 colorGrade(vec3 color, float t) {
@@ -194,7 +187,7 @@ vec3 hexGrid(vec2 uv, float t, vec2 screenUV, vec2 zoneSize) {
     gridIntensity += scan * 0.25;
 
     // Random hex highlights (blinking hexes)
-    float hexRand = hash2(hexId + floor(t * 0.3));
+    float hexRand = hash21(hexId + floor(t * 0.3));
     if (hexRand > 0.94) {
         float blink = sin(t * 5.0 + hexRand * 100.0) * 0.5 + 0.5;
         gridIntensity += blink * 0.6;
@@ -226,7 +219,7 @@ vec3 dataStream(vec2 uv, float t) {
     float columnX = fract(uv.x / columnWidth);
 
     // Each column has its own speed and phase
-    float columnSeed = hash(column);
+    float columnSeed = hash11(column);
     float columnSpeed = 0.5 + columnSeed * 0.8;
     float columnPhase = columnSeed * 100.0;
 
@@ -252,7 +245,7 @@ vec3 dataStream(vec2 uv, float t) {
     columnMask = max(0.0, columnMask);
 
     // Random "character" flicker along trail
-    float charFlicker = hash(floor(uv.y * 50.0) + floor(t * 8.0) + column);
+    float charFlicker = hash11(floor(uv.y * 50.0) + floor(t * 8.0) + column);
     if (trail > 0.1) {
         trail *= 0.7 + charFlicker * 0.3;
     }
@@ -268,7 +261,7 @@ vec3 dataStream(vec2 uv, float t) {
     }
 
     // Random column activation (not all columns active)
-    float columnActive = step(0.45, hash(column + floor(t * 0.4)));
+    float columnActive = step(0.45, hash11(column + floor(t * 0.4)));
     streamEffect *= columnActive;
 
     // Stream color with slight variation
@@ -306,16 +299,16 @@ vec3 glitch(vec2 uv, float t) {
     
     vec3 glitchColor = vec3(0.0);
     float glitchT = floor(t * 3.0);
-    float glitchSeed = hash(glitchT);
+    float glitchSeed = hash11(glitchT);
 
     // Only glitch occasionally (roughly 1 in 50 frames)
     if (glitchSeed > 0.98) {
         float intensity = (glitchSeed - 0.98) * 50.0; // 0-1 based on how "over" threshold
 
         // Block-based glitch regions
-        float blockSize = 8.0 + hash(glitchT + 1.0) * 24.0; // Variable block height
+        float blockSize = 8.0 + hash11(glitchT + 1.0) * 24.0; // Variable block height
         float block = floor(uv.y * blockSize);
-        float blockRand = hash2(vec2(block, glitchT));
+        float blockRand = hash21(vec2(block, glitchT));
 
         if (blockRand > 0.7) {
             // RGB channel separation (chromatic aberration) - matching Ghostty
@@ -324,10 +317,10 @@ vec3 glitch(vec2 uv, float t) {
             vec2 bOffset = vec2(-separation, 0.0);
 
             // Horizontal displacement for this block
-            float hShift = (hash2(vec2(block + 100.0, glitchT)) - 0.5) * 0.03 * intensity;
+            float hShift = (hash21(vec2(block + 100.0, glitchT)) - 0.5) * 0.03 * intensity;
 
             // Color corruption - blend between theme accent colors
-            float colorShift = hash2(vec2(block + 200.0, glitchT));
+            float colorShift = hash21(vec2(block + 200.0, glitchT));
             vec3 corruptColor;
             if (colorShift < 0.33) {
                 corruptColor = arethaCyan;
@@ -356,11 +349,11 @@ vec3 glitch(vec2 uv, float t) {
 
         // Rare full-width interference band
         if (glitchSeed > 0.995) {
-            float bandY = hash(glitchT + 50.0);
+            float bandY = hash11(glitchT + 50.0);
             float bandDist = abs(uv.y - bandY);
             if (bandDist < 0.02) {
                 float bandIntensity = 1.0 - bandDist / 0.02;
-                glitchColor += mix(arethaCyan, arethaPink, hash(glitchT + 60.0)) * bandIntensity * 0.12;
+                glitchColor += mix(arethaCyan, arethaPink, hash11(glitchT + 60.0)) * bandIntensity * 0.12;
             }
         }
     }

@@ -38,10 +38,7 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
  *   customColors[0] = primary tint - Colorizes the effect
  */
 
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
+#include <common.glsl>
 
 // Shadertoy-derived: iterative distortion loop. iterCount controls detail (more = denser).
 // Constants (7, 5, 1.5, 9, 11, 40, 1e2, 25.6, 164, 250, 1.35) are from original; tune speed,

@@ -40,10 +40,7 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
  *   customParams[1].y = bevelStrength (0.0-0.3) - 3D bevel effect
  */
 
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
+#include <common.glsl>
 
 vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     // Zone shape: params.x = borderRadius, params.y = zone-level border (unused; we use shader param)

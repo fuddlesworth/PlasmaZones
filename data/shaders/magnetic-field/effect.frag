@@ -54,19 +54,17 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
  */
 
 // Noise functions
-float hash(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
+#include <common.glsl>
 
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
     
-    float a = hash(i);
-    float b = hash(i + vec2(1.0, 0.0));
-    float c = hash(i + vec2(0.0, 1.0));
-    float d = hash(i + vec2(1.0, 1.0));
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
     
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
@@ -80,12 +78,6 @@ float fbm(vec2 p) {
         amp *= 0.5;
     }
     return f;
-}
-
-// Signed distance to rounded box
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
 // Calculate field vector influenced by mouse
@@ -148,9 +140,9 @@ float fieldParticles(vec2 pos, vec2 mousePos, float time, float count, float pSi
     for (float i = 0.0; i < 50.0; i++) {
         if (i >= count) break;
         
-        float angle = i * 2.399 + time * (0.5 + hash(vec2(i, 0.0)) * 0.5);
-        float radius = 0.05 + hash(vec2(i, 1.0)) * 0.15;
-        float speed = 0.8 + hash(vec2(i, 2.0)) * 0.4;
+        float angle = i * 2.399 + time * (0.5 + hash21(vec2(i, 0.0)) * 0.5);
+        float radius = 0.05 + hash21(vec2(i, 1.0)) * 0.15;
+        float speed = 0.8 + hash21(vec2(i, 2.0)) * 0.4;
         
         // Orbit around mouse
         vec2 orbit = mousePos + vec2(cos(angle * speed), sin(angle * speed)) * radius;

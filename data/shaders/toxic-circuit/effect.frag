@@ -46,16 +46,15 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
 
 const float PI = 3.14159265359;
 
-float hash(float n) { return fract(sin(n) * 43758.5453123); }
-float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+#include <common.glsl>
 
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
     return mix(
-        mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x),
-        mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x),
+        mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),
+        mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),
         f.y
     );
 }
@@ -69,11 +68,6 @@ float fbm(vec2 p, int octaves) {
         amp *= 0.5;
     }
     return f;
-}
-
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
 // Diagonal circuit grid with animated energy pulses
@@ -166,13 +160,13 @@ float toxicDrip(vec2 uv, float time, float intensity) {
     // Multiple drip streams
     for (int i = 0; i < 5; i++) {
         float fi = float(i);
-        float xOffset = hash(fi * 17.3) * 0.8 + 0.1;
-        float speed = 0.3 + hash(fi * 23.7) * 0.4;
-        float phase = hash(fi * 31.1) * 6.28;
+        float xOffset = hash11(fi * 17.3) * 0.8 + 0.1;
+        float speed = 0.3 + hash11(fi * 23.7) * 0.4;
+        float phase = hash11(fi * 31.1) * 6.28;
 
         // Drip position
         float dripX = xOffset + sin(time * 0.5 + phase) * 0.05;
-        float dripY = fract(time * speed + hash(fi * 41.3));
+        float dripY = fract(time * speed + hash11(fi * 41.3));
 
         // Drip shape - elongated teardrop
         vec2 dripPos = vec2(dripX, 1.0 - dripY);
@@ -197,19 +191,19 @@ float toxicDrip(vec2 uv, float time, float intensity) {
 // Digital glitch/corruption effect
 vec2 glitchOffset(vec2 uv, float time, float amount) {
     float glitchTime = floor(time * 20.0);
-    float trigger = hash(glitchTime);
+    float trigger = hash11(glitchTime);
 
     vec2 offset = vec2(0.0);
 
     if (trigger > 0.85 && amount > 0.01) {
-        float band = hash(glitchTime + 100.0);
-        float bandHeight = 0.03 + hash(glitchTime + 200.0) * 0.08;
+        float band = hash11(glitchTime + 100.0);
+        float bandHeight = 0.03 + hash11(glitchTime + 200.0) * 0.08;
 
         if (abs(uv.y - band) < bandHeight) {
-            offset.x = (hash(glitchTime + 300.0) - 0.5) * amount * 0.2;
+            offset.x = (hash11(glitchTime + 300.0) - 0.5) * amount * 0.2;
 
             // RGB split simulation prep
-            float split = hash(glitchTime + 400.0);
+            float split = hash11(glitchTime + 400.0);
             if (split > 0.7) {
                 offset.x *= 2.0;
             }
@@ -525,7 +519,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         vec2 cornerDist = abs(localUV - 0.5) * 2.0;
         float cornerProximity = max(cornerDist.x, cornerDist.y);
         if (cornerProximity > 0.88) {
-            float cornerGlitch = hash(floor(iTime * 15.0) + floor(cornerProximity * 10.0));
+            float cornerGlitch = hash11(floor(iTime * 15.0) + floor(cornerProximity * 10.0));
             if (cornerGlitch > 0.7) {
                 float intensity = (cornerProximity - 0.88) / 0.12;
                 result.rgb += neonMagenta * intensity * 0.8;

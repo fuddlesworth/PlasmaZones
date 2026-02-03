@@ -73,11 +73,7 @@ vec3 getBorderColor() {
     return length(c) > 0.01 ? c : mix(getColor1(), getColor2(), 0.6);
 }
 
-// Signed distance to rounded rectangle
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
+#include <common.glsl>
 
 // Smooth gradient based on angle
 float gradientValue(vec2 uv, float angleDeg) {

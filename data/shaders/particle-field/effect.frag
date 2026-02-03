@@ -40,20 +40,7 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
  *   customParams[1].y = borderGlow (0.3-1.0) - Border brightness
  */
 
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-// Quality random functions
-float hash(float n) { return fract(sin(n) * 43758.5453123); }
-float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
+#include <common.glsl>
 
 vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 6.0);

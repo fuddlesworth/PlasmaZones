@@ -37,14 +37,7 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
  *   customParams[1].y = flickerAmount (0.0-0.3) - Random flicker
  */
 
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
-
-float hash(float n) {
-    return fract(sin(n) * 43758.5453123);
-}
+#include <common.glsl>
 
 vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 6.0);
@@ -84,7 +77,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float pulse = 0.85 + 0.15 * sin(iTime * pulseSpeed * 3.14159);
     
     // Random flicker
-    float flicker = 1.0 - flickerAmount * hash(floor(iTime * 30.0));
+    float flicker = 1.0 - flickerAmount * hash11(floor(iTime * 30.0));
     
     float intensity = pulse * flicker;
     

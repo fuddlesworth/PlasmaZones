@@ -6,10 +6,12 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QQuickWindow>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <cstring>
 
 #include "../../core/logging.h"
+#include "../../core/shaderincluderesolver.h"
 
 #include <rhi/qshaderbaker.h>
 
@@ -268,7 +270,21 @@ bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
         m_shaderError = QStringLiteral("Failed to open vertex shader: ") + path;
         return false;
     }
-    m_vertexShaderSource = QTextStream(&file).readAll();
+    QString raw = QTextStream(&file).readAll();
+    const QString currentFileDir = QFileInfo(path).absolutePath();
+    const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                          QStringLiteral("plasmazones/shaders"),
+                                                          QStandardPaths::LocateDirectory);
+    QStringList includePaths{currentFileDir};
+    if (!systemShaderDir.isEmpty()) {
+        includePaths.append(systemShaderDir);
+    }
+    QString err;
+    m_vertexShaderSource = ShaderIncludeResolver::expandIncludes(raw, currentFileDir, includePaths, &err);
+    if (!err.isEmpty()) {
+        m_shaderError = QStringLiteral("Vertex shader include: ") + err;
+        return false;
+    }
     m_shaderDirty = true;
     return true;
 }
@@ -280,7 +296,21 @@ bool ZoneShaderNodeRhi::loadFragmentShader(const QString& path)
         m_shaderError = QStringLiteral("Failed to open fragment shader: ") + path;
         return false;
     }
-    m_fragmentShaderSource = QTextStream(&file).readAll();
+    QString raw = QTextStream(&file).readAll();
+    const QString currentFileDir = QFileInfo(path).absolutePath();
+    const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                          QStringLiteral("plasmazones/shaders"),
+                                                          QStandardPaths::LocateDirectory);
+    QStringList includePaths{currentFileDir};
+    if (!systemShaderDir.isEmpty()) {
+        includePaths.append(systemShaderDir);
+    }
+    QString err;
+    m_fragmentShaderSource = ShaderIncludeResolver::expandIncludes(raw, currentFileDir, includePaths, &err);
+    if (!err.isEmpty()) {
+        m_shaderError = QStringLiteral("Fragment shader include: ") + err;
+        return false;
+    }
     m_shaderDirty = true;
     return true;
 }

@@ -38,10 +38,7 @@ layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
  *   customColors[0] = tint - Colorizes the effect (default warm gradient)
  */
 
-float sdRoundedBox(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + r;
-    return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
-}
+#include <common.glsl>
 
 // Shadertoy-derived: rotating tile grid with radial wave. Key constants: tile_dist/edge
 // control tile vs gap; square_dist drives radial wave; warm gradient (pow 2.0, 1.5, 1.2) is
