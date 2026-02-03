@@ -7,7 +7,6 @@
 #include <KSharedConfig>
 
 #include "../config/settings.h"
-#include "../core/constants.h"
 #include "../core/logging.h"
 
 namespace PlasmaZones {
@@ -15,56 +14,10 @@ namespace PlasmaZones {
 ModeTracker::ModeTracker(Settings* settings, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
-    , m_lastAutotileAlgorithm(DBus::AutotileAlgorithm::MasterStack)
 {
 }
 
 ModeTracker::~ModeTracker() = default;
-
-void ModeTracker::setCurrentMode(TilingMode mode)
-{
-    if (m_currentMode == mode) {
-        return;
-    }
-
-    m_currentMode = mode;
-    Q_EMIT currentModeChanged(mode);
-
-    // Auto-save when mode changes
-    save();
-}
-
-ModeTracker::TilingMode ModeTracker::toggleMode()
-{
-    TilingMode newMode = (m_currentMode == TilingMode::Manual)
-        ? TilingMode::Autotile
-        : TilingMode::Manual;
-
-    // Get relevant ID with fallback defaults
-    QString relevantId;
-    if (newMode == TilingMode::Autotile) {
-        relevantId = m_lastAutotileAlgorithm.isEmpty()
-            ? QString(DBus::AutotileAlgorithm::MasterStack)  // Default algorithm
-            : m_lastAutotileAlgorithm;
-    } else {
-        relevantId = m_lastManualLayoutId;
-        // If no manual layout recorded, don't switch - stay in current mode
-        if (relevantId.isEmpty()) {
-            qCWarning(lcDaemon) << "Cannot toggle to Manual mode: no layout recorded yet";
-            return m_currentMode;
-        }
-    }
-
-    setCurrentMode(newMode);
-
-    Q_EMIT modeToggled(newMode, relevantId);
-
-    qCInfo(lcDaemon) << "Mode toggled to"
-                     << (newMode == TilingMode::Autotile ? "Autotile" : "Manual")
-                     << "- relevant ID:" << relevantId;
-
-    return newMode;
-}
 
 void ModeTracker::recordManualLayout(const QString& layoutId)
 {
@@ -77,37 +30,13 @@ void ModeTracker::recordManualLayout(const QString& layoutId)
         Q_EMIT lastManualLayoutIdChanged(layoutId);
     }
 
-    // Set mode to manual when recording a manual layout (only if not already)
-    if (m_currentMode != TilingMode::Manual) {
-        setCurrentMode(TilingMode::Manual);
-    }
-
+    save();
     qCDebug(lcDaemon) << "Recorded manual layout:" << layoutId;
 }
 
 void ModeTracker::recordManualLayout(const QUuid& layoutId)
 {
-    // Use default format (with braces) for consistent UUID string format across codebase
     recordManualLayout(layoutId.toString());
-}
-
-void ModeTracker::recordAutotileAlgorithm(const QString& algorithmId)
-{
-    if (algorithmId.isEmpty()) {
-        return;
-    }
-
-    if (m_lastAutotileAlgorithm != algorithmId) {
-        m_lastAutotileAlgorithm = algorithmId;
-        Q_EMIT lastAutotileAlgorithmChanged(algorithmId);
-    }
-
-    // Set mode to autotile when recording an algorithm (only if not already)
-    if (m_currentMode != TilingMode::Autotile) {
-        setCurrentMode(TilingMode::Autotile);
-    }
-
-    qCDebug(lcDaemon) << "Recorded autotile algorithm:" << algorithmId;
 }
 
 void ModeTracker::load()
@@ -117,21 +46,12 @@ void ModeTracker::load()
         return;
     }
 
-    // Load from KConfig settings
     KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup group = config->group(QStringLiteral("ModeTracking"));
 
-    int modeInt = group.readEntry(QStringLiteral("LastTilingMode"), 0);
-    m_currentMode = (modeInt == 1) ? TilingMode::Autotile : TilingMode::Manual;
-
     m_lastManualLayoutId = group.readEntry(QStringLiteral("LastManualLayoutId"), QString());
-    m_lastAutotileAlgorithm = group.readEntry(QStringLiteral("LastAutotileAlgorithm"),
-                                               QString(DBus::AutotileAlgorithm::MasterStack));
 
-    qCInfo(lcDaemon) << "ModeTracker loaded - mode:"
-                     << (m_currentMode == TilingMode::Autotile ? "Autotile" : "Manual")
-                     << "lastLayout:" << m_lastManualLayoutId
-                     << "lastAlgorithm:" << m_lastAutotileAlgorithm;
+    qCInfo(lcDaemon) << "ModeTracker loaded - lastLayout:" << m_lastManualLayoutId;
 }
 
 void ModeTracker::save()
@@ -141,16 +61,12 @@ void ModeTracker::save()
         return;
     }
 
-    // Save to KConfig settings
     KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup group = config->group(QStringLiteral("ModeTracking"));
 
-    group.writeEntry(QStringLiteral("LastTilingMode"), static_cast<int>(m_currentMode));
     group.writeEntry(QStringLiteral("LastManualLayoutId"), m_lastManualLayoutId);
-    group.writeEntry(QStringLiteral("LastAutotileAlgorithm"), m_lastAutotileAlgorithm);
 
     config->sync();
-
     qCDebug(lcDaemon) << "ModeTracker saved";
 }
 

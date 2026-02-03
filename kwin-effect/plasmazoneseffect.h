@@ -14,7 +14,6 @@
 #include <QHash>
 #include <QPoint>
 #include <QRect>
-#include <QSet>
 
 namespace PlasmaZones {
 
@@ -50,7 +49,6 @@ public:
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
 
-    // Animation interface for autotiling
     void prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -68,10 +66,6 @@ private Q_SLOTS:
                           Qt::KeyboardModifiers oldmodifiers);
     void slotScreenGeometryChanged();
     void slotSettingsChanged();
-
-    // Phase 2.3: Autotile geometry and focus handlers
-    void slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height);
-    void slotAutotileFocusWindowRequested(const QString& windowId);
 
     // Phase 1 Keyboard Navigation handlers
     void slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
@@ -163,16 +157,8 @@ private:
      */
     bool isWindowFloating(const QString& stableId) const;
 
-    // Phase 2.1: Window event notifications for autotiling
-    void notifyWindowAdded(KWin::EffectWindow* w);
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
-
-    // Phase 2.3: Autotile geometry application
-    void connectAutotileSignals();
-    void loadAutotileSettings();
-    KWin::EffectWindow* findWindowById(const QString& windowId) const;
-    void applyAutotileGeometry(KWin::EffectWindow* window, const QRect& geometry, bool animate = true);
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
@@ -245,10 +231,6 @@ private:
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
-
-    // Phase 2.1: Track windows notified to daemon via windowAdded
-    // Only send windowClosed for windows in this set (avoids D-Bus calls for untracked windows)
-    QSet<QString> m_notifiedWindows;
 
     // Polling timer for detecting window moves
     QTimer m_pollTimer;

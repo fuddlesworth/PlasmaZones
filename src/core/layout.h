@@ -28,18 +28,12 @@ enum class LayoutType {
 };
 
 /**
- * @brief Category distinguishing manual layouts from autotile algorithms
+ * @brief Category for layout type (manual zone-based layouts only)
  *
- * Used by the zone selector to show appropriate UI badges and handle
- * selection differently for autotile algorithms acting as layouts.
- *
- * QML Note: Passed as int to QML. Values:
- *   0 = Manual (traditional zone-based layout)
- *   1 = Autotile (autotile algorithm acting as a layout)
+ * QML Note: Passed as int to QML. Value: 0 = Manual
  */
 enum class LayoutCategory {
-    Manual = 0,   ///< Traditional zone-based layout
-    Autotile = 1  ///< Autotile algorithm acting as a layout
+    Manual = 0   ///< Traditional zone-based layout
 };
 
 /**

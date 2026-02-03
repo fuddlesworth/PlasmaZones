@@ -4,7 +4,6 @@
 #include "daemon.h"
 #include "overlayservice.h"
 #include "modetracker.h"
-#include "contextawareshortcutrouter.h"
 #include "unifiedlayoutcontroller.h"
 #include "zoneselectorcontroller.h"
 #include "../core/layoutmanager.h"
@@ -24,10 +23,6 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
-#include "../dbus/autotileadaptor.h"
-#include "../autotile/AutotileEngine.h"
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
 #include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
 
@@ -198,17 +193,6 @@ bool Daemon::init()
     m_windowTrackingService = std::make_unique<WindowTrackingService>(
         m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
         m_virtualDesktopManager.get(), this);
-
-    // Autotiling engine - automatic window tiling
-    m_autotileEngine = std::make_unique<AutotileEngine>(
-        m_layoutManager.get(), m_windowTrackingService.get(),
-        m_screenManager.get(), this);
-
-    // Autotile adaptor - D-Bus interface for autotiling control
-    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
-
-    // Overlay needs autotile state to show correct active layout in zone selector
-    m_overlayService->setAutotileEngine(m_autotileEngine.get());
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
@@ -384,14 +368,14 @@ void Daemon::start()
             m_layoutAdaptor->openEditor();
         }
     });
-    // Quick layout shortcuts (Meta+1-9) - now includes autotile algorithms
+    // Quick layout shortcuts (Meta+1-9)
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->applyLayoutByNumber(number);
         }
     });
 
-    // Cycle layout shortcuts (Meta+[/]) - now cycles through manual layouts AND autotile algorithms
+    // Cycle layout shortcuts (Meta+[/])
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->cyclePrevious();
@@ -438,14 +422,9 @@ void Daemon::start()
         m_windowTrackingAdaptor->restoreWindowSize();
     });
 
-    // Toggle window float shortcut (context-aware via router)
+    // Toggle window float shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
-        // Context-aware routing: autotile mode uses engine toggle, manual mode uses zone unsnap
-        if (m_shortcutRouter) {
-            m_shortcutRouter->toggleFloat();
-        } else {
-            m_windowTrackingAdaptor->toggleWindowFloat();
-        }
+        m_windowTrackingAdaptor->toggleWindowFloat();
     });
 
     // Swap window with adjacent zone shortcuts
@@ -459,14 +438,9 @@ void Daemon::start()
                 m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
             });
 
-    // Rotate windows in layout shortcuts (context-aware via router)
+    // Rotate windows in layout shortcuts
     connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool clockwise) {
-        // Context-aware routing: autotile mode rotates window order, manual mode rotates through zones
-        if (m_shortcutRouter) {
-            m_shortcutRouter->rotateWindows(clockwise);
-        } else {
-            m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise);
-        }
+        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise);
     });
 
     // Snap to zone by number shortcut
@@ -474,43 +448,18 @@ void Daemon::start()
         m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber);
     });
 
-    // Cycle windows within zone shortcut (context-aware via router)
+    // Cycle windows within zone shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool forward) {
-        // Context-aware routing: autotile mode uses focusNext/Previous, manual mode cycles in zone
-        if (m_shortcutRouter) {
-            m_shortcutRouter->cycleWindows(forward);
-        } else {
-            m_windowTrackingAdaptor->cycleWindowsInZone(forward);
-        }
+        m_windowTrackingAdaptor->cycleWindowsInZone(forward);
     });
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Phase 3.2: Autotile settings initialization
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    // Initialize autotile engine from settings and connect for live updates
-    // The engine internally handles debouncing for rapid settings changes
-    if (m_autotileEngine && m_settings) {
-        m_autotileEngine->syncFromSettings(m_settings.get());
-        m_autotileEngine->connectToSettings(m_settings.get());
-        qCInfo(lcDaemon) << "Autotile engine connected to settings";
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Mode Tracking & Smart Toggle (Unified Layout Model)
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    // Initialize mode tracker for smart toggle between manual and autotile modes
+    // Initialize mode tracker for last-used layout
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
     m_modeTracker->load();
 
-    // Initialize context-aware shortcut router
-    m_shortcutRouter = std::make_unique<ContextAwareShortcutRouter>(
-        m_modeTracker.get(), m_autotileEngine.get(), m_windowTrackingAdaptor, this);
-
-    // Initialize unified layout controller
+    // Initialize unified layout controller (manual layouts only)
     m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
-        m_layoutManager.get(), m_autotileEngine.get(), m_settings.get(), this);
+        m_layoutManager.get(), m_settings.get(), this);
 
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
@@ -518,50 +467,11 @@ void Daemon::start()
             showLayoutOsd(layout);
         }
     });
-    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this, [this](const QString& algorithmId) {
-        showAutotileOsd(algorithmId);
-    });
 
     // Connect layout manager changes to mode tracker for recording last manual layout
     connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
         if (layout && m_modeTracker) {
             m_modeTracker->recordManualLayout(layout->id());
-        }
-    });
-
-    // Connect autotile algorithm changes to mode tracker
-    if (m_autotileEngine) {
-        connect(m_autotileEngine.get(), &AutotileEngine::algorithmChanged, this, [this](const QString& algorithmId) {
-            if (m_modeTracker) {
-                m_modeTracker->recordAutotileAlgorithm(algorithmId);
-            }
-        });
-
-        // Track when autotile is enabled/disabled
-        connect(m_autotileEngine.get(), &AutotileEngine::enabledChanged, this, [this](bool enabled) {
-            if (m_modeTracker) {
-                if (enabled) {
-                    // Record autotile mode when enabled
-                    m_modeTracker->recordAutotileAlgorithm(m_autotileEngine->algorithm());
-                } else {
-                    // When disabled, switch to manual mode (keep last layout)
-                    m_modeTracker->setCurrentMode(ModeTracker::TilingMode::Manual);
-                }
-            }
-        });
-    }
-
-    // Connect zone selector autotile selection (click)
-    connect(m_overlayService.get(), &OverlayService::autotileLayoutSelected, this, [this](const QString& algorithmId) {
-        if (m_autotileEngine) {
-            m_autotileEngine->setAlgorithm(algorithmId);
-            m_autotileEngine->setEnabled(true);
-            qCInfo(lcDaemon) << "Autotile layout selected from zone selector:" << algorithmId;
-            showAutotileOsd(algorithmId);
-            // Update mode tracker
-            if (m_modeTracker) {
-                m_modeTracker->recordAutotileAlgorithm(algorithmId);
-            }
         }
     });
 
@@ -572,153 +482,12 @@ void Daemon::start()
         }
         Layout* layout = m_layoutManager->layoutById(QUuid::fromString(layoutId));
         if (layout) {
-            // Disable autotile when switching to manual layout
-            if (m_autotileEngine && m_autotileEngine->isEnabled()) {
-                m_autotileEngine->setEnabled(false);
-                qCInfo(lcDaemon) << "Disabling autotile - switching to manual layout";
-            }
             m_layoutManager->setActiveLayout(layout);
             qCInfo(lcDaemon) << "Manual layout selected from zone selector:" << layout->name();
             m_overlayService->showLayoutOsd(layout);
-            // Update mode tracker
             if (m_modeTracker) {
                 m_modeTracker->recordManualLayout(layout->id());
             }
-        }
-    });
-
-    // Connect zone selector autotile drop (drag window onto autotile layout)
-    connect(m_windowDragAdaptor, &WindowDragAdaptor::autotileDropRequested, this,
-            [this](const QString& windowId, const QString& algorithmId) {
-                if (m_autotileEngine) {
-                    m_autotileEngine->setAlgorithm(algorithmId);
-                    m_autotileEngine->setEnabled(true);
-                    m_autotileEngine->retile(QString());
-                    qCInfo(lcDaemon) << "Window dropped on autotile layout:" << algorithmId
-                                    << "- enabling and retiling for window" << windowId;
-                    showAutotileOsd(algorithmId);
-                }
-            });
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Phase 2.1: Connect window events to AutotileEngine
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // WindowTrackingAdaptor receives window events from KWin via D-Bus and emits signals.
-    // Connect these to AutotileEngine so it knows about windows for tiling.
-    if (m_autotileEngine) {
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowAddedEvent,
-                m_autotileEngine.get(), &AutotileEngine::windowOpened);
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowRemovedEvent,
-                m_autotileEngine.get(), &AutotileEngine::windowClosed);
-        connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowActivatedEvent,
-                m_autotileEngine.get(), &AutotileEngine::windowFocused);
-        qCDebug(lcDaemon) << "Connected window tracking events to AutotileEngine";
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Phase 3.1: Autotile shortcut connections (Smart Toggle)
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    // Smart toggle (Meta+T): Toggle between last manual layout and last autotile algorithm
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleAutotileRequested, this, [this]() {
-        if (!m_modeTracker || !m_autotileEngine) {
-            return;
-        }
-
-        auto oldMode = m_modeTracker->currentMode();
-        auto newMode = m_modeTracker->toggleMode();
-
-        // Check if toggle actually succeeded (may fail if no layout recorded)
-        if (newMode == oldMode) {
-            qCDebug(lcDaemon) << "Smart toggle: mode unchanged (toggle may have been blocked)";
-            m_overlayService->showNavigationOsd(false, QStringLiteral("toggle"),
-                i18n("No layout recorded - cannot switch modes"));
-            return;
-        }
-
-        if (newMode == ModeTracker::TilingMode::Autotile) {
-            // Switching TO autotile mode
-            QString algorithmId = m_modeTracker->lastAutotileAlgorithm();
-            m_autotileEngine->setAlgorithm(algorithmId);
-            m_autotileEngine->setEnabled(true);
-            qCInfo(lcDaemon) << "Smart toggle: switched to Autotile mode -" << algorithmId;
-            showAutotileOsd(algorithmId);
-        } else {
-            // Switching TO manual mode
-            m_autotileEngine->setEnabled(false);
-
-            // Restore last manual layout if available
-            QString layoutId = m_modeTracker->lastManualLayoutId();
-            if (!layoutId.isEmpty()) {
-                auto uuidOpt = Utils::parseUuid(layoutId);
-                if (uuidOpt) {
-                    Layout* layout = m_layoutManager->layoutById(*uuidOpt);
-                    if (layout) {
-                        m_layoutManager->setActiveLayout(layout);
-                        qCInfo(lcDaemon) << "Smart toggle: switched to Manual mode -" << layout->name();
-
-                        // Show OSD with layout name
-                        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-                            showLayoutOsd(layout);
-                        }
-                    }
-                }
-            } else {
-                qCInfo(lcDaemon) << "Smart toggle: switched to Manual mode (no previous layout)";
-                if (m_settings && m_settings->showNavigationOsd()) {
-                    m_overlayService->showNavigationOsd(true, QStringLiteral("mode"), QStringLiteral("Manual"));
-                }
-            }
-        }
-    });
-
-    // Focus master window
-    connect(m_shortcutManager.get(), &ShortcutManager::focusMasterRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->focusMaster();
-        }
-    });
-
-    // Swap focused window with master
-    connect(m_shortcutManager.get(), &ShortcutManager::swapMasterRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->swapFocusedWithMaster();
-        }
-    });
-
-    // Increase master area ratio
-    connect(m_shortcutManager.get(), &ShortcutManager::incMasterRatioRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->increaseMasterRatio();
-        }
-    });
-
-    // Decrease master area ratio
-    connect(m_shortcutManager.get(), &ShortcutManager::decMasterRatioRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->decreaseMasterRatio();
-        }
-    });
-
-    // Increase master window count
-    connect(m_shortcutManager.get(), &ShortcutManager::incMasterCountRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->increaseMasterCount();
-        }
-    });
-
-    // Decrease master window count
-    connect(m_shortcutManager.get(), &ShortcutManager::decMasterCountRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->decreaseMasterCount();
-        }
-    });
-
-    // Force retile all windows
-    connect(m_shortcutManager.get(), &ShortcutManager::retileRequested, this, [this]() {
-        if (m_autotileEngine) {
-            m_autotileEngine->retile();
-            qCInfo(lcDaemon) << "Manual retile triggered";
         }
     });
 
@@ -848,30 +617,6 @@ void Daemon::showLayoutOsd(Layout* layout)
         }
         break;
     }
-}
-
-void Daemon::showAutotileOsd(const QString& algorithmId)
-{
-    if (!m_settings || !m_settings->showOsdOnLayoutSwitch()) {
-        return;
-    }
-
-    auto* registry = AlgorithmRegistry::instance();
-    if (!registry) {
-        return;
-    }
-
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
-    if (!algo) {
-        return;
-    }
-
-    // Use shared utility to generate preview zones
-    QVariantList zonesList = AlgorithmRegistry::generatePreviewZones(algo);
-
-    // Show visual OSD with autotile preview (category=1 for Autotile)
-    QString layoutId = LayoutId::makeAutotileId(algorithmId);
-    m_overlayService->showLayoutOsd(layoutId, algo->name(), zonesList, 1);
 }
 
 // Unified layout management now handled by UnifiedLayoutController

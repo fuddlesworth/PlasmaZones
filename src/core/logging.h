@@ -57,9 +57,6 @@ PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcCore) PLASMAZONES_EXPORT
     // KWin effect module - snap visualization, navigation
     PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-    // Autotile module - automatic window tiling
-    PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcAutotile)
-
     // Configuration module - settings loading/saving
     PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcConfig)
 

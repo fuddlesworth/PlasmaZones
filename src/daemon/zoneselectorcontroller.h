@@ -6,7 +6,6 @@
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
-#include "../autotile/AlgorithmRegistry.h"
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -200,9 +199,6 @@ Q_SIGNALS:
     // Layout selection signal (for external handlers)
     void layoutSelected(const QString& layoutId);
     void layoutHovered(const QString& layoutId);
-
-    // Autotile layout selection (emitted when user selects an autotile algorithm from zone selector)
-    void autotileLayoutSelected(const QString& algorithmId);
 
     // Drag state signals
     void dragStarted();

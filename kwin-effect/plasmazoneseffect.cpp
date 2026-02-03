@@ -189,7 +189,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     connect(KWin::effects, &KWin::EffectsHandler::windowAdded, this, &PlasmaZonesEffect::slotWindowAdded);
     connect(KWin::effects, &KWin::EffectsHandler::windowClosed, this, &PlasmaZonesEffect::slotWindowClosed);
 
-    // Phase 2.1: Connect to window activation for autotiling focus tracking
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
 
     // mouseChanged is the only reliable way to get modifier state in a KWin effect on Wayland;
@@ -208,12 +207,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
     // Connect to keyboard navigation D-Bus signals (Phase 1)
     connectNavigationSignals();
-
-    // Connect to autotile D-Bus signals (Phase 2.3)
-    connectAutotileSignals();
-
-    // Load autotile settings from daemon (Phase 2.3)
-    loadAutotileSettings();
 
     // Sync floating window state from daemon's persisted state
     syncFloatingWindowsFromDaemon();
@@ -288,9 +281,6 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
-    // Phase 2.1: Notify daemon for autotiling (before auto-snap logic)
-    notifyWindowAdded(w);
-
     // Sync floating state for this window from daemon
     // This ensures windows that were floating when closed remain floating when reopened
     QString windowId = getWindowId(w);
@@ -335,17 +325,15 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // The daemon preserves floating state (keyed by stableId) so the window stays floating
     // when reopened. The effect's local cache will be synced in slotWindowAdded().
 
-    // Clean up any pending autotile animations
     m_windowAnimator->removeAnimation(w);
 
-    // Phase 2.1: Notify daemon for autotiling and cleanup
+    // Notify daemon for cleanup
     notifyWindowClosed(w);
 }
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
-    // Phase 2.1: Notify daemon of window activation for autotiling focus tracking
-    // Filtering handled by notifyWindowActivated
+    // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
 }
 
@@ -520,7 +508,6 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCDebug(lcEffect) << "Daemon signaled settingsChanged - reloading settings";
     loadExclusionSettings();
-    loadAutotileSettings();
 }
 
 void PlasmaZonesEffect::pollWindowMoves()
@@ -1310,41 +1297,9 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
     return windowId;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Phase 2.1: Window Event Notifications for Autotiling
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
-{
-    if (!w || !shouldHandleWindow(w)) {
-        return;
-    }
-
-    if (!ensureWindowTrackingReady("notify windowAdded")) {
-        return;
-    }
-
-    QString windowId = getWindowId(w);
-    QString screenName = getWindowScreenName(w);
-
-    // Track this window so we only send windowClosed for windows we've notified about
-    m_notifiedWindows.insert(windowId);
-
-    qCDebug(lcEffect) << "Notifying daemon: windowAdded" << windowId << "on screen" << screenName;
-    m_windowTrackingInterface->asyncCall(QStringLiteral("windowAdded"), windowId, screenName);
-}
-
 void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
 {
     if (!w) {
-        return;
-    }
-
-    QString windowId = getWindowId(w);
-
-    // Only notify for windows we previously notified via windowAdded
-    // This avoids unnecessary D-Bus calls for special windows (tooltips, popups, etc.)
-    if (!m_notifiedWindows.remove(windowId)) {
         return;
     }
 
@@ -1352,13 +1307,13 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
         return;
     }
 
+    QString windowId = getWindowId(w);
     qCDebug(lcEffect) << "Notifying daemon: windowClosed" << windowId;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowClosed"), windowId);
 }
 
 void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 {
-    // Consistent filtering with notifyWindowAdded
     if (!w || !shouldHandleWindow(w)) {
         return;
     }
@@ -1372,181 +1327,6 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenName;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowActivated"), windowId, screenName);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Phase 2.3: Autotile Window Geometry Application with Animation
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void PlasmaZonesEffect::connectAutotileSignals()
-{
-    // Connect to Autotile D-Bus signals for window geometry and focus requests
-    QDBusConnection::sessionBus().connect(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-        QStringLiteral("windowTileRequested"), this,
-        SLOT(slotAutotileWindowRequested(QString, int, int, int, int)));
-
-    QDBusConnection::sessionBus().connect(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
-        QStringLiteral("focusWindowRequested"), this,
-        SLOT(slotAutotileFocusWindowRequested(QString)));
-
-    qCDebug(lcEffect) << "Connected to autotile D-Bus signals";
-}
-
-void PlasmaZonesEffect::loadAutotileSettings()
-{
-    // Set sensible defaults immediately - don't block compositor startup waiting for daemon
-    m_windowAnimator->setAnimationsEnabled(true);
-    m_windowAnimator->setAnimationDuration(150);
-
-    // Create interface for async calls
-    auto* settingsInterface = new QDBusInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
-                                                  QDBusConnection::sessionBus(), this);
-
-    if (!settingsInterface->isValid()) {
-        qCDebug(lcEffect) << "Cannot load autotile settings - daemon not available yet, using defaults";
-        settingsInterface->deleteLater();
-        return;
-    }
-
-    // Load settings asynchronously to avoid blocking KWin startup
-
-    // Load autotileAnimationsEnabled
-    QDBusPendingCall animEnabledCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("autotileAnimationsEnabled"));
-    auto* animEnabledWatcher = new QDBusPendingCallWatcher(animEnabledCall, this);
-    connect(animEnabledWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            QVariant value = reply.value();
-            bool enabled;
-            if (value.canConvert<QDBusVariant>()) {
-                enabled = value.value<QDBusVariant>().variant().toBool();
-            } else {
-                enabled = value.toBool();
-            }
-            m_windowAnimator->setAnimationsEnabled(enabled);
-            qCDebug(lcEffect) << "Loaded autotileAnimationsEnabled:" << enabled;
-        }
-    });
-
-    // Load autotileAnimationDuration
-    QDBusPendingCall animDurationCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("autotileAnimationDuration"));
-    auto* animDurationWatcher = new QDBusPendingCallWatcher(animDurationCall, this);
-    connect(animDurationWatcher, &QDBusPendingCallWatcher::finished, this, [this, settingsInterface](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            QVariant value = reply.value();
-            int duration;
-            if (value.canConvert<QDBusVariant>()) {
-                duration = value.value<QDBusVariant>().variant().toInt();
-            } else {
-                duration = value.toInt();
-            }
-            m_windowAnimator->setAnimationDuration(static_cast<qreal>(duration));
-            qCDebug(lcEffect) << "Loaded autotileAnimationDuration:" << duration << "ms";
-        }
-        // Clean up the interface after the last setting is loaded
-        settingsInterface->deleteLater();
-    });
-
-    qCDebug(lcEffect) << "Loading autotile settings asynchronously, using defaults until loaded";
-}
-
-KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const
-{
-    if (windowId.isEmpty()) {
-        return nullptr;
-    }
-
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* w : windows) {
-        if (w && getWindowId(w) == windowId) {
-            return w;
-        }
-    }
-    return nullptr;
-}
-
-void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height)
-{
-    qCDebug(lcEffect) << "Autotile window requested:" << windowId << "geometry:" << QRect(x, y, width, height);
-
-    KWin::EffectWindow* window = findWindowById(windowId);
-    if (!window) {
-        qCDebug(lcEffect) << "Window not found for autotile:" << windowId;
-        return;
-    }
-
-    // Skip excluded windows (fullscreen, special, etc.)
-    if (!shouldHandleWindow(window)) {
-        qCDebug(lcEffect) << "Window excluded from autotile:" << windowId;
-        return;
-    }
-
-    QRect geometry(x, y, width, height);
-    applyAutotileGeometry(window, geometry, m_windowAnimator->animationsEnabled());
-}
-
-void PlasmaZonesEffect::slotAutotileFocusWindowRequested(const QString& windowId)
-{
-    qCDebug(lcEffect) << "Autotile focus requested:" << windowId;
-
-    KWin::EffectWindow* window = findWindowById(windowId);
-    if (!window) {
-        qCDebug(lcEffect) << "Window not found for focus:" << windowId;
-        return;
-    }
-
-    // Activate the window
-    KWin::effects->activateWindow(window);
-}
-
-void PlasmaZonesEffect::applyAutotileGeometry(KWin::EffectWindow* window, const QRect& geometry, bool animate)
-{
-    if (!window || !geometry.isValid()) {
-        return;
-    }
-
-    // Don't apply geometry during user interaction - would interfere with drag/resize
-    if (window->isUserMove() || window->isUserResize()) {
-        qCDebug(lcEffect) << "Window in user operation, skipping autotile";
-        return;
-    }
-
-    // Don't animate fullscreen windows
-    if (window->isFullScreen()) {
-        qCDebug(lcEffect) << "Skipping autotile for fullscreen window";
-        return;
-    }
-
-    QRectF currentGeometry = window->frameGeometry();
-
-    // If not animating or geometry is the same, apply directly
-    if (!animate || currentGeometry.toRect() == geometry) {
-        m_windowAnimator->removeAnimation(window);
-        applySnapGeometry(window, geometry);
-        return;
-    }
-
-    // Check if already animating to the same target geometry (avoid jitter from rapid signals)
-    if (m_windowAnimator->isAnimatingToTarget(window, geometry)) {
-        qCDebug(lcEffect) << "Already animating to target geometry, ignoring duplicate";
-        return;
-    }
-
-    // If already animating to different target, redirect the animation
-    if (m_windowAnimator->hasAnimation(window)) {
-        m_windowAnimator->redirectAnimation(window, geometry);
-        return;
-    }
-
-    // Start new animation
-    if (m_windowAnimator->startAnimation(window, currentGeometry, geometry)) {
-        qCDebug(lcEffect) << "Started autotile animation for window from" << currentGeometry << "to" << geometry;
-    }
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
@@ -1585,7 +1365,7 @@ void PlasmaZonesEffect::postPaintWindow(KWin::EffectWindow* w)
             QRect finalGeometry = m_windowAnimator->finalGeometry(w);
             m_windowAnimator->removeAnimation(w);
 
-            qCDebug(lcEffect) << "Autotile animation complete, applying final geometry:" << finalGeometry;
+            qCDebug(lcEffect) << "Window animation complete, applying final geometry:" << finalGeometry;
             applySnapGeometry(w, finalGeometry);
         } else {
             // Animation still running - request another repaint

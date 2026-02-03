@@ -3,14 +3,12 @@
 
 #include "overlayservice.h"
 #include "../config/configdefaults.h"
+
 #include "../core/layout.h"
 #include "../core/layoutmanager.h"
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/AutotileEngine.h"
-#include "../autotile/TilingAlgorithm.h"
 #include "../core/platform.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
@@ -902,7 +900,6 @@ void OverlayService::setSettings(ISettings* settings)
     if (m_settings != settings) {
         // Disconnect from old settings signals
         if (m_settings) {
-            disconnect(m_settings, &ISettings::autotileEnabledChanged, this, nullptr);
             disconnect(m_settings, &ISettings::settingsChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
         }
@@ -911,15 +908,11 @@ void OverlayService::setSettings(ISettings* settings)
 
         // Connect to new settings signals
         if (m_settings) {
-            // Update zone selector when autotile enabled setting changes
-            // Connect to both specific signal and general settingsChanged (for reloads)
             auto refreshZoneSelectors = [this]() {
-                // Refresh zone selector windows to include/exclude autotile layouts
                 for (QScreen* screen : m_zoneSelectorWindows.keys()) {
                     updateZoneSelectorWindow(screen);
                 }
             };
-            connect(m_settings, &ISettings::autotileEnabledChanged, this, refreshZoneSelectors);
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
 
             connect(m_settings, &ISettings::enableShaderEffectsChanged, this, [this]() {
@@ -1011,39 +1004,6 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
                 }
             });
         }
-    }
-}
-
-void OverlayService::setAutotileEngine(AutotileEngine* engine)
-{
-    // Disconnect from old engine if exists
-    if (m_autotileEngine) {
-        disconnect(m_autotileEngine, &AutotileEngine::enabledChanged, this, nullptr);
-        disconnect(m_autotileEngine, &AutotileEngine::algorithmChanged, this, nullptr);
-    }
-
-    m_autotileEngine = engine;
-
-    // Connect to autotile state change signals to update zone selector
-    // When autotile is enabled/disabled or algorithm changes, the active layout indicator needs to update
-    if (m_autotileEngine) {
-        connect(m_autotileEngine, &AutotileEngine::enabledChanged, this, [this](bool /*enabled*/) {
-            for (QScreen* screen : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(screen);
-            }
-            for (QScreen* screen : m_overlayWindows.keys()) {
-                updateOverlayWindow(screen);
-            }
-        });
-
-        connect(m_autotileEngine, &AutotileEngine::algorithmChanged, this, [this](const QString& /*algorithmId*/) {
-            for (QScreen* screen : m_zoneSelectorWindows.keys()) {
-                updateZoneSelectorWindow(screen);
-            }
-            for (QScreen* screen : m_overlayWindows.keys()) {
-                updateOverlayWindow(screen);
-            }
-        });
     }
 }
 
@@ -1233,22 +1193,8 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 && localY < indicatorY + layout.indicatorHeight) {
                 QVariantMap layoutMap = layouts[i].toMap();
                 QString layoutId = layoutMap[QStringLiteral("id")].toString();
-                const int category = layoutMap.value(QStringLiteral("category"), 0).toInt();
-                const bool isAutotile = (category == static_cast<int>(LayoutCategory::Autotile));
 
-                // Autotile: whole layout is the target - no per-zone selection
-                if (isAutotile) {
-                    if (m_selectedLayoutId != layoutId || m_selectedZoneIndex != 0) {
-                        m_selectedLayoutId = layoutId;
-                        m_selectedZoneIndex = 0; // Sentinel for whole-layout selection
-                        m_selectedZoneRelGeo = QRectF(0, 0, 1, 1);
-                        window->setProperty("selectedLayoutId", layoutId);
-                        window->setProperty("selectedZoneIndex", 0);
-                    }
-                    return;
-                }
-
-                // Manual: per-zone hit testing
+                // Per-zone hit testing
                 QVariantList zones = layoutMap[QStringLiteral("zones")].toList();
                 int scaledPadding = window->property("scaledPadding").toInt();
                 if (scaledPadding <= 0)
@@ -1368,8 +1314,7 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
 
-    const bool includeAutotile = m_settings && m_settings->autotileEnabled();
-    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, includeAutotile).size();
+    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager).size();
     updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
 
     window->setVisible(false);
@@ -1426,11 +1371,9 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     QVariantList layouts = buildLayoutsList();
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
-    // Set active layout ID - autotile takes precedence when enabled, else use currently active layout
+    // Set active layout ID
     QString activeLayoutId;
-    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
-        activeLayoutId = LayoutId::makeAutotileId(m_autotileEngine->algorithm());
-    } else if (m_layoutManager) {
+    if (m_layoutManager) {
         // Prefer the currently active layout (set via shortcut or zone selector selection)
         // Fall back to screen assignment only if no active layout is set
         Layout* activeLayout = m_layoutManager->activeLayout();
@@ -1870,9 +1813,7 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 
 QVariantList OverlayService::buildLayoutsList() const
 {
-    // Only include autotile layouts if autotiling is enabled in settings
-    const bool includeAutotile = m_settings && m_settings->autotileEnabled();
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager, includeAutotile);
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -1930,14 +1871,6 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
 
 void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry)
 {
-    // Check if this is an autotile layout selection (has "autotile:" prefix)
-    if (LayoutId::isAutotile(layoutId)) {
-        QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
-        qCInfo(lcOverlay) << "Autotile layout selected from zone selector:" << algorithmId;
-        Q_EMIT autotileLayoutSelected(algorithmId);
-        return;
-    }
-
     m_selectedLayoutId = layoutId;
     m_selectedZoneIndex = zoneIndex;
 
@@ -1949,8 +1882,7 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     qreal height = relGeoMap.value(QStringLiteral("height"), 0.0).toReal();
     m_selectedZoneRelGeo = QRectF(x, y, width, height);
 
-    // Emit signal to change the current layout (same behavior as autotile selection)
-    qCInfo(lcOverlay) << "Manual layout selected from zone selector:" << layoutId;
+    qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId;
     Q_EMIT manualLayoutSelected(layoutId);
 }
 

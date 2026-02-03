@@ -6,7 +6,6 @@
 #include "../core/constants.h"
 #include "../core/layoututils.h"
 #include "../core/utils.h"
-#include "../autotile/TilingAlgorithm.h"
 #include <QScreen>
 #include <QQuickItem>
 #include <QCursor>
@@ -320,19 +319,6 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
 {
     qCDebug(lcOverlay) << "Layout selected:" << layoutId;
 
-    // Check if this is an autotile algorithm selection
-    if (LayoutId::isAutotile(layoutId)) {
-        QString algorithmId = LayoutId::extractAlgorithmId(layoutId);
-        if (algorithmId.isEmpty()) {
-            qCWarning(lcOverlay) << "Invalid autotile layout ID (empty algorithm):" << layoutId;
-            return;
-        }
-        qCInfo(lcOverlay) << "Autotile layout selected:" << algorithmId;
-        Q_EMIT autotileLayoutSelected(algorithmId);
-        return;
-    }
-
-    // Regular manual layout selection
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 

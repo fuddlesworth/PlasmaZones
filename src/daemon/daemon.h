@@ -28,11 +28,8 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class ScreenAdaptor;
 class WindowDragAdaptor;
-class AutotileAdaptor;
-class AutotileEngine;
 class WindowTrackingService;
 class ModeTracker;
-class ContextAwareShortcutRouter;
 class ZoneSelectorController;
 class UnifiedLayoutController;
 
@@ -102,7 +99,6 @@ public:
 
     // OSD notifications
     void showLayoutOsd(Layout* layout);
-    void showAutotileOsd(const QString& algorithmId);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
@@ -131,15 +127,11 @@ private:
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
-    AutotileAdaptor* m_autotileAdaptor = nullptr; // Autotiling control
 
-    // Autotiling engine and service
     std::unique_ptr<WindowTrackingService> m_windowTrackingService;
-    std::unique_ptr<AutotileEngine> m_autotileEngine;
 
-    // Mode tracking and context-aware shortcuts
+    // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;
-    std::unique_ptr<ContextAwareShortcutRouter> m_shortcutRouter;
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;

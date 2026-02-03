@@ -12,7 +12,6 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/constants.h"
-#include "../autotile/AlgorithmRegistry.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <cmath>
@@ -468,11 +467,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
         QScreen* screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
 
-        if (LayoutId::isAutotile(selectedLayoutId)) {
-            QString algorithmId = LayoutId::extractAlgorithmId(selectedLayoutId);
-            Q_EMIT autotileDropRequested(windowId, algorithmId);
-            usedZoneSelector = true;
-        } else if (screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
+        if (screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
@@ -680,12 +675,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
         screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
 
     // Calculate selector thickness based on settings/layouts (matches overlay sizing)
-    // Include both manual layouts AND autotile algorithms
-    int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
-    auto* registry = AlgorithmRegistry::instance();
-    if (registry) {
-        layoutCount += registry->availableAlgorithms().size();
-    }
+    const int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
 
     // Match overlayservice's size mode logic exactly
     const ZoneSelectorSizeMode sizeMode = m_settings->zoneSelectorSizeMode();

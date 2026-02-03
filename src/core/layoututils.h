@@ -35,32 +35,18 @@ Q_DECLARE_FLAGS(ZoneFields, ZoneField)
 Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
 
 /**
- * @brief Entry in the unified layout list (manual layouts + autotile algorithms)
+ * @brief Entry in the unified layout list (manual zone-based layouts)
  *
- * This struct represents either a manual zone-based layout or an autotile
- * algorithm acting as a layout. It's used for:
- * - Quick layout shortcuts (Meta+1-9)
- * - Layout cycling (Meta+[/])
- * - Zone selector display
- * - D-Bus layout list queries
+ * Used for quick layout shortcuts (Meta+1-9), layout cycling (Meta+[/]),
+ * zone selector display, and D-Bus layout list queries.
  */
 struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
-    QString id;        ///< Layout UUID or "autotile:<algorithm-id>"
-    QString name;      ///< Display name for UI
+    QString id;          ///< Layout UUID
+    QString name;       ///< Display name for UI
     QString description; ///< Optional description
-    bool isAutotile;   ///< True for autotile algorithms, false for manual layouts
-    int zoneCount;     ///< Number of zones (0 for dynamic autotile)
-    QVariantList zones; ///< Zone data for preview rendering
+    int zoneCount;       ///< Number of zones
+    QVariantList zones;  ///< Zone data for preview rendering
 
-    /**
-     * @brief Extract algorithm ID from an autotile entry
-     * @return Algorithm ID, or empty string if not an autotile entry
-     */
-    QString algorithmId() const;
-
-    /**
-     * @brief Check equality based on ID
-     */
     bool operator==(const UnifiedLayoutEntry& other) const { return id == other.id; }
     bool operator!=(const UnifiedLayoutEntry& other) const { return id != other.id; }
 };
@@ -71,32 +57,16 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
  * This namespace consolidates layout list building that was previously
  * duplicated in Daemon, ZoneSelectorController, LayoutAdaptor, and OverlayService.
  *
- * Usage:
- * @code
- * auto layouts = LayoutUtils::buildUnifiedLayoutList(layoutManager);
- * for (const auto& entry : layouts) {
- *     if (entry.isAutotile) {
- *         // Handle autotile algorithm
- *     } else {
- *         // Handle manual layout
- *     }
- * }
- * @endcode
  */
 namespace LayoutUtils {
 
 /**
- * @brief Build list of all available layouts (manual + autotile)
- *
- * Returns manual layouts first (in layout manager order), followed by
- * autotile algorithms (in registration order).
+ * @brief Build list of all available manual layouts
  *
  * @param layoutManager Layout manager interface (can be nullptr)
- * @param includeAutotile Whether to include autotile algorithms (default: true)
  * @return Vector of unified layout entries
  */
-PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
-                                                                       bool includeAutotile = true);
+PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager);
 
 /**
  * @brief Convert a unified layout entry to QVariantMap for QML

@@ -536,115 +536,6 @@ SETTINGS_SETTER(const QString&, RotateWindowsCounterclockwiseShortcut, m_rotateW
 SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForwardShortcut, cycleWindowForwardShortcutChanged)
 SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut, cycleWindowBackwardShortcutChanged)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// Autotiling Settings
-// ═══════════════════════════════════════════════════════════════════════════════
-
-SETTINGS_SETTER(bool, AutotileEnabled, m_autotileEnabled, autotileEnabledChanged)
-
-void Settings::setAutotileAlgorithm(const QString& algorithm)
-{
-    // Validate against known algorithms
-    static const QStringList validAlgorithms = {
-        DBus::AutotileAlgorithm::MasterStack,
-        DBus::AutotileAlgorithm::BSP,
-        DBus::AutotileAlgorithm::Columns,
-        DBus::AutotileAlgorithm::Rows,
-        DBus::AutotileAlgorithm::Fibonacci,
-        DBus::AutotileAlgorithm::Monocle,
-        DBus::AutotileAlgorithm::ThreeColumn
-    };
-
-    QString validatedAlgorithm = algorithm;
-    if (!validAlgorithms.contains(algorithm)) {
-        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
-                            << "- defaulting to master-stack";
-        validatedAlgorithm = DBus::AutotileAlgorithm::MasterStack;
-    }
-
-    if (m_autotileAlgorithm != validatedAlgorithm) {
-        m_autotileAlgorithm = validatedAlgorithm;
-        Q_EMIT autotileAlgorithmChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileSplitRatio(qreal ratio)
-{
-    ratio = qBound(AutotileDefaults::MinSplitRatio, ratio, AutotileDefaults::MaxSplitRatio);
-    // Use qFuzzyCompare properly for values that could be near zero
-    if (!qFuzzyCompare(1.0 + m_autotileSplitRatio, 1.0 + ratio)) {
-        m_autotileSplitRatio = ratio;
-        Q_EMIT autotileSplitRatioChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileMasterCount(int count)
-{
-    count = qBound(AutotileDefaults::MinMasterCount, count, AutotileDefaults::MaxMasterCount);
-    if (m_autotileMasterCount != count) {
-        m_autotileMasterCount = count;
-        Q_EMIT autotileMasterCountChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileInnerGap(int gap)
-{
-    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
-    if (m_autotileInnerGap != gap) {
-        m_autotileInnerGap = gap;
-        Q_EMIT autotileInnerGapChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setAutotileOuterGap(int gap)
-{
-    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
-    if (m_autotileOuterGap != gap) {
-        m_autotileOuterGap = gap;
-        Q_EMIT autotileOuterGapChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-// Autotile bool setters
-SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
-SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
-SETTINGS_SETTER(AutotileInsertPosition, AutotileInsertPosition, m_autotileInsertPosition, autotileInsertPositionChanged)
-
-void Settings::setAutotileInsertPositionInt(int position)
-{
-    if (position >= 0 && position <= 2) {
-        setAutotileInsertPosition(static_cast<AutotileInsertPosition>(position));
-    }
-}
-
-// Autotile shortcut setters
-SETTINGS_SETTER(const QString&, AutotileToggleShortcut, m_autotileToggleShortcut, autotileToggleShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut, autotileFocusMasterShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileSwapMasterShortcut, m_autotileSwapMasterShortcut, autotileSwapMasterShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileIncMasterRatioShortcut, m_autotileIncMasterRatioShortcut, autotileIncMasterRatioShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileDecMasterRatioShortcut, m_autotileDecMasterRatioShortcut, autotileDecMasterRatioShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileIncMasterCountShortcut, m_autotileIncMasterCountShortcut, autotileIncMasterCountShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileDecMasterCountShortcut, m_autotileDecMasterCountShortcut, autotileDecMasterCountShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut, autotileRetileShortcutChanged)
-
-// Autotile animation and visual setters
-SETTINGS_SETTER(bool, AutotileAnimationsEnabled, m_autotileAnimationsEnabled, autotileAnimationsEnabledChanged)
-SETTINGS_SETTER_CLAMPED(AutotileAnimationDuration, m_autotileAnimationDuration, autotileAnimationDurationChanged, 50, 500)
-SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
-SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
-SETTINGS_SETTER(bool, AutotileShowActiveBorder, m_autotileShowActiveBorder, autotileShowActiveBorderChanged)
-SETTINGS_SETTER_CLAMPED(AutotileActiveBorderWidth, m_autotileActiveBorderWidth, autotileActiveBorderWidthChanged, 1, 10)
-SETTINGS_SETTER(bool, AutotileUseSystemBorderColor, m_autotileUseSystemBorderColor, autotileUseSystemBorderColorChanged)
-
-SETTINGS_SETTER(const QColor&, AutotileActiveBorderColor, m_autotileActiveBorderColor, autotileActiveBorderColorChanged)
-SETTINGS_SETTER(bool, AutotileMonocleHideOthers, m_autotileMonocleHideOthers, autotileMonocleHideOthersChanged)
-SETTINGS_SETTER(bool, AutotileMonocleShowTabs, m_autotileMonocleShowTabs, autotileMonocleShowTabsChanged)
-
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -895,68 +786,6 @@ void Settings::load()
     m_cycleWindowBackwardShortcut =
         navigationShortcuts.readEntry(QLatin1String("CycleWindowBackward"), ConfigDefaults::cycleWindowBackwardShortcut());
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Autotiling Settings (defaults from .kcfg via ConfigDefaults)
-    // Note: AutotileDefaults in constants.h still used for min/max bounds
-    // ═══════════════════════════════════════════════════════════════════════════
-    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
-
-    m_autotileEnabled = autotiling.readEntry(QLatin1String("AutotileEnabled"), ConfigDefaults::autotileEnabled());
-    m_autotileAlgorithm = autotiling.readEntry(QLatin1String("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
-
-    qreal splitRatio = autotiling.readEntry(QLatin1String("AutotileSplitRatio"), ConfigDefaults::autotileSplitRatio());
-    if (splitRatio < AutotileDefaults::MinSplitRatio || splitRatio > AutotileDefaults::MaxSplitRatio) {
-        qCWarning(lcConfig) << "Invalid autotile split ratio:" << splitRatio << "clamping to valid range";
-        splitRatio = qBound(AutotileDefaults::MinSplitRatio, splitRatio, AutotileDefaults::MaxSplitRatio);
-    }
-    m_autotileSplitRatio = splitRatio;
-
-    int masterCount = autotiling.readEntry(QLatin1String("AutotileMasterCount"), ConfigDefaults::autotileMasterCount());
-    if (masterCount < AutotileDefaults::MinMasterCount || masterCount > AutotileDefaults::MaxMasterCount) {
-        qCWarning(lcConfig) << "Invalid autotile master count:" << masterCount << "clamping to valid range";
-        masterCount = qBound(AutotileDefaults::MinMasterCount, masterCount, AutotileDefaults::MaxMasterCount);
-    }
-    m_autotileMasterCount = masterCount;
-
-    m_autotileInnerGap = readValidatedInt(autotiling, "AutotileInnerGap", ConfigDefaults::autotileInnerGap(),
-                                          AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile inner gap");
-    m_autotileOuterGap = readValidatedInt(autotiling, "AutotileOuterGap", ConfigDefaults::autotileOuterGap(),
-                                          AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap");
-    m_autotileFocusNewWindows = autotiling.readEntry(QLatin1String("AutotileFocusNewWindows"), ConfigDefaults::autotileFocusNewWindows());
-    m_autotileSmartGaps = autotiling.readEntry(QLatin1String("AutotileSmartGaps"), ConfigDefaults::autotileSmartGaps());
-    m_autotileInsertPosition = static_cast<AutotileInsertPosition>(
-        readValidatedInt(autotiling, "AutotileInsertPosition", ConfigDefaults::autotileInsertPosition(), 0, 2, "autotile insert position"));
-
-    // Autotile Animation Settings
-    m_autotileAnimationsEnabled = autotiling.readEntry(QLatin1String("AutotileAnimationsEnabled"), ConfigDefaults::autotileAnimationsEnabled());
-    m_autotileAnimationDuration = readValidatedInt(autotiling, "AutotileAnimationDuration", ConfigDefaults::autotileAnimationDuration(), 50, 500, "autotile animation duration");
-
-    // Additional Autotiling Settings
-    m_autotileFocusFollowsMouse = autotiling.readEntry(QLatin1String("AutotileFocusFollowsMouse"), ConfigDefaults::autotileFocusFollowsMouse());
-    m_autotileRespectMinimumSize = autotiling.readEntry(QLatin1String("AutotileRespectMinimumSize"), ConfigDefaults::autotileRespectMinimumSize());
-    m_autotileShowActiveBorder = autotiling.readEntry(QLatin1String("AutotileShowActiveBorder"), ConfigDefaults::autotileShowActiveBorder());
-    m_autotileActiveBorderWidth = readValidatedInt(autotiling, "AutotileActiveBorderWidth", ConfigDefaults::autotileActiveBorderWidth(), 1, 10, "autotile active border width");
-    m_autotileUseSystemBorderColor = autotiling.readEntry(QLatin1String("AutotileUseSystemBorderColor"), ConfigDefaults::autotileUseSystemBorderColor());
-
-    // Get system highlight color as default for custom border color
-    KColorScheme borderScheme(QPalette::Active, KColorScheme::Selection);
-    QColor systemHighlight = borderScheme.background(KColorScheme::ActiveBackground).color();
-    m_autotileActiveBorderColor = readValidatedColor(autotiling, "AutotileActiveBorderColor", systemHighlight, "autotile active border");
-
-    m_autotileMonocleHideOthers = autotiling.readEntry(QLatin1String("AutotileMonocleHideOthers"), ConfigDefaults::autotileMonocleHideOthers());
-    m_autotileMonocleShowTabs = autotiling.readEntry(QLatin1String("AutotileMonocleShowTabs"), ConfigDefaults::autotileMonocleShowTabs());
-
-    // Autotiling Shortcuts (defaults from .kcfg via ConfigDefaults, Bismuth-compatible)
-    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
-    m_autotileToggleShortcut = autotileShortcuts.readEntry(QLatin1String("ToggleShortcut"), ConfigDefaults::autotileToggleShortcut());
-    m_autotileFocusMasterShortcut = autotileShortcuts.readEntry(QLatin1String("FocusMasterShortcut"), ConfigDefaults::autotileFocusMasterShortcut());
-    m_autotileSwapMasterShortcut = autotileShortcuts.readEntry(QLatin1String("SwapMasterShortcut"), ConfigDefaults::autotileSwapMasterShortcut());
-    m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry(QLatin1String("IncMasterRatioShortcut"), ConfigDefaults::autotileIncMasterRatioShortcut());
-    m_autotileDecMasterRatioShortcut = autotileShortcuts.readEntry(QLatin1String("DecMasterRatioShortcut"), ConfigDefaults::autotileDecMasterRatioShortcut());
-    m_autotileIncMasterCountShortcut = autotileShortcuts.readEntry(QLatin1String("IncMasterCountShortcut"), ConfigDefaults::autotileIncMasterCountShortcut());
-    m_autotileDecMasterCountShortcut = autotileShortcuts.readEntry(QLatin1String("DecMasterCountShortcut"), ConfigDefaults::autotileDecMasterCountShortcut());
-    m_autotileRetileShortcut = autotileShortcuts.readEntry(QLatin1String("RetileShortcut"), ConfigDefaults::autotileRetileShortcut());
-
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1093,45 +922,6 @@ void Settings::save()
     navigationShortcuts.writeEntry(QLatin1String("CycleWindowForward"), m_cycleWindowForwardShortcut);
     navigationShortcuts.writeEntry(QLatin1String("CycleWindowBackward"), m_cycleWindowBackwardShortcut);
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Autotiling Settings
-    // ═══════════════════════════════════════════════════════════════════════════
-    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
-    autotiling.writeEntry(QLatin1String("AutotileEnabled"), m_autotileEnabled);
-    autotiling.writeEntry(QLatin1String("AutotileAlgorithm"), m_autotileAlgorithm);
-    autotiling.writeEntry(QLatin1String("AutotileSplitRatio"), m_autotileSplitRatio);
-    autotiling.writeEntry(QLatin1String("AutotileMasterCount"), m_autotileMasterCount);
-    autotiling.writeEntry(QLatin1String("AutotileInnerGap"), m_autotileInnerGap);
-    autotiling.writeEntry(QLatin1String("AutotileOuterGap"), m_autotileOuterGap);
-    autotiling.writeEntry(QLatin1String("AutotileFocusNewWindows"), m_autotileFocusNewWindows);
-    autotiling.writeEntry(QLatin1String("AutotileSmartGaps"), m_autotileSmartGaps);
-    autotiling.writeEntry(QLatin1String("AutotileInsertPosition"), static_cast<int>(m_autotileInsertPosition));
-
-    // Autotile Animation Settings
-    autotiling.writeEntry(QLatin1String("AutotileAnimationsEnabled"), m_autotileAnimationsEnabled);
-    autotiling.writeEntry(QLatin1String("AutotileAnimationDuration"), m_autotileAnimationDuration);
-
-    // Additional Autotiling Settings
-    autotiling.writeEntry(QLatin1String("AutotileFocusFollowsMouse"), m_autotileFocusFollowsMouse);
-    autotiling.writeEntry(QLatin1String("AutotileRespectMinimumSize"), m_autotileRespectMinimumSize);
-    autotiling.writeEntry(QLatin1String("AutotileShowActiveBorder"), m_autotileShowActiveBorder);
-    autotiling.writeEntry(QLatin1String("AutotileActiveBorderWidth"), m_autotileActiveBorderWidth);
-    autotiling.writeEntry(QLatin1String("AutotileUseSystemBorderColor"), m_autotileUseSystemBorderColor);
-    autotiling.writeEntry(QLatin1String("AutotileActiveBorderColor"), m_autotileActiveBorderColor);
-    autotiling.writeEntry(QLatin1String("AutotileMonocleHideOthers"), m_autotileMonocleHideOthers);
-    autotiling.writeEntry(QLatin1String("AutotileMonocleShowTabs"), m_autotileMonocleShowTabs);
-
-    // Autotiling Shortcuts
-    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
-    autotileShortcuts.writeEntry(QLatin1String("ToggleShortcut"), m_autotileToggleShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("FocusMasterShortcut"), m_autotileFocusMasterShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("SwapMasterShortcut"), m_autotileSwapMasterShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("IncMasterRatioShortcut"), m_autotileIncMasterRatioShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("DecMasterRatioShortcut"), m_autotileDecMasterRatioShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("IncMasterCountShortcut"), m_autotileIncMasterCountShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("DecMasterCountShortcut"), m_autotileDecMasterCountShortcut);
-    autotileShortcuts.writeEntry(QLatin1String("RetileShortcut"), m_autotileRetileShortcut);
-
     config->sync();
 }
 
@@ -1152,9 +942,7 @@ void Settings::reset()
         QStringLiteral("ZoneSelector"),
         QStringLiteral("Shaders"),
         QStringLiteral("GlobalShortcuts"),
-        QStringLiteral("NavigationShortcuts"),
-        QStringLiteral("Autotiling"),
-        QStringLiteral("AutotileShortcuts")
+        QStringLiteral("NavigationShortcuts")
     };
 
     for (const QString& groupName : groups) {

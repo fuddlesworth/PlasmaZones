@@ -26,9 +26,6 @@ Item {
     property bool isSelected: false
     property bool isHovered: false
 
-    // Helper to check if this is an autotile algorithm
-    readonly property bool isAutotile: modelData.category === 1
-
     // Signals
     signal selected(int index)
     signal activated(string layoutId)
@@ -38,9 +35,7 @@ Item {
     height: cellHeight
 
     Accessible.name: modelData.name || i18n("Unnamed Layout")
-    Accessible.description: isAutotile
-        ? i18n("Autotile algorithm with dynamic zones")
-        : modelData.isSystem
+    Accessible.description: modelData.isSystem
             ? i18n("System layout with %1 zones", modelData.zoneCount || 0)
             : i18n("Custom layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
@@ -52,22 +47,12 @@ Item {
 
     TapHandler {
         onTapped: root.selected(root.index)
-        onDoubleTapped: {
-            // Only allow editing manual layouts, not autotile algorithms
-            if (!root.isAutotile) {
-                root.activated(root.modelData.id)
-            }
-        }
+        onDoubleTapped: root.activated(root.modelData.id)
     }
 
-    Keys.onReturnPressed: {
-        // Only allow editing manual layouts, not autotile algorithms
-        if (!root.isAutotile) {
-            root.activated(root.modelData.id)
-        }
-    }
+    Keys.onReturnPressed: root.activated(root.modelData.id)
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem && !root.isAutotile) {
+        if (!root.modelData.isSystem) {
             root.deleteRequested(root.modelData)
         }
     }
@@ -150,9 +135,7 @@ Item {
 
                     text: {
                         var zoneCount = root.modelData.zoneCount || 0
-                        if (root.isAutotile) {
-                            return i18n("Dynamic")
-                        } else if (root.modelData.isSystem) {
+                        if (root.modelData.isSystem) {
                             return i18n("System • %1", zoneCount)
                         } else {
                             return i18n("%1 zones", zoneCount)

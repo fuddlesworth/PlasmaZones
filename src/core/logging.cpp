@@ -31,9 +31,6 @@ Q_LOGGING_CATEGORY(lcSnapping, "plasmazones.editor.snapping", QtInfoMsg)
 // KWin effect module categories
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 
-// Autotile module categories
-Q_LOGGING_CATEGORY(lcAutotile, "plasmazones.autotile", QtInfoMsg)
-
 // Configuration module categories
 Q_LOGGING_CATEGORY(lcConfig, "plasmazones.config", QtInfoMsg)
 

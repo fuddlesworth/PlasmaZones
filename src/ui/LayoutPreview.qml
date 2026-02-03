@@ -18,12 +18,7 @@ Rectangle {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: [] // Array of zone objects with relativeGeometry
-    // Layout category: 0=Manual, 1=Autotile (matches LayoutCategory enum in C++)
-    property int category: 0
-    // Category constants for readability (matches PlasmaZones::LayoutCategory)
-    readonly property int categoryManual: 0
-    readonly property int categoryAutotile: 1
-    property bool isAutotile: category === categoryAutotile
+    property int category: 0  // 0=Manual (matches LayoutCategory in C++)
     // State
     property bool isActive: false
     property bool isHovered: false
@@ -119,7 +114,7 @@ Rectangle {
             anchors.centerIn: parent
             spacing: Kirigami.Units.smallSpacing
 
-            // Category badge (Manual/Auto) - inline with name
+            // Category badge (layout type) - inline with name
             QFZCommon.CategoryBadge {
                 id: categoryBadge
 
