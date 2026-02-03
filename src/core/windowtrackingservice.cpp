@@ -707,6 +707,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
             continue;
         }
 
+        // zoneGeometry uses primaryScreen when screenName is empty (multi-monitor edge case)
         QRect geo = zoneGeometry(targetZone->id().toString(), entry.screenName);
         if (!geo.isValid()) {
             continue;

@@ -441,7 +441,8 @@ void ShortcutManager::setupResnapToNewLayoutShortcut()
     SETUP_SHORTCUT(m_resnapToNewLayoutAction, "Resnap Windows to New Layout", "resnap_to_new_layout",
                    resnapToNewLayoutShortcut, &ShortcutManager::onResnapToNewLayout);
 
-    qCInfo(lcShortcuts) << "Resnap to new layout shortcut registered (Meta+Ctrl+Z)";
+    qCInfo(lcShortcuts) << "Resnap to new layout shortcut registered ("
+                        << m_settings->resnapToNewLayoutShortcut() << ")";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

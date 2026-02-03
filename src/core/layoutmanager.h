@@ -84,7 +84,7 @@ public:
     }
     /**
      * @brief Get the layout that was active before the most recent switch
-     * @return Previous layout, or nullptr if none (startup or first switch)
+     * @return Previous layout. On first setActiveLayout, equals activeLayout.
      * @note Used for resnap-to-new-layout: windows from previous layout are remapped to current
      */
     Layout* previousLayout() const
