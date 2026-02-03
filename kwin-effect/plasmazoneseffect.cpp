@@ -348,7 +348,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
 
     // Connect to geometry changes for this window
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-            [this, w](KWin::EffectWindow* window, const QRectF& oldGeometry) {
+            [this](KWin::EffectWindow* window, const QRectF& oldGeometry) {
                 Q_UNUSED(oldGeometry)
                 if (window == m_dragTracker->draggedWindow()) {
                     // Skip if window has gone fullscreen - don't track fullscreen windows
@@ -790,6 +790,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           SLOT(slotRotateWindowsRequested(bool, QString)));
 
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("resnapToNewLayoutRequested"), this,
+                                          SLOT(slotResnapToNewLayoutRequested(QString)));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("cycleWindowsInZoneRequested"), this,
                                           SLOT(slotCycleWindowsInZoneRequested(QString, QString)));
 
@@ -944,6 +948,11 @@ void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, co
 void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString& rotationData)
 {
     m_navigationHandler->handleRotateWindows(clockwise, rotationData);
+}
+
+void PlasmaZonesEffect::slotResnapToNewLayoutRequested(const QString& resnapData)
+{
+    m_navigationHandler->handleResnapToNewLayout(resnapData);
 }
 
 void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused)

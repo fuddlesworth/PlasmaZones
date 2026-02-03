@@ -207,6 +207,8 @@ Layout* LayoutManager::duplicateLayout(Layout* source)
 void LayoutManager::setActiveLayout(Layout* layout)
 {
     if (m_activeLayout != layout && (layout == nullptr || m_layouts.contains(layout))) {
+        // Capture current as previous before changing (on first run, use layout as both)
+        m_previousLayout = m_activeLayout ? m_activeLayout : layout;
         m_activeLayout = layout;
         Q_EMIT activeLayoutChanged(m_activeLayout);
     }
@@ -588,7 +590,9 @@ void LayoutManager::loadLayouts(const QString& defaultLayoutId)
         if (!initial) {
             initial = m_layouts.first();
         }
-        qCDebug(lcLayout) << "Set active layout to:" << initial->name() << "with" << initial->zoneCount() << "zones";
+        qCInfo(lcLayout) << "Active layout:" << initial->name()
+                         << "id=" << initial->id().toString()
+                         << "zones=" << initial->zoneCount();
         setActiveLayout(initial);
     }
 
@@ -807,8 +811,16 @@ void LayoutManager::loadAssignments()
         m_quickLayoutShortcuts[number] = layoutId;
     }
 
-    qCDebug(lcLayout) << "Loaded" << m_assignments.size() << "assignments and" << m_quickLayoutShortcuts.size()
-                      << "quick shortcuts";
+    qCInfo(lcLayout) << "Loaded" << m_assignments.size() << "layout assignments and"
+                     << m_quickLayoutShortcuts.size() << "quick shortcuts";
+    for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
+        Layout* layout = layoutById(it.value());
+        QString layoutName = layout ? layout->name() : QStringLiteral("(unknown)");
+        qCInfo(lcLayout) << "  Assignment: screen=" << it.key().screenName
+                         << "desktop=" << it.key().virtualDesktop
+                         << "activity=" << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
+                         << "-> layout" << layoutName;
+    }
 }
 
 void LayoutManager::saveAssignments()

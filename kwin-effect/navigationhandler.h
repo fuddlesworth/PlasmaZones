@@ -42,6 +42,7 @@ public:
     void handleSwapWindows(const QString& targetZoneId, const QString& targetWindowId,
                            const QString& zoneGeometry);
     void handleRotateWindows(bool clockwise, const QString& rotationData);
+    void handleResnapToNewLayout(const QString& resnapData);
     void handleCycleWindowsInZone(const QString& directive, const QString& unused);
 
     // Floating window tracking

@@ -255,6 +255,7 @@ systemctl --user enable --now plasmazones.service
 | Toggle float | `Meta+Alt+F` |
 | Cycle window forward | `Meta+Alt+.` |
 | Cycle window backward | `Meta+Alt+,` |
+| Resnap windows to new layout | `Meta+Ctrl+Z` |
 
 </p>
 
@@ -264,6 +265,7 @@ systemctl --user enable --now plasmazones.service
 - `Meta+Ctrl+Alt+Arrow` — Swap windows between zones (avoids KDE's `Meta+Ctrl+Arrow` desktop switching)
 - `Meta+Ctrl+[/]` — Rotate all windows through zones (complements layout cycling `Meta+Alt+[/]`)
 - `Meta+Alt+./,` — Cycle through windows stacked in the same zone (monocle-style)
+- `Meta+Ctrl+Z` — Resnap windows from previous layout to current layout (by zone number, with cycling)
 - `Alt+Shift+Arrow` — Focus navigation (avoids KDE's `Meta+Arrow` quick tile)
 - `Meta+Ctrl+{1-9}` — Direct zone snapping
 

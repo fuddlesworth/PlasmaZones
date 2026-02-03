@@ -246,6 +246,9 @@ Q_SIGNALS:
     void cycleWindowForwardShortcutChanged();
     void cycleWindowBackwardShortcutChanged();
 
+    // Resnap to New Layout Shortcut
+    void resnapToNewLayoutShortcutChanged();
+
 };
 
 /**

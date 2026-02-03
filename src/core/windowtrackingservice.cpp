@@ -33,10 +33,10 @@ WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZone
 
     // Note: No save timer needed - persistence handled by WindowTrackingAdaptor via KConfig
     // Service just emits stateChanged() signal when state changes
-
-    // Connect to layout changes
-    connect(m_layoutManager, &LayoutManager::activeLayoutChanged,
-            this, &WindowTrackingService::onLayoutChanged);
+    //
+    // Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
+    // onLayoutChanged(). Do NOT connect here - duplicate invocation would clear m_resnapBuffer
+    // on the second run (after assignments were already removed), causing no_windows_to_resnap.
 
     // Note: Persistence is handled by WindowTrackingAdaptor via KConfig.
     // The service is a pure in-memory state manager - adaptor calls
@@ -680,6 +680,51 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
     return result;
 }
 
+QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout()
+{
+    QVector<RotationEntry> result;
+    if (m_resnapBuffer.isEmpty()) {
+        return result;
+    }
+
+    Layout* newLayout = m_layoutManager->activeLayout();
+    if (!newLayout || newLayout->zoneCount() == 0) {
+        m_resnapBuffer.clear();
+        return result;
+    }
+
+    QVector<Zone*> newZones = newLayout->zones();
+    std::sort(newZones.begin(), newZones.end(), [](Zone* a, Zone* b) {
+        return a->zoneNumber() < b->zoneNumber();
+    });
+    const int newZoneCount = newZones.size();
+
+    for (const ResnapEntry& entry : m_resnapBuffer) {
+        // Map position with cycling: 1->1, 2->2, 3->3, 4->1, 5->2 when 5->3 zones
+        int targetPos = ((entry.zonePosition - 1) % newZoneCount) + 1;
+        Zone* targetZone = newZones.value(targetPos - 1, nullptr);
+        if (!targetZone) {
+            continue;
+        }
+
+        // zoneGeometry uses primaryScreen when screenName is empty (multi-monitor edge case)
+        QRect geo = zoneGeometry(targetZone->id().toString(), entry.screenName);
+        if (!geo.isValid()) {
+            continue;
+        }
+
+        RotationEntry rotEntry;
+        rotEntry.windowId = entry.windowId;
+        rotEntry.sourceZoneId = QString(); // Previous zone no longer exists
+        rotEntry.targetZoneId = targetZone->id().toString();
+        rotEntry.targetGeometry = geo;
+        result.append(rotEntry);
+    }
+
+    m_resnapBuffer.clear();
+    return result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Resolution Change Handling
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -789,15 +834,152 @@ void WindowTrackingService::windowClosed(const QString& windowId)
 void WindowTrackingService::onLayoutChanged()
 {
     // Validate zone assignments against new layout
-    Layout* layout = m_layoutManager->activeLayout();
-    if (!layout) {
+    Layout* newLayout = m_layoutManager->activeLayout();
+    if (!newLayout) {
+        m_resnapBuffer.clear();
         return;
     }
 
     // Collect valid zone IDs from new layout
     QSet<QString> validZoneIds;
-    for (Zone* zone : layout->zones()) {
+    for (Zone* zone : newLayout->zones()) {
         validZoneIds.insert(zone->id().toString());
+    }
+
+    // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.
+    // When user presses the shortcut, we map zone N -> zone N (with cycling when layout has fewer zones).
+    // Include BOTH m_windowZoneAssignments (tracked) AND m_pendingZoneAssignments (session-restored
+    // windows that KWin placed in zones before we got windowSnapped - e.g. after login).
+    //
+    // LayoutManager ensures prevLayout is never null (captures current as previous on first set).
+    // When prevLayout != newLayout: capture assignments to OLD layout (real switch).
+    // When prevLayout == newLayout: capture assignments to CURRENT layout (startup re-apply).
+    //
+    // Only replace m_resnapBuffer when we capture at least one window. If user does A->B->C (snapped
+    // on A, B has no windows), prev=B yields nothing - we keep the buffer from A->B so resnap on C works.
+    Layout* prevLayout = m_layoutManager->previousLayout();
+    const bool layoutSwitched = (prevLayout != newLayout);
+    {
+        QVector<ResnapEntry> newBuffer;
+        QVector<Zone*> prevZones = prevLayout->zones();
+        std::sort(prevZones.begin(), prevZones.end(), [](Zone* a, Zone* b) {
+            return a->zoneNumber() < b->zoneNumber();
+        });
+        QHash<QString, int> zoneIdToPosition; // zoneId -> 1-based position
+        for (int i = 0; i < prevZones.size(); ++i) {
+            zoneIdToPosition[prevZones[i]->id().toString()] = i + 1;
+            QString withoutBraces = prevZones[i]->id().toString(QUuid::WithoutBraces);
+            if (withoutBraces != prevZones[i]->id().toString()) {
+                zoneIdToPosition[withoutBraces] = i + 1;
+            }
+        }
+        QSet<QString> addedStableIds; // avoid duplicates when window is in both live and pending
+
+        auto addToBuffer = [&](const QString& windowIdOrStableId, const QString& zoneId,
+                               const QString& screenName, int vd) {
+            QString stableId = Utils::extractStableId(windowIdOrStableId);
+            if (stableId.isEmpty() || m_floatingWindows.contains(stableId) || addedStableIds.contains(stableId)) {
+                return;
+            }
+            int pos = zoneIdToPosition.value(zoneId, 0);
+            if (pos <= 0) {
+                // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
+                if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+                    int lastDash = zoneId.lastIndexOf(QStringLiteral("-"));
+                    if (lastDash > 0) {
+                        bool ok = false;
+                        int idx = zoneId.mid(lastDash + 1).toInt(&ok);
+                        if (ok && idx >= 0 && idx < prevZones.size()) {
+                            pos = idx + 1; // 1-based position
+                        }
+                    }
+                }
+            }
+            if (pos <= 0) {
+                return;
+            }
+            addedStableIds.insert(stableId);
+            ResnapEntry entry;
+            entry.windowId = stableId; // KWin effect's buildWindowMap keys by stableId
+            entry.zonePosition = pos;
+            entry.screenName = screenName;
+            entry.virtualDesktop = vd;
+            newBuffer.append(entry);
+        };
+
+        const QUuid prevLayoutId = prevLayout->id();
+
+        if (layoutSwitched) {
+            // User switched layouts: capture assignments to zones from the OLD layout (not in new)
+            // 1. Live assignments (windows we've tracked via windowSnapped)
+            for (auto it = m_windowZoneAssignments.constBegin();
+                 it != m_windowZoneAssignments.constEnd(); ++it) {
+                if (validZoneIds.contains(it.value())) {
+                    continue;
+                }
+                addToBuffer(it.key(), it.value(),
+                            m_windowScreenAssignments.value(it.key()),
+                            m_windowDesktopAssignments.value(it.key(), 0));
+            }
+
+            // 2. Pending assignments (session-restored windows)
+            for (auto it = m_pendingZoneAssignments.constBegin();
+                 it != m_pendingZoneAssignments.constEnd(); ++it) {
+                if (validZoneIds.contains(it.value())) {
+                    continue;
+                }
+                QString savedLayoutId = m_pendingZoneLayouts.value(it.key());
+                if (!savedLayoutId.isEmpty()) {
+                    auto savedUuid = Utils::parseUuid(savedLayoutId);
+                    if (!savedUuid || *savedUuid != prevLayoutId) {
+                        continue; // pending is for a different layout
+                    }
+                }
+                QString screenName = m_pendingZoneScreens.value(it.key());
+                int vd = m_pendingZoneDesktops.value(it.key(), 0);
+                addToBuffer(it.key(), it.value(), screenName, vd);
+            }
+        } else {
+            // Same layout (startup): capture assignments that belong to the current layout.
+            // This lets resnap re-apply zone geometries for restored/pending windows.
+            // 1. Live assignments in current layout
+            for (auto it = m_windowZoneAssignments.constBegin();
+                 it != m_windowZoneAssignments.constEnd(); ++it) {
+                if (!validZoneIds.contains(it.value())) {
+                    continue;
+                }
+                addToBuffer(it.key(), it.value(),
+                            m_windowScreenAssignments.value(it.key()),
+                            m_windowDesktopAssignments.value(it.key(), 0));
+            }
+
+            // 2. Pending assignments for current layout
+            for (auto it = m_pendingZoneAssignments.constBegin();
+                 it != m_pendingZoneAssignments.constEnd(); ++it) {
+                if (!validZoneIds.contains(it.value())) {
+                    continue;
+                }
+                QString savedLayoutId = m_pendingZoneLayouts.value(it.key());
+                if (!savedLayoutId.isEmpty()) {
+                    auto savedUuid = Utils::parseUuid(savedLayoutId);
+                    if (!savedUuid || *savedUuid != prevLayoutId) {
+                        continue;
+                    }
+                }
+                QString screenName = m_pendingZoneScreens.value(it.key());
+                int vd = m_pendingZoneDesktops.value(it.key(), 0);
+                addToBuffer(it.key(), it.value(), screenName, vd);
+            }
+        }
+
+        if (!newBuffer.isEmpty()) {
+            m_resnapBuffer = std::move(newBuffer);
+            qCInfo(lcCore) << "Resnap buffer:" << m_resnapBuffer.size()
+                          << "windows (zone position -> window)";
+            for (const ResnapEntry& e : m_resnapBuffer) {
+                qCInfo(lcCore) << "  Zone" << e.zonePosition << "<-" << e.windowId;
+            }
+        }
     }
 
     // Remove stale assignments

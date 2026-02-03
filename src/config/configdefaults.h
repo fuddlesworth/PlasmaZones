@@ -133,6 +133,8 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     static QString openEditorShortcut() { return instance().defaultOpenEditorShortcutValue(); }
+    static QString previousLayoutShortcut() { return instance().defaultPreviousLayoutShortcutValue(); }
+    static QString nextLayoutShortcut() { return instance().defaultNextLayoutShortcutValue(); }
     static QString quickLayout1Shortcut() { return instance().defaultQuickLayout1ShortcutValue(); }
     static QString quickLayout2Shortcut() { return instance().defaultQuickLayout2ShortcutValue(); }
     static QString quickLayout3Shortcut() { return instance().defaultQuickLayout3ShortcutValue(); }
@@ -175,6 +177,7 @@ public:
     static QString rotateWindowsCounterclockwiseShortcut() { return instance().defaultRotateWindowsCounterclockwiseValue(); }
     static QString cycleWindowForwardShortcut() { return instance().defaultCycleWindowForwardValue(); }
     static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
+    static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
 
 private:
     // Lazily-initialized singleton instance

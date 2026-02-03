@@ -165,6 +165,9 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
         return;
     }
 
+    // Clear pending assignment so window won't be auto-restored on next focus/reopen
+    m_service->clearStalePendingAssignment(windowId);
+
     // Delegate to service
     m_service->unassignWindow(windowId);
 
@@ -771,6 +774,42 @@ void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
     Q_EMIT cycleWindowsInZoneRequested(directive, QString());
 }
 
+void WindowTrackingAdaptor::resnapToNewLayout()
+{
+    qCDebug(lcDbusWindow) << "resnapToNewLayout called";
+
+    QVector<RotationEntry> resnapEntries = m_service->calculateResnapFromPreviousLayout();
+
+    if (resnapEntries.isEmpty()) {
+        auto* layout = getValidatedActiveLayout(QStringLiteral("resnapToNewLayout"));
+        if (!layout) {
+            Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"),
+                                     QString(), QString(), QString());
+        } else {
+            Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"),
+                                     QString(), QString(), QString());
+        }
+        return;
+    }
+
+    QJsonArray resnapArray;
+    for (const RotationEntry& entry : resnapEntries) {
+        QJsonObject moveObj;
+        moveObj[QLatin1String("windowId")] = entry.windowId;
+        moveObj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
+        moveObj[QLatin1String("targetZoneId")] = entry.targetZoneId;
+        moveObj[QLatin1String("x")] = entry.targetGeometry.x();
+        moveObj[QLatin1String("y")] = entry.targetGeometry.y();
+        moveObj[QLatin1String("width")] = entry.targetGeometry.width();
+        moveObj[QLatin1String("height")] = entry.targetGeometry.height();
+        resnapArray.append(moveObj);
+    }
+
+    QString resnapData = QString::fromUtf8(QJsonDocument(resnapArray).toJson(QJsonDocument::Compact));
+    qCInfo(lcDbusWindow) << "Resnapping" << resnapArray.size() << "windows to new layout";
+    Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
 void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString& action, const QString& reason,
                                                      const QString& sourceZoneId, const QString& targetZoneId,
                                                      const QString& screenName)
@@ -1120,7 +1159,14 @@ void WindowTrackingAdaptor::loadState()
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
 
-    qCDebug(lcDbusWindow) << "Loaded state from KConfig -" << pendingZones.size() << "pending zone assignments";
+    qCInfo(lcDbusWindow) << "Loaded state from KConfig -" << pendingZones.size() << "pending zone assignments";
+    for (auto it = pendingZones.constBegin(); it != pendingZones.constEnd(); ++it) {
+        qCInfo(lcDbusWindow) << "  Pending snap:" << it.key() << "-> zone" << it.value();
+    }
+    if (!pendingZones.isEmpty()) {
+        m_hasPendingRestores = true;
+        tryEmitPendingRestoresAvailable();
+    }
 }
 
 void WindowTrackingAdaptor::scheduleSaveState()

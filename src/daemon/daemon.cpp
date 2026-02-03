@@ -453,6 +453,11 @@ void Daemon::start()
         m_windowTrackingAdaptor->cycleWindowsInZone(forward);
     });
 
+    // Resnap to new layout shortcut
+    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
+        m_windowTrackingAdaptor->resnapToNewLayout();
+    });
+
     // Initialize mode tracker for last-used layout
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
     m_modeTracker->load();

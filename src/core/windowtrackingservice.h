@@ -304,6 +304,18 @@ public:
      */
     QVector<RotationEntry> calculateRotation(bool clockwise) const;
 
+    /**
+     * @brief Calculate resnap data for windows from previous layout to current layout
+     *
+     * When layout changes, windows that were in the previous layout are buffered.
+     * This method maps them to the current layout by zone number (1->1, 2->2, etc.)
+     * with cycling when the new layout has fewer zones (e.g. zone 4->1, 5->2 when
+     * going from 5 zones to 3).
+     *
+     * @return List of rotation entries (same format as rotate) for KWin to apply
+     */
+    QVector<RotationEntry> calculateResnapFromPreviousLayout();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════
@@ -496,6 +508,16 @@ private:
 
     // Auto-snapped windows (to avoid updating last-used zone)
     QSet<QString> m_autoSnappedWindows;
+
+    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenName, vd)
+    // for windows that were in the previous layout, so resnapToNewLayout can map them
+    struct ResnapEntry {
+        QString windowId;
+        int zonePosition; // 1-based position in sorted-by-zoneNumber order
+        QString screenName;
+        int virtualDesktop = 0;
+    };
+    QVector<ResnapEntry> m_resnapBuffer;
 
     // Note: No save timer - persistence handled by WindowTrackingAdaptor via KConfig
     // Service emits stateChanged() signal when state needs saving

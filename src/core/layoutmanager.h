@@ -82,6 +82,15 @@ public:
     {
         return m_activeLayout;
     }
+    /**
+     * @brief Get the layout that was active before the most recent switch
+     * @return Previous layout. On first setActiveLayout, equals activeLayout.
+     * @note Used for resnap-to-new-layout: windows from previous layout are remapped to current
+     */
+    Layout* previousLayout() const
+    {
+        return m_previousLayout;
+    }
     Q_INVOKABLE void setActiveLayout(Layout* layout) override;
     Q_INVOKABLE void setActiveLayoutById(const QUuid& id) override;
 
@@ -183,6 +192,7 @@ private:
     QString m_layoutDirectory;
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;
+    Layout* m_previousLayout = nullptr; ///< Layout active before last setActiveLayout (for resnap)
     QHash<LayoutAssignmentKey, QUuid> m_assignments;
     QHash<int, QUuid> m_quickLayoutShortcuts; // number -> layout ID
 };
