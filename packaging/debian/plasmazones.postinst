@@ -3,7 +3,7 @@ set -e
 
 case "$1" in
     configure)
-        # Refresh KDE sycoca cache
+        # Refresh KDE sycoca cache so KCM appears in System Settings
         if command -v kbuildsycoca6 >/dev/null 2>&1; then
             kbuildsycoca6 --noincremental 2>/dev/null || true
         fi
@@ -12,6 +12,11 @@ case "$1" in
         if command -v gtk-update-icon-cache >/dev/null 2>&1; then
             gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true
         fi
+
+        echo ""
+        echo "PlasmaZones: enable the daemon with:"
+        echo "  systemctl --user enable --now plasmazones.service"
+        echo ""
         ;;
 esac
 

@@ -56,14 +56,13 @@ build: configure
 release:
 	@$(MAKE) BUILD_TYPE=Release build
 
-# Install to system (CMake install prints success message, runs sycoca via script)
-# Sycoca runs as original user when using sudo (handled by cmake/post-install-sycoca.sh)
+# Install to system (only installs files; packaging handles sycoca/service enable)
 install: build
 	@echo "$(YELLOW)>>> Installing (may require sudo)...$(NC)"
 	@cmake --install $(BUILD_DIR)
 	@echo "$(GREEN)>>> Installation complete$(NC)"
 
-# Refresh KDE service cache (standalone, e.g. after ninja install or if KCM not visible)
+# Optional: refresh KDE sycoca after local install (packaging does this for distro packages)
 post-install:
 	@echo "$(BLUE)>>> Refreshing KDE service cache...$(NC)"
 	@$(SHELL) cmake/post-install-sycoca.sh
@@ -157,8 +156,8 @@ help:
 	@echo "  make run-daemon   - Build and run the daemon"
 	@echo ""
 	@echo "$(GREEN)Install targets:$(NC)"
-	@echo "  make install      - Install to system (may need sudo)"
-	@echo "  make post-install - Refresh KDE cache (e.g. after ninja install)"
+	@echo "  make install      - Install files to system (may need sudo)"
+	@echo "  make post-install - Refresh KDE sycoca after install (optional; packaging does this)"
 	@echo "  make uninstall    - Uninstall from system (may need sudo)"
 	@echo ""
 	@echo "$(GREEN)Other targets:$(NC)"

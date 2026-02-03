@@ -359,47 +359,8 @@ add_custom_target(uninstall
     COMMENT "Uninstalling PlasmaZones..."
 )
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Post-install: Refresh KDE sycoca cache and show helpful message
-# Skip sycoca when DESTDIR is set (packaging); skip when not a real user install
-# ═══════════════════════════════════════════════════════════════════════════════
-install(CODE "
-    set(SYCOCA_REFRESHED FALSE)
-    # Only refresh when doing a real install (not packaging with DESTDIR)
-    if(NOT DEFINED ENV{DESTDIR} OR \"\$ENV{DESTDIR}\" STREQUAL \"\")
-        set(SYCOCA_SCRIPT \"${CMAKE_SOURCE_DIR}/cmake/post-install-sycoca.sh\")
-        if(EXISTS \"\${SYCOCA_SCRIPT}\")
-            message(STATUS \"Refreshing KDE service cache...\")
-            execute_process(
-                COMMAND \"\${SYCOCA_SCRIPT}\"
-                RESULT_VARIABLE SYCOCA_RESULT
-                OUTPUT_QUIET
-                ERROR_QUIET
-            )
-            if(SYCOCA_RESULT EQUAL 0)
-                set(SYCOCA_REFRESHED TRUE)
-            endif()
-        endif()
-    endif()
-
-    message(STATUS \"\")
-    message(STATUS \"══════════════════════════════════════════════════════════════════\")
-    message(STATUS \"  PlasmaZones installed successfully!\")
-    message(STATUS \"══════════════════════════════════════════════════════════════════\")
-    message(STATUS \"\")
-    message(STATUS \"  Settings: System Settings → Window Management → PlasmaZones\")
-    message(STATUS \"  Direct:   systemsettings kcm_plasmazones\")
-    message(STATUS \"\")
-    message(STATUS \"  Enable daemon:\")
-    message(STATUS \"      systemctl --user enable --now plasmazones.service\")
-    message(STATUS \"\")
-    if(NOT SYCOCA_REFRESHED)
-        message(STATUS \"  If PlasmaZones doesn't appear in System Settings:\")
-        message(STATUS \"      kbuildsycoca6 --noincremental\")
-        message(STATUS \"  or log out and back in.\")
-        message(STATUS \"\")
-    endif()
-")
+# Build/install only installs files. Enabling the daemon, refreshing sycoca/KWin,
+# and user-facing messages are handled by packaging (Arch .install, Debian postinst, RPM %post).
 
 # Feature summary
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
