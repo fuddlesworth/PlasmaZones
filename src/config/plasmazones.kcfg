@@ -576,12 +576,6 @@
        Mode Tracking (last-used manual layout)
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="ModeTracking">
-    <entry name="LastTilingMode" type="Int">
-      <label>Last used tiling mode (0=Manual)</label>
-      <default>0</default>
-      <min>0</min>
-      <max>0</max>
-    </entry>
     <entry name="LastManualLayoutId" type="String">
       <label>UUID of the last manually selected layout</label>
       <default></default>

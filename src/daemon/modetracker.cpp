@@ -64,7 +64,6 @@ void ModeTracker::save()
     KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup group = config->group(QStringLiteral("ModeTracking"));
 
-    group.writeEntry(QStringLiteral("LastTilingMode"), 0);
     group.writeEntry(QStringLiteral("LastManualLayoutId"), m_lastManualLayoutId);
 
     config->sync();

@@ -222,7 +222,7 @@ Window {
             anchors.bottomMargin: Kirigami.Units.gridUnit * 1.5
             spacing: Kirigami.Units.smallSpacing
 
-            // Category badge (Manual/Auto)
+            // Category badge (layout type)
             QFZCommon.CategoryBadge {
                 id: categoryBadge
 

@@ -176,7 +176,7 @@ ComboBox {
                         Layout.fillWidth: true
                     }
 
-                    // Category badge (Auto/Manual)
+                    // Category badge (layout type)
                     QFZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category

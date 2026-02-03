@@ -114,7 +114,7 @@ Rectangle {
             anchors.centerIn: parent
             spacing: Kirigami.Units.smallSpacing
 
-            // Category badge (Manual/Auto) - inline with name
+            // Category badge (layout type) - inline with name
             QFZCommon.CategoryBadge {
                 id: categoryBadge
 

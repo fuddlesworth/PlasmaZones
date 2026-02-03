@@ -333,7 +333,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
-    // Filtering handled by notifyWindowActivated
+    // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
 }
 

@@ -126,7 +126,7 @@ public:
     // Mode Tracking Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static int lastTilingMode() { return instance().defaultLastTilingModeValue(); }
+    // (LastManualLayoutId is read/written directly by ModeTracker, no default getter needed)
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Global Shortcuts

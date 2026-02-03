@@ -22,11 +22,6 @@ class ModeTracker : public QObject
     Q_PROPERTY(QString lastManualLayoutId READ lastManualLayoutId NOTIFY lastManualLayoutIdChanged)
 
 public:
-    enum class TilingMode {
-        Manual = 0   // Zone-based layouts only
-    };
-    Q_ENUM(TilingMode)
-
     explicit ModeTracker(Settings* settings, QObject* parent = nullptr);
     ~ModeTracker() override;
 
