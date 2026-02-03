@@ -5,8 +5,8 @@
     "author": "PlasmaZones",
     "version": "1.0",
     "renderType": "rendernode",
-    "fragmentShader": "effect.glsl",
-    "vertexShader": "zone.vert.glsl",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
     "parameters": [
         {
             "id": "speed",

@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 330 core
+#version 450
 
-in vec2 vTexCoord;
-in float vMouseInfluence;   // From vertex shader - mouse proximity
-in float vDistortAmount;    // From vertex shader - deformation intensity  
-in vec2 vDisplacement;      // From vertex shader - displacement vector
-out vec4 fragColor;
+layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in float vMouseInfluence;
+layout(location = 2) in float vDistortAmount;
+layout(location = 3) in vec2 vDisplacement;
 
-layout(std140) uniform ZoneUniforms {
+layout(location = 0) out vec4 fragColor;
+
+layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;

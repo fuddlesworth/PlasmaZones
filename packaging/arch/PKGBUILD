@@ -12,6 +12,7 @@ license=('GPL-3.0-or-later')
 depends=(
     'qt6-base'
     'qt6-declarative'
+    'qt6-shadertools'
     'kconfig'
     'kconfigwidgets'
     'kcoreaddons'
@@ -28,6 +29,7 @@ makedepends=(
     'cmake'
     'extra-cmake-modules'
     'qt6-tools'
+    'qt6-shadertools'
 )
 optdepends=(
     'plasma-activities: activity-based layouts'

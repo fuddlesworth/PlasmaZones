@@ -209,11 +209,13 @@ set(plasmazones_daemon_SRCS
     daemon/modetracker.h
     daemon/unifiedlayoutcontroller.cpp
     daemon/unifiedlayoutcontroller.h
-    # Shader rendering system
+    # Shader rendering system (RHI only)
+    daemon/rendering/zoneshadercommon.h
+    daemon/rendering/zoneshadernodebase.h
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
-    daemon/rendering/zoneshadernode.h
-    daemon/rendering/zoneshadernode.cpp
+    daemon/rendering/zoneshadernoderhi.h
+    daemon/rendering/zoneshadernoderhi.cpp
     # KConfigXT-generated config class (for ConfigDefaults)
     ${plasmazones_daemon_kcfg_SRCS}
 )
@@ -233,11 +235,14 @@ target_link_libraries(plasmazonesd
         Qt6::Widgets
         Qt6::Quick
         Qt6::QuickControls2
-        Qt6::OpenGL  # Required for ZoneShaderItem rendering
+        Qt6::ShaderTools  # QShaderBaker for ZoneShaderNodeRhi (runtime GLSL bake)
         KF6::DBusAddons
         KF6::GlobalAccel
         KF6::Notifications
 )
+
+# Qt6::GuiPrivate (QRhi) and Qt6::ShaderToolsPrivate (QShaderBaker) for zone overlay (required by root)
+target_link_libraries(plasmazonesd PRIVATE Qt6::GuiPrivate Qt6::ShaderToolsPrivate)
 
 # Link LayerShellQt (required)
 target_link_libraries(plasmazonesd

@@ -1,17 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#version 330 core
+#version 450
 
-// Vertex inputs
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texCoord;
 
-// Vertex outputs
-out vec2 vTexCoord;
+layout(location = 0) out vec2 vTexCoord;
 
-// Uniform block matching fragment shader (std140 layout, binding 0)
-layout(std140) uniform ZoneUniforms {
+layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;
@@ -29,15 +26,7 @@ layout(std140) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
-/**
- * PARTICLE FIELD VERTEX SHADER
- * Simple pass-through vertex shader
- */
-
 void main() {
-    // Pass through texture coordinates
     vTexCoord = texCoord;
-    
-    // Transform position by the Qt matrix
     gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
 }

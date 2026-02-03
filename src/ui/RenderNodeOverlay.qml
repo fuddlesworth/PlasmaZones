@@ -10,7 +10,7 @@ import PlasmaZones 1.0
 /**
  * Zone overlay window with QSGRenderNode-based shader rendering.
  *
- * Uses ZoneShaderItem for custom shader effects with direct OpenGL access.
+ * Uses ZoneShaderItem for custom shader effects (RHI: Vulkan/Metal/D3D/OpenGL).
  */
 Window {
     id: root
