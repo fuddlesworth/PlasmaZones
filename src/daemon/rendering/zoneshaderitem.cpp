@@ -130,6 +130,60 @@ void ZoneShaderItem::setShaderSource(const QUrl& source)
     update();
 }
 
+void ZoneShaderItem::setBufferShaderPath(const QString& path)
+{
+    if (m_bufferShaderPath == path) {
+        return;
+    }
+    m_bufferShaderPath = path;
+    m_shaderDirty = true;
+    update();
+    Q_EMIT bufferShaderPathChanged();
+}
+
+void ZoneShaderItem::setBufferShaderPaths(const QStringList& paths)
+{
+    if (m_bufferShaderPaths == paths) {
+        return;
+    }
+    m_bufferShaderPaths = paths;
+    m_shaderDirty = true;
+    update();
+    Q_EMIT bufferShaderPathsChanged();
+}
+
+void ZoneShaderItem::setBufferFeedback(bool enable)
+{
+    if (m_bufferFeedback == enable) {
+        return;
+    }
+    m_bufferFeedback = enable;
+    Q_EMIT bufferFeedbackChanged();
+    update();
+}
+
+void ZoneShaderItem::setBufferScale(qreal scale)
+{
+    const qreal clamped = qBound(0.125, scale, 1.0);
+    if (qFuzzyCompare(m_bufferScale, clamped)) {
+        return;
+    }
+    m_bufferScale = clamped;
+    Q_EMIT bufferScaleChanged();
+    update();
+}
+
+void ZoneShaderItem::setBufferWrap(const QString& wrap)
+{
+    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    if (m_bufferWrap == use) {
+        return;
+    }
+    m_bufferWrap = use;
+    Q_EMIT bufferWrapChanged();
+    update();
+}
+
 void ZoneShaderItem::setShaderParams(const QVariantMap& params)
 {
     if (m_shaderParams == params) {
@@ -574,6 +628,21 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         QMutexLocker lock(&m_labelsTextureMutex);
         node->setLabelsTexture(m_labelsTexture);
     }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Sync buffer shader path (multipass)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    QStringList effectivePaths = m_bufferShaderPaths;
+    if (effectivePaths.isEmpty() && !m_bufferShaderPath.isEmpty()) {
+        effectivePaths.append(m_bufferShaderPath);
+    }
+    while (effectivePaths.size() > 4) {
+        effectivePaths.removeLast();
+    }
+    node->setBufferShaderPaths(effectivePaths);
+    node->setBufferFeedback(m_bufferFeedback);
+    node->setBufferScale(m_bufferScale);
+    node->setBufferWrap(m_bufferWrap);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Sync shader source FIRST (must compile before zone data can be used)

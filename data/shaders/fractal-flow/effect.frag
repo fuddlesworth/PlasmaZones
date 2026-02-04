@@ -25,6 +25,8 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
+layout(binding = 1) uniform sampler2D uZoneLabels;
+
 /*
  * FRACTAL FLOW - Shadertoy Conversion
  * Organic fractal-like flowing pattern with iterative distortion
@@ -139,7 +141,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
 
     fragColor = clampFragColor(color);
 }

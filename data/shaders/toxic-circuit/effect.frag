@@ -25,6 +25,8 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
+layout(binding = 1) uniform sampler2D uZoneLabels;
+
 /*
  * TOXIC CIRCUIT - Cyberpunk Venom Overlay Effect
  * Inspired by Neon Venom / Pokemon: Toxic Circuit aesthetic
@@ -547,7 +549,7 @@ void main() {
         color.a = max(color.a, zoneColor.a);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
 
     fragColor = clampFragColor(color);
 }

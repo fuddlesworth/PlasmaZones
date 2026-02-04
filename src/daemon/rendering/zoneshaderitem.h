@@ -14,6 +14,7 @@
 #include <QRectF>
 #include <QColor>
 #include <QMutex>
+#include <QStringList>
 #include <QVector>
 #include <atomic>
 
@@ -132,6 +133,16 @@ class PLASMAZONES_EXPORT ZoneShaderItem : public QQuickItem
 
     // Shader source
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
+    /** Multi-pass: path to buffer pass fragment shader (e.g. buffer.frag). Empty for single-pass. */
+    Q_PROPERTY(QString bufferShaderPath READ bufferShaderPath WRITE setBufferShaderPath NOTIFY bufferShaderPathChanged FINAL)
+    /** Multi-pass: up to 4 buffer pass fragment shaders (A→B→C→D). When non-empty, overrides bufferShaderPath for multi-buffer. */
+    Q_PROPERTY(QStringList bufferShaderPaths READ bufferShaderPaths WRITE setBufferShaderPaths NOTIFY bufferShaderPathsChanged FINAL)
+    /** When true, buffer pass uses ping-pong (samples its own previous frame as iChannel0). Only when a single buffer pass. */
+    Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
+    /** Buffer resolution scale (e.g. 0.5 = half size); 0.125–1.0. */
+    Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
+    /** Buffer channel wrap: "clamp" or "repeat". */
+    Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
 
     // Custom parameters (16 floats in 4 vec4s, slots 0-15)
@@ -229,6 +240,24 @@ public:
         return m_shaderSource;
     }
     void setShaderSource(const QUrl& source);
+
+    QString bufferShaderPath() const
+    {
+        return m_bufferShaderPath;
+    }
+    void setBufferShaderPath(const QString& path);
+
+    QStringList bufferShaderPaths() const { return m_bufferShaderPaths; }
+    void setBufferShaderPaths(const QStringList& paths);
+
+    bool bufferFeedback() const { return m_bufferFeedback; }
+    void setBufferFeedback(bool enable);
+
+    qreal bufferScale() const { return m_bufferScale; }
+    void setBufferScale(qreal scale);
+
+    QString bufferWrap() const { return m_bufferWrap; }
+    void setBufferWrap(const QString& wrap);
 
     QVariantMap shaderParams() const
     {
@@ -367,6 +396,11 @@ Q_SIGNALS:
     void zoneCountChanged();
     void highlightedCountChanged();
     void shaderSourceChanged();
+    void bufferShaderPathChanged();
+    void bufferShaderPathsChanged();
+    void bufferFeedbackChanged();
+    void bufferScaleChanged();
+    void bufferWrapChanged();
     void shaderParamsChanged();
     void customParamsChanged(); // Emitted when any customParams1-4 changes
     void customColorsChanged(); // Emitted when any customColor1-8 changes
@@ -439,6 +473,11 @@ private:
 
     // Shader configuration
     QUrl m_shaderSource;
+    QString m_bufferShaderPath;
+    QStringList m_bufferShaderPaths;
+    bool m_bufferFeedback = false;
+    qreal m_bufferScale = 1.0;
+    QString m_bufferWrap = QStringLiteral("clamp");
     QVariantMap m_shaderParams;
 
     // Custom shader parameters

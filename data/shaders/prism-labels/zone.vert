@@ -19,12 +19,11 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     int highlightedCount;
     vec4 iMouse;
     vec4 customParams[4];
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
+    vec4 customColors[8];
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
     vec4 zoneParams[64];
-    vec2 iChannelResolution[4];
 };
 
 void main() {

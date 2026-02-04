@@ -1529,7 +1529,9 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
         window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay",
                                  initProps);
-        if (!window) {
+        if (window) {
+            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screen->name();
+        } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
         }
@@ -1551,14 +1553,26 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     // Mark window type for reliable type detection
     window->setProperty("isShaderOverlay", usingShader);
 
-    // Set shader-specific properties
+    // Set shader-specific properties (use QQmlProperty so QML bindings see updates)
     if (usingShader && m_layout) {
         auto* registry = ShaderRegistry::instance();
         if (registry) {
             const QString shaderId = m_layout->shaderId();
-            window->setProperty("shaderSource", registry->shaderUrl(shaderId));
+            const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
+            qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
+                              << "bufferPaths=" << info.bufferShaderPaths.size();
+            writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
+            writeQmlProperty(window, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
+            QVariantList pathList;
+            for (const QString &p : info.bufferShaderPaths) {
+                pathList.append(p);
+            }
+            writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), pathList);
+            writeQmlProperty(window, QStringLiteral("bufferFeedback"), info.bufferFeedback);
+            writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
+            writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, m_layout->shaderParams());
-            window->setProperty("shaderParams", QVariant::fromValue(translatedParams));
+            writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(translatedParams));
         }
     }
 
@@ -1655,15 +1669,30 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         auto* registry = ShaderRegistry::instance();
         if (registry) {
             const QString shaderId = screenLayout->shaderId();
-            window->setProperty("shaderSource", registry->shaderUrl(shaderId));
+            const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
+            writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
+            writeQmlProperty(window, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
+            QVariantList pathList;
+            for (const QString &p : info.bufferShaderPaths) {
+                pathList.append(p);
+            }
+            writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), pathList);
+            writeQmlProperty(window, QStringLiteral("bufferFeedback"), info.bufferFeedback);
+            writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
+            writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);
             // Translate parameter IDs to shader uniform names (mapsTo values)
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
-            window->setProperty("shaderParams", QVariant::fromValue(translatedParams));
+            writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(translatedParams));
         }
     } else if (windowIsShader && !useShaderOverlay()) {
         // Clear shader properties if window is shader type but shaders are now disabled
-        window->setProperty("shaderSource", QUrl());
-        window->setProperty("shaderParams", QVariantMap());
+        writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
+        writeQmlProperty(window, QStringLiteral("bufferShaderPath"), QString());
+        writeQmlProperty(window, QStringLiteral("bufferShaderPaths"), QVariantList());
+        writeQmlProperty(window, QStringLiteral("bufferFeedback"), false);
+        writeQmlProperty(window, QStringLiteral("bufferScale"), 1.0);
+        writeQmlProperty(window, QStringLiteral("bufferWrap"), QStringLiteral("clamp"));
+        writeQmlProperty(window, QStringLiteral("shaderParams"), QVariantMap());
     }
 
     // Update zones on the window (QML root has the zones property).

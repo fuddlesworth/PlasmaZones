@@ -25,6 +25,8 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
+layout(binding = 1) uniform sampler2D uZoneLabels;
+
 /*
  * WARPED LABELS - Minimalist zones with distorted zone numbers
  *

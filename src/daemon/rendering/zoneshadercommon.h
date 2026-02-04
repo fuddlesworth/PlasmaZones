@@ -64,6 +64,9 @@ struct alignas(16) ZoneShaderUniforms
     float zoneFillColors[MaxZones][4];
     float zoneBorderColors[MaxZones][4];
     float zoneParams[MaxZones][4];
+
+    // Multi-pass: iChannelResolution[i] = size of texture bound to iChannel i (std140: vec2[4], each 16-byte aligned)
+    float iChannelResolution[4][4]; // [i][0]=x, [i][1]=y; [i][2],[i][3] padding
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
