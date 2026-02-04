@@ -465,7 +465,6 @@ OverlayService::OverlayService(QObject* parent)
                                          QStringLiteral("PrepareForSleep"), this, SLOT(onPrepareForSleep(bool)));
 
     // Reset shader error state on construction (fresh start after reboot)
-    m_shaderErrorPending = false;
     m_pendingShaderError.clear();
 }
 
@@ -598,11 +597,6 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
 
 void OverlayService::initializeOverlay(QScreen* cursorScreen)
 {
-    // Handle any pending shader error from previous session
-    if (m_shaderErrorPending) {
-        qCDebug(lcOverlay) << "Previous shader error (falling back to standard overlay):" << m_pendingShaderError;
-    }
-
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
@@ -651,7 +645,6 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
             continue;
         }
 
-        // Check if window type matches what we need
         // Use isShaderOverlay property set at creation time (more reliable than shaderSource
         // which can be set on non-shader windows by updateOverlayWindow())
         const bool windowIsShader = window->property("isShaderOverlay").toBool();
@@ -711,8 +704,6 @@ void OverlayService::hide()
         }
     }
 
-    // Reset shader error state so next show() can try shader overlay again
-    m_shaderErrorPending = false;
     m_pendingShaderError.clear();
 
     Q_EMIT visibilityChanged(false);
@@ -1600,6 +1591,8 @@ void OverlayService::createOverlayWindow(QScreen* screen)
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
     if (auto* window = m_overlayWindows.take(screen)) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
+        disconnect(screen, nullptr, window, nullptr);
         window->close();
         window->deleteLater();
     }
@@ -1908,9 +1901,7 @@ bool OverlayService::useShaderOverlay() const
     if (!m_layout || ShaderRegistry::isNoneShader(m_layout->shaderId())) {
         return false;
     }
-    if (m_shaderErrorPending) {
-        return false; // Previous error, fall back to standard overlay
-    }
+    // Don't permanently give up after one error - retry each show (fallbacks mask bugs)
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false; // User disabled shaders globally
     }
@@ -2038,13 +2029,8 @@ void OverlayService::onPrepareForSleep(bool goingToSleep)
 void OverlayService::onShaderError(const QString& errorLog)
 {
     qCWarning(lcOverlay) << "Shader error during overlay:" << errorLog;
-
-    // Defer handling to next show() - don't recreate windows mid-drag
-    m_shaderErrorPending = true;
     m_pendingShaderError = errorLog;
-
-    // For current session, the overlay falls back to transparent
-    // (shader shows nothing on error, but window remains to prevent flicker)
+    // Don't set m_shaderErrorPending - retry shaders on next show (fix bugs, don't mask)
 }
 
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio)

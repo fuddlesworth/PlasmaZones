@@ -210,7 +210,6 @@ private:
 
     // Shader state
     bool m_zoneDataDirty = true;
-    bool m_shaderErrorPending = false;
     QString m_pendingShaderError;
 
     // Zone data version for shader synchronization

@@ -10,7 +10,7 @@ import PlasmaZones 1.0
 /**
  * Zone overlay window with QSGRenderNode-based shader rendering.
  *
- * Uses ZoneShaderItem for custom shader effects (RHI: Vulkan/Metal/D3D/OpenGL).
+ * Uses ZoneShaderItem for custom shader effects (QRhi, OpenGL 330).
  */
 Window {
     id: root
@@ -167,7 +167,7 @@ Window {
         }
 
         // ===================================================================
-        // FALLBACK RENDERING - When no shader or shader failed
+        // BASIC ZONES - When no shader or shader not ready
         // ===================================================================
         Repeater {
             model: root.zones
@@ -177,7 +177,7 @@ Window {
                 required property var modelData
                 required property int index
 
-                visible: !zoneShaderItem.visible
+                visible: root.shaderSource.toString() === "" || zoneShaderItem.status !== ZoneShaderItem.Ready
 
                 x: modelData.x !== undefined ? modelData.x : 0
                 y: modelData.y !== undefined ? modelData.y : 0
@@ -200,8 +200,29 @@ Window {
             }
         }
 
+        // Shader error - fail visibly, don't mask with fallback
+        Rectangle {
+            visible: root.shaderSource.toString() !== "" && zoneShaderItem.status === ZoneShaderItem.Error
+            anchors.centerIn: parent
+            width: Math.min(parent.width * 0.5, 400)
+            height: shaderErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
+            color: Kirigami.Theme.backgroundColor
+            opacity: 0.95
+            radius: Kirigami.Units.smallSpacing
+            border.color: Kirigami.Theme.negativeTextColor
+            border.width: 1
+            Text {
+                id: shaderErrorText
+                anchors.centerIn: parent
+                text: zoneShaderItem.errorLog || i18n("Shader error")
+                color: Kirigami.Theme.textColor
+                wrapMode: Text.WordWrap
+                width: parent.width - Kirigami.Units.gridUnit * 2
+            }
+        }
+
         // ===================================================================
-        // ZONE LABELS - On top of everything when shader is active
+        // ZONE LABELS - When shader active
         // ===================================================================
         Repeater {
             model: root.zones

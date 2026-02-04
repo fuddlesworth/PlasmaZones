@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// PlasmaZones shared shader helpers (Vulkan GLSL #version 450).
+// PlasmaZones shared shader helpers (GLSL #version 450).
 // Include from effect.frag or zone.vert with:
 //   #include <common.glsl>   (from global shaders dir)
 //   #include "common.glsl"   (from current shader dir if copied locally)
@@ -26,8 +26,10 @@ float hash21(vec2 p) {
 }
 
 // Pseudo-random: 2D in → 2D out (vec2 → vec2, e.g. for particle positions)
+// Must use different expressions for x and y; p.x*p.y == p.y*p.x would yield diagonal-only output
 vec2 hash22(vec2 p) {
-    vec2 k = vec2(0.3183099, 0.3678794);
-    p = p * k + k.yx;
-    return fract(sin(vec2(p.x * p.y, p.y * p.x)) * 43758.5453);
+    return fract(sin(vec2(
+        dot(p, vec2(127.1, 311.7)),
+        dot(p, vec2(269.5, 183.3))
+    )) * 43758.5453);
 }

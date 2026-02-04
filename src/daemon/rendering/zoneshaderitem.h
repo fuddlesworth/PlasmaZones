@@ -344,6 +344,11 @@ public:
      */
     QVector<ZoneColor> zoneBorderColors() const;
 
+    /**
+     * @brief Force reload of shader from source (callable from QML)
+     */
+    Q_INVOKABLE void loadShader();
+
 Q_SIGNALS:
     void iTimeChanged();
     void iTimeDeltaChanged();
@@ -391,11 +396,6 @@ private:
      * internal structures for shader rendering.
      */
     void parseZoneData();
-
-    /**
-     * @brief Load and compile the shader from source
-     */
-    void loadShader();
 
     /**
      * @brief Set error status with message

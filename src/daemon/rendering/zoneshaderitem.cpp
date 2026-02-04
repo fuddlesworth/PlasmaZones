@@ -514,8 +514,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Sync shader source FIRST (must compile before zone data can be used)
+    // Load when: item's m_shaderDirty, OR node not ready (e.g. after releaseResources)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    if (m_shaderDirty.exchange(false)) {
+    const bool needLoad = m_shaderDirty.exchange(false) || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             QString fragPath = m_shaderSource.toLocalFile();
             if (m_shaderSource.scheme() == QLatin1String("qrc")) {
@@ -562,6 +564,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             }
 
             if (loaded) {
+                node->invalidateShader(); // Ensure node re-bakes
                 setStatus(Status::Ready);
                 // Force zone data resync when shader changes successfully
                 m_zoneDataDirty = true;
@@ -572,6 +575,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 }
                 setError(errorMsg);
             }
+        } else {
+            // Source empty (e.g. user selected "none") – clear node so we don't keep drawing old shader
+            node->setVertexShaderSource(QString());
+            node->setFragmentShaderSource(QString());
+            node->invalidateShader();
+            setStatus(Status::Null);
         }
     }
 

@@ -111,13 +111,12 @@ void ZoneShaderNodeRhi::prepare()
             m_shaderError = QStringLiteral("Vertex or fragment shader source is empty");
             return;
         }
-        // Request targets required by QRhi (Vulkan/Metal/D3D/OpenGL); without this bake() returns invalid QShader.
+        // Desktop OpenGL 330 + OpenGL ES 300/310/320 (Qt may use ES on Linux/EGL).
         const QList<QShaderBaker::GeneratedShader> targets = {
-            { QShader::SpirvShader, QShaderVersion(100) },
-            { QShader::GlslShader, QShaderVersion(100, QShaderVersion::GlslEs) },
-            { QShader::GlslShader, QShaderVersion(120) },
-            { QShader::HlslShader, QShaderVersion(50) },
-            { QShader::MslShader, QShaderVersion(12) },
+            { QShader::GlslShader, QShaderVersion(330) },
+            { QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs) },
+            { QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs) },
+            { QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs) },
         };
         QShaderBaker vertexBaker;
         vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
@@ -272,11 +271,15 @@ bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
     }
     QString raw = QTextStream(&file).readAll();
     const QString currentFileDir = QFileInfo(path).absolutePath();
+    const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
     const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                                           QStringLiteral("plasmazones/shaders"),
                                                           QStandardPaths::LocateDirectory);
     QStringList includePaths{currentFileDir};
-    if (!systemShaderDir.isEmpty()) {
+    if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir) {
+        includePaths.append(shadersRootDir);
+    }
+    if (!systemShaderDir.isEmpty() && !includePaths.contains(systemShaderDir)) {
         includePaths.append(systemShaderDir);
     }
     QString err;
@@ -298,11 +301,15 @@ bool ZoneShaderNodeRhi::loadFragmentShader(const QString& path)
     }
     QString raw = QTextStream(&file).readAll();
     const QString currentFileDir = QFileInfo(path).absolutePath();
+    const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
     const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
                                                           QStringLiteral("plasmazones/shaders"),
                                                           QStandardPaths::LocateDirectory);
     QStringList includePaths{currentFileDir};
-    if (!systemShaderDir.isEmpty()) {
+    if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir) {
+        includePaths.append(shadersRootDir);
+    }
+    if (!systemShaderDir.isEmpty() && !includePaths.contains(systemShaderDir)) {
         includePaths.append(systemShaderDir);
     }
     QString err;
@@ -363,6 +370,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
     if (!rpDesc) {
         return false;
     }
+
     QVector<quint32> format = rpDesc->serializedFormat();
     if (m_pipeline && m_renderPassFormat != format) {
         m_pipeline.reset();
@@ -503,6 +511,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_initialized = false;
     m_vboUploaded = false;
     m_shaderReady = false;
+    m_shaderDirty = true;  // Force re-bake on next prepare() after context loss
 }
 
 } // namespace PlasmaZones

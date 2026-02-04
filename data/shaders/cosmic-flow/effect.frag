@@ -15,7 +15,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
+layout(std140, binding = 0) uniform ZoneUniforms {
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;
@@ -45,6 +45,11 @@ float rand2D(in vec2 p) {
     return fract(sin(dot(p, vec2(15.285, 97.258))) * 47582.122);
 }
 
+// Quintic interpolation for C2 continuity; eliminates visible cell boundaries
+vec2 quintic(vec2 f) {
+    return f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+}
+
 // Value noise
 float noise(in vec2 p) {
     vec2 i = floor(p);
@@ -55,7 +60,7 @@ float noise(in vec2 p) {
     float c = rand2D(i + vec2(0.0, 1.0));
     float d = rand2D(i + vec2(1.0, 1.0));
 
-    vec2 u = smoothstep(0.0, 1.0, f);
+    vec2 u = quintic(f);
     float lower = mix(a, b, u.x);
     float upper = mix(c, d, u.x);
     

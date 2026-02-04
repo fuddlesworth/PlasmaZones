@@ -14,7 +14,7 @@ namespace PlasmaZones {
 /**
  * @brief Abstract base for zone shader render nodes (RHI backend)
  *
- * ZoneShaderItem uses this interface to drive ZoneShaderNodeRhi (QRhi/Vulkan/Metal/D3D).
+ * ZoneShaderItem uses this interface to drive ZoneShaderNodeRhi (QRhi/OpenGL).
  */
 class ZoneShaderNodeBase : public QSGRenderNode
 {
@@ -50,7 +50,7 @@ public:
     virtual void setCustomColor7(const QColor& color) = 0;
     virtual void setCustomColor8(const QColor& color) = 0;
 
-    // Shader loading (paths; RHI node bakes Vulkan GLSL at runtime)
+    // Shader loading (paths; RHI node bakes GLSL 330 at runtime)
     virtual bool loadVertexShader(const QString& path) = 0;
     virtual bool loadFragmentShader(const QString& path) = 0;
     virtual void setVertexShaderSource(const QString& source) = 0;

@@ -16,9 +16,9 @@
 namespace PlasmaZones {
 
 /**
- * @brief QSGRenderNode for zone overlay rendering via Qt RHI (Vulkan/Metal/D3D/GL)
+ * @brief QSGRenderNode for zone overlay rendering via Qt RHI (OpenGL)
  *
- * Uses QRhi and QShaderBaker (runtime Vulkan GLSL bake). Requires Qt 6.6+
+ * Uses QRhi and QShaderBaker (runtime GLSL 330 bake). Requires Qt 6.6+
  * (commandBuffer(), renderTarget()).
  */
 class ZoneShaderNodeRhi : public ZoneShaderNodeBase
@@ -80,7 +80,7 @@ private:
     std::unique_ptr<QRhiGraphicsPipeline> m_pipeline;
     QShader m_vertexShader;
     QShader m_fragmentShader;
-    QVector<quint32> m_renderPassFormat; // for pipeline invalidation on target change
+    QVector<quint32> m_renderPassFormat;
 
     QString m_vertexShaderSource;
     QString m_fragmentShaderSource;

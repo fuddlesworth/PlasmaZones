@@ -8,7 +8,7 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-layout(set = 0, binding = 0, std140) uniform ZoneUniforms {
+layout(std140, binding = 0) uniform ZoneUniforms {
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;
