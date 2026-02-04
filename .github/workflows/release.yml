@@ -88,11 +88,11 @@ jobs:
   # Build RPM Package
   # ═══════════════════════════════════════════════════════════════════════════
   build-rpm:
-    name: Build .rpm (Fedora 41)
+    name: Build .rpm (Fedora 43)
     needs: version
     runs-on: ubuntu-latest
     container:
-      image: fedora:41
+      image: fedora:43
 
     steps:
       - name: Install prerequisites
@@ -141,7 +141,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rpm-fedora-41
+          name: rpm-fedora-43
           path: dist/*.rpm
           retention-days: 30
 
@@ -305,7 +305,7 @@ jobs:
 
           **Fedora:**
           ```bash
-          sudo dnf install plasmazones-${{ needs.version.outputs.version }}-1.fc41.x86_64.rpm
+          sudo dnf install plasmazones-${{ needs.version.outputs.version }}-1.fc43.x86_64.rpm
           ```
 
           ### Post-Installation

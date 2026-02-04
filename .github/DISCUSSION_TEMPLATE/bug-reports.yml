@@ -70,7 +70,7 @@ body:
     id: distro
     attributes:
       label: Distribution
-      placeholder: "Arch Linux, Fedora 41, etc."
+      placeholder: "Arch Linux, Fedora 43, etc."
     validations:
       required: true
 

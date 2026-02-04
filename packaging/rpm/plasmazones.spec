@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Build: rpmbuild -ba plasmazones.spec
-# Clean build: mock -r fedora-41-x86_64 plasmazones-1.2.0-1.fc41.src.rpm
+# Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
 
 Name:           plasmazones
 Version:        1.3.3
