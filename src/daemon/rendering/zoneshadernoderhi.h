@@ -8,7 +8,9 @@
 #include <QMatrix4x4>
 #include <QVector4D>
 #include <QString>
+#include <QStringList>
 #include <QVector>
+#include <array>
 #include <memory>
 
 
@@ -60,6 +62,11 @@ public:
     void setCustomColor7(const QColor& color) override;
     void setCustomColor8(const QColor& color) override;
     void setLabelsTexture(const QImage& image) override;
+    void setBufferShaderPath(const QString& path) override;
+    void setBufferShaderPaths(const QStringList& paths) override;
+    void setBufferFeedback(bool enable) override;
+    void setBufferScale(qreal scale) override;
+    void setBufferWrap(const QString& wrap) override;
     bool loadVertexShader(const QString& path) override;
     bool loadFragmentShader(const QString& path) override;
     void setVertexShaderSource(const QString& source) override;
@@ -71,6 +78,8 @@ public:
 
 private:
     bool ensurePipeline();
+    bool ensureBufferPipeline();
+    bool ensureBufferTarget();
     void syncUniformsFromData();
     void releaseRhiResources();
 
@@ -83,6 +92,49 @@ private:
     QShader m_vertexShader;
     QShader m_fragmentShader;
     QVector<quint32> m_renderPassFormat;
+
+    // Multi-pass: buffer pass(es) (optional). Up to 4 paths; when size==1 feedback may use ping-pong.
+    QString m_bufferPath;
+    QStringList m_bufferPaths;
+    bool m_bufferFeedback = false;
+    qreal m_bufferScale = 1.0;
+    QString m_bufferWrap = QStringLiteral("clamp");
+    QString m_bufferFragmentShaderSource;
+    QShader m_bufferFragmentShader;
+    qint64 m_bufferMtime = 0;
+    bool m_bufferShaderReady = false;
+    bool m_bufferShaderDirty = true;
+    std::unique_ptr<QRhiTexture> m_bufferTexture;
+    std::unique_ptr<QRhiRenderPassDescriptor> m_bufferRenderPassDescriptor;
+    std::unique_ptr<QRhiTextureRenderTarget> m_bufferRenderTarget;
+    std::unique_ptr<QRhiSampler> m_bufferSampler;
+    std::unique_ptr<QRhiShaderResourceBindings> m_bufferSrb;
+    std::unique_ptr<QRhiGraphicsPipeline> m_bufferPipeline;
+    QVector<quint32> m_bufferRenderPassFormat;
+    // Ping-pong (bufferFeedback): second texture/RT/SRB for buffer pass; image pass has two SRBs
+    std::unique_ptr<QRhiTexture> m_bufferTextureB;
+    std::unique_ptr<QRhiRenderPassDescriptor> m_bufferRenderPassDescriptorB;
+    std::unique_ptr<QRhiTextureRenderTarget> m_bufferRenderTargetB;
+    std::unique_ptr<QRhiShaderResourceBindings> m_bufferSrbB;
+    std::unique_ptr<QRhiShaderResourceBindings> m_srbB; // image pass SRB with binding 2 = texture B
+    bool m_bufferFeedbackCleared = false; // one-time clear of both buffers when feedback starts
+
+    // Multi-buffer mode (2–4 passes): per-pass resources; only used when m_bufferPaths.size() > 1
+    static constexpr int kMaxBufferPasses = 4;
+    std::array<std::unique_ptr<QRhiTexture>, kMaxBufferPasses> m_multiBufferTextures = {};
+    std::array<std::unique_ptr<QRhiTextureRenderTarget>, kMaxBufferPasses> m_multiBufferRenderTargets = {};
+    std::array<std::unique_ptr<QRhiRenderPassDescriptor>, kMaxBufferPasses> m_multiBufferRenderPassDescriptors = {};
+    std::array<std::unique_ptr<QRhiGraphicsPipeline>, kMaxBufferPasses> m_multiBufferPipelines = {};
+    std::array<std::unique_ptr<QRhiShaderResourceBindings>, kMaxBufferPasses> m_multiBufferSrbs = {};
+    std::array<QShader, kMaxBufferPasses> m_multiBufferFragmentShaders = {};
+    std::array<QString, kMaxBufferPasses> m_multiBufferFragmentShaderSources = {};
+    std::array<qint64, kMaxBufferPasses> m_multiBufferMtimes = {};
+    bool m_multiBufferShadersReady = false;
+    bool m_multiBufferShaderDirty = true;
+    // Dummy 1x1 texture for iChannel0 when multipass is set but buffer not yet created (e.g. zero size)
+    std::unique_ptr<QRhiTexture> m_dummyChannelTexture;
+    std::unique_ptr<QRhiSampler> m_dummyChannelSampler;
+    bool m_dummyChannelTextureNeedsUpload = false;
 
     QString m_vertexShaderSource;
     QString m_fragmentShaderSource;

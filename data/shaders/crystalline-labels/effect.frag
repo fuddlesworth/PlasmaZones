@@ -23,7 +23,10 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
     vec4 zoneParams[64];
+    vec2 iChannelResolution[4];
 };
+
+layout(binding = 1) uniform sampler2D uZoneLabels;
 
 /*
  * CRYSTALLINE LABELS - Voronoi fractured zone numbers with stained-glass edges

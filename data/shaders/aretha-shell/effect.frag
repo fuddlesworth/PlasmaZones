@@ -86,6 +86,8 @@ vec3 getArethaPurple() {
     return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000);  // #5555ff
 }
 
+layout(binding = 1) uniform sampler2D uZoneLabels;
+
 // Color grade mapping (shadows -> midtones -> highlights)
 const vec3 gradeShadow    = vec3(0.098, 0.153, 0.259);  // Deep blue (arethaBg)
 const vec3 gradeMid       = vec3(0.000, 0.620, 0.741);  // Teal midtones
@@ -483,7 +485,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
 
     fragColor = clampFragColor(color);
 }

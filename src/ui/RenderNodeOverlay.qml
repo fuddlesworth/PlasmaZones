@@ -17,6 +17,11 @@ Window {
 
     // Properties set from C++ OverlayService
     property url shaderSource
+    property string bufferShaderPath: ""
+    property var bufferShaderPaths: []
+    property bool bufferFeedback: false
+    property real bufferScale: 1.0
+    property string bufferWrap: "clamp"
     // Note: Using 'var' for zones because it holds a QVariantList from C++ with heterogeneous zone data
     property var zones: []
     property int zoneCount: 0
@@ -120,6 +125,14 @@ Window {
 
             // Shader source
             shaderSource: root.shaderSource
+            bufferShaderPath: root.bufferShaderPath
+            // C++ passes bufferShaderPaths as QVariantList (array). Fallback to single path if empty.
+            bufferShaderPaths: (root.bufferShaderPaths && root.bufferShaderPaths.length > 0)
+                ? Array.from(root.bufferShaderPaths)
+                : (root.bufferShaderPath ? [root.bufferShaderPath] : [])
+            bufferFeedback: root.bufferFeedback
+            bufferScale: root.bufferScale
+            bufferWrap: root.bufferWrap
 
             // Zone data
             zones: root.zones

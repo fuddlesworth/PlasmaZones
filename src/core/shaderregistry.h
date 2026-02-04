@@ -58,10 +58,16 @@ public:
         QUrl shaderUrl; ///< file:// URL to fragment shader (.glsl)
         QString sourcePath; ///< Path to fragment shader source
         QString vertexShaderPath; ///< Path to vertex shader
+        QString bufferShaderPath; ///< Path to first buffer pass shader (backward compat)
+        QStringList bufferShaderPaths; ///< Up to 4 buffer pass fragment shaders (A→B→C→D order)
         QString previewPath; ///< Absolute path to preview.png
         QList<ParameterInfo> parameters;
 
         bool isUserShader = false; ///< True for ~/.local/share shaders
+        bool isMultipass = false; ///< True if multipass and bufferShader are set
+        bool bufferFeedback = false; ///< True to enable ping-pong (buffer pass samples its own previous frame)
+        qreal bufferScale = 1.0; ///< Buffer resolution scale (e.g. 0.5 = half size); clamped 0.125–1.0
+        QString bufferWrap = QStringLiteral("clamp"); ///< "clamp" or "repeat" for iChannel0 sampler
 
         bool isValid() const
         {

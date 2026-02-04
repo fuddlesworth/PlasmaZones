@@ -10,6 +10,7 @@
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTextStream>
+#include <cstddef>
 #include <cstring>
 
 #include "../../core/logging.h"
@@ -117,6 +118,43 @@ static constexpr int ComponentZ = 2;
 static constexpr int ComponentW = 3;
 
 } // namespace RhiConstants
+
+namespace {
+
+// Shared fullscreen-quad pipeline setup for both buffer and image passes (DRY).
+static std::unique_ptr<QRhiGraphicsPipeline> createFullscreenQuadPipeline(
+    QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
+    const QShader& fragmentShader, QRhiShaderResourceBindings* srb)
+{
+    std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
+    pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
+    pipeline->setShaderStages({
+        { QRhiShaderStage::Vertex, vertexShader },
+        { QRhiShaderStage::Fragment, fragmentShader }
+    });
+    QRhiVertexInputLayout inputLayout;
+    inputLayout.setBindings({ { 4 * sizeof(float) } });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) }
+    });
+    pipeline->setVertexInputLayout(inputLayout);
+    pipeline->setShaderResourceBindings(srb);
+    pipeline->setRenderPassDescriptor(rpDesc);
+    QRhiGraphicsPipeline::TargetBlend blend;
+    blend.enable = true;
+    blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
+    blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+    blend.srcAlpha = QRhiGraphicsPipeline::One;
+    blend.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
+    pipeline->setTargetBlends({ blend });
+    if (!pipeline->create()) {
+        return nullptr;
+    }
+    return pipeline;
+}
+
+} // anonymous namespace
 
 ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     : m_item(item)
@@ -256,7 +294,94 @@ void ZoneShaderNodeRhi::prepare()
         }
     }
 
+    // Multi-pass: bake buffer fragment shader(s) when path(s) set
+    const bool multipass = !m_bufferPath.isEmpty();
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    if (multipass && multiBufferMode && m_multiBufferShaderDirty) {
+        m_multiBufferShaderDirty = false;
+        m_multiBufferShadersReady = false;
+        for (int i = 0; i < kMaxBufferPasses; ++i) {
+            m_multiBufferFragmentShaderSources[i].clear();
+            m_multiBufferFragmentShaders[i] = QShader();
+        }
+        const QList<QShaderBaker::GeneratedShader>& targets = bakeTargets();
+        bool allOk = true;
+        for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses; ++i) {
+            const QString& path = m_bufferPaths.at(i);
+            if (!QFileInfo::exists(path)) {
+                allOk = false;
+                break;
+            }
+            QString err;
+            QString src = loadAndExpandShader(path, &err);
+            if (src.isEmpty()) {
+                allOk = false;
+                break;
+            }
+            m_multiBufferFragmentShaderSources[i] = src;
+            m_multiBufferMtimes[i] = QFileInfo(path).lastModified().toMSecsSinceEpoch();
+            QShaderBaker fragmentBaker;
+            fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            fragmentBaker.setGeneratedShaders(targets);
+            fragmentBaker.setSourceString(src.toUtf8(), QShader::FragmentStage);
+            m_multiBufferFragmentShaders[i] = fragmentBaker.bake();
+            if (!m_multiBufferFragmentShaders[i].isValid()) {
+                qCWarning(lcOverlay) << "Multi-buffer shader" << i << "compile failed:" << path << fragmentBaker.errorMessage();
+                allOk = false;
+                break;
+            }
+        }
+        if (allOk && m_bufferPaths.size() > 0) {
+            m_multiBufferShadersReady = true;
+            for (int i = 0; i < kMaxBufferPasses; ++i) {
+                m_multiBufferPipelines[i].reset();
+                m_multiBufferSrbs[i].reset();
+            }
+            m_pipeline.reset();
+            m_srb.reset();
+            m_srbB.reset();
+        } else {
+            m_multiBufferShaderDirty = true; // Retry next frame on failure
+        }
+    }
+    if (multipass && !multiBufferMode && m_bufferShaderDirty) {
+        m_bufferShaderDirty = false;
+        m_bufferShaderReady = false;
+        if (m_bufferFragmentShaderSource.isEmpty()) {
+            if (QFileInfo::exists(m_bufferPath)) {
+                QString err;
+                m_bufferFragmentShaderSource = loadAndExpandShader(m_bufferPath, &err);
+                if (!m_bufferFragmentShaderSource.isEmpty()) {
+                    m_bufferMtime = QFileInfo(m_bufferPath).lastModified().toMSecsSinceEpoch();
+                }
+            }
+        }
+        if (!m_bufferFragmentShaderSource.isEmpty()) {
+            const QList<QShaderBaker::GeneratedShader>& targets = bakeTargets();
+            QShaderBaker fragmentBaker;
+            fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            fragmentBaker.setGeneratedShaders(targets);
+            fragmentBaker.setSourceString(m_bufferFragmentShaderSource.toUtf8(), QShader::FragmentStage);
+            m_bufferFragmentShader = fragmentBaker.bake();
+            if (m_bufferFragmentShader.isValid()) {
+                m_bufferShaderReady = true;
+                m_bufferPipeline.reset();
+                m_bufferSrb.reset();
+            } else {
+                qCWarning(lcOverlay) << "Buffer shader compile failed:" << m_bufferPath << fragmentBaker.errorMessage();
+                m_bufferShaderDirty = true; // Retry next frame on failure
+            }
+        }
+    }
+
     if (!m_shaderReady) {
+        return;
+    }
+
+    // Create buffer targets (single or multi) before the image pass SRB so createImageSrb*()
+    // can bind iChannel0/1/2/3 and syncUniformsFromData() sees correct sizes for iChannelResolution.
+    const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
+    if (!m_bufferPath.isEmpty() && bufferReady && !ensureBufferTarget()) {
         return;
     }
 
@@ -334,11 +459,59 @@ void ZoneShaderNodeRhi::prepare()
             cb->resourceUpdate(batch);
         }
     }
+
+    if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {
+        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        if (batch) {
+            QImage onePixel(1, 1, QImage::Format_RGBA8888);
+            onePixel.fill(Qt::transparent);
+            batch->uploadTexture(m_dummyChannelTexture.get(), onePixel);
+            cb->resourceUpdate(batch);
+            m_dummyChannelTextureNeedsUpload = false;
+        }
+    }
 }
 
 void ZoneShaderNodeRhi::render(const RenderState* state)
 {
     Q_UNUSED(state)
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
+    // Multi-buffer: create buffer targets and pipelines before the image pass SRB, so
+    // createImageSrbMulti() can bind iChannel0/1/2. If we called ensurePipeline() first,
+    // the image SRB would be created with no channel textures bound -> effect samples black.
+    if (!m_bufferPath.isEmpty() && bufferReady) {
+        if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor && !m_bufferRenderTarget->renderPassDescriptor()) {
+            m_bufferPipeline.reset();
+            m_bufferSrb.reset();
+            m_bufferSrbB.reset();
+            m_bufferRenderTarget.reset();
+            m_bufferRenderTargetB.reset();
+            m_bufferRenderPassDescriptor.reset();
+            m_bufferRenderPassDescriptorB.reset();
+            m_bufferTexture.reset();
+            m_bufferTextureB.reset();
+            m_srb.reset();
+            m_srbB.reset();
+        } else if (!multiBufferMode && m_bufferFeedback && m_bufferRenderTargetB && !m_bufferRenderPassDescriptorB && !m_bufferRenderTargetB->renderPassDescriptor()) {
+            m_bufferPipeline.reset();
+            m_bufferSrb.reset();
+            m_bufferSrbB.reset();
+            m_bufferRenderTargetB.reset();
+            m_bufferRenderPassDescriptorB.reset();
+            m_bufferTextureB.reset();
+            m_srbB.reset();
+        }
+        ensureBufferTarget();
+        ensureBufferPipeline();
+        if (!m_srb || (!multiBufferMode && m_bufferFeedback && !m_srbB)) {
+            ensurePipeline();
+        }
+    }
+    // Image pass pipeline/SRB (after buffer setup so multi-buffer has textures to bind)
+    if (m_shaderReady && (!m_pipeline || !m_srb || (m_bufferFeedback && !m_srbB))) {
+        ensurePipeline();
+    }
     if (!m_shaderReady || !m_pipeline || !m_srb) {
         return;
     }
@@ -348,10 +521,65 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         return;
     }
 
+    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady
+        && m_bufferPipeline && m_bufferRenderTarget && m_bufferTexture;
+    const bool multipassMulti = multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0]
+        && m_multiBufferPipelines[0];
+    const bool multipass = multipassSingle || multipassMulti;
+
+    if (multipass) {
+        const QColor clearColor(0, 0, 0, 0);
+        if (multiBufferMode) {
+            const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+            for (int i = 0; i < n; ++i) {
+                if (!m_multiBufferRenderTargets[i] || !m_multiBufferPipelines[i] || !m_multiBufferSrbs[i]) {
+                    continue;
+                }
+                QSize ps = m_multiBufferTextures[i]->pixelSize();
+                cb->beginPass(m_multiBufferRenderTargets[i].get(), clearColor, { 1.0f, 0 });
+                cb->setViewport(QRhiViewport(0, 0, ps.width(), ps.height()));
+                cb->setGraphicsPipeline(m_multiBufferPipelines[i].get());
+                cb->setShaderResources(m_multiBufferSrbs[i].get());
+                QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
+                cb->setVertexInput(0, 1, &vbufBinding);
+                cb->draw(4);
+                cb->endPass();
+            }
+            // iChannelResolution already set and uploaded in prepare() via syncUniformsFromData()
+        } else {
+            if (m_bufferFeedback && !m_bufferFeedbackCleared && m_bufferRenderTarget && m_bufferRenderTargetB) {
+                cb->beginPass(m_bufferRenderTarget.get(), clearColor, { 1.0f, 0 });
+                cb->endPass();
+                cb->beginPass(m_bufferRenderTargetB.get(), clearColor, { 1.0f, 0 });
+                cb->endPass();
+                m_bufferFeedbackCleared = true;
+            }
+            const int writeIndex = m_bufferFeedback ? (m_frame % 2) : 0;
+            QRhiTextureRenderTarget* bufferRT = (m_bufferFeedback && writeIndex == 1 && m_bufferRenderTargetB)
+                ? m_bufferRenderTargetB.get() : m_bufferRenderTarget.get();
+            QRhiShaderResourceBindings* bufferSrb = (m_bufferFeedback && writeIndex == 1 && m_bufferSrbB)
+                ? m_bufferSrbB.get() : m_bufferSrb.get();
+            QRhiTexture* writtenTexture = (m_bufferFeedback && writeIndex == 1 && m_bufferTextureB)
+                ? m_bufferTextureB.get() : m_bufferTexture.get();
+            cb->beginPass(bufferRT, clearColor, { 1.0f, 0 });
+            cb->setViewport(QRhiViewport(0, 0, writtenTexture->pixelSize().width(), writtenTexture->pixelSize().height()));
+            cb->setGraphicsPipeline(m_bufferPipeline.get());
+            cb->setShaderResources(bufferSrb);
+            QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
+            cb->setVertexInput(0, 1, &vbufBinding);
+            cb->draw(4);
+            cb->endPass();
+        }
+        const QColor mainClear(0, 0, 0, 0);
+        cb->beginPass(rt, mainClear, { 1.0f, 0 });
+    }
+
     QSize outputSize = rt->pixelSize();
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
     cb->setGraphicsPipeline(m_pipeline.get());
-    cb->setShaderResources();
+    const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
+    QRhiShaderResourceBindings* imageSrb = (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
+    cb->setShaderResources(imageSrb);
     QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
     cb->setVertexInput(0, 1, &vbufBinding);
     cb->draw(4);
@@ -524,6 +752,135 @@ void ZoneShaderNodeRhi::setLabelsTexture(const QImage& image)
     m_uniformsDirty = true;
 }
 
+void ZoneShaderNodeRhi::setBufferShaderPath(const QString& path)
+{
+    setBufferShaderPaths(path.isEmpty() ? QStringList() : QStringList{path});
+}
+
+void ZoneShaderNodeRhi::setBufferShaderPaths(const QStringList& paths)
+{
+    QStringList trimmed;
+    for (int i = 0; i < qMin(paths.size(), kMaxBufferPasses); ++i) {
+        if (!paths.at(i).isEmpty()) {
+            trimmed.append(paths.at(i));
+        }
+    }
+    if (m_bufferPaths == trimmed) {
+        return;
+    }
+    m_bufferPaths = trimmed;
+    m_bufferPath = trimmed.isEmpty() ? QString() : trimmed.constFirst();
+
+    qCDebug(lcOverlay) << "ZoneShaderNodeRhi setBufferShaderPaths count=" << m_bufferPaths.size()
+                       << "multiBufferMode=" << (m_bufferPaths.size() > 1);
+
+    m_bufferShaderDirty = true;
+    m_bufferShaderReady = false;
+    m_bufferFragmentShaderSource.clear();
+    m_bufferMtime = 0;
+    m_multiBufferShadersReady = false;
+    m_multiBufferShaderDirty = true;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferFragmentShaderSources[i].clear();
+        m_multiBufferFragmentShaders[i] = QShader();
+        m_multiBufferMtimes[i] = 0;
+    }
+    if (m_bufferPaths.size() == 1) {
+        const QString& path = m_bufferPaths.constFirst();
+        if (QFileInfo::exists(path)) {
+            QString err;
+            m_bufferFragmentShaderSource = loadAndExpandShader(path, &err);
+            if (!m_bufferFragmentShaderSource.isEmpty()) {
+                m_bufferMtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
+            }
+        }
+        m_bufferShaderDirty = true;
+    }
+
+    m_bufferPipeline.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    m_bufferTexture.reset();
+    m_bufferTextureB.reset();
+    m_bufferRenderTarget.reset();
+    m_bufferRenderTargetB.reset();
+    m_bufferRenderPassDescriptor.reset();
+    m_bufferRenderPassDescriptorB.reset();
+    m_bufferFeedbackCleared = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferPipelines[i].reset();
+        m_multiBufferSrbs[i].reset();
+        m_multiBufferTextures[i].reset();
+        m_multiBufferRenderTargets[i].reset();
+        m_multiBufferRenderPassDescriptors[i].reset();
+    }
+    m_pipeline.reset();
+    m_srb.reset();
+    m_srbB.reset();
+}
+
+void ZoneShaderNodeRhi::setBufferFeedback(bool enable)
+{
+    if (m_bufferFeedback == enable) {
+        return;
+    }
+    m_bufferFeedback = enable;
+    m_bufferPipeline.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    m_srb.reset();
+    m_srbB.reset();
+    m_bufferTextureB.reset();
+    m_bufferRenderTargetB.reset();
+    m_bufferRenderPassDescriptorB.reset();
+    m_bufferFeedbackCleared = false;
+}
+
+void ZoneShaderNodeRhi::setBufferScale(qreal scale)
+{
+    const qreal clamped = qBound(0.125, scale, 1.0);
+    if (qFuzzyCompare(m_bufferScale, clamped)) {
+        return;
+    }
+    m_bufferScale = clamped;
+    m_bufferTexture.reset();
+    m_bufferTextureB.reset();
+    m_bufferRenderTarget.reset();
+    m_bufferRenderTargetB.reset();
+    m_bufferRenderPassDescriptor.reset();
+    m_bufferRenderPassDescriptorB.reset();
+    m_bufferPipeline.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    m_srb.reset();
+    m_srbB.reset();
+    m_bufferFeedbackCleared = false;
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferTextures[i].reset();
+        m_multiBufferRenderTargets[i].reset();
+        m_multiBufferRenderPassDescriptors[i].reset();
+        m_multiBufferPipelines[i].reset();
+        m_multiBufferSrbs[i].reset();
+    }
+}
+
+void ZoneShaderNodeRhi::setBufferWrap(const QString& wrap)
+{
+    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    if (m_bufferWrap == use) {
+        return;
+    }
+    m_bufferWrap = use;
+    m_bufferSampler.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    m_srb.reset();
+    m_srbB.reset();
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferSrbs[i].reset();
+    }
+}
+
 bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
 {
     QString err;
@@ -602,6 +959,248 @@ void ZoneShaderNodeRhi::invalidateUniforms()
     m_zoneDataDirty = true;
 }
 
+bool ZoneShaderNodeRhi::ensureBufferTarget()
+{
+    if (m_width <= 0 || m_height <= 0) {
+        return true;
+    }
+    QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+    if (!rhi) {
+        return false;
+    }
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
+    const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
+    const QSize bufferSize(bufferW, bufferH);
+    auto createTextureAndRT = [rhi, bufferSize](std::unique_ptr<QRhiTexture>& tex,
+                                                std::unique_ptr<QRhiTextureRenderTarget>& rt,
+                                                std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
+        tex.reset(rhi->newTexture(QRhiTexture::RGBA8, bufferSize, 1, QRhiTexture::RenderTarget));
+        if (!tex->create()) {
+            return false;
+        }
+        QRhiTextureRenderTargetDescription desc(QRhiColorAttachment(tex.get()));
+        rt.reset(rhi->newTextureRenderTarget(desc));
+        rpd.reset(rt->newCompatibleRenderPassDescriptor());
+        rt->setRenderPassDescriptor(rpd.get());
+        return rt->create();
+    };
+
+    if (multiBufferMode) {
+        const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+        bool needCreate = false;
+        for (int i = 0; i < n; ++i) {
+            if (!m_multiBufferTextures[i] || m_multiBufferTextures[i]->pixelSize() != bufferSize) {
+                needCreate = true;
+                break;
+            }
+        }
+        if (needCreate) {
+            for (int i = 0; i < n; ++i) {
+                if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
+                                        m_multiBufferRenderPassDescriptors[i])) {
+                    qCWarning(lcOverlay) << "Failed to create multi-buffer texture" << i;
+                    return false;
+                }
+            }
+            for (int i = 0; i < kMaxBufferPasses; ++i) {
+                m_multiBufferPipelines[i].reset();
+                m_multiBufferSrbs[i].reset();
+            }
+            m_pipeline.reset();
+            m_srb.reset();
+            m_srbB.reset();
+        }
+        if (!m_bufferSampler) {
+            const QRhiSampler::AddressMode addr = (m_bufferWrap == QLatin1String("repeat"))
+                ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+            if (!m_bufferSampler->create()) {
+                qCWarning(lcOverlay) << "Failed to create buffer sampler";
+                return false;
+            }
+        }
+        return true;
+    }
+
+    if (!m_bufferTexture) {
+        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
+            qCWarning(lcOverlay) << "Failed to create buffer texture";
+            return false;
+        }
+        if (!m_bufferSampler) {
+            const QRhiSampler::AddressMode addr = (m_bufferWrap == QLatin1String("repeat"))
+                ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+            if (!m_bufferSampler->create()) {
+                qCWarning(lcOverlay) << "Failed to create buffer sampler";
+                return false;
+            }
+        }
+        if (m_bufferFeedback
+            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
+            qCWarning(lcOverlay) << "Failed to create buffer texture B (ping-pong)";
+            return false;
+        }
+        m_srb.reset();
+        m_srbB.reset();
+        return true;
+    }
+    if (m_bufferTexture->pixelSize() != bufferSize) {
+        if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
+            qCWarning(lcOverlay) << "Failed to resize buffer texture";
+            return false;
+        }
+        if (m_bufferFeedback
+            && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
+            qCWarning(lcOverlay) << "Failed to resize buffer texture B";
+            return false;
+        }
+        m_bufferPipeline.reset();
+        m_bufferSrb.reset();
+        m_bufferSrbB.reset();
+        m_srb.reset();
+        m_srbB.reset();
+    } else if (m_bufferFeedback && !m_bufferTextureB) {
+        if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
+            qCWarning(lcOverlay) << "Failed to create buffer texture B (ping-pong)";
+            return false;
+        }
+        m_bufferPipeline.reset();
+        m_bufferSrb.reset();
+        m_srb.reset();
+        m_srbB.reset();
+    }
+    if (m_bufferTexture && !m_bufferSampler) {
+        const QRhiSampler::AddressMode addr = (m_bufferWrap == QLatin1String("repeat"))
+            ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+        m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+        if (!m_bufferSampler->create()) {
+            qCWarning(lcOverlay) << "Failed to create buffer sampler";
+            return false;
+        }
+        m_bufferSrb.reset();
+        m_bufferSrbB.reset();
+        m_srb.reset();
+        m_srbB.reset();
+    }
+    return true;
+}
+
+bool ZoneShaderNodeRhi::ensureBufferPipeline()
+{
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    if (multiBufferMode) {
+        if (!m_multiBufferShadersReady || !m_multiBufferTextures[0] || !m_multiBufferRenderTargets[0]) {
+            return false;
+        }
+        QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+        if (!rhi || !m_bufferSampler) {
+            return false;
+        }
+        const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+        for (int i = 0; i < n; ++i) {
+            QRhiRenderPassDescriptor* rpDesc = m_multiBufferRenderPassDescriptors[i]
+                ? m_multiBufferRenderPassDescriptors[i].get()
+                : m_multiBufferRenderTargets[i]->renderPassDescriptor();
+            if (!rpDesc) {
+                return false;
+            }
+            if (!m_multiBufferSrbs[i]) {
+                std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
+                QVector<QRhiShaderResourceBinding> bindings;
+                bindings.append(QRhiShaderResourceBinding::uniformBuffer(
+                    0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+                for (int j = 0; j < i; ++j) {
+                    if (m_multiBufferTextures[j] && m_bufferSampler) {
+                        bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                            2 + j, QRhiShaderResourceBinding::FragmentStage,
+                            m_multiBufferTextures[j].get(), m_bufferSampler.get()));
+                    }
+                }
+                srb->setBindings(bindings.begin(), bindings.end());
+                if (!srb->create()) {
+                    m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ");
+                    return false;
+                }
+                m_multiBufferSrbs[i] = std::move(srb);
+            }
+            if (!m_multiBufferPipelines[i]) {
+                QRhiRenderPassDescriptor* rpDescI = m_multiBufferRenderPassDescriptors[i]
+                    ? m_multiBufferRenderPassDescriptors[i].get()
+                    : m_multiBufferRenderTargets[i]->renderPassDescriptor();
+                m_multiBufferPipelines[i] = createFullscreenQuadPipeline(rhi, rpDescI,
+                    m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get());
+                if (!m_multiBufferPipelines[i]) {
+                    m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ");
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    if (!m_bufferShaderReady || !m_bufferTexture || !m_bufferRenderTarget) {
+        return false;
+    }
+    if (m_bufferFeedback && (!m_bufferTextureB || !m_bufferRenderTargetB)) {
+        return false;
+    }
+    QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
+    if (!rhi) {
+        return false;
+    }
+    QRhiRenderPassDescriptor* rpDesc = m_bufferRenderPassDescriptor ? m_bufferRenderPassDescriptor.get() : m_bufferRenderTarget->renderPassDescriptor();
+    if (!rpDesc) {
+        return false;
+    }
+    QVector<quint32> format = rpDesc->serializedFormat();
+    if (m_bufferPipeline && m_bufferRenderPassFormat != format) {
+        m_bufferPipeline.reset();
+        m_bufferSrb.reset();
+        m_bufferSrbB.reset();
+    }
+    m_bufferRenderPassFormat = format;
+
+    auto createBufferSrb = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
+        std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
+        QVector<QRhiShaderResourceBinding> bindings;
+        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
+            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+        if (channel0Texture && m_bufferSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                2, QRhiShaderResourceBinding::FragmentStage, channel0Texture, m_bufferSampler.get()));
+        }
+        srb->setBindings(bindings.begin(), bindings.end());
+        return srb->create() ? std::move(srb) : nullptr;
+    };
+
+    if (!m_bufferSrb) {
+        QRhiTexture* prevFrame = m_bufferFeedback ? m_bufferTextureB.get() : nullptr;
+        m_bufferSrb = createBufferSrb(prevFrame);
+        if (!m_bufferSrb) {
+            m_shaderError = QStringLiteral("Failed to create buffer pass SRB");
+            return false;
+        }
+    }
+    if (m_bufferFeedback && !m_bufferSrbB) {
+        m_bufferSrbB = createBufferSrb(m_bufferTexture.get());
+        if (!m_bufferSrbB) {
+            m_shaderError = QStringLiteral("Failed to create buffer pass SRB B");
+            return false;
+        }
+    }
+
+    if (!m_bufferPipeline) {
+        m_bufferPipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_bufferFragmentShader, m_bufferSrb.get());
+        if (!m_bufferPipeline) {
+            m_shaderError = QStringLiteral("Failed to create buffer pipeline");
+            return false;
+        }
+    }
+    return true;
+}
+
 bool ZoneShaderNodeRhi::ensurePipeline()
 {
     QRhi* rhi = m_item ? m_item->window() ? m_item->window()->rhi() : nullptr : nullptr;
@@ -619,11 +1218,18 @@ bool ZoneShaderNodeRhi::ensurePipeline()
     if (m_pipeline && m_renderPassFormat != format) {
         m_pipeline.reset();
         m_srb.reset();
+        m_srbB.reset();
     }
     m_renderPassFormat = format;
 
-    if (!m_srb) {
-        m_srb.reset(rhi->newShaderResourceBindings());
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    auto createImageSrbSingle = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
+        QRhiSampler* channel0Sampler = (channel0Texture && m_bufferSampler) ? m_bufferSampler.get() : nullptr;
+        if (!channel0Texture && !m_bufferPath.isEmpty()) {
+            channel0Texture = m_dummyChannelTexture.get();
+            channel0Sampler = m_dummyChannelSampler.get();
+        }
+        std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
         bindings.append(QRhiShaderResourceBinding::uniformBuffer(
             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
@@ -631,39 +1237,93 @@ bool ZoneShaderNodeRhi::ensurePipeline()
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
         }
-        m_srb->setBindings(bindings.begin(), bindings.end());
-        if (!m_srb->create()) {
+        if (channel0Texture && channel0Sampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                2, QRhiShaderResourceBinding::FragmentStage, channel0Texture, channel0Sampler));
+        }
+        srb->setBindings(bindings.begin(), bindings.end());
+        return srb->create() ? std::move(srb) : nullptr;
+    };
+    auto createImageSrbMulti = [rhi, this]() -> std::unique_ptr<QRhiShaderResourceBindings> {
+        std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
+        QVector<QRhiShaderResourceBinding> bindings;
+        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
+            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+        if (m_labelsTexture && m_labelsSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+        }
+        const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
+        QRhiSampler* bufferSam = m_bufferSampler.get();
+        QRhiTexture* dummyTex = m_dummyChannelTexture.get();
+        QRhiSampler* dummySam = m_dummyChannelSampler.get();
+        for (int i = 0; i < n; ++i) {
+            QRhiTexture* tex = m_multiBufferTextures[i] ? m_multiBufferTextures[i].get() : dummyTex;
+            QRhiSampler* sam = (tex == dummyTex) ? dummySam : bufferSam;
+            if (tex && sam) {
+                bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                    2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
+            }
+        }
+        srb->setBindings(bindings.begin(), bindings.end());
+        return srb->create() ? std::move(srb) : nullptr;
+    };
+
+    if (!m_srb) {
+        if (multiBufferMode) {
+            if (!m_dummyChannelTexture) {
+                m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+                if (m_dummyChannelTexture->create()) {
+                    m_dummyChannelTextureNeedsUpload = true;
+                } else {
+                    m_dummyChannelTexture.reset();
+                }
+            }
+            if (!m_dummyChannelSampler && m_dummyChannelTexture) {
+                m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
+                                                             QRhiSampler::None, QRhiSampler::ClampToEdge,
+                                                             QRhiSampler::ClampToEdge));
+                if (!m_dummyChannelSampler->create()) {
+                    m_dummyChannelSampler.reset();
+                }
+            }
+            m_srb = createImageSrbMulti();
+        } else {
+            if (!m_bufferPath.isEmpty() && !m_bufferTexture && !m_dummyChannelTexture) {
+                m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+                if (m_dummyChannelTexture->create()) {
+                    m_dummyChannelTextureNeedsUpload = true;
+                } else {
+                    m_dummyChannelTexture.reset();
+                }
+                if (!m_dummyChannelSampler) {
+                    m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
+                                                                QRhiSampler::None, QRhiSampler::ClampToEdge,
+                                                                QRhiSampler::ClampToEdge));
+                    if (!m_dummyChannelSampler->create()) {
+                        m_dummyChannelSampler.reset();
+                    }
+                }
+            }
+            m_srb = createImageSrbSingle(m_bufferTexture.get());
+        }
+        if (!m_srb) {
             m_shaderError = QStringLiteral("Failed to create shader resource bindings");
+            return false;
+        }
+    }
+    if (!multiBufferMode && m_bufferFeedback && m_bufferTextureB && !m_srbB) {
+        m_srbB = createImageSrbSingle(m_bufferTextureB.get());
+        if (!m_srbB) {
+            m_shaderError = QStringLiteral("Failed to create image pass SRB B");
             return false;
         }
     }
 
     if (!m_pipeline) {
-        m_pipeline.reset(rhi->newGraphicsPipeline());
-        m_pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
-        m_pipeline->setShaderStages({
-            { QRhiShaderStage::Vertex, m_vertexShader },
-            { QRhiShaderStage::Fragment, m_fragmentShader }
-        });
-        QRhiVertexInputLayout inputLayout;
-        inputLayout.setBindings({ { 4 * sizeof(float) } });
-        inputLayout.setAttributes({
-            { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
-            { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) }
-        });
-        m_pipeline->setVertexInputLayout(inputLayout);
-        m_pipeline->setShaderResourceBindings(m_srb.get());
-        m_pipeline->setRenderPassDescriptor(rpDesc);
-        QRhiGraphicsPipeline::TargetBlend blend;
-        blend.enable = true;
-        blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
-        blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-        blend.srcAlpha = QRhiGraphicsPipeline::One;
-        blend.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-        m_pipeline->setTargetBlends({ blend });
-        if (!m_pipeline->create()) {
+        m_pipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_fragmentShader, m_srb.get());
+        if (!m_pipeline) {
             m_shaderError = QStringLiteral("Failed to create graphics pipeline");
-            m_pipeline.reset();
             return false;
         }
     }
@@ -746,10 +1406,59 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
             std::memset(m_uniforms.zoneParams[i], 0, sizeof(m_uniforms.zoneParams[i]));
         }
     }
+
+    // iChannelResolution (std140: vec2[4], each element 16 bytes)
+    const bool multiBufferMode = m_bufferPaths.size() > 1;
+    const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), 4) : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
+    for (int i = 0; i < 4; ++i) {
+        if (i < numChannels) {
+            if (multiBufferMode && m_multiBufferTextures[i]) {
+                QSize ps = m_multiBufferTextures[i]->pixelSize();
+                m_uniforms.iChannelResolution[i][0] = static_cast<float>(ps.width());
+                m_uniforms.iChannelResolution[i][1] = static_cast<float>(ps.height());
+            } else if (!multiBufferMode && i == 0 && m_bufferTexture && m_width > 0 && m_height > 0) {
+                const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
+                const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
+                m_uniforms.iChannelResolution[0][0] = static_cast<float>(bufferW);
+                m_uniforms.iChannelResolution[0][1] = static_cast<float>(bufferH);
+            } else {
+                m_uniforms.iChannelResolution[i][0] = 0.0f;
+                m_uniforms.iChannelResolution[i][1] = 0.0f;
+            }
+        } else {
+            m_uniforms.iChannelResolution[i][0] = 0.0f;
+            m_uniforms.iChannelResolution[i][1] = 0.0f;
+        }
+        m_uniforms.iChannelResolution[i][2] = 0.0f;
+        m_uniforms.iChannelResolution[i][3] = 0.0f;
+    }
 }
 
 void ZoneShaderNodeRhi::releaseRhiResources()
 {
+    m_bufferPipeline.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    m_bufferTexture.reset();
+    m_bufferTextureB.reset();
+    m_bufferRenderTarget.reset();
+    m_bufferRenderTargetB.reset();
+    m_bufferRenderPassDescriptor.reset();
+    m_bufferRenderPassDescriptorB.reset();
+    m_bufferSampler.reset();
+    m_bufferRenderPassFormat.clear();
+    m_bufferFeedbackCleared = false;
+    m_srbB.reset();
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferPipelines[i].reset();
+        m_multiBufferSrbs[i].reset();
+        m_multiBufferTextures[i].reset();
+        m_multiBufferRenderTargets[i].reset();
+        m_multiBufferRenderPassDescriptors[i].reset();
+    }
+    m_dummyChannelTexture.reset();
+    m_dummyChannelSampler.reset();
+    m_dummyChannelTextureNeedsUpload = false;
     m_pipeline.reset();
     m_srb.reset();
     m_labelsTexture.reset();
@@ -758,6 +1467,10 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_vbo.reset();
     m_vertexShader = QShader();
     m_fragmentShader = QShader();
+    m_bufferFragmentShader = QShader();
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferFragmentShaders[i] = QShader();
+    }
     m_renderPassFormat.clear();
     m_initialized = false;
     m_vboUploaded = false;

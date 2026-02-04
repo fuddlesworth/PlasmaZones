@@ -270,6 +270,12 @@ void ShaderRegistry::loadShaderFromDir(const QString& shaderDir, bool isUserShad
     ShaderInfo info = loadShaderMetadata(shaderDir);
     info.isUserShader = isUserShader;
 
+    // Multipass requires at least one buffer shader; treat missing as load failure (same as missing effect.frag)
+    if (info.isMultipass && info.bufferShaderPaths.isEmpty()) {
+        qCWarning(lcCore) << "Skipping multipass shader (missing buffer shader(s)):" << shaderDir;
+        return;
+    }
+
     // Validate fragment shader exists
     if (!QFile::exists(info.sourcePath)) {
         qCWarning(lcCore) << "Shader missing fragment shader:" << info.sourcePath;
@@ -330,6 +336,44 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
     const QString vertShaderName = root.value(QLatin1String("vertexShader")).toString(QStringLiteral("zone.vert"));
     info.sourcePath = dir.filePath(fragShaderName);
     info.vertexShaderPath = dir.filePath(vertShaderName);
+
+    // Multi-pass: one or more buffer pass shaders (A→B→C→D)
+    info.isMultipass = root.value(QLatin1String("multipass")).toBool(false);
+    const QJsonArray bufferShadersArray = root.value(QLatin1String("bufferShaders")).toArray();
+    if (!bufferShadersArray.isEmpty()) {
+        for (int i = 0; i < qMin(bufferShadersArray.size(), 4); ++i) {
+            const QString name = bufferShadersArray.at(i).toString();
+            if (!name.isEmpty()) {
+                info.bufferShaderPaths.append(dir.filePath(name));
+            }
+        }
+    }
+    if (info.bufferShaderPaths.isEmpty()) {
+        const QString bufferShaderName = root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
+        info.bufferShaderPath = dir.filePath(bufferShaderName);
+        info.bufferShaderPaths.append(info.bufferShaderPath);
+    } else {
+        info.bufferShaderPath = info.bufferShaderPaths.constFirst();
+    }
+    if (info.isMultipass) {
+        bool allExist = true;
+        for (const QString& path : info.bufferShaderPaths) {
+            if (!QFile::exists(path)) {
+                qCWarning(lcCore) << "Multipass shader missing buffer shader:" << path;
+                allExist = false;
+                break;
+            }
+        }
+        if (!allExist) {
+            info.bufferShaderPaths.clear();
+            info.bufferShaderPath.clear();
+        }
+    }
+    info.bufferFeedback = root.value(QLatin1String("bufferFeedback")).toBool(false);
+    qreal scale = root.value(QLatin1String("bufferScale")).toDouble(1.0);
+    info.bufferScale = qBound(0.125, scale, 1.0);
+    const QString wrap = root.value(QLatin1String("bufferWrap")).toString(QStringLiteral("clamp"));
+    info.bufferWrap = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
 
     // Parse parameters
     const QJsonArray paramsArray = root.value(QLatin1String("parameters")).toArray();

@@ -6,13 +6,8 @@
 //   #include <common.glsl>   (from global shaders dir)
 //   #include "common.glsl"   (from current shader dir if copied locally)
 //
-// The main shader must declare the ZoneUniforms block; this file only provides
-// helper functions.
-//
-// Labels texture (binding 1): pre-rendered zone numbers. Optional - shaders may
-// sample it to composite labels over the zone effect.
-layout(binding = 1) uniform sampler2D uZoneLabels;
-
+// The main shader must declare the ZoneUniforms block and any sampler bindings;
+// this file only provides helper functions (no layout/binding declarations).
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 
@@ -61,23 +56,23 @@ vec2 hash22(vec2 p) {
 }
 
 // Composite pre-rendered zone labels over the current color (premult alpha over).
-// uv: fragCoord / max(iResolution, vec2(0.0001)); no Y flip (QImage row 0 = texture v=0)
-vec4 compositeLabels(vec4 color, vec2 uv) {
-    vec4 labels = texture(uZoneLabels, uv);
+// labelsTex: sampler at binding 1; uv: fragCoord / max(iResolution, vec2(0.0001)); no Y flip
+vec4 compositeLabels(vec4 color, vec2 uv, sampler2D labelsTex) {
+    vec4 labels = texture(labelsTex, uv);
     color.rgb = color.rgb * (1.0 - labels.a) + labels.rgb;
     color.a = labels.a + color.a * (1.0 - labels.a);
     return color;
 }
 
-// UV for labels texture sampling. Use with compositeLabels(color, labelsUv(fragCoord)).
+// UV for labels texture sampling. Use with compositeLabels(color, labelsUv(fragCoord), labelsTex).
 vec2 labelsUv(vec2 fragCoord) {
     vec2 res = max(iResolution, vec2(0.0001));
     return fragCoord / res;
 }
 
 // Convenience: composite labels using fragCoord (computes UV internally)
-vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord) {
-    return compositeLabels(color, labelsUv(fragCoord));
+vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord, sampler2D labelsTex) {
+    return compositeLabels(color, labelsUv(fragCoord), labelsTex);
 }
 
 // Premultiplied alpha over blend: result = src over dst
