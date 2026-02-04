@@ -706,7 +706,11 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_vboUploaded = false;
     m_didFullUploadOnce = false;
     m_shaderReady = false;
-    m_shaderDirty = true; // Force re-bake on next prepare() after context loss
+    m_shaderDirty = true;
+    m_uniformsDirty = true;
+    m_timeDirty = true;
+    m_zoneDataDirty = true;
+    // Next prepare() will re-create all RHI resources and do a full UBO upload
 }
 
 WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath)
