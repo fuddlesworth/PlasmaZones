@@ -136,6 +136,11 @@ void ZoneShaderItem::setBufferShaderPath(const QString& path)
         return;
     }
     m_bufferShaderPath = path;
+    const QStringList newPaths = path.isEmpty() ? QStringList() : QStringList{path};
+    if (m_bufferShaderPaths != newPaths) {
+        m_bufferShaderPaths = newPaths;
+        Q_EMIT bufferShaderPathsChanged();
+    }
     m_shaderDirty = true;
     update();
     Q_EMIT bufferShaderPathChanged();
@@ -147,6 +152,11 @@ void ZoneShaderItem::setBufferShaderPaths(const QStringList& paths)
         return;
     }
     m_bufferShaderPaths = paths;
+    const QString newPath = paths.isEmpty() ? QString() : paths.constFirst();
+    if (m_bufferShaderPath != newPath) {
+        m_bufferShaderPath = newPath;
+        Q_EMIT bufferShaderPathChanged();
+    }
     m_shaderDirty = true;
     update();
     Q_EMIT bufferShaderPathsChanged();

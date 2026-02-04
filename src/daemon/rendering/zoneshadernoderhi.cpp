@@ -300,6 +300,10 @@ void ZoneShaderNodeRhi::prepare()
     if (multipass && multiBufferMode && m_multiBufferShaderDirty) {
         m_multiBufferShaderDirty = false;
         m_multiBufferShadersReady = false;
+        for (int i = 0; i < kMaxBufferPasses; ++i) {
+            m_multiBufferFragmentShaderSources[i].clear();
+            m_multiBufferFragmentShaders[i] = QShader();
+        }
         const QList<QShaderBaker::GeneratedShader>& targets = bakeTargets();
         bool allOk = true;
         for (int i = 0; i < m_bufferPaths.size() && i < kMaxBufferPasses; ++i) {
@@ -336,6 +340,8 @@ void ZoneShaderNodeRhi::prepare()
             m_pipeline.reset();
             m_srb.reset();
             m_srbB.reset();
+        } else {
+            m_multiBufferShaderDirty = true; // Retry next frame on failure
         }
     }
     if (multipass && !multiBufferMode && m_bufferShaderDirty) {
@@ -363,6 +369,7 @@ void ZoneShaderNodeRhi::prepare()
                 m_bufferSrb.reset();
             } else {
                 qCWarning(lcOverlay) << "Buffer shader compile failed:" << m_bufferPath << fragmentBaker.errorMessage();
+                m_bufferShaderDirty = true; // Retry next frame on failure
             }
         }
     }
@@ -371,10 +378,10 @@ void ZoneShaderNodeRhi::prepare()
         return;
     }
 
-    // Multi-buffer: create buffer targets before the image pass SRB so createImageSrbMulti()
-    // can bind iChannel0/1/2/3. Otherwise the image pass would run with unbound channels (black).
+    // Create buffer targets (single or multi) before the image pass SRB so createImageSrb*()
+    // can bind iChannel0/1/2/3 and syncUniformsFromData() sees correct sizes for iChannelResolution.
     const bool bufferReady = multiBufferMode ? m_multiBufferShadersReady : m_bufferShaderReady;
-    if (!m_bufferPath.isEmpty() && bufferReady && multiBufferMode && !ensureBufferTarget()) {
+    if (!m_bufferPath.isEmpty() && bufferReady && !ensureBufferTarget()) {
         return;
     }
 
@@ -538,30 +545,7 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
                 cb->draw(4);
                 cb->endPass();
             }
-            QRhi* rhi = m_item && m_item->window() ? m_item->window()->rhi() : nullptr;
-            if (rhi) {
-                QRhiResourceUpdateBatch* uboBatch = rhi->nextResourceUpdateBatch();
-                if (uboBatch) {
-                    const int nChan = qMin(m_bufferPaths.size(), kMaxBufferPasses);
-                    for (int i = 0; i < 4; ++i) {
-                        if (i < nChan && m_multiBufferTextures[i]) {
-                            QSize ps = m_multiBufferTextures[i]->pixelSize();
-                            m_uniforms.iChannelResolution[i][0] = static_cast<float>(ps.width());
-                            m_uniforms.iChannelResolution[i][1] = static_cast<float>(ps.height());
-                        } else {
-                            m_uniforms.iChannelResolution[i][0] = 0.0f;
-                            m_uniforms.iChannelResolution[i][1] = 0.0f;
-                        }
-                        m_uniforms.iChannelResolution[i][2] = 0.0f;
-                        m_uniforms.iChannelResolution[i][3] = 0.0f;
-                    }
-                    uboBatch->updateDynamicBuffer(m_ubo.get(),
-                        offsetof(ZoneShaderUniforms, iChannelResolution),
-                        sizeof(m_uniforms.iChannelResolution),
-                        &m_uniforms.iChannelResolution);
-                    cb->resourceUpdate(uboBatch);
-                }
-            }
+            // iChannelResolution already set and uploaded in prepare() via syncUniformsFromData()
         } else {
             if (m_bufferFeedback && !m_bufferFeedbackCleared && m_bufferRenderTarget && m_bufferRenderTargetB) {
                 cb->beginPass(m_bufferRenderTarget.get(), clearColor, { 1.0f, 0 });
