@@ -24,6 +24,7 @@ Build-Depends:
  libkf6notifications-dev,
  libkf6colorscheme-dev,
  kwin-dev,
+ libxkbcommon-dev,
  liblayershellqtinterface-dev,
  libplasmaactivities-dev,
 Standards-Version: 4.6.2

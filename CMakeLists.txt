@@ -84,6 +84,7 @@ include(FeatureSummary)
 
 # Find Qt6
 find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS
+    Concurrent
     Core
     Quick
     QuickControls2
