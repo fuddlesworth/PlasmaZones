@@ -374,13 +374,13 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float borderWidth = max(params.y, 1.0);
     
     // Convert normalized coords to pixels (screen coords: Y=0 at top)
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     
     // Local UV within the zone (0-1), screen coords (Y=0 at top of zone)
-    vec2 localUV = (fragCoord - rectPos) / rectSize;
+    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     localUV = clamp(localUV, 0.0, 1.0);
     
     // Signed distance to zone boundary
@@ -433,9 +433,8 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     }
     
     // Border rendering
-    float borderDist = abs(d);
-    if (borderDist < borderWidth + 1.0) {
-        float border = 1.0 - smoothstep(0.0, borderWidth, borderDist);
+    float border = softBorder(d, borderWidth);
+    if (border > 0.0) {
         
         vec3 edgeColor = borderColor.rgb;
         if (length(edgeColor) < 0.01) {
@@ -453,7 +452,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     
     // Outer glow for highlighted zones
     if (isHighlighted && d > 0.0 && d < 20.0) {
-        float glow = exp(-d / 8.0) * 0.4;
+        float glow = expGlow(d, 8.0, 0.4);
         result.rgb += getArethaCyan() * glow;
         result.a = max(result.a, glow * 0.6);
     }
@@ -481,16 +480,10 @@ void main() {
         bool isHighlighted = zoneParams[i].z > 0.5;
         vec4 zoneColor = renderArethaZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], isHighlighted);
-        
-        // Alpha compositing (over operator for overlapping zones)
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
-    
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

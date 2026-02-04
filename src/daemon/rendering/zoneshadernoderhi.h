@@ -59,6 +59,7 @@ public:
     void setCustomColor6(const QColor& color) override;
     void setCustomColor7(const QColor& color) override;
     void setCustomColor8(const QColor& color) override;
+    void setLabelsTexture(const QImage& image) override;
     bool loadVertexShader(const QString& path) override;
     bool loadFragmentShader(const QString& path) override;
     void setVertexShaderSource(const QString& source) override;
@@ -122,6 +123,13 @@ private:
     QColor m_customColor6 = Qt::white;
     QColor m_customColor7 = Qt::white;
     QColor m_customColor8 = Qt::white;
+
+    // Labels texture (binding 1)
+    QImage m_labelsImage;
+    QImage m_transparentFallbackImage;
+    std::unique_ptr<QRhiTexture> m_labelsTexture;
+    std::unique_ptr<QRhiSampler> m_labelsSampler;
+    bool m_labelsTextureDirty = false;
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */

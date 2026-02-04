@@ -82,8 +82,8 @@ vec4 renderRotatingTilesZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bor
     float baseAngleDeg = abs(customParams[0].w) > 0.01 ? customParams[0].w : 30.0;
     float fillOpacity = customParams[1].x > 0.01 ? customParams[1].x : 0.9;
 
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     vec2 localFragCoord = fragCoord - rectPos;
@@ -117,15 +117,14 @@ vec4 renderRotatingTilesZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bor
         }
     }
 
-    float borderDist = abs(d);
-    if (borderDist < effectiveBorderWidth + 2.0) {
-        float border = 1.0 - smoothstep(0.0, effectiveBorderWidth, borderDist);
+    float border = softBorder(d, effectiveBorderWidth);
+    if (border > 0.0) {
         result.rgb = mix(result.rgb, borderClr, border);
         result.a = max(result.a, border * 0.98);
     }
 
     if (isHighlighted && d > 0.0 && d < 45.0) {
-        float glow = exp(-d / 12.0) * 0.6;
+        float glow = expGlow(d, 12.0, 0.6);
         result.rgb += tint * glow;
         result.a = max(result.a, glow * 0.65);
     }
@@ -134,7 +133,7 @@ vec4 renderRotatingTilesZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bor
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -148,15 +147,10 @@ void main() {
             continue;
 
         vec4 zoneColor = renderRotatingTilesZone(fragCoord, rect, zoneFillColors[i], zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
-
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
 
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

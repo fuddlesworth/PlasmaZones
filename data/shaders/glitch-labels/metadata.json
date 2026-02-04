@@ -1,0 +1,80 @@
+{
+    "id": "glitch-labels",
+    "name": "Glitch Labels",
+    "description": "Minimalist zones with digital glitch effect on zone numbers: slice displacement and scan lines, no chromatic aberration",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "renderType": "rendernode",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "fillOpacity",
+            "name": "Card Opacity",
+            "type": "float",
+            "slot": 0,
+            "default": 0.85,
+            "min": 0.4,
+            "max": 0.95
+        },
+        {
+            "id": "borderWidth",
+            "name": "Border Width",
+            "type": "float",
+            "slot": 1,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "glitchAmount",
+            "name": "Glitch Strength",
+            "type": "float",
+            "slot": 4,
+            "default": 0.035,
+            "min": 0.0,
+            "max": 0.1
+        },
+        {
+            "id": "glitchSpeed",
+            "name": "Glitch Speed",
+            "type": "float",
+            "slot": 5,
+            "default": 8.0,
+            "min": 1.0,
+            "max": 20.0
+        },
+        {
+            "id": "sliceCount",
+            "name": "Slice Count",
+            "type": "float",
+            "slot": 6,
+            "default": 24.0,
+            "min": 8.0,
+            "max": 64.0
+        },
+        {
+            "id": "scanLineStrength",
+            "name": "Scan Lines",
+            "type": "float",
+            "slot": 7,
+            "default": 0.15,
+            "min": 0.0,
+            "max": 0.5
+        },
+        {
+            "id": "cardColor",
+            "name": "Card Color",
+            "type": "color",
+            "slot": 0,
+            "default": "#1f2428"
+        },
+        {
+            "id": "accentColor",
+            "name": "Accent Color",
+            "type": "color",
+            "slot": 1,
+            "default": "#8b5cf6"
+        }
+    ]
+}

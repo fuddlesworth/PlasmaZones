@@ -8,6 +8,32 @@
 //
 // The main shader must declare the ZoneUniforms block; this file only provides
 // helper functions.
+//
+// Labels texture (binding 1): pre-rendered zone numbers. Optional - shaders may
+// sample it to composite labels over the zone effect.
+layout(binding = 1) uniform sampler2D uZoneLabels;
+
+const float PI = 3.14159265359;
+const float TAU = 6.28318530718;
+
+// Convert texture coords to screen coords (Y=0 at top). Requires ZoneUniforms.iResolution.
+vec2 fragCoordFromTexCoord(vec2 vTexCoord) {
+    return vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+}
+
+// Clamp color and apply qt_Opacity for final output. Requires ZoneUniforms.qt_Opacity.
+vec4 clampFragColor(vec4 color) {
+    return vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+}
+
+// Zone rect helpers: rect.xy/zw are normalized 0-1; multiply by iResolution for pixels.
+vec2 zoneRectPos(vec4 rect) { return rect.xy * iResolution; }
+vec2 zoneRectSize(vec4 rect) { return rect.zw * iResolution; }
+
+// Local UV within zone (0-1). Safe division; use for zone-relative sampling.
+vec2 zoneLocalUV(vec2 fragCoord, vec2 rectPos, vec2 rectSize) {
+    return (fragCoord - rectPos) / max(rectSize, vec2(0.001));
+}
 
 // Signed distance to rounded box (half-extents b, corner radius r)
 float sdRoundedBox(vec2 p, vec2 b, float r) {
@@ -32,4 +58,50 @@ vec2 hash22(vec2 p) {
         dot(p, vec2(127.1, 311.7)),
         dot(p, vec2(269.5, 183.3))
     )) * 43758.5453);
+}
+
+// Composite pre-rendered zone labels over the current color (premult alpha over).
+// uv: fragCoord / max(iResolution, vec2(0.0001)); no Y flip (QImage row 0 = texture v=0)
+vec4 compositeLabels(vec4 color, vec2 uv) {
+    vec4 labels = texture(uZoneLabels, uv);
+    color.rgb = color.rgb * (1.0 - labels.a) + labels.rgb;
+    color.a = labels.a + color.a * (1.0 - labels.a);
+    return color;
+}
+
+// UV for labels texture sampling. Use with compositeLabels(color, labelsUv(fragCoord)).
+vec2 labelsUv(vec2 fragCoord) {
+    vec2 res = max(iResolution, vec2(0.0001));
+    return fragCoord / res;
+}
+
+// Convenience: composite labels using fragCoord (computes UV internally)
+vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord) {
+    return compositeLabels(color, labelsUv(fragCoord));
+}
+
+// Premultiplied alpha over blend: result = src over dst
+vec4 blendOver(vec4 dst, vec4 src) {
+    float srcA = src.a;
+    float dstA = dst.a;
+    float outA = srcA + dstA * (1.0 - srcA);
+    if (outA <= 0.0) return dst;
+    vec3 outRgb = (src.rgb * srcA + dst.rgb * dstA * (1.0 - srcA)) / outA;
+    return vec4(outRgb, outA);
+}
+
+// Soft border factor from SDF distance d (0 at edge, 1 inside border)
+float softBorder(float d, float borderWidth) {
+    float borderDist = abs(d);
+    return 1.0 - smoothstep(0.0, borderWidth, borderDist);
+}
+
+// Exponential falloff glow (e.g. outer glow: d > 0 outside zone)
+float expGlow(float d, float falloff, float strength) {
+    return exp(-d / falloff) * strength;
+}
+
+// Color with fallback when unset (length < 0.01)
+vec3 colorWithFallback(vec3 color, vec3 fallback) {
+    return length(color) >= 0.01 ? color : fallback;
 }

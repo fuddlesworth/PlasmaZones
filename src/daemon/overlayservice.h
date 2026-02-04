@@ -118,6 +118,10 @@ private:
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
+    void updateLabelsTextureForWindow(QQuickWindow* window,
+                                     const QVariantList& patched,
+                                     QScreen* screen,
+                                     Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList() const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
@@ -177,7 +181,10 @@ private:
      * Handles common QML window creation: component loading, error checking,
      * QQuickWindow casting, ownership, and screen assignment.
      */
-    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType);
+    QQuickWindow* createQmlWindow(const QUrl& qmlUrl,
+                                  QScreen* screen,
+                                  const char* windowType,
+                                  const QVariantMap& initialProperties = QVariantMap());
 
     // Shader support methods
     bool useShaderOverlay() const;

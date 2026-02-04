@@ -145,13 +145,13 @@ vec4 renderAuroraSweepZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
     vec3 borderClr = getBorderColor();
     
     // Convert normalized coords to pixels
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     
     // Local UV within the zone (0-1)
-    vec2 localUV = (fragCoord - rectPos) / rectSize;
+    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     localUV = clamp(localUV, 0.0, 1.0);
     
     // Signed distance to zone boundary
@@ -203,9 +203,8 @@ vec4 renderAuroraSweepZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
     }
     
     // Border rendering
-    float borderDist = abs(d);
-    if (borderDist < borderWidth + 1.5) {
-        float border = 1.0 - smoothstep(0.0, borderWidth, borderDist);
+    float border = softBorder(d, borderWidth);
+    if (border > 0.0) {
         
         // Use custom border color or derive from gradient
         vec3 bColor = borderClr;
@@ -228,7 +227,7 @@ vec4 renderAuroraSweepZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
     
     // Outer glow for highlighted zones
     if (isHighlighted && d > 0.0 && d < 20.0) {
-        float glow = exp(-d / 8.0) * 0.35;
+        float glow = expGlow(d, 8.0, 0.35);
         vec3 glowColor = mix(color1, color2, 0.5);
         result.rgb += glowColor * glow;
         result.a = max(result.a, glow * 0.5);
@@ -238,8 +237,7 @@ vec4 renderAuroraSweepZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
 }
 
 void main() {
-    // Convert texture coords to screen coords (Y=0 at top)
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
@@ -255,16 +253,10 @@ void main() {
         bool isHighlighted = zoneParams[i].z > 0.5;
         vec4 zoneColor = renderAuroraSweepZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], isHighlighted);
-        
-        // Alpha compositing
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
-    
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

@@ -6,6 +6,7 @@
 #include "zoneshadercommon.h"
 #include <QSGRenderNode>
 #include <QColor>
+#include <QImage>
 #include <QVector4D>
 #include <QString>
 
@@ -49,6 +50,12 @@ public:
     virtual void setCustomColor6(const QColor& color) = 0;
     virtual void setCustomColor7(const QColor& color) = 0;
     virtual void setCustomColor8(const QColor& color) = 0;
+
+    /** Labels texture (pre-rendered zone numbers). Default no-op for backends that don't support it. */
+    virtual void setLabelsTexture(const QImage& image)
+    {
+        Q_UNUSED(image)
+    }
 
     // Shader loading (paths; RHI node bakes GLSL 330 at runtime)
     virtual bool loadVertexShader(const QString& path) = 0;

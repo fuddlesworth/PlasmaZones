@@ -37,8 +37,7 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec4 zoneParams[64];
 };
 
-const float PI = 3.14159265359;
-const float TAU = 6.28318530718;
+#include <common.glsl>
 
 // Pseudo-random 2D hash
 float rand2D(in vec2 p) {
@@ -90,8 +89,6 @@ vec3 palette(in float t, in vec3 a, in vec3 b, in vec3 c, in vec3 d) {
     return a + b * cos(TAU * (c * t + d));
 }
 
-#include <common.glsl>
-
 vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
@@ -113,8 +110,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float borderBrightness = customParams[2].w > 0.1 ? customParams[2].w : 1.3;
     
     // Convert rect to pixel coordinates
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 halfSize = rectSize * 0.5;
     
@@ -125,7 +122,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float d = sdRoundedBox(p, halfSize, borderRadius);
     
     // UV for the cosmic effect - normalized and centered
-    vec2 localUV = (fragCoord - rectPos) / rectSize;
+    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     vec2 centeredUV = (localUV * 2.0 - 1.0) * noiseScale;
     
     // Aspect correction
@@ -140,10 +137,10 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     
     // IQ palette: when palette colors are unset, palA/palB become gray (brightness/saturation);
     // set palette colors in the UI for full control.
-    if (length(palA) < 0.01) palA = vec3(brightness);
-    if (length(palB) < 0.01) palB = vec3(saturation);
-    if (length(palC) < 0.01) palC = vec3(1.0);
-    if (length(palD) < 0.01) palD = vec3(0.0, 0.10, 0.20);
+    palA = colorWithFallback(palA, vec3(brightness));
+    palB = colorWithFallback(palB, vec3(saturation));
+    palC = colorWithFallback(palC, vec3(1.0));
+    palD = colorWithFallback(palD, vec3(0.0, 0.10, 0.20));
     
     // Apply color shift to phase
     palD += vec3(colorShift);
@@ -178,9 +175,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     }
     
     // Border
-    float borderDist = abs(d);
-    if (borderDist < borderWidth + 2.0) {
-        float border = 1.0 - smoothstep(0.0, borderWidth, borderDist);
+    float border = softBorder(d, borderWidth);
+    if (border > 0.0) {
         
         // Animated border using the same palette
         float time = iTime;
@@ -195,7 +191,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     
     // Outer glow
     if (d > 0.0 && d < 20.0 && borderGlow > 0.01) {
-        float glow = exp(-d / 8.0) * borderGlow;
+        float glow = expGlow(d, 8.0, borderGlow);
         
         // Glow color from palette
         float time = iTime;
@@ -210,7 +206,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
@@ -224,16 +220,10 @@ void main() {
         
         vec4 zoneColor = renderCosmicZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
-        
-        // Alpha compositing (over operator for overlapping zones)
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
-    
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

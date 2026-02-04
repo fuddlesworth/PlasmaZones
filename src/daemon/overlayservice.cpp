@@ -14,10 +14,14 @@
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
 #include "../core/shaderregistry.h"
+#include "rendering/zonelabeltexturebuilder.h"
+
+#include <KColorScheme>
 
 #include <QCoreApplication>
 #include <QCursor>
 #include <QGuiApplication>
+#include <QImage>
 #include <QScreen>
 #include <QQmlEngine>
 #include <QQmlComponent>
@@ -501,7 +505,10 @@ OverlayService::~OverlayService()
     // since all QML objects have been properly cleaned up
 }
 
-QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType)
+QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl,
+                                              QScreen* screen,
+                                              const char* windowType,
+                                              const QVariantMap& initialProperties)
 {
     if (!screen) {
         qCWarning(lcOverlay) << "Screen is null for" << windowType;
@@ -520,7 +527,8 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
         return nullptr;
     }
 
-    QObject* obj = component.create();
+    QObject* obj = initialProperties.isEmpty() ? component.create()
+                                               : component.createWithInitialProperties(initialProperties);
     if (!obj) {
         qCWarning(lcOverlay) << "Failed to create" << windowType << "window:" << component.errors();
         return nullptr;
@@ -1514,7 +1522,13 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     // Try shader overlay first, fall back to standard overlay if it fails
     QQuickWindow* window = nullptr;
     if (usingShader) {
-        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay");
+        // Set labelsTexture before QML loads so ZoneShaderItem binding never sees undefined
+        QImage placeholder(1, 1, QImage::Format_ARGB32);
+        placeholder.fill(Qt::transparent);
+        QVariantMap initProps;
+        initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
+        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay",
+                                 initProps);
         if (!window) {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
@@ -1654,12 +1668,12 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
 
     // Update zones on the window (QML root has the zones property).
     // Patch isHighlighted from overlay's highlightedZoneId/highlightedZoneIds so
-    // ZoneDataProvider and fallback Repeater/ZoneLabel see the correct state.
+    // ZoneDataProvider and zone components see the correct state.
     QVariantList zones = buildZonesList(screen);
     QVariantList patched = patchZonesWithHighlight(zones, window);
     window->setProperty("zones", patched);
 
-    // Shader overlay: zoneCount, highlightedCount, zoneDataVersion
+    // Shader overlay: zoneCount, highlightedCount, zoneDataVersion, labelsTexture
     if (useShaderOverlay()) {
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
@@ -1670,12 +1684,41 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         window->setProperty("zoneCount", patched.size());
         window->setProperty("highlightedCount", highlightedCount);
         ++m_zoneDataVersion;
+
+        updateLabelsTextureForWindow(window, patched, screen, screenLayout);
         for (auto* w : std::as_const(m_overlayWindows)) {
             if (w) {
                 w->setProperty("zoneDataVersion", m_zoneDataVersion);
             }
         }
     }
+}
+
+void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window,
+                                                 const QVariantList& patched,
+                                                 QScreen* screen,
+                                                 Layout* screenLayout)
+{
+    Q_UNUSED(screen)
+    if (!window) {
+        return;
+    }
+    const bool showNumbers =
+        screenLayout ? screenLayout->showZoneNumbers() : (m_settings ? m_settings->showZoneNumbers() : true);
+    const QColor numberColor = m_settings ? m_settings->numberColor() : QColor(Qt::white);
+    QColor backgroundColor = Qt::black;
+    if (m_settings) {
+        KColorScheme scheme(QPalette::Active, KColorScheme::View);
+        backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
+    }
+    const QSize size(qMax(1, static_cast<int>(window->width())), qMax(1, static_cast<int>(window->height())));
+    QImage labelsImage =
+        ZoneLabelTextureBuilder::build(patched, size, numberColor, showNumbers, backgroundColor);
+    if (labelsImage.isNull()) {
+        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
+        labelsImage.fill(Qt::transparent);
+    }
+    window->setProperty("labelsTexture", QVariant::fromValue(labelsImage));
 }
 
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
@@ -2000,6 +2043,21 @@ void OverlayService::updateZonesForAllWindows()
         window->setProperty("zones", patched);
         window->setProperty("zoneCount", patched.size());
         window->setProperty("highlightedCount", highlightedCount);
+
+        if (useShaderOverlay()) {
+            Layout* screenLayout = nullptr;
+            if (m_layoutManager) {
+                screenLayout = m_layoutManager->activeLayout();
+                if (!screenLayout) {
+                    screenLayout =
+                        m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+                }
+            }
+            if (!screenLayout) {
+                screenLayout = m_layout;
+            }
+            updateLabelsTextureForWindow(window, patched, screen, screenLayout);
+        }
     }
 
     ++m_zoneDataVersion;

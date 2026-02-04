@@ -52,20 +52,17 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float cornerGlowStrength = customParams[1].z > 0.001 ? customParams[1].z : 0.5;
     float innerGlowSpread = customParams[1].w > 0.01 ? customParams[1].w : 0.25;
     
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
     
     // Neon colors
-    vec3 neonColor = customColors[0].rgb;
-    if (length(neonColor) < 0.01) neonColor = fillColor.rgb;
-    if (length(neonColor) < 0.01) neonColor = vec3(1.0, 0.0, 0.4); // #ff0066 hot pink
-    
-    vec3 accentColor = customColors[1].rgb;
-    if (length(accentColor) < 0.01) accentColor = vec3(0.0, 1.0, 1.0); // #00ffff cyan
+    vec3 neonColor = colorWithFallback(customColors[0].rgb, fillColor.rgb);
+    neonColor = colorWithFallback(neonColor, vec3(1.0, 0.0, 0.4)); // #ff0066 hot pink
+    vec3 accentColor = colorWithFallback(customColors[1].rgb, vec3(0.0, 1.0, 1.0)); // #00ffff cyan
     
     if (isHighlighted) {
         neonColor = accentColor;
@@ -74,7 +71,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     }
     
     // Pulse animation
-    float pulse = 0.85 + 0.15 * sin(iTime * pulseSpeed * 3.14159);
+    float pulse = 0.85 + 0.15 * sin(iTime * pulseSpeed * PI);
     
     // Random flicker
     float flicker = 1.0 - flickerAmount * hash11(floor(iTime * 30.0));
@@ -82,8 +79,6 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float intensity = pulse * flicker;
     
     vec4 result = vec4(0.0);
-    
-    float borderDist = abs(d);
     
     // Inside the zone - inner glow effect
     if (d < 0.0) {
@@ -106,7 +101,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     
     // Bright neon core (the actual border line)
     float coreWidth = borderWidth * 0.6;
-    float core = 1.0 - smoothstep(0.0, coreWidth, borderDist);
+    float core = softBorder(d, coreWidth);
     if (core > 0.0) {
         vec3 coreColor = neonColor * coreIntensity * intensity;
         // White hot center
@@ -117,14 +112,14 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     
     // Subtle outer glow (just a thin halo, not the main effect)
     if (d > 0.0 && d < glowSize * 0.3) {
-        float outerGlow = exp(-d / (glowSize * 0.1)) * glowIntensity * 0.3;
+        float outerGlow = expGlow(d, glowSize * 0.1, glowIntensity * 0.3);
         result.rgb += neonColor * outerGlow * intensity;
         result.a = max(result.a, outerGlow * 0.5);
     }
     
     // Corner accents inside
     if (d < 0.0) {
-        vec2 localUV = (fragCoord - rectPos) / rectSize;
+        vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
         vec2 cornerDist = abs(localUV - 0.5) * 2.0;
         float cornerProximity = max(cornerDist.x, cornerDist.y);
         if (cornerProximity > 0.85) {
@@ -137,7 +132,7 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
@@ -156,6 +151,8 @@ void main() {
         color.rgb += zoneColor.rgb * zoneColor.a;
         color.a = max(color.a, zoneColor.a);
     }
-    
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

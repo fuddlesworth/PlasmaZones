@@ -5,6 +5,8 @@
 #include "zoneshadernodebase.h"
 #include "zoneshadernoderhi.h"
 
+#include "../../core/constants.h"
+
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
@@ -333,6 +335,29 @@ void ZoneShaderItem::setCustomColor8(const QVector4D& color)
     update();
 }
 
+QImage ZoneShaderItem::labelsTexture() const
+{
+    QMutexLocker lock(&m_labelsTextureMutex);
+    return m_labelsTexture;
+}
+
+void ZoneShaderItem::setLabelsTexture(const QImage& image)
+{
+    QImage newImage = image;
+    {
+        QMutexLocker lock(&m_labelsTextureMutex);
+        if (m_labelsTexture.size() == newImage.size()) {
+            const int pixels = newImage.width() * newImage.height();
+            if (pixels <= 512 * 512 && m_labelsTexture == newImage) {
+                return;
+            }
+        }
+        m_labelsTexture = std::move(newImage);
+    }
+    Q_EMIT labelsTextureChanged();
+    update();
+}
+
 QVector4D ZoneShaderItem::customColorByIndex(int index) const
 {
     switch (index) {
@@ -392,10 +417,10 @@ void ZoneShaderItem::parseZoneData()
         ZoneRect rect;
 
         // Extract pixel coordinates and normalize to 0-1 using iResolution
-        const float px = z.value(QStringLiteral("x"), 0).toFloat();
-        const float py = z.value(QStringLiteral("y"), 0).toFloat();
-        const float pw = z.value(QStringLiteral("width"), 0).toFloat();
-        const float ph = z.value(QStringLiteral("height"), 0).toFloat();
+        const float px = z.value(QLatin1String(JsonKeys::X), 0).toFloat();
+        const float py = z.value(QLatin1String(JsonKeys::Y), 0).toFloat();
+        const float pw = z.value(QLatin1String(JsonKeys::Width), 0).toFloat();
+        const float ph = z.value(QLatin1String(JsonKeys::Height), 0).toFloat();
 
         rect.x = px / resW;
         rect.y = py / resH;
@@ -403,12 +428,12 @@ void ZoneShaderItem::parseZoneData()
         rect.height = ph / resH;
 
         // Extract zone number and highlighted state
-        rect.zoneNumber = z.value(QStringLiteral("zoneNumber"), 0).toInt();
-        rect.highlighted = z.value(QStringLiteral("isHighlighted"), false).toBool();
+        rect.zoneNumber = z.value(QLatin1String(JsonKeys::ZoneNumber), 0).toInt();
+        rect.highlighted = z.value(QLatin1String(JsonKeys::IsHighlighted), false).toBool();
 
         // Extract shader border properties (stored in snapshot for thread-safe access)
-        rect.borderRadius = z.value(QStringLiteral("shaderBorderRadius"), 8.0f).toFloat();
-        rect.borderWidth = z.value(QStringLiteral("shaderBorderWidth"), 2.0f).toFloat();
+        rect.borderRadius = z.value(QLatin1String("shaderBorderRadius"), 8.0f).toFloat();
+        rect.borderWidth = z.value(QLatin1String("shaderBorderWidth"), 2.0f).toFloat();
 
         if (rect.highlighted) {
             ++highlightedCount;
@@ -420,20 +445,20 @@ void ZoneShaderItem::parseZoneData()
         // Extract fill color (premultiplied RGBA, 0-1 range)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         ZoneColor fillColor;
-        fillColor.r = z.value(QStringLiteral("fillR"), 0.0f).toFloat();
-        fillColor.g = z.value(QStringLiteral("fillG"), 0.0f).toFloat();
-        fillColor.b = z.value(QStringLiteral("fillB"), 0.0f).toFloat();
-        fillColor.a = z.value(QStringLiteral("fillA"), 0.0f).toFloat();
+        fillColor.r = z.value(QLatin1String("fillR"), 0.0f).toFloat();
+        fillColor.g = z.value(QLatin1String("fillG"), 0.0f).toFloat();
+        fillColor.b = z.value(QLatin1String("fillB"), 0.0f).toFloat();
+        fillColor.a = z.value(QLatin1String("fillA"), 0.0f).toFloat();
         newFillColors.append(fillColor);
 
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         // Extract border color (RGBA, 0-1 range)
         // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         ZoneColor borderColor;
-        borderColor.r = z.value(QStringLiteral("borderR"), 1.0f).toFloat();
-        borderColor.g = z.value(QStringLiteral("borderG"), 1.0f).toFloat();
-        borderColor.b = z.value(QStringLiteral("borderB"), 1.0f).toFloat();
-        borderColor.a = z.value(QStringLiteral("borderA"), 1.0f).toFloat();
+        borderColor.r = z.value(QLatin1String("borderR"), 1.0f).toFloat();
+        borderColor.g = z.value(QLatin1String("borderG"), 1.0f).toFloat();
+        borderColor.b = z.value(QLatin1String("borderB"), 1.0f).toFloat();
+        borderColor.a = z.value(QLatin1String("borderA"), 1.0f).toFloat();
         newBorderColors.append(borderColor);
     }
 
@@ -541,6 +566,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setCustomColor8(
         QColor::fromRgbF(static_cast<float>(m_customColor8.x()), static_cast<float>(m_customColor8.y()),
                          static_cast<float>(m_customColor8.z()), static_cast<float>(m_customColor8.w())));
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Sync labels texture (pre-rendered zone numbers for shader pass)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+        QMutexLocker lock(&m_labelsTextureMutex);
+        node->setLabelsTexture(m_labelsTexture);
+    }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Sync shader source FIRST (must compile before zone data can be used)

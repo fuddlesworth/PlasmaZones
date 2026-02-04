@@ -37,6 +37,9 @@ Window {
     property bool showNumbers: true
     property color numberColor: Kirigami.Theme.textColor
 
+    // Pre-rendered zone labels texture (set from C++ when shader overlay + showNumbers)
+    property var labelsTexture
+
     // Appearance properties
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
@@ -132,6 +135,9 @@ Window {
             // Mouse position
             iMouse: root.mousePosition
 
+            // Labels texture (pre-rendered zone numbers for shader pass)
+            labelsTexture: root.labelsTexture
+
             // Custom parameters (16 floats + 4 colors)
             customParams1: root.customParams1
             customParams2: root.customParams2
@@ -218,30 +224,6 @@ Window {
                 color: Kirigami.Theme.textColor
                 wrapMode: Text.WordWrap
                 width: parent.width - Kirigami.Units.gridUnit * 2
-            }
-        }
-
-        // ===================================================================
-        // ZONE LABELS - When shader active
-        // ===================================================================
-        Repeater {
-            model: root.zones
-            // Note: 'visible' on Repeater has no effect - delegate visibility is controlled below
-
-            ZoneLabel {
-                required property var modelData
-                required property int index
-
-                visible: zoneShaderItem.visible && root.showNumbers && width > 0 && height > 0
-
-                x: modelData.x !== undefined ? modelData.x : 0
-                y: modelData.y !== undefined ? modelData.y : 0
-                width: modelData.width !== undefined ? modelData.width : 0
-                height: modelData.height !== undefined ? modelData.height : 0
-
-                zoneNumber: modelData.zoneNumber || (index + 1)
-                zoneName: modelData.name || ""
-                numberColor: root.numberColor
             }
         }
     }

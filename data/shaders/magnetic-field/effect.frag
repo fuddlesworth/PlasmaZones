@@ -192,15 +192,15 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float trailLength = customParams[1].z > 0.01 ? customParams[1].z : 0.5;
     float distortionAmount = customParams[1].w > 0.01 ? customParams[1].w : 0.4;
     
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
-    vec2 localUV = (fragCoord - rectPos) / rectSize;
+    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     
     // Mouse position relative to zone (normalized)
     vec2 mouseNorm = iMouse.zw;  // Already normalized 0-1
-    vec2 mouseLocal = (iMouse.xy - rectPos) / rectSize;  // Mouse relative to this zone
+    vec2 mouseLocal = zoneLocalUV(iMouse.xy, rectPos, rectSize);  // Mouse relative to this zone
     
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
     
@@ -283,10 +283,9 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
     
     // Border with energy effect - enhanced by vertex displacement
-    float borderDist = abs(d);
     float effectiveBorderWidth = borderWidth + vDistortAmount * 2.0; // Border pulses with deformation
-    if (borderDist < effectiveBorderWidth + 3.0) {
-        float border = 1.0 - smoothstep(0.0, effectiveBorderWidth, borderDist);
+    float border = softBorder(d, effectiveBorderWidth);
+    if (border > 0.0) {
         
         // Energy flowing along border - modulated by vertex influence
         float flow = sin(atan(p.y, p.x) * 8.0 + t * 4.0 + vMouseInfluence * 10.0) * 0.5 + 0.5;
@@ -313,7 +312,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
@@ -327,16 +326,10 @@ void main() {
         
         vec4 zoneColor = renderMagneticZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
-        
-        // Alpha compositing (over operator for overlapping zones)
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
-    
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

@@ -81,17 +81,15 @@ vec4 renderFractalFlowZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
     float borderGlowStrength = customParams[1].y > 0.01 ? customParams[1].y : 0.4;
     float glowSize = customParams[1].z > 0.5 ? customParams[1].z : 8.0;
 
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     vec2 localFragCoord = fragCoord - rectPos;
 
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
-    vec3 tint = customColors[0].rgb;
-    if (length(tint) < 0.01)
-        tint = vec3(1.0, 1.0, 1.0);
+    vec3 tint = colorWithFallback(customColors[0].rgb, vec3(1.0, 1.0, 1.0));
 
     if (isHighlighted) {
         fillOpacity = min(fillOpacity + 0.1, 0.98);
@@ -107,16 +105,15 @@ vec4 renderFractalFlowZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
         result.a = fillOpacity;
     }
 
-    float borderDist = abs(d);
-    if (borderDist < borderWidth + 2.0) {
-        float border = 1.0 - smoothstep(0.0, borderWidth, borderDist);
+    float border = softBorder(d, borderWidth);
+    if (border > 0.0) {
         vec3 borderClr = length(borderColor.rgb) > 0.01 ? borderColor.rgb : tint;
         result.rgb = mix(result.rgb, borderClr, border);
         result.a = max(result.a, border * 0.98);
     }
 
     if (isHighlighted && d > 0.0 && d < 20.0) {
-        float glow = exp(-d / glowSize) * borderGlowStrength;
+        float glow = expGlow(d, glowSize, borderGlowStrength);
         result.rgb += tint * glow;
         result.a = max(result.a, glow * 0.5);
     }
@@ -125,7 +122,7 @@ vec4 renderFractalFlowZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -139,15 +136,10 @@ void main() {
             continue;
 
         vec4 zoneColor = renderFractalFlowZone(fragCoord, rect, zoneFillColors[i], zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
-
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
 
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

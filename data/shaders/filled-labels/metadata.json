@@ -1,0 +1,78 @@
+{
+    "id": "filled-labels",
+    "name": "Filled Labels",
+    "description": "Zone numbers filled with a gradient inside the digit shape. Vertical, horizontal, or radial gradient with optional pulse.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "renderType": "rendernode",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "fillOpacity",
+            "name": "Card Opacity",
+            "type": "float",
+            "slot": 0,
+            "default": 0.85,
+            "min": 0.4,
+            "max": 0.95
+        },
+        {
+            "id": "borderWidth",
+            "name": "Border Width",
+            "type": "float",
+            "slot": 1,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "alphaCutoff",
+            "name": "Alpha Cutoff",
+            "type": "float",
+            "slot": 4,
+            "default": 0.45,
+            "min": 0.25,
+            "max": 0.65
+        },
+        {
+            "id": "gradientDirection",
+            "name": "Gradient Direction",
+            "type": "float",
+            "slot": 5,
+            "default": 0.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "pulseSpeed",
+            "name": "Pulse Speed",
+            "type": "float",
+            "slot": 6,
+            "default": 0.0,
+            "min": 0.0,
+            "max": 4.0
+        },
+        {
+            "id": "cardColor",
+            "name": "Card Color",
+            "type": "color",
+            "slot": 0,
+            "default": "#1f2428"
+        },
+        {
+            "id": "gradientStart",
+            "name": "Gradient Start",
+            "type": "color",
+            "slot": 1,
+            "default": "#e8e4f0"
+        },
+        {
+            "id": "gradientEnd",
+            "name": "Gradient End",
+            "type": "color",
+            "slot": 2,
+            "default": "#6b5b7a"
+        }
+    ]
+}

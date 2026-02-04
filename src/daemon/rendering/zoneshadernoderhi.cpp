@@ -128,6 +128,10 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     m_uniforms.qt_Opacity = 1.0f;
     m_customParams1 = QVector4D(0.5f, 2.0f, 0.0f, 0.0f);
     m_customParams2 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
+
+    // 1×1 transparent fallback for when labels are disabled
+    m_transparentFallbackImage = QImage(1, 1, QImage::Format_ARGB32_Premultiplied);
+    m_transparentFallbackImage.fill(Qt::transparent);
 }
 
 ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
@@ -180,6 +184,18 @@ void ZoneShaderNodeRhi::prepare()
         m_ubo.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, sizeof(ZoneShaderUniforms)));
         if (!m_ubo->create()) {
             m_shaderError = QStringLiteral("Failed to create uniform buffer");
+            return;
+        }
+        // Labels texture (1×1 initially; resized when image uploaded)
+        m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        if (!m_labelsTexture->create()) {
+            m_shaderError = QStringLiteral("Failed to create labels texture");
+            return;
+        }
+        m_labelsSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                              QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+        if (!m_labelsSampler->create()) {
+            m_shaderError = QStringLiteral("Failed to create labels sampler");
             return;
         }
     }
@@ -246,6 +262,33 @@ void ZoneShaderNodeRhi::prepare()
 
     if (!ensurePipeline()) {
         return;
+    }
+
+    // Labels texture: resize if needed, upload when dirty
+    if (m_labelsTextureDirty && m_labelsTexture && m_labelsSampler) {
+        m_labelsTextureDirty = false;
+        const QSize targetSize = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
+                                     ? m_labelsImage.size()
+                                     : QSize(1, 1);
+        if (m_labelsTexture->pixelSize() != targetSize) {
+            m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!m_labelsTexture->create()) {
+                m_shaderError = QStringLiteral("Failed to resize labels texture");
+                return;
+            }
+            m_srb.reset(); // Force SRB recreation with new texture
+            if (!ensurePipeline()) {
+                return;
+            }
+        }
+        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        if (batch) {
+            const QImage& src = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
+                                    ? m_labelsImage
+                                    : m_transparentFallbackImage;
+            batch->uploadTexture(m_labelsTexture.get(), src);
+            cb->resourceUpdate(batch);
+        }
     }
 
     if (m_uniformsDirty) {
@@ -474,6 +517,13 @@ void ZoneShaderNodeRhi::setCustomColor8(const QColor& color)
     m_zoneDataDirty = true;
 }
 
+void ZoneShaderNodeRhi::setLabelsTexture(const QImage& image)
+{
+    m_labelsImage = image;
+    m_labelsTextureDirty = true;
+    m_uniformsDirty = true;
+}
+
 bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
 {
     QString err;
@@ -574,9 +624,14 @@ bool ZoneShaderNodeRhi::ensurePipeline()
 
     if (!m_srb) {
         m_srb.reset(rhi->newShaderResourceBindings());
-        m_srb->setBindings({
-            QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get())
-        });
+        QVector<QRhiShaderResourceBinding> bindings;
+        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
+            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+        if (m_labelsTexture && m_labelsSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+        }
+        m_srb->setBindings(bindings.begin(), bindings.end());
         if (!m_srb->create()) {
             m_shaderError = QStringLiteral("Failed to create shader resource bindings");
             return false;
@@ -697,6 +752,8 @@ void ZoneShaderNodeRhi::releaseRhiResources()
 {
     m_pipeline.reset();
     m_srb.reset();
+    m_labelsTexture.reset();
+    m_labelsSampler.reset();
     m_ubo.reset();
     m_vbo.reset();
     m_vertexShader = QShader();
@@ -710,6 +767,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_zoneDataDirty = true;
+    m_labelsTextureDirty = true;
     // Next prepare() will re-create all RHI resources and do a full UBO upload
 }
 

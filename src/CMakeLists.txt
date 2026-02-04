@@ -213,6 +213,8 @@ set(plasmazones_daemon_SRCS
     daemon/unifiedlayoutcontroller.h
     # Shader rendering system (RHI only)
     daemon/rendering/zoneshadercommon.h
+    daemon/rendering/zonelabeltexturebuilder.h
+    daemon/rendering/zonelabeltexturebuilder.cpp
     daemon/rendering/zoneshadernodebase.h
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp

@@ -10,6 +10,7 @@
 #include <QVector4D>
 #include <QVariantList>
 #include <QVariantMap>
+#include <QImage>
 #include <QRectF>
 #include <QColor>
 #include <QMutex>
@@ -150,6 +151,9 @@ class PLASMAZONES_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(QVector4D customColor6 READ customColor6 WRITE setCustomColor6 NOTIFY customColorsChanged FINAL)
     Q_PROPERTY(QVector4D customColor7 READ customColor7 WRITE setCustomColor7 NOTIFY customColorsChanged FINAL)
     Q_PROPERTY(QVector4D customColor8 READ customColor8 WRITE setCustomColor8 NOTIFY customColorsChanged FINAL)
+
+    // Labels texture (pre-rendered zone numbers for shader pass)
+    Q_PROPERTY(QImage labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY labelsTextureChanged FINAL)
 
     // Status
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
@@ -306,6 +310,10 @@ public:
     }
     void setCustomColor8(const QVector4D& color);
 
+    // Labels texture getter/setter
+    QImage labelsTexture() const;
+    void setLabelsTexture(const QImage& image);
+
     // Status getters
     Status status() const
     {
@@ -362,6 +370,7 @@ Q_SIGNALS:
     void shaderParamsChanged();
     void customParamsChanged(); // Emitted when any customParams1-4 changes
     void customColorsChanged(); // Emitted when any customColor1-8 changes
+    void labelsTextureChanged();
     void statusChanged();
     void errorLogChanged();
 
@@ -449,6 +458,10 @@ private:
     // Status
     Status m_status = Status::Null;
     QString m_errorLog;
+
+    // Labels texture (main thread writes, render thread reads via updatePaintNode)
+    QImage m_labelsTexture;
+    mutable QMutex m_labelsTextureMutex;
 
     // Thread-safe zone data storage
     // Protected by m_zoneDataMutex for render thread access

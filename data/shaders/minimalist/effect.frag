@@ -53,24 +53,19 @@ vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     float innerGlow = customParams[1].x > 0.001 ? customParams[1].x : 0.15;
     float bevelStrength = customParams[1].y > 0.001 ? customParams[1].y : 0.12;
     
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
-    vec2 localUV = (fragCoord - rectPos) / rectSize;
+    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
     
     // Colors
-    vec3 cardColor = customColors[0].rgb;
-    if (length(cardColor) < 0.01) cardColor = fillColor.rgb;
-    if (length(cardColor) < 0.01) cardColor = vec3(0.18, 0.2, 0.25);
-    
-    vec3 accentColor = customColors[1].rgb;
-    if (length(accentColor) < 0.01) accentColor = vec3(0.3, 0.55, 0.95);
-    
-    vec3 borderClr = borderColor.rgb;
-    if (length(borderClr) < 0.01) borderClr = mix(cardColor, vec3(1.0), 0.3);
+    vec3 cardColor = colorWithFallback(customColors[0].rgb, fillColor.rgb);
+    cardColor = colorWithFallback(cardColor, vec3(0.18, 0.2, 0.25));
+    vec3 accentColor = colorWithFallback(customColors[1].rgb, vec3(0.3, 0.55, 0.95));
+    vec3 borderClr = colorWithFallback(borderColor.rgb, mix(cardColor, vec3(1.0), 0.3));
     
     if (isHighlighted) {
         cardColor = mix(cardColor, accentColor, 0.25);
@@ -129,10 +124,8 @@ vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     }
     
     // Clean border
-    float borderDist = abs(d);
-    if (borderDist < borderWidth + 1.0) {
-        float border = 1.0 - smoothstep(0.0, borderWidth, borderDist);
-        
+    float border = softBorder(d, borderWidth);
+    if (border > 0.0) {
         // Border with slight gradient
         vec3 bColor = borderClr;
         bColor *= 0.9 + localUV.y * 0.2; // Lighter at bottom
@@ -151,7 +144,7 @@ vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
     
     // Highlight outer glow
     if (isHighlighted && d > 0.0 && d < 15.0) {
-        float glow = exp(-d / 6.0) * 0.5;
+        float glow = expGlow(d, 6.0, 0.5);
         result.rgb += accentColor * glow;
         result.a = max(result.a, glow * 0.6);
     }
@@ -160,7 +153,7 @@ vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 border
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
@@ -174,16 +167,10 @@ void main() {
         
         vec4 zoneColor = renderMinimalistZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
-        
-        // Proper alpha compositing
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
+
+    color = compositeLabelsWithUv(color, fragCoord);
     
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+    fragColor = clampFragColor(color);
 }

@@ -55,22 +55,19 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float fillDarkness = customParams[1].z > 0.001 ? customParams[1].z : 0.1;
     float particleBrightness = customParams[1].w > 0.01 ? customParams[1].w : 0.25;
     
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     vec2 localPos = fragCoord - rectPos;
-    vec2 localUV = localPos / rectSize;
+    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
     
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
     
     // Colors
-    vec3 particleColor = customColors[0].rgb;
-    if (length(particleColor) < 0.01) particleColor = fillColor.rgb;
-    if (length(particleColor) < 0.01) particleColor = vec3(0.3, 0.8, 1.0);
-    
-    vec3 accentColor = customColors[1].rgb;
-    if (length(accentColor) < 0.01) accentColor = vec3(1.0, 0.4, 0.8);
+    vec3 particleColor = colorWithFallback(customColors[0].rgb, fillColor.rgb);
+    particleColor = colorWithFallback(particleColor, vec3(0.3, 0.8, 1.0));
+    vec3 accentColor = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.4, 0.8));
     
     if (isHighlighted) {
         particleColor = mix(particleColor, accentColor, 0.5);
@@ -106,7 +103,7 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         vec2 randOffset = hash22(seed);
         
         // Particle movement - floating motion
-        float angle = randOffset.x * 6.28318 + time * (0.3 + randOffset.y * 0.4);
+        float angle = randOffset.x * TAU + time * (0.3 + randOffset.y * 0.4);
         float radius = 0.1 + randOffset.y * 0.3;
         vec2 motion = vec2(cos(angle), sin(angle * 0.7 + fi)) * radius;
         
@@ -142,8 +139,7 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     }
     
     // Border
-    float borderDist = abs(d);
-    float border = 1.0 - smoothstep(0.0, borderWidth + 1.0, borderDist);
+    float border = softBorder(d, borderWidth + 1.0);
     if (border > 0.0) {
         vec3 bColor = particleColor * borderGlow;
         result.rgb = mix(result.rgb, bColor, border * 0.8);
@@ -152,7 +148,7 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     
     // Highlight glow
     if (isHighlighted && d > 0.0 && d < 25.0) {
-        float glow = exp(-d * 0.1) * 0.4;
+        float glow = expGlow(d, 10.0, 0.4);
         result.rgb += accentColor * glow;
         result.a = max(result.a, glow * 0.5);
     }
@@ -161,7 +157,7 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {
@@ -176,15 +172,10 @@ void main() {
         vec4 zoneColor = renderParticleZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
         
-        // Alpha compositing (over operator for overlapping zones)
-        float srcA = zoneColor.a;
-        float dstA = color.a;
-        float outA = srcA + dstA * (1.0 - srcA);
-        if (outA > 0.0) {
-            color.rgb = (zoneColor.rgb * srcA + color.rgb * dstA * (1.0 - srcA)) / outA;
-        }
-        color.a = outA;
+        color = blendOver(color, zoneColor);
     }
-    
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }

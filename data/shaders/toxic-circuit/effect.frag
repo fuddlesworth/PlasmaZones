@@ -44,8 +44,6 @@ layout(std140, binding = 0) uniform ZoneUniforms {
  *   customColors[1] = electricPurple - Secondary circuit color (#BF00FF)
  */
 
-const float PI = 3.14159265359;
-
 #include <common.glsl>
 
 float noise(vec2 p) {
@@ -245,8 +243,8 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     float edgeGlowStrength = customParams[2].x > 0.001 ? customParams[2].x : 0.35;
     float mouseInfluenceStrength = customParams[2].y > 0.01 ? customParams[2].y : 1.5;
 
-    vec2 rectPos = rect.xy * iResolution;
-    vec2 rectSize = rect.zw * iResolution;
+    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
 
@@ -288,7 +286,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 
     // Mouse position in local UV space (0-1 within this zone)
     vec2 mousePixel = iMouse.xy;
-    vec2 mouseLocal = (mousePixel - rectPos) / rectSize;
+    vec2 mouseLocal = zoneLocalUV(mousePixel, rectPos, rectSize);
     float mouseInZone = step(0.0, mouseLocal.x) * step(mouseLocal.x, 1.0) *
                         step(0.0, mouseLocal.y) * step(mouseLocal.y, 1.0);
 
@@ -436,19 +434,17 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     }
 
     // Neon toxic border with chromatic split
-    float borderDist = abs(d);
     float effectiveBorderWidth = isHighlighted ? borderWidth * 1.5 : borderWidth;
-    if (borderDist < effectiveBorderWidth + chromaShift + 5.0) {
-        float border = 1.0 - smoothstep(0.0, effectiveBorderWidth, borderDist);
-
+    float border = softBorder(d, effectiveBorderWidth);
+    if (abs(d) < effectiveBorderWidth + chromaShift + 5.0) {
         // Chromatic border split
         float chromaAmount = isHighlighted ? chromaShift * 0.6 : chromaShift * 0.4;
         float dR = sdRoundedBox(p + vec2(chromaAmount, 0.0), rectSize * 0.5, borderRadius);
         float dB = sdRoundedBox(p - vec2(chromaAmount, 0.0), rectSize * 0.5, borderRadius);
 
-        float bR = 1.0 - smoothstep(0.0, effectiveBorderWidth, abs(dR));
+        float bR = softBorder(dR, effectiveBorderWidth);
         float bG = border;
-        float bB = 1.0 - smoothstep(0.0, effectiveBorderWidth, abs(dB));
+        float bB = softBorder(dB, effectiveBorderWidth);
 
         // Animated border color - faster and brighter when highlighted
         float pulseRate = isHighlighted ? 5.0 : 3.0;
@@ -496,8 +492,8 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         float glowFalloff1 = isHighlighted ? 20.0 : 10.0;
         float glowFalloff2 = isHighlighted ? 40.0 : 20.0;
 
-        float glow1 = exp(-d / glowFalloff1) * (isHighlighted ? 0.7 : 0.3);
-        float glow2 = exp(-d / glowFalloff2) * (isHighlighted ? 0.4 : 0.15);
+        float glow1 = expGlow(d, glowFalloff1, isHighlighted ? 0.7 : 0.3);
+        float glow2 = expGlow(d, glowFalloff2, isHighlighted ? 0.4 : 0.15);
 
         float glowPulse = sin(iTime * pulseSpeed * 2.0) * 0.2 + 0.8;
         vec3 glowColor = mix(toxicGreen, electricPurple, glow1) * glowPulse;
@@ -551,5 +547,7 @@ void main() {
         color.a = max(color.a, zoneColor.a);
     }
 
-    fragColor = vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
+    color = compositeLabelsWithUv(color, fragCoord);
+
+    fragColor = clampFragColor(color);
 }
