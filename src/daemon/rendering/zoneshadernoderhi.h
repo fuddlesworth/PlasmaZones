@@ -11,6 +11,7 @@
 #include <QVector>
 #include <memory>
 
+
 #include <rhi/qrhi.h>
 
 namespace PlasmaZones {
@@ -84,12 +85,19 @@ private:
 
     QString m_vertexShaderSource;
     QString m_fragmentShaderSource;
+    QString m_vertexPath;
+    QString m_fragmentPath;
+    qint64 m_vertexMtime = 0;
+    qint64 m_fragmentMtime = 0;
     QString m_shaderError;
     bool m_initialized = false;
     bool m_vboUploaded = false;
     bool m_shaderReady = false;
     bool m_shaderDirty = true;
     bool m_uniformsDirty = true;
+    bool m_timeDirty = true;
+    bool m_zoneDataDirty = true;
+    bool m_didFullUploadOnce = false;
 
     ZoneShaderUniforms m_uniforms = {};
     QVector<ZoneData> m_zones;

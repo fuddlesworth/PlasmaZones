@@ -5,6 +5,8 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
+#include <QMutex>
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -16,6 +18,24 @@
 #include <rhi/qshaderbaker.h>
 
 namespace PlasmaZones {
+
+namespace {
+
+struct ShaderCacheEntry {
+    QShader vertex;
+    QShader fragment;
+};
+using ShaderCache = QHash<QString, ShaderCacheEntry>;
+ShaderCache s_shaderCache;
+QMutex s_shaderCacheMutex;
+
+QString shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QString& fragPath, qint64 fragMtime)
+{
+    return vertPath + QLatin1Char('\n') + QString::number(vertMtime) + QLatin1Char('\n') + fragPath
+           + QLatin1Char('\n') + QString::number(fragMtime);
+}
+
+} // anonymous namespace
 
 namespace RhiConstants {
 
@@ -111,36 +131,58 @@ void ZoneShaderNodeRhi::prepare()
             m_shaderError = QStringLiteral("Vertex or fragment shader source is empty");
             return;
         }
-        // Desktop OpenGL 330 + OpenGL ES 300/310/320 (Qt may use ES on Linux/EGL).
-        const QList<QShaderBaker::GeneratedShader> targets = {
-            { QShader::GlslShader, QShaderVersion(330) },
-            { QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs) },
-            { QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs) },
-            { QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs) },
-        };
-        QShaderBaker vertexBaker;
-        vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
-        vertexBaker.setGeneratedShaders(targets);
-        vertexBaker.setSourceString(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
-        m_vertexShader = vertexBaker.bake();
-        if (!m_vertexShader.isValid()) {
-            const QString msg = vertexBaker.errorMessage();
-            m_shaderError = QStringLiteral("Vertex shader: ") + (msg.isEmpty() ? QStringLiteral("compilation failed (no details)") : msg);
-            return;
+
+        const QString cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, m_fragmentPath, m_fragmentMtime);
+        if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
+            QMutexLocker lock(&s_shaderCacheMutex);
+            auto it = s_shaderCache.constFind(cacheKey);
+            if (it != s_shaderCache.constEnd()) {
+                m_vertexShader = it->vertex;
+                m_fragmentShader = it->fragment;
+                m_shaderReady = true;
+                m_pipeline.reset();
+                m_srb.reset();
+            }
         }
-        QShaderBaker fragmentBaker;
-        fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
-        fragmentBaker.setGeneratedShaders(targets);
-        fragmentBaker.setSourceString(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
-        m_fragmentShader = fragmentBaker.bake();
-        if (!m_fragmentShader.isValid()) {
-            const QString msg = fragmentBaker.errorMessage();
-            m_shaderError = QStringLiteral("Fragment shader: ") + (msg.isEmpty() ? QStringLiteral("compilation failed (no details)") : msg);
-            return;
+
+        if (!m_shaderReady) {
+            // Desktop OpenGL 330 + OpenGL ES 300/310/320 (Qt may use ES on Linux/EGL).
+            const QList<QShaderBaker::GeneratedShader> targets = {
+                { QShader::GlslShader, QShaderVersion(330) },
+                { QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs) },
+                { QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs) },
+                { QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs) },
+            };
+            QShaderBaker vertexBaker;
+            vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            vertexBaker.setGeneratedShaders(targets);
+            vertexBaker.setSourceString(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
+            m_vertexShader = vertexBaker.bake();
+            if (!m_vertexShader.isValid()) {
+                const QString msg = vertexBaker.errorMessage();
+                m_shaderError = QStringLiteral("Vertex shader: ")
+                    + (msg.isEmpty() ? QStringLiteral("compilation failed (no details)") : msg);
+                return;
+            }
+            QShaderBaker fragmentBaker;
+            fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            fragmentBaker.setGeneratedShaders(targets);
+            fragmentBaker.setSourceString(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
+            m_fragmentShader = fragmentBaker.bake();
+            if (!m_fragmentShader.isValid()) {
+                const QString msg = fragmentBaker.errorMessage();
+                m_shaderError = QStringLiteral("Fragment shader: ")
+                    + (msg.isEmpty() ? QStringLiteral("compilation failed (no details)") : msg);
+                return;
+            }
+            m_shaderReady = true;
+            m_pipeline.reset();
+            m_srb.reset();
+            if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
+                QMutexLocker lock(&s_shaderCacheMutex);
+                s_shaderCache[cacheKey] = ShaderCacheEntry{ m_vertexShader, m_fragmentShader };
+            }
         }
-        m_shaderReady = true;
-        m_pipeline.reset();
-        m_srb.reset();
     }
 
     if (!m_shaderReady) {
@@ -153,17 +195,42 @@ void ZoneShaderNodeRhi::prepare()
 
     if (m_uniformsDirty) {
         syncUniformsFromData();
-        m_uniformsDirty = false;
-    }
-
-    QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
-    if (batch) {
-        batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ZoneShaderUniforms), &m_uniforms);
-        if (!m_vboUploaded) {
+        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        if (batch) {
+            if (!m_didFullUploadOnce) {
+                batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ZoneShaderUniforms), &m_uniforms);
+                m_didFullUploadOnce = true;
+            } else {
+                using namespace ZoneShaderUboRegions;
+                if (m_timeDirty) {
+                    batch->updateDynamicBuffer(m_ubo.get(),
+                                               kTimeBlockOffset,
+                                               kTimeBlockSize,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + kTimeBlockOffset);
+                }
+                if (m_zoneDataDirty) {
+                    batch->updateDynamicBuffer(m_ubo.get(),
+                                               kSceneDataOffset,
+                                               kSceneDataSize,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + kSceneDataOffset);
+                }
+            }
+            if (!m_vboUploaded) {
+                batch->uploadStaticBuffer(m_vbo.get(), RhiConstants::QuadVertices);
+                m_vboUploaded = true;
+            }
+            cb->resourceUpdate(batch);
+            m_timeDirty = false;
+            m_zoneDataDirty = false;
+            m_uniformsDirty = false;
+        }
+    } else {
+        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        if (batch && !m_vboUploaded) {
             batch->uploadStaticBuffer(m_vbo.get(), RhiConstants::QuadVertices);
             m_vboUploaded = true;
+            cb->resourceUpdate(batch);
         }
-        cb->resourceUpdate(batch);
     }
 }
 
@@ -198,6 +265,7 @@ void ZoneShaderNodeRhi::setZones(const QVector<ZoneData>& zones)
     int count = qMin(zones.size(), MaxZones);
     m_zones = zones.mid(0, count);
     m_uniformsDirty = true;
+    m_zoneDataDirty = true;
 }
 
 void ZoneShaderNodeRhi::setZone(int index, const ZoneData& data)
@@ -208,6 +276,7 @@ void ZoneShaderNodeRhi::setZone(int index, const ZoneData& data)
         }
         m_zones[index] = data;
         m_uniformsDirty = true;
+        m_zoneDataDirty = true;
     }
 }
 
@@ -216,6 +285,7 @@ void ZoneShaderNodeRhi::setZoneCount(int count)
     if (count >= 0 && count <= MaxZones) {
         m_zones.resize(count);
         m_uniformsDirty = true;
+        m_zoneDataDirty = true;
     }
 }
 
@@ -226,6 +296,7 @@ void ZoneShaderNodeRhi::setHighlightedZones(const QVector<int>& indices)
         m_zones[i].isHighlighted = indices.contains(i);
     }
     m_uniformsDirty = true;
+    m_zoneDataDirty = true;
 }
 
 void ZoneShaderNodeRhi::clearHighlights()
@@ -235,32 +306,114 @@ void ZoneShaderNodeRhi::clearHighlights()
         zone.isHighlighted = false;
     }
     m_uniformsDirty = true;
+    m_zoneDataDirty = true;
 }
 
-void ZoneShaderNodeRhi::setTime(float time) { m_time = time; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setTimeDelta(float delta) { m_timeDelta = delta; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setFrame(int frame) { m_frame = frame; m_uniformsDirty = true; }
+void ZoneShaderNodeRhi::setTime(float time)
+{
+    m_time = time;
+    m_uniformsDirty = true;
+    m_timeDirty = true;
+}
+void ZoneShaderNodeRhi::setTimeDelta(float delta)
+{
+    m_timeDelta = delta;
+    m_uniformsDirty = true;
+    m_timeDirty = true;
+}
+void ZoneShaderNodeRhi::setFrame(int frame)
+{
+    m_frame = frame;
+    m_uniformsDirty = true;
+    m_timeDirty = true;
+}
 void ZoneShaderNodeRhi::setResolution(float width, float height)
 {
     if (m_width != width || m_height != height) {
         m_width = width;
         m_height = height;
         m_uniformsDirty = true;
+        m_zoneDataDirty = true;
     }
 }
-void ZoneShaderNodeRhi::setMousePosition(const QPointF& pos) { m_mousePosition = pos; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomParams1(const QVector4D& params) { m_customParams1 = params; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomParams2(const QVector4D& params) { m_customParams2 = params; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomParams3(const QVector4D& params) { m_customParams3 = params; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomParams4(const QVector4D& params) { m_customParams4 = params; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor1(const QColor& color) { m_customColor1 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor2(const QColor& color) { m_customColor2 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor3(const QColor& color) { m_customColor3 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor4(const QColor& color) { m_customColor4 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor5(const QColor& color) { m_customColor5 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor6(const QColor& color) { m_customColor6 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor7(const QColor& color) { m_customColor7 = color; m_uniformsDirty = true; }
-void ZoneShaderNodeRhi::setCustomColor8(const QColor& color) { m_customColor8 = color; m_uniformsDirty = true; }
+void ZoneShaderNodeRhi::setMousePosition(const QPointF& pos)
+{
+    m_mousePosition = pos;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomParams1(const QVector4D& params)
+{
+    m_customParams1 = params;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomParams2(const QVector4D& params)
+{
+    m_customParams2 = params;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomParams3(const QVector4D& params)
+{
+    m_customParams3 = params;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomParams4(const QVector4D& params)
+{
+    m_customParams4 = params;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor1(const QColor& color)
+{
+    m_customColor1 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor2(const QColor& color)
+{
+    m_customColor2 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor3(const QColor& color)
+{
+    m_customColor3 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor4(const QColor& color)
+{
+    m_customColor4 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor5(const QColor& color)
+{
+    m_customColor5 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor6(const QColor& color)
+{
+    m_customColor6 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor7(const QColor& color)
+{
+    m_customColor7 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+void ZoneShaderNodeRhi::setCustomColor8(const QColor& color)
+{
+    m_customColor8 = color;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
 
 bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
 {
@@ -288,6 +441,8 @@ bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
         m_shaderError = QStringLiteral("Vertex shader include: ") + err;
         return false;
     }
+    m_vertexPath = path;
+    m_vertexMtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     m_shaderDirty = true;
     return true;
 }
@@ -318,6 +473,8 @@ bool ZoneShaderNodeRhi::loadFragmentShader(const QString& path)
         m_shaderError = QStringLiteral("Fragment shader include: ") + err;
         return false;
     }
+    m_fragmentPath = path;
+    m_fragmentMtime = QFileInfo(path).lastModified().toMSecsSinceEpoch();
     m_shaderDirty = true;
     return true;
 }
@@ -326,6 +483,10 @@ void ZoneShaderNodeRhi::setVertexShaderSource(const QString& source)
 {
     if (m_vertexShaderSource != source) {
         m_vertexShaderSource = source;
+        if (source.isEmpty()) {
+            m_vertexPath.clear();
+            m_vertexMtime = 0;
+        }
         m_shaderDirty = true;
     }
 }
@@ -334,6 +495,10 @@ void ZoneShaderNodeRhi::setFragmentShaderSource(const QString& source)
 {
     if (m_fragmentShaderSource != source) {
         m_fragmentShaderSource = source;
+        if (source.isEmpty()) {
+            m_fragmentPath.clear();
+            m_fragmentMtime = 0;
+        }
         m_shaderDirty = true;
     }
 }
@@ -356,6 +521,8 @@ void ZoneShaderNodeRhi::invalidateShader()
 void ZoneShaderNodeRhi::invalidateUniforms()
 {
     m_uniformsDirty = true;
+    m_timeDirty = true;
+    m_zoneDataDirty = true;
 }
 
 bool ZoneShaderNodeRhi::ensurePipeline()
@@ -510,8 +677,9 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_renderPassFormat.clear();
     m_initialized = false;
     m_vboUploaded = false;
+    m_didFullUploadOnce = false;
     m_shaderReady = false;
-    m_shaderDirty = true;  // Force re-bake on next prepare() after context loss
+    m_shaderDirty = true; // Force re-bake on next prepare() after context loss
 }
 
 } // namespace PlasmaZones

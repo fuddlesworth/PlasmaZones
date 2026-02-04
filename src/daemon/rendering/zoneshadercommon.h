@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cstddef>
+
 #include <QColor>
 #include <QRectF>
 #include <QVector4D>
@@ -65,6 +67,28 @@ struct alignas(16) ZoneShaderUniforms
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
+
+/**
+ * @brief UBO region offsets and sizes for partial updates (reduces GPU bandwidth)
+ *
+ * Used by ZoneShaderNodeRhi to upload only changed regions instead of the full block.
+ * Layout must match ZoneShaderUniforms and std140 rules.
+ */
+namespace ZoneShaderUboRegions {
+
+// Transform and opacity from Qt scene graph (mat4 + float)
+constexpr size_t kMatrixOpacityOffset = 0;
+constexpr size_t kMatrixOpacitySize = offsetof(ZoneShaderUniforms, iTime); // 68 bytes
+
+// Animation time block (iTime, iTimeDelta, iFrame)
+constexpr size_t kTimeBlockOffset = offsetof(ZoneShaderUniforms, iTime);
+constexpr size_t kTimeBlockSize = sizeof(float) + sizeof(float) + sizeof(int); // 12 bytes
+
+// Scene data: iResolution through end (zone counts, iMouse, params, colors, zone arrays)
+constexpr size_t kSceneDataOffset = offsetof(ZoneShaderUniforms, iResolution);
+constexpr size_t kSceneDataSize = sizeof(ZoneShaderUniforms) - kSceneDataOffset;
+
+} // namespace ZoneShaderUboRegions
 
 /**
  * @brief Zone data for passing to the shader node

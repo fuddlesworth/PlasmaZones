@@ -21,29 +21,34 @@ Suggested improvements to the PlasmaZones shader system. **RHI/Vulkan migration 
 
 ## 1. Performance
 
-### Partial UBO updates
+### Partial UBO updates ✅ (implemented)
 
-Currently the full `ZoneShaderUniforms` block is uploaded every frame via `QRhiResourceUpdateBatch::updateDynamicBuffer(..., 0, sizeof(ZoneShaderUniforms), ...)`. You can reduce bandwidth by tracking what changed and doing smaller updates:
+~~Currently the full `ZoneShaderUniforms` block is uploaded every frame~~ **Implemented:** UBO updates are now partial where possible.
 
-- **Time block only** (iTime, iTimeDelta, iFrame): when only the animation timer tick runs, upload just that region (same offset/size as in the C++ struct).
-- **Zone data only**: when only zone rects/colors/highlights change, upload only the `zoneRects` / `zoneFillColors` / `zoneBorderColors` / `zoneParams` ranges.
-- **Per-frame matrix/opacity**: avoid full UBO upload when only `qt_Matrix` and `qt_Opacity` change; use a smaller `updateDynamicBuffer` range or a separate small buffer.
+- **Time block only** (iTime, iTimeDelta, iFrame): when only the animation timer tick runs, we upload just that region via `ZoneShaderUboRegions::kTimeBlockOffset` / `kTimeBlockSize` (12 bytes).
+- **Zone data only**: when only zone rects/colors/params/resolution/mouse/custom params change, we upload only the scene region via `kSceneDataOffset` / `kSceneDataSize`.
+- **Full upload**: first frame after init or context loss still does a full upload; subsequent frames use one or two partial `updateDynamicBuffer` calls.
 
-This reduces PCIe/GPU bandwidth and helps on multi-monitor setups.
+Constants live in `zoneshadercommon.h` (`ZoneShaderUboRegions`). Granular dirty flags (`m_timeDirty`, `m_zoneDataDirty`) are set in setters and cleared after upload. This reduces PCIe/GPU bandwidth and helps on multi-monitor setups.
 
-### Shader bake caching
+**Not yet done:** Per-frame matrix/opacity from the scene graph (smaller upload when only `qt_Matrix`/`qt_Opacity` change) — would require reading `RenderState` and comparing to last uploaded values.
 
-Shaders are baked with QShaderBaker on first use. Optional improvement:
+### Shader bake caching ✅ (implemented)
 
-- Cache the baked `QShader` in memory keyed by shader path + file mtime (or hash). On load, if cache hit and file unchanged, skip bake.
-- Optionally persist to disk under `~/.cache/plasmazones/shaders/` for faster startup and hot-reload.
+~~Shaders are baked with QShaderBaker on first use.~~ **Implemented:** In-memory cache keyed by vertex path + vertex mtime + fragment path + fragment mtime.
+
+- On load (when both paths are set), we look up the cache in `prepare()`; on hit we reuse the baked `QShader` pair and skip bake.
+- On miss we bake and insert into a static `QHash` guarded by `QMutex` (prepare runs on the render thread).
+- Paths and mtimes are set in `loadVertexShader()` / `loadFragmentShader()`; when source is set directly (no path), cache is skipped.
+
+**Optional future:** Persist cache to disk under `~/.cache/plasmazones/shaders/` for faster startup and hot-reload.
 
 ### Smarter update throttling
 
-You already have a configurable shader frame rate. You could:
+You already have a configurable shader frame rate.
 
-- **Pause or heavily throttle** the shader timer when the overlay is hidden (e.g. after a short delay) so `iTime`/`iTimeDelta` barely advance when not visible.
-- For **static-looking shaders** (no `iTime` usage), optionally skip or reduce timer-driven updates and only push updates when zone data or params change.
+- **Pause when overlay hidden** ✅: The overlay already calls `stopShaderAnimation()` in `hide()`, so the shader timer is stopped when not visible; no change needed.
+- For **static-looking shaders** (no `iTime` usage), optionally skip or reduce timer-driven updates and only push updates when zone data or params change — not implemented (would require metadata or shader analysis).
 
 ---
 
@@ -121,7 +126,7 @@ The wiki mentions `preview.png`. For a better authoring experience:
 
 ## 6. Smaller cleanups
 
-- **ZoneShaderNodeRhi**: In `prepare()`, the full UBO is uploaded every time. Consider partial updates when only `qt_Matrix`/`qt_Opacity` or only zone data change (see Section 1).
+- ~~**ZoneShaderNodeRhi**: In `prepare()`, the full UBO is uploaded every time. Consider partial updates~~ ✅ Done (Section 1): partial UBO updates for time block and zone/scene data are implemented. Matrix/opacity-only partial update is optional future work.
 - **ZoneShaderItem** color parsing from `shaderParams` (e.g. `customColor5`–`8`) could share a single helper (or loop) with `customColor1`–`4` to avoid duplication.
 - **ShaderRegistry**: `shaderCompilationStarted` / `shaderCompilationFinished` are declared but baking runs on the render thread in `ZoneShaderNodeRhi`; if pre-load validation is added, emit those from the validation path so the UI can show a compiling state.
 
