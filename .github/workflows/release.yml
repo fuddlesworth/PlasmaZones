@@ -54,7 +54,7 @@ jobs:
             cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
             build-essential pkg-kde-tools \
             devscripts debhelper fakeroot dpkg-dev \
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev \
+            qt6-base-dev qt6-base-private-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev \
             kwin-dev libwayland-dev libepoxy-dev libdrm-dev \
             libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
             libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
@@ -71,11 +71,12 @@ jobs:
         run: |
           # dpkg-buildpackage expects debian/ at project root
           ln -s packaging/debian debian
-          dpkg-buildpackage -us -uc -b
+          dpkg-buildpackage -us -uc -b 2>&1 | tee build.log; code=${PIPESTATUS[0]}
           mkdir -p dist
-          mv ../*.deb dist/
-          # Include debug symbol packages (.ddeb) if generated
+          mv ../*.deb dist/ 2>/dev/null || true
           mv ../*.ddeb dist/ 2>/dev/null || true
+          if [ $code -ne 0 ]; then echo "--- Build log (last 300 lines) ---"; tail -300 build.log; fi
+          exit $code
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -113,7 +114,8 @@ jobs:
             kf6-ki18n-devel kf6-kcmutils-devel \
             kf6-kwindowsystem-devel kf6-kglobalaccel-devel \
             kf6-knotifications-devel kf6-kcolorscheme-devel \
-            layer-shell-qt-devel plasma-activities-devel
+            layer-shell-qt-devel plasma-activities-devel \
+            systemd-rpm-macros
 
       - name: Setup rpmbuild
         run: rpmdev-setuptree
@@ -134,9 +136,11 @@ jobs:
       - name: Build RPM
         run: |
           cp packaging/rpm/plasmazones.spec ~/rpmbuild/SPECS/
-          rpmbuild -bb ~/rpmbuild/SPECS/plasmazones.spec
+          rpmbuild -bb ~/rpmbuild/SPECS/plasmazones.spec 2>&1 | tee build.log; code=${PIPESTATUS[0]}
           mkdir -p dist
-          cp ~/rpmbuild/RPMS/*/*.rpm dist/
+          cp ~/rpmbuild/RPMS/*/*.rpm dist/ 2>/dev/null || true
+          if [ $code -ne 0 ]; then echo "--- Build log (last 200 lines) ---"; tail -200 build.log; fi
+          exit $code
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
