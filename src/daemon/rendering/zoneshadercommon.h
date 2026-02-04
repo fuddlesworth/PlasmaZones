@@ -77,16 +77,16 @@ static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds ex
 namespace ZoneShaderUboRegions {
 
 // Transform and opacity from Qt scene graph (mat4 + float)
-constexpr size_t kMatrixOpacityOffset = 0;
-constexpr size_t kMatrixOpacitySize = offsetof(ZoneShaderUniforms, iTime); // 68 bytes
+constexpr size_t K_MATRIX_OPACITY_OFFSET = 0;
+constexpr size_t K_MATRIX_OPACITY_SIZE = offsetof(ZoneShaderUniforms, iTime); // 68 bytes
 
 // Animation time block (iTime, iTimeDelta, iFrame)
-constexpr size_t kTimeBlockOffset = offsetof(ZoneShaderUniforms, iTime);
-constexpr size_t kTimeBlockSize = sizeof(float) + sizeof(float) + sizeof(int); // 12 bytes
+constexpr size_t K_TIME_BLOCK_OFFSET = offsetof(ZoneShaderUniforms, iTime);
+constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int); // 12 bytes
 
 // Scene data: iResolution through end (zone counts, iMouse, params, colors, zone arrays)
-constexpr size_t kSceneDataOffset = offsetof(ZoneShaderUniforms, iResolution);
-constexpr size_t kSceneDataSize = sizeof(ZoneShaderUniforms) - kSceneDataOffset;
+constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, iResolution);
+constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
 
 } // namespace ZoneShaderUboRegions
 

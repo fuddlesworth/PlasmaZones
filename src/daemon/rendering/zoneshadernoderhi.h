@@ -124,4 +124,17 @@ private:
     QColor m_customColor8 = Qt::white;
 };
 
+/** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */
+struct WarmShaderBakeResult {
+    bool success = false;
+    QString errorMessage;
+};
+
+/**
+ * Pre-load cache warming: load, bake, and insert shaders for the given paths into the
+ * shared bake cache. Safe to call from any thread (e.g. after ShaderRegistry::refresh()).
+ * @return success and error message (e.g. from QShaderBaker) for UI reporting
+ */
+WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath);
+
 } // namespace PlasmaZones

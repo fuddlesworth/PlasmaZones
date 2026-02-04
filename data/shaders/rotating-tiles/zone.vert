@@ -8,7 +8,7 @@ layout(location = 0) in vec2 position;
 layout(location = 1) in vec2 texCoord;
 
 // Vertex outputs
-out vec2 vTexCoord;
+layout(location = 0) out vec2 vTexCoord;
 
 // Uniform block matching fragment shader (std140 layout)
 layout(std140, binding = 0) uniform ZoneUniforms {

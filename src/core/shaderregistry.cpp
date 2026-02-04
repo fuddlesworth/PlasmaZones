@@ -188,6 +188,16 @@ void ShaderRegistry::refresh()
     Q_EMIT shadersChanged();
 }
 
+void ShaderRegistry::reportShaderBakeStarted(const QString& shaderId)
+{
+    Q_EMIT shaderCompilationStarted(shaderId);
+}
+
+void ShaderRegistry::reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error)
+{
+    Q_EMIT shaderCompilationFinished(shaderId, success, error);
+}
+
 void ShaderRegistry::loadSystemShaders()
 {
     // locateAll() returns paths in priority order: user first, system last

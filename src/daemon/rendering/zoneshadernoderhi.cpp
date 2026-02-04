@@ -25,14 +25,75 @@ struct ShaderCacheEntry {
     QShader vertex;
     QShader fragment;
 };
-using ShaderCache = QHash<QString, ShaderCacheEntry>;
+// Key is QByteArray so we can use NUL as delimiter (invalid in file paths; avoids newline collision)
+using ShaderCache = QHash<QByteArray, ShaderCacheEntry>;
 ShaderCache s_shaderCache;
 QMutex s_shaderCacheMutex;
 
-QString shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QString& fragPath, qint64 fragMtime)
+constexpr int kShaderCacheMaxSize = 64;
+
+static void shaderCacheEvictOne()
 {
-    return vertPath + QLatin1Char('\n') + QString::number(vertMtime) + QLatin1Char('\n') + fragPath
-           + QLatin1Char('\n') + QString::number(fragMtime);
+    if (s_shaderCache.isEmpty()) {
+        return;
+    }
+    s_shaderCache.erase(s_shaderCache.begin());
+}
+
+// NUL delimiter: cannot appear in file paths (Unix/Windows), avoids newline collision in keys
+static constexpr char kShaderCacheKeyDelim = '\0';
+
+static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, const QString& fragPath, qint64 fragMtime)
+{
+    QByteArray key = vertPath.toUtf8();
+    key.append(kShaderCacheKeyDelim);
+    key.append(QByteArray::number(vertMtime));
+    key.append(kShaderCacheKeyDelim);
+    key.append(fragPath.toUtf8());
+    key.append(kShaderCacheKeyDelim);
+    key.append(QByteArray::number(fragMtime));
+    return key;
+}
+
+static const QList<QShaderBaker::GeneratedShader>& bakeTargets()
+{
+    static const QList<QShaderBaker::GeneratedShader> targets = {
+        { QShader::GlslShader, QShaderVersion(330) },
+        { QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs) },
+        { QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs) },
+        { QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs) },
+    };
+    return targets;
+}
+
+static QString loadAndExpandShader(const QString& path, QString* outError)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        if (outError) {
+            *outError = QStringLiteral("Failed to open: ") + path;
+        }
+        return QString();
+    }
+    const QString raw = QTextStream(&file).readAll();
+    const QString currentFileDir = QFileInfo(path).absolutePath();
+    const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
+    const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
+                                                          QStringLiteral("plasmazones/shaders"),
+                                                          QStandardPaths::LocateDirectory);
+    QStringList includePaths{currentFileDir};
+    if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir) {
+        includePaths.append(shadersRootDir);
+    }
+    if (!systemShaderDir.isEmpty() && !includePaths.contains(systemShaderDir)) {
+        includePaths.append(systemShaderDir);
+    }
+    QString err;
+    const QString expanded = ShaderIncludeResolver::expandIncludes(raw, currentFileDir, includePaths, &err);
+    if (!err.isEmpty() && outError) {
+        *outError = err;
+    }
+    return err.isEmpty() ? expanded : QString();
 }
 
 } // anonymous namespace
@@ -132,7 +193,7 @@ void ZoneShaderNodeRhi::prepare()
             return;
         }
 
-        const QString cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, m_fragmentPath, m_fragmentMtime);
+        const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, m_fragmentPath, m_fragmentMtime);
         if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
             QMutexLocker lock(&s_shaderCacheMutex);
             auto it = s_shaderCache.constFind(cacheKey);
@@ -146,13 +207,7 @@ void ZoneShaderNodeRhi::prepare()
         }
 
         if (!m_shaderReady) {
-            // Desktop OpenGL 330 + OpenGL ES 300/310/320 (Qt may use ES on Linux/EGL).
-            const QList<QShaderBaker::GeneratedShader> targets = {
-                { QShader::GlslShader, QShaderVersion(330) },
-                { QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs) },
-                { QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs) },
-                { QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs) },
-            };
+            const QList<QShaderBaker::GeneratedShader>& targets = bakeTargets();
             QShaderBaker vertexBaker;
             vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
             vertexBaker.setGeneratedShaders(targets);
@@ -204,15 +259,19 @@ void ZoneShaderNodeRhi::prepare()
                 using namespace ZoneShaderUboRegions;
                 if (m_timeDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(),
-                                               kTimeBlockOffset,
-                                               kTimeBlockSize,
-                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + kTimeBlockOffset);
+                                               K_TIME_BLOCK_OFFSET,
+                                               K_TIME_BLOCK_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + K_TIME_BLOCK_OFFSET);
                 }
                 if (m_zoneDataDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(),
-                                               kSceneDataOffset,
-                                               kSceneDataSize,
-                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + kSceneDataOffset);
+                                               K_SCENE_DATA_OFFSET,
+                                               K_SCENE_DATA_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + K_SCENE_DATA_OFFSET);
+                }
+                // Defensive: if a future setter sets m_uniformsDirty without granular flags, do full upload
+                if (!m_timeDirty && !m_zoneDataDirty) {
+                    batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ZoneShaderUniforms), &m_uniforms);
                 }
             }
             if (!m_vboUploaded) {
@@ -417,28 +476,12 @@ void ZoneShaderNodeRhi::setCustomColor8(const QColor& color)
 
 bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        m_shaderError = QStringLiteral("Failed to open vertex shader: ") + path;
-        return false;
-    }
-    QString raw = QTextStream(&file).readAll();
-    const QString currentFileDir = QFileInfo(path).absolutePath();
-    const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
-    const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                                          QStringLiteral("plasmazones/shaders"),
-                                                          QStandardPaths::LocateDirectory);
-    QStringList includePaths{currentFileDir};
-    if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir) {
-        includePaths.append(shadersRootDir);
-    }
-    if (!systemShaderDir.isEmpty() && !includePaths.contains(systemShaderDir)) {
-        includePaths.append(systemShaderDir);
-    }
     QString err;
-    m_vertexShaderSource = ShaderIncludeResolver::expandIncludes(raw, currentFileDir, includePaths, &err);
-    if (!err.isEmpty()) {
-        m_shaderError = QStringLiteral("Vertex shader include: ") + err;
+    m_vertexShaderSource = loadAndExpandShader(path, &err);
+    if (m_vertexShaderSource.isEmpty()) {
+        m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
+                ? QString(QStringLiteral("Failed to open vertex shader: ") + path)
+                : QString(QStringLiteral("Vertex shader include: ") + err);
         return false;
     }
     m_vertexPath = path;
@@ -449,28 +492,12 @@ bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
 
 bool ZoneShaderNodeRhi::loadFragmentShader(const QString& path)
 {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        m_shaderError = QStringLiteral("Failed to open fragment shader: ") + path;
-        return false;
-    }
-    QString raw = QTextStream(&file).readAll();
-    const QString currentFileDir = QFileInfo(path).absolutePath();
-    const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
-    const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                                          QStringLiteral("plasmazones/shaders"),
-                                                          QStandardPaths::LocateDirectory);
-    QStringList includePaths{currentFileDir};
-    if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir) {
-        includePaths.append(shadersRootDir);
-    }
-    if (!systemShaderDir.isEmpty() && !includePaths.contains(systemShaderDir)) {
-        includePaths.append(systemShaderDir);
-    }
     QString err;
-    m_fragmentShaderSource = ShaderIncludeResolver::expandIncludes(raw, currentFileDir, includePaths, &err);
-    if (!err.isEmpty()) {
-        m_shaderError = QStringLiteral("Fragment shader include: ") + err;
+    m_fragmentShaderSource = loadAndExpandShader(path, &err);
+    if (m_fragmentShaderSource.isEmpty()) {
+        m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
+                ? QString(QStringLiteral("Failed to open fragment shader: ") + path)
+                : QString(QStringLiteral("Fragment shader include: ") + err);
         return false;
     }
     m_fragmentPath = path;
@@ -680,6 +707,63 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_didFullUploadOnce = false;
     m_shaderReady = false;
     m_shaderDirty = true; // Force re-bake on next prepare() after context loss
+}
+
+WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath)
+{
+    WarmShaderBakeResult result;
+    if (vertexPath.isEmpty() || fragmentPath.isEmpty()) {
+        result.errorMessage = QStringLiteral("Vertex or fragment path is empty");
+        return result;
+    }
+    QString err;
+    const QString vertSource = loadAndExpandShader(vertexPath, &err);
+    if (vertSource.isEmpty()) {
+        result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load vertex shader") : err;
+        return result;
+    }
+    const QString fragSource = loadAndExpandShader(fragmentPath, &err);
+    if (fragSource.isEmpty()) {
+        result.errorMessage = err.isEmpty() ? QStringLiteral("Failed to load fragment shader") : err;
+        return result;
+    }
+    const qint64 vertMtime = QFileInfo(vertexPath).lastModified().toMSecsSinceEpoch();
+    const qint64 fragMtime = QFileInfo(fragmentPath).lastModified().toMSecsSinceEpoch();
+
+    const QList<QShaderBaker::GeneratedShader>& targets = bakeTargets();
+    QShaderBaker vertexBaker;
+    vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+    vertexBaker.setGeneratedShaders(targets);
+    vertexBaker.setSourceString(vertSource.toUtf8(), QShader::VertexStage);
+    const QShader vertexShader = vertexBaker.bake();
+    if (!vertexShader.isValid()) {
+        result.errorMessage = vertexBaker.errorMessage();
+        if (result.errorMessage.isEmpty()) {
+            result.errorMessage = QStringLiteral("Vertex shader bake failed");
+        }
+        return result;
+    }
+    QShaderBaker fragmentBaker;
+    fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+    fragmentBaker.setGeneratedShaders(targets);
+    fragmentBaker.setSourceString(fragSource.toUtf8(), QShader::FragmentStage);
+    const QShader fragmentShader = fragmentBaker.bake();
+    if (!fragmentShader.isValid()) {
+        result.errorMessage = fragmentBaker.errorMessage();
+        if (result.errorMessage.isEmpty()) {
+            result.errorMessage = QStringLiteral("Fragment shader bake failed");
+        }
+        return result;
+    }
+
+    const QByteArray key = shaderCacheKey(vertexPath, vertMtime, fragmentPath, fragMtime);
+    QMutexLocker lock(&s_shaderCacheMutex);
+    if (s_shaderCache.size() >= kShaderCacheMaxSize) {
+        shaderCacheEvictOne();
+    }
+    s_shaderCache[key] = ShaderCacheEntry{ vertexShader, fragmentShader };
+    result.success = true;
+    return result;
 }
 
 } // namespace PlasmaZones

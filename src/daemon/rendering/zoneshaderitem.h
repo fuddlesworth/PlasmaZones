@@ -407,6 +407,11 @@ private:
      */
     void setStatus(Status status);
 
+    /** @brief Get custom color by index (1–8). Used by setShaderParams loop. */
+    QVector4D customColorByIndex(int index) const;
+    /** @brief Set custom color by index (1–8). Used by setShaderParams loop. */
+    void setCustomColorByIndex(int index, const QVector4D& color);
+
     // Animation state
     qreal m_iTime = 0.0;
     qreal m_iTimeDelta = 0.0;

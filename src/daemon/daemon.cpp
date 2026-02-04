@@ -2,10 +2,32 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "daemon.h"
+
+#include <QGuiApplication>
+#include <QFutureWatcher>
+#include <QPointer>
+#include <QtConcurrent>
+#include <QScreen>
+#include <QCursor>
+#include <QAction>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusError>
+#include <QFile>
+#include <QThread>
+#include <QProcess>
+
+#include <KGlobalAccel>
+#include <KLocalizedString>
+#include <KSharedConfig>
+#include <KConfigGroup>
+
 #include "overlayservice.h"
 #include "modetracker.h"
 #include "unifiedlayoutcontroller.h"
 #include "zoneselectorcontroller.h"
+#include "shortcutmanager.h"
+#include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
 #include "../core/zonedetector.h"
 #include "../core/screenmanager.h"
@@ -14,7 +36,8 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "shortcutmanager.h"
+#include "../core/windowtrackingservice.h"
+#include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
@@ -23,22 +46,6 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
-#include "../core/windowtrackingservice.h"
-#include "../core/shaderregistry.h"
-
-#include <QGuiApplication>
-#include <QScreen>
-#include <QCursor>
-#include <QAction>
-#include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusError>
-#include <QThread>
-#include <QProcess>
-#include <KGlobalAccel>
-#include <KLocalizedString>
-#include <KSharedConfig>
-#include <KConfigGroup>
 
 namespace PlasmaZones {
 
@@ -94,7 +101,50 @@ bool Daemon::init()
     // Initialize shader registry singleton (must be done early, before D-Bus adaptors)
     // The registry checks for Qt6::ShaderTools availability at compile time
     // and for qsb tool availability at runtime
-    new ShaderRegistry(this);
+    auto* shaderRegistry = new ShaderRegistry(this);
+    auto scheduleWarmForShader = [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
+        if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
+            return;
+        }
+        if (info.vertexShaderPath.isEmpty() || info.sourcePath.isEmpty()) {
+            return;
+        }
+        if (!QFile::exists(info.vertexShaderPath) || !QFile::exists(info.sourcePath)) {
+            return;
+        }
+        ShaderRegistry* reg = registryPtr.data();
+        if (!reg) {
+            return;
+        }
+        const QString shaderId = info.id;
+        auto* watcher = new QFutureWatcher<WarmShaderBakeResult>(this);
+        connect(watcher, &QFutureWatcher<WarmShaderBakeResult>::finished, this, [registryPtr, watcher, shaderId]() {
+            if (!registryPtr) {
+                watcher->deleteLater();
+                return;
+            }
+            const WarmShaderBakeResult r = watcher->result();
+            if (!r.success) {
+                qCWarning(lcDaemon) << "Shader bake failed for" << shaderId << ":" << r.errorMessage;
+            }
+            registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
+            watcher->deleteLater();
+        });
+        reg->reportShaderBakeStarted(shaderId);
+        watcher->setFuture(QtConcurrent::run([vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
+            return warmShaderBakeCacheForPaths(vertPath, fragPath);
+        }));
+    };
+    connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {
+        const QList<ShaderRegistry::ShaderInfo> shaders = ShaderRegistry::instance()->availableShaders();
+        for (const ShaderRegistry::ShaderInfo& info : shaders) {
+            scheduleWarmForShader(info);
+        }
+    });
+    // Warm cache once for shaders already loaded by ShaderRegistry ctor
+    for (const ShaderRegistry::ShaderInfo& info : shaderRegistry->availableShaders()) {
+        scheduleWarmForShader(info);
+    }
 
     m_layoutManager->setSettings(m_settings.get());
     // Load layouts (pass defaultLayoutId so initial active uses Settings default when set)

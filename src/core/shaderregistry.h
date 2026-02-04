@@ -166,6 +166,16 @@ public:
      */
     Q_INVOKABLE void refresh();
 
+    /**
+     * Report shader bake started (e.g. before cache warming). Emits shaderCompilationStarted.
+     */
+    void reportShaderBakeStarted(const QString& shaderId);
+    /**
+     * Report shader bake result (e.g. from cache warming). Emits shaderCompilationFinished.
+     * Call from the main thread when a background bake completes.
+     */
+    void reportShaderBakeFinished(const QString& shaderId, bool success, const QString& error);
+
 Q_SIGNALS:
     void shadersChanged();
     void shaderCompilationStarted(const QString& shaderId);

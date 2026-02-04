@@ -181,7 +181,7 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
     setCustomParams3(newParams3);
     setCustomParams4(newParams4);
 
-    // Color params: customColor1 through customColor4 (color slots 0-3)
+    // Color params: customColor1–8 (color slots 0–7), single helper + loop
     auto extractColor = [&params](const QString& key, const QVector4D& defaultVal) -> QVector4D {
         if (params.contains(key)) {
             QVariant val = params.value(key);
@@ -189,7 +189,8 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
                 QColor color = val.value<QColor>();
                 return QVector4D(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
                                  static_cast<float>(color.blueF()), static_cast<float>(color.alphaF()));
-            } else if (val.typeId() == QMetaType::QString) {
+            }
+            if (val.typeId() == QMetaType::QString) {
                 QColor color(val.toString());
                 if (color.isValid()) {
                     return QVector4D(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
@@ -200,14 +201,13 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         return defaultVal;
     };
 
-    setCustomColor1(extractColor(QStringLiteral("customColor1"), m_customColor1));
-    setCustomColor2(extractColor(QStringLiteral("customColor2"), m_customColor2));
-    setCustomColor3(extractColor(QStringLiteral("customColor3"), m_customColor3));
-    setCustomColor4(extractColor(QStringLiteral("customColor4"), m_customColor4));
-    setCustomColor5(extractColor(QStringLiteral("customColor5"), m_customColor5));
-    setCustomColor6(extractColor(QStringLiteral("customColor6"), m_customColor6));
-    setCustomColor7(extractColor(QStringLiteral("customColor7"), m_customColor7));
-    setCustomColor8(extractColor(QStringLiteral("customColor8"), m_customColor8));
+    static const char* const colorKeys[] = {
+        "customColor1", "customColor2", "customColor3", "customColor4",
+        "customColor5", "customColor6", "customColor7", "customColor8",
+    };
+    for (int i = 0; i < 8; ++i) {
+        setCustomColorByIndex(i + 1, extractColor(QString::fromLatin1(colorKeys[i]), customColorByIndex(i + 1)));
+    }
 
     Q_EMIT shaderParamsChanged();
     update();
@@ -331,6 +331,36 @@ void ZoneShaderItem::setCustomColor8(const QVector4D& color)
     m_customColor8 = color;
     Q_EMIT customColorsChanged();
     update();
+}
+
+QVector4D ZoneShaderItem::customColorByIndex(int index) const
+{
+    switch (index) {
+    case 1: return m_customColor1;
+    case 2: return m_customColor2;
+    case 3: return m_customColor3;
+    case 4: return m_customColor4;
+    case 5: return m_customColor5;
+    case 6: return m_customColor6;
+    case 7: return m_customColor7;
+    case 8: return m_customColor8;
+    default: return QVector4D();
+    }
+}
+
+void ZoneShaderItem::setCustomColorByIndex(int index, const QVector4D& color)
+{
+    switch (index) {
+    case 1: setCustomColor1(color); break;
+    case 2: setCustomColor2(color); break;
+    case 3: setCustomColor3(color); break;
+    case 4: setCustomColor4(color); break;
+    case 5: setCustomColor5(color); break;
+    case 6: setCustomColor6(color); break;
+    case 7: setCustomColor7(color); break;
+    case 8: setCustomColor8(color); break;
+    default: break;
+    }
 }
 
 // ============================================================================
