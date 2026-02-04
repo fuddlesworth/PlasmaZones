@@ -6,7 +6,7 @@
 # Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
 
 Name:           plasmazones
-Version:        1.3.4
+Version:        1.3.5
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -158,6 +158,9 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Tue Feb  4 2026 fuddlesworth - 1.3.5-1
+- Release 1.3.5: fix CI (add Qt6 ShaderTools to deb/rpm build deps)
+
 * Tue Feb  3 2026 fuddlesworth - 1.3.4-1
 - Release 1.3.4
 
