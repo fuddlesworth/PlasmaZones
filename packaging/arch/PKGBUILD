@@ -1,9 +1,12 @@
 # Maintainer: fuddlesworth
 # PlasmaZones - FancyZones-style window tiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+# pkgver is set by CI from the git tag when building in the release workflow.
+# For local/AUR builds, update pkgver and sha256sums to match the release tarball.
 
 pkgname=plasmazones
-pkgver=1.3.3
+pkgver=0.0.0
 pkgrel=1
 pkgdesc="FancyZones-style window tiling for KDE Plasma"
 arch=('x86_64')

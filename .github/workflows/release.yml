@@ -54,7 +54,7 @@ jobs:
             cmake ninja-build extra-cmake-modules gettext g++ pkg-config \
             build-essential pkg-kde-tools \
             devscripts debhelper fakeroot dpkg-dev \
-            qt6-base-dev qt6-declarative-dev qt6-tools-dev \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-shadertools-dev \
             kwin-dev libwayland-dev libepoxy-dev libdrm-dev \
             libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
             libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
@@ -106,7 +106,7 @@ jobs:
           dnf install -y \
             cmake ninja-build extra-cmake-modules gettext gcc-c++ \
             qt6-qtbase-devel qt6-qtbase-private-devel \
-            qt6-qtdeclarative-devel qt6-qttools-devel \
+            qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtshadertools-devel \
             kwin-devel wayland-devel libepoxy-devel libdrm-devel \
             kf6-kconfig-devel kf6-kconfigwidgets-devel \
             kf6-kcoreaddons-devel kf6-kdbusaddons-devel \
@@ -126,10 +126,12 @@ jobs:
           tar --exclude='.git' --exclude='build' -cf - . | tar -xf - -C PlasmaZones-${VERSION}/
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
-      - name: Update spec version
+      - name: Update spec version and changelog from tag
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
+          CHANGELOG_DATE=$(TZ=UTC date '+%a %b %e %Y')
+          sed -i "0,/^\* .* fuddlesworth - [0-9.]*-1/s/^\* .* fuddlesworth - [0-9.]*-1/* $CHANGELOG_DATE fuddlesworth - $VERSION-1/" packaging/rpm/plasmazones.spec
 
       - name: Build RPM
         run: |

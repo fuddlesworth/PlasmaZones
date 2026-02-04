@@ -4,9 +4,11 @@
 #
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
+#
+# Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        1.3.3
+Version:        0.0.0
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -163,7 +165,7 @@ Features:
 - Resnap-to-new-layout shortcut and shortcut consolidation (PR #75)
 - Logging alignment and PR review fixes
 
-* Sat Feb  1 2026 fuddlesworth - 1.2.0-1
+* Sun Feb  1 2026 fuddlesworth - 1.2.0-1
 - Initial RPM package
 - Wayland-only release (X11 support removed)
 - KDE Plasma 6 / KF6 / Qt6 required
