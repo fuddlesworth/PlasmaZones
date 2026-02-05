@@ -22,29 +22,6 @@ ScrollView {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // Update available banner (only show if we have a valid latest version)
-        Kirigami.InlineMessage {
-            id: updateBanner
-            Layout.fillWidth: true
-            visible: kcm.updateAvailable
-                     && kcm.latestVersion.length > 0
-                     && kcm.latestVersion !== kcm.dismissedUpdateVersion
-            type: Kirigami.MessageType.Information
-            text: i18n("A new version is available: %1", kcm.latestVersion)
-            actions: [
-                Kirigami.Action {
-                    text: i18n("View Release")
-                    icon.name: "internet-web-browser"
-                    onTriggered: kcm.openReleaseUrl()
-                },
-                Kirigami.Action {
-                    text: i18n("Dismiss")
-                    icon.name: "dialog-close"
-                    onTriggered: kcm.dismissedUpdateVersion = kcm.latestVersion
-                }
-            ]
-        }
-
         // App header with icon and version
         RowLayout {
             Layout.fillWidth: true
@@ -234,6 +211,10 @@ ScrollView {
                     updateStatusLabel.visible = true
                     updateStatusLabel.manualCheck = false
                     statusHideTimer.restart()
+                    // Reshow the header banner if an update was found
+                    if (kcm.updateAvailable) {
+                        kcm.dismissedUpdateVersion = ""
+                    }
                 }
 
                 text: {
