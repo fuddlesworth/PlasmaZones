@@ -178,7 +178,7 @@ void ShortcutManager::updateShortcuts()
         updateQuickLayoutShortcut(i);
     }
 
-    // Phase 1 Keyboard Navigation shortcuts
+    // Keyboard navigation shortcuts
     updateMoveWindowLeftShortcut();
     updateMoveWindowRightShortcut();
     updateMoveWindowUpShortcut();
@@ -231,7 +231,7 @@ void ShortcutManager::unregisterShortcuts()
     qDeleteAll(m_quickLayoutActions);
     m_quickLayoutActions.clear();
 
-    // Phase 1 Keyboard Navigation actions
+    // Keyboard navigation actions
     DELETE_SHORTCUT(m_moveWindowLeftAction);
     DELETE_SHORTCUT(m_moveWindowRightAction);
     DELETE_SHORTCUT(m_moveWindowUpAction);

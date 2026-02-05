@@ -76,7 +76,6 @@ const vec3 gradeMid       = vec3(0.000, 0.620, 0.741);  // Teal midtones
 const vec3 gradeHighlight = vec3(0.333, 0.667, 1.000);  // Cyan highlights
 
 // === UTILITIES ===
-#include <common.glsl>
 float luminance(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
 // === LAYER 1: NEON COLOR GRADE ===
@@ -377,8 +376,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float t = iTime * SPEED;
         vec3 fx = vec3(0.0);
         
-        // Base color: use configured background color (matching Ghostty's approach)
-        // This allows users to set the same background color as their terminal
+        // Base color: use configured background (e.g. match terminal)
         vec3 baseColor = getBackgroundColor();
         
         // Use zone fill color alpha for transparency (or default to 0.95 for Ghostty-like appearance)

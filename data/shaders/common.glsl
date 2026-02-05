@@ -36,12 +36,12 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 
-// Convert texture coords to screen coords (Y=0 at top). Requires ZoneUniforms.iResolution.
+// Texture coords to screen coords (Y=0 at top). Uses iResolution.
 vec2 fragCoordFromTexCoord(vec2 vTexCoord) {
     return vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
 }
 
-// Clamp color and apply qt_Opacity for final output. Requires ZoneUniforms.qt_Opacity.
+// Clamp color and apply qt_Opacity for final output.
 vec4 clampFragColor(vec4 color) {
     return vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
 }
@@ -95,7 +95,7 @@ vec2 labelsUv(vec2 fragCoord) {
     return fragCoord / res;
 }
 
-// Convenience: composite labels using fragCoord and uZoneLabels (binding 1)
+// Composite labels at fragCoord using uZoneLabels (binding 1)
 vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord) {
     return compositeLabels(color, labelsUv(fragCoord), uZoneLabels);
 }

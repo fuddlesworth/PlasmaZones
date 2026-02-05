@@ -22,8 +22,6 @@ layout(location = 0) out vec4 fragColor;
  *   customColors[0] = tint - Colorizes the effect (default warm gradient)
  */
 
-#include <common.glsl>
-
 // Shadertoy-derived: rotating tile grid with radial wave. Key constants: tile_dist/edge
 // control tile vs gap; square_dist drives radial wave; warm gradient (pow 2.0, 1.5, 1.2) is
 // hardcoded; only tint is exposed. Tune tileScale, speed, radialWaveScale, baseAngle for look.

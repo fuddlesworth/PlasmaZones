@@ -205,7 +205,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                           QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
     qCDebug(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
 
-    // Connect to keyboard navigation D-Bus signals (Phase 1)
+    // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
 
     // Sync floating window state from daemon's persisted state

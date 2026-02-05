@@ -32,8 +32,6 @@ layout(location = 0) out vec4 fragColor;
  */
 
 // Noise functions
-#include <common.glsl>
-
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);

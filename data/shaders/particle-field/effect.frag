@@ -24,8 +24,6 @@ layout(location = 0) out vec4 fragColor;
  *   customParams[1].y = borderGlow (0.3-1.0) - Border brightness
  */
 
-#include <common.glsl>
-
 vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 6.0);
     float borderWidth = max(params.y, 2.0);

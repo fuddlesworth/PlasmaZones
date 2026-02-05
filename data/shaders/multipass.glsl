@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// PlasmaZones multipass shader bindings. Include only in effect.frag for shaders
-// that use buffer channels (metadata multipass: true). Declares iChannel0-3 and
-// channelUv helper. Requires ZoneUniforms with iChannelResolution[4] before include.
+// Multipass bindings. Include in effect.frag when using buffer channels (metadata multipass: true).
+// Declares iChannel0-3 and channelUv. Include after ZoneUniforms (needs iChannelResolution[4]).
 //
 //   #include <multipass.glsl>
 

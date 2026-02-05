@@ -28,8 +28,6 @@ layout(location = 0) out vec4 fragColor;
  *   customColors[1] = electricPurple - Secondary circuit color (#BF00FF)
  */
 
-#include <common.glsl>
-
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);

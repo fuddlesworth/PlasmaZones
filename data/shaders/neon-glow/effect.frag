@@ -21,8 +21,6 @@ layout(location = 0) out vec4 fragColor;
  *   customParams[1].y = flickerAmount (0.0-0.3) - Random flicker
  */
 
-#include <common.glsl>
-
 vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 6.0);
     float borderWidth = max(params.y, 3.0);

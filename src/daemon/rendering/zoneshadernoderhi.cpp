@@ -645,18 +645,21 @@ void ZoneShaderNodeRhi::setTime(float time)
     m_time = time;
     m_uniformsDirty = true;
     m_timeDirty = true;
+    m_zoneDataDirty = true; // iDate is in scene block; re-upload when time changes
 }
 void ZoneShaderNodeRhi::setTimeDelta(float delta)
 {
     m_timeDelta = delta;
     m_uniformsDirty = true;
     m_timeDirty = true;
+    m_zoneDataDirty = true; // iDate is in scene block; re-upload when time changes
 }
 void ZoneShaderNodeRhi::setFrame(int frame)
 {
     m_frame = frame;
     m_uniformsDirty = true;
     m_timeDirty = true;
+    m_zoneDataDirty = true; // iDate is in scene block; re-upload when time changes
 }
 void ZoneShaderNodeRhi::setResolution(float width, float height)
 {
@@ -1403,9 +1406,8 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
         }
     }
 
-    // iChannelResolution (std140: vec2[4], each element 16 bytes)
-    // Shadertoy compatibility: per-channel size for correct UV scaling.
-    // Dummy 1x1 channels get vec2(1,1); unused/multipass channels get actual buffer size.
+    // iChannelResolution (std140: vec2[4], each element 16 bytes). Per-channel size for UV scaling.
+    // Unbound/dummy channels use (1,1); others use actual buffer size.
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), 4) : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
     for (int i = 0; i < 4; ++i) {

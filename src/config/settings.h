@@ -152,7 +152,7 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString quickLayout9Shortcut READ quickLayout9Shortcut WRITE setQuickLayout9Shortcut NOTIFY
                    quickLayout9ShortcutChanged)
 
-    // Keyboard Navigation Shortcuts (Phase 1 features)
+    // Keyboard Navigation Shortcuts
     Q_PROPERTY(QString moveWindowLeftShortcut READ moveWindowLeftShortcut WRITE setMoveWindowLeftShortcut NOTIFY
                    moveWindowLeftShortcutChanged)
     Q_PROPERTY(QString moveWindowRightShortcut READ moveWindowRightShortcut WRITE setMoveWindowRightShortcut NOTIFY
@@ -634,7 +634,7 @@ public:
     QString quickLayoutShortcut(int index) const;
     void setQuickLayoutShortcut(int index, const QString& shortcut);
 
-    // Keyboard Navigation Shortcuts (Phase 1 features)
+    // Keyboard Navigation Shortcuts
     QString moveWindowLeftShortcut() const
     {
         return m_moveWindowLeftShortcut;
@@ -927,7 +927,7 @@ private:
         QStringLiteral("Meta+Alt+4"), QStringLiteral("Meta+Alt+5"), QStringLiteral("Meta+Alt+6"),
         QStringLiteral("Meta+Alt+7"), QStringLiteral("Meta+Alt+8"), QStringLiteral("Meta+Alt+9")};
 
-    // Keyboard Navigation Shortcuts (Phase 1 features)
+    // Keyboard Navigation Shortcuts
     // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
     // we use Meta+Alt+Shift+Arrow instead.
     QString m_moveWindowLeftShortcut = QStringLiteral("Meta+Alt+Shift+Left");

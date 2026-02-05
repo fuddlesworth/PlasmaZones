@@ -422,7 +422,7 @@ Q_SIGNALS:
                             const QString& sourceZoneId, const QString& targetZoneId,
                             const QString& screenName);
 
-    // Phase 1 Keyboard Navigation signals (for KWin script)
+    // Keyboard Navigation signals (for KWin script)
     /**
      * @brief Request to move a window to a specific zone
      * @param targetZoneId Zone ID to move to

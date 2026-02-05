@@ -438,7 +438,7 @@ void Daemon::start()
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Phase 1 Keyboard Navigation Shortcuts
+    // Keyboard Navigation Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Move window to adjacent zone shortcuts

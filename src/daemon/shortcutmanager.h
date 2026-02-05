@@ -73,7 +73,7 @@ Q_SIGNALS:
      */
     void quickLayoutRequested(int number);
 
-    // Phase 1 Keyboard Navigation signals
+    // Keyboard navigation signals
     /**
      * @brief Emitted when move window to adjacent zone is requested
      * @param direction Navigation direction (Left, Right, Up, Down)
@@ -220,7 +220,7 @@ private:
     QAction* m_nextLayoutAction = nullptr;
     QVector<QAction*> m_quickLayoutActions;
 
-    // Phase 1 Keyboard Navigation actions
+    // Keyboard navigation actions
     QAction* m_moveWindowLeftAction = nullptr;
     QAction* m_moveWindowRightAction = nullptr;
     QAction* m_moveWindowUpAction = nullptr;

@@ -57,8 +57,6 @@ vec3 getBorderColor() {
     return length(c) > 0.01 ? c : mix(getColor1(), getColor2(), 0.6);
 }
 
-#include <common.glsl>
-
 // Smooth gradient based on angle
 float gradientValue(vec2 uv, float angleDeg) {
     float angle = radians(angleDeg);

@@ -22,8 +22,6 @@ layout(location = 0) out vec4 fragColor;
  *   customColors[0] = primary tint - Colorizes the effect
  */
 
-#include <common.glsl>
-
 // Shadertoy-derived: iterative distortion loop. iterCount controls detail (more = denser).
 // Constants (7, 5, 1.5, 9, 11, 40, 1e2, 25.6, 164, 250, 1.35) are from original; tune speed,
 // coordScale and iterCount for user control. Loop is dynamic so very high iterCount can be costly.

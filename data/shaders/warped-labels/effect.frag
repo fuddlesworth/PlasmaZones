@@ -24,8 +24,6 @@ layout(location = 0) out vec4 fragColor;
  *   customParams[1].w = waveFreq - Wave frequency
  */
 
-#include <common.glsl>
-
 vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 10.0);
     float fillOpacity = customParams[0].x > 0.1 ? customParams[0].x : 0.85;

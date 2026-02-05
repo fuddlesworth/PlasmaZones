@@ -14,8 +14,6 @@ layout(location = 3) out vec2 vDisplacement;
 #include <common.glsl>
 
 // Noise for organic movement
-#include <common.glsl>
-
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
