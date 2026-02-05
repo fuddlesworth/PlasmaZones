@@ -27,7 +27,7 @@
       <max>10</max>
     </entry>
     <entry name="DragActivationMouseButton" type="Int">
-      <label>Mouse button to activate zone overlay when starting a window drag (0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, 32=Extra1, 64=Extra2, 128=Extra3). Alternative to modifier for one-handed use.</label>
+      <label>Mouse button to activate zone overlay while dragging (hold during drag to show zones; 0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, 32=Extra1, 64=Extra2, 128=Extra3). Left (1) is invalid. Alternative to modifier for one-handed use.</label>
       <default>0</default>
       <min>0</min>
       <max>128</max>

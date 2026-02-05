@@ -41,6 +41,7 @@ Item {
         { bit: altFlag, label: i18n("Alt") },
         { bit: metaFlag, label: i18n("Meta") }
     ]
+    // Qt::MouseButton bits; UI labels "Extra 3/4/5" match common naming (kcfg uses Extra1/2/3 for 32/64/128)
     readonly property var mouseButtonList: [
         { bit: 0x02, label: i18n("Right") },
         { bit: 0x04, label: i18n("Middle") },
@@ -125,6 +126,8 @@ Item {
             flat: true
             icon.name: "edit-clear"
             z: 1
+            Accessible.role: Accessible.Button
+            Accessible.name: i18n("Clear")
             onClicked: root.clearAll()
             QQC2.ToolTip.visible: hovered && root.tooltipEnabled
             QQC2.ToolTip.text: i18n("Clear")

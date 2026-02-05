@@ -16,6 +16,9 @@ import org.kde.kirigami as Kirigami
 Control {
     id: root
 
+    Accessible.role: Accessible.EditableText
+    Accessible.name: root.placeholderText
+
     // acceptMode: 0 = All, 1 = MetaOnly (modifier keys only), 2 = MouseOnly (mouse buttons only)
     readonly property int acceptModeAll: 0
     readonly property int acceptModeMetaOnly: 1
@@ -207,8 +210,12 @@ Control {
                     mouse.accepted = true
                     if (root.acceptMode === root.acceptModeMetaOnly)
                         return
-                    if (mouse.button === Qt.LeftButton)
+                    if (mouse.button === Qt.LeftButton) {
+                        // In MouseOnly mode, left click cancels (no capture); in All mode, ignore so user can press a key/mouse
+                        if (root.acceptMode === root.acceptModeMouseOnly)
+                            root.cancelCapture()
                         return
+                    }
                     var bit = mouse.button
                     if (bit >= 0x02 && bit <= 0x80) {
                         root.endCapture()

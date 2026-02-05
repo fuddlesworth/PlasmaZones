@@ -146,6 +146,10 @@ void Settings::setDragActivationModifierInt(int modifier)
 
 void Settings::setDragActivationMouseButton(int button)
 {
+    // Left button (1) must not activate zones (user drags with left); treat as disabled
+    if (button == 1) {
+        button = 0;
+    }
     if (m_dragActivationMouseButton != button) {
         m_dragActivationMouseButton = button;
         Q_EMIT dragActivationMouseButtonChanged();
@@ -607,6 +611,10 @@ void Settings::load()
 
     m_dragActivationMouseButton = activation.readEntry(QLatin1String("DragActivationMouseButton"), ConfigDefaults::dragActivationMouseButton());
     m_dragActivationMouseButton = qBound(0, m_dragActivationMouseButton, 128);
+    // Left button (1) must not activate zones (user drags with left); treat as disabled
+    if (m_dragActivationMouseButton == 1) {
+        m_dragActivationMouseButton = 0;
+    }
 
     // Skip-snap modifier: hold this to move window without snapping
     int skipMod = activation.readEntry(QLatin1String("SkipSnapModifier"), ConfigDefaults::skipSnapModifier());
