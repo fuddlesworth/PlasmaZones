@@ -7,25 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
+#include <common.glsl>
 
 /*
  * FLOW LABELS - Zone numbers filled with animated flowing plasma (FBM + palette)
@@ -35,8 +17,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
  *        flow is driven by uv + time so the pattern animates inside the glyph. Optional
  *        bright outline so the digit reads clearly.
  */
-
-#include <common.glsl>
 
 float rand2D(vec2 p) {
     return fract(sin(dot(p, vec2(15.285, 97.258))) * 47582.122);

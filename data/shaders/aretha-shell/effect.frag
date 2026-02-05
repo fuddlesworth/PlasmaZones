@@ -12,23 +12,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
+#include <common.glsl>
 
 // === PARAMETER ACCESS ===
 // Slot 0-3: customParams[0].xyzw
@@ -85,8 +69,6 @@ vec3 getArethaPurple() {
     vec3 c = customColors[3].rgb;
     return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000);  // #5555ff
 }
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
 
 // Color grade mapping (shadows -> midtones -> highlights)
 const vec3 gradeShadow    = vec3(0.098, 0.153, 0.259);  // Deep blue (arethaBg)
@@ -485,7 +467,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
+    color = compositeLabelsWithUv(color, fragCoord);
 
     fragColor = clampFragColor(color);
 }

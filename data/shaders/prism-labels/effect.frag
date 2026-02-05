@@ -7,25 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
+#include <common.glsl>
 
 /*
  * RIPPLE LABELS - Liquid surface with expanding wavefronts; zone numbers refracted by the same wave
@@ -38,8 +20,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
  *   customParams[0].x = fillOpacity, .y = borderWidth, .z = rippleFreq (rings per unit dist), .w = rippleSpeed
  *   customParams[1].x = ringSharpness (line sharpness), .y = refractStrength (UV displacement), .z = ringBrightness
  */
-
-#include <common.glsl>
 
 // Ripple phase from zone center (local 0-1 space); distScale makes dist ~1 at edge of zone
 float ripplePhase(vec2 localUV, float freq, float speed) {

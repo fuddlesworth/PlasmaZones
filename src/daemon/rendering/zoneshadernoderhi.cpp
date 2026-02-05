@@ -3,6 +3,7 @@
 
 #include "zoneshadernoderhi.h"
 
+#include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -1223,6 +1224,8 @@ bool ZoneShaderNodeRhi::ensurePipeline()
     m_renderPassFormat = format;
 
     const bool multiBufferMode = m_bufferPaths.size() > 1;
+    const bool hasMultipass = !m_bufferPath.isEmpty() || multiBufferMode;
+
     auto createImageSrbSingle = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
         QRhiSampler* channel0Sampler = (channel0Texture && m_bufferSampler) ? m_bufferSampler.get() : nullptr;
         if (!channel0Texture && !m_bufferPath.isEmpty()) {
@@ -1269,42 +1272,29 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         return srb->create() ? std::move(srb) : nullptr;
     };
 
+    if (hasMultipass) {
+        if (!m_dummyChannelTexture) {
+            m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+            if (m_dummyChannelTexture->create()) {
+                m_dummyChannelTextureNeedsUpload = true;
+            } else {
+                m_dummyChannelTexture.reset();
+            }
+        }
+        if (!m_dummyChannelSampler && m_dummyChannelTexture) {
+            m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
+                                                         QRhiSampler::None, QRhiSampler::ClampToEdge,
+                                                         QRhiSampler::ClampToEdge));
+            if (!m_dummyChannelSampler->create()) {
+                m_dummyChannelSampler.reset();
+            }
+        }
+    }
+
     if (!m_srb) {
         if (multiBufferMode) {
-            if (!m_dummyChannelTexture) {
-                m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-                if (m_dummyChannelTexture->create()) {
-                    m_dummyChannelTextureNeedsUpload = true;
-                } else {
-                    m_dummyChannelTexture.reset();
-                }
-            }
-            if (!m_dummyChannelSampler && m_dummyChannelTexture) {
-                m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
-                                                             QRhiSampler::None, QRhiSampler::ClampToEdge,
-                                                             QRhiSampler::ClampToEdge));
-                if (!m_dummyChannelSampler->create()) {
-                    m_dummyChannelSampler.reset();
-                }
-            }
             m_srb = createImageSrbMulti();
         } else {
-            if (!m_bufferPath.isEmpty() && !m_bufferTexture && !m_dummyChannelTexture) {
-                m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-                if (m_dummyChannelTexture->create()) {
-                    m_dummyChannelTextureNeedsUpload = true;
-                } else {
-                    m_dummyChannelTexture.reset();
-                }
-                if (!m_dummyChannelSampler) {
-                    m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
-                                                                QRhiSampler::None, QRhiSampler::ClampToEdge,
-                                                                QRhiSampler::ClampToEdge));
-                    if (!m_dummyChannelSampler->create()) {
-                        m_dummyChannelSampler.reset();
-                    }
-                }
-            }
             m_srb = createImageSrbSingle(m_bufferTexture.get());
         }
         if (!m_srb) {
@@ -1341,6 +1331,12 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     m_uniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
     m_uniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
     m_uniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
+    const QDateTime now = QDateTime::currentDateTime();
+    m_uniforms.iDate[0] = static_cast<float>(now.date().year());
+    m_uniforms.iDate[1] = static_cast<float>(now.date().month());
+    m_uniforms.iDate[2] = static_cast<float>(now.date().day());
+    m_uniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60
+                                             + now.time().second() + now.time().msec() / 1000.0);
     m_uniforms.zoneCount = m_zones.size();
     int highlightedCount = 0;
     for (const auto& zone : m_zones) {
@@ -1408,6 +1404,8 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     }
 
     // iChannelResolution (std140: vec2[4], each element 16 bytes)
+    // Shadertoy compatibility: per-channel size for correct UV scaling.
+    // Dummy 1x1 channels get vec2(1,1); unused/multipass channels get actual buffer size.
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), 4) : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
     for (int i = 0; i < 4; ++i) {
@@ -1422,12 +1420,12 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
                 m_uniforms.iChannelResolution[0][0] = static_cast<float>(bufferW);
                 m_uniforms.iChannelResolution[0][1] = static_cast<float>(bufferH);
             } else {
-                m_uniforms.iChannelResolution[i][0] = 0.0f;
-                m_uniforms.iChannelResolution[i][1] = 0.0f;
+                m_uniforms.iChannelResolution[i][0] = 1.0f; // dummy 1x1
+                m_uniforms.iChannelResolution[i][1] = 1.0f;
             }
         } else {
-            m_uniforms.iChannelResolution[i][0] = 0.0f;
-            m_uniforms.iChannelResolution[i][1] = 0.0f;
+            m_uniforms.iChannelResolution[i][0] = 1.0f; // dummy 1x1 for unbound channels
+            m_uniforms.iChannelResolution[i][1] = 1.0f;
         }
         m_uniforms.iChannelResolution[i][2] = 0.0f;
         m_uniforms.iChannelResolution[i][3] = 0.0f;
