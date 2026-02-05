@@ -1,4 +1,4 @@
-plasmazones (1.5.7-1) unstable; urgency=medium
+plasmazones (1.5.8-1) unstable; urgency=medium
 
   * Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
   * Missing pacman hook files for sycoca cache refresh in Arch package

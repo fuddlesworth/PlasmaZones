@@ -160,7 +160,7 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
-* Thu Feb  5 2026 fuddlesworth - 1.5.7-1
+* Thu Feb  5 2026 fuddlesworth - 1.5.8-1
 - Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
 - Missing pacman hook files for sycoca cache refresh in Arch package
 - POSIX awk compatibility in changelog generator (mawk on Ubuntu)

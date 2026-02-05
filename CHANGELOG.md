@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.7] - 2026-02-05
+## [1.5.8] - 2026-02-05
 
 ### Changed
 - Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
@@ -155,7 +155,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[1.5.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.2...v1.5.7
+[1.5.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.2...v1.5.8
 [1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.2
 [1.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.2...v1.3.3
