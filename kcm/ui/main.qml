@@ -166,6 +166,10 @@ KCM.AbstractKCM {
                 text: i18n("Exclusions")
                 icon.name: "dialog-cancel-symbolic"
             }
+            TabButton {
+                text: i18n("About")
+                icon.name: "help-about"
+            }
         }
     }
 
@@ -269,6 +273,12 @@ KCM.AbstractKCM {
 
         // TAB 6: EXCLUSIONS
         ExclusionsTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+        // TAB 7: ABOUT
+        AboutTab {
             kcm: root.kcmModule
             constants: constants
         }
