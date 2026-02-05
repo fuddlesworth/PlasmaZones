@@ -1,3 +1,9 @@
+plasmazones (1.5.2-1) unstable; urgency=medium
+
+  * Fix missing pacman hook files for sycoca cache refresh.
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Wed, 05 Feb 2026 18:00:00 +0000
+
 plasmazones (1.5.1-1) unstable; urgency=medium
 
   * Multi-pass shader rendering with up to 4 buffer passes and inter-pass

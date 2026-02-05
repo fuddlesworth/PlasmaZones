@@ -160,6 +160,9 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Wed Feb  5 2026 fuddlesworth - 1.5.2-1
+- Fix missing pacman hook files for sycoca cache refresh
+
 * Wed Feb  5 2026 fuddlesworth - 1.5.1-1
 - Multi-pass shader rendering with up to 4 buffer passes and texture channels
 - Multi-channel shaders: buffer passes read outputs from previous passes
