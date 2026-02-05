@@ -123,9 +123,13 @@ static constexpr int ComponentW = 3;
 namespace {
 
 // Shared fullscreen-quad pipeline setup for both buffer and image passes (DRY).
+// Buffer passes render to intermediate textures and should NOT alpha-blend against
+// the clear color; use enableBlend=false for those so shaders can freely use the
+// alpha channel for data without darkening the RGB output.
 static std::unique_ptr<QRhiGraphicsPipeline> createFullscreenQuadPipeline(
     QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
-    const QShader& fragmentShader, QRhiShaderResourceBindings* srb)
+    const QShader& fragmentShader, QRhiShaderResourceBindings* srb,
+    bool enableBlend = true)
 {
     std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
     pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
@@ -143,7 +147,7 @@ static std::unique_ptr<QRhiGraphicsPipeline> createFullscreenQuadPipeline(
     pipeline->setShaderResourceBindings(srb);
     pipeline->setRenderPassDescriptor(rpDesc);
     QRhiGraphicsPipeline::TargetBlend blend;
-    blend.enable = true;
+    blend.enable = enableBlend;
     blend.srcColor = QRhiGraphicsPipeline::SrcAlpha;
     blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
     blend.srcAlpha = QRhiGraphicsPipeline::One;
@@ -1134,7 +1138,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                     ? m_multiBufferRenderPassDescriptors[i].get()
                     : m_multiBufferRenderTargets[i]->renderPassDescriptor();
                 m_multiBufferPipelines[i] = createFullscreenQuadPipeline(rhi, rpDescI,
-                    m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get());
+                    m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
+                    /*enableBlend=*/false);
                 if (!m_multiBufferPipelines[i]) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ");
                     return false;
@@ -1196,7 +1201,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     }
 
     if (!m_bufferPipeline) {
-        m_bufferPipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_bufferFragmentShader, m_bufferSrb.get());
+        m_bufferPipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_bufferFragmentShader, m_bufferSrb.get(),
+            /*enableBlend=*/false);
         if (!m_bufferPipeline) {
             m_shaderError = QStringLiteral("Failed to create buffer pipeline");
             return false;
