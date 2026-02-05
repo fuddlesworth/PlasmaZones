@@ -395,7 +395,7 @@ jobs:
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman
+            pacman -Sy --noconfirm pacman >&2
             useradd -m builder
             cp /build/* /home/builder/
             chown builder:builder /home/builder/*
@@ -440,7 +440,7 @@ jobs:
             -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" \
             -v "$(pwd)/plasmazones.install:/build/plasmazones.install:ro" \
             archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman
+            pacman -Sy --noconfirm pacman >&2
             useradd -m builder
             cp /build/* /home/builder/
             chown builder:builder /home/builder/*
