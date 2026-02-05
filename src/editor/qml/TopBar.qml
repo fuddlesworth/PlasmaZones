@@ -493,12 +493,12 @@ ToolBar {
 
             // Help button
             ToolButton {
-                icon.name: "help-contents"
+                icon.name: "help-hint"
                 onClicked: helpDialog.open()
-                ToolTip.text: i18nc("@tooltip", "Keyboard shortcuts and usage guide (F1)")
+                ToolTip.text: i18nc("@tooltip", "Quick reference guide (F1)")
                 ToolTip.visible: hovered
                 Accessible.name: i18nc("@action", "Help")
-                Accessible.description: i18nc("@info", "Open keyboard shortcuts and usage guide")
+                Accessible.description: i18nc("@info", "Open quick reference guide")
             }
 
             // Close button

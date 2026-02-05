@@ -515,7 +515,7 @@ Window {
 
         anchors {
             top: parent.top
-            right: parent.right
+            left: parent.left
             margins: Kirigami.Units.largeSpacing
         }
 
