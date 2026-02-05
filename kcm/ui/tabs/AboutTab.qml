@@ -22,11 +22,13 @@ ScrollView {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // Update available banner
+        // Update available banner (only show if we have a valid latest version)
         Kirigami.InlineMessage {
             id: updateBanner
             Layout.fillWidth: true
-            visible: kcm.updateAvailable && kcm.latestVersion !== kcm.dismissedUpdateVersion
+            visible: kcm.updateAvailable
+                     && kcm.latestVersion.length > 0
+                     && kcm.latestVersion !== kcm.dismissedUpdateVersion
             type: Kirigami.MessageType.Information
             text: i18n("A new version is available: %1", kcm.latestVersion)
             actions: [
@@ -61,11 +63,13 @@ ScrollView {
 
                 Kirigami.Heading {
                     level: 1
-                    text: "PlasmaZones"
+                    text: i18n("PlasmaZones")
                 }
 
                 Label {
-                    text: i18n("Version %1", kcm.currentVersion)
+                    text: kcm.currentVersion.length > 0
+                          ? i18n("Version %1", kcm.currentVersion)
+                          : i18n("Version unknown")
                     opacity: 0.7
                 }
             }
@@ -94,26 +98,26 @@ ScrollView {
                 spacing: Kirigami.Units.smallSpacing
 
                 LinkButton {
-                    text: i18n("GitHub Repository")
-                    icon.name: "vcs-branch"
+                    linkText: i18n("GitHub Repository")
+                    linkIcon: "vcs-branch"
                     url: "https://github.com/fuddlesworth/PlasmaZones"
                 }
 
                 LinkButton {
-                    text: i18n("Report a Bug")
-                    icon.name: "tools-report-bug"
+                    linkText: i18n("Report a Bug")
+                    linkIcon: "tools-report-bug"
                     url: "https://github.com/fuddlesworth/PlasmaZones/issues/new"
                 }
 
                 LinkButton {
-                    text: i18n("Documentation / Wiki")
-                    icon.name: "documentation"
+                    linkText: i18n("Documentation / Wiki")
+                    linkIcon: "documentation"
                     url: "https://github.com/fuddlesworth/PlasmaZones/wiki"
                 }
 
                 LinkButton {
-                    text: i18n("Releases")
-                    icon.name: "package-available"
+                    linkText: i18n("Releases")
+                    linkIcon: "package-available"
                     url: "https://github.com/fuddlesworth/PlasmaZones/releases"
                 }
             }
@@ -139,8 +143,8 @@ ScrollView {
                 }
 
                 LinkButton {
-                    text: i18n("View License")
-                    icon.name: "license"
+                    linkText: i18n("View License")
+                    linkIcon: "license"
                     url: "https://www.gnu.org/licenses/gpl-3.0.html"
                 }
             }
@@ -187,6 +191,9 @@ ScrollView {
             icon.name: "view-refresh"
             enabled: !kcm.checkingForUpdates
             onClicked: kcm.checkForUpdates()
+
+            Accessible.name: text
+            Accessible.role: Accessible.Button
         }
 
         // Spacer
@@ -196,22 +203,33 @@ ScrollView {
     }
 
     // Helper component for link buttons
+    // Uses explicit properties instead of fragile parent.parent references
     component LinkButton: Button {
+        id: linkButton
+
+        required property string linkText
+        required property string linkIcon
         required property string url
+
         Layout.fillWidth: true
         flat: true
         horizontalPadding: Kirigami.Units.largeSpacing
+
+        Accessible.name: linkText
+        Accessible.role: Accessible.Link
+        Accessible.description: i18n("Opens %1 in web browser", url)
+
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
 
             Kirigami.Icon {
-                source: parent.parent.icon.name
+                source: linkButton.linkIcon
                 Layout.preferredWidth: Kirigami.Units.iconSizes.small
                 Layout.preferredHeight: Kirigami.Units.iconSizes.small
             }
 
             Label {
-                text: parent.parent.text
+                text: linkButton.linkText
                 Layout.fillWidth: true
                 color: Kirigami.Theme.linkColor
             }
@@ -223,6 +241,7 @@ ScrollView {
                 opacity: 0.5
             }
         }
-        onClicked: Qt.openUrlExternally(url)
+
+        onClicked: Qt.openUrlExternally(linkButton.url)
     }
 }
