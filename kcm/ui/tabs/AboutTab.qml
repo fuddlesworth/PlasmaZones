@@ -193,11 +193,15 @@ ScrollView {
                 id: checkUpdateButton
                 Layout.alignment: Qt.AlignHCenter
                 text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
-                icon.name: kcm.checkingForUpdates ? "view-refresh" : "view-refresh"
+                icon.name: "view-refresh"
                 enabled: !kcm.checkingForUpdates
                 onClicked: {
+                    updateStatusLabel.manualCheck = true
                     updateStatusLabel.visible = false
                     kcm.checkForUpdates()
+                    // Show result after short delay (handles rate-limited case where
+                    // checkingForUpdates never becomes true because check was skipped)
+                    statusShowTimer.restart()
                 }
 
                 Accessible.name: text
@@ -211,23 +215,25 @@ ScrollView {
                 visible: false
                 opacity: 0.8
 
-                // Track when checking finishes to show result
+                property bool manualCheck: false
+
+                // Track when checking finishes to show result immediately
                 Connections {
                     target: kcm
                     function onCheckingForUpdatesChanged() {
-                        if (!kcm.checkingForUpdates && updateStatusLabel.wasChecking) {
-                            updateStatusLabel.visible = true
-                            updateStatusLabel.wasChecking = false
-                            // Auto-hide after 5 seconds
-                            statusHideTimer.restart()
-                        }
-                        if (kcm.checkingForUpdates) {
-                            updateStatusLabel.wasChecking = true
+                        // When checking completes (transitions from true to false)
+                        if (!kcm.checkingForUpdates && updateStatusLabel.manualCheck) {
+                            statusShowTimer.stop()
+                            updateStatusLabel.showResult()
                         }
                     }
                 }
 
-                property bool wasChecking: false
+                function showResult() {
+                    updateStatusLabel.visible = true
+                    updateStatusLabel.manualCheck = false
+                    statusHideTimer.restart()
+                }
 
                 text: {
                     if (kcm.updateAvailable) {
@@ -246,6 +252,17 @@ ScrollView {
                         return Kirigami.Theme.textColor
                     } else {
                         return Kirigami.Theme.neutralTextColor
+                    }
+                }
+            }
+
+            // Short delay to show result (handles rate-limited case)
+            Timer {
+                id: statusShowTimer
+                interval: 500
+                onTriggered: {
+                    if (updateStatusLabel.manualCheck && !kcm.checkingForUpdates) {
+                        updateStatusLabel.showResult()
                     }
                 }
             }
