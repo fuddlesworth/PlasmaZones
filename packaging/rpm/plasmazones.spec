@@ -160,6 +160,22 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Wed Feb  5 2026 fuddlesworth - 1.5.0-1
+- Multi-pass shader rendering with up to 4 buffer passes and texture channels
+- Multi-channel shaders: buffer passes read outputs from previous passes
+- Zone labels rendered as shader textures for custom number styling
+- Fix buffer pass alpha blending in RHI renderer
+- New Voronoi Stained Glass shader (3D raymarched with bloom)
+- Mouse button zone activation as alternative to modifier-key drag (PR #80)
+- Zone selector auto-scroll and screen-clamped positioning
+- Update notification banner with GitHub release checking
+- About tab with version info and links in KCM
+- Pywal color import error feedback
+- Fix duplicate zone IDs and use-after-free in editor undo system
+- Redesign help dialog and fullscreen exit button
+- Fix update check button layout shift
+- Automatic AUR publishing on release
+
 * Tue Feb  3 2026 fuddlesworth - 1.3.3-1
 - Build/install only installs files; packaging handles sycoca and daemon enable
 - Resnap-to-new-layout shortcut and shortcut consolidation (PR #75)
