@@ -67,6 +67,8 @@ set(plasmazones_core_SRCS
     config/settings.h
     config/colorimporter.cpp
     config/colorimporter.h
+    config/updatechecker.cpp
+    config/updatechecker.h
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor.h
     dbus/settingsadaptor.cpp

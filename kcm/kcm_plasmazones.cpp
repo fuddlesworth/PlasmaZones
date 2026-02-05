@@ -3,6 +3,8 @@
 
 #include "kcm_plasmazones.h"
 #include "../src/config/settings.h"
+#include "../src/config/updatechecker.h"
+#include "version.h"
 #include "../src/core/constants.h"
 #include "../src/core/interfaces.h" // For DragModifier enum
 #include "../src/core/logging.h"
@@ -23,6 +25,7 @@
 #include <QTimer>
 #include <QFile>
 #include <QDir>
+#include <QDesktopServices>
 #include <QProcess>
 #include <QDBusConnectionInterface>
 #include <QDBusReply>
@@ -57,6 +60,15 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     m_lastDaemonState = isDaemonRunning();
     m_daemonEnabled = m_lastDaemonState; // Assume enabled if running, will be corrected async
     refreshDaemonEnabledState();
+
+    // Set up update checker
+    m_updateChecker = new UpdateChecker(this);
+    connect(m_updateChecker, &UpdateChecker::updateAvailableChanged, this, &KCMPlasmaZones::updateAvailableChanged);
+    connect(m_updateChecker, &UpdateChecker::latestVersionChanged, this, &KCMPlasmaZones::latestVersionChanged);
+    connect(m_updateChecker, &UpdateChecker::releaseUrlChanged, this, &KCMPlasmaZones::releaseUrlChanged);
+    connect(m_updateChecker, &UpdateChecker::checkingChanged, this, &KCMPlasmaZones::checkingForUpdatesChanged);
+    // Check for updates when KCM loads
+    m_updateChecker->checkForUpdates();
 
     // Listen for layout changes from the daemon
     // When layouts are edited and saved, the daemon emits layoutListChanged
@@ -1585,6 +1597,50 @@ void KCMPlasmaZones::checkDaemonStatus()
 
         // Note: When daemon starts, we rely on the daemonReady D-Bus signal
         // to trigger loadLayouts(). No polling needed here.
+    }
+}
+
+// Update checker methods
+bool KCMPlasmaZones::updateAvailable() const
+{
+    return m_updateChecker ? m_updateChecker->updateAvailable() : false;
+}
+
+QString KCMPlasmaZones::currentVersion() const
+{
+    return VERSION_STRING;
+}
+
+QString KCMPlasmaZones::latestVersion() const
+{
+    return m_updateChecker ? m_updateChecker->latestVersion() : QString();
+}
+
+QString KCMPlasmaZones::releaseUrl() const
+{
+    return m_updateChecker ? m_updateChecker->releaseUrl() : QString();
+}
+
+bool KCMPlasmaZones::checkingForUpdates() const
+{
+    return m_updateChecker ? m_updateChecker->isChecking() : false;
+}
+
+void KCMPlasmaZones::checkForUpdates()
+{
+    if (m_updateChecker) {
+        m_updateChecker->checkForUpdates();
+    }
+}
+
+void KCMPlasmaZones::openReleaseUrl()
+{
+    QString url = releaseUrl();
+    if (!url.isEmpty()) {
+        QDesktopServices::openUrl(QUrl(url));
+    } else {
+        // Fallback to main releases page
+        QDesktopServices::openUrl(QUrl(GITHUB_RELEASES_URL));
     }
 }
 

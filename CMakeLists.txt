@@ -302,6 +302,14 @@ endif()
 # Run extract-pot to create/update po/*.pot; translators add po/<lang>/*.po
 KI18N_INSTALL(po)
 
+# Generate version header with compile-time version info
+configure_file(
+    "${CMAKE_SOURCE_DIR}/src/core/version.h.in"
+    "${CMAKE_BINARY_DIR}/generated/version.h"
+    @ONLY
+)
+include_directories("${CMAKE_BINARY_DIR}/generated")
+
 # Source directories
 add_subdirectory(src)
 add_subdirectory(kwin-effect)  # KWin C++ Effect with modifier detection (uses effects.mouseChanged)

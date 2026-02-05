@@ -26,6 +26,7 @@ constexpr const char* SystemdServiceName = "plasmazones.service";
 }
 
 class Settings;
+class UpdateChecker;
 
 /**
  * @brief KDE Control Module for PlasmaZones settings
@@ -181,6 +182,13 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(bool daemonRunning READ isDaemonRunning NOTIFY daemonRunningChanged)
     Q_PROPERTY(bool daemonEnabled READ isDaemonEnabled WRITE setDaemonEnabled NOTIFY daemonEnabledChanged)
 
+    // Update checker
+    Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
+    Q_PROPERTY(QString currentVersion READ currentVersion CONSTANT)
+    Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
+    Q_PROPERTY(QString releaseUrl READ releaseUrl NOTIFY releaseUrlChanged)
+    Q_PROPERTY(bool checkingForUpdates READ checkingForUpdates NOTIFY checkingForUpdatesChanged)
+
 public:
     explicit KCMPlasmaZones(QObject* parent, const KPluginMetaData& data);
     ~KCMPlasmaZones() override;
@@ -263,6 +271,13 @@ public:
     bool isDaemonRunning() const;
     bool isDaemonEnabled() const;
     void setDaemonEnabled(bool enabled);
+
+    // Update checker
+    bool updateAvailable() const;
+    QString currentVersion() const;
+    QString latestVersion() const;
+    QString releaseUrl() const;
+    bool checkingForUpdates() const;
 
     // Property setters
     void setShiftDragToActivate(bool enable);
@@ -386,6 +401,10 @@ public Q_SLOTS:
     Q_INVOKABLE void startDaemon();
     Q_INVOKABLE void stopDaemon();
 
+    // Update checker
+    Q_INVOKABLE void checkForUpdates();
+    Q_INVOKABLE void openReleaseUrl();
+
 Q_SIGNALS:
     void shiftDragToActivateChanged();
     void dragActivationModifierChanged();
@@ -459,6 +478,10 @@ Q_SIGNALS:
     void activityAssignmentsChanged();
     void daemonRunningChanged();
     void daemonEnabledChanged();
+    void updateAvailableChanged();
+    void latestVersionChanged();
+    void releaseUrlChanged();
+    void checkingForUpdatesChanged();
     void quickLayoutSlotsRefreshed(); // Emitted when quick layout slots are reloaded from daemon
     void colorImportError(const QString& message); // Emitted when color import fails
     void colorImportSuccess(); // Emitted when color import succeeds
@@ -497,6 +520,7 @@ private:
     static KConfigGroup editorConfigGroup();
 
     Settings* m_settings = nullptr;
+    UpdateChecker* m_updateChecker = nullptr;
     QTimer* m_daemonCheckTimer = nullptr;
     bool m_daemonEnabled = true;
     bool m_lastDaemonState = false;

@@ -87,6 +87,27 @@ KCM.AbstractKCM {
         width: parent.width
         spacing: 0
 
+        // Update available banner
+        Kirigami.InlineMessage {
+            id: updateBanner
+            Layout.fillWidth: true
+            visible: kcm.updateAvailable
+            type: Kirigami.MessageType.Information
+            text: i18n("PlasmaZones %1 is available (you have %2)", kcm.latestVersion, kcm.currentVersion)
+            actions: [
+                Kirigami.Action {
+                    text: i18n("View Release")
+                    icon.name: "internet-web-browser"
+                    onTriggered: kcm.openReleaseUrl()
+                },
+                Kirigami.Action {
+                    text: i18n("Dismiss")
+                    icon.name: "dialog-close"
+                    onTriggered: updateBanner.visible = false
+                }
+            ]
+        }
+
         // Master enable/disable row
         RowLayout {
             Layout.fillWidth: true
