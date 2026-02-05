@@ -67,6 +67,12 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     connect(m_updateChecker, &UpdateChecker::latestVersionChanged, this, &KCMPlasmaZones::latestVersionChanged);
     connect(m_updateChecker, &UpdateChecker::releaseUrlChanged, this, &KCMPlasmaZones::releaseUrlChanged);
     connect(m_updateChecker, &UpdateChecker::checkingChanged, this, &KCMPlasmaZones::checkingForUpdatesChanged);
+
+    // Load cached dismissed version
+    KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+    KConfigGroup updatesGroup = config->group(QStringLiteral("Updates"));
+    m_dismissedUpdateVersion = updatesGroup.readEntry("DismissedUpdateVersion", QString());
+
     // Check for updates when KCM loads
     m_updateChecker->checkForUpdates();
 
@@ -1624,6 +1630,26 @@ QString KCMPlasmaZones::releaseUrl() const
 bool KCMPlasmaZones::checkingForUpdates() const
 {
     return m_updateChecker ? m_updateChecker->isChecking() : false;
+}
+
+QString KCMPlasmaZones::dismissedUpdateVersion() const
+{
+    return m_dismissedUpdateVersion;
+}
+
+void KCMPlasmaZones::setDismissedUpdateVersion(const QString& version)
+{
+    if (m_dismissedUpdateVersion != version) {
+        m_dismissedUpdateVersion = version;
+
+        // Persist to config
+        KSharedConfig::Ptr config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        KConfigGroup group = config->group(QStringLiteral("Updates"));
+        group.writeEntry("DismissedUpdateVersion", version);
+        config->sync();
+
+        Q_EMIT dismissedUpdateVersionChanged();
+    }
 }
 
 void KCMPlasmaZones::checkForUpdates()

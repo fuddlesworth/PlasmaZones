@@ -180,6 +180,12 @@ public:
     static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
     static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Update Notifications
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString dismissedUpdateVersion() { return QString(); }  // Default is empty string
+
 private:
     // Lazily-initialized singleton instance
     static PlasmaZonesConfig& instance()

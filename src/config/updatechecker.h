@@ -14,7 +14,7 @@ namespace PlasmaZones {
  * @brief Checks GitHub releases for available updates
  *
  * Queries the GitHub API to check if a newer version is available.
- * Respects rate limiting and caches results to avoid excessive requests.
+ * Includes basic rate limiting (minimum 5 minutes between checks).
  */
 class PLASMAZONES_EXPORT UpdateChecker : public QObject
 {
@@ -41,7 +41,11 @@ public:
     static QString currentVersion();
 
     /// Compare two version strings (returns -1, 0, or 1)
+    /// Handles pre-release suffixes (e.g., "1.4.0-beta" < "1.4.0")
     static int compareVersions(const QString& v1, const QString& v2);
+
+    /// Strip 'v' prefix from version string if present
+    static QString stripVersionPrefix(const QString& version);
 
 public Q_SLOTS:
     /// Start checking for updates
@@ -62,6 +66,9 @@ private Q_SLOTS:
     void onRequestFinished(QNetworkReply* reply);
 
 private:
+    /// Parse version component, handling pre-release suffixes
+    static void parseVersionComponent(const QString& part, int& number, QString& preRelease);
+
     QNetworkAccessManager* m_networkManager = nullptr;
     bool m_updateAvailable = false;
     bool m_checking = false;
@@ -69,6 +76,10 @@ private:
     QString m_releaseUrl;
     QString m_releaseNotes;
     QString m_errorMessage;
+    qint64 m_lastCheckTime = 0;  // Rate limiting: epoch ms of last check
+
+    static constexpr int CHECK_INTERVAL_MS = 5 * 60 * 1000;  // 5 minutes minimum between checks
+    static constexpr int REQUEST_TIMEOUT_MS = 15 * 1000;     // 15 second timeout
 };
 
 } // namespace PlasmaZones

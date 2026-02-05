@@ -91,9 +91,9 @@ KCM.AbstractKCM {
         Kirigami.InlineMessage {
             id: updateBanner
             Layout.fillWidth: true
-            visible: kcm.updateAvailable
+            visible: kcm.updateAvailable && kcm.latestVersion !== kcm.dismissedUpdateVersion
             type: Kirigami.MessageType.Information
-            text: i18n("PlasmaZones %1 is available (you have %2)", kcm.latestVersion, kcm.currentVersion)
+            text: i18n("A new version is available: %1 (installed: %2)", kcm.latestVersion, kcm.currentVersion)
             actions: [
                 Kirigami.Action {
                     text: i18n("View Release")
@@ -103,7 +103,7 @@ KCM.AbstractKCM {
                 Kirigami.Action {
                     text: i18n("Dismiss")
                     icon.name: "dialog-close"
-                    onTriggered: updateBanner.visible = false
+                    onTriggered: kcm.dismissedUpdateVersion = kcm.latestVersion
                 }
             ]
         }

@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QDateTime>
+#include <QRegularExpression>
 
 Q_LOGGING_CATEGORY(lcUpdateChecker, "plasmazones.updatechecker", QtInfoMsg)
 
@@ -28,23 +30,59 @@ QString UpdateChecker::currentVersion()
     return VERSION_STRING;
 }
 
+QString UpdateChecker::stripVersionPrefix(const QString& version)
+{
+    return version.startsWith(QLatin1Char('v')) ? version.mid(1) : version;
+}
+
+void UpdateChecker::parseVersionComponent(const QString& part, int& number, QString& preRelease)
+{
+    // Handle versions like "4-beta", "0-rc1", "3-alpha2"
+    static const QRegularExpression preReleasePattern(QStringLiteral("^(\\d+)(?:-(.+))?$"));
+    QRegularExpressionMatch match = preReleasePattern.match(part);
+
+    if (match.hasMatch()) {
+        number = match.captured(1).toInt();
+        preRelease = match.captured(2);  // Empty if no pre-release suffix
+    } else {
+        number = part.toInt();
+        preRelease.clear();
+    }
+}
+
 int UpdateChecker::compareVersions(const QString& v1, const QString& v2)
 {
-    // Remove 'v' prefix if present
-    QString ver1 = v1.startsWith(QLatin1Char('v')) ? v1.mid(1) : v1;
-    QString ver2 = v2.startsWith(QLatin1Char('v')) ? v2.mid(1) : v2;
+    QString ver1 = stripVersionPrefix(v1);
+    QString ver2 = stripVersionPrefix(v2);
 
     QStringList parts1 = ver1.split(QLatin1Char('.'));
     QStringList parts2 = ver2.split(QLatin1Char('.'));
 
-    // Compare each numeric component
+    // Compare each version component
     int maxParts = qMax(parts1.size(), parts2.size());
     for (int i = 0; i < maxParts; ++i) {
-        int num1 = (i < parts1.size()) ? parts1[i].toInt() : 0;
-        int num2 = (i < parts2.size()) ? parts2[i].toInt() : 0;
+        int num1 = 0, num2 = 0;
+        QString pre1, pre2;
 
+        if (i < parts1.size()) {
+            parseVersionComponent(parts1[i], num1, pre1);
+        }
+        if (i < parts2.size()) {
+            parseVersionComponent(parts2[i], num2, pre2);
+        }
+
+        // Compare numeric parts first
         if (num1 < num2) return -1;
         if (num1 > num2) return 1;
+
+        // If numbers equal, compare pre-release (no pre-release > pre-release)
+        // e.g., "1.4.0" > "1.4.0-beta"
+        if (pre1.isEmpty() && !pre2.isEmpty()) return 1;   // v1 is release, v2 is pre-release
+        if (!pre1.isEmpty() && pre2.isEmpty()) return -1;  // v1 is pre-release, v2 is release
+        if (!pre1.isEmpty() && !pre2.isEmpty()) {
+            int cmp = pre1.compare(pre2);
+            if (cmp != 0) return cmp < 0 ? -1 : 1;
+        }
     }
 
     return 0; // Equal
@@ -57,7 +95,16 @@ void UpdateChecker::checkForUpdates()
         return;
     }
 
+    // Rate limiting: don't check more than once per CHECK_INTERVAL_MS
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_lastCheckTime > 0 && (now - m_lastCheckTime) < CHECK_INTERVAL_MS) {
+        qCDebug(lcUpdateChecker) << "Rate limited: last check was"
+                                  << (now - m_lastCheckTime) / 1000 << "seconds ago";
+        return;
+    }
+
     m_checking = true;
+    m_lastCheckTime = now;
     m_errorMessage.clear();
     Q_EMIT checkingChanged();
     Q_EMIT errorMessageChanged();
@@ -68,6 +115,7 @@ void UpdateChecker::checkForUpdates()
     request.setHeader(QNetworkRequest::UserAgentHeader,
         QStringLiteral("PlasmaZones/%1").arg(VERSION_STRING));
     request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setTransferTimeout(REQUEST_TIMEOUT_MS);
 
     m_networkManager->get(request);
 }
@@ -102,8 +150,8 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     QJsonObject release = doc.object();
 
     // Extract version from tag_name (e.g., "v1.4.0" -> "1.4.0")
-    QString tagName = release[QStringLiteral("tag_name")].toString();
-    QString latestVersion = tagName.startsWith(QLatin1Char('v')) ? tagName.mid(1) : tagName;
+    QString tagName = release[QLatin1String("tag_name")].toString();
+    QString latestVersion = stripVersionPrefix(tagName);
 
     if (latestVersion.isEmpty()) {
         m_errorMessage = tr("No version found in release data");
@@ -114,8 +162,8 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     }
 
     m_latestVersion = latestVersion;
-    m_releaseUrl = release[QStringLiteral("html_url")].toString();
-    m_releaseNotes = release[QStringLiteral("body")].toString();
+    m_releaseUrl = release[QLatin1String("html_url")].toString();
+    m_releaseNotes = release[QLatin1String("body")].toString();
 
     Q_EMIT latestVersionChanged();
     Q_EMIT releaseUrlChanged();

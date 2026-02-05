@@ -597,4 +597,14 @@
     </entry>
   </group>
 
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Update Notifications
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Updates">
+    <entry name="DismissedUpdateVersion" type="String">
+      <label>Version string that was dismissed by the user</label>
+      <default></default>
+    </entry>
+  </group>
+
 </kcfg>

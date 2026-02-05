@@ -188,6 +188,7 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
     Q_PROPERTY(QString releaseUrl READ releaseUrl NOTIFY releaseUrlChanged)
     Q_PROPERTY(bool checkingForUpdates READ checkingForUpdates NOTIFY checkingForUpdatesChanged)
+    Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY dismissedUpdateVersionChanged)
 
 public:
     explicit KCMPlasmaZones(QObject* parent, const KPluginMetaData& data);
@@ -278,6 +279,8 @@ public:
     QString latestVersion() const;
     QString releaseUrl() const;
     bool checkingForUpdates() const;
+    QString dismissedUpdateVersion() const;
+    void setDismissedUpdateVersion(const QString& version);
 
     // Property setters
     void setShiftDragToActivate(bool enable);
@@ -482,6 +485,7 @@ Q_SIGNALS:
     void latestVersionChanged();
     void releaseUrlChanged();
     void checkingForUpdatesChanged();
+    void dismissedUpdateVersionChanged();
     void quickLayoutSlotsRefreshed(); // Emitted when quick layout slots are reloaded from daemon
     void colorImportError(const QString& message); // Emitted when color import fails
     void colorImportSuccess(); // Emitted when color import succeeds
@@ -521,6 +525,7 @@ private:
 
     Settings* m_settings = nullptr;
     UpdateChecker* m_updateChecker = nullptr;
+    QString m_dismissedUpdateVersion;  // Cached to avoid repeated config reads
     QTimer* m_daemonCheckTimer = nullptr;
     bool m_daemonEnabled = true;
     bool m_lastDaemonState = false;
