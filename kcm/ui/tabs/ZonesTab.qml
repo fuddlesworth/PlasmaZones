@@ -300,13 +300,21 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    ModifierCheckBoxes {
-                        id: dragActivationModifiers
+                    ModifierAndMouseCheckBoxes {
+                        id: dragActivationInput
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Zone activation:")
+                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeAll
                         modifierValue: kcm.dragActivationModifier
+                        mouseButtonValue: kcm.dragActivationMouseButton
                         tooltipEnabled: root.isCurrentTab
+                        customTooltipText: i18n("Hold modifier or use this mouse button to show zones while dragging (e.g. left-click to drag, another button to activate zones)")
                         onValueModified: (value) => {
                             kcm.dragActivationModifier = value
+                        }
+                        onMouseButtonsModified: (value) => {
+                            kcm.dragActivationMouseButton = value
                         }
                     }
 
@@ -315,12 +323,15 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Multi-Zone Selection")
                     }
 
-                    ModifierCheckBoxes {
+                    ModifierAndMouseCheckBoxes {
                         id: multiZoneModifiers
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Multi-zone modifier:")
+                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.multiZoneModifier
                         tooltipEnabled: root.isCurrentTab
-                        ToolTip.text: i18n("Hold this modifier while dragging to span windows across multiple zones")
+                        customTooltipText: i18n("Hold this modifier while dragging to span windows across multiple zones")
                         onValueModified: (value) => {
                             kcm.multiZoneModifier = value
                         }
@@ -334,6 +345,7 @@ ScrollView {
                     }
 
                     RowLayout {
+                        Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Edge threshold:")
                         spacing: Kirigami.Units.smallSpacing
 

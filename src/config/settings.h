@@ -28,6 +28,8 @@ class PLASMAZONES_EXPORT Settings : public ISettings
                    shiftDragToActivateChanged)
     Q_PROPERTY(int dragActivationModifier READ dragActivationModifierInt WRITE setDragActivationModifierInt NOTIFY
                    dragActivationModifierChanged)
+    Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
+                   dragActivationMouseButtonChanged)
     Q_PROPERTY(
         int skipSnapModifier READ skipSnapModifierInt WRITE setSkipSnapModifierInt NOTIFY skipSnapModifierChanged)
     Q_PROPERTY(
@@ -247,6 +249,9 @@ public:
         return static_cast<int>(m_dragActivationModifier);
     }
     void setDragActivationModifierInt(int modifier);
+
+    int dragActivationMouseButton() const override { return m_dragActivationMouseButton; }
+    void setDragActivationMouseButton(int button) override;
 
     DragModifier skipSnapModifier() const override
     {
@@ -847,6 +852,7 @@ private:
     // KWin Effect provides modifiers via mouseChanged signal
     // Default: Alt+Drag to show zones (matches reset() function and common user expectation)
     DragModifier m_dragActivationModifier = DragModifier::Alt; // Default: Alt for zone activation
+    int m_dragActivationMouseButton = 0; // 0=None, Qt::MouseButton bits (2=Right, 4=Middle, etc.)
     DragModifier m_skipSnapModifier = DragModifier::Shift; // Default: Shift to skip snap
     DragModifier m_multiZoneModifier = DragModifier::CtrlAlt; // Default: Ctrl+Alt for multi-zone
     bool m_middleClickMultiZone = true;

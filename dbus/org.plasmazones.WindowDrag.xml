@@ -27,10 +27,13 @@
             <arg name="windowClass" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window class (for exclusions)."/>
             </arg>
+            <arg name="mouseButtons" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags for the button(s) that started the drag (0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, etc.). Used for activation-by-mouse-button."/>
+            </arg>
         </method>
 
         <method name="dragMoved">
-            <annotation name="org.gtk.GDBus.DocString" value="Called while the window is being dragged. Cursor position (int) and keyboard modifiers (Qt flags)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Called while the window is being dragged. Cursor position (int), keyboard modifiers and current mouse buttons (Qt flags)."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -42,6 +45,9 @@
             </arg>
             <arg name="modifiers" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers flags."/>
+            </arg>
+            <arg name="mouseButtons" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags currently held (0=None, 2=Right, 4=Middle, etc.). Used to toggle overlay when activation is set to a mouse button (same as modifier: hold button during drag to show zones)."/>
             </arg>
         </method>
 

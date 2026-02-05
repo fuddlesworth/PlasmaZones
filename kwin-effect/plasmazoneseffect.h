@@ -94,7 +94,7 @@ private:
 
     // D-Bus communication
     void callDragStarted(const QString& windowId, const QRectF& geometry);
-    void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods);
+    void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
     void callSnapToLastZone(KWin::EffectWindow* window);
     void ensureDBusInterface();
@@ -209,6 +209,7 @@ public:
 
     // Current keyboard modifiers (for drag tracking)
     Qt::KeyboardModifiers currentModifiers() const { return m_currentModifiers; }
+    Qt::MouseButtons currentMouseButtons() const { return m_currentMouseButtons; }
 
 private:
     // Friend classes for helpers
@@ -227,6 +228,7 @@ private:
     // Updated via mouseChanged; that's the only reliable way to get modifiers in a
     // KWin effect on Wayland (QGuiApplication doesn't work here).
     Qt::KeyboardModifiers m_currentModifiers = Qt::NoModifier;
+    Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
 
     // D-Bus interfaces (lazy initialization)
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
