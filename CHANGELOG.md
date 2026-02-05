@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.5] - 2026-02-05
+## [1.5.6] - 2026-02-05
 
 ### Changed
 - Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
@@ -13,8 +13,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - Missing pacman hook files for sycoca cache refresh in Arch package
 - POSIX awk compatibility in changelog generator (mawk on Ubuntu)
-- Git safe.directory permission error in AUR publish docker containers
-- Install git in AUR publish docker containers
+- AUR publish docker git ownership issue (removed -w /pkg, chown before git)
 
 ## [1.5.2] - 2026-02-05
 
@@ -156,7 +155,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[1.5.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.2...v1.5.5
+[1.5.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.2...v1.5.6
 [1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.2
 [1.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.3...v1.3.4
 [1.3.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.2...v1.3.3

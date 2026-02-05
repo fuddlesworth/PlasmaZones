@@ -160,12 +160,11 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
-* Thu Feb  5 2026 fuddlesworth - 1.5.5-1
+* Thu Feb  5 2026 fuddlesworth - 1.5.6-1
 - Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
 - Missing pacman hook files for sycoca cache refresh in Arch package
 - POSIX awk compatibility in changelog generator (mawk on Ubuntu)
-- Git safe.directory permission error in AUR publish docker containers
-- Install git in AUR publish docker containers
+- AUR publish docker git ownership issue (removed -w /pkg, chown before git)
 
 * Thu Feb  5 2026 fuddlesworth - 1.5.2-1
 - Multi-pass shader rendering with up to 4 buffer passes and inter-pass texture channels (iChannel0-3) ([#78])
