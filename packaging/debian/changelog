@@ -1,4 +1,4 @@
-plasmazones (1.5.0-1) unstable; urgency=medium
+plasmazones (1.5.1-1) unstable; urgency=medium
 
   * Multi-pass shader rendering with up to 4 buffer passes and inter-pass
     texture channels (iChannel0-3).

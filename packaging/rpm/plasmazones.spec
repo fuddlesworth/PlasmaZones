@@ -160,7 +160,7 @@ Features:
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
-* Wed Feb  5 2026 fuddlesworth - 1.5.0-1
+* Wed Feb  5 2026 fuddlesworth - 1.5.1-1
 - Multi-pass shader rendering with up to 4 buffer passes and texture channels
 - Multi-channel shaders: buffer passes read outputs from previous passes
 - Zone labels rendered as shader textures for custom number styling
