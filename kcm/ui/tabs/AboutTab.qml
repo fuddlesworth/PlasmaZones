@@ -183,14 +183,15 @@ ScrollView {
             }
         }
 
-        // Check for updates section
-        RowLayout {
-            Layout.alignment: Qt.AlignHCenter
+        // Check for updates section - use Item to prevent layout shift
+        Item {
+            Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.largeSpacing
+            implicitHeight: checkUpdateButton.height
 
             Button {
                 id: checkUpdateButton
+                anchors.horizontalCenter: parent.horizontalCenter
                 text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
                 icon.name: "view-refresh"
                 enabled: !kcm.checkingForUpdates
@@ -207,9 +208,12 @@ ScrollView {
                 Accessible.role: Accessible.Button
             }
 
-            // Status message after check completes
+            // Status message - anchored to right of button, doesn't affect button position
             Label {
                 id: updateStatusLabel
+                anchors.left: checkUpdateButton.right
+                anchors.leftMargin: Kirigami.Units.largeSpacing
+                anchors.verticalCenter: checkUpdateButton.verticalCenter
                 visible: false
 
                 property bool manualCheck: false
