@@ -45,6 +45,8 @@ class KCMPlasmaZones : public KQuickConfigModule
                    shiftDragToActivateChanged)
     Q_PROPERTY(int dragActivationModifier READ dragActivationModifier WRITE setDragActivationModifier NOTIFY
                    dragActivationModifierChanged)
+    Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
+                   dragActivationMouseButtonChanged)
     Q_PROPERTY(int multiZoneModifier READ multiZoneModifier WRITE setMultiZoneModifier NOTIFY multiZoneModifierChanged)
     Q_PROPERTY(bool middleClickMultiZone READ middleClickMultiZone WRITE setMiddleClickMultiZone NOTIFY
                    middleClickMultiZoneChanged)
@@ -186,6 +188,7 @@ public:
     // Property getters
     bool shiftDragToActivate() const;
     int dragActivationModifier() const;
+    int dragActivationMouseButton() const;
     int multiZoneModifier() const;
     bool middleClickMultiZone() const;
     bool showZonesOnAllMonitors() const;
@@ -264,6 +267,7 @@ public:
     // Property setters
     void setShiftDragToActivate(bool enable);
     void setDragActivationModifier(int modifier);
+    void setDragActivationMouseButton(int button);
     void setMultiZoneModifier(int modifier);
     void setMiddleClickMultiZone(bool enable);
     void setShowZonesOnAllMonitors(bool show);
@@ -385,6 +389,7 @@ public Q_SLOTS:
 Q_SIGNALS:
     void shiftDragToActivateChanged();
     void dragActivationModifierChanged();
+    void dragActivationMouseButtonChanged();
     void multiZoneModifierChanged();
     void middleClickMultiZoneChanged();
     void showZonesOnAllMonitorsChanged();

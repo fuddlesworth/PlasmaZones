@@ -55,10 +55,11 @@ public Q_SLOTS:
      * @param height Window height
      * @param appName Application name (for exclusion filtering)
      * @param windowClass Window class (for exclusion filtering)
+     * @param mouseButtons Qt::MouseButtons flags for the button(s) that started the drag (for activation-by-mouse)
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
      */
     void dragStarted(const QString& windowId, double x, double y, double width, double height,
-                     const QString& appName = QString(), const QString& windowClass = QString());
+                     const QString& appName, const QString& windowClass, int mouseButtons);
 
     /**
      * Called while window is being dragged (cursor moved)
@@ -66,9 +67,9 @@ public Q_SLOTS:
      * @param cursorX Cursor X position (int32 - matches KWin's QPoint)
      * @param cursorY Cursor Y position (int32 - matches KWin's QPoint)
      * @param modifiers Qt keyboard modifiers from KWin (int32 - Qt::KeyboardModifiers flags)
-     * @note Parameters are int because KWin sends QPoint (integers) and Qt::KeyboardModifiers (int flags)
+     * @param mouseButtons Qt::MouseButtons currently held (int32). Enables activation-by-mouse: hold this button during drag to show overlay (same as modifier).
      */
-    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers);
+    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
 
     /**
      * Called when window drag ends

@@ -30,8 +30,10 @@ target_link_libraries(kcm_plasmazones
 # Install QML files
 install(FILES
     ui/main.qml
+    ui/InputCapture.qml
     ui/KeySequenceInput.qml
     ui/LayoutThumbnail.qml
+    ui/ModifierAndMouseCheckBoxes.qml
     ui/ModifierCheckBoxes.qml
     ui/PositionPicker.qml
     ui/PreviewSizeControl.qml

@@ -146,6 +146,10 @@ int KCMPlasmaZones::dragActivationModifier() const
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
     return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->dragActivationModifier()));
 }
+int KCMPlasmaZones::dragActivationMouseButton() const
+{
+    return m_settings->dragActivationMouseButton();
+}
 int KCMPlasmaZones::multiZoneModifier() const
 {
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
@@ -456,11 +460,27 @@ void KCMPlasmaZones::setShiftDragToActivate(bool enable)
 
 void KCMPlasmaZones::setDragActivationModifier(int bitmask)
 {
-    // Convert Qt::KeyboardModifier bitmask to DragModifier enum for storage
     int enumValue = ModifierUtils::bitmaskToDragModifier(bitmask);
     if (static_cast<int>(m_settings->dragActivationModifier()) != enumValue) {
         m_settings->setDragActivationModifier(static_cast<DragModifier>(enumValue));
+        if (m_settings->dragActivationMouseButton() != 0) {
+            m_settings->setDragActivationMouseButton(0);
+            Q_EMIT dragActivationMouseButtonChanged();
+        }
         Q_EMIT dragActivationModifierChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setDragActivationMouseButton(int button)
+{
+    if (m_settings->dragActivationMouseButton() != button) {
+        m_settings->setDragActivationMouseButton(button);
+        if (button != 0 && static_cast<int>(m_settings->dragActivationModifier()) != 0) {
+            m_settings->setDragActivationModifier(DragModifier::Disabled);
+            Q_EMIT dragActivationModifierChanged();
+        }
+        Q_EMIT dragActivationMouseButtonChanged();
         setNeedsSave(true);
     }
 }
@@ -1204,6 +1224,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT shiftDragToActivateChanged();
     Q_EMIT dragActivationModifierChanged();
+    Q_EMIT dragActivationMouseButtonChanged();
     Q_EMIT multiZoneModifierChanged();
     Q_EMIT middleClickMultiZoneChanged();
     Q_EMIT showZonesOnAllMonitorsChanged();

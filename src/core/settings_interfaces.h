@@ -36,6 +36,8 @@ public:
     virtual void setShiftDragToActivate(bool enable) = 0;
     virtual DragModifier dragActivationModifier() const = 0;
     virtual void setDragActivationModifier(DragModifier modifier) = 0;
+    virtual int dragActivationMouseButton() const = 0;
+    virtual void setDragActivationMouseButton(int button) = 0;
     virtual DragModifier skipSnapModifier() const = 0;
     virtual void setSkipSnapModifier(DragModifier modifier) = 0;
     virtual DragModifier multiZoneModifier() const = 0;

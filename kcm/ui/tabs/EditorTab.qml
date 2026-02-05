@@ -45,6 +45,7 @@ ScrollView {
                 contentItem: Kirigami.FormLayout {
                     KeySequenceInput {
                         id: editorDuplicateShortcutField
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Duplicate zone:")
                         keySequence: kcm.editorDuplicateShortcut
                         onKeySequenceModified: (sequence) => {
@@ -56,6 +57,7 @@ ScrollView {
 
                     KeySequenceInput {
                         id: editorSplitHorizontalShortcutField
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split horizontally:")
                         keySequence: kcm.editorSplitHorizontalShortcut
                         onKeySequenceModified: (sequence) => {
@@ -67,6 +69,7 @@ ScrollView {
 
                     KeySequenceInput {
                         id: editorSplitVerticalShortcutField
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split vertically:")
                         keySequence: kcm.editorSplitVerticalShortcut
                         onKeySequenceModified: (sequence) => {
@@ -78,6 +81,7 @@ ScrollView {
 
                     KeySequenceInput {
                         id: editorFillShortcutField
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Fill space:")
                         keySequence: kcm.editorFillShortcut
                         onKeySequenceModified: (sequence) => {
@@ -183,9 +187,11 @@ ScrollView {
                         Kirigami.FormData.isSection: true
                     }
 
-                    ModifierCheckBoxes {
-                        id: snapOverrideModifiers
+                    ModifierAndMouseCheckBoxes {
+                        id: snapOverrideInput
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Override modifier:")
+                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.editorSnapOverrideModifier
                         tooltipEnabled: true
                         onValueModified: (value) => {
@@ -224,9 +230,11 @@ ScrollView {
                         ToolTip.text: i18n("When enabled, holding the modifier key while dropping a zone expands it to fill available space")
                     }
 
-                    ModifierCheckBoxes {
-                        id: fillOnDropModifiers
+                    ModifierAndMouseCheckBoxes {
+                        id: fillOnDropInput
+                        Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Modifier:")
+                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         enabled: fillOnDropEnabledCheck.checked
                         modifierValue: kcm.fillOnDropModifier
                         tooltipEnabled: true

@@ -91,8 +91,9 @@ bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers
 }
 
 void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height,
-                                    const QString& appName, const QString& windowClass)
+                                    const QString& appName, const QString& windowClass, int mouseButtons)
 {
+    Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
     // Check exclusion list - if window is excluded, don't allow snapping
     if (m_settings->isWindowExcluded(appName, windowClass)) {
         qCDebug(lcDbusWindow) << "Window excluded from snapping - appName:" << appName << "windowClass:" << windowClass;
@@ -377,7 +378,7 @@ void WindowDragAdaptor::handleSingleZoneModifier(int x, int y)
     }
 }
 
-void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers)
+void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
     if (windowId != m_draggedWindowId || m_snapCancelled) {
         return;
@@ -403,20 +404,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         mods = QGuiApplication::queryKeyboardModifiers();
     }
 
-    // Get modifier settings
+    // Get modifier settings and current activation state (keyboard or mouse)
     int dragActivationMod = static_cast<int>(m_settings->dragActivationModifier());
     int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
-    bool zoneActivationHeld = checkModifier(dragActivationMod, mods);
+    const int activationButton = m_settings->dragActivationMouseButton();
+    const bool activationByMouse = (activationButton != 0 && (mouseButtons & activationButton) != 0);
+    bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse;
     bool multiZoneModifierHeld = checkModifier(multiZoneMod, mods);
 
-    // Multi-zone modifier takes precedence (Ctrl+Alt by default)
     if (multiZoneModifierHeld) {
         handleMultiZoneModifier(cursorX, cursorY, mods);
     } else if (zoneActivationHeld) {
-        // Single-zone activation (Alt by default)
         handleSingleZoneModifier(cursorX, cursorY);
     } else {
-        // No modifier held - hide overlay
         hideOverlayAndClearZoneState();
     }
 }

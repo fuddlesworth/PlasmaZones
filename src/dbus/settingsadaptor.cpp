@@ -160,6 +160,19 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
 
+    // Activation by mouse button (0=None, Qt::MouseButton bits)
+    m_getters[QStringLiteral("dragActivationMouseButton")] = [this]() {
+        return m_settings->dragActivationMouseButton();
+    };
+    m_setters[QStringLiteral("dragActivationMouseButton")] = [this](const QVariant& v) {
+        int button = v.toInt();
+        if (button >= 0 && button <= 128) {
+            m_settings->setDragActivationMouseButton(button);
+            return true;
+        }
+        return false;
+    };
+
     REGISTER_BOOL_SETTING("middleClickMultiZone", middleClickMultiZone, setMiddleClickMultiZone)
 
     // Display settings

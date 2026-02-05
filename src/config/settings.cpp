@@ -144,6 +144,19 @@ void Settings::setDragActivationModifierInt(int modifier)
     }
 }
 
+void Settings::setDragActivationMouseButton(int button)
+{
+    // Left button (1) must not activate zones (user drags with left); treat as disabled
+    if (button == 1) {
+        button = 0;
+    }
+    if (m_dragActivationMouseButton != button) {
+        m_dragActivationMouseButton = button;
+        Q_EMIT dragActivationMouseButtonChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setSkipSnapModifier(DragModifier modifier)
 {
     if (m_skipSnapModifier != modifier) {
@@ -596,6 +609,13 @@ void Settings::load()
     }
     qCDebug(lcConfig) << "Loaded DragActivationModifier= " << static_cast<int>(m_dragActivationModifier);
 
+    m_dragActivationMouseButton = activation.readEntry(QLatin1String("DragActivationMouseButton"), ConfigDefaults::dragActivationMouseButton());
+    m_dragActivationMouseButton = qBound(0, m_dragActivationMouseButton, 128);
+    // Left button (1) must not activate zones (user drags with left); treat as disabled
+    if (m_dragActivationMouseButton == 1) {
+        m_dragActivationMouseButton = 0;
+    }
+
     // Skip-snap modifier: hold this to move window without snapping
     int skipMod = activation.readEntry(QLatin1String("SkipSnapModifier"), ConfigDefaults::skipSnapModifier());
     m_skipSnapModifier = static_cast<DragModifier>(qBound(0, skipMod, 8));
@@ -790,6 +810,7 @@ void Settings::save()
     // Activation
     activation.writeEntry(QLatin1String("ShiftDrag"), m_shiftDragToActivate); // Deprecated, kept for compatibility
     activation.writeEntry(QLatin1String("DragActivationModifier"), static_cast<int>(m_dragActivationModifier));
+    activation.writeEntry(QLatin1String("DragActivationMouseButton"), m_dragActivationMouseButton);
     activation.writeEntry(QLatin1String("SkipSnapModifier"), static_cast<int>(m_skipSnapModifier));
     activation.writeEntry(QLatin1String("MultiZoneModifier"), static_cast<int>(m_multiZoneModifier));
     activation.writeEntry(QLatin1String("MiddleClickMultiZone"), m_middleClickMultiZone);

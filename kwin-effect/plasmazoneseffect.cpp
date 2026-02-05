@@ -178,7 +178,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             });
     connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
             [this](const QString& windowId, const QPointF& cursorPos) {
-                callDragMoved(windowId, cursorPos, m_currentModifiers);
+                callDragMoved(windowId, cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
             });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId) {
@@ -362,7 +362,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // Window geometry changed during drag - send update
                     // Use tracked modifiers from mouseChanged signal
                     QPointF cursorPos = KWin::effects->cursorPos();
-                    callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers);
+                    callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
                 }
             });
 }
@@ -373,21 +373,22 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
 {
     Q_UNUSED(pos)
     Q_UNUSED(oldpos)
-    Q_UNUSED(buttons)
-    Q_UNUSED(oldbuttons)
     Q_UNUSED(oldmodifiers)
 
-    // Track the current keyboard modifiers from KWin's input system
-    // This is called whenever the mouse moves or modifiers change
-    if (m_currentModifiers != modifiers) {
+    const bool modifiersChanged = (m_currentModifiers != modifiers);
+    const bool buttonsChanged = (oldbuttons != buttons);
+
+    if (modifiersChanged) {
         m_currentModifiers = modifiers;
         qCDebug(lcEffect) << "Modifiers changed to" << static_cast<int>(modifiers);
+    }
+    m_currentMouseButtons = buttons;
 
-        // If we're currently dragging, send an update with the new modifiers
-        if (m_dragTracker->isDragging()) {
-            QPointF cursorPos = KWin::effects->cursorPos();
-            callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers);
-        }
+    // When modifiers or mouse buttons change during a drag, push state to daemon immediately.
+    // Otherwise mouse activation would only update on the next move (e.g. 50 ms poll), making it feel slower than keys.
+    if ((modifiersChanged || buttonsChanged) && m_dragTracker->isDragging()) {
+        QPointF cursorPos = KWin::effects->cursorPos();
+        callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
     }
 }
 
@@ -1141,9 +1142,9 @@ void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& g
         appName = windowClass;
     }
 
-    // D-Bus interface expects doubles for geometry + strings for app info (sddddss signature)
+    // D-Bus interface: sddddssi (windowId, x, y, w, h, appName, windowClass, mouseButtons)
     m_dbusInterface->asyncCall(QStringLiteral("dragStarted"), windowId, geometry.x(), geometry.y(), geometry.width(),
-                               geometry.height(), appName, windowClass);
+                               geometry.height(), appName, windowClass, static_cast<int>(m_currentMouseButtons));
 }
 bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 {
@@ -1165,16 +1166,16 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
     m_windowTrackingInterface->asyncCall(QStringLiteral("setWindowSticky"), windowId, sticky);
 }
 
-void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods)
+void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons)
 {
     ensureDBusInterface();
     if (!m_dbusInterface || !m_dbusInterface->isValid()) {
         return;
     }
 
-    // D-Bus interface expects ints for cursor position and modifiers (siii signature)
+    // D-Bus: dragMoved(s, i, i, i, i) - windowId, cursorX, cursorY, modifiers, mouseButtons
     m_dbusInterface->asyncCall(QStringLiteral("dragMoved"), windowId, static_cast<int>(cursorPos.x()),
-                               static_cast<int>(cursorPos.y()), static_cast<int>(mods));
+                               static_cast<int>(cursorPos.y()), static_cast<int>(mods), mouseButtons);
 }
 
 void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId)

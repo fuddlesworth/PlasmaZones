@@ -26,6 +26,12 @@
       <min>0</min>
       <max>10</max>
     </entry>
+    <entry name="DragActivationMouseButton" type="Int">
+      <label>Mouse button to activate zone overlay while dragging (hold during drag to show zones; 0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, 32=Extra1, 64=Extra2, 128=Extra3). Left (1) is invalid. Alternative to modifier for one-handed use.</label>
+      <default>0</default>
+      <min>0</min>
+      <max>128</max>
+    </entry>
     <entry name="SkipSnapModifier" type="Int">
       <label>Modifier key to skip zone snapping while dragging (0=Disabled,1=Shift,2=Ctrl,3=Alt,4=Meta,5=Ctrl+Alt,6=Ctrl+Shift,7=Alt+Shift,8=Always)</label>
       <default>1</default>

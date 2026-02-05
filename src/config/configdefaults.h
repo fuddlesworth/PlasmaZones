@@ -36,6 +36,7 @@ public:
 
     static bool shiftDrag() { return instance().defaultShiftDragValue(); }
     static int dragActivationModifier() { return instance().defaultDragActivationModifierValue(); }
+    static int dragActivationMouseButton() { return instance().defaultDragActivationMouseButtonValue(); }
     static int skipSnapModifier() { return instance().defaultSkipSnapModifierValue(); }
     static int multiZoneModifier() { return instance().defaultMultiZoneModifierValue(); }
     static bool middleClickMultiZone() { return instance().defaultMiddleClickMultiZoneValue(); }
