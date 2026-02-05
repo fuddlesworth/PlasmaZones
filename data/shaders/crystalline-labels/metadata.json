@@ -4,7 +4,6 @@
     "description": "Zone numbers fractured into Voronoi cells with gentle drift and stained-glass style edge lines. Unique showcase effect.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

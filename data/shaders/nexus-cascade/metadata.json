@@ -1,0 +1,157 @@
+{
+    "id": "nexus-cascade",
+    "name": "Nexus Cascade",
+    "description": "Multi-pass multi-channel wow shader: plasma base → distortion layer → bloom combine, with chromatic aberration and zone masking",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "multipass": true,
+    "bufferShaders": ["pass0.frag", "pass1.frag", "pass2.frag"],
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "speed",
+            "name": "Plasma Speed",
+            "group": "Pass 0 - Base",
+            "type": "float",
+            "slot": 0,
+            "default": 0.4,
+            "min": 0.05,
+            "max": 2.0
+        },
+        {
+            "id": "plasmaScale",
+            "name": "Plasma Scale",
+            "group": "Pass 0 - Base",
+            "type": "float",
+            "slot": 1,
+            "default": 4.0,
+            "min": 1.0,
+            "max": 15.0
+        },
+        {
+            "id": "distortStrength",
+            "name": "Distortion Strength",
+            "group": "Pass 1 - Layer",
+            "type": "float",
+            "slot": 4,
+            "default": 0.03,
+            "min": 0.0,
+            "max": 0.15
+        },
+        {
+            "id": "rippleFreq",
+            "name": "Ripple Frequency",
+            "group": "Pass 1 - Layer",
+            "type": "float",
+            "slot": 5,
+            "default": 8.0,
+            "min": 2.0,
+            "max": 25.0
+        },
+        {
+            "id": "scanlineOpacity",
+            "name": "Scanline Opacity",
+            "group": "Pass 1 - Layer",
+            "type": "float",
+            "slot": 6,
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "bloomRadius",
+            "name": "Bloom Radius",
+            "group": "Pass 2 - Bloom",
+            "type": "float",
+            "slot": 8,
+            "default": 3.0,
+            "min": 0.5,
+            "max": 12.0
+        },
+        {
+            "id": "bloomStrength",
+            "name": "Bloom Strength",
+            "group": "Pass 2 - Bloom",
+            "type": "float",
+            "slot": 9,
+            "default": 0.25,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "channelBlend",
+            "name": "Channel Blend",
+            "group": "Pass 2 - Bloom",
+            "type": "float",
+            "slot": 10,
+            "default": 0.6,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "chromaStrength",
+            "name": "Chromatic Aberration (px)",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 12,
+            "default": 4.0,
+            "min": 0.0,
+            "max": 15.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Zone Fill Opacity",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 13,
+            "default": 0.92,
+            "min": 0.3,
+            "max": 1.0
+        },
+        {
+            "id": "channelMix",
+            "name": "Channel Mix",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 14,
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "zoneFillTint",
+            "name": "Zone Fill Tint",
+            "group": "Final Composite",
+            "type": "float",
+            "slot": 15,
+            "default": 0.0,
+            "min": 0.0,
+            "max": 1.0
+        },
+        {
+            "id": "color1",
+            "name": "Plasma Color 1",
+            "group": "Colors",
+            "type": "color",
+            "slot": 0,
+            "default": "#3366e6"
+        },
+        {
+            "id": "color2",
+            "name": "Plasma Color 2",
+            "group": "Colors",
+            "type": "color",
+            "slot": 1,
+            "default": "#cc4de6"
+        },
+        {
+            "id": "color3",
+            "name": "Plasma Color 3",
+            "group": "Colors",
+            "type": "color",
+            "slot": 2,
+            "default": "#19ccb8"
+        }
+    ]
+}

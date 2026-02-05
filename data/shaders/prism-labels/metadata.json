@@ -4,7 +4,6 @@
     "description": "Liquid surface: concentric ripples from the zone center and zone numbers refracted by the same wave",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

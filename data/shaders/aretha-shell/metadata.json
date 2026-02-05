@@ -4,7 +4,6 @@
     "description": "Ghost in the Shell inspired cyberpunk effect with color grading, hex grid, and data streams",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

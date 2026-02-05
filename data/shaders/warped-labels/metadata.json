@@ -4,7 +4,6 @@
     "description": "Minimalist zones with animated wave distortion and chromatic aberration on zone numbers",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

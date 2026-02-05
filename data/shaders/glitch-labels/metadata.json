@@ -4,7 +4,6 @@
     "description": "Minimalist zones with digital glitch effect on zone numbers: slice displacement and scan lines, no chromatic aberration",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

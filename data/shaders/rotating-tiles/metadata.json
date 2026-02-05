@@ -4,7 +4,6 @@
     "description": "Rotating tiled grid with radial wave; tile edges pulse from center. Adapted from Shadertoy.",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

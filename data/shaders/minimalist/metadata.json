@@ -4,7 +4,6 @@
     "description": "Clean card style with soft shadows, subtle gradients, and thin borders",
     "author": "PlasmaZones",
     "version": "2.1",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

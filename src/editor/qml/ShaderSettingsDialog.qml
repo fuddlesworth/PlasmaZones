@@ -69,6 +69,22 @@ Kirigami.Dialog {
 
     readonly property var shaderParams: currentShaderInfo ? (currentShaderInfo.parameters || []) : []
 
+    // Shaders sorted by name for the dropdown (avoids arbitrary QHash order)
+    readonly property var sortedShaders: {
+        var shaders = editorController ? editorController.availableShaders : [];
+        if (!shaders || shaders.length === 0) return [];
+        var arr = [];
+        for (var i = 0; i < shaders.length; i++) {
+            if (shaders[i]) arr.push(shaders[i]);
+        }
+        arr.sort(function(a, b) {
+            var na = (a && a.name !== undefined) ? String(a.name) : "";
+            var nb = (b && b.name !== undefined) ? String(b.name) : "";
+            return na.localeCompare(nb);
+        });
+        return arr;
+    }
+
     // Computed property: parameters grouped by their "group" field
     readonly property var parameterGroups: buildParameterGroups(shaderParams)
 
@@ -357,7 +373,7 @@ Kirigami.Dialog {
                 enabled: root.hasShaderEffect
                 Layout.fillWidth: true
 
-                model: root.editorController ? root.editorController.availableShaders : []
+                model: root.sortedShaders
                 textRole: "name"
                 valueRole: "id"
 

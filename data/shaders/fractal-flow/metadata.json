@@ -4,7 +4,6 @@
     "description": "Organic fractal-like flowing pattern adapted from Shadertoy - iterative distortion with color tinting",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

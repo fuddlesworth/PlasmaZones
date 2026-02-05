@@ -4,7 +4,6 @@
     "description": "Flowing fractal noise with animated color palette - mesmerizing organic patterns",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

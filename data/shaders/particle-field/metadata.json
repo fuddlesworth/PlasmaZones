@@ -4,7 +4,6 @@
     "description": "Animated floating particles with glow effects and smooth motion",
     "author": "PlasmaZones",
     "version": "2.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [

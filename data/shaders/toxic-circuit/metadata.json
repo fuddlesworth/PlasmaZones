@@ -4,7 +4,6 @@
     "description": "Cyberpunk venom overlay with glowing circuit traces, toxic drip effects, digital corruption, and neon shimmer - inspired by Neon Venom aesthetic",
     "author": "PlasmaZones",
     "version": "1.0",
-    "renderType": "rendernode",
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [
