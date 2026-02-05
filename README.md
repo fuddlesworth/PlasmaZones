@@ -100,7 +100,7 @@ GPU-accelerated zone overlays with 17 built-in effects, including multipass shad
 | Warped Labels | Animated wave distortion and chromatic aberration on zone numbers |
 
 <p align="center">
-  <img src="docs/media/screenshots/shaders-gallery.png" alt="Shader effects gallery" />
+  <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
 </p>
 
 Custom shaders supported — see the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
