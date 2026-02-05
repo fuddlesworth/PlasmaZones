@@ -394,8 +394,9 @@ jobs:
           docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "
             pacman -Sy --noconfirm pacman
             useradd -m builder
+            git config --global --add safe.directory /pkg
             chown -R builder:builder /pkg
-            su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+            su builder -c 'git config --global --add safe.directory /pkg && makepkg --printsrcinfo > .SRCINFO'
           "
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -435,8 +436,9 @@ jobs:
           docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "
             pacman -Sy --noconfirm pacman
             useradd -m builder
+            git config --global --add safe.directory /pkg
             chown -R builder:builder /pkg
-            su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+            su builder -c 'git config --global --add safe.directory /pkg && makepkg --printsrcinfo > .SRCINFO'
           "
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
