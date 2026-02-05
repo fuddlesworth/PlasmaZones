@@ -390,13 +390,14 @@ jobs:
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
           sed -i "s/'[a-f0-9]\{64\}'/'$SHA256'/" PKGBUILD
 
-          # Generate .SRCINFO
-          docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman git
+          # Generate .SRCINFO (mount PKGBUILD read-only to avoid chown breaking host git)
+          docker run --rm -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" archlinux:latest bash -c "
+            pacman -Sy --noconfirm pacman
             useradd -m builder
-            chown -R builder:builder /pkg
-            su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO'
-          "
+            cp /build/PKGBUILD /home/builder/
+            chown builder:builder /home/builder/PKGBUILD
+            su builder -c 'cd /home/builder && makepkg --printsrcinfo'
+          " > .SRCINFO
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
@@ -431,13 +432,14 @@ jobs:
           echo "Source tarball SHA256: $TARBALL_SHA256"
           sed -i "s/'[a-f0-9]\{64\}'/'$TARBALL_SHA256'/" PKGBUILD
 
-          # Generate .SRCINFO
-          docker run --rm -v "$(pwd):/pkg" archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman git
+          # Generate .SRCINFO (mount PKGBUILD read-only to avoid chown breaking host git)
+          docker run --rm -v "$(pwd)/PKGBUILD:/build/PKGBUILD:ro" archlinux:latest bash -c "
+            pacman -Sy --noconfirm pacman
             useradd -m builder
-            chown -R builder:builder /pkg
-            su builder -c 'cd /pkg && makepkg --printsrcinfo > .SRCINFO'
-          "
+            cp /build/PKGBUILD /home/builder/
+            chown builder:builder /home/builder/PKGBUILD
+            su builder -c 'cd /home/builder && makepkg --printsrcinfo'
+          " > .SRCINFO
 
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
