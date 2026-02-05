@@ -184,14 +184,13 @@ ScrollView {
         }
 
         // Check for updates section
-        ColumnLayout {
-            Layout.fillWidth: true
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
             Layout.topMargin: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.smallSpacing
+            spacing: Kirigami.Units.largeSpacing
 
             Button {
                 id: checkUpdateButton
-                Layout.alignment: Qt.AlignHCenter
                 text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
                 icon.name: "view-refresh"
                 enabled: !kcm.checkingForUpdates
@@ -211,9 +210,7 @@ ScrollView {
             // Status message after check completes
             Label {
                 id: updateStatusLabel
-                Layout.alignment: Qt.AlignHCenter
                 visible: false
-                opacity: 0.8
 
                 property bool manualCheck: false
 
