@@ -53,11 +53,14 @@ struct alignas(16) ZoneShaderUniforms
     // iMouse.xy = mouse position in pixels, iMouse.zw = normalized (0-1)
     float iMouse[4]; // vec4: 16 bytes at offset 96-111
 
+    // Date/time: year, month (1-12), day (1-31), seconds since midnight
+    float iDate[4]; // vec4: 16 bytes
+
     // Custom shader parameters (16 float slots in 4 vec4s)
-    float customParams[4][4]; // vec4[4]: 64 bytes at offset 112
+    float customParams[4][4]; // vec4[4]: 64 bytes at offset 128
 
     // Custom colors (8 color slots)
-    float customColors[8][4]; // vec4[8]: 128 bytes at offset 176
+    float customColors[8][4]; // vec4[8]: 128 bytes at offset 192
 
     // Zone data arrays (each element is vec4)
     float zoneRects[MaxZones][4];

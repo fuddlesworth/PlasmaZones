@@ -7,26 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-    vec2 iChannelResolution[4];
-};
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
+#include <common.glsl>
 
 /*
  * CRYSTALLINE LABELS - Voronoi fractured zone numbers with stained-glass edges
@@ -40,8 +21,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
  *   customParams[1].x = cellScale (cells per axis), .y = driftAmount, .z = driftSpeed
  *   customParams[1].w = edgeStrength (0 = no lines), customParams[2].x = edgeWidth
  */
-
-#include <common.glsl>
 
 vec4 renderMinimalistZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 10.0);

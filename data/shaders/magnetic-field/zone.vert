@@ -11,29 +11,9 @@ layout(location = 1) out float vMouseInfluence;
 layout(location = 2) out float vDistortAmount;
 layout(location = 3) out vec2 vDisplacement;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;        // xy = pixels, zw = normalized (0-1)
-    // customParams[0]: fieldStrength, waveSpeed, rippleSize, glowIntensity
-    // customParams[1]: particleCount, particleSize, trailLength, distortionAmount
-    vec4 customParams[4];  // [0-3], access as customParams[0].x for slot 0, etc.
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
-
-// Noise for organic movement
 #include <common.glsl>
 
+// Noise for organic movement
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);

@@ -12,23 +12,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
+#include <common.glsl>
 
 // === PARAMETER ACCESS ===
 // Slot 0-3: customParams[0].xyzw
@@ -86,15 +70,12 @@ vec3 getArethaPurple() {
     return length(c) > 0.01 ? c : vec3(0.333, 0.333, 1.000);  // #5555ff
 }
 
-layout(binding = 1) uniform sampler2D uZoneLabels;
-
 // Color grade mapping (shadows -> midtones -> highlights)
 const vec3 gradeShadow    = vec3(0.098, 0.153, 0.259);  // Deep blue (arethaBg)
 const vec3 gradeMid       = vec3(0.000, 0.620, 0.741);  // Teal midtones
 const vec3 gradeHighlight = vec3(0.333, 0.667, 1.000);  // Cyan highlights
 
 // === UTILITIES ===
-#include <common.glsl>
 float luminance(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
 // === LAYER 1: NEON COLOR GRADE ===
@@ -395,8 +376,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float t = iTime * SPEED;
         vec3 fx = vec3(0.0);
         
-        // Base color: use configured background color (matching Ghostty's approach)
-        // This allows users to set the same background color as their terminal
+        // Base color: use configured background (e.g. match terminal)
         vec3 baseColor = getBackgroundColor();
         
         // Use zone fill color alpha for transparency (or default to 0.95 for Ghostty-like appearance)
@@ -485,7 +465,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
+    color = compositeLabelsWithUv(color, fragCoord);
 
     fragColor = clampFragColor(color);
 }

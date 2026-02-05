@@ -7,25 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;        // xy = pixels, zw = normalized (0-1)
-    vec4 customParams[4];  // [0-3], access as customParams[0].x for slot 0, etc.
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
+#include <common.glsl>
 
 /*
  * PARTICLE FIELD - Floating Particles Effect
@@ -41,8 +23,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
  *   customParams[1].x = fillOpacity (0.1-0.5) - Background fill
  *   customParams[1].y = borderGlow (0.3-1.0) - Border brightness
  */
-
-#include <common.glsl>
 
 vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor, vec4 params, bool isHighlighted) {
     float borderRadius = max(params.x, 6.0);
@@ -177,7 +157,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
+    color = compositeLabelsWithUv(color, fragCoord);
 
     fragColor = clampFragColor(color);
 }

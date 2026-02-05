@@ -6,17 +6,42 @@
 //   #include <common.glsl>   (from global shaders dir)
 //   #include "common.glsl"   (from current shader dir if copied locally)
 //
-// The main shader must declare the ZoneUniforms block and any sampler bindings;
-// this file only provides helper functions (no layout/binding declarations).
+// Bindings 0-1: UBO and labels. Channels (2-5) in multipass.glsl.
+
+#ifndef PLASMAZONES_COMMON_GLSL
+#define PLASMAZONES_COMMON_GLSL
+
+layout(std140, binding = 0) uniform ZoneUniforms {
+    mat4 qt_Matrix;
+    float qt_Opacity;
+    float iTime;
+    float iTimeDelta;
+    int iFrame;
+    vec2 iResolution;
+    int zoneCount;
+    int highlightedCount;
+    vec4 iMouse;        // xy = pixels, zw = normalized (0-1)
+    vec4 iDate;         // xyzw = year, month, day, seconds since midnight
+    vec4 customParams[4];
+    vec4 customColors[8];
+    vec4 zoneRects[64];
+    vec4 zoneFillColors[64];
+    vec4 zoneBorderColors[64];
+    vec4 zoneParams[64];
+    vec2 iChannelResolution[4];
+};
+
+layout(binding = 1) uniform sampler2D uZoneLabels;
+
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 
-// Convert texture coords to screen coords (Y=0 at top). Requires ZoneUniforms.iResolution.
+// Texture coords to screen coords (Y=0 at top). Uses iResolution.
 vec2 fragCoordFromTexCoord(vec2 vTexCoord) {
     return vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
 }
 
-// Clamp color and apply qt_Opacity for final output. Requires ZoneUniforms.qt_Opacity.
+// Clamp color and apply qt_Opacity for final output.
 vec4 clampFragColor(vec4 color) {
     return vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
 }
@@ -70,9 +95,9 @@ vec2 labelsUv(vec2 fragCoord) {
     return fragCoord / res;
 }
 
-// Convenience: composite labels using fragCoord (computes UV internally)
-vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord, sampler2D labelsTex) {
-    return compositeLabels(color, labelsUv(fragCoord), labelsTex);
+// Composite labels at fragCoord using uZoneLabels (binding 1)
+vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord) {
+    return compositeLabels(color, labelsUv(fragCoord), uZoneLabels);
 }
 
 // Premultiplied alpha over blend: result = src over dst
@@ -100,3 +125,5 @@ float expGlow(float d, float falloff, float strength) {
 vec3 colorWithFallback(vec3 color, vec3 fallback) {
     return length(color) >= 0.01 ? color : fallback;
 }
+
+#endif // PLASMAZONES_COMMON_GLSL

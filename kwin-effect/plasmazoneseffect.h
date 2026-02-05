@@ -67,7 +67,7 @@ private Q_SLOTS:
     void slotScreenGeometryChanged();
     void slotSettingsChanged();
 
-    // Phase 1 Keyboard Navigation handlers
+    // Keyboard Navigation handlers
     void slotMoveWindowToZoneRequested(const QString& targetZoneId, const QString& zoneGeometry);
     void slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
     void slotRestoreWindowRequested();

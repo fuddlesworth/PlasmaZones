@@ -8,24 +8,7 @@ layout(location = 1) in vec2 texCoord;
 
 layout(location = 0) out vec2 vTexCoord;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];  // [0-7], access as customColors[0] for color slot 0, etc.
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-    vec2 iChannelResolution[4];
-};
+#include <common.glsl>
 
 void main() {
     vTexCoord = texCoord;

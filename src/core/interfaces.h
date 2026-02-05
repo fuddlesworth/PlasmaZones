@@ -208,7 +208,7 @@ Q_SIGNALS:
     void quickLayout8ShortcutChanged();
     void quickLayout9ShortcutChanged();
 
-    // Keyboard Navigation Shortcuts (Phase 1 features)
+    // Keyboard Navigation Shortcuts
     void moveWindowLeftShortcutChanged();
     void moveWindowRightShortcutChanged();
     void moveWindowUpShortcutChanged();

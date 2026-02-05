@@ -7,25 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
+#include <common.glsl>
 
 /*
  * FRACTAL FLOW - Shadertoy Conversion
@@ -39,8 +21,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
  *   customParams[1].x = iterations (10.0-25.0) - Loop iterations (more = denser detail)
  *   customColors[0] = primary tint - Colorizes the effect
  */
-
-#include <common.glsl>
 
 // Shadertoy-derived: iterative distortion loop. iterCount controls detail (more = denser).
 // Constants (7, 5, 1.5, 9, 11, 40, 1e2, 25.6, 164, 250, 1.35) are from original; tune speed,
@@ -141,7 +121,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
+    color = compositeLabelsWithUv(color, fragCoord);
 
     fragColor = clampFragColor(color);
 }

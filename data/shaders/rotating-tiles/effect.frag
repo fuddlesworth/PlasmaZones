@@ -7,25 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 
 layout(location = 0) out vec4 fragColor;
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    mat4 qt_Matrix;
-    float qt_Opacity;
-    float iTime;
-    float iTimeDelta;
-    int iFrame;
-    vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
-    vec4 iMouse;
-    vec4 customParams[4];
-    vec4 customColors[8];
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
-};
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
+#include <common.glsl>
 
 /*
  * ROTATING TILES - Shadertoy conversion
@@ -39,8 +21,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
  *   customParams[0].w = baseAngle (degrees) - Base rotation angle
  *   customColors[0] = tint - Colorizes the effect (default warm gradient)
  */
-
-#include <common.glsl>
 
 // Shadertoy-derived: rotating tile grid with radial wave. Key constants: tile_dist/edge
 // control tile vs gap; square_dist drives radial wave; warm gradient (pow 2.0, 1.5, 1.2) is
@@ -152,7 +132,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord, uZoneLabels);
+    color = compositeLabelsWithUv(color, fragCoord);
 
     fragColor = clampFragColor(color);
 }
