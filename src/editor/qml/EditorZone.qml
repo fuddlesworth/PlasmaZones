@@ -181,11 +181,17 @@ Item {
 
     // Public function delegated to geometrySync
     function syncFromZoneData() {
+        // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
+        if (!parent)
+            return;
         geometrySync.syncFromZoneData();
     }
 
     // Delegate to geometrySync
     function ensureDimensionsInitialized() {
+        // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
+        if (!parent)
+            return;
         geometrySync.ensureDimensionsInitialized();
     }
 
@@ -459,47 +465,54 @@ Item {
     // However, QVariantMap property changes don't automatically trigger QML bindings,
     // so we need to force re-evaluation by updating tracker properties
     Connections {
+        // Avoid use-after-free when zone is removed from Repeater (e.g. deleteZone) but
+        // Qt.callLater callbacks from prior zoneColorChanged/zonesChanged still run.
         function onZoneColorChanged(zoneId) {
-            // When zone color changes for this zone, force color property re-evaluation
-            if (zoneId === root.zoneId && root.zoneData) {
-                // Capture references before deferred call
-                var rootRef = root;
-                var zoneRectRef = zoneRect;
-                Qt.callLater(function() {
-                    if (rootRef && rootRef.zoneData && zoneRectRef) {
-                        zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
-                        zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
-                        zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
-                        zoneRectRef._activeOpacityTracker = rootRef.zoneData.activeOpacity;
-                        zoneRectRef._inactiveOpacityTracker = rootRef.zoneData.inactiveOpacity;
-                        zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
-                        zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
-                        zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
-                    }
-                });
-            }
+            if (zoneId !== root.zoneId || !root.zoneData)
+                return;
+            var rootRef = root;
+            var zoneRectRef = zoneRect;
+            Qt.callLater(function() {
+                try {
+                    // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
+                    if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
+                        return;
+                    zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
+                    zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
+                    zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
+                    zoneRectRef._activeOpacityTracker = rootRef.zoneData.activeOpacity;
+                    zoneRectRef._inactiveOpacityTracker = rootRef.zoneData.inactiveOpacity;
+                    zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
+                    zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
+                    zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
+                } catch (e) {
+                    // Expected when zone is destroyed between signal and callLater
+                }
+            });
         }
 
         function onZonesChanged() {
-            // Zones list changed - Repeater model updates automatically
-            // Force re-evaluation of all appearance properties
-            if (root.zoneData) {
-                // Capture references before deferred call
-                var rootRef = root;
-                var zoneRectRef = zoneRect;
-                Qt.callLater(function() {
-                    if (rootRef && rootRef.zoneData && zoneRectRef) {
-                        zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
-                        zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
-                        zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
-                        zoneRectRef._activeOpacityTracker = rootRef.zoneData.activeOpacity;
-                        zoneRectRef._inactiveOpacityTracker = rootRef.zoneData.inactiveOpacity;
-                        zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
-                        zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
-                        zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
-                    }
-                });
-            }
+            if (!root.zoneData)
+                return;
+            var rootRef = root;
+            var zoneRectRef = zoneRect;
+            Qt.callLater(function() {
+                try {
+                    // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
+                    if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
+                        return;
+                    zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
+                    zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
+                    zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
+                    zoneRectRef._activeOpacityTracker = rootRef.zoneData.activeOpacity;
+                    zoneRectRef._inactiveOpacityTracker = rootRef.zoneData.inactiveOpacity;
+                    zoneRectRef._borderWidthTracker = rootRef.zoneData.borderWidth;
+                    zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
+                    zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
+                } catch (e) {
+                    // Expected when zone is destroyed between signal and callLater
+                }
+            });
         }
 
         target: root.controller

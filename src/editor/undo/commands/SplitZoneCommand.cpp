@@ -87,14 +87,27 @@ void SplitZoneCommand::redo()
     // Get current zones list
     QVariantList currentZones = m_zoneManager->zones();
 
-    // Build new zones list: keep all zones except the original, then add new zones
-    QVariantList newZonesList;
+    // Collect ALL IDs that will be added from m_newZonesData so we can
+    // remove them from currentZones first.  This prevents duplicates when
+    // QUndoStack::push() calls redo() after the split was already performed.
+    QSet<QString> replacedIds;
+    replacedIds.insert(m_originalZoneId);
+    for (const QVariant& zoneVar : m_newZonesData) {
+        if (!zoneVar.canConvert<QVariantMap>())
+            continue;
+        QVariantMap zone = zoneVar.toMap();
+        QString id = zone[JsonKeys::Id].toString();
+        if (!id.isEmpty()) {
+            replacedIds.insert(id);
+        }
+    }
 
-    // First, add all existing zones except the original
+    // Build new zones list: keep all zones except those being replaced
+    QVariantList newZonesList;
     for (const QVariant& zoneVar : currentZones) {
         QVariantMap zone = zoneVar.toMap();
         QString zoneId = zone[JsonKeys::Id].toString();
-        if (zoneId != m_originalZoneId) {
+        if (!replacedIds.contains(zoneId)) {
             newZonesList.append(zone);
         }
     }

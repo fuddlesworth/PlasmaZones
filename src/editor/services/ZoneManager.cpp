@@ -1249,9 +1249,11 @@ void ZoneManager::setZoneData(const QString& zoneId, const QVariantMap& zoneData
 
 void ZoneManager::restoreZones(const QVariantList& zones)
 {
-    // Validate zones list before restoring
+    // Validate and deduplicate zones list before restoring
     QSet<QString> zoneIds;
     QSet<int> zoneNumbers;
+    QVariantList validated;
+    bool hasDuplicates = false;
 
     for (const QVariant& zoneVar : zones) {
         if (!zoneVar.canConvert<QVariantMap>()) {
@@ -1279,15 +1281,16 @@ void ZoneManager::restoreZones(const QVariantList& zones)
             return; // Don't restore if invalid
         }
 
-        // Check for duplicate IDs
+        // Check for duplicate IDs — skip duplicates, keep first occurrence
         QString zoneId = zone[JsonKeys::Id].toString();
         if (zoneId.isEmpty()) {
             qCWarning(lcEditorZone) << "Empty zone ID in restoreZones";
             return; // Don't restore if invalid
         }
         if (zoneIds.contains(zoneId)) {
-            qCWarning(lcEditorZone) << "Duplicate zone ID in restoreZones:" << zoneId;
-            return; // Don't restore if duplicates
+            qCWarning(lcEditorZone) << "Duplicate zone ID in restoreZones, skipping:" << zoneId;
+            hasDuplicates = true;
+            continue; // Skip duplicate, keep first occurrence
         }
         zoneIds.insert(zoneId);
 
@@ -1299,10 +1302,12 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         if (zoneNumber > 0) {
             zoneNumbers.insert(zoneNumber);
         }
+
+        validated.append(zoneVar);
     }
 
-    // All validation passed, restore zones
-    m_zones = zones;
+    // Restore the deduplicated list
+    m_zones = hasDuplicates ? validated : zones;
     Q_EMIT zonesChanged();
     Q_EMIT zonesModified();
 }

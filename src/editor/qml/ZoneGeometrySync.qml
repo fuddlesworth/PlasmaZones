@@ -20,6 +20,9 @@ Item {
 
     // Sync visual properties from model data
     function syncFromZoneData() {
+        // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
+        if (!zoneRoot || !zoneRoot.parent)
+            return;
         // Don't sync during active operations
         if (zoneRoot.operationState !== 0 || zoneRoot.isDividerOperation)
             return ;
@@ -84,6 +87,9 @@ Item {
 
     // Initialize dimensions when canvas becomes valid
     function ensureDimensionsInitialized() {
+        // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
+        if (!zoneRoot || !zoneRoot.parent)
+            return;
         if (zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0 && isFinite(zoneRoot.canvasWidth) && isFinite(zoneRoot.canvasHeight)) {
             syncFromZoneData();
             if ((zoneRoot.visualWidth === 0 || zoneRoot.visualHeight === 0 || !isFinite(zoneRoot.visualWidth) || !isFinite(zoneRoot.visualHeight)) && zoneRoot.zoneData) {

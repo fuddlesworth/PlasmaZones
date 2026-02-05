@@ -34,7 +34,7 @@ Item {
             id: numberLabel
 
             anchors.horizontalCenter: parent.horizontalCenter
-            text: zoneContent.zoneData.zoneNumber || 1
+            text: (zoneContent.zoneData && zoneContent.zoneData.zoneNumber) || 1
             // Guard against negative or zero dimensions causing invalid font size
             font.pixelSize: Math.max(8, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25)
             font.bold: true
@@ -45,7 +45,7 @@ Item {
         // Zone name label (below number)
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: zoneContent.zoneData.name || ""
+            text: (zoneContent.zoneData && zoneContent.zoneData.name) || ""
             // Scale font size based on zone dimensions, using default font size as base
             font.pixelSize: {
                 var baseSize = Kirigami.Theme.defaultFont.pixelSize;
