@@ -28,10 +28,12 @@ parse_changelog() {
     awk '
     /^## \[/ {
         # Extract version and date: ## [1.5.2] - 2026-02-05
-        match($0, /\[([0-9][^\]]+)\]/, va)
-        match($0, /[0-9]{4}-[0-9]{2}-[0-9]{2}/, da)
-        version = va[1]
-        date = da[0]
+        # POSIX awk compatible: use index/substr instead of gawk match()
+        i = index($0, "[")
+        j = index($0, "]")
+        version = substr($0, i+1, j-i-1)
+        k = index($0, "] - ")
+        date = substr($0, k+4)
         next
     }
     /^### / { next }  # Skip section headers (Added, Fixed, etc.)
