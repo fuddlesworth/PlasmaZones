@@ -944,12 +944,12 @@ void Settings::reset()
     qCDebug(lcConfig) << "Settings reset to defaults";
 }
 
-void Settings::loadColorsFromFile(const QString& filePath)
+QString Settings::loadColorsFromFile(const QString& filePath)
 {
     // Delegate to ColorImporter
     ColorImportResult result = ColorImporter::importFromFile(filePath);
     if (!result.success) {
-        return;
+        return result.errorMessage;
     }
 
     // Apply imported colors
@@ -960,6 +960,8 @@ void Settings::loadColorsFromFile(const QString& filePath)
 
     m_useSystemColors = false;
     Q_EMIT useSystemColorsChanged();
+
+    return QString(); // Success - no error
 }
 
 void Settings::applySystemColorScheme()

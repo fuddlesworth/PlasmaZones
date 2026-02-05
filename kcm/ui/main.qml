@@ -371,4 +371,26 @@ KCM.AbstractKCM {
             }
         }
     }
+
+    // Color import error dialog
+    Kirigami.PromptDialog {
+        id: colorImportErrorDialog
+        title: i18n("Color Import Failed")
+        subtitle: ""
+        standardButtons: Kirigami.Dialog.Ok
+        preferredWidth: Math.min(Kirigami.Units.gridUnit * 30, parent.width * 0.8)
+    }
+
+    // Connect to KCM signals for color import feedback
+    Connections {
+        target: kcm
+        function onColorImportError(message) {
+            colorImportErrorDialog.subtitle = message
+            colorImportErrorDialog.open()
+        }
+        function onColorImportSuccess() {
+            // Switch to Zones tab (index 3) to show the updated colors
+            tabBar.currentIndex = 3
+        }
+    }
 }

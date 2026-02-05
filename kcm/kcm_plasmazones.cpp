@@ -1424,23 +1424,40 @@ void KCMPlasmaZones::removeExcludedWindowClass(int index)
 void KCMPlasmaZones::loadColorsFromPywal()
 {
     QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
-    if (QFile::exists(pywalPath)) {
-        m_settings->loadColorsFromFile(pywalPath);
-        Q_EMIT highlightColorChanged();
-        Q_EMIT inactiveColorChanged();
-        Q_EMIT borderColorChanged();
-        Q_EMIT numberColorChanged();
-        setNeedsSave(true);
+    if (!QFile::exists(pywalPath)) {
+        Q_EMIT colorImportError(tr("Pywal colors not found. Run 'wal' to generate colors first.\n\nExpected file: %1").arg(pywalPath));
+        return;
     }
-}
 
-void KCMPlasmaZones::loadColorsFromFile(const QString& filePath)
-{
-    m_settings->loadColorsFromFile(filePath);
+    QString error = m_settings->loadColorsFromFile(pywalPath);
+    if (!error.isEmpty()) {
+        Q_EMIT colorImportError(error);
+        return;
+    }
+
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
     Q_EMIT borderColorChanged();
     Q_EMIT numberColorChanged();
+    Q_EMIT useSystemColorsChanged();
+    Q_EMIT colorImportSuccess();
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::loadColorsFromFile(const QString& filePath)
+{
+    QString error = m_settings->loadColorsFromFile(filePath);
+    if (!error.isEmpty()) {
+        Q_EMIT colorImportError(error);
+        return;
+    }
+
+    Q_EMIT highlightColorChanged();
+    Q_EMIT inactiveColorChanged();
+    Q_EMIT borderColorChanged();
+    Q_EMIT numberColorChanged();
+    Q_EMIT useSystemColorsChanged();
+    Q_EMIT colorImportSuccess();
     setNeedsSave(true);
 }
 

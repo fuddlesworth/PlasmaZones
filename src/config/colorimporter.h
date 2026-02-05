@@ -17,6 +17,7 @@ namespace PlasmaZones {
  */
 struct PLASMAZONES_EXPORT ColorImportResult {
     bool success = false;
+    QString errorMessage;  // Human-readable error if success=false
     QColor highlightColor;
     QColor inactiveColor;
     QColor borderColor;

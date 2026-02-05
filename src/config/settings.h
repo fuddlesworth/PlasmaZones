@@ -805,7 +805,7 @@ public:
 
     // Additional methods
     Q_INVOKABLE bool isWindowExcluded(const QString& appName, const QString& windowClass) const override;
-    Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
+    Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
     Q_INVOKABLE void applySystemColorScheme();
 
 private:

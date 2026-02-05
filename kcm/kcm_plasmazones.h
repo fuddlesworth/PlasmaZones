@@ -460,6 +460,8 @@ Q_SIGNALS:
     void daemonRunningChanged();
     void daemonEnabledChanged();
     void quickLayoutSlotsRefreshed(); // Emitted when quick layout slots are reloaded from daemon
+    void colorImportError(const QString& message); // Emitted when color import fails
+    void colorImportSuccess(); // Emitted when color import succeeds
 
 private Q_SLOTS:
     void loadLayouts();
