@@ -62,10 +62,8 @@ jobs:
             libkf6notifications-dev libkf6colorscheme-dev \
             liblayershellqtinterface-dev libplasmaactivities-dev
 
-      - name: Update changelog version
-        run: |
-          VERSION="${{ needs.version.outputs.version }}"
-          sed -i "1s/([^)]*)/($VERSION-1)/" packaging/debian/changelog
+      - name: Generate Debian changelog from CHANGELOG.md
+        run: bash packaging/generate-changelog.sh debian
 
       - name: Build Debian package
         run: |
@@ -126,12 +124,11 @@ jobs:
           tar --exclude='.git' --exclude='build' -cf - . | tar -xf - -C PlasmaZones-${VERSION}/
           tar czf ~/rpmbuild/SOURCES/plasmazones-${VERSION}.tar.gz PlasmaZones-${VERSION}
 
-      - name: Update spec version and changelog from tag
+      - name: Generate RPM changelog and set version from CHANGELOG.md
         run: |
           VERSION="${{ needs.version.outputs.version }}"
           sed -i "s/^Version:.*/Version:        $VERSION/" packaging/rpm/plasmazones.spec
-          CHANGELOG_DATE=$(TZ=UTC date '+%a %b %e %Y')
-          sed -i "0,/^\* .* fuddlesworth - [0-9.]*-1/s/^\* .* fuddlesworth - [0-9.]*-1/* $CHANGELOG_DATE fuddlesworth - $VERSION-1/" packaging/rpm/plasmazones.spec
+          bash packaging/generate-changelog.sh rpm
 
       - name: Build RPM
         run: |
@@ -280,56 +277,44 @@ jobs:
       - name: List artifacts
         run: find artifacts -type f
 
-      - name: Generate release notes
-        id: notes
+      - name: Generate release notes from CHANGELOG.md
         run: |
           VERSION="${{ needs.version.outputs.version }}"
-
-          # Get commits since last tag
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-
-          cat > release_notes.md << 'NOTES_EOF'
-          ## PlasmaZones v${{ needs.version.outputs.version }}
-
-          ### Installation
-
-          **Arch Linux:**
-          ```bash
-          # Download and install
-          sudo pacman -U plasmazones-${{ needs.version.outputs.version }}-1-x86_64.pkg.tar.zst
-          ```
-
-          **Ubuntu/Debian (25.10+):**
-          ```bash
-          sudo dpkg -i plasmazones_${{ needs.version.outputs.version }}-1_amd64.deb
-          sudo apt-get install -f  # Install dependencies if needed
-          ```
-
-          **Fedora:**
-          ```bash
-          sudo dnf install plasmazones-${{ needs.version.outputs.version }}-1.fc43.x86_64.rpm
-          ```
-
-          ### Post-Installation
-
-          ```bash
-          # Enable the daemon
-          systemctl --user enable --now plasmazones.service
-
-          # Open settings
-          systemsettings kcm_plasmazones
-          ```
-
-          ### Changes
-
-          NOTES_EOF
-
-          # Add commit log
-          if [ -n "$PREV_TAG" ]; then
-            git log --pretty=format:"- %s (%h)" ${PREV_TAG}..HEAD >> release_notes.md
-          else
-            git log --pretty=format:"- %s (%h)" -20 >> release_notes.md
-          fi
+          {
+            echo "## PlasmaZones v${VERSION}"
+            echo ""
+            bash packaging/generate-changelog.sh notes "$VERSION"
+            echo ""
+            echo "### Installation"
+            echo ""
+            echo "**Arch Linux (AUR):**"
+            echo '```bash'
+            echo "yay -S plasmazones  # or plasmazones-bin"
+            echo '```'
+            echo ""
+            echo "**Arch Linux (manual):**"
+            echo '```bash'
+            echo "sudo pacman -U plasmazones-${VERSION}-1-x86_64.pkg.tar.zst"
+            echo '```'
+            echo ""
+            echo "**Ubuntu/Debian (25.10+):**"
+            echo '```bash'
+            echo "sudo dpkg -i plasmazones_${VERSION}-1_amd64.deb"
+            echo "sudo apt-get install -f  # Install dependencies if needed"
+            echo '```'
+            echo ""
+            echo "**Fedora:**"
+            echo '```bash'
+            echo "sudo dnf install plasmazones-${VERSION}-1.fc43.x86_64.rpm"
+            echo '```'
+            echo ""
+            echo "### Post-Installation"
+            echo ""
+            echo '```bash'
+            echo "systemctl --user enable --now plasmazones.service"
+            echo "systemsettings kcm_plasmazones"
+            echo '```'
+          } > release_notes.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
