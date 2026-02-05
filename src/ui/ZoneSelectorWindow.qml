@@ -71,7 +71,10 @@ Window {
     // Total rows (may exceed visible rows)
     property int scrollContentHeight: 129
     // Full content height for scrolling
+    property int scrollContentWidth: 180
+    // Full content width for horizontal scrolling
     property bool needsScrolling: false
+    property bool needsHorizontalScrolling: false
     // Scale factor for converting screen pixels to preview pixels
     property real previewScale: 0.09375
     // Zone settings from C++ (actual pixel values)
@@ -99,6 +102,63 @@ Window {
         id: animationConstants
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
+    }
+
+    // Auto-scroll constants for drag-based scrolling
+    // During window drag, the cursor is captured so scroll wheel events can't reach the ScrollView.
+    // Instead, auto-scroll when cursor is near the edges of the scrollable area.
+    QtObject {
+        id: autoScrollConstants
+        readonly property int edgeMargin: Kirigami.Units.gridUnit * 4 // ~32px trigger zone
+        readonly property real maxSpeed: 0.04 // max scroll position change per tick (0-1 range)
+        readonly property int interval: 16    // ~60fps
+        readonly property real scrollThreshold: 0.01 // epsilon for scroll position comparisons
+        readonly property real fadeOpacity: 0.95      // fade gradient edge opacity (matches container)
+    }
+
+    Timer {
+        id: autoScrollTimer
+        interval: autoScrollConstants.interval
+        repeat: true
+        running: root.visible && (root.needsScrolling || root.needsHorizontalScrolling) && root.cursorX >= 0
+
+        onTriggered: {
+            // Map window-local cursor coords to scrollView-local coordinates
+            // cursorX/cursorY are already window-local (C++ does mapFromGlobal before setting them)
+            var local = scrollView.mapFromItem(null, root.cursorX, root.cursorY);
+            var lx = local.x;
+            var ly = local.y;
+
+            // Vertical auto-scroll
+            if (root.needsScrolling) {
+                var vBar = scrollView.ScrollBar.vertical;
+                if (ly >= 0 && ly < autoScrollConstants.edgeMargin) {
+                    // Near top edge — scroll up, speed proportional to closeness
+                    var topFactor = 1.0 - ly / autoScrollConstants.edgeMargin;
+                    vBar.position = Math.max(0, vBar.position - autoScrollConstants.maxSpeed * topFactor);
+                } else if (ly > scrollView.height - autoScrollConstants.edgeMargin && ly <= scrollView.height) {
+                    // Near bottom edge — scroll down
+                    var bottomFactor = 1.0 - (scrollView.height - ly) / autoScrollConstants.edgeMargin;
+                    var maxPos = 1.0 - vBar.size;
+                    vBar.position = Math.min(maxPos, vBar.position + autoScrollConstants.maxSpeed * bottomFactor);
+                }
+            }
+
+            // Horizontal auto-scroll
+            if (root.needsHorizontalScrolling) {
+                var hBar = scrollView.ScrollBar.horizontal;
+                if (lx >= 0 && lx < autoScrollConstants.edgeMargin) {
+                    // Near left edge — scroll left
+                    var leftFactor = 1.0 - lx / autoScrollConstants.edgeMargin;
+                    hBar.position = Math.max(0, hBar.position - autoScrollConstants.maxSpeed * leftFactor);
+                } else if (lx > scrollView.width - autoScrollConstants.edgeMargin && lx <= scrollView.width) {
+                    // Near right edge — scroll right
+                    var rightFactor = 1.0 - (scrollView.width - lx) / autoScrollConstants.edgeMargin;
+                    var maxHPos = 1.0 - hBar.size;
+                    hBar.position = Math.min(maxHPos, hBar.position + autoScrollConstants.maxSpeed * rightFactor);
+                }
+            }
+        }
     }
 
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
@@ -321,19 +381,19 @@ Window {
             anchors.centerIn: parent
             width: root.contentWidth
             height: root.contentHeight
-            clip: root.needsScrolling
-            contentWidth: root.contentWidth
+            clip: root.needsScrolling || root.needsHorizontalScrolling
+            contentWidth: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
             contentHeight: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
-            // Only show scrollbar when needed
+            // Only show scrollbars when needed
             ScrollBar.vertical.policy: root.needsScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ScrollBar.horizontal.policy: root.needsHorizontalScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
 
             // Layout previews grid
             GridLayout {
                 id: contentGrid
 
                 objectName: "zoneSelectorContentGrid"
-                width: root.contentWidth
+                width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
                 height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
                 columns: root.layoutColumns
                 rowSpacing: root.indicatorSpacing
@@ -597,6 +657,68 @@ Window {
 
             }
 
+        }
+
+        // Scroll fade indicators — show gradient edges when content overflows
+        // Shared fade color matching container background
+        readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
+
+        // Top fade: visible when scrolled down (more content above)
+        Rectangle {
+            anchors.top: scrollView.top
+            anchors.left: scrollView.left
+            anchors.right: scrollView.right
+            height: root.indicatorSpacing
+            visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
+            z: 10
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: container.fadeColor }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+        }
+
+        // Bottom fade: visible when more content below
+        Rectangle {
+            anchors.bottom: scrollView.bottom
+            anchors.left: scrollView.left
+            anchors.right: scrollView.right
+            height: root.indicatorSpacing
+            visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1.0 - autoScrollConstants.scrollThreshold)
+            z: 10
+            gradient: Gradient {
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 1.0; color: container.fadeColor }
+            }
+        }
+
+        // Left fade: visible when scrolled right (more content to the left)
+        Rectangle {
+            anchors.top: scrollView.top
+            anchors.bottom: scrollView.bottom
+            anchors.left: scrollView.left
+            width: root.indicatorSpacing
+            visible: root.needsHorizontalScrolling && scrollView.ScrollBar.horizontal.position > autoScrollConstants.scrollThreshold
+            z: 10
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: container.fadeColor }
+                GradientStop { position: 1.0; color: "transparent" }
+            }
+        }
+
+        // Right fade: visible when more content to the right
+        Rectangle {
+            anchors.top: scrollView.top
+            anchors.bottom: scrollView.bottom
+            anchors.right: scrollView.right
+            width: root.indicatorSpacing
+            visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1.0 - autoScrollConstants.scrollThreshold)
+            z: 10
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0.0; color: "transparent" }
+                GradientStop { position: 1.0; color: container.fadeColor }
+            }
         }
 
         // Empty state

@@ -205,11 +205,13 @@ struct ZoneSelectorLayout
     int contentWidth = 0;
     int contentHeight = 0;
     int scrollContentHeight = 0; // Full content height for scrolling
+    int scrollContentWidth = 0;  // Full content width for horizontal scrolling
     int containerWidth = 0;
     int containerHeight = 0;
     int barHeight = 0;
     int barWidth = 0;
     bool needsScrolling = false;
+    bool needsHorizontalScrolling = false;
 };
 
 ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen* screen, int layoutCount)
@@ -264,21 +266,51 @@ ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen*
     // Store total rows before limiting for visible area
     layout.totalRows = layout.rows;
 
-    // Limit visible rows for overflow handling (Auto mode)
-    // This enables scrolling when there are too many layouts
-    const int visibleRows = (sizeMode == ZoneSelectorSizeMode::Auto && layout.rows > maxRows) ? maxRows : layout.rows;
+    layout.labelSpace = layout.labelTopMargin + layout.labelHeight;
+    layout.paddingSide = layout.containerPadding / 2;
+
+    // Step 1: Apply maxRows setting (Auto mode, Grid only)
+    // maxRows only makes sense for Grid: in Vertical each layout is a row (maxRows would
+    // arbitrarily hide layouts), in Horizontal there's always 1 row. Screen-based clamping
+    // in Step 2 handles overflow for all modes.
+    int visibleRows = layout.rows;
+    if (sizeMode == ZoneSelectorSizeMode::Auto && layoutMode == ZoneSelectorLayoutMode::Grid && layout.rows > maxRows) {
+        visibleRows = maxRows;
+    }
+
+    // Step 2: Screen-based clamping (all size modes)
+    // Ensure the popup never exceeds screen bounds, enabling scrolling for overflow
+    const int screenH = screenGeom.height();
+    const int screenW = screenGeom.width();
+    const int maxContentH = std::max(0, screenH - layout.containerPadding - 2 * layout.containerTopMargin);
+    const int maxContentW = std::max(0, screenW - layout.containerPadding - 2 * layout.containerSideMargin);
+    const int rowUnitH = layout.indicatorHeight + layout.labelSpace + layout.indicatorSpacing;
+    if (rowUnitH > 0) {
+        const int maxFittingRows = std::max(1, (maxContentH + layout.indicatorSpacing) / rowUnitH);
+        if (visibleRows > maxFittingRows) {
+            visibleRows = maxFittingRows;
+        }
+    }
+
     layout.rows = visibleRows;
     layout.needsScrolling = (layout.totalRows > visibleRows);
 
-    layout.labelSpace = layout.labelTopMargin + layout.labelHeight;
-    layout.paddingSide = layout.containerPadding / 2;
-    layout.contentWidth = layout.columns * layout.indicatorWidth + (layout.columns - 1) * layout.indicatorSpacing;
-    // Visible content height for container sizing
-    layout.contentHeight =
-        visibleRows * (layout.indicatorHeight + layout.labelSpace) + (visibleRows - 1) * layout.indicatorSpacing;
-    // Full scroll content height for all rows
+    // Full content dimensions (all items, for scroll content)
+    layout.scrollContentWidth = layout.columns * layout.indicatorWidth + (layout.columns - 1) * layout.indicatorSpacing;
     layout.scrollContentHeight = layout.totalRows * (layout.indicatorHeight + layout.labelSpace)
         + (layout.totalRows - 1) * layout.indicatorSpacing;
+
+    // Visible content dimensions (may be clamped to screen)
+    layout.contentWidth = layout.scrollContentWidth;
+    layout.contentHeight =
+        visibleRows * (layout.indicatorHeight + layout.labelSpace) + (visibleRows - 1) * layout.indicatorSpacing;
+
+    // Horizontal screen clamping (primarily for horizontal layout mode)
+    if (layout.contentWidth > maxContentW && maxContentW > 0) {
+        layout.contentWidth = maxContentW;
+        layout.needsHorizontalScrolling = true;
+    }
+
     layout.containerWidth = layout.contentWidth + layout.containerPadding;
     layout.containerHeight = layout.contentHeight + layout.containerPadding;
     layout.barHeight = layout.containerTopMargin + layout.containerHeight;
@@ -346,7 +378,9 @@ void applyZoneSelectorLayout(QQuickWindow* window, const ZoneSelectorLayout& lay
     writeQmlProperty(window, QStringLiteral("contentWidth"), layout.contentWidth);
     writeQmlProperty(window, QStringLiteral("contentHeight"), layout.contentHeight);
     writeQmlProperty(window, QStringLiteral("scrollContentHeight"), layout.scrollContentHeight);
+    writeQmlProperty(window, QStringLiteral("scrollContentWidth"), layout.scrollContentWidth);
     writeQmlProperty(window, QStringLiteral("needsScrolling"), layout.needsScrolling);
+    writeQmlProperty(window, QStringLiteral("needsHorizontalScrolling"), layout.needsHorizontalScrolling);
     // Explicitly set containerWidth/Height after contentWidth/Height to ensure they update
     writeQmlProperty(window, QStringLiteral("containerWidth"), layout.containerWidth);
     writeQmlProperty(window, QStringLiteral("containerHeight"), layout.containerHeight);

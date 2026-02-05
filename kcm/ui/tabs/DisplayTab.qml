@@ -205,7 +205,7 @@ ScrollView {
                         from: 1
                         to: 10
                         value: kcm.zoneSelectorMaxRows
-                        visible: kcm.zoneSelectorLayoutMode !== 1  // Hide for horizontal mode
+                        visible: kcm.zoneSelectorLayoutMode === 0  // Only applies to Grid mode
                         onValueModified: kcm.zoneSelectorMaxRows = value
 
                         ToolTip.visible: hovered && root.isCurrentTab

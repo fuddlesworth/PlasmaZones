@@ -724,10 +724,25 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
         totalRows = 1;
     }
 
-    // Cap visible rows to maxRows setting (only in Auto mode, matching overlayservice)
-    int visibleRows = (sizeMode == ZoneSelectorSizeMode::Auto && totalRows > maxRows) ? maxRows : totalRows;
+    // Cap visible rows to maxRows setting (Auto mode, Grid only — matching overlayservice)
+    int visibleRows = (sizeMode == ZoneSelectorSizeMode::Auto && mode == ZoneSelectorLayoutMode::Grid && totalRows > maxRows) ? maxRows : totalRows;
+
+    // Screen-based clamping (all size modes) to prevent overflow
+    const int maxContentH = std::max(0, screenGeom.height() - containerPadding - 2 * containerTopMargin);
+    const int maxContentW = std::max(0, screenGeom.width() - containerPadding - 2 * containerSideMargin);
+    const int rowUnitH = indicatorHeight + labelSpace + indicatorSpacing;
+    if (rowUnitH > 0) {
+        const int maxFittingRows = std::max(1, (maxContentH + indicatorSpacing) / rowUnitH);
+        if (visibleRows > maxFittingRows) {
+            visibleRows = maxFittingRows;
+        }
+    }
 
     int contentWidth = columns * indicatorWidth + (columns - 1) * indicatorSpacing;
+    // Clamp horizontal to screen width
+    if (contentWidth > maxContentW && maxContentW > 0) {
+        contentWidth = maxContentW;
+    }
     int contentHeight = visibleRows * (indicatorHeight + labelSpace) + (visibleRows - 1) * indicatorSpacing;
     int containerWidth = contentWidth + containerPadding;
     int containerHeight = contentHeight + containerPadding;
