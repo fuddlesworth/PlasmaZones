@@ -392,7 +392,7 @@ jobs:
 
           # Generate .SRCINFO
           docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman
+            pacman -Sy --noconfirm pacman git
             useradd -m builder
             git config --global --add safe.directory /pkg
             chown -R builder:builder /pkg
@@ -434,7 +434,7 @@ jobs:
 
           # Generate .SRCINFO
           docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "
-            pacman -Sy --noconfirm pacman
+            pacman -Sy --noconfirm pacman git
             useradd -m builder
             git config --global --add safe.directory /pkg
             chown -R builder:builder /pkg
