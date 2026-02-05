@@ -343,3 +343,124 @@ jobs:
             artifacts/**/*.rpm
             artifacts/**/*.pkg.tar.zst
           generate_release_notes: false
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Publish to AUR (Arch User Repository)
+  # ═══════════════════════════════════════════════════════════════════════════
+  publish-aur:
+    name: Publish to AUR
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    if: ${{ !contains(needs.version.outputs.version, 'alpha') && !contains(needs.version.outputs.version, 'beta') && !contains(needs.version.outputs.version, 'rc') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Arch package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: arch-package
+          path: dist
+
+      - name: Calculate package hash
+        id: hash
+        run: |
+          PKG_FILE=$(ls dist/*.pkg.tar.zst | head -1)
+          SHA256=$(sha256sum "$PKG_FILE" | cut -d' ' -f1)
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "Package: $PKG_FILE"
+          echo "SHA256: $SHA256"
+
+      - name: Setup SSH for AUR
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          cat >> ~/.ssh/config << 'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/aur
+            User aur
+            StrictHostKeyChecking accept-new
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Clone and update AUR repository (plasmazones-bin)
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA256: ${{ steps.hash.outputs.sha256 }}
+        run: |
+          git clone ssh://aur@aur.archlinux.org/plasmazones-bin.git /tmp/aur-bin
+          cd /tmp/aur-bin
+
+          # Copy files from source repo
+          cp "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD.bin" ./PKGBUILD
+          cp "$GITHUB_WORKSPACE/packaging/arch/plasmazones.install" ./
+          cp "$GITHUB_WORKSPACE/packaging/arch/LICENSE" ./
+
+          # Update version and hash
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/'[a-f0-9]\{64\}'/'$SHA256'/" PKGBUILD
+
+          # Generate .SRCINFO
+          docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "
+            pacman -Sy --noconfirm pacman
+            useradd -m builder
+            chown -R builder:builder /pkg
+            su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+          "
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update to $VERSION"
+            git push
+            echo "✅ Published plasmazones-bin $VERSION to AUR"
+          fi
+
+      - name: Clone and update AUR repository (plasmazones - source)
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          git clone ssh://aur@aur.archlinux.org/plasmazones.git /tmp/aur-src
+          cd /tmp/aur-src
+
+          # Copy files from source repo
+          cp "$GITHUB_WORKSPACE/packaging/arch/PKGBUILD" ./
+          cp "$GITHUB_WORKSPACE/packaging/arch/plasmazones.install" ./
+          cp "$GITHUB_WORKSPACE/packaging/arch/LICENSE" ./
+
+          # Update version
+          sed -i "s/^pkgver=.*/pkgver=$VERSION/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+
+          # Calculate and update source tarball hash
+          TARBALL_URL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
+          TARBALL_SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | cut -d' ' -f1)
+          echo "Source tarball SHA256: $TARBALL_SHA256"
+          sed -i "s/'[a-f0-9]\{64\}'/'$TARBALL_SHA256'/" PKGBUILD
+
+          # Generate .SRCINFO
+          docker run --rm -v "$(pwd):/pkg" -w /pkg archlinux:latest bash -c "
+            pacman -Sy --noconfirm pacman
+            useradd -m builder
+            chown -R builder:builder /pkg
+            su builder -c 'makepkg --printsrcinfo > .SRCINFO'
+          "
+
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update to $VERSION"
+            git push
+            echo "✅ Published plasmazones $VERSION to AUR"
+          fi
