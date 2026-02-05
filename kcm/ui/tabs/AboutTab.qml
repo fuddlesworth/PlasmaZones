@@ -183,17 +183,78 @@ ScrollView {
             }
         }
 
-        // Check for updates button
-        Button {
-            Layout.alignment: Qt.AlignHCenter
+        // Check for updates section
+        ColumnLayout {
+            Layout.fillWidth: true
             Layout.topMargin: Kirigami.Units.largeSpacing
-            text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
-            icon.name: "view-refresh"
-            enabled: !kcm.checkingForUpdates
-            onClicked: kcm.checkForUpdates()
+            spacing: Kirigami.Units.smallSpacing
 
-            Accessible.name: text
-            Accessible.role: Accessible.Button
+            Button {
+                id: checkUpdateButton
+                Layout.alignment: Qt.AlignHCenter
+                text: kcm.checkingForUpdates ? i18n("Checking...") : i18n("Check for Updates")
+                icon.name: kcm.checkingForUpdates ? "view-refresh" : "view-refresh"
+                enabled: !kcm.checkingForUpdates
+                onClicked: {
+                    updateStatusLabel.visible = false
+                    kcm.checkForUpdates()
+                }
+
+                Accessible.name: text
+                Accessible.role: Accessible.Button
+            }
+
+            // Status message after check completes
+            Label {
+                id: updateStatusLabel
+                Layout.alignment: Qt.AlignHCenter
+                visible: false
+                opacity: 0.8
+
+                // Track when checking finishes to show result
+                Connections {
+                    target: kcm
+                    function onCheckingForUpdatesChanged() {
+                        if (!kcm.checkingForUpdates && updateStatusLabel.wasChecking) {
+                            updateStatusLabel.visible = true
+                            updateStatusLabel.wasChecking = false
+                            // Auto-hide after 5 seconds
+                            statusHideTimer.restart()
+                        }
+                        if (kcm.checkingForUpdates) {
+                            updateStatusLabel.wasChecking = true
+                        }
+                    }
+                }
+
+                property bool wasChecking: false
+
+                text: {
+                    if (kcm.updateAvailable) {
+                        return i18n("Update available!")
+                    } else if (kcm.latestVersion.length > 0) {
+                        return i18n("You're up to date.")
+                    } else {
+                        return i18n("Could not check for updates.")
+                    }
+                }
+
+                color: {
+                    if (kcm.updateAvailable) {
+                        return Kirigami.Theme.positiveTextColor
+                    } else if (kcm.latestVersion.length > 0) {
+                        return Kirigami.Theme.textColor
+                    } else {
+                        return Kirigami.Theme.neutralTextColor
+                    }
+                }
+            }
+
+            Timer {
+                id: statusHideTimer
+                interval: 5000
+                onTriggered: updateStatusLabel.visible = false
+            }
         }
 
         // Spacer
