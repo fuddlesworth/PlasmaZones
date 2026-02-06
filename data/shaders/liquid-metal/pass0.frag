@@ -54,46 +54,48 @@ void main() {
 
     float t = iTime * speed;
 
-    // Base fluid surface: standing waves (wobble in place, no net drift)
+    // Fluidity factor: higher viscosity = slower, thicker, less fine detail
+    float fluidity = 1.0 - viscosity * 0.7;
+
+    // Base fluid surface: standing waves that breathe in place
     vec2 p = uv * scale;
     float h = 0.0;
 
-    // Primary standing waves: spatial pattern modulated by time
-    h += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * cos(t * 0.6) * 0.20;
-    h += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * cos(t * 0.5 + 1.0) * 0.18;
-    h += sin(p.x * 1.3 - p.y * 0.9) * cos(t * 0.35 + 2.5) * 0.15;
+    // Primary undulation: spatial pattern modulated by time (no directional drift)
+    h += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * cos(t * 0.6) * 0.30;
+    h += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * cos(t * 0.5 + 1.0) * 0.25;
 
-    // Secondary standing waves: smaller cross-pattern wobble
-    float visc = 1.0 - viscosity; // higher viscosity = less fine detail
-    h += sin(p.x * 3.5 + p.y * 2.0) * cos(t * 0.9) * 0.08 * visc;
-    h += sin(p.x * 2.0 - p.y * 3.8) * cos(t * 0.7 + 1.5) * 0.06 * visc;
+    // Cross-pattern standing waves at different phases
+    h += sin(p.x * 2.8) * sin(p.y * 2.3) * cos(t * 0.8 + 0.7) * 0.18;
+    h += cos(p.x * 1.5 + p.y * 1.9) * sin(t * 0.4 + 2.0) * 0.15;
 
-    // Organic turbulence: slowly morphing surface texture (no drift)
+    // Organic turbulence: FBM that slowly morphs in place
     float turb = fbm(p * 0.8 + vec2(sin(t * 0.1) * 0.3, cos(t * 0.08) * 0.3), 4);
-    h += (turb - 0.5) * 0.15 * visc;
+    h += (turb - 0.5) * 0.20 * fluidity;
 
-    // Fine surface tension dimples
-    float fine = sin(p.x * 8.0) * sin(p.y * 7.0) * cos(t * 1.2);
-    h += fine * 0.02 * visc;
+    // Fine surface tension ripples (standing, dampened by viscosity)
+    float fine = sin(p.x * 6.0) * sin(p.y * 5.5) * cos(t * 1.5);
+    h += fine * 0.03 * fluidity;
 
     // Mouse interaction: radial ripples emanating from cursor
     if (mouseStr > 0.001) {
-        vec2 mouseUV = vec2(iMouse.z, 1.0 - iMouse.w); // flip Y to match screen-space UV
+        vec2 mouseUV = iMouse.zw; // normalized 0-1
         if (mouseUV.x > 0.0 || mouseUV.y > 0.0) {
             float dist = length(uv - mouseUV);
-            // Expanding ring ripple
-            float ring = sin(dist * 30.0 - t * 4.0) * exp(-dist * 5.0);
+            // Standing ripple centered on cursor (concentric rings that pulse)
+            float ring = sin(dist * 25.0) * cos(t * 3.0) * exp(-dist * 6.0);
             h += ring * mouseStr * 0.5;
-            // Displacement push
-            float push = exp(-dist * 8.0);
-            h += push * mouseStr * 0.3;
+            // Displacement dome under cursor
+            float push = exp(-dist * 10.0);
+            h += push * mouseStr * 0.25;
         }
     }
 
-    // Compute approximate surface velocity (time derivative of primary waves)
+    // Compute approximate surface velocity via analytical time derivative
+    // of the primary standing waves (d/dt of cos(wt) = -w*sin(wt))
     float velocity = 0.0;
-    velocity += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * (-sin(t * 0.6)) * 0.6 * 0.20;
-    velocity += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * (-sin(t * 0.5 + 1.0)) * 0.5 * 0.18;
+    velocity += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * (-0.6 * sin(t * 0.6)) * 0.30;
+    velocity += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * (-0.5 * sin(t * 0.5 + 1.0)) * 0.25;
 
     // Caustic intensity: bright spots where waves focus light
     // Approximate as areas of high curvature convergence
