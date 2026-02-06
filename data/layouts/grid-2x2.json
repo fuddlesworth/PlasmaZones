@@ -20,16 +20,16 @@
             "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 }
         },
         {
-            "id": "{zone-grid22-3}",
-            "name": "Bottom Left",
-            "zoneNumber": 3,
-            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 }
-        },
-        {
             "id": "{zone-grid22-4}",
             "name": "Bottom Right",
-            "zoneNumber": 4,
+            "zoneNumber": 3,
             "relativeGeometry": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 }
+        },
+        {
+            "id": "{zone-grid22-3}",
+            "name": "Bottom Left",
+            "zoneNumber": 4,
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 }
         }
     ]
 }

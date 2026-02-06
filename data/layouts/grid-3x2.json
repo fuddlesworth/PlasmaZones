@@ -26,10 +26,10 @@
             "relativeGeometry": { "x": 0.666667, "y": 0, "width": 0.333333, "height": 0.5 }
         },
         {
-            "id": "{zone-grid32-4}",
-            "name": "Bottom Left",
+            "id": "{zone-grid32-6}",
+            "name": "Bottom Right",
             "zoneNumber": 4,
-            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.333333, "height": 0.5 }
+            "relativeGeometry": { "x": 0.666667, "y": 0.5, "width": 0.333333, "height": 0.5 }
         },
         {
             "id": "{zone-grid32-5}",
@@ -38,10 +38,10 @@
             "relativeGeometry": { "x": 0.333333, "y": 0.5, "width": 0.333334, "height": 0.5 }
         },
         {
-            "id": "{zone-grid32-6}",
-            "name": "Bottom Right",
+            "id": "{zone-grid32-4}",
+            "name": "Bottom Left",
             "zoneNumber": 6,
-            "relativeGeometry": { "x": 0.666667, "y": 0.5, "width": 0.333333, "height": 0.5 }
+            "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.333333, "height": 0.5 }
         }
     ]
 }
