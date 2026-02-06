@@ -165,6 +165,11 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Fri Feb  6 2026 fuddlesworth - 1.7.0-1
+- Add layout visibility filtering (per-screen/desktop/activity)
+- Default OSD style to visual preview for new installs
+- Fix stale screen restrictions on monitor disconnect
+
 * Fri Feb  6 2026 fuddlesworth - 1.6.2-1
 - Fix editor not moving to selected screen on multi-monitor setups
 - Fix editor defaulting to wrong screen on Wayland

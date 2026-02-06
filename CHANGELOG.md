@@ -5,6 +5,26 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-02-06
+
+### Added
+- Layout visibility filtering: control which layouts appear in zone selector per screen, virtual desktop, and activity
+  - Tier 1 (KCM): eye toggle to globally hide a layout from the zone selector
+  - Tier 2 (Editor): visibility popup to restrict layouts to specific screens, desktops, or activities
+  - Empty allow-lists = visible everywhere (opt-in model)
+  - Active layout always bypasses filters to prevent empty selector state
+  - Undo/redo support for visibility changes in the editor
+  - Filter badge on KCM layout cards when Tier 2 restrictions are active
+- Layout cycling (Meta+[/]) now respects per-screen visibility filtering
+
+### Changed
+- OSD style defaults to visual preview instead of text for new installs
+
+### Fixed
+- Duplicated and imported layouts no longer inherit visibility restrictions from the source
+- Stale screen names auto-cleaned from layout restrictions when monitors are disconnected
+- Layout cycling skips hidden/restricted layouts correctly in all directions
+
 ## [1.6.2] - 2026-02-06
 
 ### Fixed
