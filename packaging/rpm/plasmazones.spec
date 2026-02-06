@@ -104,6 +104,11 @@ Features:
 # Update icon cache
 /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor &>/dev/null || :
 %systemd_user_post plasmazones.service
+echo ""
+echo "PlasmaZones: the KWin effect is enabled by default, but KWin must"
+echo "be restarted to load it. Log out and back in, or run:"
+echo "  kwin_wayland --replace &"
+echo ""
 
 %preun
 %systemd_user_preun plasmazones.service

@@ -9,3 +9,9 @@ if [ -n "$SUDO_USER" ]; then
 else
     kbuildsycoca6 --noincremental 2>/dev/null || true
 fi
+
+echo ""
+echo "Note: The KWin effect is enabled by default, but KWin must be"
+echo "restarted to load it. Log out and back in, or run:"
+echo "  kwin_wayland --replace &"
+echo ""

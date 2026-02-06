@@ -17,6 +17,10 @@ case "$1" in
         echo "PlasmaZones: enable the daemon with:"
         echo "  systemctl --user enable --now plasmazones.service"
         echo ""
+        echo "The KWin effect is enabled by default, but KWin must be"
+        echo "restarted to load it. Log out and back in, or run:"
+        echo "  kwin_wayland --replace &"
+        echo ""
         ;;
 esac
 
