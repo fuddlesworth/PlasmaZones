@@ -28,7 +28,9 @@
 #include "undo/commands/DividerResizeCommand.h"
 #include "undo/commands/UpdateShaderIdCommand.h"
 #include "undo/commands/UpdateShaderParamsCommand.h"
+#include "undo/commands/UpdateVisibilityCommand.h"
 #include "../core/constants.h"
+#include "../core/layoututils.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include "../core/dbusvariantutils.h"
@@ -632,6 +634,57 @@ void EditorController::loadLayout(const QString& layoutId)
         m_currentShaderParams.clear();
     }
 
+    // Load visibility filtering allow-lists
+    LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt, m_allowedActivities);
+
+    // Query available context info from daemon via D-Bus
+    // Clear first so stale data is not shown if daemon is unavailable
+    m_availableScreenNames.clear();
+    m_virtualDesktopCount = 1;
+    m_virtualDesktopNames.clear();
+    m_activitiesAvailable = false;
+    m_availableActivities.clear();
+    {
+        QDBusInterface iface(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                             QString(DBus::Interface::LayoutManager));
+        if (iface.isValid()) {
+            // Screen names
+            QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
+            if (screensReply.isValid()) {
+                QJsonDocument screensDoc = QJsonDocument::fromJson(screensReply.value().toUtf8());
+                m_availableScreenNames = screensDoc.object().keys();
+            }
+
+            // Virtual desktops
+            QDBusReply<int> countReply = iface.call(QStringLiteral("getVirtualDesktopCount"));
+            if (countReply.isValid()) {
+                m_virtualDesktopCount = countReply.value();
+            }
+            QDBusReply<QStringList> namesReply = iface.call(QStringLiteral("getVirtualDesktopNames"));
+            if (namesReply.isValid()) {
+                m_virtualDesktopNames = namesReply.value();
+            }
+
+            // Activities
+            QDBusReply<bool> activitiesReply = iface.call(QStringLiteral("isActivitiesAvailable"));
+            if (activitiesReply.isValid()) {
+                m_activitiesAvailable = activitiesReply.value();
+            }
+            if (m_activitiesAvailable) {
+                QDBusReply<QString> allActivitiesReply = iface.call(QStringLiteral("getAllActivitiesInfo"));
+                if (allActivitiesReply.isValid()) {
+                    QJsonDocument activitiesDoc = QJsonDocument::fromJson(allActivitiesReply.value().toUtf8());
+                    if (activitiesDoc.isArray()) {
+                        const auto arr = activitiesDoc.array();
+                        for (const auto& v : arr) {
+                            m_availableActivities.append(v.toObject().toVariantMap());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Load per-layout gap overrides (-1 = use global setting)
     int oldZonePadding = m_zonePadding;
     int oldOuterGap = m_outerGap;
@@ -687,6 +740,16 @@ void EditorController::loadLayout(const QString& layoutId)
     if (m_outerGap != oldOuterGap) {
         Q_EMIT outerGapChanged();
     }
+
+    // Emit visibility filtering signals
+    Q_EMIT allowedScreensChanged();
+    Q_EMIT allowedDesktopsChanged();
+    Q_EMIT allowedActivitiesChanged();
+    Q_EMIT availableScreenNamesChanged();
+    Q_EMIT virtualDesktopCountChanged();
+    Q_EMIT virtualDesktopNamesChanged();
+    Q_EMIT activitiesAvailableChanged();
+    Q_EMIT availableActivitiesChanged();
 }
 
 /**
@@ -772,6 +835,9 @@ void EditorController::saveLayout()
         layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
     }
 
+    // Include visibility filtering allow-lists (only if non-empty)
+    LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt, m_allowedActivities);
+
     QJsonDocument doc(layoutObj);
     QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
 
@@ -820,6 +886,171 @@ void EditorController::discardChanges()
         loadLayout(m_layoutId);
     }
     Q_EMIT editorClosed();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Visibility Filtering (Tier 2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList EditorController::allowedDesktops() const
+{
+    QVariantList result;
+    for (int d : m_allowedDesktopsInt) {
+        result.append(d);
+    }
+    return result;
+}
+
+void EditorController::setAllowedScreens(const QStringList& screens)
+{
+    if (m_allowedScreens != screens) {
+        auto* cmd = new UpdateVisibilityCommand(this, m_allowedScreens, screens, m_allowedDesktopsInt,
+                                                m_allowedDesktopsInt, m_allowedActivities, m_allowedActivities);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setAllowedDesktops(const QVariantList& desktops)
+{
+    QList<int> intList;
+    for (const QVariant& v : desktops) {
+        intList.append(v.toInt());
+    }
+    if (m_allowedDesktopsInt != intList) {
+        auto* cmd = new UpdateVisibilityCommand(this, m_allowedScreens, m_allowedScreens, m_allowedDesktopsInt,
+                                                intList, m_allowedActivities, m_allowedActivities);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setAllowedActivities(const QStringList& activities)
+{
+    if (m_allowedActivities != activities) {
+        auto* cmd = new UpdateVisibilityCommand(this, m_allowedScreens, m_allowedScreens, m_allowedDesktopsInt,
+                                                m_allowedDesktopsInt, m_allowedActivities, activities);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setAllowedScreensDirect(const QStringList& screens)
+{
+    if (m_allowedScreens != screens) {
+        m_allowedScreens = screens;
+        markUnsaved();
+        Q_EMIT allowedScreensChanged();
+    }
+}
+
+void EditorController::setAllowedDesktopsDirect(const QList<int>& desktops)
+{
+    if (m_allowedDesktopsInt != desktops) {
+        m_allowedDesktopsInt = desktops;
+        markUnsaved();
+        Q_EMIT allowedDesktopsChanged();
+    }
+}
+
+void EditorController::setAllowedActivitiesDirect(const QStringList& activities)
+{
+    if (m_allowedActivities != activities) {
+        m_allowedActivities = activities;
+        markUnsaved();
+        Q_EMIT allowedActivitiesChanged();
+    }
+}
+
+void EditorController::toggleScreenAllowed(const QString& screenName)
+{
+    QStringList screens = m_allowedScreens;
+
+    if (screens.isEmpty()) {
+        // Currently "all screens" - populate with all except this one
+        for (const QString& s : m_availableScreenNames) {
+            if (s != screenName) {
+                screens.append(s);
+            }
+        }
+        // If result is empty (single screen), nothing to restrict
+        if (screens.isEmpty()) {
+            return;
+        }
+    } else if (screens.contains(screenName)) {
+        screens.removeAll(screenName);
+        // If removing last screen, clear to mean "all screens"
+        if (screens.isEmpty()) {
+            screens.clear(); // explicit: empty = visible everywhere
+        }
+    } else {
+        screens.append(screenName);
+        // If all screens are now in the list, clear it (= visible everywhere)
+        if (screens.size() >= m_availableScreenNames.size()) {
+            screens.clear();
+        }
+    }
+
+    setAllowedScreens(screens);
+}
+
+void EditorController::toggleDesktopAllowed(int desktop)
+{
+    QList<int> desktops = m_allowedDesktopsInt;
+
+    if (desktops.isEmpty()) {
+        // Currently "all desktops" - populate with all except this one
+        for (int i = 1; i <= m_virtualDesktopCount; ++i) {
+            if (i != desktop) {
+                desktops.append(i);
+            }
+        }
+        // If result is empty (single desktop), nothing to restrict
+        if (desktops.isEmpty()) {
+            return;
+        }
+    } else if (desktops.contains(desktop)) {
+        desktops.removeAll(desktop);
+    } else {
+        desktops.append(desktop);
+        // If all desktops are now in the list, clear it (= visible everywhere)
+        if (desktops.size() >= m_virtualDesktopCount) {
+            desktops.clear();
+        }
+    }
+
+    QVariantList varList;
+    for (int d : desktops) {
+        varList.append(d);
+    }
+    setAllowedDesktops(varList);
+}
+
+void EditorController::toggleActivityAllowed(const QString& activityId)
+{
+    QStringList activities = m_allowedActivities;
+
+    if (activities.isEmpty()) {
+        // Currently "all activities" - populate with all except this one
+        for (const QVariant& v : m_availableActivities) {
+            QVariantMap actMap = v.toMap();
+            QString id = actMap.value(QLatin1String("id")).toString();
+            if (id != activityId) {
+                activities.append(id);
+            }
+        }
+        // If result is empty (single activity), nothing to restrict
+        if (activities.isEmpty()) {
+            return;
+        }
+    } else if (activities.contains(activityId)) {
+        activities.removeAll(activityId);
+    } else {
+        activities.append(activityId);
+        // If all activities are now in the list, clear it (= visible everywhere)
+        if (activities.size() >= m_availableActivities.size()) {
+            activities.clear();
+        }
+    }
+
+    setAllowedActivities(activities);
 }
 
 /**

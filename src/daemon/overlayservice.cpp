@@ -1347,7 +1347,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
 
-    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(m_layoutManager).size();
+    const int layoutCount = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screen->name(), m_currentVirtualDesktop, m_currentActivity).size();
     updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
 
     window->setVisible(false);
@@ -1400,8 +1401,8 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
 
-    // Build and pass layout data (all available layouts with their zones)
-    QVariantList layouts = buildLayoutsList();
+    // Build and pass layout data (filtered for this screen's context)
+    QVariantList layouts = buildLayoutsList(screen->name());
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
     // Set active layout ID
@@ -1910,9 +1911,10 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     return map;
 }
 
-QVariantList OverlayService::buildLayoutsList() const
+QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
 {
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity);
     return LayoutUtils::toVariantList(entries);
 }
 

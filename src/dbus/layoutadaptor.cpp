@@ -227,6 +227,11 @@ QStringList LayoutAdaptor::getLayoutList()
             if (layout) {
                 json[JsonKeys::IsSystem] = layout->isSystemLayout();
                 json[JsonKeys::Type] = static_cast<int>(layout->type());
+                json[JsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
+
+                // Include allow-lists so KCM can show the filter badge
+                LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
+                                                  layout->allowedDesktops(), layout->allowedActivities());
             }
         }
 
@@ -257,6 +262,25 @@ QString LayoutAdaptor::getLayout(const QString& id)
     QString json = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
     m_cachedLayoutJson[uuid] = json;
     return json;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Visibility Filtering
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
+{
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout hidden"));
+    if (!layout) {
+        return;
+    }
+
+    layout->setHiddenFromSelector(hidden);
+    // Note: saveLayouts() is triggered automatically via layoutModified signal
+
+    qCDebug(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
+    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+    Q_EMIT layoutListChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -409,6 +433,17 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->setShaderParams(obj[JsonKeys::ShaderParams].toObject().toVariantMap());
     } else {
         layout->setShaderParams(QVariantMap());
+    }
+
+    // Update visibility allow-lists
+    {
+        QStringList screens;
+        QList<int> desktops;
+        QStringList activities;
+        LayoutUtils::deserializeAllowLists(obj, screens, desktops, activities);
+        layout->setAllowedScreens(screens);
+        layout->setAllowedDesktops(desktops);
+        layout->setAllowedActivities(activities);
     }
 
     // Clear existing zones and add new ones

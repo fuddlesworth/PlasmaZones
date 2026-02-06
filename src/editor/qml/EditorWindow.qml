@@ -240,6 +240,7 @@ Window {
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
         shaderDialog: shaderDialog
+        visibilityDialog: visibilityDialog
         importDialog: importDialog
         editorWindow: editorWindow
         exportDialog: exportDialog
@@ -657,6 +658,14 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     ShaderSettingsDialog {
         id: shaderDialog
+        editorController: editorWindow._editorController
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // VISIBILITY SETTINGS DIALOG
+    // ═══════════════════════════════════════════════════════════════════
+    VisibilitySettingsDialog {
+        id: visibilityDialog
         editorController: editorWindow._editorController
     }
 

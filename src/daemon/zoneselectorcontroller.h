@@ -153,6 +153,13 @@ public:
         return m_currentVirtualDesktop;
     }
 
+    // Activity management
+    void setCurrentActivity(const QString& activity);
+    QString currentActivity() const
+    {
+        return m_currentActivity;
+    }
+
     // Drag state management
     Q_INVOKABLE void startDrag();
     Q_INVOKABLE void endDrag();
@@ -242,6 +249,7 @@ private:
     QPointer<QScreen> m_screen;
     QPointer<QQuickItem> m_qmlItem;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
+    QString m_currentActivity; // Current KDE activity (empty = all activities)
 
     // Timers
     QTimer m_collapseTimer; // Delay before collapsing from expanded

@@ -129,6 +129,21 @@ public:
      */
     void syncFromExternalState();
 
+    /**
+     * @brief Set current screen name for per-screen visibility filtering
+     */
+    void setCurrentScreenName(const QString& screenName);
+
+    /**
+     * @brief Set current virtual desktop for visibility filtering
+     */
+    void setCurrentVirtualDesktop(int desktop);
+
+    /**
+     * @brief Set current activity for visibility filtering
+     */
+    void setCurrentActivity(const QString& activity);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when current layout ID changes
@@ -165,6 +180,9 @@ private:
     QPointer<Settings> m_settings;
 
     QString m_currentLayoutId;
+    QString m_currentScreenName;
+    int m_currentVirtualDesktop = 1;
+    QString m_currentActivity;
     mutable QVector<UnifiedLayoutEntry> m_cachedLayouts;
     mutable bool m_cacheValid = false;
 };

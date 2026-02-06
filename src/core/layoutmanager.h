@@ -147,6 +147,10 @@ public:
     Q_INVOKABLE void cycleToPreviousLayout(const QString& screenName);
     Q_INVOKABLE void cycleToNextLayout(const QString& screenName);
 
+    // Context for visibility-filtered cycling
+    void setCurrentVirtualDesktop(int desktop) { m_currentVirtualDesktop = desktop; }
+    void setCurrentActivity(const QString& activity) { m_currentActivity = activity; }
+
     Q_INVOKABLE void createBuiltInLayouts() override;
     QVector<Layout*> builtInLayouts() const override;
 
@@ -195,6 +199,8 @@ private:
     Layout* m_previousLayout = nullptr; ///< Layout active before last setActiveLayout (for resnap)
     QHash<LayoutAssignmentKey, QUuid> m_assignments;
     QHash<int, QUuid> m_quickLayoutShortcuts; // number -> layout ID
+    int m_currentVirtualDesktop = 1;
+    QString m_currentActivity;
 };
 
 } // namespace PlasmaZones

@@ -99,21 +99,70 @@ Item {
                     scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
                 }
 
-                // Default layout indicator (top-left)
-                Kirigami.Icon {
+                // Top-left indicator row (default star + restriction badge)
+                Row {
                     anchors.top: parent.top
                     anchors.left: parent.left
                     anchors.margins: Kirigami.Units.smallSpacing
-                    source: "favorite"
-                    visible: root.modelData.id === root.kcm.defaultLayoutId
-                    width: Kirigami.Units.iconSizes.small
-                    height: Kirigami.Units.iconSizes.small
-                    color: Kirigami.Theme.positiveTextColor
+                    spacing: Kirigami.Units.smallSpacing / 2
 
-                    HoverHandler { id: defaultIconHover }
-                    ToolTip.visible: defaultIconHover.hovered
-                    ToolTip.text: i18n("Default layout")
+                    Kirigami.Icon {
+                        id: defaultIcon
+                        source: "favorite"
+                        visible: root.modelData.id === root.kcm.defaultLayoutId
+                        width: Kirigami.Units.iconSizes.small
+                        height: Kirigami.Units.iconSizes.small
+                        color: Kirigami.Theme.positiveTextColor
+
+                        HoverHandler { id: defaultIconHover }
+                        ToolTip.visible: defaultIconHover.hovered
+                        ToolTip.text: i18n("Default layout")
+                    }
+
+                    Kirigami.Icon {
+                        source: "view-filter"
+                        visible: {
+                            var d = root.modelData
+                            var s = d.allowedScreens
+                            var k = d.allowedDesktops
+                            var a = d.allowedActivities
+                            return (s !== undefined && s !== null && s.length > 0) ||
+                                   (k !== undefined && k !== null && k.length > 0) ||
+                                   (a !== undefined && a !== null && a.length > 0)
+                        }
+                        width: Kirigami.Units.iconSizes.small
+                        height: Kirigami.Units.iconSizes.small
+                        color: Kirigami.Theme.disabledTextColor
+
+                        HoverHandler { id: filterIconHover }
+                        ToolTip.visible: filterIconHover.hovered
+                        ToolTip.text: i18n("This layout has per-screen/desktop/activity restrictions")
+                    }
                 }
+
+                // Visibility toggle (top-right)
+                ToolButton {
+                    anchors.top: parent.top
+                    anchors.right: parent.right
+                    anchors.margins: Kirigami.Units.smallSpacing / 2
+                    width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
+                    height: width
+                    padding: 0
+                    visible: root.isHovered || root.modelData.hiddenFromSelector === true
+                    icon.name: root.modelData.hiddenFromSelector ? "view-hidden" : "view-visible"
+                    icon.width: Kirigami.Units.iconSizes.small
+                    icon.height: Kirigami.Units.iconSizes.small
+                    icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
+                    onClicked: root.kcm.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
+
+                    ToolTip.visible: hovered
+                    ToolTip.text: root.modelData.hiddenFromSelector
+                        ? i18n("Hidden from zone selector. Click to show.")
+                        : i18n("Visible in zone selector. Click to hide.")
+                }
+
+                // Dim thumbnail when hidden
+                opacity: root.modelData.hiddenFromSelector ? 0.5 : 1.0
 
             }
 

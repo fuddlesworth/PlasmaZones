@@ -120,6 +120,12 @@ inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual
 inline constexpr QLatin1String ShaderId{"shaderId"};
 inline constexpr QLatin1String ShaderParams{"shaderParams"};
 
+// Visibility filtering keys
+inline constexpr QLatin1String HiddenFromSelector{"hiddenFromSelector"};
+inline constexpr QLatin1String AllowedScreens{"allowedScreens"};
+inline constexpr QLatin1String AllowedDesktops{"allowedDesktops"};
+inline constexpr QLatin1String AllowedActivities{"allowedActivities"};
+
 // Assignment keys
 inline constexpr QLatin1String Assignments{"assignments"};
 inline constexpr QLatin1String Screen{"screen"};

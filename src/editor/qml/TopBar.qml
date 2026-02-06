@@ -20,6 +20,7 @@ ToolBar {
     required property var confirmCloseDialog
     required property var helpDialog
     required property var shaderDialog
+    required property var visibilityDialog
     required property var importDialog
     required property var exportDialog
     required property var editorWindow
@@ -413,6 +414,27 @@ ToolBar {
                     }
                 }
             }
+        }
+
+        // Visual separator
+        Kirigami.Separator {
+            Layout.fillHeight: true
+            Layout.preferredWidth: 1
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // VISIBILITY SETTINGS BUTTON (Tier 2 per-context filtering)
+        // ═══════════════════════════════════════════════════════════════
+        ToolButton {
+            id: visibilityButton
+
+            icon.name: "view-filter"
+            enabled: editorController !== null && editorController !== undefined
+            onClicked: topBar.visibilityDialog.open()
+            ToolTip.text: i18nc("@tooltip", "Layout visibility (per monitor/desktop/activity)")
+            ToolTip.visible: hovered
+            Accessible.name: i18nc("@action", "Layout Visibility")
+            Accessible.description: i18nc("@info", "Configure where this layout appears in the zone selector")
         }
 
         // Visual separator

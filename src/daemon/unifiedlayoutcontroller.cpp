@@ -58,7 +58,9 @@ std::optional<UnifiedLayoutEntry> UnifiedLayoutController::currentLayout() const
 QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
-        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+        // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
+        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
+            m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
         m_cacheValid = true;
     }
     return m_cachedLayouts;
@@ -140,6 +142,30 @@ void UnifiedLayoutController::syncFromExternalState()
         m_currentLayoutId = m_layoutManager->activeLayout()->id().toString();
     } else {
         m_currentLayoutId.clear();
+    }
+}
+
+void UnifiedLayoutController::setCurrentScreenName(const QString& screenName)
+{
+    if (m_currentScreenName != screenName) {
+        m_currentScreenName = screenName;
+        m_cacheValid = false;
+    }
+}
+
+void UnifiedLayoutController::setCurrentVirtualDesktop(int desktop)
+{
+    if (m_currentVirtualDesktop != desktop) {
+        m_currentVirtualDesktop = desktop;
+        m_cacheValid = false;
+    }
+}
+
+void UnifiedLayoutController::setCurrentActivity(const QString& activity)
+{
+    if (m_currentActivity != activity) {
+        m_currentActivity = activity;
+        m_cacheValid = false;
     }
 }
 

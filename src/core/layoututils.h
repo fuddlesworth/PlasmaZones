@@ -69,6 +69,24 @@ namespace LayoutUtils {
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager);
 
 /**
+ * @brief Build filtered list of layouts visible in the given context
+ *
+ * Filters out layouts that are:
+ * - hiddenFromSelector = true
+ * - Not allowed on the given screen/desktop/activity (if allow lists are non-empty)
+ *
+ * @param layoutManager Layout manager interface
+ * @param screenName Current screen name (empty = skip screen filter)
+ * @param virtualDesktop Current virtual desktop (0 = skip desktop filter)
+ * @param activity Current activity ID (empty = skip activity filter)
+ */
+PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
+    ILayoutManager* layoutManager,
+    const QString& screenName,
+    int virtualDesktop,
+    const QString& activity);
+
+/**
  * @brief Convert a unified layout entry to QVariantMap for QML
  *
  * Creates a map with keys matching the zone selector's expectations:
@@ -120,6 +138,22 @@ PLASMAZONES_EXPORT int findLayoutIndex(const QVector<UnifiedLayoutEntry>& entrie
  */
 PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLayoutEntry>& entries,
                                                          const QString& layoutId);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Allow-list serialization (shared by Layout, LayoutAdaptor, EditorController)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Serialize visibility allow-lists to JSON (only writes non-empty lists)
+ */
+PLASMAZONES_EXPORT void serializeAllowLists(QJsonObject& json, const QStringList& screens,
+                                             const QList<int>& desktops, const QStringList& activities);
+
+/**
+ * @brief Deserialize visibility allow-lists from JSON (clears output params first)
+ */
+PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringList& screens,
+                                               QList<int>& desktops, QStringList& activities);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Zone conversion utilities

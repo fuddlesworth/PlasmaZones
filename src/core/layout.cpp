@@ -3,6 +3,7 @@
 
 #include "layout.h"
 #include "constants.h"
+#include "layoututils.h"
 #include "logging.h"
 #include "shaderregistry.h"
 #include <QJsonArray>
@@ -78,6 +79,10 @@ Layout::Layout(const Layout& other)
     , m_defaultOrder(other.m_defaultOrder)
     , m_shaderId(other.m_shaderId)
     , m_shaderParams(other.m_shaderParams)
+    , m_hiddenFromSelector(other.m_hiddenFromSelector)
+    , m_allowedScreens(other.m_allowedScreens)
+    , m_allowedDesktops(other.m_allowedDesktops)
+    , m_allowedActivities(other.m_allowedActivities)
 {
     // Deep copy zones using clone() method
     for (const auto* zone : other.m_zones) {
@@ -94,6 +99,12 @@ Layout::~Layout()
 Layout& Layout::operator=(const Layout& other)
 {
     if (this != &other) {
+        // Track visibility changes for signal emission
+        bool hiddenChanged = m_hiddenFromSelector != other.m_hiddenFromSelector;
+        bool screensChanged = m_allowedScreens != other.m_allowedScreens;
+        bool desktopsChanged = m_allowedDesktops != other.m_allowedDesktops;
+        bool activitiesChanged = m_allowedActivities != other.m_allowedActivities;
+
         m_name = other.m_name;
         m_type = other.m_type;
         m_description = other.m_description;
@@ -104,6 +115,10 @@ Layout& Layout::operator=(const Layout& other)
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
         m_shaderId = other.m_shaderId;
         m_shaderParams = other.m_shaderParams;
+        m_hiddenFromSelector = other.m_hiddenFromSelector;
+        m_allowedScreens = other.m_allowedScreens;
+        m_allowedDesktops = other.m_allowedDesktops;
+        m_allowedActivities = other.m_allowedActivities;
 
         // Deep copy zones using clone() method
         qDeleteAll(m_zones);
@@ -114,6 +129,12 @@ Layout& Layout::operator=(const Layout& other)
         }
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zonesChanged();
+
+        // Emit visibility signals for changed properties
+        if (hiddenChanged) Q_EMIT hiddenFromSelectorChanged();
+        if (screensChanged) Q_EMIT allowedScreensChanged();
+        if (desktopsChanged) Q_EMIT allowedDesktopsChanged();
+        if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
     }
     return *this;
 }
@@ -129,6 +150,34 @@ LAYOUT_SETTER(const QString&, Description, m_description, descriptionChanged)
 LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
 LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
 LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
+LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
+
+void Layout::setAllowedScreens(const QStringList& screens)
+{
+    if (m_allowedScreens != screens) {
+        m_allowedScreens = screens;
+        Q_EMIT allowedScreensChanged();
+        Q_EMIT layoutModified();
+    }
+}
+
+void Layout::setAllowedDesktops(const QList<int>& desktops)
+{
+    if (m_allowedDesktops != desktops) {
+        m_allowedDesktops = desktops;
+        Q_EMIT allowedDesktopsChanged();
+        Q_EMIT layoutModified();
+    }
+}
+
+void Layout::setAllowedActivities(const QStringList& activities)
+{
+    if (m_allowedActivities != activities) {
+        m_allowedActivities = activities;
+        Q_EMIT allowedActivitiesChanged();
+        Q_EMIT layoutModified();
+    }
+}
 
 // Gap setters (allow -1 for "use global" or non-negative values)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(ZonePadding, m_zonePadding, zonePaddingChanged)
@@ -362,6 +411,12 @@ QJsonObject Layout::toJson() const
         }
     }
 
+    // Visibility filtering - only serialize non-default values
+    if (m_hiddenFromSelector) {
+        json[JsonKeys::HiddenFromSelector] = true;
+    }
+    LayoutUtils::serializeAllowLists(json, m_allowedScreens, m_allowedDesktops, m_allowedActivities);
+
     QJsonArray zonesArray;
     for (const auto* zone : m_zones) {
         zonesArray.append(zone->toJson());
@@ -395,6 +450,10 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     if (json.contains(JsonKeys::ShaderParams)) {
         layout->m_shaderParams = json[JsonKeys::ShaderParams].toObject().toVariantMap();
     }
+
+    // Visibility filtering
+    layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);
+    LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops, layout->m_allowedActivities);
 
     const auto zonesArray = json[JsonKeys::Zones].toArray();
     for (const auto& zoneValue : zonesArray) {

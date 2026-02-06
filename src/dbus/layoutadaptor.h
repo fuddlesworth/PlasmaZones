@@ -55,6 +55,9 @@ public Q_SLOTS:
     QString importLayout(const QString& filePath);
     void exportLayout(const QString& layoutId, const QString& filePath);
 
+    // Visibility filtering
+    void setLayoutHidden(const QString& layoutId, bool hidden);
+
     // Editor support
     bool updateLayout(const QString& layoutJson);
     QString createLayoutFromJson(const QString& layoutJson);

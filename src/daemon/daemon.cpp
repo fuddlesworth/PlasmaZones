@@ -333,6 +333,11 @@ void Daemon::start()
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::currentDesktopChanged, this, [this](int desktop) {
         // Update overlay service with current desktop for per-desktop layout lookup
         m_overlayService->setCurrentVirtualDesktop(desktop);
+        // Update layout manager and unified controller for filtered cycling
+        m_layoutManager->setCurrentVirtualDesktop(desktop);
+        if (m_unifiedLayoutController) {
+            m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
+        }
         // Layout switching is handled automatically by VirtualDesktopManager
         // Just ensure overlay is updated
         if (m_overlayService->isVisible()) {
@@ -357,6 +362,11 @@ void Daemon::start()
         connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
                     m_overlayService->setCurrentActivity(activityId);
+                    // Update layout manager and unified controller for filtered cycling
+                    m_layoutManager->setCurrentActivity(activityId);
+                    if (m_unifiedLayoutController) {
+                        m_unifiedLayoutController->setCurrentActivity(activityId);
+                    }
                     if (m_overlayService->isVisible()) {
                         m_overlayService->updateGeometries();
                     }
@@ -374,6 +384,16 @@ void Daemon::start()
 
     connect(m_screenManager.get(), &ScreenManager::screenRemoved, this, [this](QScreen* screen) {
         m_overlayService->handleScreenRemoved(screen);
+
+        // Clean stale screen name from layout visibility restrictions
+        const QString removedName = screen->name();
+        for (Layout* layout : m_layoutManager->layouts()) {
+            QStringList allowed = layout->allowedScreens();
+            if (allowed.isEmpty()) continue;
+            if (allowed.removeAll(removedName) > 0) {
+                layout->setAllowedScreens(allowed);
+            }
+        }
     });
 
     connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this,
@@ -426,13 +446,20 @@ void Daemon::start()
     });
 
     // Cycle layout shortcuts (Meta+[/])
+    // Resolve cursor screen at cycle time for per-screen visibility filtering
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
         if (m_unifiedLayoutController) {
+            QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+            if (!screen) screen = Utils::primaryScreen();
+            if (screen) m_unifiedLayoutController->setCurrentScreenName(screen->name());
             m_unifiedLayoutController->cyclePrevious();
         }
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
         if (m_unifiedLayoutController) {
+            QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+            if (!screen) screen = Utils::primaryScreen();
+            if (screen) m_unifiedLayoutController->setCurrentScreenName(screen->name());
             m_unifiedLayoutController->cycleNext();
         }
     });
@@ -515,6 +542,14 @@ void Daemon::start()
     // Initialize unified layout controller (manual layouts only)
     m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
         m_layoutManager.get(), m_settings.get(), this);
+
+    // Set initial desktop/activity context for visibility-filtered cycling
+    m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
+    m_unifiedLayoutController->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
+    if (m_activityManager && ActivityManager::isAvailable()) {
+        m_layoutManager->setCurrentActivity(m_activityManager->currentActivity());
+        m_unifiedLayoutController->setCurrentActivity(m_activityManager->currentActivity());
+    }
 
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {

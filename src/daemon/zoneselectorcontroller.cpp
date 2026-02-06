@@ -78,8 +78,13 @@ void ZoneSelectorController::setEnabled(bool enabled)
 
 QVariantList ZoneSelectorController::layouts() const
 {
-    // Use shared utility to build unified layout list
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(m_layoutManager);
+    // Use shared utility to build filtered layout list for current context
+    QString screenName;
+    if (m_screen) {
+        screenName = m_screen->name();
+    }
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -227,6 +232,15 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
                 setActiveLayoutId(screenLayout->id().toString());
             }
         }
+    }
+}
+
+void ZoneSelectorController::setCurrentActivity(const QString& activity)
+{
+    if (m_currentActivity != activity) {
+        m_currentActivity = activity;
+        // Refresh layout list when activity changes
+        Q_EMIT layoutsChanged();
     }
 }
 

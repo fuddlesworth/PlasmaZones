@@ -112,6 +112,17 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 // Unified layout list building
 // ═══════════════════════════════════════════════════════════════════════════
 
+static UnifiedLayoutEntry entryFromLayout(Layout* layout)
+{
+    UnifiedLayoutEntry entry;
+    entry.id = layout->id().toString();
+    entry.name = layout->name();
+    entry.description = layout->description();
+    entry.zoneCount = layout->zoneCount();
+    entry.zones = zonesToVariantList(layout, ZoneField::Minimal);
+    return entry;
+}
+
 QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager)
 {
     QVector<UnifiedLayoutEntry> list;
@@ -122,16 +133,64 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
             if (!layout) {
                 continue;
             }
-
-            UnifiedLayoutEntry entry;
-            entry.id = layout->id().toString();
-            entry.name = layout->name();
-            entry.description = layout->description();
-            entry.zoneCount = layout->zoneCount();
-            entry.zones = zonesToVariantList(layout, ZoneField::Minimal);
-
-            list.append(entry);
+            list.append(entryFromLayout(layout));
         }
+    }
+
+    return list;
+}
+
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
+    ILayoutManager* layoutManager,
+    const QString& screenName,
+    int virtualDesktop,
+    const QString& activity)
+{
+    QVector<UnifiedLayoutEntry> list;
+
+    if (!layoutManager) {
+        return list;
+    }
+
+    // Track the active layout so we can guarantee it appears in the list
+    // (prevents empty selector / broken cycling when active layout is hidden)
+    Layout* activeLayout = layoutManager->activeLayout();
+
+    const auto layouts = layoutManager->layouts();
+    for (Layout* layout : layouts) {
+        if (!layout) {
+            continue;
+        }
+
+        bool isActive = (layout == activeLayout);
+
+        // Tier 1: skip globally hidden layouts (unless active)
+        if (layout->hiddenFromSelector() && !isActive) {
+            continue;
+        }
+
+        // Tier 2: screen filter (unless active)
+        if (!isActive && !screenName.isEmpty() && !layout->allowedScreens().isEmpty()) {
+            if (!layout->allowedScreens().contains(screenName)) {
+                continue;
+            }
+        }
+
+        // Tier 2: desktop filter (unless active)
+        if (!isActive && virtualDesktop > 0 && !layout->allowedDesktops().isEmpty()) {
+            if (!layout->allowedDesktops().contains(virtualDesktop)) {
+                continue;
+            }
+        }
+
+        // Tier 2: activity filter (unless active)
+        if (!isActive && !activity.isEmpty() && !layout->allowedActivities().isEmpty()) {
+            if (!layout->allowedActivities().contains(activity)) {
+                continue;
+            }
+        }
+
+        list.append(entryFromLayout(layout));
     }
 
     return list;
@@ -177,6 +236,7 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[IsSystem] = false;
     json[Type] = 0;
     json[Category] = static_cast<int>(LayoutCategory::Manual);
+    // hiddenFromSelector is added by callers that have access to the Layout*
 
     // Convert zones to JSON array
     QJsonArray zonesArray;
@@ -199,6 +259,56 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Zones] = zonesArray;
 
     return json;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Allow-list serialization
+// ═══════════════════════════════════════════════════════════════════════════
+
+void serializeAllowLists(QJsonObject& json, const QStringList& screens,
+                          const QList<int>& desktops, const QStringList& activities)
+{
+    using namespace JsonKeys;
+
+    if (!screens.isEmpty()) {
+        json[AllowedScreens] = QJsonArray::fromStringList(screens);
+    }
+    if (!desktops.isEmpty()) {
+        QJsonArray arr;
+        for (int d : desktops) {
+            arr.append(d);
+        }
+        json[AllowedDesktops] = arr;
+    }
+    if (!activities.isEmpty()) {
+        json[AllowedActivities] = QJsonArray::fromStringList(activities);
+    }
+}
+
+void deserializeAllowLists(const QJsonObject& json, QStringList& screens,
+                            QList<int>& desktops, QStringList& activities)
+{
+    using namespace JsonKeys;
+
+    screens.clear();
+    desktops.clear();
+    activities.clear();
+
+    if (json.contains(AllowedScreens)) {
+        for (const auto& v : json[AllowedScreens].toArray()) {
+            screens.append(v.toString());
+        }
+    }
+    if (json.contains(AllowedDesktops)) {
+        for (const auto& v : json[AllowedDesktops].toArray()) {
+            desktops.append(v.toInt());
+        }
+    }
+    if (json.contains(AllowedActivities)) {
+        for (const auto& v : json[AllowedActivities].toArray()) {
+            activities.append(v.toString());
+        }
+    }
 }
 
 int findLayoutIndex(const QVector<UnifiedLayoutEntry>& entries, const QString& layoutId)

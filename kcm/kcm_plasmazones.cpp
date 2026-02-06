@@ -1138,6 +1138,20 @@ void KCMPlasmaZones::save()
         m_pendingActivityAssignments.clear();
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Layout visibility (hiddenFromSelector)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (!m_pendingHiddenStates.isEmpty()) {
+        for (auto it = m_pendingHiddenStates.cbegin(); it != m_pendingHiddenStates.cend(); ++it) {
+            QDBusMessage hiddenReply = callDaemon(layoutInterface, QStringLiteral("setLayoutHidden"),
+                                                  {it.key(), it.value()});
+            if (hiddenReply.type() == QDBusMessage::ErrorMessage) {
+                failedOperations.append(QStringLiteral("Layout visibility (%1)").arg(it.key()));
+            }
+        }
+        m_pendingHiddenStates.clear();
+    }
+
     if (!failedOperations.isEmpty()) {
         qCWarning(lcKcm) << "Save: D-Bus operations failed:" << failedOperations.join(QStringLiteral(", "))
                          << "- some settings may not have been saved to daemon";
@@ -1206,6 +1220,9 @@ void KCMPlasmaZones::load()
     m_pendingActivityAssignments.clear();
     m_clearedActivityAssignments.clear();
 
+    // Clear pending layout visibility changes (discard unsaved changes)
+    m_pendingHiddenStates.clear();
+
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT quickLayoutSlotsRefreshed();
@@ -1236,6 +1253,18 @@ void KCMPlasmaZones::defaults()
     m_clearedDesktopAssignments.clear();
     m_pendingActivityAssignments.clear();
     m_clearedActivityAssignments.clear();
+
+    // Reset all layouts to visible (clear hidden states)
+    m_pendingHiddenStates.clear();
+    for (int i = 0; i < m_layouts.size(); ++i) {
+        QVariantMap layout = m_layouts[i].toMap();
+        if (layout[QStringLiteral("hiddenFromSelector")].toBool()) {
+            layout[QStringLiteral("hiddenFromSelector")] = false;
+            m_layouts[i] = layout;
+            m_pendingHiddenStates[layout[QStringLiteral("id")].toString()] = false;
+        }
+    }
+    Q_EMIT layoutsChanged();
 
     // Emit all property change signals so UI updates
     Q_EMIT screenAssignmentsChanged();
@@ -1401,6 +1430,25 @@ void KCMPlasmaZones::openEditor()
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
     QDBusConnection::sessionBus().asyncCall(msg);
+}
+
+void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
+{
+    // Stage the change locally (applied on save)
+    m_pendingHiddenStates[layoutId] = hidden;
+
+    // Update local model so the UI reflects the change immediately
+    for (int i = 0; i < m_layouts.size(); ++i) {
+        QVariantMap layout = m_layouts[i].toMap();
+        if (layout[QStringLiteral("id")].toString() == layoutId) {
+            layout[QStringLiteral("hiddenFromSelector")] = hidden;
+            m_layouts[i] = layout;
+            break;
+        }
+    }
+    Q_EMIT layoutsChanged();
+
+    setNeedsSave(true);
 }
 
 void KCMPlasmaZones::addExcludedApp(const QString& app)

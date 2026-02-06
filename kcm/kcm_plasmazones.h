@@ -355,6 +355,7 @@ public Q_SLOTS:
     Q_INVOKABLE void exportLayout(const QString& layoutId, const QString& filePath);
     Q_INVOKABLE void editLayout(const QString& layoutId);
     Q_INVOKABLE void openEditor();
+    Q_INVOKABLE void setLayoutHidden(const QString& layoutId, bool hidden);
 
     // Exclusion management
     Q_INVOKABLE void addExcludedApp(const QString& app);
@@ -555,6 +556,10 @@ private:
     // Key format: "screenName:desktopNumber" -> layoutId (empty string means cleared)
     QMap<QString, QString> m_pendingDesktopAssignments;
     QSet<QString> m_clearedDesktopAssignments; // Keys that should be cleared on save
+
+    // Pending layout visibility changes (staged until Apply)
+    // Key: layoutId, Value: hiddenFromSelector state
+    QHash<QString, bool> m_pendingHiddenStates;
 
     // Fill on drop settings (stored separately in Editor group)
     bool m_fillOnDropEnabled = true;

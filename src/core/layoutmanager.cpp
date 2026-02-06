@@ -75,9 +75,38 @@ bool LayoutManager::shouldSkipLayoutAssignment(const QUuid& layoutId, const QStr
 
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
+// Filters out hidden layouts and respects visibility allow-lists
 Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
 {
     if (m_layouts.isEmpty()) {
+        return nullptr;
+    }
+
+    // Build filtered list of visible layouts for current context
+    QVector<Layout*> visible;
+    for (Layout* l : m_layouts) {
+        if (!l || l->hiddenFromSelector()) {
+            continue;
+        }
+        if (!screenName.isEmpty() && !l->allowedScreens().isEmpty()) {
+            if (!l->allowedScreens().contains(screenName)) {
+                continue;
+            }
+        }
+        if (m_currentVirtualDesktop > 0 && !l->allowedDesktops().isEmpty()) {
+            if (!l->allowedDesktops().contains(m_currentVirtualDesktop)) {
+                continue;
+            }
+        }
+        if (!m_currentActivity.isEmpty() && !l->allowedActivities().isEmpty()) {
+            if (!l->allowedActivities().contains(m_currentActivity)) {
+                continue;
+            }
+        }
+        visible.append(l);
+    }
+
+    if (visible.isEmpty()) {
         return nullptr;
     }
 
@@ -87,17 +116,20 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
         currentLayout = layoutForScreen(screenName);
     }
     if (!currentLayout) {
-        currentLayout = m_layouts.first();
+        currentLayout = visible.first();
     }
 
-    int currentIndex = m_layouts.indexOf(currentLayout);
+    int currentIndex = visible.indexOf(currentLayout);
     if (currentIndex < 0) {
-        currentIndex = 0;
+        // Current layout is not in the visible list (e.g. hidden).
+        // For forward cycling, start before the first so we land on visible[0].
+        // For backward cycling, start after the last so we land on the last visible.
+        currentIndex = (direction > 0) ? -1 : visible.size();
     }
 
     // Wrap around: +size ensures positive modulo for direction=-1
-    int newIndex = (currentIndex + direction + m_layouts.size()) % m_layouts.size();
-    Layout* newLayout = m_layouts.at(newIndex);
+    int newIndex = (currentIndex + direction + visible.size()) % visible.size();
+    Layout* newLayout = visible.at(newIndex);
 
     // Update both active layout and per-screen assignment
     setActiveLayout(newLayout);
@@ -198,6 +230,13 @@ Layout* LayoutManager::duplicateLayout(Layout* source)
     auto newLayout = new Layout(*source);
     newLayout->setName(source->name() + QStringLiteral(" (Copy)"));
     // Note: Copy constructor already leaves sourcePath empty, making it a user layout
+
+    // Reset visibility restrictions so duplicated layout starts fresh
+    newLayout->setHiddenFromSelector(false);
+    newLayout->setAllowedScreens({});
+    newLayout->setAllowedDesktops({});
+    newLayout->setAllowedActivities({});
+
     addLayout(newLayout);
     saveLayouts();
 
@@ -910,6 +949,13 @@ void LayoutManager::importLayout(const QString& filePath)
 
     // Imported layouts have no source path - they'll be saved to user directory
     // (sourcePath is already empty from fromJson)
+
+    // Reset visibility restrictions since screen/desktop/activity names are machine-specific
+    layout->setHiddenFromSelector(false);
+    layout->setAllowedScreens({});
+    layout->setAllowedDesktops({});
+    layout->setAllowedActivities({});
+
     addLayout(layout);
     saveLayouts();
 

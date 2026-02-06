@@ -95,6 +95,18 @@ class EditorController : public QObject
     Q_PROPERTY(bool hasShaderEffect READ hasShaderEffect NOTIFY currentShaderIdChanged)
     Q_PROPERTY(QString noneShaderUuid READ noneShaderUuid CONSTANT)
 
+    // Visibility filtering (Tier 2 per-context allow-lists)
+    Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
+    Q_PROPERTY(QVariantList allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
+    Q_PROPERTY(QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+
+    // Context info for visibility UI
+    Q_PROPERTY(QStringList availableScreenNames READ availableScreenNames NOTIFY availableScreenNamesChanged)
+    Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopCountChanged)
+    Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopNamesChanged)
+    Q_PROPERTY(bool activitiesAvailable READ activitiesAvailable NOTIFY activitiesAvailableChanged)
+    Q_PROPERTY(QVariantList availableActivities READ availableActivities NOTIFY availableActivitiesChanged)
+
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
@@ -136,6 +148,21 @@ public:
     int globalOuterGap() const;
     bool canPaste() const;
     UndoController* undoController() const;
+
+    // Visibility filtering getters
+    QStringList allowedScreens() const { return m_allowedScreens; }
+    QVariantList allowedDesktops() const;
+    QStringList allowedActivities() const { return m_allowedActivities; }
+    QStringList availableScreenNames() const { return m_availableScreenNames; }
+    int virtualDesktopCount() const { return m_virtualDesktopCount; }
+    QStringList virtualDesktopNames() const { return m_virtualDesktopNames; }
+    bool activitiesAvailable() const { return m_activitiesAvailable; }
+    QVariantList availableActivities() const { return m_availableActivities; }
+
+    // Visibility filtering setters
+    void setAllowedScreens(const QStringList& screens);
+    void setAllowedDesktops(const QVariantList& desktops);
+    void setAllowedActivities(const QStringList& activities);
 
     // Shader getters
     QString currentShaderId() const;
@@ -184,6 +211,11 @@ public:
     void setCurrentShaderIdDirect(const QString& id);
     void setCurrentShaderParamsDirect(const QVariantMap& params);
     void setShaderParameterDirect(const QString& key, const QVariant& value);
+
+    // Visibility setters - Direct (for undo/redo, bypass command creation)
+    void setAllowedScreensDirect(const QStringList& screens);
+    void setAllowedDesktopsDirect(const QList<int>& desktops);
+    void setAllowedActivitiesDirect(const QStringList& activities);
 
     // Shader operations (QML-invokable)
     Q_INVOKABLE void setShaderParameter(const QString& key, const QVariant& value);
@@ -348,6 +380,11 @@ public Q_SLOTS:
     Q_INVOKABLE void setDefaultZoneColors(const QString& highlightColor, const QString& inactiveColor,
                                           const QString& borderColor);
 
+    // Visibility filtering toggle methods
+    Q_INVOKABLE void toggleScreenAllowed(const QString& screenName);
+    Q_INVOKABLE void toggleDesktopAllowed(int desktop);
+    Q_INVOKABLE void toggleActivityAllowed(const QString& activityId);
+
     // Import/Export operations
     Q_INVOKABLE void importLayout(const QString& filePath);
     Q_INVOKABLE void exportLayout(const QString& filePath);
@@ -405,6 +442,16 @@ Q_SIGNALS:
     void availableShadersChanged();
     void currentShaderParametersChanged();
     void shadersEnabledChanged();
+
+    // Visibility filtering signals
+    void allowedScreensChanged();
+    void allowedDesktopsChanged();
+    void allowedActivitiesChanged();
+    void availableScreenNamesChanged();
+    void virtualDesktopCountChanged();
+    void virtualDesktopNamesChanged();
+    void activitiesAvailableChanged();
+    void availableActivitiesChanged();
 
     // Incremental update signals (to avoid full Repeater rebuilds)
     void zoneGeometryChanged(const QString& zoneId);
@@ -574,6 +621,16 @@ private:
     // Cache for current shader's parameter definitions (avoids repeated D-Bus calls)
     // Updated when shader selection changes
     QVariantList m_cachedShaderParameters;
+
+    // Visibility filtering state
+    QStringList m_allowedScreens;
+    QList<int> m_allowedDesktopsInt;
+    QStringList m_allowedActivities;
+    QStringList m_availableScreenNames;
+    int m_virtualDesktopCount = 1;
+    QStringList m_virtualDesktopNames;
+    bool m_activitiesAvailable = false;
+    QVariantList m_availableActivities;
 
     // Multi-zone drag state
     bool m_multiZoneDragActive = false;

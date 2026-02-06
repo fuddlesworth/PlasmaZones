@@ -356,6 +356,8 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/UpdateShaderIdCommand.h
     editor/undo/commands/UpdateShaderParamsCommand.cpp
     editor/undo/commands/UpdateShaderParamsCommand.h
+    editor/undo/commands/UpdateVisibilityCommand.cpp
+    editor/undo/commands/UpdateVisibilityCommand.h
 )
 
 # Create the executable first
@@ -393,6 +395,7 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/TemplatePreview.qml
         editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
+        editor/qml/VisibilitySettingsDialog.qml
         editor/qml/ParameterDelegate.qml
         # SRP-extracted components from PropertyPanel
         editor/qml/ColorUtils.js

@@ -62,6 +62,12 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(QString shaderId READ shaderId WRITE setShaderId NOTIFY shaderIdChanged)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
 
+    // Visibility filtering
+    Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
+    Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
+    Q_PROPERTY(QList<int> allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
+    Q_PROPERTY(QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+
 public:
     explicit Layout(QObject* parent = nullptr);
     explicit Layout(const QString& name, LayoutType type = LayoutType::Custom, QObject* parent = nullptr);
@@ -145,6 +151,28 @@ public:
     }
     void setShaderParams(const QVariantMap& params);
 
+    // Visibility filtering
+    bool hiddenFromSelector() const
+    {
+        return m_hiddenFromSelector;
+    }
+    void setHiddenFromSelector(bool hidden);
+    QStringList allowedScreens() const
+    {
+        return m_allowedScreens;
+    }
+    void setAllowedScreens(const QStringList& screens);
+    QList<int> allowedDesktops() const
+    {
+        return m_allowedDesktops;
+    }
+    void setAllowedDesktops(const QList<int>& desktops);
+    QStringList allowedActivities() const
+    {
+        return m_allowedActivities;
+    }
+    void setAllowedActivities(const QStringList& activities);
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -201,6 +229,10 @@ Q_SIGNALS:
     void sourcePathChanged();
     void shaderIdChanged();
     void shaderParamsChanged();
+    void hiddenFromSelectorChanged();
+    void allowedScreensChanged();
+    void allowedDesktopsChanged();
+    void allowedActivitiesChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
@@ -221,6 +253,12 @@ private:
     // Shader support
     QString m_shaderId; // Shader effect ID (empty = no shader)
     QVariantMap m_shaderParams; // Shader-specific parameters
+
+    // Visibility filtering
+    bool m_hiddenFromSelector = false;
+    QStringList m_allowedScreens;    // empty = all screens
+    QList<int> m_allowedDesktops;    // empty = all desktops
+    QStringList m_allowedActivities; // empty = all activities
 
     // Cache last geometry used for recalculation to avoid redundant work
     mutable QRectF m_lastRecalcGeometry;

@@ -123,7 +123,7 @@ private:
                                      QScreen* screen,
                                      Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
-    QVariantList buildLayoutsList() const;
+    QVariantList buildLayoutsList(const QString& screenName = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
