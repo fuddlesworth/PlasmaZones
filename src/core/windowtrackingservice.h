@@ -70,17 +70,34 @@ public:
                             const QString& screenName, int virtualDesktop);
 
     /**
+     * @brief Assign a window to multiple zones (multi-zone snap)
+     * @param windowId Full window ID
+     * @param zoneIds List of zone UUID strings (first is primary)
+     * @param screenName Screen where the zones are located
+     * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
+     */
+    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
+                             const QString& screenName, int virtualDesktop);
+
+    /**
      * @brief Remove window from its assigned zone
      * @param windowId Full window ID
      */
     void unassignWindow(const QString& windowId);
 
     /**
-     * @brief Get the zone ID for a window
+     * @brief Get the primary zone ID for a window
      * @param windowId Full window ID
      * @return Zone ID or empty string if not assigned
      */
     QString zoneForWindow(const QString& windowId) const;
+
+    /**
+     * @brief Get all zone IDs for a window (multi-zone support)
+     * @param windowId Full window ID
+     * @return List of zone IDs (empty if not assigned)
+     */
+    QStringList zonesForWindow(const QString& windowId) const;
 
     /**
      * @brief Get all windows in a specific zone
@@ -163,11 +180,18 @@ public:
     void unsnapForFloat(const QString& windowId);
 
     /**
-     * @brief Get zone to restore to when unfloating
+     * @brief Get primary zone to restore to when unfloating
      * @param windowId Full window ID
      * @return Zone ID or empty string if none
      */
     QString preFloatZone(const QString& windowId) const;
+
+    /**
+     * @brief Get all zones to restore to when unfloating (multi-zone support)
+     * @param windowId Full window ID
+     * @return List of zone IDs (empty if none)
+     */
+    QStringList preFloatZones(const QString& windowId) const;
 
     /**
      * @brief Clear pre-float zone after restore
@@ -298,6 +322,14 @@ public:
     QRect zoneGeometry(const QString& zoneId, const QString& screenName = QString()) const;
 
     /**
+     * @brief Get combined geometry for multiple zones on a specific screen
+     * @param zoneIds List of zone UUID strings
+     * @param screenName Screen name (empty = primary)
+     * @return Union of all zone geometries, or invalid QRect if none found
+     */
+    QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenName = QString()) const;
+
+    /**
      * @brief Calculate rotation data for all windows in layout
      * @param clockwise true for clockwise rotation
      * @return List of rotation entries
@@ -349,9 +381,9 @@ public:
 
     /**
      * @brief Get all zone assignments for persistence
-     * @return Map of windowId -> zoneId
+     * @return Map of windowId -> zoneIds (list of zone UUIDs)
      */
-    const QHash<QString, QString>& zoneAssignments() const { return m_windowZoneAssignments; }
+    const QHash<QString, QStringList>& zoneAssignments() const { return m_windowZoneAssignments; }
 
     /**
      * @brief Get all screen assignments for persistence
@@ -371,7 +403,7 @@ public:
     /**
      * @brief Get pending zone assignments (for session restore)
      */
-    const QHash<QString, QString>& pendingZoneAssignments() const { return m_pendingZoneAssignments; }
+    const QHash<QString, QStringList>& pendingZoneAssignments() const { return m_pendingZoneAssignments; }
 
     /**
      * @brief Get pending screen assignments
@@ -396,7 +428,7 @@ public:
     /**
      * @brief Set pending zone assignments (loaded from KConfig by adaptor)
      */
-    void setPendingZoneAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneAssignments = assignments; }
+    void setPendingZoneAssignments(const QHash<QString, QStringList>& assignments) { m_pendingZoneAssignments = assignments; }
 
     /**
      * @brief Set pending screen assignments
@@ -437,12 +469,12 @@ public:
     /**
      * @brief Get pre-float zone assignments for persistence
      */
-    const QHash<QString, QString>& preFloatZoneAssignments() const { return m_preFloatZoneAssignments; }
+    const QHash<QString, QStringList>& preFloatZoneAssignments() const { return m_preFloatZoneAssignments; }
 
     /**
      * @brief Set pre-float zone assignments (loaded from KConfig by adaptor)
      */
-    void setPreFloatZoneAssignments(const QHash<QString, QString>& assignments) { m_preFloatZoneAssignments = assignments; }
+    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments) { m_preFloatZoneAssignments = assignments; }
 
 Q_SIGNALS:
     /**
@@ -472,8 +504,8 @@ private:
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
 
-    // Zone assignments: windowId -> zoneId
-    QHash<QString, QString> m_windowZoneAssignments;
+    // Zone assignments: windowId -> zoneIds (supports multi-zone snap)
+    QHash<QString, QStringList> m_windowZoneAssignments;
     // Screen tracking: windowId -> screenName
     QHash<QString, QString> m_windowScreenAssignments;
     // Desktop tracking: windowId -> virtual desktop
@@ -492,13 +524,13 @@ private:
     QSet<QString> m_floatingWindows;
 
     // Session persistence
-    QHash<QString, QString> m_pendingZoneAssignments;  // stableId -> zoneId
+    QHash<QString, QStringList> m_pendingZoneAssignments;  // stableId -> zoneIds
     QHash<QString, QString> m_pendingZoneScreens;      // stableId -> screenName
     QHash<QString, int> m_pendingZoneDesktops;         // stableId -> desktop
     QHash<QString, QString> m_pendingZoneLayouts;      // stableId -> layoutId (for layout validation on restore)
 
     // Pre-float zone (for unfloat restore)
-    QHash<QString, QString> m_preFloatZoneAssignments;
+    QHash<QString, QStringList> m_preFloatZoneAssignments;
 
     // User-snapped classes (for auto-snap eligibility)
     QSet<QString> m_userSnappedClasses;

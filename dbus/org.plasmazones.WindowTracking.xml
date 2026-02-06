@@ -13,6 +13,15 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
         </method>
+        <method name="windowSnappedMultiZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Record that a window was snapped to multiple zones."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="zoneIds" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="List of zone UUIDs (first is primary)."/>
+            </arg>
+        </method>
         <method name="windowUnsnapped">
             <annotation name="org.gtk.GDBus.DocString" value="Record that a window was unsnapped."/>
             <arg name="windowId" type="s" direction="in">
@@ -158,6 +167,18 @@
             <annotation name="org.gtk.GDBus.DocString" value="Clear saved pre-float zone for the window."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
+        <method name="calculateUnfloatRestore">
+            <annotation name="org.gtk.GDBus.DocString" value="Calculate unfloat restore geometry and zone IDs in one call. Returns JSON with found, zoneIds, x, y, width, height. Supports multi-zone: combined geometry of all pre-float zones."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name for geometry calculation."/>
+            </arg>
+            <arg name="restoreJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON: {found, zoneIds, x, y, width, height}."/>
             </arg>
         </method>
         <method name="getZoneGeometry">

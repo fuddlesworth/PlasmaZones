@@ -42,6 +42,7 @@ public:
 public Q_SLOTS:
     // Window snapping notifications (from KWin script)
     void windowSnapped(const QString& windowId, const QString& zoneId);
+    void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds);
     void windowUnsnapped(const QString& windowId);
     /**
      * Record whether a window is sticky (on all virtual desktops).
@@ -72,6 +73,18 @@ public Q_SLOTS:
      * @param windowId Window ID from the effect
      */
     void clearPreFloatZone(const QString& windowId);
+
+    /**
+     * Calculate unfloat restore geometry and zone IDs in a single call.
+     * Returns JSON: {"found":true/false, "zoneIds":["..."], "x":N, "y":N, "width":N, "height":N}
+     * If found is false, the window had no pre-float zone.
+     * Supports multi-zone: if the window was snapped to multiple zones before floating,
+     * the geometry will be the combined (united) geometry of all zones.
+     * @param windowId Window ID from the effect
+     * @param screenName Screen name for geometry calculation
+     * @return JSON string with restore info
+     */
+    QString calculateUnfloatRestore(const QString& windowId, const QString& screenName);
 
     /**
      * Store window geometry before snapping (for unsnap restoration)
@@ -544,6 +557,19 @@ private:
      * @return JSON string with x, y, width, height
      */
     QString rectToJson(const QRect& rect) const;
+
+    /**
+     * @brief Detect which screen a zone is on by finding where its center falls
+     * @param zoneId Zone UUID string
+     * @return Screen name, or empty string if not determinable
+     */
+    QString detectScreenForZone(const QString& zoneId) const;
+
+    /**
+     * @brief Clear floating state when a window is being snapped
+     * @param windowId Window ID being snapped
+     */
+    void clearFloatingStateForSnap(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)

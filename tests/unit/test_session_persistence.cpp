@@ -51,7 +51,7 @@ public:
     {
         if (windowId.isEmpty() || zoneId.isEmpty())
             return;
-        m_windowZoneAssignments[windowId] = zoneId;
+        m_windowZoneAssignments[windowId] = QStringList{zoneId};
         m_lastUsedZoneId = zoneId;
     }
 
@@ -59,7 +59,8 @@ public:
     {
         if (windowId.isEmpty())
             return;
-        QString previousZone = m_windowZoneAssignments.value(windowId);
+        QStringList previousZones = m_windowZoneAssignments.value(windowId);
+        QString previousZone = previousZones.isEmpty() ? QString() : previousZones.first();
         m_windowZoneAssignments.remove(windowId);
         if (previousZone == m_lastUsedZoneId) {
             m_lastUsedZoneId.clear();
@@ -82,7 +83,7 @@ public:
         QJsonObject assignmentsObj;
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             QString stableId = extractStableId(it.key());
-            assignmentsObj[stableId] = it.value();
+            assignmentsObj[stableId] = it.value().isEmpty() ? QString() : it.value().first();
         }
         root[QStringLiteral("windowZoneAssignments")] = assignmentsObj;
         root[QStringLiteral("lastUsedZoneId")] = m_lastUsedZoneId;
@@ -109,7 +110,7 @@ public:
         // Load into PENDING assignments (keyed by stable ID)
         QJsonObject assignmentsObj = root[QStringLiteral("windowZoneAssignments")].toObject();
         for (auto it = assignmentsObj.constBegin(); it != assignmentsObj.constEnd(); ++it) {
-            m_pendingZoneAssignments[it.key()] = it.value().toString();
+            m_pendingZoneAssignments[it.key()] = QStringList{it.value().toString()};
         }
 
         m_lastUsedZoneId = root[QStringLiteral("lastUsedZoneId")].toString();
@@ -138,7 +139,8 @@ public:
             return false;
         }
 
-        zoneId = m_pendingZoneAssignments.value(stableId);
+        QStringList zones = m_pendingZoneAssignments.value(stableId);
+        zoneId = zones.isEmpty() ? QString() : zones.first();
         return !zoneId.isEmpty();
     }
 
@@ -193,11 +195,11 @@ public:
 
 private:
     // Runtime state (cleared on session end)
-    QHash<QString, QString> m_windowZoneAssignments;
+    QHash<QString, QStringList> m_windowZoneAssignments;
     QString m_lastUsedZoneId;
 
     // Pending assignments from loaded session (keyed by stable ID)
-    QHash<QString, QString> m_pendingZoneAssignments;
+    QHash<QString, QStringList> m_pendingZoneAssignments;
 };
 
 /**
@@ -256,7 +258,7 @@ public:
     {
         if (windowId.isEmpty() || zoneId.isEmpty())
             return;
-        m_windowZoneAssignments[windowId] = zoneId;
+        m_windowZoneAssignments[windowId] = QStringList{zoneId};
         m_windowScreenAssignments[windowId] = screenName;
         m_windowDesktopAssignments[windowId] = desktop;
         m_lastUsedZoneId = zoneId;
@@ -268,14 +270,15 @@ public:
             return;
 
         QString stableId = extractStableId(windowId);
-        QString zoneId = m_windowZoneAssignments.value(windowId);
+        QStringList zoneIds = m_windowZoneAssignments.value(windowId);
+        QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
 
         if (!zoneId.isEmpty()) {
             // Save to pending with full context
             QString screenName = m_windowScreenAssignments.value(windowId);
             int desktop = m_windowDesktopAssignments.value(windowId, m_currentDesktop);
 
-            m_pendingZoneAssignments[stableId] = zoneId;
+            m_pendingZoneAssignments[stableId] = QStringList{zoneId};
             m_pendingZoneScreens[stableId] = screenName;
             m_pendingZoneDesktops[stableId] = desktop;
 
@@ -301,7 +304,7 @@ public:
 
         QJsonObject assignmentsObj;
         for (auto it = m_pendingZoneAssignments.constBegin(); it != m_pendingZoneAssignments.constEnd(); ++it) {
-            assignmentsObj[it.key()] = it.value();
+            assignmentsObj[it.key()] = it.value().isEmpty() ? QString() : it.value().first();
         }
         root[QStringLiteral("windowZoneAssignments")] = assignmentsObj;
 
@@ -344,7 +347,7 @@ public:
 
         QJsonObject assignmentsObj = root[QStringLiteral("windowZoneAssignments")].toObject();
         for (auto it = assignmentsObj.constBegin(); it != assignmentsObj.constEnd(); ++it) {
-            m_pendingZoneAssignments[it.key()] = it.value().toString();
+            m_pendingZoneAssignments[it.key()] = QStringList{it.value().toString()};
         }
 
         QJsonObject screensObj = root[QStringLiteral("pendingScreenAssignments")].toObject();
@@ -432,7 +435,8 @@ public:
             }
         }
 
-        zoneId = m_pendingZoneAssignments.value(stableId);
+        QStringList zones = m_pendingZoneAssignments.value(stableId);
+        zoneId = zones.isEmpty() ? QString() : zones.first();
         return !zoneId.isEmpty();
     }
 
@@ -486,13 +490,13 @@ private:
     QHash<QString, QString> m_screenLayouts;
 
     // Runtime state
-    QHash<QString, QString> m_windowZoneAssignments;
+    QHash<QString, QStringList> m_windowZoneAssignments;
     QHash<QString, QString> m_windowScreenAssignments;
     QHash<QString, int> m_windowDesktopAssignments;
     QString m_lastUsedZoneId;
 
     // Pending assignments with full context
-    QHash<QString, QString> m_pendingZoneAssignments;
+    QHash<QString, QStringList> m_pendingZoneAssignments;
     QHash<QString, QString> m_pendingZoneScreens;
     QHash<QString, int> m_pendingZoneDesktops;
     QHash<QString, QString> m_pendingZoneLayouts;

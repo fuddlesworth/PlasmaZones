@@ -190,13 +190,13 @@ private Q_SLOTS:
     {
         // Simulate session restore with same-class windows
         // Session 1: User had Konsole window in Zone A
-        QHash<QString, QString> persistedAssignments;
+        QHash<QString, QStringList> persistedAssignments;
         QString session1Window = QStringLiteral("org.kde.konsole:konsole:12345");
         QString zone1 = QStringLiteral("zone-uuid-a");
 
         // Save stable ID -> zone mapping
         QString stableId = extractStableId(session1Window);
-        persistedAssignments[stableId] = zone1;
+        persistedAssignments[stableId] = QStringList{zone1};
 
         // Session 2: New Konsole window opens (different pointer, never was snapped)
         QString session2Window = QStringLiteral("org.kde.konsole:konsole:67890");
@@ -206,7 +206,7 @@ private Q_SLOTS:
         QVERIFY(persistedAssignments.contains(newStableId));
 
         // This causes the WRONG window to be auto-snapped to Zone A
-        QString wronglyAssignedZone = persistedAssignments.value(newStableId);
+        QString wronglyAssignedZone = persistedAssignments.value(newStableId).value(0);
         QCOMPARE(wronglyAssignedZone, zone1);
     }
 
@@ -214,7 +214,7 @@ private Q_SLOTS:
     {
         // Simulate: User had 3 Konsole windows in zones A, B, C (session 1)
         // Problem: Which zone should a NEW Konsole window use in session 2?
-        QHash<QString, QString> persistedAssignments;
+        QHash<QString, QStringList> persistedAssignments;
 
         // All 3 windows have the same stable ID - only LAST one is stored!
         QString konsole1 = QStringLiteral("org.kde.konsole:konsole:11111");
@@ -226,13 +226,13 @@ private Q_SLOTS:
         QString stable3 = extractStableId(konsole3);
 
         // Simulate saving: last write wins
-        persistedAssignments[stable1] = QStringLiteral("zone-a");
-        persistedAssignments[stable2] = QStringLiteral("zone-b"); // Overwrites zone-a!
-        persistedAssignments[stable3] = QStringLiteral("zone-c"); // Overwrites zone-b!
+        persistedAssignments[stable1] = QStringList{QStringLiteral("zone-a")};
+        persistedAssignments[stable2] = QStringList{QStringLiteral("zone-b")}; // Overwrites zone-a!
+        persistedAssignments[stable3] = QStringList{QStringLiteral("zone-c")}; // Overwrites zone-b!
 
         // BUG: Only one assignment survives
         QCOMPARE(persistedAssignments.size(), 1);
-        QCOMPARE(persistedAssignments.value(QStringLiteral("org.kde.konsole:konsole")), QStringLiteral("zone-c"));
+        QCOMPARE(persistedAssignments.value(QStringLiteral("org.kde.konsole:konsole")).value(0), QStringLiteral("zone-c"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════

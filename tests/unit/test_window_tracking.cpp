@@ -44,9 +44,9 @@ public:
         if (windowId.isEmpty() || zoneId.isEmpty())
             return;
 
-        QString previousZone = m_windowZoneAssignments.value(windowId);
-        if (previousZone != zoneId) {
-            m_windowZoneAssignments[windowId] = zoneId;
+        QStringList previousZones = m_windowZoneAssignments.value(windowId);
+        if (previousZones != QStringList{zoneId}) {
+            m_windowZoneAssignments[windowId] = QStringList{zoneId};
             Q_EMIT windowZoneChanged(windowId, zoneId);
         }
 
@@ -61,12 +61,12 @@ public:
         if (windowId.isEmpty())
             return;
 
-        QString previousZoneId = m_windowZoneAssignments.value(windowId);
+        QStringList previousZoneIds = m_windowZoneAssignments.value(windowId);
         if (m_windowZoneAssignments.remove(windowId) > 0) {
             Q_EMIT windowZoneChanged(windowId, QString());
 
             // Clear last used zone only if this window was snapped to it
-            if (!m_lastUsedZoneId.isEmpty() && previousZoneId == m_lastUsedZoneId) {
+            if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
                 m_lastUsedZoneId.clear();
             }
         }
@@ -127,14 +127,15 @@ public:
 
     QString getZoneForWindow(const QString& windowId)
     {
-        return m_windowZoneAssignments.value(windowId);
+        const QStringList zones = m_windowZoneAssignments.value(windowId);
+        return zones.isEmpty() ? QString() : zones.first();
     }
 
     QStringList getWindowsInZone(const QString& zoneId)
     {
         QStringList windows;
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-            if (it.value() == zoneId) {
+            if (it.value().contains(zoneId)) {
                 windows.append(it.key());
             }
         }
@@ -214,7 +215,7 @@ private:
         return windowId;
     }
 
-    QHash<QString, QString> m_windowZoneAssignments;
+    QHash<QString, QStringList> m_windowZoneAssignments;
     QHash<QString, QRect> m_preSnapGeometries;
     QSet<QString> m_floatingWindows;
     QString m_lastUsedZoneId;

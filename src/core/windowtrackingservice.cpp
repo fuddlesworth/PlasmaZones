@@ -56,15 +56,21 @@ WindowTrackingService::~WindowTrackingService()
 void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
                                                 const QString& screenName, int virtualDesktop)
 {
-    if (windowId.isEmpty() || zoneId.isEmpty()) {
+    assignWindowToZones(windowId, QStringList{zoneId}, screenName, virtualDesktop);
+}
+
+void WindowTrackingService::assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
+                                                 const QString& screenName, int virtualDesktop)
+{
+    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
         return;
     }
 
     // Only emit signal if value actually changed
-    QString previousZone = m_windowZoneAssignments.value(windowId);
-    bool zoneChanged = (previousZone != zoneId);
+    QStringList previousZones = m_windowZoneAssignments.value(windowId);
+    bool zoneChanged = (previousZones != zoneIds);
 
-    m_windowZoneAssignments[windowId] = zoneId;
+    m_windowZoneAssignments[windowId] = zoneIds;
     m_windowScreenAssignments[windowId] = screenName;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
@@ -74,16 +80,16 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
     // windows to auto-restore on open, even when they shouldn't.
 
     if (zoneChanged) {
-        Q_EMIT windowZoneChanged(windowId, zoneId);
+        Q_EMIT windowZoneChanged(windowId, zoneIds.first());
     }
     scheduleSaveState();
 }
 
 void WindowTrackingService::unassignWindow(const QString& windowId)
 {
-    // Get the zone before removing (needed for last-used zone check)
-    QString previousZoneId = m_windowZoneAssignments.take(windowId);
-    if (previousZoneId.isEmpty()) {
+    // Get the zones before removing (needed for last-used zone check)
+    QStringList previousZoneIds = m_windowZoneAssignments.take(windowId);
+    if (previousZoneIds.isEmpty()) {
         return;  // Window wasn't assigned, nothing to do
     }
 
@@ -92,7 +98,7 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
 
     // Clear last-used zone if we're unsnapping from it
     // This preserves last-used zone when unsnapping a different window
-    if (!m_lastUsedZoneId.isEmpty() && previousZoneId == m_lastUsedZoneId) {
+    if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
         m_lastUsedZoneId.clear();
         m_lastUsedScreenName.clear();
         m_lastUsedZoneClass.clear();
@@ -108,6 +114,12 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const
 {
+    const QStringList zones = m_windowZoneAssignments.value(windowId);
+    return zones.isEmpty() ? QString() : zones.first();
+}
+
+QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
+{
     return m_windowZoneAssignments.value(windowId);
 }
 
@@ -116,7 +128,7 @@ QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
     QStringList result;
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
-        if (it.value() == zoneId) {
+        if (it.value().contains(zoneId)) {
             result.append(it.key());
         }
     }
@@ -257,17 +269,24 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
 {
     QString stableId = Utils::extractStableId(windowId);
 
-    // Save zone for restore on unfloat
+    // Save zone(s) for restore on unfloat
     if (m_windowZoneAssignments.contains(windowId)) {
-        QString zoneId = m_windowZoneAssignments.value(windowId);
-        m_preFloatZoneAssignments[stableId] = zoneId;
-        qCDebug(lcCore) << "Saved pre-float zone for" << stableId << "->" << zoneId;
+        QStringList zoneIds = m_windowZoneAssignments.value(windowId);
+        m_preFloatZoneAssignments[stableId] = zoneIds;
+        qCDebug(lcCore) << "Saved pre-float zones for" << stableId << "->" << zoneIds;
         unassignWindow(windowId);
     }
     // Note: If window not in assignments, it's already unsnapped - no action needed
 }
 
 QString WindowTrackingService::preFloatZone(const QString& windowId) const
+{
+    QString stableId = Utils::extractStableId(windowId);
+    const QStringList zones = m_preFloatZoneAssignments.value(stableId);
+    return zones.isEmpty() ? QString() : zones.first();
+}
+
+QStringList WindowTrackingService::preFloatZones(const QString& windowId) const
 {
     QString stableId = Utils::extractStableId(windowId);
     return m_preFloatZoneAssignments.value(stableId);
@@ -358,6 +377,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     result.shouldSnap = true;
     result.geometry = geo;
     result.zoneId = m_lastUsedZoneId;
+    result.zoneIds = QStringList{m_lastUsedZoneId};
     result.screenName = m_lastUsedScreenName;
     return result;
 }
@@ -388,7 +408,11 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         return SnapResult::noSnap();
     }
 
-    QString zoneId = m_pendingZoneAssignments.value(stableId);
+    QStringList zoneIds = m_pendingZoneAssignments.value(stableId);
+    if (zoneIds.isEmpty()) {
+        return SnapResult::noSnap();
+    }
+    QString zoneId = zoneIds.first(); // Primary zone for validation
     QString savedScreen = m_pendingZoneScreens.value(stableId, screenName);
 
     // BUG FIX: Verify layout context matches before restoring
@@ -440,8 +464,13 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         }
     }
 
-    // Calculate geometry
-    QRect geo = zoneGeometry(zoneId, savedScreen);
+    // Calculate geometry (use combined geometry for multi-zone)
+    QRect geo;
+    if (zoneIds.size() > 1) {
+        geo = multiZoneGeometry(zoneIds, savedScreen);
+    } else {
+        geo = zoneGeometry(zoneId, savedScreen);
+    }
     if (!geo.isValid()) {
         return SnapResult::noSnap();
     }
@@ -450,6 +479,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     result.shouldSnap = true;
     result.geometry = geo;
     result.zoneId = zoneId;
+    result.zoneIds = zoneIds;
     result.screenName = savedScreen;
     return result;
 }
@@ -532,19 +562,20 @@ QString WindowTrackingService::findEmptyZone() const
         return QString();
     }
 
-    // Pattern B: build occupied zones from assignments, then return first layout zone not in that set.
+    // Build occupied zones from assignments (checking all zone IDs per window for multi-zone support)
     QSet<QUuid> occupiedZoneIds;
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-        const QString& zoneId = it.value();
-        if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
-            continue;
-        }
-        auto uuid = Utils::parseUuid(zoneId);
-        if (uuid) {
-            occupiedZoneIds.insert(*uuid);
-        } else {
-            qCWarning(lcCore) << "Invalid zone ID format in assignment for window" << it.key()
-                              << "- zone ID:" << zoneId;
+        for (const QString& zoneId : it.value()) {
+            if (zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+                continue;
+            }
+            auto uuid = Utils::parseUuid(zoneId);
+            if (uuid) {
+                occupiedZoneIds.insert(*uuid);
+            } else {
+                qCWarning(lcCore) << "Invalid zone ID format in assignment for window" << it.key()
+                                  << "- zone ID:" << zoneId;
+            }
         }
     }
 
@@ -587,6 +618,22 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     return geoF.toRect();
 }
 
+QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenName) const
+{
+    QRect combined;
+    for (const QString& zoneId : zoneIds) {
+        QRect geo = zoneGeometry(zoneId, screenName);
+        if (geo.isValid()) {
+            if (combined.isValid()) {
+                combined = combined.united(geo);
+            } else {
+                combined = geo;
+            }
+        }
+    }
+    return combined;
+}
+
 QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) const
 {
     QVector<RotationEntry> result;
@@ -616,6 +663,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
 
     // Build window -> zone mapping for snapped windows (excluding floating windows)
     // This handles windows that may have been restored with zone IDs that need format normalization
+    // For multi-zone windows, use the primary zone (first) for rotation
     QVector<QPair<QString, int>> windowZoneIndices; // windowId, current zone index
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
@@ -627,7 +675,12 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise) 
             continue;
         }
 
-        QString storedZoneId = it.value();
+        // Use primary zone for rotation (first in list)
+        const QStringList& zoneIdList = it.value();
+        if (zoneIdList.isEmpty()) {
+            continue;
+        }
+        QString storedZoneId = zoneIdList.first();
         int zoneIndex = -1;
 
         // Try direct match first
@@ -740,10 +793,14 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
         QString windowId = it.key();
-        QString zoneId = it.value();
+        const QStringList& zoneIds = it.value();
+        if (zoneIds.isEmpty()) {
+            continue;
+        }
         QString screenName = m_windowScreenAssignments.value(windowId);
 
-        QRect geo = zoneGeometry(zoneId, screenName);
+        QRect geo = (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName)
+                                          : zoneGeometry(zoneIds.first(), screenName);
         if (geo.isValid()) {
             result[windowId] = geo;
         }
@@ -764,12 +821,13 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     // This ensures the window can be restored to its zone when reopened.
     // BUT: Don't persist if the window is floating - floating windows should stay floating
     // and not be auto-snapped when reopened.
-    QString zoneId = m_windowZoneAssignments.value(windowId);
+    QStringList zoneIds = m_windowZoneAssignments.value(windowId);
+    QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
     // Use stableId for consistent floating check (m_floatingWindows stores stableIds)
     bool isFloating = m_floatingWindows.contains(stableId);
     if (!zoneId.isEmpty() && !zoneId.startsWith(QStringLiteral("zoneselector-")) && !isFloating) {
         if (!stableId.isEmpty()) {
-            m_pendingZoneAssignments[stableId] = zoneId;
+            m_pendingZoneAssignments[stableId] = zoneIds;
 
             QString screenName = m_windowScreenAssignments.value(windowId);
             if (!screenName.isEmpty()) {
@@ -875,12 +933,14 @@ void WindowTrackingService::onLayoutChanged()
         }
         QSet<QString> addedStableIds; // avoid duplicates when window is in both live and pending
 
-        auto addToBuffer = [&](const QString& windowIdOrStableId, const QString& zoneId,
+        auto addToBuffer = [&](const QString& windowIdOrStableId, const QStringList& zoneIdList,
                                const QString& screenName, int vd) {
             QString stableId = Utils::extractStableId(windowIdOrStableId);
             if (stableId.isEmpty() || m_floatingWindows.contains(stableId) || addedStableIds.contains(stableId)) {
                 return;
             }
+            // Use primary zone for position mapping
+            QString zoneId = zoneIdList.isEmpty() ? QString() : zoneIdList.first();
             int pos = zoneIdToPosition.value(zoneId, 0);
             if (pos <= 0) {
                 // Handle zoneselector synthetic IDs: "zoneselector-{layoutId}-{index}"
@@ -909,12 +969,18 @@ void WindowTrackingService::onLayoutChanged()
 
         const QUuid prevLayoutId = prevLayout->id();
 
+        // Helper to check if a window's primary zone is in valid set
+        auto primaryZoneValid = [&](const QStringList& zoneIdList) {
+            if (zoneIdList.isEmpty()) return false;
+            return validZoneIds.contains(zoneIdList.first());
+        };
+
         if (layoutSwitched) {
             // User switched layouts: capture assignments to zones from the OLD layout (not in new)
             // 1. Live assignments (windows we've tracked via windowSnapped)
             for (auto it = m_windowZoneAssignments.constBegin();
                  it != m_windowZoneAssignments.constEnd(); ++it) {
-                if (validZoneIds.contains(it.value())) {
+                if (primaryZoneValid(it.value())) {
                     continue;
                 }
                 addToBuffer(it.key(), it.value(),
@@ -925,7 +991,7 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments (session-restored windows)
             for (auto it = m_pendingZoneAssignments.constBegin();
                  it != m_pendingZoneAssignments.constEnd(); ++it) {
-                if (validZoneIds.contains(it.value())) {
+                if (primaryZoneValid(it.value())) {
                     continue;
                 }
                 QString savedLayoutId = m_pendingZoneLayouts.value(it.key());
@@ -945,7 +1011,7 @@ void WindowTrackingService::onLayoutChanged()
             // 1. Live assignments in current layout
             for (auto it = m_windowZoneAssignments.constBegin();
                  it != m_windowZoneAssignments.constEnd(); ++it) {
-                if (!validZoneIds.contains(it.value())) {
+                if (!primaryZoneValid(it.value())) {
                     continue;
                 }
                 addToBuffer(it.key(), it.value(),
@@ -956,7 +1022,7 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments for current layout
             for (auto it = m_pendingZoneAssignments.constBegin();
                  it != m_pendingZoneAssignments.constEnd(); ++it) {
-                if (!validZoneIds.contains(it.value())) {
+                if (!primaryZoneValid(it.value())) {
                     continue;
                 }
                 QString savedLayoutId = m_pendingZoneLayouts.value(it.key());
@@ -982,11 +1048,12 @@ void WindowTrackingService::onLayoutChanged()
         }
     }
 
-    // Remove stale assignments
+    // Remove stale assignments (check primary zone)
     QStringList toRemove;
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
-        if (!validZoneIds.contains(it.value())) {
+        const QStringList& zoneIdList = it.value();
+        if (zoneIdList.isEmpty() || !validZoneIds.contains(zoneIdList.first())) {
             toRemove.append(it.key());
         }
     }

@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include <QString>
+#include <QStringList>
 #include <QRect>
 
 namespace PlasmaZones {
@@ -26,7 +27,8 @@ struct PLASMAZONES_EXPORT SnapResult
 {
     bool shouldSnap = false;    ///< Whether the window should be snapped
     QRect geometry;             ///< Target geometry for snapping (x, y, width, height)
-    QString zoneId;             ///< UUID of target zone
+    QString zoneId;             ///< UUID of primary target zone (backward compat)
+    QStringList zoneIds;        ///< All zone UUIDs (for multi-zone snap)
     QString screenName;         ///< Screen where the zone is located
 
     /**
@@ -43,7 +45,7 @@ struct PLASMAZONES_EXPORT SnapResult
      */
     static SnapResult noSnap()
     {
-        return SnapResult{false, QRect(), QString(), QString()};
+        return SnapResult{false, QRect(), QString(), QStringList(), QString()};
     }
 };
 

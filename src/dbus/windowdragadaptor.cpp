@@ -444,6 +444,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
     const QRect capturedZoneGeometry = m_currentZoneGeometry;
     const bool capturedIsMultiZoneMode = m_isMultiZoneMode;
     const QRect capturedMultiZoneGeometry = m_currentMultiZoneGeometry;
+    const QVector<QUuid> capturedAdjacentZoneIds = m_currentAdjacentZoneIds;
     const bool capturedWasSnapped = m_wasSnapped;
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
@@ -525,7 +526,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
             shouldApplyGeometry = true;
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
-                m_windowTracking->windowSnapped(windowId, capturedZoneId);
+                // Pass ALL zone IDs for multi-zone snap (not just primary)
+                QStringList allZoneIds;
+                for (const QUuid& id : capturedAdjacentZoneIds) {
+                    allZoneIds.append(id.toString());
+                }
+                if (allZoneIds.isEmpty()) {
+                    allZoneIds.append(capturedZoneId);
+                }
+                m_windowTracking->windowSnappedMultiZone(windowId, allZoneIds);
                 // Record user-initiated snap (not auto-snap)
                 m_windowTracking->recordSnapIntent(windowId, true);
             }

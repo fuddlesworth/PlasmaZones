@@ -482,25 +482,31 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
             QString capturedWindowId = windowId;
             QString capturedScreenName = screenName;
 
-            // Use ASYNC D-Bus call to get pre-float zone
-            QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getPreFloatZone"), windowId);
+            // Use single ASYNC D-Bus call to get pre-float zones + combined geometry
+            QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("calculateUnfloatRestore"), windowId, screenName);
             auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
             connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow, capturedWindowId, capturedScreenName](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
 
-                QDBusPendingReply<bool, QString> reply = *w;
+                QDBusPendingReply<QString> reply = *w;
                 if (!reply.isValid()) {
-                    qCDebug(lcEffect) << "getPreFloatZone reply invalid:" << reply.error().message();
+                    qCDebug(lcEffect) << "calculateUnfloatRestore reply invalid:" << reply.error().message();
                     return;
                 }
 
-                bool found = reply.argumentAt<0>();
-                QString zoneId = reply.argumentAt<1>();
+                QString restoreJson = reply.value();
+                qCDebug(lcEffect) << "calculateUnfloatRestore result:" << restoreJson;
 
-                qCDebug(lcEffect) << "getPreFloatZone result: found=" << found << "zoneId=" << zoneId;
+                QJsonDocument doc = QJsonDocument::fromJson(restoreJson.toUtf8());
+                if (!doc.isObject()) {
+                    qCDebug(lcEffect) << "calculateUnfloatRestore: invalid JSON";
+                    return;
+                }
 
-                if (!found || zoneId.isEmpty()) {
+                QJsonObject obj = doc.object();
+                bool found = obj.value(QStringLiteral("found")).toBool(false);
+                if (!found) {
                     qCDebug(lcEffect) << "No pre-float zone found for window";
                     return;
                 }
@@ -510,60 +516,47 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
                     return;
                 }
 
-                // Use nested ASYNC D-Bus call to get zone geometry - avoid sync calls that block compositor
-                auto* iface = m_effect->windowTrackingInterface();
-                if (!iface || !iface->isValid()) {
-                    qCDebug(lcEffect) << "D-Bus interface not valid for geometry lookup";
+                // Extract zone IDs
+                QStringList zoneIds;
+                const QJsonArray zoneArray = obj.value(QStringLiteral("zoneIds")).toArray();
+                for (const QJsonValue& v : zoneArray) {
+                    zoneIds.append(v.toString());
+                }
+
+                // Extract combined geometry
+                QRect geometry(obj.value(QStringLiteral("x")).toInt(),
+                               obj.value(QStringLiteral("y")).toInt(),
+                               obj.value(QStringLiteral("width")).toInt(),
+                               obj.value(QStringLiteral("height")).toInt());
+
+                if (!geometry.isValid() || zoneIds.isEmpty()) {
+                    qCDebug(lcEffect) << "Invalid geometry or empty zones for unfloat";
                     return;
                 }
 
-                QString capturedZoneId = zoneId;
-                QDBusPendingCall geomCall = iface->asyncCall(QStringLiteral("getZoneGeometryForScreen"), zoneId, capturedScreenName);
-                auto* geomWatcher = new QDBusPendingCallWatcher(geomCall, this);
+                // BUG FIX: Store the current floating geometry as pre-snap BEFORE snapping to zone.
+                // This allows the next float toggle to restore the window to its floating position.
+                // Without this, float→unfloat→float would fail because there's no geometry to restore.
+                auto* iface = m_effect->windowTrackingInterface();
+                if (iface && iface->isValid()) {
+                    QRectF floatingGeom = safeWindow->frameGeometry();
+                    qCDebug(lcEffect) << "Storing floating geometry as pre-snap:" << floatingGeom;
+                    iface->asyncCall(QStringLiteral("storePreSnapGeometry"), capturedWindowId,
+                                     static_cast<int>(floatingGeom.x()), static_cast<int>(floatingGeom.y()),
+                                     static_cast<int>(floatingGeom.width()), static_cast<int>(floatingGeom.height()));
+                }
 
-                connect(geomWatcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow, capturedWindowId, capturedZoneId, capturedScreenName](QDBusPendingCallWatcher* gw) {
-                    gw->deleteLater();
+                qCDebug(lcEffect) << "Applying unfloat geometry:" << geometry << "to zones:" << zoneIds;
+                m_effect->applySnapGeometry(safeWindow, geometry);
 
-                    if (!safeWindow) {
-                        qCDebug(lcEffect) << "Window destroyed before geometry callback";
-                        return;
+                if (iface && iface->isValid()) {
+                    if (zoneIds.size() > 1) {
+                        iface->asyncCall(QStringLiteral("windowSnappedMultiZone"), capturedWindowId, zoneIds);
+                    } else {
+                        iface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneIds.first());
                     }
-
-                    QDBusPendingReply<QString> geomReply = *gw;
-                    if (!geomReply.isValid()) {
-                        qCDebug(lcEffect) << "getZoneGeometryForScreen reply invalid:" << geomReply.error().message();
-                        return;
-                    }
-
-                    QString geometryJson = geomReply.value();
-                    qCDebug(lcEffect) << "Got geometry JSON for unfloat:" << geometryJson;
-
-                    QRect geometry = m_effect->parseZoneGeometry(geometryJson);
-                    if (!geometry.isValid()) {
-                        qCDebug(lcEffect) << "Invalid geometry for unfloat - parsed as:" << geometry;
-                        return;
-                    }
-
-                    // BUG FIX: Store the current floating geometry as pre-snap BEFORE snapping to zone.
-                    // This allows the next float toggle to restore the window to its floating position.
-                    // Without this, float→unfloat→float would fail because there's no geometry to restore.
-                    auto* iface = m_effect->windowTrackingInterface();
-                    if (iface && iface->isValid()) {
-                        QRectF floatingGeom = safeWindow->frameGeometry();
-                        qCDebug(lcEffect) << "Storing floating geometry as pre-snap:" << floatingGeom;
-                        iface->asyncCall(QStringLiteral("storePreSnapGeometry"), capturedWindowId,
-                                         static_cast<int>(floatingGeom.x()), static_cast<int>(floatingGeom.y()),
-                                         static_cast<int>(floatingGeom.width()), static_cast<int>(floatingGeom.height()));
-                    }
-
-                    qCDebug(lcEffect) << "Applying unfloat geometry:" << geometry << "to zone:" << capturedZoneId;
-                    m_effect->applySnapGeometry(safeWindow, geometry);
-
-                    if (iface && iface->isValid()) {
-                        iface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, capturedZoneId);
-                        iface->asyncCall(QStringLiteral("clearPreFloatZone"), capturedWindowId);
-                    }
-                });
+                    iface->asyncCall(QStringLiteral("clearPreFloatZone"), capturedWindowId);
+                }
             });
         }
 
