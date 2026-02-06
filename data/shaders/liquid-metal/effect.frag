@@ -32,9 +32,9 @@ vec4 renderLiquidMetalZone(vec2 fragCoord, int idx) {
     vec2 rectSize = zoneRectSize(rect);
     vec2 center = rectPos + rectSize * 0.5;
 
+    float borderRadius = params.x;
     float borderWidth = params.y;
-    float borderRadius = params.z;
-    bool isHighlighted = params.w > 0.5;
+    bool isHighlighted = params.z > 0.5;
 
     // SDF for rounded rectangle
     float d = sdRoundedBox(fragCoord - center, rectSize * 0.5, borderRadius);
