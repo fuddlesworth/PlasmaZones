@@ -57,25 +57,29 @@ void main() {
     // Fluidity factor: higher viscosity = slower, thicker, less fine detail
     float fluidity = 1.0 - viscosity * 0.7;
 
-    // Base fluid surface: standing waves that breathe in place
+    // Base fluid surface: standing waves with staggered phases so there's always motion
     vec2 p = uv * scale;
     float h = 0.0;
 
-    // Primary undulation: spatial pattern modulated by time (no directional drift)
-    h += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * cos(t * 0.6) * 0.30;
-    h += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * cos(t * 0.5 + 1.0) * 0.25;
+    // Primary undulation — large, slow swells (always at least one is active)
+    h += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * cos(t * 0.6) * 0.35;
+    h += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * cos(t * 0.9 + 2.1) * 0.30;
 
-    // Cross-pattern standing waves at different phases
-    h += sin(p.x * 2.8) * sin(p.y * 2.3) * cos(t * 0.8 + 0.7) * 0.18;
-    h += cos(p.x * 1.5 + p.y * 1.9) * sin(t * 0.4 + 2.0) * 0.15;
+    // Cross-pattern standing waves at prime-ratio speeds (never flatten together)
+    h += sin(p.x * 2.8) * sin(p.y * 2.3) * cos(t * 1.3 + 0.7) * 0.22;
+    h += cos(p.x * 1.5 + p.y * 1.9) * sin(t * 0.7 + 3.8) * 0.18;
+
+    // Medium-frequency detail — gives the surface visible texture
+    h += sin(p.x * 4.5 + p.y * 1.2) * cos(t * 1.1 + 1.5) * 0.12 * fluidity;
+    h += cos(p.x * 1.8 - p.y * 3.7) * sin(t * 1.5 + 0.3) * 0.10 * fluidity;
 
     // Organic turbulence: FBM that slowly morphs in place
-    float turb = fbm(p * 0.8 + vec2(sin(t * 0.1) * 0.3, cos(t * 0.08) * 0.3), 4);
-    h += (turb - 0.5) * 0.20 * fluidity;
+    float turb = fbm(p * 0.8 + vec2(sin(t * 0.15) * 0.4, cos(t * 0.12) * 0.4), 4);
+    h += (turb - 0.5) * 0.25 * fluidity;
 
-    // Fine surface tension ripples (standing, dampened by viscosity)
-    float fine = sin(p.x * 6.0) * sin(p.y * 5.5) * cos(t * 1.5);
-    h += fine * 0.03 * fluidity;
+    // Fine surface tension ripples (dampened by viscosity)
+    float fine = sin(p.x * 7.0 + t * 0.3) * sin(p.y * 6.5 - t * 0.2) * cos(t * 2.0);
+    h += fine * 0.06 * fluidity;
 
     // Mouse interaction: radial ripples emanating from cursor
     if (mouseStr > 0.001) {
@@ -91,16 +95,15 @@ void main() {
         }
     }
 
-    // Compute approximate surface velocity via analytical time derivative
-    // of the primary standing waves (d/dt of cos(wt) = -w*sin(wt))
+    // Approximate surface velocity from time derivatives of the primary waves
     float velocity = 0.0;
-    velocity += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * (-0.6 * sin(t * 0.6)) * 0.30;
-    velocity += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * (-0.5 * sin(t * 0.5 + 1.0)) * 0.25;
+    velocity += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * (-0.6 * sin(t * 0.6)) * 0.35;
+    velocity += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * (-0.9 * sin(t * 0.9 + 2.1)) * 0.30;
+    velocity += sin(p.x * 2.8) * sin(p.y * 2.3) * (-1.3 * sin(t * 1.3 + 0.7)) * 0.22;
 
     // Caustic intensity: bright spots where waves focus light
-    // Approximate as areas of high curvature convergence
-    float caustic = abs(velocity) * 2.0 + turb * 0.5;
-    caustic = pow(max(caustic, 0.0), 1.5) * 0.3;
+    float caustic = abs(velocity) * 2.5 + turb * 0.6;
+    caustic = pow(max(caustic, 0.0), 1.3) * 0.5;
 
     // Pack: R = height (-1..1 range, stored as 0..1), G = velocity, B = caustic
     fragColor = vec4(h * 0.5 + 0.5, velocity * 0.5 + 0.5, caustic, 1.0);
