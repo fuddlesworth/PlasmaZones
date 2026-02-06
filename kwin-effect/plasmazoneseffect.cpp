@@ -807,6 +807,11 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("windowFloatingChanged"), this,
                                           SLOT(slotWindowFloatingChanged(QString, bool)));
 
+    // Connect to Settings signal for window picker (KCM exclusion list helper)
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                          QStringLiteral("runningWindowsRequested"), this,
+                                          SLOT(slotRunningWindowsRequested()));
+
     qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
@@ -1031,6 +1036,73 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& stableId, bool 
     m_navigationHandler->setWindowFloating(stableId, isFloating);
 }
 
+void PlasmaZonesEffect::slotRunningWindowsRequested()
+{
+    qCDebug(lcEffect) << "Running windows requested by KCM";
+
+    QJsonArray windowArray;
+    QSet<QString> seenClasses;
+
+    // Iterate in reverse (top-to-bottom) so deduplication keeps the topmost
+    // window's caption per class, which is more useful to the user
+    const auto windows = KWin::effects->stackingOrder();
+    for (auto it = windows.rbegin(); it != windows.rend(); ++it) {
+        KWin::EffectWindow* w = *it;
+        if (!w) {
+            continue;
+        }
+
+        // Include all normal, non-special windows (relaxed filter for the picker)
+        if (w->isSpecialWindow() || w->isDesktop() || w->isDock()
+            || w->isSkipSwitcher() || w->isNotification()
+            || w->isOnScreenDisplay() || w->isPopupWindow()) {
+            continue;
+        }
+
+        QString windowClass = w->windowClass();
+        if (windowClass.isEmpty()) {
+            continue;
+        }
+
+        // Deduplicate by windowClass (first seen = topmost due to reverse iteration)
+        if (seenClasses.contains(windowClass)) {
+            continue;
+        }
+        seenClasses.insert(windowClass);
+
+        // Derive a short app name from the window class:
+        //   X11: "resourceName resourceClass" → first part (e.g., "dolphin")
+        //   Wayland app_id: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
+        QString appName = windowClass;
+        int spaceIdx = windowClass.indexOf(QLatin1Char(' '));
+        if (spaceIdx > 0) {
+            appName = windowClass.left(spaceIdx);
+        } else {
+            int dotIdx = windowClass.lastIndexOf(QLatin1Char('.'));
+            if (dotIdx >= 0 && dotIdx < windowClass.length() - 1) {
+                appName = windowClass.mid(dotIdx + 1);
+            }
+        }
+
+        QJsonObject obj;
+        obj[QStringLiteral("windowClass")] = windowClass;
+        obj[QStringLiteral("appName")] = appName;
+        obj[QStringLiteral("caption")] = w->caption();
+        windowArray.append(obj);
+    }
+
+    QString jsonString = QString::fromUtf8(QJsonDocument(windowArray).toJson(QJsonDocument::Compact));
+    qCDebug(lcEffect) << "Providing" << windowArray.size() << "running windows to daemon";
+
+    // Send result back to daemon via D-Bus
+    ensureInterface(m_settingsInterface, DBus::Interface::Settings, "Settings");
+    if (m_settingsInterface && m_settingsInterface->isValid()) {
+        m_settingsInterface->asyncCall(QStringLiteral("provideRunningWindows"), jsonString);
+    } else {
+        qCWarning(lcEffect) << "Cannot provide running windows - Settings interface not available";
+    }
+}
+
 bool PlasmaZonesEffect::borderActivated(KWin::ElectricBorder border)
 {
     Q_UNUSED(border)
@@ -1138,8 +1210,17 @@ void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& g
     QString windowClass;
     if (m_dragTracker->draggedWindow()) {
         windowClass = m_dragTracker->draggedWindow()->windowClass();
-        // Use windowClass as appName too - KWin effect doesn't have separate appName
+        // Derive short app name from window class for exclusion matching
         appName = windowClass;
+        int spaceIdx = windowClass.indexOf(QLatin1Char(' '));
+        if (spaceIdx > 0) {
+            appName = windowClass.left(spaceIdx);
+        } else {
+            int dotIdx = windowClass.lastIndexOf(QLatin1Char('.'));
+            if (dotIdx >= 0 && dotIdx < windowClass.length() - 1) {
+                appName = windowClass.mid(dotIdx + 1);
+            }
+        }
     }
 
     // D-Bus interface: sddddssi (windowId, x, y, w, h, appName, windowClass, mouseButtons)

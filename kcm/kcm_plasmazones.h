@@ -362,6 +362,7 @@ public Q_SLOTS:
     Q_INVOKABLE void removeExcludedApp(int index);
     Q_INVOKABLE void addExcludedWindowClass(const QString& windowClass);
     Q_INVOKABLE void removeExcludedWindowClass(int index);
+    Q_INVOKABLE QVariantList getRunningWindows();
 
     // Pywal integration
     Q_INVOKABLE void loadColorsFromPywal();

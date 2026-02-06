@@ -25,9 +25,13 @@ Kirigami.Card {
     // Whether to use monospace font for list items
     property bool useMonospaceFont: false
 
+    // Whether to show the "Pick from running windows" button
+    property bool showPickButton: false
+
     // Signals for add/remove actions
     signal addRequested(string text)
     signal removeRequested(int index)
+    signal pickRequested()
 
     header: Kirigami.Heading {
         level: 3
@@ -63,6 +67,15 @@ Kirigami.Card {
                     root.addRequested(inputField.text)
                     inputField.text = ""
                 }
+            }
+
+            ToolButton {
+                visible: root.showPickButton
+                icon.name: "crosshairs"
+                ToolTip.text: i18n("Pick from running windows")
+                ToolTip.visible: hovered
+                onClicked: root.pickRequested()
+                Accessible.name: i18n("Pick from running windows")
             }
         }
 

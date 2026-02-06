@@ -20,6 +20,11 @@ ScrollView {
     clip: true
     contentWidth: availableWidth
 
+    WindowPickerDialog {
+        id: windowPickerDialog
+        kcm: root.kcm
+    }
+
     ColumnLayout {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
@@ -126,9 +131,11 @@ ScrollView {
                 iconSource: "application-x-executable"
                 model: kcm.excludedApplications
                 useMonospaceFont: false
+                showPickButton: true
 
                 onAddRequested: (text) => kcm.addExcludedApp(text)
                 onRemoveRequested: (index) => kcm.removeExcludedApp(index)
+                onPickRequested: windowPickerDialog.openForApps()
             }
         }
 
@@ -142,15 +149,17 @@ ScrollView {
                 anchors.fill: parent
 
                 title: i18n("Excluded Window Classes")
-                placeholderText: i18n("Window class (use xprop to find)")
+                placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
                 emptyTitle: i18n("No excluded window classes")
-                emptyExplanation: i18n("Use 'xprop | grep WM_CLASS' to find window classes")
+                emptyExplanation: i18n("Add window classes above or pick from running windows")
                 iconSource: "window"
                 model: kcm.excludedWindowClasses
-                useMonospaceFont: true
+                useMonospaceFont: false
+                showPickButton: true
 
                 onAddRequested: (text) => kcm.addExcludedWindowClass(text)
                 onRemoveRequested: (index) => kcm.removeExcludedWindowClass(index)
+                onPickRequested: windowPickerDialog.openForClasses()
             }
         }
     }

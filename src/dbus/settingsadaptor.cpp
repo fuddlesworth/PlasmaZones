@@ -361,4 +361,42 @@ void SettingsAdaptor::refreshShaders()
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window Picker D-Bus Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString SettingsAdaptor::getRunningWindows()
+{
+    // Guard against reentrant calls (shouldn't happen via D-Bus serialization,
+    // but protects against unexpected provideRunningWindows calls)
+    if (m_windowListLoop) {
+        return QStringLiteral("[]");
+    }
+
+    m_pendingWindowList.clear();
+
+    QEventLoop loop;
+    m_windowListLoop = &loop;
+
+    // Timeout after 2 seconds if KWin effect doesn't respond
+    QTimer::singleShot(2000, &loop, &QEventLoop::quit);
+
+    // Signal the KWin effect to enumerate windows
+    Q_EMIT runningWindowsRequested();
+
+    // Block until provideRunningWindows() is called or timeout
+    loop.exec();
+
+    m_windowListLoop = nullptr;
+    return m_pendingWindowList;
+}
+
+void SettingsAdaptor::provideRunningWindows(const QString& json)
+{
+    m_pendingWindowList = json;
+    if (m_windowListLoop && m_windowListLoop->isRunning()) {
+        m_windowListLoop->quit();
+    }
+}
+
 } // namespace PlasmaZones

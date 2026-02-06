@@ -7,6 +7,7 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
+#include <QEventLoop>
 #include <QString>
 #include <QVariant>
 #include <QTimer>
@@ -95,8 +96,26 @@ public Q_SLOTS:
      */
     void refreshShaders();
 
+    /**
+     * @brief Get list of currently running windows (for exclusion picker)
+     *
+     * Requests the KWin effect to enumerate all windows. Returns JSON array
+     * of objects with windowClass and caption fields.
+     * Blocks up to 2 seconds waiting for the KWin effect to respond.
+     *
+     * @return JSON string: [{"windowClass":"...", "appName":"...", "caption":"..."}]
+     */
+    QString getRunningWindows();
+
+    /**
+     * @brief Receive window list from KWin effect (callback)
+     * @param json JSON array of window objects
+     */
+    void provideRunningWindows(const QString& json);
+
 Q_SIGNALS:
     void settingsChanged();
+    void runningWindowsRequested();
 
 private:
     void initializeRegistry();
@@ -110,6 +129,10 @@ private:
     void scheduleSave();
 
     ISettings* m_settings; // Interface type (DIP)
+
+    // Window picker request/response state
+    QString m_pendingWindowList;
+    QEventLoop* m_windowListLoop = nullptr;
 
     // Registry pattern
     using Getter = std::function<QVariant()>;

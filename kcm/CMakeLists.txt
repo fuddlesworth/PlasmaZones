@@ -53,6 +53,7 @@ install(FILES
     ui/tabs/ExclusionsTab.qml
     ui/tabs/AboutTab.qml
     ui/tabs/ExclusionListCard.qml
+    ui/tabs/WindowPickerDialog.qml
     ui/tabs/MonitorAssignmentsCard.qml
     ui/tabs/ActivityAssignmentsCard.qml
     ui/tabs/QuickLayoutSlotsCard.qml

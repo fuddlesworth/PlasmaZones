@@ -29,8 +29,10 @@
 #include <QProcess>
 #include <QDBusConnectionInterface>
 #include <QDBusReply>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QSet>
 #include <QtGui/QtGui> // For Qt::KeyboardModifier flags
 #include <KGlobalAccel>
@@ -1485,6 +1487,42 @@ void KCMPlasmaZones::removeExcludedWindowClass(int index)
         classes.removeAt(index);
         setExcludedWindowClasses(classes);
     }
+}
+
+QVariantList KCMPlasmaZones::getRunningWindows()
+{
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
+
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+
+    QString json = reply.arguments().at(0).toString();
+    if (json.isEmpty()) {
+        return {};
+    }
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return {};
+    }
+
+    QVariantList result;
+    const QJsonArray array = doc.array();
+    for (const QJsonValue& value : array) {
+        if (!value.isObject()) {
+            continue;
+        }
+        QJsonObject obj = value.toObject();
+        QVariantMap item;
+        item[QStringLiteral("windowClass")] = obj[QStringLiteral("windowClass")].toString();
+        item[QStringLiteral("appName")] = obj[QStringLiteral("appName")].toString();
+        item[QStringLiteral("caption")] = obj[QStringLiteral("caption")].toString();
+        result.append(item);
+    }
+
+    return result;
 }
 
 void KCMPlasmaZones::loadColorsFromPywal()

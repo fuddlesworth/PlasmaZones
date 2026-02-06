@@ -79,6 +79,7 @@ private Q_SLOTS:
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
+    void slotRunningWindowsRequested();
 
 private:
     // Window management
@@ -234,6 +235,7 @@ private:
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
+    std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
 
     // Polling timer for detecting window moves
     QTimer m_pollTimer;
