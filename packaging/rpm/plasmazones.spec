@@ -165,6 +165,12 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Fri Feb  6 2026 fuddlesworth - 1.6.1-1
+- Add Liquid Metal shader with multipass rendering
+- Fix AUR -bin package build failure (.INSTALL dotfile in package root)
+- Fix Liquid Metal surface drift, mouse Y, zone params swizzle
+- Remove 5 low-quality shaders
+
 * Wed Feb  5 2026 fuddlesworth - 1.6.0-1
 - Multi-zone snapping support in window tracking
 - Fix shader parameter accumulation bug in layout JSON

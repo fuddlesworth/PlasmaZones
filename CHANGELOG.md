@@ -5,6 +5,20 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-02-06
+
+### Added
+- Liquid Metal shader: mercury-like fluid surface with environment reflections, Fresnel, bloom, and mouse interaction
+
+### Fixed
+- AUR `-bin` package build failure due to `.INSTALL` dotfile left in package root
+- Liquid Metal: surface drifting to bottom-left (use standing waves instead of travelling)
+- Liquid Metal: inverted mouse Y coordinate
+- Liquid Metal: outer glow rendering outside zones due to zoneParams swizzle bug
+
+### Removed
+- 5 low-quality shaders: minimalist, aurora-sweep, warped-labels, prism-labels, glitch-labels
+
 ## [1.6.0] - 2026-02-05
 
 ### Added
