@@ -93,8 +93,8 @@ vec4 renderNeonZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     }
     
     // Subtle outer glow (just a thin halo, not the main effect)
-    if (d > 0.0 && d < glowSize * 0.3) {
-        float outerGlow = expGlow(d, glowSize * 0.1, glowIntensity * 0.3);
+    if (d > 0.0 && d < glowSize * 0.6) {
+        float outerGlow = expGlow(d, glowSize * 0.25, glowIntensity * 0.3);
         result.rgb += neonColor * outerGlow * intensity;
         result.a = max(result.a, outerGlow * 0.5);
     }
@@ -129,9 +129,7 @@ void main() {
         vec4 zoneColor = renderNeonZone(fragCoord, rect, zoneFillColors[i], 
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
         
-        // Additive blend for glow
-        color.rgb += zoneColor.rgb * zoneColor.a;
-        color.a = max(color.a, zoneColor.a);
+        color = blendOver(color, zoneColor);
     }
 
     color = compositeLabelsWithUv(color, fragCoord);

@@ -80,13 +80,15 @@ vec2 fieldVector(vec2 pos, vec2 mousePos, float strength, float time) {
 float fieldLines(vec2 pos, vec2 mousePos, float strength, float time, float speed) {
     float lines = 0.0;
     
+    // Field vector is independent of loop iteration — compute once
+    vec2 field = fieldVector(pos, mousePos, strength, time);
+    float angle = atan(field.y, field.x);
+
     // Multiple field line layers
     for (int i = 0; i < 3; i++) {
         float phase = float(i) * 2.094; // 2π/3
-        vec2 field = fieldVector(pos, mousePos, strength, time);
-        
+
         // Create flowing field lines
-        float angle = atan(field.y, field.x);
         float flow = sin(angle * 8.0 + length(pos - mousePos) * 10.0 - time * speed * 2.0 + phase);
         flow = pow(abs(flow), 3.0);
         

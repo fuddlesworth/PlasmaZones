@@ -34,9 +34,8 @@ void main() {
     vec4 blur = (c1 * 2.0 + b1 + b2 + b3 + b4) / 6.0;
 
     vec4 ch0 = texture(iChannel0, channelUv(0, fragCoord));
-    vec4 ch1 = texture(iChannel1, channelUv(1, fragCoord));
 
-    vec3 combined = mix(ch0.rgb, ch1.rgb, blend);
+    vec3 combined = mix(ch0.rgb, c1.rgb, blend);
     combined += blur.rgb * bloomStrength;
 
     fragColor = vec4(clamp(combined, 0.0, 1.0), 1.0);

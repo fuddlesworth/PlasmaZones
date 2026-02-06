@@ -124,10 +124,10 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     palD += vec3(colorShift);
     
     vec4 result = vec4(0.0);
-    
+    float time = iTime;
+
     // Inside the zone
     if (d < 0.0) {
-        float time = iTime;
         
         // First fbm layer - slow drift
         float q = fbm(centeredUV + time * speed, octaves);
@@ -157,7 +157,6 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     if (border > 0.0) {
         
         // Animated border using the same palette
-        float time = iTime;
         float angle = atan(p.y, p.x);
         float borderFlow = fbm(vec2(angle * 2.0, time * 0.5), 3);
         vec3 borderCol = palette(borderFlow * contrast, palA, palB, palC, palD);
@@ -172,7 +171,6 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float glow = expGlow(d, 8.0, borderGlow);
         
         // Glow color from palette
-        float time = iTime;
         float angle = atan(p.y, p.x);
         vec3 glowCol = palette(angle / TAU + time * 0.1, palA, palB, palC, palD);
         

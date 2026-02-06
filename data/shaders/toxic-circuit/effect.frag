@@ -332,10 +332,15 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         float colorMix = sin(mouseTime * 0.5 + localUV.x * 3.0) * 0.5 + 0.5;
         vec3 circuitColor = mix(toxicGreen, electricPurple, colorMix);
 
-        // Chromatic aberration - boosted near cursor
+        // Chromatic aberration - approximate from single evaluation
+        // Instead of calling circuitPattern 3 times, shift the single result
+        // by sampling the UV gradient to fake the R/B channel offsets
         float enhancedChroma = chromaShift * (1.0 + mouseInfluence * 2.5);
-        float circuitR = circuitPattern(glitchedUV + vec2(enhancedChroma / rectSize.x, 0.0), circuitDensity, mouseTime);
-        float circuitB = circuitPattern(glitchedUV - vec2(enhancedChroma / rectSize.x, 0.0), circuitDensity, mouseTime);
+        vec2 chromaDir = vec2(enhancedChroma / rectSize.x, 0.0);
+        // Use dFdx to estimate how circuit changes per pixel in the chroma direction
+        float dCircuit = dFdx(circuit) * chromaDir.x * rectSize.x;
+        float circuitR = clamp(circuit + dCircuit, 0.0, 1.0);
+        float circuitB = clamp(circuit - dCircuit, 0.0, 1.0);
 
         vec3 circuitRGB;
         circuitRGB.r = circuitR * circuitColor.r;
@@ -509,7 +514,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 }
 
 void main() {
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
@@ -524,9 +529,7 @@ void main() {
         vec4 zoneColor = renderToxicCircuitZone(fragCoord, rect, zoneFillColors[i],
             zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
 
-        // Additive blend for glow effects
-        color.rgb += zoneColor.rgb * zoneColor.a;
-        color.a = max(color.a, zoneColor.a);
+        color = blendOver(color, zoneColor);
     }
 
     color = compositeLabelsWithUv(color, fragCoord);

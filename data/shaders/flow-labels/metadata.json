@@ -1,0 +1,125 @@
+{
+    "id": "flow-labels",
+    "name": "Flow Labels",
+    "description": "Zone numbers filled with animated flowing plasma driven by FBM noise and a configurable color palette. Minimal dark card so the label is the focus.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {
+            "id": "fillOpacity",
+            "name": "Card Opacity",
+            "type": "float",
+            "slot": 0,
+            "default": 0.88,
+            "min": 0.4,
+            "max": 0.98
+        },
+        {
+            "id": "borderWidth",
+            "name": "Border Width",
+            "type": "float",
+            "slot": 1,
+            "default": 2.0,
+            "min": 1.0,
+            "max": 4.0
+        },
+        {
+            "id": "flowSpeed",
+            "name": "Flow Speed",
+            "type": "float",
+            "slot": 4,
+            "default": 0.4,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "noiseScale",
+            "name": "Noise Scale",
+            "type": "float",
+            "slot": 5,
+            "default": 8.0,
+            "min": 2.0,
+            "max": 20.0
+        },
+        {
+            "id": "octaves",
+            "name": "Noise Octaves",
+            "type": "float",
+            "slot": 6,
+            "default": 5.0,
+            "min": 1.0,
+            "max": 8.0
+        },
+        {
+            "id": "contrast",
+            "name": "Color Contrast",
+            "type": "float",
+            "slot": 7,
+            "default": 0.9,
+            "min": 0.1,
+            "max": 2.0
+        },
+        {
+            "id": "outlinePx",
+            "name": "Outline Width (px)",
+            "type": "float",
+            "slot": 8,
+            "default": 14.0,
+            "min": 0.0,
+            "max": 30.0
+        },
+        {
+            "id": "alphaCutoff",
+            "name": "Alpha Cutoff",
+            "type": "float",
+            "slot": 9,
+            "default": 0.38,
+            "min": 0.15,
+            "max": 0.65
+        },
+        {
+            "id": "cardColor",
+            "name": "Card Color",
+            "type": "color",
+            "slot": 0,
+            "default": "#1e2328"
+        },
+        {
+            "id": "outlineColor",
+            "name": "Outline / Accent Color",
+            "type": "color",
+            "slot": 1,
+            "default": "#e6dff0"
+        },
+        {
+            "id": "paletteA",
+            "name": "Palette Offset",
+            "type": "color",
+            "slot": 2,
+            "default": "#808080"
+        },
+        {
+            "id": "paletteB",
+            "name": "Palette Amplitude",
+            "type": "color",
+            "slot": 3,
+            "default": "#808080"
+        },
+        {
+            "id": "paletteC",
+            "name": "Palette Frequency",
+            "type": "color",
+            "slot": 4,
+            "default": "#ffffff"
+        },
+        {
+            "id": "paletteD",
+            "name": "Palette Phase",
+            "type": "color",
+            "slot": 5,
+            "default": "#001f38"
+        }
+    ]
+}

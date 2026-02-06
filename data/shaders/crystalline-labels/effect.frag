@@ -111,7 +111,6 @@ vec4 compositeLabelsCrystalline(vec4 color, vec2 uv) {
     float edge = edgeStrength * (1.0 - smoothstep(0.0, edgeWidth, gap));
     vec3 edgeColor = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.95, 0.9));
     labels.rgb = mix(labels.rgb, edgeColor, edge);
-    labels.a = min(labels.a, 1.0);
 
     color.rgb = color.rgb * (1.0 - labels.a) + labels.rgb;
     color.a = labels.a + color.a * (1.0 - labels.a);

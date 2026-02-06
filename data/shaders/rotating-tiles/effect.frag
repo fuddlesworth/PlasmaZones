@@ -23,9 +23,9 @@ layout(location = 0) out vec4 fragColor;
  */
 
 // Shadertoy-derived: rotating tile grid with radial wave. Key constants: tile_dist/edge
-// control tile vs gap; square_dist drives radial wave; warm gradient (pow 2.0, 1.5, 1.2) is
-// hardcoded; only tint is exposed. Tune tileScale, speed, radialWaveScale, baseAngle for look.
-vec4 sampleRotatingTiles(vec2 localFragCoord, vec2 zoneSize, float iTime, float tileScale, float speed, float radialWaveScale, float baseAngleDeg) {
+// control tile vs gap; square_dist drives radial wave; tint color lerped by value.
+// Tune tileScale, speed, radialWaveScale, baseAngle for look.
+vec4 sampleRotatingTiles(vec2 localFragCoord, vec2 zoneSize, float tileScale, float speed, float radialWaveScale, float baseAngleDeg, vec3 tint) {
     float aspect_ratio = zoneSize.y / zoneSize.x;
     vec2 uv = localFragCoord / zoneSize.x;
     uv -= vec2(0.5, 0.5 * aspect_ratio);
@@ -50,7 +50,7 @@ vec4 sampleRotatingTiles(vec2 localFragCoord, vec2 zoneSize, float iTime, float 
     value += square_dist * 0.1;
     value *= 0.6;
 
-    vec3 rgb = vec3(pow(value, 2.0), pow(value, 1.5), pow(value, 1.2));
+    vec3 rgb = mix(vec3(0.0), tint.rgb, value);
     return vec4(rgb, 1.0);
 }
 
@@ -61,7 +61,7 @@ vec4 renderRotatingTilesZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bor
     float tileScale = customParams[0].x > 1.0 ? customParams[0].x : 20.0;
     float speed = customParams[0].y > 0.01 ? customParams[0].y : 1.0;
     float radialWaveScale = customParams[0].z > 1.0 ? customParams[0].z : 20.0;
-    float baseAngleDeg = abs(customParams[0].w) > 0.01 ? customParams[0].w : 30.0;
+    float baseAngleDeg = customParams[0].w;
     float fillOpacity = customParams[1].x > 0.01 ? customParams[1].x : 0.9;
 
     vec2 rectPos = zoneRectPos(rect);
@@ -88,8 +88,8 @@ vec4 renderRotatingTilesZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bor
     vec4 result = vec4(0.0);
 
     if (d < 0.0) {
-        vec4 raw = sampleRotatingTiles(localFragCoord, rectSize, iTime, tileScale, speed, radialWaveScale, baseAngleDeg);
-        result.rgb = raw.rgb * tint;
+        vec4 raw = sampleRotatingTiles(localFragCoord, rectSize, tileScale, speed, radialWaveScale, baseAngleDeg, tint);
+        result.rgb = raw.rgb;
         result.a = fillOpacity;
         if (isHighlighted) {
             vec3 highlightTint = length(fillColor.rgb) > 0.01 ? fillColor.rgb : vec3(0.3, 0.5, 0.9);

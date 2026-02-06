@@ -37,9 +37,7 @@ float getTrailLength()     { return customParams[3].x > 0.01 ? customParams[3].x
 // === ARETHA DARK PALETTE (hardcoded base colors) ===
 // Declare constants before they're used in functions
 const vec3 arethaBg       = vec3(0.098, 0.153, 0.259);  // #192742 - deep dark blue
-const vec3 arethaFg       = vec3(0.827, 0.855, 0.890);  // #d3dae3 - light gray
 const vec3 arethaLavender = vec3(0.482, 0.388, 0.776);  // #7b63c6 - lavender
-const vec3 arethaBlue     = vec3(0.200, 0.510, 0.816);  // #3382d0 - steel blue
 
 // Background color from customColors[4] (slot 4)
 // This can be set to match Ghostty's terminal background color
@@ -260,13 +258,6 @@ vec3 dataStream(vec2 uv, float t) {
 
 // === ADDITIONAL EFFECTS ===
 
-// Horizontal scan line accent (from DataStream) - defined but not used in Ghostty mainImage
-// Keeping for potential future use, but not calling it to match Ghostty exactly
-float scanLine(vec2 uv, float t) {
-    float scanY = fract(t * 0.25);  // top -> bottom (Y increases downward in screen coords)
-    return smoothstep(0.015, 0.0, abs(uv.y - scanY)) * 0.15;
-}
-
 // Ambient glow (matching Ghostty direction, increased intensity for visibility)
 vec3 ambientGlow(vec2 uv, float t) {
     vec3 arethaTeal = getArethaTeal();
@@ -424,8 +415,8 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         }
         
         // Animate border
-        float t = iTime * getSpeed() * 5.0;
-        float pulse = sin(t * 2.0) * 0.15 + 0.85;
+        float bt = iTime * getSpeed() * 5.0;
+        float pulse = sin(bt * 2.0) * 0.15 + 0.85;
         edgeColor *= pulse;
         
         result.rgb = mix(result.rgb, edgeColor, border * 0.8);

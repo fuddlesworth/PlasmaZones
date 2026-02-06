@@ -77,10 +77,10 @@ vec4 renderNexusZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             innerGlow = max(0.0, innerGlow);
             result.rgb += borderClr * innerGlow;
         } else {
-            float desat = 0.5;
+            float desat = 0.15;
             float lum = luminance(result.rgb);
             result.rgb = mix(vec3(lum), result.rgb, 1.0 - desat);
-            result.rgb *= 0.88;
+            result.rgb *= 0.95;
         }
         result.rgb = clamp(result.rgb, 0.0, 1.0);
     }

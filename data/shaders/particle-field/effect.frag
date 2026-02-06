@@ -42,8 +42,7 @@ vec4 renderParticleZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 center = rectPos + rectSize * 0.5;
     vec2 p = fragCoord - center;
     vec2 localPos = fragCoord - rectPos;
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-    
+
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
     
     // Colors
