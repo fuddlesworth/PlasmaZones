@@ -165,6 +165,14 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Wed Feb  5 2026 fuddlesworth - 1.6.0-1
+- Multi-zone snapping support in window tracking
+- Fix shader parameter accumulation bug in layout JSON
+- Atomic undo for shader switching
+- Post-install messages note KWin restart requirement
+- Remove dead properties (Layout::author, Layout::shortcut, Zone::shortcut)
+- Remove dead files (ZoneEditor.qml, LayoutPicker.qml, ShaderOverlay.qml, shadercompiler.cpp, zonedataprovider.cpp)
+
 * Thu Feb  5 2026 fuddlesworth - 1.5.9-1
 - Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
 - Missing pacman hook files for sycoca cache refresh in Arch package

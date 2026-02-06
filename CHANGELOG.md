@@ -5,6 +5,20 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-05
+
+### Added
+- Multi-zone snapping support in window tracking
+
+### Fixed
+- Shader parameters from previously-used shaders accumulating in layout JSON
+- Atomic undo for shader switching (single undo step instead of two)
+- Post-install messages now note that KWin restart is required to load the effect
+
+### Removed
+- Dead properties: Layout::author, Layout::shortcut, Zone::shortcut (never wired up)
+- Dead files: ZoneEditor.qml, LayoutPicker.qml, ShaderOverlay.qml, shadercompiler.cpp, zonedataprovider.cpp
+
 ## [1.5.9] - 2026-02-05
 
 ### Changed
