@@ -160,13 +160,15 @@ Kirigami.Dialog {
         if (!editorController) return;
 
         if (pendingShaderId !== editorController.currentShaderId) {
-            editorController.currentShaderId = pendingShaderId;
-        }
-
-        var currentParams = editorController.currentShaderParams || {};
-        for (var paramId in pendingParams) {
-            if (pendingParams[paramId] !== currentParams[paramId]) {
-                editorController.setShaderParameter(paramId, pendingParams[paramId]);
+            // Shader switched: atomic undo of ID + params (single Ctrl+Z)
+            editorController.switchShader(pendingShaderId, pendingParams);
+        } else {
+            // Same shader: apply individual param changes (supports undo merge for slider drags)
+            var currentParams = editorController.currentShaderParams || {};
+            for (var paramId in pendingParams) {
+                if (pendingParams[paramId] !== currentParams[paramId]) {
+                    editorController.setShaderParameter(paramId, pendingParams[paramId]);
+                }
             }
         }
     }

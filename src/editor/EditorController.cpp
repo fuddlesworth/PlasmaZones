@@ -663,6 +663,11 @@ void EditorController::loadLayout(const QString& layoutId)
         m_cachedShaderParameters = info.value(QLatin1String("parameters")).toList();
     }
 
+    // Strip stale params accumulated from previous shader selections
+    if (!m_currentShaderParams.isEmpty() && !m_cachedShaderParameters.isEmpty()) {
+        m_currentShaderParams = stripStaleShaderParams(m_currentShaderParams);
+    }
+
     ++m_zonesVersion;
     Q_EMIT layoutIdChanged();
     Q_EMIT layoutNameChanged();
@@ -747,12 +752,16 @@ void EditorController::saveLayout()
     }
     layoutObj[QLatin1String(JsonKeys::Zones)] = zonesArray;
 
-    // Include shader settings
+    // Include shader settings (strip stale params from other shaders)
     if (!ShaderRegistry::isNoneShader(m_currentShaderId)) {
         layoutObj[QLatin1String(JsonKeys::ShaderId)] = m_currentShaderId;
     }
     if (!m_currentShaderParams.isEmpty()) {
-        layoutObj[QLatin1String(JsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(m_currentShaderParams);
+        // Only persist params that belong to the current shader
+        QVariantMap cleanParams = stripStaleShaderParams(m_currentShaderParams);
+        if (!cleanParams.isEmpty()) {
+            layoutObj[QLatin1String(JsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(cleanParams);
+        }
     }
 
     // Include per-layout gap overrides (only if set, >= 0)
@@ -3021,6 +3030,48 @@ void EditorController::resetShaderParameters()
                                                   i18nc("@action", "Reset Shader Parameters"));
         m_undoController->push(cmd);
     }
+}
+
+void EditorController::switchShader(const QString& id, const QVariantMap& params)
+{
+    if (m_currentShaderId == id && m_currentShaderParams == params) {
+        return;
+    }
+
+    m_undoController->beginMacro(i18nc("@action", "Switch Shader Effect"));
+    setCurrentShaderId(id);
+    setCurrentShaderParams(params);
+    m_undoController->endMacro();
+}
+
+QVariantMap EditorController::stripStaleShaderParams(const QVariantMap& params) const
+{
+    if (params.isEmpty() || m_cachedShaderParameters.isEmpty()) {
+        return params;
+    }
+
+    // Build set of valid param IDs for the current shader
+    QSet<QString> validIds;
+    for (const QVariant& paramVar : m_cachedShaderParameters) {
+        QVariantMap paramDef = paramVar.toMap();
+        QString id = paramDef.value(QStringLiteral("id")).toString();
+        if (!id.isEmpty()) {
+            validIds.insert(id);
+        }
+    }
+
+    if (validIds.isEmpty()) {
+        return params;
+    }
+
+    // Keep only params that belong to the current shader
+    QVariantMap result;
+    for (auto it = params.constBegin(); it != params.constEnd(); ++it) {
+        if (validIds.contains(it.key())) {
+            result[it.key()] = it.value();
+        }
+    }
+    return result;
 }
 
 void EditorController::refreshAvailableShaders()

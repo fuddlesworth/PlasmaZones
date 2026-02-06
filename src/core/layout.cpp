@@ -71,8 +71,6 @@ Layout::Layout(const Layout& other)
     , m_name(other.m_name)
     , m_type(other.m_type)
     , m_description(other.m_description)
-    , m_author(other.m_author)
-    , m_shortcut(other.m_shortcut)
     , m_zonePadding(other.m_zonePadding)
     , m_outerGap(other.m_outerGap)
     , m_showZoneNumbers(other.m_showZoneNumbers)
@@ -99,8 +97,6 @@ Layout& Layout::operator=(const Layout& other)
         m_name = other.m_name;
         m_type = other.m_type;
         m_description = other.m_description;
-        m_author = other.m_author;
-        m_shortcut = other.m_shortcut;
         m_zonePadding = other.m_zonePadding;
         m_outerGap = other.m_outerGap;
         m_showZoneNumbers = other.m_showZoneNumbers;
@@ -130,8 +126,6 @@ Layout& Layout::operator=(const Layout& other)
 LAYOUT_SETTER(const QString&, Name, m_name, nameChanged)
 LAYOUT_SETTER(LayoutType, Type, m_type, typeChanged)
 LAYOUT_SETTER(const QString&, Description, m_description, descriptionChanged)
-LAYOUT_SETTER(const QString&, Author, m_author, authorChanged)
-LAYOUT_SETTER(const QString&, Shortcut, m_shortcut, shortcutChanged)
 LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
 LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
 LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
@@ -334,9 +328,9 @@ QJsonObject Layout::toJson() const
     json[JsonKeys::Id] = m_id.toString();
     json[JsonKeys::Name] = m_name;
     json[JsonKeys::Type] = static_cast<int>(m_type);
-    json[JsonKeys::Description] = m_description;
-    json[JsonKeys::Author] = m_author;
-    json[JsonKeys::Shortcut] = m_shortcut;
+    if (!m_description.isEmpty()) {
+        json[JsonKeys::Description] = m_description;
+    }
     // Only serialize gap overrides if they're set (>= 0)
     if (m_zonePadding >= 0) {
         json[JsonKeys::ZonePadding] = m_zonePadding;
@@ -350,12 +344,22 @@ QJsonObject Layout::toJson() const
     }
     // Note: isBuiltIn is no longer serialized - it's determined by source path at load time
 
-    // Shader support
+    // Shader support - only persist params belonging to the active shader
     if (!ShaderRegistry::isNoneShader(m_shaderId)) {
         json[JsonKeys::ShaderId] = m_shaderId;
     }
     if (!m_shaderParams.isEmpty()) {
-        json[JsonKeys::ShaderParams] = QJsonObject::fromVariantMap(m_shaderParams);
+        QVariantMap paramsToSave = m_shaderParams;
+
+        // Strip stale params from other shaders and validate values
+        auto* registry = ShaderRegistry::instance();
+        if (registry && !ShaderRegistry::isNoneShader(m_shaderId)) {
+            paramsToSave = registry->validateAndCoerceParams(m_shaderId, m_shaderParams);
+        }
+
+        if (!paramsToSave.isEmpty()) {
+            json[JsonKeys::ShaderParams] = QJsonObject::fromVariantMap(paramsToSave);
+        }
     }
 
     QJsonArray zonesArray;
@@ -379,8 +383,6 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_name = json[JsonKeys::Name].toString();
     layout->m_type = static_cast<LayoutType>(json[JsonKeys::Type].toInt());
     layout->m_description = json[JsonKeys::Description].toString();
-    layout->m_author = json[JsonKeys::Author].toString();
-    layout->m_shortcut = json[JsonKeys::Shortcut].toString();
     // Gap overrides: -1 means use global setting (key absent = no override)
     layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;
     layout->m_outerGap = json.contains(JsonKeys::OuterGap) ? json[JsonKeys::OuterGap].toInt(-1) : -1;

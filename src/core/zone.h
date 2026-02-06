@@ -33,7 +33,6 @@ class PLASMAZONES_EXPORT Zone : public QObject
     Q_PROPERTY(QRectF geometry READ geometry WRITE setGeometry NOTIFY geometryChanged)
     Q_PROPERTY(QRectF relativeGeometry READ relativeGeometry WRITE setRelativeGeometry NOTIFY relativeGeometryChanged)
     Q_PROPERTY(int zoneNumber READ zoneNumber WRITE setZoneNumber NOTIFY zoneNumberChanged)
-    Q_PROPERTY(QString shortcut READ shortcut WRITE setShortcut NOTIFY shortcutChanged)
     Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
     Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
@@ -99,13 +98,6 @@ public:
         return m_zoneNumber;
     }
     void setZoneNumber(int number);
-
-    // Keyboard shortcut for quick snap
-    QString shortcut() const
-    {
-        return m_shortcut;
-    }
-    void setShortcut(const QString& shortcut);
 
     // Ricer-friendly appearance customization
     QColor highlightColor() const
@@ -177,7 +169,6 @@ Q_SIGNALS:
     void geometryChanged();
     void relativeGeometryChanged();
     void zoneNumberChanged();
-    void shortcutChanged();
     void highlightColorChanged();
     void inactiveColorChanged();
     void borderColorChanged();
@@ -194,7 +185,6 @@ private:
     QRectF m_geometry;
     QRectF m_relativeGeometry;
     int m_zoneNumber = 0;
-    QString m_shortcut;
 
     // Appearance (ricer-friendly) - using constants for defaults
     QColor m_highlightColor = Defaults::HighlightColor;

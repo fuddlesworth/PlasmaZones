@@ -72,7 +72,6 @@ void Zone::copyPropertiesFrom(const Zone& other)
     m_geometry = other.m_geometry;
     m_relativeGeometry = other.m_relativeGeometry;
     m_zoneNumber = other.m_zoneNumber;
-    m_shortcut = other.m_shortcut;
     m_highlightColor = other.m_highlightColor;
     m_inactiveColor = other.m_inactiveColor;
     m_borderColor = other.m_borderColor;
@@ -98,7 +97,6 @@ ZONE_SETTER(const QString&, Name, m_name, nameChanged)
 ZONE_SETTER(const QRectF&, Geometry, m_geometry, geometryChanged)
 ZONE_SETTER(const QRectF&, RelativeGeometry, m_relativeGeometry, relativeGeometryChanged)
 ZONE_SETTER(int, ZoneNumber, m_zoneNumber, zoneNumberChanged)
-ZONE_SETTER(const QString&, Shortcut, m_shortcut, shortcutChanged)
 
 // Color setters
 ZONE_SETTER(const QColor&, HighlightColor, m_highlightColor, highlightColorChanged)
@@ -168,7 +166,6 @@ QJsonObject Zone::toJson() const
     json[Id] = m_id.toString();
     json[Name] = m_name;
     json[ZoneNumber] = m_zoneNumber;
-    json[Shortcut] = m_shortcut;
 
     // Relative geometry for resolution independence
     QJsonObject relGeo;
@@ -206,7 +203,6 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
 
     zone->m_name = json[Name].toString();
     zone->m_zoneNumber = json[ZoneNumber].toInt();
-    zone->m_shortcut = json[Shortcut].toString();
 
     // Relative geometry
     const auto relGeo = json[RelativeGeometry].toObject();

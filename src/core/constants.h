@@ -82,7 +82,6 @@ namespace JsonKeys {
 inline constexpr QLatin1String Id{"id"};
 inline constexpr QLatin1String Name{"name"};
 inline constexpr QLatin1String ZoneNumber{"zoneNumber"};
-inline constexpr QLatin1String Shortcut{"shortcut"};
 inline constexpr QLatin1String RelativeGeometry{"relativeGeometry"};
 inline constexpr QLatin1String Appearance{"appearance"};
 
@@ -108,7 +107,6 @@ inline constexpr QLatin1String IsHighlighted{"isHighlighted"};
 inline constexpr QLatin1String DefaultOrder{"defaultOrder"};
 inline constexpr QLatin1String Type{"type"};
 inline constexpr QLatin1String Description{"description"};
-inline constexpr QLatin1String Author{"author"};
 inline constexpr QLatin1String Zones{"zones"};
 inline constexpr QLatin1String ZonePadding{"zonePadding"};
 inline constexpr QLatin1String OuterGap{"outerGap"};

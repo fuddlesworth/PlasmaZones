@@ -188,6 +188,7 @@ public:
     // Shader operations (QML-invokable)
     Q_INVOKABLE void setShaderParameter(const QString& key, const QVariant& value);
     Q_INVOKABLE void resetShaderParameters();
+    Q_INVOKABLE void switchShader(const QString& id, const QVariantMap& params);
     Q_INVOKABLE void refreshAvailableShaders();
 
 public Q_SLOTS:
@@ -428,6 +429,14 @@ Q_SIGNALS:
 
 private:
     void markUnsaved();
+
+    /**
+     * @brief Remove shader params that don't belong to the current shader
+     *
+     * Uses m_cachedShaderParameters to determine valid param IDs.
+     * Returns a new map containing only keys that match the current shader's definitions.
+     */
+    QVariantMap stripStaleShaderParams(const QVariantMap& params) const;
 
     /**
      * @brief Z-order operation types for changeZOrderImpl

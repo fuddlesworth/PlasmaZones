@@ -51,8 +51,6 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(LayoutType type READ type WRITE setType NOTIFY typeChanged)
     Q_PROPERTY(QString description READ description WRITE setDescription NOTIFY descriptionChanged)
-    Q_PROPERTY(QString author READ author WRITE setAuthor NOTIFY authorChanged)
-    Q_PROPERTY(QString shortcut READ shortcut WRITE setShortcut NOTIFY shortcutChanged)
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
@@ -94,19 +92,6 @@ public:
         return m_description;
     }
     void setDescription(const QString& description);
-
-    QString author() const
-    {
-        return m_author;
-    }
-    void setAuthor(const QString& author);
-
-    // Quick switch shortcut (Win+Ctrl+Alt+[number])
-    QString shortcut() const
-    {
-        return m_shortcut;
-    }
-    void setShortcut(const QString& shortcut);
 
     // Layout settings (per-layout gap overrides, -1 = use global setting)
     int zonePadding() const
@@ -210,8 +195,6 @@ Q_SIGNALS:
     void nameChanged();
     void typeChanged();
     void descriptionChanged();
-    void authorChanged();
-    void shortcutChanged();
     void zonePaddingChanged();
     void outerGapChanged();
     void showZoneNumbersChanged();
@@ -228,8 +211,6 @@ private:
     QString m_name;
     LayoutType m_type = LayoutType::Custom;
     QString m_description;
-    QString m_author;
-    QString m_shortcut;
     int m_zonePadding = -1;  // -1 = use global setting
     int m_outerGap = -1;     // -1 = use global setting
     bool m_showZoneNumbers = true;

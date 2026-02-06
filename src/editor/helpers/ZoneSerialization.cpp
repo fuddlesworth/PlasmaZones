@@ -51,8 +51,6 @@ QString serializeZonesToClipboard(const QVariantList& zones)
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
         zoneObj[QLatin1String("useCustomColors")] =
             zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
-        zoneObj[QLatin1String("shortcut")] =
-            zone.contains(JsonKeys::Shortcut) ? zone[JsonKeys::Shortcut].toString() : QString();
 
         zonesArray.append(zoneObj);
     }
@@ -104,7 +102,6 @@ QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
 
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
         zone[useCustomColorsKey] = zoneObj[QLatin1String("useCustomColors")].toBool(false);
-        zone[JsonKeys::Shortcut] = zoneObj[QLatin1String("shortcut")].toString();
 
         zones.append(zone);
     }

@@ -1167,10 +1167,6 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         zone[useCustomColorsKey] = zoneData[useCustomColorsKey].toBool();
     }
 
-    if (zoneData.contains(JsonKeys::Shortcut)) {
-        zone[JsonKeys::Shortcut] = zoneData[JsonKeys::Shortcut].toString();
-    }
-
     // Copy z-order if present, otherwise set to end
     if (zoneData.contains(JsonKeys::ZOrder)) {
         zone[JsonKeys::ZOrder] = zoneData[JsonKeys::ZOrder].toInt();
