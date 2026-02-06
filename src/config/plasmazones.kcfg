@@ -79,8 +79,8 @@
       <default>true</default>
     </entry>
     <entry name="OsdStyle" type="Int">
-      <label>OSD notification style (0=Text, 1=Preview, 2=Compact)</label>
-      <default>1</default>
+      <label>OSD notification style (0=None, 1=Text, 2=Preview)</label>
+      <default>2</default>
       <min>0</min>
       <max>2</max>
     </entry>
