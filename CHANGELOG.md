@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-02-06
+
+### Fixed
+- Editor not moving to selected screen when switching monitors in TopBar or via D-Bus `openEditorForScreen`
+- Editor defaulting to wrong screen on Wayland (now uses cursor screen instead of unreliable `primaryScreen`)
+
 ## [1.6.1] - 2026-02-06
 
 ### Added

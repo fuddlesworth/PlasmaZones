@@ -165,6 +165,10 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Fri Feb  6 2026 fuddlesworth - 1.6.2-1
+- Fix editor not moving to selected screen on multi-monitor setups
+- Fix editor defaulting to wrong screen on Wayland
+
 * Fri Feb  6 2026 fuddlesworth - 1.6.1-1
 - Add Liquid Metal shader with multipass rendering
 - Fix AUR -bin package build failure (.INSTALL dotfile in package root)
