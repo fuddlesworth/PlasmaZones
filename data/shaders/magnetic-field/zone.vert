@@ -10,6 +10,7 @@ layout(location = 0) out vec2 vTexCoord;
 layout(location = 1) out float vMouseInfluence;
 layout(location = 2) out float vDistortAmount;
 layout(location = 3) out vec2 vDisplacement;
+layout(location = 4) out vec2 vFragCoord;
 
 #include <common.glsl>
 
@@ -29,7 +30,8 @@ float noise(vec2 p) {
 
 void main() {
     vTexCoord = texCoord;
-    
+    vFragCoord = vec2(texCoord.x, 1.0 - texCoord.y) * iResolution;
+
     // Get parameters
     float fieldStrength = customParams[0].x > 0.01 ? customParams[0].x : 1.0;
     float waveSpeed = customParams[0].y > 0.01 ? customParams[0].y : 1.5;
@@ -112,5 +114,5 @@ void main() {
     vDistortAmount = length(totalDisplacement) * 50.0;
     vDisplacement = totalDisplacement;
     
-    gl_Position = qt_Matrix * vec4(displacedPos, 0.0, 1.0);
+    gl_Position = vec4(displacedPos, 0.0, 1.0);
 }

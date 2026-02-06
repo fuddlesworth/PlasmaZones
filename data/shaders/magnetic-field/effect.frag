@@ -7,6 +7,7 @@ layout(location = 0) in vec2 vTexCoord;
 layout(location = 1) in float vMouseInfluence;
 layout(location = 2) in float vDistortAmount;
 layout(location = 3) in vec2 vDisplacement;
+layout(location = 4) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -185,7 +186,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     // Colors
     vec3 fieldColor = customColors[0].rgb;
     if (length(fieldColor) < 0.01) fieldColor = vec3(0.545, 0.361, 0.965);  // Purple #8b5cf6
-    
+
     vec3 highlightColor = customColors[1].rgb;
     if (length(highlightColor) < 0.01) highlightColor = vec3(0.98, 0.8, 0.082);  // Yellow #facc15
     
@@ -290,7 +291,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 }
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {

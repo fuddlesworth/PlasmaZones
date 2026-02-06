@@ -9,11 +9,13 @@ layout(location = 1) in vec2 texCoord;
 
 // Vertex outputs
 layout(location = 0) out vec2 vTexCoord;
+layout(location = 1) out vec2 vFragCoord;
 
 // Uniform block matching fragment shader (std140 layout)
 #include <common.glsl>
 
 void main() {
     vTexCoord = texCoord;
-    gl_Position = qt_Matrix * vec4(position, 0.0, 1.0);
+    vFragCoord = vec2(texCoord.x, 1.0 - texCoord.y) * iResolution;
+    gl_Position = vec4(position, 0.0, 1.0);
 }

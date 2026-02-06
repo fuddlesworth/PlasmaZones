@@ -98,15 +98,15 @@
             "max": 3.0
         },
         {
-            "id": "toxicGreen",
-            "name": "Toxic Green",
+            "id": "primaryColor",
+            "name": "Primary Color",
             "type": "color",
             "slot": 0,
             "default": "#39FF14"
         },
         {
-            "id": "electricPurple",
-            "name": "Electric Purple",
+            "id": "secondaryColor",
+            "name": "Secondary Color",
             "type": "color",
             "slot": 1,
             "default": "#BF00FF"

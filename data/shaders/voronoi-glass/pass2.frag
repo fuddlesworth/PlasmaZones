@@ -10,6 +10,7 @@
 // Output to iChannel2: RGB = final post-processed image, A = 1.0.
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -17,7 +18,7 @@ layout(location = 0) out vec4 fragColor;
 #include <multipass.glsl>
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec2 uv1 = channelUv(1, fragCoord);
     float py = 1.0 / max(iChannelResolution[1].y, 1.0);
 

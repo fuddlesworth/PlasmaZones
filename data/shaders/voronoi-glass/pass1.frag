@@ -9,6 +9,7 @@
 // Output to iChannel1: RGB = h-blurred bloom, A = 1.0.
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -23,7 +24,7 @@ vec3 sampleBright(vec2 uv) {
 }
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec2 uv = channelUv(0, fragCoord);
     float px = 1.0 / max(iChannelResolution[0].x, 1.0);
 

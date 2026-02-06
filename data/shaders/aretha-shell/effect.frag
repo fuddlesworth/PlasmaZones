@@ -9,6 +9,7 @@
 // Ported to PlasmaZones zone overlay system
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -437,7 +438,7 @@ vec4 renderArethaZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 void main() {
     // Convert texture coords to screen coords (Y=0 at top, matching Qt/PlasmaZones convention)
     // OpenGL texture coords have Y=0 at bottom, so invert Y to match Qt screen coords
-    vec2 fragCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
+    vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
     
     if (zoneCount == 0) {

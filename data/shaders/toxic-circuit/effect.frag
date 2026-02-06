@@ -4,6 +4,7 @@
 #version 450
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -24,8 +25,8 @@ layout(location = 0) out vec4 fragColor;
  *   customParams[1].y = smogDensity (0.0-0.5) - Atmospheric haze
  *   customParams[1].z = chromaShift (0.0-15.0) - Chromatic aberration
  *   customParams[1].w = fillOpacity (0.3-0.9) - Inner fill darkness
- *   customColors[0] = toxicGreen - Primary toxic color (#39FF14)
- *   customColors[1] = electricPurple - Secondary circuit color (#BF00FF)
+ *   customColors[0] - Primary color (default #39FF14)
+ *   customColors[1] - Secondary color (default #BF00FF)
  */
 
 float noise(vec2 p) {
@@ -233,14 +234,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Colors - Toxic Circuit palette
-    vec3 toxicGreen = customColors[0].rgb;
-    if (length(toxicGreen) < 0.01) toxicGreen = vec3(0.224, 1.0, 0.078);  // #39FF14
-
-    vec3 electricPurple = customColors[1].rgb;
-    if (length(electricPurple) < 0.01) electricPurple = vec3(0.749, 0.0, 1.0);  // #BF00FF
-
-    vec3 deepPurple = vec3(0.102, 0.0, 0.2);  // #1A0033
-    vec3 neonMagenta = vec3(1.0, 0.063, 0.941);  // #FF10F0
+    vec3 primaryColor = colorWithFallback(customColors[0].rgb, vec3(0.224, 1.0, 0.078));   // #39FF14
+    vec3 secondaryColor = colorWithFallback(customColors[1].rgb, vec3(0.749, 0.0, 1.0)); // #BF00FF
+    vec3 bgColor = vec3(0.102, 0.0, 0.2);                                                // #1A0033
+    vec3 accentColor = vec3(1.0, 0.063, 0.941);                                          // #FF10F0
 
     float time = iTime * pulseSpeed;
 
@@ -248,10 +245,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     float highlightBoost = 1.0;
     if (isHighlighted) {
         // Swap primary colors - purple becomes dominant, green becomes accent
-        vec3 temp = toxicGreen;
-        toxicGreen = neonMagenta;
-        electricPurple = mix(temp, vec3(1.0, 1.0, 0.0), 0.3);  // Yellow-green accent
-        deepPurple = vec3(0.15, 0.0, 0.25);  // Lighter purple base
+        vec3 temp = primaryColor;
+        primaryColor = accentColor;
+        secondaryColor = mix(temp, vec3(1.0, 1.0, 0.0), 0.3);  // Yellow-green accent
+        bgColor = vec3(0.15, 0.0, 0.25);  // Lighter purple base
 
         // Dramatic parameter boosts
         glowStrength *= 2.2;
@@ -323,14 +320,14 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
     if (d < 0.0) {
         // Dark toxic base with depth
         float depthFade = 1.0 - length(localUV - 0.5) * 0.3;
-        vec3 baseColor = deepPurple * depthFade * 0.8;
+        vec3 baseColor = bgColor * depthFade * 0.8;
 
         // Circuit trace overlay (uses accelerated time near mouse)
         float circuit = circuitPattern(glitchedUV, circuitDensity, mouseTime);
 
         // Color the circuits with animated gradient
         float colorMix = sin(mouseTime * 0.5 + localUV.x * 3.0) * 0.5 + 0.5;
-        vec3 circuitColor = mix(toxicGreen, electricPurple, colorMix);
+        vec3 circuitColor = mix(primaryColor, secondaryColor, colorMix);
 
         // Chromatic aberration - approximate from single evaluation
         // Instead of calling circuitPattern 3 times, shift the single result
@@ -355,30 +352,30 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             dripUV += mouseDir * mouseInfluence * 0.08;  // Drips bend toward cursor
         }
         float drip = toxicDrip(dripUV, iTime * timeBoost, dripIntensity * (1.0 + mouseInfluence));
-        vec3 dripColor = mix(toxicGreen, neonMagenta, drip * 0.3 + mouseInfluence * 0.2);
+        vec3 dripColor = mix(primaryColor, accentColor, drip * 0.3 + mouseInfluence * 0.2);
         baseColor += dripColor * drip * 0.8;
 
         // Atmospheric smog layer - clears near cursor
         float smogMod = smogDensity * (1.0 - mouseInfluence * 0.6);  // Smog thins near cursor
         float smog = atmosphericSmog(localUV, iTime, smogMod);
-        vec3 smogColor = mix(deepPurple, electricPurple * 0.3, smog);
+        vec3 smogColor = mix(bgColor, secondaryColor * 0.3, smog);
         baseColor = mix(baseColor, smogColor, smog * 0.5);
 
         // Iridescent shimmer (like toxic skin) - subtle
         float shimmer = sin(localUV.x * 40.0 + localUV.y * 30.0 + time * 2.0) * 0.5 + 0.5;
         shimmer = pow(shimmer, 4.0);
-        vec3 shimmerColor = mix(toxicGreen, electricPurple, shimmer);
+        vec3 shimmerColor = mix(primaryColor, secondaryColor, shimmer);
         baseColor += shimmerColor * shimmer * 0.08;
 
         // Energy pulse wave from center - subtle
         float pulseWave = sin(length(localUV - 0.5) * 15.0 - time * 2.0) * 0.5 + 0.5;
         pulseWave = pow(pulseWave, 5.0);
-        baseColor += toxicGreen * pulseWave * 0.1;
+        baseColor += primaryColor * pulseWave * 0.1;
 
         // Inner edge glow (fresnel-like) - toned down
         float edgeDist = -d / 50.0;
         float fresnel = pow(1.0 - clamp(edgeDist, 0.0, 1.0), 3.0);
-        baseColor += mix(toxicGreen, electricPurple, fresnel) * fresnel * edgeGlowStrength;
+        baseColor += mix(primaryColor, secondaryColor, fresnel) * fresnel * edgeGlowStrength;
 
         // === MOUSE INTERACTION - Integrated Effects ===
         if (mouseInfluence > 0.001) {
@@ -386,12 +383,12 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             baseColor += circuitColor * circuit * mouseInfluence * 0.8;
 
             // Color shift toward neon magenta near cursor
-            baseColor = mix(baseColor, baseColor * 1.3 + neonMagenta * 0.15, mouseInfluence * 0.6);
+            baseColor = mix(baseColor, baseColor * 1.3 + accentColor * 0.15, mouseInfluence * 0.6);
 
             // Cursor hotspot glow
             float hotspot = smoothstep(0.06, 0.0, mouseDist);
             float pulse = sin(iTime * 3.0) * 0.3 + 0.7;
-            baseColor += neonMagenta * hotspot * pulse * 0.6;
+            baseColor += accentColor * hotspot * pulse * 0.6;
         }
 
         // Energy ripple emanating from cursor - extends beyond main influence zone
@@ -399,7 +396,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             float rippleFade = smoothstep(0.6, 0.0, mouseDist);
             float ripple = sin(mouseDist * 40.0 - iTime * 5.0) * 0.5 + 0.5;
             ripple = pow(ripple, 2.0) * rippleFade;
-            baseColor += mix(toxicGreen, electricPurple, 0.5) * ripple * 0.35;
+            baseColor += mix(primaryColor, secondaryColor, 0.5) * ripple * 0.35;
         }
 
         // Flicker
@@ -413,7 +410,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         if (isHighlighted) {
             float bloom = sin(iTime * 4.0) * 0.15 + 0.85;
             baseColor *= bloom;
-            baseColor += neonMagenta * 0.15;
+            baseColor += accentColor * 0.15;
         }
 
         result.rgb = baseColor;
@@ -436,11 +433,11 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         // Animated border color - faster and brighter when highlighted
         float pulseRate = isHighlighted ? 5.0 : 3.0;
         float borderPulse = sin(iTime * pulseSpeed * pulseRate) * 0.5 + 0.5;
-        vec3 borderBase = mix(toxicGreen, electricPurple, borderPulse);
+        vec3 borderBase = mix(primaryColor, secondaryColor, borderPulse);
 
         // Highlighted: use brighter, more saturated colors
         if (isHighlighted) {
-            borderBase = mix(borderBase, neonMagenta, 0.4);
+            borderBase = mix(borderBase, accentColor, 0.4);
             borderBase *= 1.3;
         }
 
@@ -460,11 +457,11 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         float travelSpeed = isHighlighted ? 8.0 : 4.0;
         float energyTravel = sin(angle * 8.0 - iTime * travelSpeed) * 0.5 + 0.5;
         energyTravel = pow(energyTravel, 3.0);
-        borderRGB += toxicGreen * energyTravel * border * (isHighlighted ? 0.8 : 0.5);
+        borderRGB += primaryColor * energyTravel * border * (isHighlighted ? 0.8 : 0.5);
 
         // Mouse intensifies nearby border section
         if (mouseInfluence > 0.01) {
-            borderRGB += neonMagenta * mouseInfluence * border * 0.5;
+            borderRGB += accentColor * mouseInfluence * border * 0.5;
             borderRGB *= 1.0 + mouseInfluence * 0.4;
         }
 
@@ -483,13 +480,13 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         float glow2 = expGlow(d, glowFalloff2, isHighlighted ? 0.4 : 0.15);
 
         float glowPulse = sin(iTime * pulseSpeed * 2.0) * 0.2 + 0.8;
-        vec3 glowColor = mix(toxicGreen, electricPurple, glow1) * glowPulse;
+        vec3 glowColor = mix(primaryColor, secondaryColor, glow1) * glowPulse;
 
         // Highlighted: add pulsing ring effect
         if (isHighlighted) {
             float ringDist = mod(d - iTime * 25.0, 20.0);
             float ring = smoothstep(2.5, 0.0, ringDist) * smoothstep(0.0, 1.0, ringDist);
-            glowColor += neonMagenta * ring * 1.2;
+            glowColor += accentColor * ring * 1.2;
             glow1 += ring * 0.3;
         }
 
@@ -505,7 +502,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             float cornerGlitch = hash11(floor(iTime * 15.0) + floor(cornerProximity * 10.0));
             if (cornerGlitch > 0.7) {
                 float intensity = (cornerProximity - 0.88) / 0.12;
-                result.rgb += neonMagenta * intensity * 0.8;
+                result.rgb += accentColor * intensity * 0.8;
             }
         }
     }
@@ -514,7 +511,7 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
 }
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {

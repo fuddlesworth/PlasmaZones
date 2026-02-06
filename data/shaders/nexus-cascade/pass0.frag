@@ -7,6 +7,7 @@
 // Fullscreen output to iChannel0. No channel inputs.
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -46,7 +47,7 @@ float flowNoise(vec2 p, float t) {
 }
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec2 uv = fragCoord / max(iResolution.xy, vec2(1.0));
     vec2 centered = uv - 0.5;
 

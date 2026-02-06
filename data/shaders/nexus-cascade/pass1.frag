@@ -7,6 +7,7 @@
 // Samples iChannel0, outputs to iChannel1.
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -14,7 +15,7 @@ layout(location = 0) out vec4 fragColor;
 #include <multipass.glsl>
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec2 uv = fragCoord / max(iResolution.xy, vec2(1.0));
 
     float distortStrength = customParams[1].x > 0.001 ? customParams[1].x : 0.03;

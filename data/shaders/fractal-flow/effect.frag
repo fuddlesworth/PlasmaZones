@@ -4,6 +4,7 @@
 #version 450
 
 layout(location = 0) in vec2 vTexCoord;
+layout(location = 1) in vec2 vFragCoord;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -104,7 +105,7 @@ vec4 renderFractalFlowZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borde
 }
 
 void main() {
-    vec2 fragCoord = fragCoordFromTexCoord(vTexCoord);
+    vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
 
     if (zoneCount == 0) {
