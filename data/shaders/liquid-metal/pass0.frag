@@ -54,25 +54,27 @@ void main() {
 
     float t = iTime * speed;
 
-    // Base fluid surface: layered travelling waves at different angles
+    // Base fluid surface: standing waves (wobble in place, no net drift)
     vec2 p = uv * scale;
     float h = 0.0;
 
-    // Primary wave: large slow undulation
-    h += sin(p.x * 1.7 + t * 0.6 + sin(p.y * 0.8 + t * 0.3) * 0.5) * 0.35;
-    h += sin(p.y * 2.1 - t * 0.5 + sin(p.x * 1.1 - t * 0.2) * 0.4) * 0.30;
+    // Primary standing waves: spatial pattern modulated by time
+    h += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * cos(t * 0.6) * 0.20;
+    h += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * cos(t * 0.5 + 1.0) * 0.18;
+    h += sin(p.x * 1.3 - p.y * 0.9) * cos(t * 0.35 + 2.5) * 0.15;
 
-    // Secondary waves: smaller, faster cross-ripples
-    h += sin(p.x * 3.5 + p.y * 2.0 + t * 1.2) * 0.15 * viscosity;
-    h += sin(p.x * 2.0 - p.y * 3.8 - t * 1.0) * 0.12 * viscosity;
+    // Secondary standing waves: smaller cross-pattern wobble
+    float visc = 1.0 - viscosity; // higher viscosity = less fine detail
+    h += sin(p.x * 3.5 + p.y * 2.0) * cos(t * 0.9) * 0.08 * visc;
+    h += sin(p.x * 2.0 - p.y * 3.8) * cos(t * 0.7 + 1.5) * 0.06 * visc;
 
-    // Organic turbulence: FBM noise that slowly evolves
-    float turb = fbm(p * 0.8 + vec2(t * 0.15, t * 0.12), 4);
-    h += (turb - 0.5) * 0.25 * (1.0 - viscosity * 0.5);
+    // Organic turbulence: slowly morphing surface texture (no drift)
+    float turb = fbm(p * 0.8 + vec2(sin(t * 0.1) * 0.3, cos(t * 0.08) * 0.3), 4);
+    h += (turb - 0.5) * 0.15 * visc;
 
-    // Fine surface tension ripples
-    float fine = sin(p.x * 8.0 + t * 2.5) * sin(p.y * 7.0 - t * 1.8);
-    h += fine * 0.04 * viscosity;
+    // Fine surface tension dimples
+    float fine = sin(p.x * 8.0) * sin(p.y * 7.0) * cos(t * 1.2);
+    h += fine * 0.02 * visc;
 
     // Mouse interaction: radial ripples emanating from cursor
     if (mouseStr > 0.001) {
@@ -88,14 +90,10 @@ void main() {
         }
     }
 
-    // Compute approximate surface velocity for normal estimation
-    // (time derivative approximation via phase-shifted copy)
-    float h2 = 0.0;
-    float dt = 0.016;
-    float t2 = t + dt;
-    h2 += sin(p.x * 1.7 + t2 * 0.6 + sin(p.y * 0.8 + t2 * 0.3) * 0.5) * 0.35;
-    h2 += sin(p.y * 2.1 - t2 * 0.5 + sin(p.x * 1.1 - t2 * 0.2) * 0.4) * 0.30;
-    float velocity = (h2 - h) / dt;
+    // Compute approximate surface velocity (time derivative of primary waves)
+    float velocity = 0.0;
+    velocity += sin(p.x * 1.7 + sin(p.y * 0.8) * 0.5) * (-sin(t * 0.6)) * 0.6 * 0.20;
+    velocity += sin(p.y * 2.1 + sin(p.x * 1.1) * 0.4) * (-sin(t * 0.5 + 1.0)) * 0.5 * 0.18;
 
     // Caustic intensity: bright spots where waves focus light
     // Approximate as areas of high curvature convergence
