@@ -10,8 +10,9 @@ import org.kde.kirigami as Kirigami
  * @brief Dialog for picking from currently running windows
  *
  * Shows a filterable list of running windows with their window class and caption.
- * Used by the Exclusions tab to let users pick window classes without needing
- * to manually type them (replaces the old "use xprop" workflow).
+ * Emits picked(value) when a window is selected. Used by the Exclusions tab
+ * and App Rules card to let users pick window classes without needing
+ * to manually type them.
  */
 Kirigami.Dialog {
     id: dialog
@@ -23,6 +24,8 @@ Kirigami.Dialog {
 
     property bool forApps: false
     property var windowList: []
+
+    signal picked(string value)
 
     // Derive a short app name from windowClass when appName is not available
     // X11: "resourceName resourceClass" → first part (e.g., "dolphin")
@@ -142,11 +145,7 @@ Kirigami.Dialog {
                 }
 
                 onClicked: {
-                    if (dialog.forApps) {
-                        kcm.addExcludedApp(appNameResolved)
-                    } else {
-                        kcm.addExcludedWindowClass(modelData.windowClass)
-                    }
+                    dialog.picked(primaryText)
                     dialog.close()
                 }
             }

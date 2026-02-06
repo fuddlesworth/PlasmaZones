@@ -212,6 +212,20 @@ public Q_SLOTS:
     void recordSnapIntent(const QString& windowId, bool wasUserInitiated);
 
     /**
+     * Snap a window to its app-rule-defined zone (highest priority auto-snap)
+     * @param windowId Full window ID (including pointer address)
+     * @param windowScreenName Screen name for geometry calculation
+     * @param sticky Whether window is on all desktops
+     * @param snapX Output: X position to snap to
+     * @param snapY Output: Y position to snap to
+     * @param snapWidth Output: Width to snap to
+     * @param snapHeight Output: Height to snap to
+     * @param shouldSnap Output: True if an app rule matched and window should be snapped
+     */
+    void snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky,
+                       int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
+
+    /**
      * Restore a window to its persisted zone from the previous session
      * This uses stable window identifiers (windowClass:resourceName) to match
      * windows across sessions, even though KWin internal IDs change.

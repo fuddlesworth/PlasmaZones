@@ -6,6 +6,7 @@
 #include "../src/config/updatechecker.h"
 #include "version.h"
 #include "../src/core/constants.h"
+#include "../src/core/layout.h"
 #include "../src/core/interfaces.h" // For DragModifier enum
 #include "../src/core/logging.h"
 #include "../src/core/modifierutils.h"
@@ -1154,6 +1155,50 @@ void KCMPlasmaZones::save()
         m_pendingHiddenStates.clear();
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // App-to-zone rules (per-layout)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (!m_pendingAppRules.isEmpty()) {
+        for (auto it = m_pendingAppRules.cbegin(); it != m_pendingAppRules.cend(); ++it) {
+            const QString& layoutId = it.key();
+            const QVariantList& rules = it.value();
+
+            // Get current layout JSON from daemon
+            QDBusMessage layoutReply = callDaemon(layoutInterface, QStringLiteral("getLayout"), {layoutId});
+            if (layoutReply.type() != QDBusMessage::ReplyMessage || layoutReply.arguments().isEmpty()) {
+                failedOperations.append(QStringLiteral("App rules (get %1)").arg(layoutId));
+                continue;
+            }
+
+            QString json = layoutReply.arguments().first().toString();
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+            if (doc.isNull() || !doc.isObject()) {
+                failedOperations.append(QStringLiteral("App rules (parse %1)").arg(layoutId));
+                continue;
+            }
+
+            // Build appRules JSON array from pending rules
+            QJsonArray rulesArray;
+            for (const auto& ruleVar : rules) {
+                QVariantMap ruleMap = ruleVar.toMap();
+                PlasmaZones::AppRule rule;
+                rule.pattern = ruleMap[QStringLiteral("pattern")].toString();
+                rule.zoneNumber = ruleMap[QStringLiteral("zoneNumber")].toInt();
+                rulesArray.append(rule.toJson());
+            }
+
+            // Patch the layout JSON and send back
+            QJsonObject obj = doc.object();
+            obj[JsonKeys::AppRules] = rulesArray;
+            QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+            QDBusMessage updateReply = callDaemon(layoutInterface, QStringLiteral("updateLayout"), {updatedJson});
+            if (updateReply.type() == QDBusMessage::ErrorMessage) {
+                failedOperations.append(QStringLiteral("App rules (save %1)").arg(layoutId));
+            }
+        }
+        m_pendingAppRules.clear();
+    }
+
     if (!failedOperations.isEmpty()) {
         qCWarning(lcKcm) << "Save: D-Bus operations failed:" << failedOperations.join(QStringLiteral(", "))
                          << "- some settings may not have been saved to daemon";
@@ -1225,9 +1270,13 @@ void KCMPlasmaZones::load()
     // Clear pending layout visibility changes (discard unsaved changes)
     m_pendingHiddenStates.clear();
 
+    // Clear pending app rules (discard unsaved changes)
+    m_pendingAppRules.clear();
+
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT quickLayoutSlotsRefreshed();
+    Q_EMIT appRulesRefreshed();
     setNeedsSave(false);
 }
 
@@ -1258,6 +1307,17 @@ void KCMPlasmaZones::defaults()
 
     // Reset all layouts to visible (clear hidden states)
     m_pendingHiddenStates.clear();
+
+    // Stage empty app rules for all layouts (clears any daemon-side rules on Apply)
+    m_pendingAppRules.clear();
+    for (int i = 0; i < m_layouts.size(); ++i) {
+        QVariantMap layout = m_layouts[i].toMap();
+        QString layoutId = layout[QStringLiteral("id")].toString();
+        if (!layoutId.isEmpty()) {
+            m_pendingAppRules[layoutId] = QVariantList();
+        }
+    }
+    Q_EMIT appRulesRefreshed();
     for (int i = 0; i < m_layouts.size(); ++i) {
         QVariantMap layout = m_layouts[i].toMap();
         if (layout[QStringLiteral("hiddenFromSelector")].toBool()) {
@@ -2478,6 +2538,83 @@ QString KCMPlasmaZones::getQuickLayoutShortcut(int slotNumber) const
     // If KGlobalAccel returns empty, the shortcut is not assigned
     // Don't fall back to settings defaults as that would be misleading
     return QString();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// App-to-Zone Rules
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList KCMPlasmaZones::getAppRulesForLayout(const QString& layoutId) const
+{
+    // Check pending cache first (unsaved changes)
+    if (m_pendingAppRules.contains(layoutId)) {
+        return m_pendingAppRules.value(layoutId);
+    }
+
+    // Fall back to daemon
+    QDBusMessage reply =
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+
+    QString json = reply.arguments().first().toString();
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (doc.isNull() || !doc.isObject()) {
+        return {};
+    }
+
+    QJsonArray rulesArray = doc.object()[QLatin1String("appRules")].toArray();
+    QVariantList result;
+    for (const auto& ruleVal : rulesArray) {
+        QJsonObject ruleObj = ruleVal.toObject();
+        QVariantMap rule;
+        rule[QStringLiteral("pattern")] = ruleObj[QLatin1String("pattern")].toString();
+        rule[QStringLiteral("zoneNumber")] = ruleObj[QLatin1String("zoneNumber")].toInt();
+        result.append(rule);
+    }
+    return result;
+}
+
+void KCMPlasmaZones::setAppRulesForLayout(const QString& layoutId, const QVariantList& rules)
+{
+    m_pendingAppRules[layoutId] = rules;
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber)
+{
+    QString trimmed = pattern.trimmed();
+    if (trimmed.isEmpty() || zoneNumber < 1) {
+        return;
+    }
+
+    QVariantList rules = getAppRulesForLayout(layoutId);
+
+    // Check for duplicate pattern (case-insensitive)
+    for (const auto& ruleVar : rules) {
+        QVariantMap existing = ruleVar.toMap();
+        if (existing[QStringLiteral("pattern")].toString().compare(trimmed, Qt::CaseInsensitive) == 0) {
+            return;
+        }
+    }
+
+    QVariantMap newRule;
+    newRule[QStringLiteral("pattern")] = trimmed;
+    newRule[QStringLiteral("zoneNumber")] = zoneNumber;
+    rules.append(newRule);
+    setAppRulesForLayout(layoutId, rules);
+}
+
+void KCMPlasmaZones::removeAppRuleFromLayout(const QString& layoutId, int index)
+{
+    QVariantList rules = getAppRulesForLayout(layoutId);
+    if (index < 0 || index >= rules.size()) {
+        return;
+    }
+    rules.removeAt(index);
+    setAppRulesForLayout(layoutId, rules);
 }
 
 } // namespace PlasmaZones

@@ -143,6 +143,11 @@ inline constexpr QLatin1String Depth{"depth"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String RefreshRate{"refreshRate"};
 
+// App rules keys
+inline constexpr QLatin1String AppRules{"appRules"};
+inline constexpr QLatin1String Pattern{"pattern"};
+// ZoneNumber is reused from zone keys above
+
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 }

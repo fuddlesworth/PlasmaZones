@@ -7,7 +7,7 @@
  * Pages:
  * - Layouts: View, create, edit, import/export layouts
  * - Editor: Keyboard shortcuts and snapping settings
- * - Assignments: Monitor, activity, and quick layout assignments
+ * - Assignments: Monitor, activity, quick layout, and app-to-zone assignments
  * - Zones: Appearance and behavior settings (merged for consistency)
  * - Display: Zone selector popup and OSD settings
  * - Exclusions: Apps and windows to exclude from snapping

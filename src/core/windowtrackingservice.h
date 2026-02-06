@@ -217,6 +217,16 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
+     * @brief Calculate snap result based on app-to-zone rules
+     * @param windowId Full window ID
+     * @param windowScreenName Screen where window currently is
+     * @param isSticky Whether window is on all desktops
+     * @return SnapResult with geometry and zone info, or noSnap if no rule matches
+     */
+    SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
+                                       bool isSticky) const;
+
+    /**
      * @brief Calculate snap result for new window to last used zone
      * @param windowId Full window ID
      * @param windowScreenName Screen where window currently is

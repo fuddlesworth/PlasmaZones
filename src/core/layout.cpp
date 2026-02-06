@@ -77,6 +77,7 @@ Layout::Layout(const Layout& other)
     , m_showZoneNumbers(other.m_showZoneNumbers)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_defaultOrder(other.m_defaultOrder)
+    , m_appRules(other.m_appRules)
     , m_shaderId(other.m_shaderId)
     , m_shaderParams(other.m_shaderParams)
     , m_hiddenFromSelector(other.m_hiddenFromSelector)
@@ -115,6 +116,8 @@ Layout& Layout::operator=(const Layout& other)
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
         m_shaderId = other.m_shaderId;
         m_shaderParams = other.m_shaderParams;
+        bool rulesChanged = m_appRules != other.m_appRules;
+        m_appRules = other.m_appRules;
         m_hiddenFromSelector = other.m_hiddenFromSelector;
         m_allowedScreens = other.m_allowedScreens;
         m_allowedDesktops = other.m_allowedDesktops;
@@ -135,6 +138,7 @@ Layout& Layout::operator=(const Layout& other)
         if (screensChanged) Q_EMIT allowedScreensChanged();
         if (desktopsChanged) Q_EMIT allowedDesktopsChanged();
         if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
+        if (rulesChanged) Q_EMIT appRulesChanged();
     }
     return *this;
 }
@@ -185,6 +189,85 @@ LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGap, m_outerGap, outerGapChanged)
 
 // Source path setter (no layoutModified - internal tracking property)
 LAYOUT_SETTER_NO_MODIFIED(const QString&, SourcePath, m_sourcePath, sourcePathChanged)
+
+// App-to-zone rules
+void Layout::setAppRules(const QVector<AppRule>& rules)
+{
+    if (m_appRules != rules) {
+        m_appRules = rules;
+        Q_EMIT appRulesChanged();
+        Q_EMIT layoutModified();
+    }
+}
+
+QVariantList Layout::appRulesVariant() const
+{
+    QVariantList result;
+    for (const auto& rule : m_appRules) {
+        QVariantMap map;
+        map[QStringLiteral("pattern")] = rule.pattern;
+        map[QStringLiteral("zoneNumber")] = rule.zoneNumber;
+        result.append(map);
+    }
+    return result;
+}
+
+void Layout::setAppRulesVariant(const QVariantList& rules)
+{
+    QVector<AppRule> newRules;
+    for (const auto& item : rules) {
+        QVariantMap map = item.toMap();
+        AppRule rule;
+        rule.pattern = map.value(QStringLiteral("pattern")).toString();
+        rule.zoneNumber = map.value(QStringLiteral("zoneNumber")).toInt();
+        if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
+            newRules.append(rule);
+        }
+    }
+    setAppRules(newRules);
+}
+
+int Layout::matchAppRule(const QString& windowClass) const
+{
+    if (windowClass.isEmpty() || m_appRules.isEmpty()) {
+        return 0;
+    }
+    for (const auto& rule : m_appRules) {
+        if (windowClass.contains(rule.pattern, Qt::CaseInsensitive)) {
+            return rule.zoneNumber;
+        }
+    }
+    return 0;
+}
+
+QJsonObject AppRule::toJson() const
+{
+    QJsonObject obj;
+    obj[JsonKeys::Pattern] = pattern;
+    obj[JsonKeys::ZoneNumber] = zoneNumber;
+    return obj;
+}
+
+AppRule AppRule::fromJson(const QJsonObject& obj)
+{
+    AppRule rule;
+    rule.pattern = obj[JsonKeys::Pattern].toString();
+    rule.zoneNumber = obj[JsonKeys::ZoneNumber].toInt();
+    return rule;
+}
+
+QVector<AppRule> AppRule::fromJsonArray(const QJsonArray& array)
+{
+    QVector<AppRule> rules;
+    rules.reserve(array.size());
+    for (const auto& value : array) {
+        AppRule rule = AppRule::fromJson(value.toObject());
+        if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
+            rules.append(rule);
+        }
+    }
+    return rules;
+}
 
 void Layout::clearZonePaddingOverride()
 {
@@ -411,6 +494,15 @@ QJsonObject Layout::toJson() const
         }
     }
 
+    // App-to-zone rules - only serialize if non-empty
+    if (!m_appRules.isEmpty()) {
+        QJsonArray rulesArray;
+        for (const auto& rule : m_appRules) {
+            rulesArray.append(rule.toJson());
+        }
+        json[JsonKeys::AppRules] = rulesArray;
+    }
+
     // Visibility filtering - only serialize non-default values
     if (m_hiddenFromSelector) {
         json[JsonKeys::HiddenFromSelector] = true;
@@ -449,6 +541,11 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_shaderId = json[JsonKeys::ShaderId].toString();
     if (json.contains(JsonKeys::ShaderParams)) {
         layout->m_shaderParams = json[JsonKeys::ShaderParams].toObject().toVariantMap();
+    }
+
+    // App-to-zone rules
+    if (json.contains(JsonKeys::AppRules)) {
+        layout->m_appRules = AppRule::fromJsonArray(json[JsonKeys::AppRules].toArray());
     }
 
     // Visibility filtering

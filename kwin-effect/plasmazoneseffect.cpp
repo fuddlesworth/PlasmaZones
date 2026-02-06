@@ -1128,71 +1128,95 @@ void PlasmaZonesEffect::callSnapToLastZone(KWin::EffectWindow* window)
     // Use QPointer to safely handle window destruction during async calls
     QPointer<KWin::EffectWindow> safeWindow = window;
 
-    // FIRST: Try to restore to persisted zone from previous session
-    // This takes priority over "snap to last zone" to ensure windows return
-    // to their original positions after relog, not to the last-used zone.
-    QDBusPendingCall restoreCall =
-        m_windowTrackingInterface->asyncCall(QStringLiteral("restoreToPersistedZone"), windowId, screenName, sticky);
+    // Priority chain: App Rules -> Session Restore -> Snap to Last Zone
 
-    QDBusPendingCallWatcher* restoreWatcher = new QDBusPendingCallWatcher(restoreCall, this);
-    connect(restoreWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, sticky](QDBusPendingCallWatcher* w) {
+    // FIRST: Try app-to-zone rules (highest priority - explicit user intent)
+    QDBusPendingCall appRuleCall =
+        m_windowTrackingInterface->asyncCall(QStringLiteral("snapToAppRule"), windowId, screenName, sticky);
+
+    QDBusPendingCallWatcher* appRuleWatcher = new QDBusPendingCallWatcher(appRuleCall, this);
+    connect(appRuleWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, safeWindow, windowId, screenName, sticky](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
 
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
-                if (reply.isError()) {
-                    qCDebug(lcEffect) << "restoreToPersistedZone error:" << reply.error().message();
-                    // Fall through to snapToLastZone
-                } else {
-                    int snapX = reply.argumentAt<0>();
-                    int snapY = reply.argumentAt<1>();
-                    int snapWidth = reply.argumentAt<2>();
-                    int snapHeight = reply.argumentAt<3>();
-                    bool shouldRestore = reply.argumentAt<4>();
-
-                    if (shouldRestore && safeWindow) {
-                        QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
-                        qCDebug(lcEffect)
-                            << "Restoring window" << windowId << "to persisted zone geometry:" << snapGeometry;
+                if (!reply.isError()) {
+                    bool shouldSnap = reply.argumentAt<4>();
+                    if (shouldSnap && safeWindow) {
+                        QRect snapGeometry(reply.argumentAt<0>(), reply.argumentAt<1>(),
+                                           reply.argumentAt<2>(), reply.argumentAt<3>());
+                        qCDebug(lcEffect) << "App rule snapping window" << windowId
+                                          << "to geometry:" << snapGeometry;
+                        ensurePreSnapGeometryStored(safeWindow, windowId);
                         applySnapGeometry(safeWindow, snapGeometry);
-                        return; // Successfully restored, don't fall back to snapToLastZone
+                        return; // App rule matched, skip other snap methods
                     }
+                } else {
+                    qCDebug(lcEffect) << "snapToAppRule error:" << reply.error().message();
                 }
 
-                // FALLBACK: No persisted zone found, try "snap to last zone" feature
+                // SECOND: Try to restore to persisted zone from previous session
                 if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
                     return;
                 }
 
-                // BUG FIX: Pass the window's current screen name to prevent cross-monitor snapping
-                // Without this, windows on monitor 2 would snap to zones on monitor 1
-                QString windowScreenName = getWindowScreenName(safeWindow);
-                QDBusPendingCall snapCall = m_windowTrackingInterface->asyncCall(QStringLiteral("snapToLastZone"),
-                                                                                 windowId, windowScreenName, sticky);
+                QDBusPendingCall restoreCall =
+                    m_windowTrackingInterface->asyncCall(QStringLiteral("restoreToPersistedZone"), windowId, screenName, sticky);
 
-                QDBusPendingCallWatcher* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
-                connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
-                        [this, safeWindow, windowId](QDBusPendingCallWatcher* sw) {
-                            sw->deleteLater();
+                QDBusPendingCallWatcher* restoreWatcher = new QDBusPendingCallWatcher(restoreCall, this);
+                connect(restoreWatcher, &QDBusPendingCallWatcher::finished, this,
+                        [this, safeWindow, windowId, sticky](QDBusPendingCallWatcher* rw) {
+                            rw->deleteLater();
 
-                            QDBusPendingReply<int, int, int, int, bool> snapReply = *sw;
-                            if (snapReply.isError()) {
-                                qCDebug(lcEffect) << "snapToLastZone not applied:" << snapReply.error().message();
+                            QDBusPendingReply<int, int, int, int, bool> restoreReply = *rw;
+                            if (!restoreReply.isError()) {
+                                bool shouldRestore = restoreReply.argumentAt<4>();
+                                if (shouldRestore && safeWindow) {
+                                    QRect snapGeometry(restoreReply.argumentAt<0>(), restoreReply.argumentAt<1>(),
+                                                       restoreReply.argumentAt<2>(), restoreReply.argumentAt<3>());
+                                    qCDebug(lcEffect)
+                                        << "Restoring window" << windowId << "to persisted zone geometry:" << snapGeometry;
+                                    ensurePreSnapGeometryStored(safeWindow, windowId);
+                                    applySnapGeometry(safeWindow, snapGeometry);
+                                    return; // Successfully restored, don't fall back to snapToLastZone
+                                }
+                            } else {
+                                qCDebug(lcEffect) << "restoreToPersistedZone error:" << restoreReply.error().message();
+                            }
+
+                            // THIRD: No persisted zone found, try "snap to last zone" feature
+                            if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
                                 return;
                             }
 
-                            int snapX = snapReply.argumentAt<0>();
-                            int snapY = snapReply.argumentAt<1>();
-                            int snapWidth = snapReply.argumentAt<2>();
-                            int snapHeight = snapReply.argumentAt<3>();
-                            bool shouldSnap = snapReply.argumentAt<4>();
+                            QString windowScreenName = getWindowScreenName(safeWindow);
+                            QDBusPendingCall snapCall = m_windowTrackingInterface->asyncCall(QStringLiteral("snapToLastZone"),
+                                                                                             windowId, windowScreenName, sticky);
 
-                            if (shouldSnap && safeWindow) {
-                                QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
-                                qCDebug(lcEffect) << "Auto-snapping new window" << windowId
-                                                  << "to last zone geometry:" << snapGeometry;
-                                applySnapGeometry(safeWindow, snapGeometry);
-                            }
+                            QDBusPendingCallWatcher* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
+                            connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
+                                    [this, safeWindow, windowId](QDBusPendingCallWatcher* sw) {
+                                        sw->deleteLater();
+
+                                        QDBusPendingReply<int, int, int, int, bool> snapReply = *sw;
+                                        if (snapReply.isError()) {
+                                            qCDebug(lcEffect) << "snapToLastZone not applied:" << snapReply.error().message();
+                                            return;
+                                        }
+
+                                        int snapX = snapReply.argumentAt<0>();
+                                        int snapY = snapReply.argumentAt<1>();
+                                        int snapWidth = snapReply.argumentAt<2>();
+                                        int snapHeight = snapReply.argumentAt<3>();
+                                        bool shouldSnap = snapReply.argumentAt<4>();
+
+                                        if (shouldSnap && safeWindow) {
+                                            QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
+                                            qCDebug(lcEffect) << "Auto-snapping new window" << windowId
+                                                              << "to last zone geometry:" << snapGeometry;
+                                            applySnapGeometry(safeWindow, snapGeometry);
+                                        }
+                                    });
                         });
             });
 }

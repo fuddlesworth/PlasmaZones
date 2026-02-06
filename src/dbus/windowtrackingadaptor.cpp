@@ -533,6 +533,38 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
     qCDebug(lcDbusWindow) << "Snapping new window" << windowId << "to last used zone" << result.zoneId;
 }
 
+void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky,
+                                          int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+{
+    snapX = snapY = snapWidth = snapHeight = 0;
+    shouldSnap = false;
+
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    // Delegate calculation to service
+    SnapResult result = m_service->calculateSnapToAppRule(windowId, windowScreenName, sticky);
+    if (!result.shouldSnap) {
+        return;
+    }
+
+    snapX = result.geometry.x();
+    snapY = result.geometry.y();
+    snapWidth = result.geometry.width();
+    snapHeight = result.geometry.height();
+    shouldSnap = true;
+
+    // Mark as auto-snapped so windowSnapped() won't update last-used zone or clear pending
+    m_service->markAsAutoSnapped(windowId);
+
+    // Track the assignment
+    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
+
+    qCDebug(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
+}
+
 void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, const QString& screenName, bool sticky,
                                                    int& snapX, int& snapY, int& snapWidth, int& snapHeight,
                                                    bool& shouldRestore)

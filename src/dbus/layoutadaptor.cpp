@@ -446,6 +446,11 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->setAllowedActivities(activities);
     }
 
+    // Update app-to-zone rules
+    if (obj.contains(JsonKeys::AppRules)) {
+        layout->setAppRules(AppRule::fromJsonArray(obj[JsonKeys::AppRules].toArray()));
+    }
+
     // Clear existing zones and add new ones
     layout->clearZones();
 

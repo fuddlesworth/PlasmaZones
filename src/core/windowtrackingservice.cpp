@@ -316,6 +316,74 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 // Auto-Snap Logic
 // ═══════════════════════════════════════════════════════════════════════════════
 
+SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId,
+                                                           const QString& windowScreenName,
+                                                           bool isSticky) const
+{
+    // Check if window was floating - floating windows should NOT be auto-snapped
+    QString stableId = Utils::extractStableId(windowId);
+    if (m_floatingWindows.contains(stableId)) {
+        return SnapResult::noSnap();
+    }
+
+    // Check sticky window handling
+    if (isSticky && m_settings) {
+        auto handling = m_settings->stickyWindowHandling();
+        if (handling == StickyWindowHandling::IgnoreAll) {
+            return SnapResult::noSnap();
+        }
+    }
+
+    // Get the layout for this screen (respects per-screen/desktop assignments)
+    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    Layout* layout = nullptr;
+    if (m_layoutManager) {
+        if (!windowScreenName.isEmpty()) {
+            layout = m_layoutManager->layoutForScreen(windowScreenName, currentDesktop, QString());
+        }
+        if (!layout) {
+            layout = m_layoutManager->activeLayout();
+        }
+    }
+    if (!layout) {
+        return SnapResult::noSnap();
+    }
+
+    // Extract window class and check against app rules
+    QString windowClass = Utils::extractWindowClass(windowId);
+    int zoneNumber = layout->matchAppRule(windowClass);
+    if (zoneNumber <= 0) {
+        return SnapResult::noSnap();
+    }
+
+    // Find the zone by number
+    Zone* zone = layout->zoneByNumber(zoneNumber);
+    if (!zone) {
+        qCDebug(lcCore) << "App rule matched zone" << zoneNumber << "for" << windowClass
+                        << "but zone not found in layout";
+        return SnapResult::noSnap();
+    }
+
+    // Calculate geometry
+    QString zoneId = zone->id().toString();
+    QString screenName = windowScreenName.isEmpty() ? QString() : windowScreenName;
+    QRect geo = zoneGeometry(zoneId, screenName);
+    if (!geo.isValid()) {
+        return SnapResult::noSnap();
+    }
+
+    qCInfo(lcCore) << "App rule matched:" << windowClass << "-> zone" << zoneNumber
+                   << "(" << zoneId << ")";
+
+    SnapResult result;
+    result.shouldSnap = true;
+    result.geometry = geo;
+    result.zoneId = zoneId;
+    result.zoneIds = QStringList{zoneId};
+    result.screenName = screenName;
+    return result;
+}
+
 SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowId,
                                                            const QString& windowScreenName,
                                                            bool isSticky) const

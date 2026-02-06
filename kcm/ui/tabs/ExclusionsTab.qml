@@ -23,6 +23,13 @@ ScrollView {
     WindowPickerDialog {
         id: windowPickerDialog
         kcm: root.kcm
+        onPicked: (value) => {
+            if (forApps) {
+                root.kcm.addExcludedApp(value)
+            } else {
+                root.kcm.addExcludedWindowClass(value)
+            }
+        }
     }
 
     ColumnLayout {

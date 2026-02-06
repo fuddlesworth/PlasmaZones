@@ -202,6 +202,33 @@
                 <annotation name="org.gtk.GDBus.DocString" value="JSON e.g. {x, y, width, height}."/>
             </arg>
         </method>
+        <method name="snapToAppRule">
+            <annotation name="org.gtk.GDBus.DocString" value="Snap a window to its app-rule-defined zone (highest priority auto-snap). Returns geometry and shouldSnap."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
+            </arg>
+            <arg name="windowScreenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
+            </arg>
+            <arg name="shouldSnap" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if an app rule matched and window should be snapped."/>
+            </arg>
+        </method>
         <method name="snapToLastZone">
             <annotation name="org.gtk.GDBus.DocString" value="Compute snap geometry for auto-snap to last used zone. Respects moveNewWindowsToLastZone setting. Returns geometry and shouldSnap."/>
             <arg name="windowId" type="s" direction="in">
@@ -338,6 +365,15 @@
             </arg>
         </signal>
 
+        <method name="recordSnapIntent">
+            <annotation name="org.gtk.GDBus.DocString" value="Record whether the last snap was user-initiated (for snap-to-last-zone filtering)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="wasUserInitiated" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if user performed the snap (drag or shortcut), false if auto-snapped."/>
+            </arg>
+        </method>
         <method name="windowClosed">
             <annotation name="org.gtk.GDBus.DocString" value="Notify daemon that a window was closed (cleanup)."/>
             <arg name="windowId" type="s" direction="in">

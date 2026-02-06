@@ -357,6 +357,12 @@ public Q_SLOTS:
     Q_INVOKABLE void openEditor();
     Q_INVOKABLE void setLayoutHidden(const QString& layoutId, bool hidden);
 
+    // App-to-zone rules management
+    Q_INVOKABLE QVariantList getAppRulesForLayout(const QString& layoutId) const;
+    Q_INVOKABLE void setAppRulesForLayout(const QString& layoutId, const QVariantList& rules);
+    Q_INVOKABLE void addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber);
+    Q_INVOKABLE void removeAppRuleFromLayout(const QString& layoutId, int index);
+
     // Exclusion management
     Q_INVOKABLE void addExcludedApp(const QString& app);
     Q_INVOKABLE void removeExcludedApp(int index);
@@ -489,6 +495,7 @@ Q_SIGNALS:
     void checkingForUpdatesChanged();
     void dismissedUpdateVersionChanged();
     void quickLayoutSlotsRefreshed(); // Emitted when quick layout slots are reloaded from daemon
+    void appRulesRefreshed(); // Emitted when app rules cache is cleared (load/defaults)
     void colorImportError(const QString& message); // Emitted when color import fails
     void colorImportSuccess(); // Emitted when color import succeeds
 
@@ -561,6 +568,11 @@ private:
     // Pending layout visibility changes (staged until Apply)
     // Key: layoutId, Value: hiddenFromSelector state
     QHash<QString, bool> m_pendingHiddenStates;
+
+    // Pending app-to-zone rules (staged until Apply)
+    // Key: layoutId, Value: rules list (QVariantList of {pattern, zoneNumber})
+    // Only layouts that have been modified are stored here.
+    QHash<QString, QVariantList> m_pendingAppRules;
 
     // Fill on drop settings (stored separately in Editor group)
     bool m_fillOnDropEnabled = true;

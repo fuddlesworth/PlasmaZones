@@ -10,10 +10,30 @@
 #include <QVector>
 #include <QUuid>
 #include <QString>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <memory>
 
 namespace PlasmaZones {
+
+/**
+ * @brief App-to-zone auto-snap rule
+ *
+ * Maps a window class pattern to a zone number within a layout.
+ * Patterns are case-insensitive substring matches against the window class.
+ */
+struct PLASMAZONES_EXPORT AppRule {
+    QString pattern;       // Window class or app name pattern (case-insensitive substring match)
+    int zoneNumber = 0;    // 1-based zone number to snap to
+
+    bool operator==(const AppRule& other) const { return pattern == other.pattern && zoneNumber == other.zoneNumber; }
+    bool operator!=(const AppRule& other) const { return !(*this == other); }
+
+    // Serialization helpers (centralized to avoid DRY violations)
+    QJsonObject toJson() const;
+    static AppRule fromJson(const QJsonObject& obj);
+    static QVector<AppRule> fromJsonArray(const QJsonArray& array);
+};
 
 /**
  * @brief Layout types matching FancyZones
@@ -61,6 +81,9 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(bool isSystemLayout READ isSystemLayout NOTIFY sourcePathChanged)
     Q_PROPERTY(QString shaderId READ shaderId WRITE setShaderId NOTIFY shaderIdChanged)
     Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
+
+    // App-to-zone rules
+    Q_PROPERTY(QVariantList appRules READ appRulesVariant WRITE setAppRulesVariant NOTIFY appRulesChanged)
 
     // Visibility filtering
     Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
@@ -173,6 +196,13 @@ public:
     }
     void setAllowedActivities(const QStringList& activities);
 
+    // App-to-zone rules
+    QVector<AppRule> appRules() const { return m_appRules; }
+    void setAppRules(const QVector<AppRule>& rules);
+    QVariantList appRulesVariant() const;
+    void setAppRulesVariant(const QVariantList& rules);
+    int matchAppRule(const QString& windowClass) const;
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -233,6 +263,7 @@ Q_SIGNALS:
     void allowedScreensChanged();
     void allowedDesktopsChanged();
     void allowedActivitiesChanged();
+    void appRulesChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
@@ -249,6 +280,9 @@ private:
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)
     QVector<Zone*> m_zones;
+
+    // App-to-zone rules
+    QVector<AppRule> m_appRules;
 
     // Shader support
     QString m_shaderId; // Shader effect ID (empty = no shader)

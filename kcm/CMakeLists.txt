@@ -58,6 +58,7 @@ install(FILES
     ui/tabs/ActivityAssignmentsCard.qml
     ui/tabs/QuickLayoutSlotsCard.qml
     ui/tabs/LayoutToolbar.qml
+    ui/tabs/AppRulesCard.qml
     ui/tabs/LayoutGridDelegate.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones/tabs
 )
