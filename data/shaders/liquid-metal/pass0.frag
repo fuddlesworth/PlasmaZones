@@ -78,7 +78,7 @@ void main() {
 
     // Mouse interaction: radial ripples emanating from cursor
     if (mouseStr > 0.001) {
-        vec2 mouseUV = iMouse.zw; // normalized 0-1
+        vec2 mouseUV = vec2(iMouse.z, 1.0 - iMouse.w); // flip Y to match screen-space UV
         if (mouseUV.x > 0.0 || mouseUV.y > 0.0) {
             float dist = length(uv - mouseUV);
             // Expanding ring ripple
