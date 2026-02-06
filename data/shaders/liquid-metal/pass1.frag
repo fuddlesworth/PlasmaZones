@@ -15,38 +15,41 @@ layout(location = 0) out vec4 fragColor;
 #include <common.glsl>
 #include <multipass.glsl>
 
-// Procedural environment map: high-contrast studio lighting look
+// Procedural environment map: studio strip lights against dark background.
+// Strip lights create the classic chrome look — bright bands that visibly
+// warp and slide across the deforming surface.
 vec3 envMap(vec3 dir, vec3 warmClr, vec3 coolClr, float rotation) {
     // Rotate reflection direction around Y axis
     float c = cos(rotation);
     float s = sin(rotation);
     vec3 rd = vec3(dir.x * c - dir.z * s, dir.y, dir.x * s + dir.z * c);
 
-    // Dark base — makes the bright areas pop
-    vec3 sky = vec3(0.03);
+    float y = rd.y;    // vertical angle — drives horizontal bands on surface
+    float x = rd.x;    // horizontal angle — drives vertical variation
 
-    // Vertical gradient bands: alternating warm/cool strips (like studio lighting)
-    float skyGrad = rd.y * 0.5 + 0.5;
-    sky += mix(warmClr * 0.4, coolClr * 0.6, smoothstep(0.3, 0.7, skyGrad));
+    // Very dark base — essential for contrast
+    vec3 sky = vec3(0.02);
 
-    // Bright horizon band (ground plane reflection — key visual feature)
-    float horizon = exp(-rd.y * rd.y * 8.0);
-    sky += warmClr * horizon * 1.2;
+    // Strip light 1: broad warm horizon band (the dominant visual feature)
+    sky += warmClr * 1.8 * exp(-y * y * 12.0);
 
-    // Upper fill light (cool)
-    float upper = smoothstep(0.5, 0.9, skyGrad);
-    sky += coolClr * upper * 0.5;
+    // Strip light 2: narrow bright white band above horizon
+    sky += vec3(1.2) * exp(-pow((y - 0.35) * 8.0, 2.0));
 
-    // Primary sun — sharp highlight
-    vec3 sunDir = normalize(vec3(0.5, 0.8, 0.3));
+    // Strip light 3: cool band higher up
+    sky += coolClr * 1.2 * exp(-pow((y - 0.7) * 7.0, 2.0));
+
+    // Strip light 4: subtle warm accent from below (ground bounce)
+    sky += warmClr * 0.5 * exp(-pow((y + 0.5) * 6.0, 2.0));
+
+    // Vertical accent: angled fill strip for left-right asymmetry
+    float diag = (x + y) * 0.7;
+    sky += coolClr * 0.3 * exp(-pow((diag - 0.2) * 6.0, 2.0));
+
+    // Pinpoint sun highlight
+    vec3 sunDir = normalize(vec3(0.4, 0.7, 0.3));
     float sunDot = max(0.0, dot(rd, sunDir));
-    sky += vec3(1.0, 0.95, 0.8) * pow(sunDot, 128.0) * 3.0;
-    sky += vec3(1.0, 0.9, 0.7) * pow(sunDot, 16.0) * 0.5;
-
-    // Secondary light (opposite side, cooler)
-    vec3 fillDir = normalize(vec3(-0.6, 0.3, -0.5));
-    float fillDot = max(0.0, dot(rd, fillDir));
-    sky += coolClr * pow(fillDot, 32.0) * 1.5;
+    sky += vec3(1.5, 1.4, 1.2) * pow(sunDot, 256.0) * 3.0;
 
     return sky;
 }
@@ -72,8 +75,9 @@ void main() {
     vec3 warmClr = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.83, 0.63));
     vec3 coolClr = colorWithFallback(customColors[2].rgb, vec3(0.376, 0.565, 0.753));
 
-    // Reconstruct normal from height differences — higher scale = more visible ripples
-    float normalScale = 0.55;
+    // Reconstruct normal — normalScale drives how dramatically the surface
+    // distorts reflections. Higher = more visible ripples/bands.
+    float normalScale = 1.0;
     vec3 normal = normalize(vec3(
         (hC - hR) / texel.x * normalScale,
         (hC - hU) / texel.y * normalScale,
@@ -86,34 +90,28 @@ void main() {
     // Reflection vector
     vec3 refl = reflect(-viewDir, normal);
 
-    // Fresnel: more reflection at glancing angles (metals have high base reflectivity)
-    float fresnel = pow(1.0 - max(0.0, dot(normal, viewDir)), fresnelPow);
-    fresnel = mix(0.4, 1.0, fresnel);
+    // Fresnel: steep edges go bright, flat areas stay darker
+    float NdotV = max(0.0, dot(normal, viewDir));
+    float fresnel = pow(1.0 - NdotV, fresnelPow);
+    fresnel = mix(0.5, 1.0, fresnel); // high base reflectivity (it's metal)
 
-    // Environment reflection
+    // Environment reflection — this is where the strip lights show up
     float envRot = iTime * envRotSpeed;
     vec3 envClr = envMap(refl, warmClr, coolClr, envRot);
 
-    // Key light — broad specular
+    // Key light specular
     vec3 lightDir = normalize(vec3(0.3, 0.5, 1.0));
     vec3 halfVec = normalize(viewDir + lightDir);
     float spec = pow(max(0.0, dot(normal, halfVec)), specSharp);
 
-    // Rim/back light — catches edges for definition
-    vec3 rimDir = normalize(vec3(-0.4, -0.3, 0.6));
-    vec3 rimHalf = normalize(viewDir + rimDir);
-    float rimSpec = pow(max(0.0, dot(normal, rimHalf)), specSharp * 0.5) * 0.6;
+    // Compose metal surface: reflection is primary, everything else accents it
+    vec3 col = metalClr * envClr * fresnel * reflStr;
+    col += vec3(1.0, 0.98, 0.94) * spec * 2.5; // specular punch
+    col += metalClr * caustic * 0.4; // caustic shimmer
 
-    // Compose metal surface
-    vec3 col = metalClr * 0.08; // dark ambient
-    col += metalClr * envClr * fresnel * reflStr; // reflection
-    col += vec3(1.0, 0.98, 0.94) * spec * 2.0; // key specular
-    col += coolClr * rimSpec; // rim specular
-    col += metalClr * caustic * 0.3; // caustic shimmer
-
-    // Edge darkening in valleys (Fresnel-based concavity)
-    float curvature = length(vec2(hC - hR, hC - hU)) * 30.0;
-    col += warmClr * curvature * 0.08;
+    // Darken concave areas (valleys between ripples)
+    float valley = 1.0 - smoothstep(0.0, 0.15, abs(hC));
+    col *= mix(1.0, 0.6, valley * 0.3);
 
     fragColor = vec4(max(col, 0.0), 1.0);
 }
