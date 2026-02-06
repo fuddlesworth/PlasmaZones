@@ -78,6 +78,21 @@ Window {
         fullscreenMode = !fullscreenMode;
     }
 
+    // Move the editor window to the screen matching editorController.targetScreen
+    function moveToTargetScreen() {
+        if (!editorWindow._editorController || !editorWindow._availableScreens)
+            return;
+        var targetName = editorWindow._editorController.targetScreen;
+        if (!targetName)
+            return;
+        for (var i = 0; i < editorWindow._availableScreens.length; i++) {
+            if (editorWindow._availableScreens[i].name === targetName) {
+                editorWindow.screen = editorWindow._availableScreens[i];
+                return;
+            }
+        }
+    }
+
     // Helper to check if a zone is currently selected
     // Uses C++ Q_INVOKABLE method - faster than JavaScript loop due to no JS engine overhead
     function isZoneSelected(zoneId) {
@@ -165,6 +180,8 @@ Window {
                 editorWindow._editorController.createNewLayout();
 
         }
+        // Move editor to the target screen (handles --screen arg and D-Bus openEditorForScreen)
+        moveToTargetScreen();
         // Request focus on drawingArea for keyboard navigation
         // Use a timer to ensure focus is set after window is fully shown
         Qt.callLater(function() {
@@ -691,6 +708,10 @@ Window {
                 var _ = editorWindow._editorController.zones;
                 editorWindow.selectedZoneId = editorWindow.selectedZoneId; // Trigger property update
             }
+        }
+
+        function onTargetScreenChanged() {
+            editorWindow.moveToTargetScreen();
         }
 
         function onLayoutNameChanged() {
