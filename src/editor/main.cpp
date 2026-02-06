@@ -12,6 +12,7 @@
 #include <QCommandLineParser>
 #include <QQuickStyle>
 #include <QScreen>
+#include <QCursor>
 #include <QObject>
 
 #include <KLocalizedString>
@@ -60,10 +61,14 @@ int main(int argc, char* argv[])
     if (parser.isSet(screenOption)) {
         targetScreen = parser.value(screenOption);
     } else {
-        // Default to primary screen if no screen specified
-        QScreen* primaryScreen = QGuiApplication::primaryScreen();
-        if (primaryScreen) {
-            targetScreen = primaryScreen->name();
+        // Default to the screen under the cursor — more intuitive than primaryScreen()
+        // which can be unreliable on Wayland (Qt may not match KDE's configured primary)
+        QScreen* cursorScreen = QGuiApplication::screenAt(QCursor::pos());
+        if (!cursorScreen) {
+            cursorScreen = QGuiApplication::primaryScreen();
+        }
+        if (cursorScreen) {
+            targetScreen = cursorScreen->name();
         }
     }
 
