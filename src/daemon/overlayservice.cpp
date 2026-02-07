@@ -667,6 +667,11 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
             createOverlayWindow(screen);
         }
         if (auto* window = m_overlayWindows.value(screen)) {
+            assertWindowOnScreen(window, screen);
+            qCDebug(lcOverlay) << "initializeOverlay: screen=" << screen->name()
+                               << "screenGeom=" << screen->geometry()
+                               << "availGeom=" << ScreenManager::actualAvailableGeometry(screen)
+                               << "windowScreen=" << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
             updateOverlayWindow(screen);
             window->show();
         }
@@ -709,6 +714,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
                 createOverlayWindow(screen);
                 updateOverlayWindow(screen);
                 if (auto* window = m_overlayWindows.value(screen)) {
+                    assertWindowOnScreen(window, screen);
                     window->show();
                 }
             }
@@ -833,16 +839,6 @@ void OverlayService::updateSettings(ISettings* settings)
     // Without this, changing settings while the selector is visible can leave stale geometry
     // and anchors, causing corrupted rendering or incorrect window sizing.
     // Skip disabled monitors.
-    if (!m_zoneSelectorWindows.isEmpty()) {
-        for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
-                continue;
-            }
-            updateZoneSelectorWindow(screen);
-        }
-    }
-
-    // Keep selector windows updated with the latest settings and layout data
     if (!m_zoneSelectorWindows.isEmpty()) {
         for (auto* screen : m_zoneSelectorWindows.keys()) {
             if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
@@ -1094,12 +1090,24 @@ void OverlayService::removeScreen(QScreen* screen)
     destroyOverlayWindow(screen);
 }
 
+void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
+{
+    if (!window || !screen) {
+        return;
+    }
+    if (window->screen() != screen) {
+        window->setScreen(screen);
+    }
+    window->setGeometry(screen->geometry());
+}
+
 void OverlayService::handleScreenAdded(QScreen* screen)
 {
     if (m_visible && screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         if (auto* window = m_overlayWindows.value(screen)) {
+            assertWindowOnScreen(window, screen);
             window->show();
         }
     }
@@ -1137,6 +1145,7 @@ void OverlayService::showZoneSelector()
             createZoneSelectorWindow(screen);
         }
         if (auto* window = m_zoneSelectorWindows.value(screen)) {
+            assertWindowOnScreen(window, screen);
             updateZoneSelectorWindow(screen);
             window->show();
         } else {
@@ -1405,20 +1414,18 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     QVariantList layouts = buildLayoutsList(screen->name());
     writeQmlProperty(window, QStringLiteral("layouts"), layouts);
 
-    // Set active layout ID
+    // Set active layout ID for this screen
+    // Per-screen assignment takes priority so each monitor highlights its own layout
     QString activeLayoutId;
     if (m_layoutManager) {
-        // Prefer the currently active layout (set via shortcut or zone selector selection)
-        // Fall back to screen assignment only if no active layout is set
-        Layout* activeLayout = m_layoutManager->activeLayout();
-        if (activeLayout) {
-            activeLayoutId = activeLayout->id().toString();
+        Layout* screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        if (screenLayout) {
+            activeLayoutId = screenLayout->id().toString();
         } else {
-            // No active layout - try screen-specific assignment
-            Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-            if (screenLayout) {
-                activeLayoutId = screenLayout->id().toString();
+            Layout* activeLayout = m_layoutManager->activeLayout();
+            if (activeLayout) {
+                activeLayoutId = activeLayout->id().toString();
             } else if (m_layout) {
                 activeLayoutId = m_layout->id().toString();
             }
@@ -1589,10 +1596,24 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     window->setProperty("isShaderOverlay", usingShader);
 
     // Set shader-specific properties (use QQmlProperty so QML bindings see updates)
-    if (usingShader && m_layout) {
+    // Use per-screen layout (same resolution as updateOverlayWindow) so each monitor
+    // gets the correct shader when per-screen assignments differ
+    Layout* screenLayout = nullptr;
+    if (m_layoutManager) {
+        screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        if (!screenLayout) {
+            screenLayout = m_layoutManager->activeLayout();
+        }
+    }
+    if (!screenLayout) {
+        screenLayout = m_layout;
+    }
+
+    if (usingShader && screenLayout) {
         auto* registry = ShaderRegistry::instance();
         if (registry) {
-            const QString shaderId = m_layout->shaderId();
+            const QString shaderId = screenLayout->shaderId();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
                               << "bufferPaths=" << info.bufferShaderPaths.size();
@@ -1606,7 +1627,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
             writeQmlProperty(window, QStringLiteral("bufferFeedback"), info.bufferFeedback);
             writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
             writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);
-            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, m_layout->shaderParams());
+            QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
             writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(translatedParams));
         }
     }
@@ -1669,13 +1690,13 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     }
 
     // Get the layout for this screen to use layout-specific settings
-    // Prefer the currently active layout, fall back to screen assignment
+    // Prefer per-screen assignment, fall back to global active layout
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout = m_layoutManager->activeLayout();
+        screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (!screenLayout) {
-            screenLayout =
-                m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+            screenLayout = m_layoutManager->activeLayout();
         }
     }
     if (!screenLayout) {
@@ -1793,15 +1814,14 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
         return zonesList;
     }
 
-    // Get the currently active layout first, then fall back to screen-specific assignment
-    // This ensures the overlay shows the layout selected via shortcuts or zone selector
+    // Get the layout for this specific screen, fall back to global active layout
+    // Per-screen assignments take priority so each monitor shows its own layout
     Layout* screenLayout = nullptr;
     if (m_layoutManager) {
-        screenLayout = m_layoutManager->activeLayout();
+        screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (!screenLayout) {
-            // Fall back to screen-specific assignment if no active layout is set
-            screenLayout =
-                m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+            screenLayout = m_layoutManager->activeLayout();
         }
     }
 
@@ -1813,6 +1833,12 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     if (!screenLayout) {
         return zonesList;
     }
+
+    qCDebug(lcOverlay) << "buildZonesList: screen=" << screen->name()
+                       << "screenGeom=" << screen->geometry()
+                       << "availGeom=" << ScreenManager::actualAvailableGeometry(screen)
+                       << "layout=" << screenLayout->name()
+                       << "zones=" << screenLayout->zones().size();
 
     for (auto* zone : screenLayout->zones()) {
         if (zone) {
@@ -1983,8 +2009,25 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     qreal height = relGeoMap.value(QStringLiteral("height"), 0.0).toReal();
     m_selectedZoneRelGeo = QRectF(x, y, width, height);
 
-    qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId;
-    Q_EMIT manualLayoutSelected(layoutId);
+    // Determine which screen the zone selector is on from the sender window
+    // Primary: look up in our window-to-screen map (authoritative assignment)
+    // Fallback: use Qt's screen assignment on the window itself
+    QString screenName;
+    auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
+    if (senderWindow) {
+        for (auto it = m_zoneSelectorWindows.constBegin(); it != m_zoneSelectorWindows.constEnd(); ++it) {
+            if (it.value() == senderWindow) {
+                screenName = it.key()->name();
+                break;
+            }
+        }
+        if (screenName.isEmpty() && senderWindow->screen()) {
+            screenName = senderWindow->screen()->name();
+        }
+    }
+
+    qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId << "on screen:" << screenName;
+    Q_EMIT manualLayoutSelected(layoutId, screenName);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2112,10 +2155,10 @@ void OverlayService::updateZonesForAllWindows()
         if (useShaderOverlay()) {
             Layout* screenLayout = nullptr;
             if (m_layoutManager) {
-                screenLayout = m_layoutManager->activeLayout();
+                screenLayout =
+                    m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
                 if (!screenLayout) {
-                    screenLayout =
-                        m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+                    screenLayout = m_layoutManager->activeLayout();
                 }
             }
             if (!screenLayout) {
@@ -2156,11 +2199,21 @@ void OverlayService::onShaderError(const QString& errorLog)
     // Don't set m_shaderErrorPending - retry shaders on next show (fix bugs, don't mask)
 }
 
-bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio)
+bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
+                                            const QString& screenName)
 {
-    QScreen* screen = Utils::primaryScreen();
+    // Resolve target screen: explicit name > primary
+    // Note: QCursor::pos() is NOT used here — it returns stale data for background
+    // daemons on Wayland. Callers should always pass screenName from KWin effect data.
+    QScreen* screen = nullptr;
+    if (!screenName.isEmpty()) {
+        screen = Utils::findScreenByName(screenName);
+    }
     if (!screen) {
-        qCWarning(lcOverlay) << "No primary screen for layout OSD";
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        qCWarning(lcOverlay) << "No screen available for layout OSD";
         return false;
     }
 
@@ -2174,6 +2227,8 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screen
         return false;
     }
 
+    assertWindowOnScreen(window, screen);
+
     screenGeom = screen->geometry();
     aspectRatio = (screenGeom.height() > 0)
         ? static_cast<qreal>(screenGeom.width()) / screenGeom.height()
@@ -2183,7 +2238,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screen
     return true;
 }
 
-void OverlayService::showLayoutOsd(Layout* layout)
+void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
 {
     if (!layout) {
         qCDebug(lcOverlay) << "No layout provided for OSD";
@@ -2195,10 +2250,13 @@ void OverlayService::showLayoutOsd(Layout* layout)
         return;
     }
 
+    // Hide any existing layout OSD before showing new one (prevent stale OSD on other screen)
+    hideLayoutOsd();
+
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio)) {
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenName)) {
         return;
     }
 
@@ -2211,20 +2269,24 @@ void OverlayService::showLayoutOsd(Layout* layout)
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
-    qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name();
+    qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name() << "on screen:" << screenName;
 }
 
-void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category)
+void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
+                                   const QString& screenName)
 {
     if (zones.isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << name;
         return;
     }
 
+    // Hide any existing layout OSD before showing new one (prevent stale OSD on other screen)
+    hideLayoutOsd();
+
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 0;
-    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio)) {
+    if (!prepareLayoutOsdWindow(window, screenGeom, aspectRatio, screenName)) {
         return;
     }
 
@@ -2237,7 +2299,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
-    qCDebug(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category;
+    qCDebug(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category << "on screen:" << screenName;
 }
 
 void OverlayService::hideLayoutOsd()
@@ -2293,11 +2355,6 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
-    if (!m_layout || m_layout->zones().isEmpty()) {
-        qCDebug(lcOverlay) << "No layout or zones available for navigation OSD";
-        return;
-    }
-
     // Deduplicate: Skip if same action+reason within 200ms (prevents duplicate from Qt signal + D-Bus signal)
     QString actionKey = action + QLatin1String(":") + reason;
     if (actionKey == m_lastNavigationAction + QLatin1String(":") + m_lastNavigationReason
@@ -2316,6 +2373,22 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
     if (!screen) {
         qCWarning(lcOverlay) << "No screen available for navigation OSD";
+        return;
+    }
+
+    // Resolve per-screen layout (not the global m_layout which may belong to another screen)
+    Layout* screenLayout = nullptr;
+    if (m_layoutManager) {
+        screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        if (!screenLayout) {
+            screenLayout = m_layoutManager->activeLayout();
+        }
+    }
+    if (!screenLayout) {
+        screenLayout = m_layout;
+    }
+    if (!screenLayout || screenLayout->zones().isEmpty()) {
+        qCDebug(lcOverlay) << "No layout or zones available for navigation OSD";
         return;
     }
 
@@ -2374,7 +2447,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Use shared LayoutUtils with minimal fields for zone number lookup
     // (only need zoneId and zoneNumber, not name/appearance)
-    QVariantList zonesList = LayoutUtils::zonesToVariantList(m_layout, ZoneField::Minimal);
+    QVariantList zonesList = LayoutUtils::zonesToVariantList(screenLayout, ZoneField::Minimal);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // Get screen geometry for window positioning
@@ -2385,6 +2458,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     const int osdHeight = 70; // Text message + margins
     window->setWidth(osdWidth);
     window->setHeight(osdHeight);
+
+    // Ensure the window is on the correct Wayland output before positioning/show
+    assertWindowOnScreen(window, screen);
     centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
 
     // Hide any existing navigation OSD before showing new one (prevent overlap)

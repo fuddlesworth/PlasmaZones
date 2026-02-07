@@ -244,13 +244,14 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     return bestZone ? bestZone->id().toString() : QString();
 }
 
-QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction)
+QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenName)
 {
     if (!DbusHelpers::validateNonEmpty(direction, QStringLiteral("direction"), QStringLiteral("get first zone"))) {
         return QString();
     }
 
-    auto* layout = DbusHelpers::getActiveLayoutOrWarn(m_layoutManager, QStringLiteral("get first zone"));
+    // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }

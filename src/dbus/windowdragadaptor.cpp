@@ -135,10 +135,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         QScreen* screen = screenAtPoint(m_originalGeometry.center().x(), m_originalGeometry.center().y());
 
         if (screen) {
-            auto* layout = m_layoutManager->layoutForScreen(screen->name());
-            if (!layout) {
-                layout = m_layoutManager->activeLayout();
-            }
+            auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
             if (layout) {
                 layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
@@ -200,11 +197,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
         m_overlayShown = true;
     }
 
-    // Get layout assigned to this specific screen (supports different layouts per monitor)
-    auto* layout = m_layoutManager->layoutForScreen(screen->name());
-    if (!layout) {
-        layout = m_layoutManager->activeLayout();
-    }
+    // Get layout assigned to this specific screen (uses current desktop + activity context)
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
     if (!layout) {
         return;
     }
@@ -318,11 +312,8 @@ void WindowDragAdaptor::handleSingleZoneModifier(int x, int y)
         m_overlayShown = true;
     }
 
-    // Get layout assigned to this specific screen
-    auto* layout = m_layoutManager->layoutForScreen(screen->name());
-    if (!layout) {
-        layout = m_layoutManager->activeLayout();
-    }
+    // Get layout assigned to this specific screen (uses current desktop + activity context)
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
     if (!layout) {
         return;
     }
@@ -452,13 +443,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
     const int capturedLastCursorX = m_lastCursorX;
     const int capturedLastCursorY = m_lastCursorY;
 
+    // Determine the screen where the drag was released
+    QScreen* releaseScreen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
+    QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
+
     // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
     bool useOverlayZone = true;
-    {
-        QScreen* releaseScreen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
-        if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreen->name())) {
-            useOverlayZone = false;
-        }
+    if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenName)) {
+        useOverlayZone = false;
     }
 
     // Check if a zone was selected via the zone selector (takes priority)
@@ -502,7 +494,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
                         // Fallback to synthetic format (navigation won't work, but tracking still happens)
                         zoneUuid = QStringLiteral("zoneselector-%1-%2").arg(selectedLayoutId).arg(selectedZoneIndex);
                     }
-                    m_windowTracking->windowSnapped(windowId, zoneUuid);
+                    m_windowTracking->windowSnapped(windowId, zoneUuid, releaseScreenName);
                     // Record user-initiated snap (not auto-snap)
                     // This prevents auto-snapping windows that were never manually snapped by user
                     m_windowTracking->recordSnapIntent(windowId, true);
@@ -534,7 +526,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
                 if (allZoneIds.isEmpty()) {
                     allZoneIds.append(capturedZoneId);
                 }
-                m_windowTracking->windowSnappedMultiZone(windowId, allZoneIds);
+                m_windowTracking->windowSnappedMultiZone(windowId, allZoneIds, releaseScreenName);
                 // Record user-initiated snap (not auto-snap)
                 m_windowTracking->recordSnapIntent(windowId, true);
             }
@@ -546,7 +538,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
             shouldApplyGeometry = true;
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
-                m_windowTracking->windowSnapped(windowId, capturedZoneId);
+                m_windowTracking->windowSnapped(windowId, capturedZoneId, releaseScreenName);
                 // Record user-initiated snap (not auto-snap)
                 m_windowTracking->recordSnapIntent(windowId, true);
             }

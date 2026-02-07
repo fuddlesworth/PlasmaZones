@@ -547,13 +547,24 @@ void LayoutAdaptor::openEditorForLayout(const QString& layoutId)
     launchEditor({QStringLiteral("--layout"), layoutId}, QStringLiteral("for layout: %1").arg(layoutId));
 }
 
+void LayoutAdaptor::openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenName)
+{
+    QStringList args{QStringLiteral("--layout"), layoutId};
+    if (!screenName.isEmpty()) {
+        args << QStringLiteral("--screen") << screenName;
+    }
+    launchEditor(args, QStringLiteral("for layout: %1 on screen: %2").arg(layoutId, screenName));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen Assignments
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString LayoutAdaptor::getLayoutForScreen(const QString& screenName)
 {
-    auto* layout = m_layoutManager->layoutForScreen(screenName);
+    int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    QString activity = m_activityManager ? m_activityManager->currentActivity() : QString();
+    auto* layout = m_layoutManager->layoutForScreen(screenName, desktop, activity);
     return layout ? layout->id().toString() : QString();
 }
 

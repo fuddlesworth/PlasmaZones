@@ -130,6 +130,11 @@ public:
     void syncFromExternalState();
 
     /**
+     * @brief Get current screen name
+     */
+    QString currentScreenName() const { return m_currentScreenName; }
+
+    /**
      * @brief Set current screen name for per-screen visibility filtering
      */
     void setCurrentScreenName(const QString& screenName);

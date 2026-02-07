@@ -1430,7 +1430,14 @@ void KCMPlasmaZones::deleteLayout(const QString& layoutId)
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"));
     msg << layoutId;
-    QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcConfig) << "deleteLayout D-Bus call failed:" << reply.error().message();
+        }
+    });
     QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
 }
 
@@ -1474,24 +1481,57 @@ void KCMPlasmaZones::exportLayout(const QString& layoutId, const QString& filePa
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("exportLayout"));
     msg << layoutId << filePath;
-    QDBusConnection::sessionBus().asyncCall(msg);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcConfig) << "exportLayout D-Bus call failed:" << reply.error().message();
+        }
+    });
 }
 
 void KCMPlasmaZones::editLayout(const QString& layoutId)
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForLayout"));
-    msg << layoutId;
-    QDBusConnection::sessionBus().asyncCall(msg);
+    QString screenName = currentScreenName();
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath),
+        QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForLayoutOnScreen"));
+    msg << layoutId << screenName;
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcConfig) << "editLayout D-Bus call failed:" << reply.error().message();
+        }
+    });
 }
 
 void KCMPlasmaZones::openEditor()
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
-    QDBusConnection::sessionBus().asyncCall(msg);
+    QString screenName = currentScreenName();
+
+    QDBusMessage msg;
+    if (!screenName.isEmpty()) {
+        msg = QDBusMessage::createMethodCall(
+            QString(DBus::ServiceName), QString(DBus::ObjectPath),
+            QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForScreen"));
+        msg << screenName;
+    } else {
+        msg = QDBusMessage::createMethodCall(
+            QString(DBus::ServiceName), QString(DBus::ObjectPath),
+            QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
+    }
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcConfig) << "openEditor D-Bus call failed:" << reply.error().message();
+        }
+    });
 }
 
 void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
@@ -1999,6 +2039,16 @@ QDBusMessage KCMPlasmaZones::callDaemon(const QString& interface, const QString&
     }
 
     return reply;
+}
+
+QString KCMPlasmaZones::currentScreenName() const
+{
+    if (auto* window = QGuiApplication::focusWindow()) {
+        if (auto* screen = window->screen()) {
+            return screen->name();
+        }
+    }
+    return QString();
 }
 
 void KCMPlasmaZones::notifyDaemon()

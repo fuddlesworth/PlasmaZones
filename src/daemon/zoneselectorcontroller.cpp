@@ -8,7 +8,6 @@
 #include "../core/utils.h"
 #include <QScreen>
 #include <QQuickItem>
-#include <QCursor>
 #include <QGuiApplication>
 #include "../core/logging.h"
 
@@ -171,7 +170,7 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
             Layout* effectiveLayout = nullptr;
             if (m_screen) {
                 effectiveLayout =
-                    m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, QString());
+                    m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
             }
             if (!effectiveLayout) {
                 effectiveLayout = layout;
@@ -210,7 +209,7 @@ void ZoneSelectorController::setScreen(QScreen* screen)
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, QString());
+        Layout* screenLayout = m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (m_layoutManager->activeLayout()) {
@@ -227,7 +226,7 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
             Layout* screenLayout =
-                m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, QString());
+                m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }
@@ -336,16 +335,9 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Notify layout manager to switch layout
-    if (m_layoutManager) {
-        auto uuidOpt = Utils::parseUuid(layoutId);
-        if (uuidOpt) {
-            Layout* layout = m_layoutManager->layoutById(*uuidOpt);
-            if (layout) {
-                m_layoutManager->setActiveLayout(layout);
-            }
-        }
-    }
+    // Layout assignment and activation are handled by the daemon's manualLayoutSelected
+    // handler (connected to OverlayService::onZoneSelected -> manualLayoutSelected signal).
+    // Doing it here as well would double-assign and double-save.
 }
 
 void ZoneSelectorController::hoverLayout(const QString& layoutId)
@@ -377,18 +369,27 @@ void ZoneSelectorController::onProximityCheckTimeout()
         return;
     }
 
-    // Get current cursor position
-    QPointF globalPos = QCursor::pos();
-    updateCursorPosition(globalPos);
+    // Use already-stored cursor position from D-Bus drag events
+    // (QCursor::pos() is unreliable for background daemons on Wayland)
+    updateProximity();
 }
 
 void ZoneSelectorController::updateProximity()
 {
+    // Update screen from cursor position (handles cross-monitor drag)
+    if (!m_cursorPosition.isNull()) {
+        QScreen* cursorScreen = QGuiApplication::screenAt(m_cursorPosition.toPoint());
+        if (cursorScreen) {
+            m_screen = cursorScreen;
+        }
+    }
+
     if (!m_screen) {
         m_screen = Utils::primaryScreen();
     }
 
     if (!m_screen) {
+        qCDebug(lcOverlay) << "updateProximity: no screen available";
         return;
     }
 
@@ -435,7 +436,7 @@ void ZoneSelectorController::checkEdgeProximity()
     updateProximity();
 }
 
-QString ZoneSelectorController::stateToString(State state) const
+QString ZoneSelectorController::stateToString(State state)
 {
     switch (state) {
     case State::Hidden:
@@ -449,7 +450,7 @@ QString ZoneSelectorController::stateToString(State state) const
     }
 }
 
-ZoneSelectorController::State ZoneSelectorController::stringToState(const QString& state) const
+ZoneSelectorController::State ZoneSelectorController::stringToState(const QString& state)
 {
     if (state == QLatin1String("near")) {
         return State::Near;

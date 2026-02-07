@@ -95,7 +95,7 @@
             </arg>
         </method>
         <method name="getLayoutForScreen">
-            <annotation name="org.gtk.GDBus.DocString" value="Get the layout ID assigned to a screen (all virtual desktops)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Get the layout currently in use on a screen (resolves with current virtual desktop and activity context)."/>
             <arg name="screenName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
             </arg>

@@ -219,8 +219,8 @@ private Q_SLOTS:
 private:
     void updateProximity();
     void checkEdgeProximity();
-    QString stateToString(State state) const;
-    State stringToState(const QString& state) const;
+    static QString stateToString(State state);
+    static State stringToState(const QString& state);
 
     // State
     State m_state = State::Hidden;

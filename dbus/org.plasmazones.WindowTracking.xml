@@ -12,6 +12,9 @@
             <arg name="zoneId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID."/>
             </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window was snapped (empty to auto-detect)."/>
+            </arg>
         </method>
         <method name="windowSnappedMultiZone">
             <annotation name="org.gtk.GDBus.DocString" value="Record that a window was snapped to multiple zones."/>
@@ -20,6 +23,9 @@
             </arg>
             <arg name="zoneIds" type="as" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="List of zone UUIDs (first is primary)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window was snapped (empty to auto-detect)."/>
             </arg>
         </method>
         <method name="windowUnsnapped">
@@ -372,6 +378,12 @@
             </arg>
             <arg name="wasUserInitiated" type="b" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="True if user performed the snap (drag or shortcut), false if auto-snapped."/>
+            </arg>
+        </method>
+        <method name="cursorScreenChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Report that the cursor has moved to a different screen. Called by KWin effect when cursor crosses monitor boundaries."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Name of the screen the cursor is now on (e.g. DP-1)."/>
             </arg>
         </method>
         <method name="windowClosed">

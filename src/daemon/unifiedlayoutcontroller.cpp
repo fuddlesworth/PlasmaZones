@@ -150,6 +150,16 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenName)
     if (m_currentScreenName != screenName) {
         m_currentScreenName = screenName;
         m_cacheValid = false;
+
+        // Sync current layout ID to what's actually assigned to this screen
+        // (not the global active layout, which may belong to a different screen)
+        if (m_layoutManager && !screenName.isEmpty()) {
+            Layout* screenLayout = m_layoutManager->layoutForScreen(
+                screenName, m_currentVirtualDesktop, m_currentActivity);
+            if (screenLayout) {
+                m_currentLayoutId = screenLayout->id().toString();
+            }
+        }
     }
 }
 
@@ -175,9 +185,18 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
     if (uuidOpt && m_layoutManager) {
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
-            m_layoutManager->setActiveLayout(layout);
+            if (!m_currentScreenName.isEmpty()) {
+                // Per-screen assignment only — don't change global active layout
+                // so other screens keep their own assigned layouts
+                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop,
+                                              m_currentActivity, layout);
+            } else {
+                // No screen context — fall back to global
+                m_layoutManager->setActiveLayout(layout);
+            }
             setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied unified layout:" << entry.name;
+            qCInfo(lcDaemon) << "Applied unified layout:" << entry.name
+                             << "to screen:" << m_currentScreenName;
             Q_EMIT layoutApplied(layout);
             return true;
         }

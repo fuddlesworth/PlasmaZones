@@ -66,8 +66,9 @@ public Q_SLOTS:
     void openEditor();
     void openEditorForScreen(const QString& screenName);
     void openEditorForLayout(const QString& layoutId);
+    void openEditorForLayoutOnScreen(const QString& layoutId, const QString& screenName);
 
-    // Screen assignments (legacy: defaults to virtualDesktop=0 for all desktops)
+    // Screen assignments
     QString getLayoutForScreen(const QString& screenName);
     void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
     void clearAssignment(const QString& screenName);

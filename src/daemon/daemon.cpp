@@ -65,6 +65,45 @@ QString navigationDirectionToString(NavigationDirection direction)
     }
     return QString();
 }
+
+/**
+ * @brief Resolve current screen for keyboard shortcuts
+ *
+ * Primary source: the cursor's screen, reported by the KWin effect via
+ * cursorScreenChanged (fires on every monitor crossing in slotMouseChanged).
+ * This accurately reflects where the user is looking, even if no window
+ * on that screen has focus.
+ *
+ * Fallback: the focused window's screen, reported via windowActivated.
+ * Used when the effect hasn't loaded yet or no mouse movement has occurred.
+ *
+ * QCursor::pos() is NOT used — it returns stale data for background daemons
+ * on Wayland.
+ */
+QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
+{
+    if (!trackingAdaptor) {
+        return nullptr;
+    }
+
+    // Prefer cursor screen — tracks the physical cursor position
+    const QString& cursorScreen = trackingAdaptor->lastCursorScreenName();
+    if (!cursorScreen.isEmpty()) {
+        QScreen* screen = Utils::findScreenByName(cursorScreen);
+        if (screen) {
+            return screen;
+        }
+    }
+
+    // Cursor screen not yet reported (effect not loaded or no mouse movement).
+    // Fall back to focused window's screen.
+    const QString& activeScreen = trackingAdaptor->lastActiveScreenName();
+    if (!activeScreen.isEmpty()) {
+        return Utils::findScreenByName(activeScreen);
+    }
+
+    return nullptr;
+}
 } // anonymous namespace
 
 Daemon::Daemon(QObject* parent)
@@ -168,10 +207,14 @@ bool Daemon::init()
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
     connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
         if (layout) {
-            // Recalculate zone geometries for all screens when global layout changes
-            for (auto* screen : m_screenManager->screens()) {
-                QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-                layout->recalculateZoneGeometries(availableGeom);
+            // Recalculate zone geometries once using primary screen geometry.
+            // Active layout is global; recalculating per-screen overwrites each
+            // iteration (last-wins bug). The overlay computes per-screen geometry
+            // on the fly via GeometryUtils::getZoneGeometryWithGaps().
+            QScreen* primary = Utils::primaryScreen();
+            if (primary) {
+                layout->recalculateZoneGeometries(
+                    ScreenManager::actualAvailableGeometry(primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -264,7 +307,7 @@ bool Daemon::init()
         if (error.type() == QDBusError::ServiceUnknown || error.type() == QDBusError::NoReply) {
             // Transient error - retry
             if (attempt < maxRetries - 1) {
-                int delayMs = 1000 * (attempt + 1); // Exponential backoff: 1s, 2s, 3s
+                int delayMs = 1000 * (attempt + 1); // Linear backoff: 1s, 2s, 3s
                 qCWarning(lcDaemon) << "Failed to register D-Bus service (attempt" << (attempt + 1) << "/" << maxRetries
                                     << "):" << error.message() << "- retrying in" << delayMs << "ms";
                 QThread::msleep(delayMs);
@@ -331,22 +374,23 @@ void Daemon::start()
 
     // Connect virtual desktop changes to layout switching
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::currentDesktopChanged, this, [this](int desktop) {
-        // Update overlay service with current desktop for per-desktop layout lookup
+        // Update all components with current desktop for per-desktop layout lookup
+        // NOTE: LayoutManager is the single source of truth for desktop/activity.
+        // WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen().
         m_overlayService->setCurrentVirtualDesktop(desktop);
-        // Update layout manager and unified controller for filtered cycling
         m_layoutManager->setCurrentVirtualDesktop(desktop);
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
         }
-        // Layout switching is handled automatically by VirtualDesktopManager
-        // Just ensure overlay is updated
         if (m_overlayService->isVisible()) {
             m_overlayService->updateGeometries();
         }
     });
 
-    // Set initial virtual desktop on overlay service
-    m_overlayService->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
+    // Set initial virtual desktop on components that maintain their own copy
+    // (WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen())
+    const int initialDesktop = m_virtualDesktopManager->currentDesktop();
+    m_overlayService->setCurrentVirtualDesktop(initialDesktop);
 
     // Initialize and start activity manager
     // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
@@ -355,14 +399,13 @@ void Daemon::start()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
-        // Set initial activity on overlay for per-activity layout resolution
+        // Set initial activity on components that maintain their own copy
         m_overlayService->setCurrentActivity(m_activityManager->currentActivity());
 
-        // Connect activity changes: update overlay's activity and refresh layout resolution
+        // Connect activity changes: update all components
         connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
                 [this](const QString& activityId) {
                     m_overlayService->setCurrentActivity(activityId);
-                    // Update layout manager and unified controller for filtered cycling
                     m_layoutManager->setCurrentActivity(activityId);
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
@@ -426,11 +469,13 @@ void Daemon::start()
     m_shortcutManager->registerShortcuts();
 
     // Connect shortcut signals
+    // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
+    // get stale cursor data. resolveShortcutScreen() handles both by falling back to
+    // the screen reported by the KWin effect's windowActivated D-Bus call.
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
-        // Open editor for the screen under the cursor (or primary screen as fallback)
-        QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
-        if (!screen) {
-            screen = Utils::primaryScreen();
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen && m_unifiedLayoutController) {
+            screen = Utils::findScreenByName(m_unifiedLayoutController->currentScreenName());
         }
         if (screen) {
             m_layoutAdaptor->openEditorForScreen(screen->name());
@@ -440,28 +485,45 @@ void Daemon::start()
     });
     // Quick layout shortcuts (Meta+1-9)
     connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
-        if (m_unifiedLayoutController) {
-            m_unifiedLayoutController->applyLayoutByNumber(number);
+        if (!m_unifiedLayoutController) {
+            return;
         }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (screen) {
+            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+        } else {
+            qCDebug(lcDaemon) << "No screen info for quickLayout shortcut — skipping";
+            return;
+        }
+        m_unifiedLayoutController->applyLayoutByNumber(number);
     });
 
     // Cycle layout shortcuts (Meta+[/])
-    // Resolve cursor screen at cycle time for per-screen visibility filtering
     connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
-        if (m_unifiedLayoutController) {
-            QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
-            if (!screen) screen = Utils::primaryScreen();
-            if (screen) m_unifiedLayoutController->setCurrentScreenName(screen->name());
-            m_unifiedLayoutController->cyclePrevious();
+        if (!m_unifiedLayoutController) {
+            return;
         }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (screen) {
+            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+        } else {
+            qCDebug(lcDaemon) << "No screen info for previousLayout shortcut — skipping";
+            return;
+        }
+        m_unifiedLayoutController->cyclePrevious();
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
-        if (m_unifiedLayoutController) {
-            QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
-            if (!screen) screen = Utils::primaryScreen();
-            if (screen) m_unifiedLayoutController->setCurrentScreenName(screen->name());
-            m_unifiedLayoutController->cycleNext();
+        if (!m_unifiedLayoutController) {
+            return;
         }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (screen) {
+            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+        } else {
+            qCDebug(lcDaemon) << "No screen info for nextLayout shortcut — skipping";
+            return;
+        }
+        m_unifiedLayoutController->cycleNext();
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -491,7 +553,8 @@ void Daemon::start()
 
     // Push to empty zone shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
-        m_windowTrackingAdaptor->pushToEmptyZone();
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        m_windowTrackingAdaptor->pushToEmptyZone(screen ? screen->name() : QString());
     });
 
     // Restore window size shortcut
@@ -517,12 +580,14 @@ void Daemon::start()
 
     // Rotate windows in layout shortcuts
     connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool clockwise) {
-        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise);
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screen ? screen->name() : QString());
     });
 
     // Snap to zone by number shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
-        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber);
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen ? screen->name() : QString());
     });
 
     // Cycle windows within zone shortcut
@@ -554,7 +619,7 @@ void Daemon::start()
     // Connect unified layout controller signals for OSD display
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-            showLayoutOsd(layout);
+            showLayoutOsd(layout, m_unifiedLayoutController->currentScreenName());
         }
     });
 
@@ -566,18 +631,32 @@ void Daemon::start()
     });
 
     // Connect zone selector manual layout selection (drop on zone)
-    connect(m_overlayService.get(), &OverlayService::manualLayoutSelected, this, [this](const QString& layoutId) {
+    // Screen name comes directly from the zone selector window
+    connect(m_overlayService.get(), &OverlayService::manualLayoutSelected, this,
+            [this](const QString& layoutId, const QString& screenName) {
         if (!m_layoutManager) {
             return;
         }
         Layout* layout = m_layoutManager->layoutById(QUuid::fromString(layoutId));
-        if (layout) {
+        if (!layout) {
+            return;
+        }
+        if (!screenName.isEmpty()) {
+            m_layoutManager->assignLayout(screenName, m_virtualDesktopManager->currentDesktop(),
+                m_activityManager && ActivityManager::isAvailable()
+                    ? m_activityManager->currentActivity() : QString(),
+                layout);
+        } else {
+            // Only change global active layout when no per-screen context is available.
+            // With a screen name, assignLayout() is sufficient — changing the global active
+            // would affect screens that weren't targeted by this selection.
             m_layoutManager->setActiveLayout(layout);
-            qCInfo(lcDaemon) << "Manual layout selected from zone selector:" << layout->name();
-            m_overlayService->showLayoutOsd(layout);
-            if (m_modeTracker) {
-                m_modeTracker->recordManualLayout(layout->id());
-            }
+        }
+        qCInfo(lcDaemon) << "Manual layout selected from zone selector:" << layout->name()
+                         << "on screen:" << screenName;
+        m_overlayService->showLayoutOsd(layout, screenName);
+        if (m_modeTracker) {
+            m_modeTracker->recordManualLayout(layout->id());
         }
     });
 
@@ -665,7 +744,7 @@ void Daemon::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
-void Daemon::showLayoutOsd(Layout* layout)
+void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
 {
     if (!layout) {
         return;
@@ -700,8 +779,8 @@ void Daemon::showLayoutOsd(Layout* layout)
     case OsdStyle::Preview:
         // Use visual layout preview OSD
         if (m_overlayService) {
-            m_overlayService->showLayoutOsd(layout);
-            qCDebug(lcDaemon) << "Showing preview OSD for layout:" << layoutName;
+            m_overlayService->showLayoutOsd(layout, screenName);
+            qCDebug(lcDaemon) << "Showing preview OSD for layout:" << layoutName << "on screen:" << screenName;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
         }

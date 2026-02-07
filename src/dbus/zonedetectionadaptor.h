@@ -57,7 +57,7 @@ public Q_SLOTS:
      * @param direction Direction string ("left", "right", "up", "down")
      * @return Zone ID of the edge zone, or empty string if no zones available
      */
-    QString getFirstZoneInDirection(const QString& direction);
+    QString getFirstZoneInDirection(const QString& direction, const QString& screenName = QString());
 
     // Get zone info by zone number (1-indexed)
     QString getZoneByNumber(int zoneNumber);

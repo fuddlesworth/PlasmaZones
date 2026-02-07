@@ -513,6 +513,8 @@ private Q_SLOTS:
     void onActivitiesChanged();
 
 private:
+    // Get screen name from the focused KCM window (for editor targeting on Wayland)
+    QString currentScreenName() const;
     void notifyDaemon();
     void refreshDaemonEnabledState(); // Async refresh of systemd enabled state
     void setDaemonAutostart(bool enabled);

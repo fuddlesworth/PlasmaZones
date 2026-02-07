@@ -28,7 +28,10 @@ struct LayoutAssignmentKey
 
 inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 {
-    return qHash(key.screenName, seed) ^ (static_cast<size_t>(key.virtualDesktop) << 16) ^ qHash(key.activity, seed);
+    seed = ::qHash(key.screenName, seed);
+    seed = ::qHash(key.virtualDesktop, seed);
+    seed = ::qHash(key.activity, seed);
+    return seed;
 }
 
 /**
@@ -147,7 +150,9 @@ public:
     Q_INVOKABLE void cycleToPreviousLayout(const QString& screenName);
     Q_INVOKABLE void cycleToNextLayout(const QString& screenName);
 
-    // Context for visibility-filtered cycling
+    // Context for visibility-filtered cycling and per-screen layout lookups
+    int currentVirtualDesktop() const override { return m_currentVirtualDesktop; }
+    QString currentActivity() const override { return m_currentActivity; }
     void setCurrentVirtualDesktop(int desktop) { m_currentVirtualDesktop = desktop; }
     void setCurrentActivity(const QString& activity) { m_currentActivity = activity; }
 

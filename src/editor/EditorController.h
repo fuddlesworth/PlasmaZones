@@ -8,6 +8,7 @@
 #include <QRectF>
 #include <QUuid>
 #include <QScreen>
+#include <QQuickWindow>
 #include <KConfigGroup>
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -195,6 +196,17 @@ public:
     void setFillOnDropEnabled(bool enabled);
     void setFillOnDropModifier(int modifier);
     void setTargetScreen(const QString& screenName);
+
+    /**
+     * @brief Show a QML Window fullscreen on the target screen from C++
+     *
+     * On Wayland, QWindow::setScreen() has no effect on xdg-shell surfaces
+     * (QTBUG-88997). KWin determines the output from the window's initial
+     * geometry when the surface is first committed. This method positions
+     * the window within the target screen's bounds before calling
+     * showFullScreen(), giving KWin the correct output hint.
+     */
+    Q_INVOKABLE void showFullScreenOnTargetScreen(QQuickWindow* window);
     void setTargetScreenDirect(const QString& screenName); // Sets screen without loading layout (for initialization)
     void setZonePadding(int padding);
     void setOuterGap(int gap);

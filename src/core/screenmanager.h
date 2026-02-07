@@ -193,7 +193,7 @@ private:
     bool m_dbusQueryPending = false;
     bool m_panelGeometryReceived = false;  // True after first panel D-Bus query completes
     QVector<QScreen*> m_trackedScreens;
-    QMap<int, ScreenPanelOffsets> m_panelOffsets;
+    QMap<QString, ScreenPanelOffsets> m_panelOffsets; // Keyed by QScreen name
 
     // Persistent geometry sensor windows (one per screen)
     // These invisible LayerShellQt windows track available geometry
