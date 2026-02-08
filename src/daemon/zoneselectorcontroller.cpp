@@ -387,7 +387,10 @@ void ZoneSelectorController::onProximityCheckTimeout()
 
 void ZoneSelectorController::updateProximity()
 {
-    // Update screen from cursor position (handles cross-monitor drag)
+    // Note: Proximity-based triggering during drag is handled by
+    // WindowDragAdaptor::isNearTriggerEdge(), which uses per-screen resolved config.
+    // This method provides QML property updates for direct cursor-position use cases.
+
     if (!m_cursorPosition.isNull()) {
         QScreen* cursorScreen = QGuiApplication::screenAt(m_cursorPosition.toPoint());
         if (cursorScreen) {
@@ -400,43 +403,32 @@ void ZoneSelectorController::updateProximity()
     }
 
     if (!m_screen) {
-        qCDebug(lcOverlay) << "updateProximity: no screen available";
         return;
     }
 
-    // Get screen geometry
-    QRectF screenGeometry = m_screen->geometry();
-    qreal screenTop = screenGeometry.top();
-    qreal screenCenterX = screenGeometry.center().x();
+    const QRectF screenGeometry = m_screen->geometry();
+    const qreal distanceFromTop = m_cursorPosition.y() - screenGeometry.top();
 
-    // Calculate distance from top edge
-    qreal distanceFromTop = m_cursorPosition.y() - screenTop;
+    // Horizontal zone check: cursor must be within the center area
+    const qreal hDist = qAbs(m_cursorPosition.x() - screenGeometry.center().x());
+    const bool inTriggerZone = hDist < (screenGeometry.width() / 2 - m_edgeTriggerZone);
 
-    // Check if cursor is within horizontal trigger zone (centered area)
-    qreal horizontalDistance = qAbs(m_cursorPosition.x() - screenCenterX);
-    bool inHorizontalZone = horizontalDistance < (screenGeometry.width() / 2 - m_edgeTriggerZone);
-
-    // Calculate proximity (0.0 = at edge, 1.0 = far away)
-    qreal proximity = qBound(0.0, distanceFromTop / static_cast<qreal>(m_triggerDistance), 1.0);
+    // Proximity: 0.0 = at edge, 1.0 = far away
+    const qreal proximity = qBound(0.0, distanceFromTop / static_cast<qreal>(m_triggerDistance), 1.0);
 
     if (m_cursorProximity != proximity) {
         m_cursorProximity = proximity;
         Q_EMIT cursorProximityChanged(proximity);
     }
 
-    // Check if cursor is over the selector (don't hide while interacting)
     bool cursorOverSelector = m_selectorGeometry.isValid() && m_selectorGeometry.contains(m_cursorPosition);
 
-    // State transitions based on proximity
-    if (m_isDragging && inHorizontalZone) {
+    if (m_isDragging && inTriggerZone) {
         if (proximity < 0.3 && m_state == State::Hidden) {
-            // Close to edge - show selector
             show();
         } else if (proximity < 0.1 && m_state == State::Near) {
-            // Very close - expand
             expand();
         } else if (proximity > 0.7 && m_state != State::Hidden && !cursorOverSelector) {
-            // Far from edge AND not over selector - hide
             hide();
         }
     }

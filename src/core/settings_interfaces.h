@@ -18,6 +18,43 @@ enum class ZoneSelectorSizeMode;
 enum class StickyWindowHandling;
 enum class OsdStyle;
 
+/**
+ * @brief Per-screen zone selector configuration
+ *
+ * Holds all zone selector settings that can be overridden per-monitor.
+ * Used by OverlayService and ZoneSelectorController to apply resolved
+ * (per-screen override > global default) settings for each screen.
+ */
+struct ZoneSelectorConfig {
+    int position = 1;           // ZoneSelectorPosition enum value (Top)
+    int layoutMode = 0;         // ZoneSelectorLayoutMode enum value (Grid)
+    int sizeMode = 0;           // ZoneSelectorSizeMode enum value (Auto)
+    int maxRows = 4;
+    int previewWidth = 180;
+    int previewHeight = 101;
+    bool previewLockAspect = true;
+    int gridColumns = 5;
+    int triggerDistance = 50;
+};
+
+/**
+ * @brief Config key names for per-screen zone selector overrides
+ *
+ * Used in KConfig group keys ([ZoneSelector:ScreenName]), QVariantMap
+ * override storage, and QML writeSetting() calls.
+ */
+namespace ZoneSelectorConfigKey {
+inline constexpr const char Position[] = "Position";
+inline constexpr const char LayoutMode[] = "LayoutMode";
+inline constexpr const char SizeMode[] = "SizeMode";
+inline constexpr const char MaxRows[] = "MaxRows";
+inline constexpr const char PreviewWidth[] = "PreviewWidth";
+inline constexpr const char PreviewHeight[] = "PreviewHeight";
+inline constexpr const char PreviewLockAspect[] = "PreviewLockAspect";
+inline constexpr const char GridColumns[] = "GridColumns";
+inline constexpr const char TriggerDistance[] = "TriggerDistance";
+} // namespace ZoneSelectorConfigKey
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -179,6 +216,21 @@ public:
     virtual void setZoneSelectorSizeMode(ZoneSelectorSizeMode mode) = 0;
     virtual int zoneSelectorMaxRows() const = 0;
     virtual void setZoneSelectorMaxRows(int rows) = 0;
+
+    // Per-screen zone selector config resolution
+    virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenName*/) const {
+        return {
+            static_cast<int>(zoneSelectorPosition()),
+            static_cast<int>(zoneSelectorLayoutMode()),
+            static_cast<int>(zoneSelectorSizeMode()),
+            zoneSelectorMaxRows(),
+            zoneSelectorPreviewWidth(),
+            zoneSelectorPreviewHeight(),
+            zoneSelectorPreviewLockAspect(),
+            zoneSelectorGridColumns(),
+            zoneSelectorTriggerDistance()
+        };
+    }
 };
 
 /**

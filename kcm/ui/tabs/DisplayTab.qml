@@ -9,6 +9,10 @@ import ".."
 
 /**
  * @brief Display tab - Zone selector popup and OSD settings
+ *
+ * Supports per-monitor zone selector configuration when multiple monitors
+ * are detected. A monitor selector at the top lets users choose between
+ * editing global defaults ("All Monitors") or per-screen overrides.
  */
 ScrollView {
     id: root
@@ -23,13 +27,83 @@ ScrollView {
     property real screenAspectRatio: 16/9
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16/9)
 
-    // Effective preview dimensions based on size mode
-    property int effectivePreviewWidth: kcm.zoneSelectorSizeMode === 0
-        ? Math.round(180 * (safeAspectRatio / (16/9)))
-        : kcm.zoneSelectorPreviewWidth
-    property int effectivePreviewHeight: kcm.zoneSelectorSizeMode === 0
-        ? Math.round(effectivePreviewWidth / safeAspectRatio)
-        : kcm.zoneSelectorPreviewHeight
+    // Per-screen monitor selector state
+    // selectedScreenIndex: 0 = "All Monitors (Default)", 1+ = specific screen
+    property int selectedScreenIndex: 0
+    readonly property bool isPerScreen: selectedScreenIndex > 0
+    // Derived from perScreenOverrides so QML re-evaluates when writeSetting() updates it
+    readonly property bool hasOverrides: isPerScreen && Object.keys(perScreenOverrides).length > 0
+    readonly property string selectedScreenName: {
+        if (selectedScreenIndex > 0 && selectedScreenIndex <= kcm.screens.length) {
+            return kcm.screens[selectedScreenIndex - 1].name || ""
+        }
+        return ""
+    }
+
+    // Clamp selectedScreenIndex when screens change (e.g., monitor hot-unplug)
+    onSelectedScreenIndexChanged: reloadPerScreenOverrides()
+    Connections {
+        target: kcm
+        function onScreensChanged() {
+            if (root.selectedScreenIndex > kcm.screens.length) {
+                root.selectedScreenIndex = 0
+            }
+        }
+    }
+
+    // Per-screen override cache (loaded from C++ when screen selection changes)
+    property var perScreenOverrides: ({})
+
+    function reloadPerScreenOverrides() {
+        if (isPerScreen && selectedScreenName !== "") {
+            perScreenOverrides = kcm.getPerScreenZoneSelectorSettings(selectedScreenName)
+        } else {
+            perScreenOverrides = {}
+        }
+    }
+
+    // Read a setting value: per-screen override if editing a specific screen, otherwise global
+    function settingValue(key, globalValue) {
+        if (isPerScreen && perScreenOverrides.hasOwnProperty(key)) {
+            return perScreenOverrides[key]
+        }
+        return globalValue
+    }
+
+    // Write a setting value: per-screen override if editing a specific screen, otherwise global
+    function writeSetting(key, value, globalSetter) {
+        if (isPerScreen) {
+            kcm.setPerScreenZoneSelectorSetting(selectedScreenName, key, value)
+            // Reassign the property (shallow copy) so QML detects the change
+            var updated = Object.assign({}, perScreenOverrides)
+            updated[key] = value
+            perScreenOverrides = updated
+        } else {
+            globalSetter(value)
+        }
+    }
+
+    // Effective values that resolve per-screen > global
+    readonly property int effectivePosition: settingValue("Position", kcm.zoneSelectorPosition)
+    readonly property int effectiveLayoutMode: settingValue("LayoutMode", kcm.zoneSelectorLayoutMode)
+    readonly property int effectiveSizeMode: settingValue("SizeMode", kcm.zoneSelectorSizeMode)
+    readonly property int effectiveGridColumns: settingValue("GridColumns", kcm.zoneSelectorGridColumns)
+    readonly property int effectiveMaxRows: settingValue("MaxRows", kcm.zoneSelectorMaxRows)
+    readonly property int effectivePreviewWidth: {
+        var sm = effectiveSizeMode
+        if (sm === 0) {
+            return Math.round(180 * (safeAspectRatio / (16/9)))
+        }
+        return settingValue("PreviewWidth", kcm.zoneSelectorPreviewWidth)
+    }
+    readonly property int effectivePreviewHeight: {
+        var sm = effectiveSizeMode
+        if (sm === 0) {
+            return Math.round(effectivePreviewWidth / safeAspectRatio)
+        }
+        return settingValue("PreviewHeight", kcm.zoneSelectorPreviewHeight)
+    }
+    readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", kcm.zoneSelectorTriggerDistance)
 
     clip: true
     contentWidth: availableWidth
@@ -53,6 +127,78 @@ ScrollView {
             checked: kcm.zoneSelectorEnabled
             onToggled: kcm.zoneSelectorEnabled = checked
             font.bold: true
+        }
+
+        // Monitor selector - only visible with 2+ monitors
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: monitorSelectorCard.implicitHeight
+            visible: kcm.screens.length > 1
+
+            Kirigami.Card {
+                id: monitorSelectorCard
+                anchors.fill: parent
+                enabled: kcm.zoneSelectorEnabled
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Monitor")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: ColumnLayout {
+                    spacing: Kirigami.Units.smallSpacing
+
+                    ComboBox {
+                        id: monitorCombo
+                        Layout.fillWidth: true
+                        textRole: "text"
+                        Accessible.name: i18n("Monitor selection")
+                        model: {
+                            var items = [{ text: i18n("All Monitors (Default)") }]
+                            for (var i = 0; i < kcm.screens.length; i++) {
+                                var s = kcm.screens[i]
+                                var label = s.name || ("Monitor " + (i + 1))
+                                if (s.resolution) label += " (" + s.resolution + ")"
+                                items.push({ text: label })
+                            }
+                            return items
+                        }
+                        currentIndex: root.selectedScreenIndex
+                        onActivated: function(index) {
+                            root.selectedScreenIndex = index
+                            root.reloadPerScreenOverrides()
+                        }
+                    }
+
+                    // Per-screen info/reset row
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: root.isPerScreen
+
+                        Kirigami.InlineMessage {
+                            Layout.fillWidth: true
+                            type: root.hasOverrides
+                                ? Kirigami.MessageType.Positive
+                                : Kirigami.MessageType.Information
+                            text: root.hasOverrides
+                                ? i18n("Custom settings for this monitor")
+                                : i18n("Using default settings — changes below create an override")
+                            visible: true
+                        }
+
+                        Button {
+                            text: i18n("Reset to Default")
+                            icon.name: "edit-clear"
+                            visible: root.hasOverrides
+                            onClicked: {
+                                kcm.clearPerScreenZoneSelectorSettings(root.selectedScreenName)
+                                root.reloadPerScreenOverrides()
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Position & Trigger card - wrapped in Item for stable sizing
@@ -83,10 +229,10 @@ ScrollView {
                             id: positionPicker
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.top
-                            position: kcm.zoneSelectorPosition
+                            position: root.effectivePosition
                             enabled: kcm.zoneSelectorEnabled
                             onPositionSelected: function(newPosition) {
-                                kcm.zoneSelectorPosition = newPosition
+                                root.writeSetting("Position", newPosition, function(v) { kcm.zoneSelectorPosition = v })
                             }
                         }
 
@@ -135,13 +281,13 @@ ScrollView {
                                     Layout.fillWidth: true
                                     from: 10
                                     to: root.constants.zoneSelectorTriggerMax
-                                    value: kcm.zoneSelectorTriggerDistance
+                                    value: root.effectiveTriggerDistance
                                     stepSize: 10
-                                    onMoved: kcm.zoneSelectorTriggerDistance = value
+                                    onMoved: root.writeSetting("TriggerDistance", value, function(v) { kcm.zoneSelectorTriggerDistance = v })
                                 }
 
                                 Label {
-                                    text: kcm.zoneSelectorTriggerDistance + " px"
+                                    text: root.effectiveTriggerDistance + " px"
                                     Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
                                     horizontalAlignment: Text.AlignRight
                                     font: Kirigami.Theme.fixedWidthFont
@@ -180,8 +326,8 @@ ScrollView {
                             { text: i18n("Horizontal"), value: 1 },
                             { text: i18n("Vertical"), value: 2 }
                         ]
-                        currentIndex: indexForValue(kcm.zoneSelectorLayoutMode)
-                        onActivated: kcm.zoneSelectorLayoutMode = currentValue
+                        currentIndex: indexForValue(root.effectiveLayoutMode)
+                        onActivated: root.writeSetting("LayoutMode", currentValue, function(v) { kcm.zoneSelectorLayoutMode = v })
 
                         function indexForValue(value) {
                             for (let i = 0; i < model.length; i++) {
@@ -195,18 +341,18 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Grid columns:")
                         from: 1
                         to: root.constants.zoneSelectorGridColumnsMax
-                        value: kcm.zoneSelectorGridColumns
-                        visible: kcm.zoneSelectorLayoutMode === 0
-                        onValueModified: kcm.zoneSelectorGridColumns = value
+                        value: root.effectiveGridColumns
+                        visible: root.effectiveLayoutMode === 0
+                        onValueModified: root.writeSetting("GridColumns", value, function(v) { kcm.zoneSelectorGridColumns = v })
                     }
 
                     SpinBox {
                         Kirigami.FormData.label: i18n("Max visible rows:")
                         from: 1
                         to: 10
-                        value: kcm.zoneSelectorMaxRows
-                        visible: kcm.zoneSelectorLayoutMode === 0  // Only applies to Grid mode
-                        onValueModified: kcm.zoneSelectorMaxRows = value
+                        value: root.effectiveMaxRows
+                        visible: root.effectiveLayoutMode === 0  // Only applies to Grid mode
+                        onValueModified: root.writeSetting("MaxRows", value, function(v) { kcm.zoneSelectorMaxRows = v })
 
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Scrolling enabled when more rows exist")
@@ -308,9 +454,9 @@ ScrollView {
                         // Track which size is selected
                         // 0=Auto, 1=Small(120), 2=Medium(180), 3=Large(260), 4=Custom
                         property int selectedSize: {
-                            if (kcm.zoneSelectorSizeMode === 0) return 0  // Auto
+                            if (root.effectiveSizeMode === 0) return 0  // Auto
                             if (customModeActive) return 4  // Explicit Custom selection
-                            var w = kcm.zoneSelectorPreviewWidth
+                            var w = root.effectivePreviewWidth
                             if (Math.abs(w - 120) <= 5) return 1  // Small
                             if (Math.abs(w - 180) <= 5) return 2  // Medium
                             if (Math.abs(w - 260) <= 5) return 3  // Large
@@ -323,7 +469,7 @@ ScrollView {
                             highlighted: parent.selectedSize === 0
                             onClicked: {
                                 sizeButtonRow.customModeActive = false
-                                kcm.zoneSelectorSizeMode = 0
+                                root.writeSetting("SizeMode", 0, function(v) { kcm.zoneSelectorSizeMode = v })
                             }
 
                             ToolTip.visible: hovered
@@ -337,9 +483,9 @@ ScrollView {
                             highlighted: parent.selectedSize === 1
                             onClicked: {
                                 sizeButtonRow.customModeActive = false
-                                kcm.zoneSelectorSizeMode = 1
-                                kcm.zoneSelectorPreviewWidth = 120
-                                kcm.zoneSelectorPreviewHeight = Math.round(120 / root.screenAspectRatio)
+                                root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
+                                root.writeSetting("PreviewWidth", 120, function(v) { kcm.zoneSelectorPreviewWidth = v })
+                                root.writeSetting("PreviewHeight", Math.round(120 / root.screenAspectRatio), function(v) { kcm.zoneSelectorPreviewHeight = v })
                             }
 
                             ToolTip.visible: hovered
@@ -353,9 +499,9 @@ ScrollView {
                             highlighted: parent.selectedSize === 2
                             onClicked: {
                                 sizeButtonRow.customModeActive = false
-                                kcm.zoneSelectorSizeMode = 1
-                                kcm.zoneSelectorPreviewWidth = 180
-                                kcm.zoneSelectorPreviewHeight = Math.round(180 / root.screenAspectRatio)
+                                root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
+                                root.writeSetting("PreviewWidth", 180, function(v) { kcm.zoneSelectorPreviewWidth = v })
+                                root.writeSetting("PreviewHeight", Math.round(180 / root.screenAspectRatio), function(v) { kcm.zoneSelectorPreviewHeight = v })
                             }
 
                             ToolTip.visible: hovered
@@ -369,9 +515,9 @@ ScrollView {
                             highlighted: parent.selectedSize === 3
                             onClicked: {
                                 sizeButtonRow.customModeActive = false
-                                kcm.zoneSelectorSizeMode = 1
-                                kcm.zoneSelectorPreviewWidth = 260
-                                kcm.zoneSelectorPreviewHeight = Math.round(260 / root.screenAspectRatio)
+                                root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
+                                root.writeSetting("PreviewWidth", 260, function(v) { kcm.zoneSelectorPreviewWidth = v })
+                                root.writeSetting("PreviewHeight", Math.round(260 / root.screenAspectRatio), function(v) { kcm.zoneSelectorPreviewHeight = v })
                             }
 
                             ToolTip.visible: hovered
@@ -385,7 +531,7 @@ ScrollView {
                             highlighted: parent.selectedSize === 4
                             onClicked: {
                                 sizeButtonRow.customModeActive = true
-                                kcm.zoneSelectorSizeMode = 1
+                                root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
                             }
 
                             ToolTip.visible: hovered
@@ -411,19 +557,19 @@ ScrollView {
                             Layout.fillWidth: true
                             from: root.constants.zoneSelectorPreviewWidthMin
                             to: root.constants.zoneSelectorPreviewWidthMax
-                            value: kcm.zoneSelectorPreviewWidth
+                            value: root.effectivePreviewWidth
                             stepSize: 10
                             onMoved: {
-                                kcm.zoneSelectorPreviewWidth = value
+                                root.writeSetting("PreviewWidth", value, function(v) { kcm.zoneSelectorPreviewWidth = v })
                                 // Always maintain aspect ratio
                                 var newHeight = Math.round(value / root.screenAspectRatio)
                                 newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight))
-                                kcm.zoneSelectorPreviewHeight = newHeight
+                                root.writeSetting("PreviewHeight", newHeight, function(v) { kcm.zoneSelectorPreviewHeight = v })
                             }
                         }
 
                         Label {
-                            text: kcm.zoneSelectorPreviewWidth + " px"
+                            text: root.effectivePreviewWidth + " px"
                             Layout.preferredWidth: 55
                             horizontalAlignment: Text.AlignRight
                             font: Kirigami.Theme.fixedWidthFont
@@ -434,7 +580,7 @@ ScrollView {
                     Label {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignHCenter
-                        visible: kcm.zoneSelectorSizeMode === 0
+                        visible: root.effectiveSizeMode === 0
                         text: i18n("Preview size adjusts automatically based on your screen resolution.")
                         opacity: 0.6
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize

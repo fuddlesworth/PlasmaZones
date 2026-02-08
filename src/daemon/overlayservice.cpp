@@ -3,6 +3,7 @@
 
 #include "overlayservice.h"
 #include "../config/configdefaults.h"
+#include "../core/zoneselectorlayout.h"
 
 #include "../core/layout.h"
 #include "../core/layoutmanager.h"
@@ -40,6 +41,23 @@
 #include <LayerShellQt/Shell>
 
 namespace PlasmaZones {
+
+// Fallback config when ISettings* is null (e.g. during teardown).
+// Uses ConfigDefaults to stay in sync with the .kcfg single source of truth.
+static ZoneSelectorConfig defaultZoneSelectorConfig()
+{
+    return {
+        ConfigDefaults::position(),
+        ConfigDefaults::layoutMode(),
+        ConfigDefaults::sizeMode(),
+        ConfigDefaults::maxRows(),
+        ConfigDefaults::previewWidth(),
+        ConfigDefaults::previewHeight(),
+        ConfigDefaults::previewLockAspect(),
+        ConfigDefaults::gridColumns(),
+        ConfigDefaults::triggerDistance()
+    };
+}
 
 namespace {
 
@@ -187,141 +205,8 @@ QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName)
     return nullptr;
 }
 
-struct ZoneSelectorLayout
-{
-    int indicatorWidth = 180;
-    int indicatorHeight = 101;
-    int indicatorSpacing = 18;
-    int containerPadding = 36;
-    int containerTopMargin = 10;
-    int containerSideMargin = 10; // Margin from left/right screen edge
-    int labelTopMargin = 8;
-    int labelHeight = 20;
-    int labelSpace = 28;
-    int paddingSide = 18;
-    int columns = 1;
-    int rows = 1; // Visible rows (may be limited by maxRows)
-    int totalRows = 1; // Total rows (for scroll content height)
-    int contentWidth = 0;
-    int contentHeight = 0;
-    int scrollContentHeight = 0; // Full content height for scrolling
-    int scrollContentWidth = 0;  // Full content width for horizontal scrolling
-    int containerWidth = 0;
-    int containerHeight = 0;
-    int barHeight = 0;
-    int barWidth = 0;
-    bool needsScrolling = false;
-    bool needsHorizontalScrolling = false;
-};
-
-ZoneSelectorLayout computeZoneSelectorLayout(const ISettings* settings, QScreen* screen, int layoutCount)
-{
-    ZoneSelectorLayout layout;
-    const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
-    const qreal screenAspectRatio =
-        screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-
-    // Determine size mode (Auto vs Manual) - use ConfigDefaults for null-safety
-    const ZoneSelectorSizeMode sizeMode = settings ? settings->zoneSelectorSizeMode()
-        : static_cast<ZoneSelectorSizeMode>(ConfigDefaults::sizeMode());
-    const int maxRows = settings ? settings->zoneSelectorMaxRows() : ConfigDefaults::maxRows();
-
-    if (sizeMode == ZoneSelectorSizeMode::Auto) {
-        // Auto-sizing: Calculate preview size as ~10% of screen width, bounded 120-280px
-        // This follows KDE HIG principles for adaptive sizing
-        const int autoWidth = qBound(120, screenGeom.width() / 10, 280);
-        layout.indicatorWidth = autoWidth;
-        // Always lock aspect ratio in Auto mode for consistent appearance
-        layout.indicatorHeight = qRound(static_cast<qreal>(layout.indicatorWidth) / screenAspectRatio);
-    } else {
-        // Manual mode: Use explicit settings
-        if (settings) {
-            layout.indicatorWidth = settings->zoneSelectorPreviewWidth();
-            if (settings->zoneSelectorPreviewLockAspect()) {
-                layout.indicatorHeight = qRound(static_cast<qreal>(layout.indicatorWidth) / screenAspectRatio);
-            } else {
-                layout.indicatorHeight = settings->zoneSelectorPreviewHeight();
-            }
-        }
-    }
-
-    const int safeLayoutCount = std::max(1, layoutCount);
-    const ZoneSelectorLayoutMode layoutMode =
-        settings ? settings->zoneSelectorLayoutMode() : ZoneSelectorLayoutMode::Grid;
-
-    if (layoutMode == ZoneSelectorLayoutMode::Vertical) {
-        layout.columns = 1;
-        layout.rows = safeLayoutCount;
-    } else if (layoutMode == ZoneSelectorLayoutMode::Grid) {
-        // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
-        const int gridColumns = settings ? settings->zoneSelectorGridColumns() : ConfigDefaults::gridColumns();
-        layout.columns = std::max(1, gridColumns);
-        layout.rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / layout.columns));
-    } else {
-        // Horizontal mode
-        layout.columns = safeLayoutCount;
-        layout.rows = 1;
-    }
-
-    // Store total rows before limiting for visible area
-    layout.totalRows = layout.rows;
-
-    layout.labelSpace = layout.labelTopMargin + layout.labelHeight;
-    layout.paddingSide = layout.containerPadding / 2;
-
-    // Step 1: Apply maxRows setting (Auto mode, Grid only)
-    // maxRows only makes sense for Grid: in Vertical each layout is a row (maxRows would
-    // arbitrarily hide layouts), in Horizontal there's always 1 row. Screen-based clamping
-    // in Step 2 handles overflow for all modes.
-    int visibleRows = layout.rows;
-    if (sizeMode == ZoneSelectorSizeMode::Auto && layoutMode == ZoneSelectorLayoutMode::Grid && layout.rows > maxRows) {
-        visibleRows = maxRows;
-    }
-
-    // Step 2: Screen-based clamping (all size modes)
-    // Ensure the popup never exceeds screen bounds, enabling scrolling for overflow
-    const int screenH = screenGeom.height();
-    const int screenW = screenGeom.width();
-    const int maxContentH = std::max(0, screenH - layout.containerPadding - 2 * layout.containerTopMargin);
-    const int maxContentW = std::max(0, screenW - layout.containerPadding - 2 * layout.containerSideMargin);
-    const int rowUnitH = layout.indicatorHeight + layout.labelSpace + layout.indicatorSpacing;
-    if (rowUnitH > 0) {
-        const int maxFittingRows = std::max(1, (maxContentH + layout.indicatorSpacing) / rowUnitH);
-        if (visibleRows > maxFittingRows) {
-            visibleRows = maxFittingRows;
-        }
-    }
-
-    layout.rows = visibleRows;
-    layout.needsScrolling = (layout.totalRows > visibleRows);
-
-    // Full content dimensions (all items, for scroll content)
-    layout.scrollContentWidth = layout.columns * layout.indicatorWidth + (layout.columns - 1) * layout.indicatorSpacing;
-    layout.scrollContentHeight = layout.totalRows * (layout.indicatorHeight + layout.labelSpace)
-        + (layout.totalRows - 1) * layout.indicatorSpacing;
-
-    // Visible content dimensions (may be clamped to screen)
-    layout.contentWidth = layout.scrollContentWidth;
-    layout.contentHeight =
-        visibleRows * (layout.indicatorHeight + layout.labelSpace) + (visibleRows - 1) * layout.indicatorSpacing;
-
-    // Horizontal screen clamping (primarily for horizontal layout mode)
-    if (layout.contentWidth > maxContentW && maxContentW > 0) {
-        layout.contentWidth = maxContentW;
-        layout.needsHorizontalScrolling = true;
-    }
-
-    layout.containerWidth = layout.contentWidth + layout.containerPadding;
-    layout.containerHeight = layout.contentHeight + layout.containerPadding;
-    layout.barHeight = layout.containerTopMargin + layout.containerHeight;
-    // Include side margins so corner/side positions have room for margin
-    layout.barWidth = layout.containerSideMargin + layout.containerWidth + layout.containerSideMargin;
-
-    return layout;
-}
-
-void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, ISettings* settings,
-                                          const ZoneSelectorLayout& layout)
+void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, const ZoneSelectorConfig& config,
+                                          ISettings* settings, const ZoneSelectorLayout& layout)
 {
     if (!window || !screen) {
         return;
@@ -335,13 +220,13 @@ void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen,
     const qreal previewScale = screenWidth > 0 ? static_cast<qreal>(indicatorWidth) / screenWidth : 0.09375;
     writeQmlProperty(window, QStringLiteral("previewScale"), previewScale);
 
-    // Compute positionIsVertical
-    if (settings) {
-        const ZoneSelectorPosition pos = settings->zoneSelectorPosition();
-        writeQmlProperty(window, QStringLiteral("positionIsVertical"),
-                         (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
+    // Compute positionIsVertical from per-screen config
+    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
+    writeQmlProperty(window, QStringLiteral("positionIsVertical"),
+                     (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
 
-        // Compute scaled zone appearance values
+    // Compute scaled zone appearance values (from global settings - not per-screen)
+    if (settings) {
         const int zonePadding = settings->zonePadding();
         const int zoneBorderWidth = settings->borderWidth();
         const int zoneBorderRadius = settings->borderRadius();
@@ -447,28 +332,25 @@ void applyZoneSelectorGeometry(QQuickWindow* window, QScreen* screen, const Zone
     window->setHeight(layout.barHeight);
 }
 
-void updateZoneSelectorWindowLayout(QQuickWindow* window, QScreen* screen, ISettings* settings, int layoutCount)
+void updateZoneSelectorWindowLayout(QQuickWindow* window, QScreen* screen, const ZoneSelectorConfig& config,
+                                    ISettings* settings, int layoutCount)
 {
     if (!window || !screen) {
         return;
     }
 
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(settings, screen, layoutCount);
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screen, layoutCount);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
-    if (settings) {
-        const ZoneSelectorPosition pos = settings->zoneSelectorPosition();
-        writeQmlProperty(window, QStringLiteral("positionIsVertical"),
-                         (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
-    }
+    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
+    writeQmlProperty(window, QStringLiteral("positionIsVertical"),
+                     (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
 
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(window, screen, settings, layout);
-
-    const ZoneSelectorPosition pos = settings ? settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
+    updateZoneSelectorComputedProperties(window, screen, config, settings, layout);
 
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         layerWindow->setAnchors(getAnchorsForPosition(pos));
@@ -1227,7 +1109,10 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         }
 
         const int layoutCount = layouts.size();
-        const ZoneSelectorLayout layout = computeZoneSelectorLayout(m_settings, screen, layoutCount);
+        const ZoneSelectorConfig selectorConfig = m_settings
+            ? m_settings->resolvedZoneSelectorConfig(screen->name())
+            : defaultZoneSelectorConfig();
+        const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, screen, layoutCount);
 
         // Get grid position from QML - it knows exactly where the content is rendered
         int contentGridX = 0;
@@ -1343,13 +1228,18 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
 
     const QRect screenGeom = screen->geometry();
 
+    // Build resolved per-screen config
+    const ZoneSelectorConfig config = m_settings
+        ? m_settings->resolvedZoneSelectorConfig(screen->name())
+        : defaultZoneSelectorConfig();
+    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
+
     // Configure LayerShellQt for zone selector (LayerTop for pointer input)
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
 
-        ZoneSelectorPosition pos = m_settings ? m_settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
         layerWindow->setAnchors(getAnchorsForPosition(pos));
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-selector-%1").arg(screen->name()));
@@ -1361,24 +1251,23 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
-    // Pass zone appearance settings for scaled preview
+    // Pass zone appearance settings for scaled preview (global settings)
     if (m_settings) {
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
-        writeQmlProperty(window, QStringLiteral("selectorPosition"),
-                         static_cast<int>(m_settings->zoneSelectorPosition()));
-        writeQmlProperty(window, QStringLiteral("selectorLayoutMode"),
-                         static_cast<int>(m_settings->zoneSelectorLayoutMode()));
-        writeQmlProperty(window, QStringLiteral("selectorGridColumns"), m_settings->zoneSelectorGridColumns());
-        writeQmlProperty(window, QStringLiteral("previewWidth"), m_settings->zoneSelectorPreviewWidth());
-        writeQmlProperty(window, QStringLiteral("previewHeight"), m_settings->zoneSelectorPreviewHeight());
-        writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
+    // Pass resolved per-screen config values to QML
+    writeQmlProperty(window, QStringLiteral("selectorPosition"), config.position);
+    writeQmlProperty(window, QStringLiteral("selectorLayoutMode"), config.layoutMode);
+    writeQmlProperty(window, QStringLiteral("selectorGridColumns"), config.gridColumns);
+    writeQmlProperty(window, QStringLiteral("previewWidth"), config.previewWidth);
+    writeQmlProperty(window, QStringLiteral("previewHeight"), config.previewHeight);
+    writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     const int layoutCount = LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screen->name(), m_currentVirtualDesktop, m_currentActivity).size();
-    updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
+    updateZoneSelectorWindowLayout(window, screen, config, m_settings, layoutCount);
 
     window->setVisible(false);
     auto conn = connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this, SLOT(onZoneSelected(QString, int, QVariant)));
@@ -1415,24 +1304,28 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("screenWidth"), screenGeom.width());
 
+    // Build resolved per-screen config
+    const ZoneSelectorConfig config = m_settings
+        ? m_settings->resolvedZoneSelectorConfig(screen->name())
+        : defaultZoneSelectorConfig();
+
     // Update settings-based properties
     if (m_settings) {
         writeQmlProperty(window, QStringLiteral("highlightColor"), m_settings->highlightColor());
         writeQmlProperty(window, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
         writeQmlProperty(window, QStringLiteral("borderColor"), m_settings->borderColor());
-        // Zone appearance settings for scaled preview
+        // Zone appearance settings for scaled preview (global)
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
-        writeQmlProperty(window, QStringLiteral("selectorPosition"),
-                         static_cast<int>(m_settings->zoneSelectorPosition()));
-        writeQmlProperty(window, QStringLiteral("selectorLayoutMode"),
-                         static_cast<int>(m_settings->zoneSelectorLayoutMode()));
-        writeQmlProperty(window, QStringLiteral("selectorGridColumns"), m_settings->zoneSelectorGridColumns());
-        writeQmlProperty(window, QStringLiteral("previewWidth"), m_settings->zoneSelectorPreviewWidth());
-        writeQmlProperty(window, QStringLiteral("previewHeight"), m_settings->zoneSelectorPreviewHeight());
-        writeQmlProperty(window, QStringLiteral("previewLockAspect"), m_settings->zoneSelectorPreviewLockAspect());
     }
+    // Pass resolved per-screen config values to QML
+    writeQmlProperty(window, QStringLiteral("selectorPosition"), config.position);
+    writeQmlProperty(window, QStringLiteral("selectorLayoutMode"), config.layoutMode);
+    writeQmlProperty(window, QStringLiteral("selectorGridColumns"), config.gridColumns);
+    writeQmlProperty(window, QStringLiteral("previewWidth"), config.previewWidth);
+    writeQmlProperty(window, QStringLiteral("previewHeight"), config.previewHeight);
+    writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     // Build and pass layout data (filtered for this screen's context)
     QVariantList layouts = buildLayoutsList(screen->name());
@@ -1447,31 +1340,27 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     }
     writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
 
-    // Compute layout for geometry updates
+    // Compute layout for geometry updates using per-screen config
     const int layoutCount = layouts.size();
-    const ZoneSelectorLayout layout = computeZoneSelectorLayout(m_settings, screen, layoutCount);
+    const ZoneSelectorLayout layout = computeZoneSelectorLayout(config, screen, layoutCount);
 
     // Set positionIsVertical before layout properties; QML anchors depend on it for
     // containerWidth/Height, so it has to be correct before we apply the layout.
-    if (m_settings) {
-        const ZoneSelectorPosition pos = m_settings->zoneSelectorPosition();
-        writeQmlProperty(window, QStringLiteral("positionIsVertical"),
-                         (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
-    }
+    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
+    writeQmlProperty(window, QStringLiteral("positionIsVertical"),
+                     (pos == ZoneSelectorPosition::Left || pos == ZoneSelectorPosition::Right));
 
     // Apply layout and geometry
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(window, screen, m_settings, layout);
+    updateZoneSelectorComputedProperties(window, screen, config, m_settings, layout);
 
     // Force QML to process property updates immediately
     if (auto* contentRoot = window->contentItem()) {
         contentRoot->polish();
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
-
-    const ZoneSelectorPosition pos = m_settings ? m_settings->zoneSelectorPosition() : ZoneSelectorPosition::Top;
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         const int screenW = screenGeom.width();
         const int screenH = screenGeom.height();
