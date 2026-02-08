@@ -251,6 +251,9 @@ Q_SIGNALS:
     // Resnap to New Layout Shortcut
     void resnapToNewLayoutShortcutChanged();
 
+    // Snap All Windows Shortcut
+    void snapAllWindowsShortcutChanged();
+
 };
 
 /**

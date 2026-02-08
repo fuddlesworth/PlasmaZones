@@ -64,6 +64,26 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
     return result;
 }
 
+static QString serializeRotationEntries(const QVector<RotationEntry>& entries)
+{
+    if (entries.isEmpty()) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray array;
+    for (const RotationEntry& entry : entries) {
+        QJsonObject obj;
+        obj[QLatin1String("windowId")] = entry.windowId;
+        obj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
+        obj[QLatin1String("targetZoneId")] = entry.targetZoneId;
+        obj[QLatin1String("x")] = entry.targetGeometry.x();
+        obj[QLatin1String("y")] = entry.targetGeometry.y();
+        obj[QLatin1String("width")] = entry.targetGeometry.width();
+        obj[QLatin1String("height")] = entry.targetGeometry.height();
+        array.append(obj);
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
 WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
                                              QObject* parent)
@@ -849,21 +869,8 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
         return;
     }
 
-    QJsonArray rotationArray;
-    for (const RotationEntry& entry : rotationEntries) {
-        QJsonObject moveObj;
-        moveObj[QLatin1String("windowId")] = entry.windowId;
-        moveObj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
-        moveObj[QLatin1String("targetZoneId")] = entry.targetZoneId;
-        moveObj[QLatin1String("x")] = entry.targetGeometry.x();
-        moveObj[QLatin1String("y")] = entry.targetGeometry.y();
-        moveObj[QLatin1String("width")] = entry.targetGeometry.width();
-        moveObj[QLatin1String("height")] = entry.targetGeometry.height();
-        rotationArray.append(moveObj);
-    }
-
-    QString rotationData = QString::fromUtf8(QJsonDocument(rotationArray).toJson(QJsonDocument::Compact));
-    qCInfo(lcDbusWindow) << "Rotating" << rotationArray.size() << "windows"
+    QString rotationData = serializeRotationEntries(rotationEntries);
+    qCInfo(lcDbusWindow) << "Rotating" << rotationEntries.size() << "windows"
                          << (clockwise ? "clockwise" : "counterclockwise");
     Q_EMIT rotateWindowsRequested(clockwise, rotationData);
     // NOTE: Don't emit navigationFeedback here. The KWin effect will report the actual
@@ -898,22 +905,26 @@ void WindowTrackingAdaptor::resnapToNewLayout()
         return;
     }
 
-    QJsonArray resnapArray;
-    for (const RotationEntry& entry : resnapEntries) {
-        QJsonObject moveObj;
-        moveObj[QLatin1String("windowId")] = entry.windowId;
-        moveObj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
-        moveObj[QLatin1String("targetZoneId")] = entry.targetZoneId;
-        moveObj[QLatin1String("x")] = entry.targetGeometry.x();
-        moveObj[QLatin1String("y")] = entry.targetGeometry.y();
-        moveObj[QLatin1String("width")] = entry.targetGeometry.width();
-        moveObj[QLatin1String("height")] = entry.targetGeometry.height();
-        resnapArray.append(moveObj);
-    }
-
-    QString resnapData = QString::fromUtf8(QJsonDocument(resnapArray).toJson(QJsonDocument::Compact));
-    qCInfo(lcDbusWindow) << "Resnapping" << resnapArray.size() << "windows to new layout";
+    QString resnapData = serializeRotationEntries(resnapEntries);
+    qCInfo(lcDbusWindow) << "Resnapping" << resnapEntries.size() << "windows to new layout";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
+void WindowTrackingAdaptor::snapAllWindows(const QString& screenName)
+{
+    qCDebug(lcDbusWindow) << "snapAllWindows called for screen:" << screenName;
+    Q_EMIT snapAllWindowsRequested(screenName);
+}
+
+QString WindowTrackingAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenName)
+{
+    qCDebug(lcDbusWindow) << "calculateSnapAllWindows called with" << windowIds.size()
+                          << "windows on screen:" << screenName;
+
+    QVector<RotationEntry> entries = m_service->calculateSnapAllWindows(windowIds, screenName);
+
+    qCInfo(lcDbusWindow) << "Calculated snap-all for" << entries.size() << "windows";
+    return serializeRotationEntries(entries);
 }
 
 void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString& action, const QString& reason,

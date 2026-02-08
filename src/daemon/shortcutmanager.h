@@ -133,6 +133,13 @@ Q_SIGNALS:
      */
     void resnapToNewLayoutRequested();
 
+    /**
+     * @brief Emitted when snap all windows shortcut is triggered
+     *
+     * Snaps all visible unsnapped windows on the current screen to zones.
+     */
+    void snapAllWindowsRequested();
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -201,6 +208,10 @@ private Q_SLOTS:
     void onResnapToNewLayout();
     void updateResnapToNewLayoutShortcut();
 
+    // Snap All Windows
+    void onSnapAllWindows();
+    void updateSnapAllWindowsShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -211,6 +222,7 @@ private:
     void setupRotateWindowsShortcuts();
     void setupCycleWindowsShortcuts();
     void setupResnapToNewLayoutShortcut();
+    void setupSnapAllWindowsShortcut();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -252,6 +264,9 @@ private:
 
     // Resnap to New Layout action
     QAction* m_resnapToNewLayoutAction = nullptr;
+
+    // Snap All Windows action
+    QAction* m_snapAllWindowsAction = nullptr;
 };
 
 } // namespace PlasmaZones

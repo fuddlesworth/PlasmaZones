@@ -358,6 +358,22 @@ public Q_SLOTS:
     void resnapToNewLayout();
 
     /**
+     * @brief Calculate snap assignments for all provided windows
+     * @param windowIds List of unsnapped window IDs
+     * @param screenName Screen for layout/geometry resolution
+     * @return JSON array [{windowId, targetZoneId, x, y, width, height}, ...]
+     * @note Called by KWin effect after collecting unsnapped windows
+     */
+    QString calculateSnapAllWindows(const QStringList& windowIds, const QString& screenName);
+
+    /**
+     * @brief Trigger snap-all-windows from daemon shortcut
+     * @param screenName Screen where cursor is located
+     * @note Emits snapAllWindowsRequested signal to KWin effect
+     */
+    void snapAllWindows(const QString& screenName);
+
+    /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
      * @return true if window is floating
@@ -531,6 +547,12 @@ Q_SIGNALS:
      * @note Same format as rotateWindowsRequested; KWin effect applies geometries and calls windowSnapped
      */
     void resnapToNewLayoutRequested(const QString& resnapData);
+
+    /**
+     * @brief Request KWin effect to collect unsnapped windows and snap them all
+     * @param screenName Screen to operate on
+     */
+    void snapAllWindowsRequested(const QString& screenName);
 
 private Q_SLOTS:
     /**

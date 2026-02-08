@@ -179,6 +179,7 @@ public:
     static QString cycleWindowForwardShortcut() { return instance().defaultCycleWindowForwardValue(); }
     static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
     static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
+    static QString snapAllWindowsShortcut() { return instance().defaultSnapAllWindowsShortcutValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Update Notifications

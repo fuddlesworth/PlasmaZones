@@ -883,6 +883,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           SLOT(slotCycleWindowsInZoneRequested(QString, QString)));
 
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("snapAllWindowsRequested"), this,
+                                          SLOT(slotSnapAllWindowsRequested(QString)));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("pendingRestoresAvailable"), this,
                                           SLOT(slotPendingRestoresAvailable()));
 
@@ -1043,6 +1047,80 @@ void PlasmaZonesEffect::slotRotateWindowsRequested(bool clockwise, const QString
 void PlasmaZonesEffect::slotResnapToNewLayoutRequested(const QString& resnapData)
 {
     m_navigationHandler->handleResnapToNewLayout(resnapData);
+}
+
+void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenName)
+{
+    qCDebug(lcEffect) << "Snap all windows requested for screen:" << screenName;
+
+    if (!ensureWindowTrackingReady("snap all windows")) {
+        return;
+    }
+
+    // Collect unsnapped, non-floating windows on this screen in stacking order
+    // (bottom-to-top) so lower windows get lower-numbered zones deterministically
+    QStringList unsnappedWindowIds;
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || !shouldHandleWindow(w)) {
+            continue;
+        }
+
+        QString windowId = getWindowId(w);
+        QString stableId = extractStableId(windowId);
+
+        // User-initiated snap commands override floating state.
+        // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
+
+        if (getWindowScreenName(w) != screenName) {
+            qCDebug(lcEffect) << "snap-all: skipping window on different screen" << stableId;
+            continue;
+        }
+
+        if (w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+            qCDebug(lcEffect) << "snap-all: skipping minimized/other-desktop window" << stableId;
+            continue;
+        }
+
+        // Check if already snapped (sync query - acceptable for user-triggered action)
+        QString zoneId = queryZoneForWindow(windowId);
+        if (!zoneId.isEmpty()) {
+            qCDebug(lcEffect) << "snap-all: skipping already-snapped window" << stableId << "zone:" << zoneId;
+            continue;
+        }
+
+        unsnappedWindowIds.append(windowId);
+    }
+
+    qCDebug(lcEffect) << "snap-all: found" << unsnappedWindowIds.size() << "unsnapped windows to snap";
+
+    if (unsnappedWindowIds.isEmpty()) {
+        qCDebug(lcEffect) << "No unsnapped windows to snap on screen" << screenName;
+        emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"),
+                               QString(), QString(), screenName);
+        return;
+    }
+
+    // Ask daemon to calculate zone assignments
+    QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(
+        QStringLiteral("calculateSnapAllWindows"), unsnappedWindowIds, screenName);
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, screenName](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<QString> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "calculateSnapAllWindows failed:" << reply.error().message();
+            emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("calculation_error"),
+                                   QString(), QString(), screenName);
+            return;
+        }
+
+        QString snapData = reply.value();
+        m_navigationHandler->handleSnapAllWindows(snapData, screenName);
+    });
 }
 
 void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused)

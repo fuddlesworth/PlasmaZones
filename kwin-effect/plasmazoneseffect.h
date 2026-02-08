@@ -76,6 +76,7 @@ private Q_SLOTS:
                                   const QString& zoneGeometry);
     void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
     void slotResnapToNewLayoutRequested(const QString& resnapData);
+    void slotSnapAllWindowsRequested(const QString& screenName);
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& stableId, bool isFloating);

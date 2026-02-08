@@ -356,6 +356,18 @@ public:
     QVector<RotationEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     /**
+     * @brief Calculate snap assignments for all unsnapped windows
+     * @param windowIds List of unsnapped window IDs (from KWin effect)
+     * @param screenName Screen for layout/geometry resolution
+     * @return List of RotationEntry with target zone assignments
+     *
+     * Assigns windows to zones in zone-number order, skipping already-occupied
+     * zones. If more windows than zones, extra windows are left unassigned.
+     */
+    QVector<RotationEntry> calculateSnapAllWindows(const QStringList& windowIds,
+                                                    const QString& screenName) const;
+
+    /**
      * @brief Calculate resnap data for windows from previous layout to current layout
      *
      * When layout changes, windows that were in the previous layout are buffered.
@@ -518,6 +530,7 @@ private:
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
+    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString()) const;
 
     // Dependencies
     LayoutManager* m_layoutManager;

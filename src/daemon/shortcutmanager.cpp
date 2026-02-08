@@ -133,6 +133,9 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     // Resnap to New Layout shortcut
     connect(m_settings, &Settings::resnapToNewLayoutShortcutChanged, this, &ShortcutManager::updateResnapToNewLayoutShortcut);
 
+    // Snap All Windows shortcut
+    connect(m_settings, &Settings::snapAllWindowsShortcutChanged, this, &ShortcutManager::updateSnapAllWindowsShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -160,6 +163,7 @@ void ShortcutManager::registerShortcuts()
     setupRotateWindowsShortcuts();
     setupCycleWindowsShortcuts();
     setupResnapToNewLayoutShortcut();
+    setupSnapAllWindowsShortcut();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -213,6 +217,8 @@ void ShortcutManager::updateShortcuts()
     updateCycleWindowForwardShortcut();
     updateCycleWindowBackwardShortcut();
 
+    // Snap All Windows shortcut
+    updateSnapAllWindowsShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -264,6 +270,9 @@ void ShortcutManager::unregisterShortcuts()
 
     // Resnap to New Layout action
     DELETE_SHORTCUT(m_resnapToNewLayoutAction);
+
+    // Snap All Windows action
+    DELETE_SHORTCUT(m_snapAllWindowsAction);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -445,6 +454,15 @@ void ShortcutManager::setupResnapToNewLayoutShortcut()
                         << m_settings->resnapToNewLayoutShortcut() << ")";
 }
 
+void ShortcutManager::setupSnapAllWindowsShortcut()
+{
+    SETUP_SHORTCUT(m_snapAllWindowsAction, "Snap All Windows to Zones", "snap_all_windows",
+                   snapAllWindowsShortcut, &ShortcutManager::onSnapAllWindows);
+
+    qCInfo(lcShortcuts) << "Snap all windows shortcut registered ("
+                        << m_settings->snapAllWindowsShortcut() << ")";
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Slot Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -591,6 +609,12 @@ void ShortcutManager::onResnapToNewLayout()
     Q_EMIT resnapToNewLayoutRequested();
 }
 
+void ShortcutManager::onSnapAllWindows()
+{
+    qCInfo(lcShortcuts) << "Snap all windows triggered";
+    Q_EMIT snapAllWindowsRequested();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Update Shortcut Methods
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -724,6 +748,11 @@ void ShortcutManager::updateCycleWindowBackwardShortcut()
 void ShortcutManager::updateResnapToNewLayoutShortcut()
 {
     UPDATE_SHORTCUT(m_resnapToNewLayoutAction, resnapToNewLayoutShortcut);
+}
+
+void ShortcutManager::updateSnapAllWindowsShortcut()
+{
+    UPDATE_SHORTCUT(m_snapAllWindowsAction, snapAllWindowsShortcut);
 }
 
 // Undefine macros to keep them local to this file

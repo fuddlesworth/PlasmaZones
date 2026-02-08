@@ -228,6 +228,10 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
                    NOTIFY resnapToNewLayoutShortcutChanged)
 
+    // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
+    Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut
+                   NOTIFY snapAllWindowsShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -808,6 +812,12 @@ public:
     }
     void setResnapToNewLayoutShortcut(const QString& shortcut);
 
+    QString snapAllWindowsShortcut() const
+    {
+        return m_snapAllWindowsShortcut;
+    }
+    void setSnapAllWindowsShortcut(const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -990,6 +1000,9 @@ private:
 
     // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
     QString m_resnapToNewLayoutShortcut = QStringLiteral("Meta+Ctrl+Z");
+
+    // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
+    QString m_snapAllWindowsShortcut = QStringLiteral("Meta+Ctrl+S");
 
 };
 

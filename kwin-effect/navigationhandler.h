@@ -43,6 +43,7 @@ public:
                            const QString& zoneGeometry);
     void handleRotateWindows(bool clockwise, const QString& rotationData);
     void handleResnapToNewLayout(const QString& resnapData);
+    void handleSnapAllWindows(const QString& snapData, const QString& screenName);
     void handleCycleWindowsInZone(const QString& directive, const QString& unused);
 
     // Floating window tracking
@@ -55,6 +56,31 @@ public:
     const QSet<QString>& floatingWindows() const { return m_floatingWindows; }
 
 private:
+    /**
+     * @brief Result from batch snap/rotate/resnap operations
+     */
+    struct BatchSnapResult {
+        enum Status { Success, ParseError, EmptyData, DbusError };
+        Status status = Success;
+        int successCount = 0;
+        QString firstSourceZoneId;
+        QString firstTargetZoneId;
+    };
+
+    /**
+     * @brief Shared core for batch snap operations (rotate, resnap, snap-all)
+     *
+     * Parses JSON array of snap entries, validates D-Bus interface, builds window map,
+     * and applies geometry + windowSnapped for each valid entry.
+     *
+     * @param jsonData JSON array of {windowId, targetZoneId, sourceZoneId, x, y, width, height}
+     * @param filterCurrentDesktop If true, skip windows not on current desktop/activity (resnap)
+     * @param resolveFullWindowId If true, resolve full windowId via getWindowId() (resnap)
+     */
+    BatchSnapResult applyBatchSnapFromJson(const QString& jsonData,
+                                           bool filterCurrentDesktop = false,
+                                           bool resolveFullWindowId = false);
+
     // Internal helper for float toggle - called after daemon state is synced
     void executeFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
                             const QString& stableId, const QString& screenName, bool newFloatState);

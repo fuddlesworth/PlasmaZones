@@ -623,6 +623,16 @@ void Daemon::start()
         m_windowTrackingAdaptor->resnapToNewLayout();
     });
 
+    // Snap all windows shortcut
+    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for snapAllWindows shortcut — skipping";
+            return;
+        }
+        m_windowTrackingAdaptor->snapAllWindows(screen->name());
+    });
+
     // Initialize mode tracker for last-used layout
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
     m_modeTracker->load();

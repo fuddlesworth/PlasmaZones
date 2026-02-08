@@ -428,6 +428,12 @@
       <label>Shortcut to resnap windows from previous layout to current layout</label>
       <default>Meta+Ctrl+Z</default>
     </entry>
+
+    <!-- Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops) -->
+    <entry name="SnapAllWindowsShortcut" type="String">
+      <label>Shortcut to snap all visible windows to zones</label>
+      <default>Meta+Ctrl+S</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

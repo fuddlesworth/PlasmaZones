@@ -45,13 +45,8 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
     QString stableId = m_effect->extractStableId(windowId);
     QString screenName = m_effect->getWindowScreenName(activeWindow);
 
-    // Check if window is floating
-    if (isWindowFloating(stableId)) {
-        qCDebug(lcEffect) << "Window is floating, skipping move";
-        m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("window_floating"),
-                                         QString(), QString(), screenName);
-        return;
-    }
+    // User-initiated snap commands override floating state.
+    // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
 
     // Check if this is a navigation directive
     if (targetZoneId.startsWith(NavigateDirectivePrefix)) {
@@ -588,11 +583,8 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
     QString stableId = m_effect->extractStableId(windowId);
     QString screenName = m_effect->getWindowScreenName(activeWindow);
 
-    if (isWindowFloating(stableId)) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("window_floating"),
-                                         QString(), QString(), screenName);
-        return;
-    }
+    // User-initiated snap commands override floating state.
+    // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
 
     if (!targetZoneId.startsWith(SwapDirectivePrefix)) {
         m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_directive"),
@@ -757,14 +749,8 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
                         return;
                     }
 
-                    QString targetStableId = m_effect->extractStableId(targetWindowIdToSwap);
-                    if (isWindowFloating(targetStableId)) {
-                        m_effect->applySnapGeometry(safeWindow, targetGeom);
-                        swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, capturedTargetZone, capturedScreenName);
-                        m_effect->emitNavigationFeedback(true, QStringLiteral("swap"), QStringLiteral("target_floating"),
-                                                         capturedCurrentZoneId, capturedTargetZone, capturedScreenName);
-                        return;
-                    }
+                    // User-initiated snap commands override floating state.
+                    // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
 
                     m_effect->ensurePreSnapGeometryStored(safeWindow, capturedWindowId);
                     m_effect->ensurePreSnapGeometryStored(targetWindow, targetWindowIdToSwap);
@@ -784,130 +770,34 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
     });
 }
 
-void NavigationHandler::handleRotateWindows(bool clockwise, const QString& rotationData)
+NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(const QString& jsonData,
+                                                                             bool filterCurrentDesktop,
+                                                                             bool resolveFullWindowId)
 {
-    qCDebug(lcEffect) << "Rotate windows requested, clockwise:" << clockwise;
-
-    // Get screen name from active window for OSD placement
-    KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
-    QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
+    BatchSnapResult result;
 
     QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(rotationData.toUtf8(), &parseError);
+    QJsonDocument doc = QJsonDocument::fromJson(jsonData.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("parse_error"),
-                                         QString(), QString(), screenName);
-        return;
+        result.status = BatchSnapResult::ParseError;
+        return result;
     }
 
-    QJsonArray rotationArray = doc.array();
-    if (rotationArray.isEmpty()) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_windows"),
-                                         QString(), QString(), screenName);
-        return;
+    QJsonArray entries = doc.array();
+    if (entries.isEmpty()) {
+        result.status = BatchSnapResult::EmptyData;
+        return result;
     }
 
     auto* iface = m_effect->windowTrackingInterface();
     if (!iface || !iface->isValid()) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("dbus_error"),
-                                         QString(), QString(), screenName);
-        return;
+        result.status = BatchSnapResult::DbusError;
+        return result;
     }
 
     QHash<QString, KWin::EffectWindow*> windowMap = m_effect->buildWindowMap();
-    int successCount = 0;
-    QString firstSourceZoneId; // Capture first move's source zone for OSD
-    QString firstTargetZoneId; // Capture first move's target zone for OSD
 
-    for (const QJsonValue& value : rotationArray) {
-        if (!value.isObject()) {
-            continue;
-        }
-
-        QJsonObject moveObj = value.toObject();
-        QString windowId = moveObj[QStringLiteral("windowId")].toString();
-        QString targetZoneId = moveObj[QStringLiteral("targetZoneId")].toString();
-        QString sourceZoneId = moveObj[QStringLiteral("sourceZoneId")].toString();
-        int x = moveObj[QStringLiteral("x")].toInt();
-        int y = moveObj[QStringLiteral("y")].toInt();
-        int width = moveObj[QStringLiteral("width")].toInt();
-        int height = moveObj[QStringLiteral("height")].toInt();
-
-        if (windowId.isEmpty() || targetZoneId.isEmpty()) {
-            continue;
-        }
-
-        QString stableId = m_effect->extractStableId(windowId);
-        KWin::EffectWindow* window = windowMap.value(stableId);
-
-        if (!window) {
-            continue;
-        }
-
-        if (isWindowFloating(stableId)) {
-            continue;
-        }
-
-        m_effect->ensurePreSnapGeometryStored(window, windowId);
-        m_effect->applySnapGeometry(window, QRect(x, y, width, height));
-        QString windowScreen = m_effect->getWindowScreenName(window);
-        iface->asyncCall(QStringLiteral("windowSnapped"), windowId, targetZoneId, windowScreen);
-        ++successCount;
-
-        // Capture first successful move's zones for OSD highlighting
-        if (successCount == 1) {
-            firstSourceZoneId = sourceZoneId;
-            firstTargetZoneId = targetZoneId;
-        }
-    }
-
-    if (successCount > 0) {
-        // Pass direction and count in reason field for OSD display
-        // Format: "clockwise:N" or "counterclockwise:N" where N is window count
-        QString direction = clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise");
-        QString reason = QStringLiteral("%1:%2").arg(direction).arg(successCount);
-        m_effect->emitNavigationFeedback(true, QStringLiteral("rotate"), reason,
-                                         firstSourceZoneId, firstTargetZoneId, screenName);
-    } else {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"),
-                                         QString(), QString(), screenName);
-    }
-}
-
-void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
-{
-    qCDebug(lcEffect) << "Resnap to new layout requested";
-
-    KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
-    QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(resnapData.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("parse_error"),
-                                         QString(), QString(), screenName);
-        return;
-    }
-
-    QJsonArray resnapArray = doc.array();
-    if (resnapArray.isEmpty()) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows"),
-                                         QString(), QString(), screenName);
-        return;
-    }
-
-    auto* iface = m_effect->windowTrackingInterface();
-    if (!iface || !iface->isValid()) {
-        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("dbus_error"),
-                                         QString(), QString(), screenName);
-        return;
-    }
-
-    QHash<QString, KWin::EffectWindow*> windowMap = m_effect->buildWindowMap();
-    int successCount = 0;
-    QString firstTargetZoneId;
-
-    for (const QJsonValue& value : resnapArray) {
+    for (const QJsonValue& value : entries) {
         if (!value.isObject()) {
             continue;
         }
@@ -930,35 +820,110 @@ void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
         if (!window) {
             continue;
         }
+        // User-initiated snap commands override floating state.
+        // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
 
-        if (isWindowFloating(stableId)) {
+        if (filterCurrentDesktop && (!window->isOnCurrentDesktop() || !window->isOnCurrentActivity())) {
             continue;
         }
 
-        // Only resnap windows on current desktop (and activity) - user expects to see them move
-        if (!window->isOnCurrentDesktop() || !window->isOnCurrentActivity()) {
-            continue;
-        }
+        // Resnap JSON may contain stableIds from pending entries; resolve full windowId from KWin
+        QString snapWindowId = resolveFullWindowId ? m_effect->getWindowId(window) : windowId;
 
-        // Use full windowId from KWin for daemon tracking (JSON may contain stableId for pending entries)
-        QString fullWindowId = m_effect->getWindowId(window);
-        QString windowScreen = m_effect->getWindowScreenName(window);
-        m_effect->ensurePreSnapGeometryStored(window, fullWindowId);
+        m_effect->ensurePreSnapGeometryStored(window, snapWindowId);
         m_effect->applySnapGeometry(window, QRect(x, y, width, height));
-        iface->asyncCall(QStringLiteral("windowSnapped"), fullWindowId, targetZoneId, windowScreen);
-        ++successCount;
+        QString windowScreen = m_effect->getWindowScreenName(window);
+        iface->asyncCall(QStringLiteral("windowSnapped"), snapWindowId, targetZoneId, windowScreen);
+        ++result.successCount;
 
-        if (successCount == 1) {
-            firstTargetZoneId = targetZoneId;
+        if (result.successCount == 1) {
+            result.firstSourceZoneId = moveObj[QLatin1String("sourceZoneId")].toString();
+            result.firstTargetZoneId = targetZoneId;
         }
     }
 
-    if (successCount > 0) {
-        QString reason = QStringLiteral("resnap:%1").arg(successCount);
+    return result;
+}
+
+void NavigationHandler::handleRotateWindows(bool clockwise, const QString& rotationData)
+{
+    qCDebug(lcEffect) << "Rotate windows requested, clockwise:" << clockwise;
+
+    KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
+    QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
+
+    BatchSnapResult result = applyBatchSnapFromJson(rotationData);
+
+    if (result.status == BatchSnapResult::ParseError) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("parse_error"),
+                                         QString(), QString(), screenName);
+    } else if (result.status == BatchSnapResult::EmptyData) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_windows"),
+                                         QString(), QString(), screenName);
+    } else if (result.status == BatchSnapResult::DbusError) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("dbus_error"),
+                                         QString(), QString(), screenName);
+    } else if (result.successCount > 0) {
+        QString direction = clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise");
+        QString reason = QStringLiteral("%1:%2").arg(direction).arg(result.successCount);
+        m_effect->emitNavigationFeedback(true, QStringLiteral("rotate"), reason,
+                                         result.firstSourceZoneId, result.firstTargetZoneId, screenName);
+    } else {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"),
+                                         QString(), QString(), screenName);
+    }
+}
+
+void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
+{
+    qCDebug(lcEffect) << "Resnap to new layout requested";
+
+    KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
+    QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
+
+    BatchSnapResult result = applyBatchSnapFromJson(resnapData, /*filterCurrentDesktop=*/true,
+                                                    /*resolveFullWindowId=*/true);
+
+    if (result.status == BatchSnapResult::ParseError) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("parse_error"),
+                                         QString(), QString(), screenName);
+    } else if (result.status == BatchSnapResult::EmptyData) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows"),
+                                         QString(), QString(), screenName);
+    } else if (result.status == BatchSnapResult::DbusError) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("dbus_error"),
+                                         QString(), QString(), screenName);
+    } else if (result.successCount > 0) {
+        QString reason = QStringLiteral("resnap:%1").arg(result.successCount);
         m_effect->emitNavigationFeedback(true, QStringLiteral("resnap"), reason,
-                                         QString(), firstTargetZoneId, screenName);
+                                         QString(), result.firstTargetZoneId, screenName);
     } else {
         m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_resnaps"),
+                                         QString(), QString(), screenName);
+    }
+}
+
+void NavigationHandler::handleSnapAllWindows(const QString& snapData, const QString& screenName)
+{
+    qCDebug(lcEffect) << "Snap all windows handler called for screen:" << screenName;
+
+    BatchSnapResult result = applyBatchSnapFromJson(snapData);
+
+    if (result.status == BatchSnapResult::ParseError) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("parse_error"),
+                                         QString(), QString(), screenName);
+    } else if (result.status == BatchSnapResult::EmptyData) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_windows"),
+                                         QString(), QString(), screenName);
+    } else if (result.status == BatchSnapResult::DbusError) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("dbus_error"),
+                                         QString(), QString(), screenName);
+    } else if (result.successCount > 0) {
+        QString reason = QStringLiteral("snap_all:%1").arg(result.successCount);
+        m_effect->emitNavigationFeedback(true, QStringLiteral("snap_all"), reason,
+                                         QString(), result.firstTargetZoneId, screenName);
+    } else {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_snaps"),
                                          QString(), QString(), screenName);
     }
 }
