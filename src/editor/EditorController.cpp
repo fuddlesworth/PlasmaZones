@@ -54,6 +54,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QPointer>
+#include <QTimer>
 #include <QUuid>
 #include <QtMath>
 #include <QRegularExpression>
@@ -474,12 +476,16 @@ void EditorController::setTargetScreen(const QString& screenName)
             qCWarning(lcEditor) << "Switching screens with unsaved changes";
         }
 
+        QString previousLayout = m_layoutId;
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
 
         // Load the layout assigned to this screen
         if (!screenName.isEmpty() && m_layoutService) {
             QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
+            qCDebug(lcEditor) << "setTargetScreen:" << screenName
+                              << "daemon returned layoutId:" << layoutId
+                              << "current layoutId:" << previousLayout;
             if (!layoutId.isEmpty()) {
                 // Load the assigned layout
                 loadLayout(layoutId);
@@ -490,6 +496,57 @@ void EditorController::setTargetScreen(const QString& screenName)
             }
         }
     }
+}
+
+void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
+{
+    if (!window) {
+        return;
+    }
+
+    if (!m_targetScreen.isEmpty()) {
+        const auto screens = QGuiApplication::screens();
+        for (auto* screen : screens) {
+            if (screen->name() == m_targetScreen) {
+                // Already on the correct screen — nothing to do
+                if (window->screen() == screen && window->isVisible()) {
+                    return;
+                }
+
+                qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
+                                  << "geometry:" << screen->geometry();
+
+                // On Wayland, the wl_output for an xdg-shell surface is bound at
+                // surface creation time. setScreen()/setGeometry() cannot move an
+                // already-mapped surface to a different output. To switch screens we
+                // must destroy the native window (wl_surface) and let Qt recreate it
+                // so the new surface gets mapped to the correct output.
+                // When the window is already visible (mid-session screen switch), defer
+                // the destroy+recreate to avoid tearing down the surface inside the
+                // current render frame or signal handler (QTBUG-88997).
+                if (window->isVisible()) {
+                    QPointer<QQuickWindow> safeWindow(window);
+                    QScreen* targetScreen = screen;
+                    QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
+                        if (!safeWindow || !targetScreen) {
+                            return;
+                        }
+                        safeWindow->destroy();
+                        safeWindow->setScreen(targetScreen);
+                        safeWindow->setGeometry(targetScreen->geometry());
+                        safeWindow->showFullScreen();
+                    });
+                    return;
+                }
+
+                window->setScreen(screen);
+                window->setGeometry(screen->geometry());
+                break;
+            }
+        }
+    }
+
+    window->showFullScreen();
 }
 
 void EditorController::setTargetScreenDirect(const QString& screenName)
@@ -645,8 +702,8 @@ void EditorController::loadLayout(const QString& layoutId)
     m_activitiesAvailable = false;
     m_availableActivities.clear();
     {
-        QDBusInterface iface(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                             QString(DBus::Interface::LayoutManager));
+        QDBusInterface iface{QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                             QString(DBus::Interface::LayoutManager)};
         if (iface.isValid()) {
             // Screen names
             QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));

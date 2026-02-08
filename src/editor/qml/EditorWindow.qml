@@ -80,17 +80,11 @@ Window {
 
     // Move the editor window to the screen matching editorController.targetScreen
     function moveToTargetScreen() {
-        if (!editorWindow._editorController || !editorWindow._availableScreens)
+        if (!editorWindow._editorController)
             return;
-        var targetName = editorWindow._editorController.targetScreen;
-        if (!targetName)
-            return;
-        for (var i = 0; i < editorWindow._availableScreens.length; i++) {
-            if (editorWindow._availableScreens[i].name === targetName) {
-                editorWindow.screen = editorWindow._availableScreens[i];
-                return;
-            }
-        }
+        // Use C++ method which applies the Wayland setGeometry() workaround
+        // (QML Window.screen assignment is a no-op on Wayland for xdg-shell surfaces)
+        editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
     }
 
     // Helper to check if a zone is currently selected
@@ -159,7 +153,10 @@ Window {
     // Window flags - fullscreen editor window on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowFullScreenButtonHint
     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
-    visibility: Window.FullScreen
+    // Start hidden — on Wayland the compositor assigns the output when the surface
+    // is first mapped. We must set the target screen BEFORE showing, otherwise the
+    // window always lands on the primary monitor.
+    visible: false
     title: i18nc("@title", "Layout Editor")
     Component.onCompleted: {
         // Initialize selectedZoneId from editorController context property
@@ -180,8 +177,9 @@ Window {
                 editorWindow._editorController.createNewLayout();
 
         }
-        // Move editor to the target screen (handles --screen arg and D-Bus openEditorForScreen)
-        moveToTargetScreen();
+        // Set screen and show via C++ Q_INVOKABLE — QML Window.screen assignment
+        // doesn't reliably call QWindow::setScreen() on Wayland (type mismatch)
+        editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
         // Request focus on drawingArea for keyboard navigation
         // Use a timer to ensure focus is set after window is fully shown
         Qt.callLater(function() {

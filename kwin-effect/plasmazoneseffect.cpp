@@ -17,6 +17,7 @@
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusServiceWatcher>
 #include <QLoggingCategory>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -208,6 +209,57 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
 
+    // Watch for daemon D-Bus service (re)registration.
+    // After a daemon restart, m_lastCursorScreenName is still valid in the effect
+    // but the daemon's lastCursorScreenName/lastActiveScreenName are empty.
+    // Without this, keyboard shortcuts (rotate, etc.) operate on all screens
+    // because resolveShortcutScreen returns nullptr.
+    //
+    // Limitations: only watches for service *registration* (new daemon start).
+    // If the daemon crashes mid-call, in-flight D-Bus calls will return errors
+    // that individual callers handle via isValid()/isError() checks.
+    // On Wayland, this watcher uses D-Bus monitoring (not X11 selection),
+    // which works reliably across both sessions.
+    auto* serviceWatcher = new QDBusServiceWatcher(
+        DBus::ServiceName, QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration, this);
+    connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+        qCDebug(lcEffect) << "Daemon service registered — scheduling state re-push";
+
+        // Reset stale D-Bus interfaces so ensureInterface recreates them on next use
+        m_dbusInterface.reset();
+        m_windowTrackingInterface.reset();
+        m_zoneDetectionInterface.reset();
+        m_settingsInterface.reset();
+
+        // Defer re-push by 2s to avoid blocking the compositor.
+        // QDBusInterface constructor performs synchronous introspection. If we call
+        // ensureWindowTrackingReady() immediately, the daemon may still be in its
+        // start() method (event loop not yet running) and unable to respond,
+        // causing KWin to freeze until the D-Bus timeout expires.
+        QTimer::singleShot(2000, this, [this]() {
+            qCDebug(lcEffect) << "Re-pushing state after daemon registration";
+
+            // Re-push cursor screen
+            if (!m_lastCursorScreenName.isEmpty()
+                && ensureWindowTrackingReady("daemon re-register cursor screen")) {
+                m_windowTrackingInterface->asyncCall(
+                    QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
+                qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastCursorScreenName;
+            }
+
+            // Re-notify active window (gives daemon lastActiveScreenName)
+            KWin::EffectWindow* activeWindow = getActiveWindow();
+            if (activeWindow) {
+                notifyWindowActivated(activeWindow);
+            }
+
+            // Re-sync floating state and settings from daemon
+            syncFloatingWindowsFromDaemon();
+            loadExclusionSettings();
+        });
+    });
+
     // Sync floating window state from daemon's persisted state
     syncFloatingWindowsFromDaemon();
 
@@ -241,6 +293,24 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // The daemon disables KWin's Quick Tile via kwriteconfig6. We don't reserve electric borders
     // here because that would turn on the edge effect visually; the daemon's config approach
     // is the right way to prevent Quick Tile from activating.
+
+    // Seed m_lastCursorScreenName with the compositor's active screen. This ensures
+    // the daemon has a valid cursor screen even if no mouse movement occurs after login.
+    // slotMouseChanged will overwrite this as soon as the cursor moves.
+    auto* initialScreen = KWin::effects->activeScreen();
+    if (initialScreen) {
+        m_lastCursorScreenName = initialScreen->name();
+        // Defer the D-Bus call so the daemon has time to register its service
+        QTimer::singleShot(500, this, [this, initialName = m_lastCursorScreenName]() {
+            // Only send if no mouse movement has already updated the screen
+            if (m_lastCursorScreenName == initialName
+                && !initialName.isEmpty()
+                && ensureWindowTrackingReady("initial cursor screen")) {
+                m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), initialName);
+                qCDebug(lcEffect) << "Sent initial cursor screen:" << initialName;
+            }
+        });
+    }
 
     qCDebug(lcEffect) << "Initialized - C++ effect with D-Bus support and mouseChanged connection";
 }
@@ -371,7 +441,6 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                                          Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                                          Qt::KeyboardModifiers oldmodifiers)
 {
-    Q_UNUSED(pos)
     Q_UNUSED(oldpos)
     Q_UNUSED(oldmodifiers)
 
@@ -389,6 +458,21 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     if ((modifiersChanged || buttonsChanged) && m_dragTracker->isDragging()) {
         QPointF cursorPos = KWin::effects->cursorPos();
         callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+    }
+
+    // Track which screen the cursor is on for shortcut screen detection.
+    // Only send a D-Bus call when the cursor actually crosses to a different monitor,
+    // not on every pixel move. This gives the daemon accurate cursor-based screen info
+    // on Wayland where QCursor::pos() is unreliable for background processes.
+    auto* output = KWin::effects->screenAt(pos.toPoint());
+    if (output) {
+        QString screenName = output->name();
+        if (screenName != m_lastCursorScreenName) {
+            m_lastCursorScreenName = screenName;
+            if (ensureWindowTrackingReady("report cursor screen")) {
+                m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), screenName);
+            }
+        }
     }
 }
 
@@ -854,7 +938,7 @@ QString PlasmaZonesEffect::queryAdjacentZone(const QString& currentZoneId, const
     return QString();
 }
 
-QString PlasmaZonesEffect::queryFirstZoneInDirection(const QString& direction)
+QString PlasmaZonesEffect::queryFirstZoneInDirection(const QString& direction, const QString& screenName)
 {
     ensureZoneDetectionInterface();
     if (!m_zoneDetectionInterface || !m_zoneDetectionInterface->isValid()) {
@@ -865,7 +949,7 @@ QString PlasmaZonesEffect::queryFirstZoneInDirection(const QString& direction)
     // handlers that need the result immediately for decision making.
     // The latency is acceptable since it only blocks during keyboard navigation,
     // not during startup or window lifecycle events.
-    QDBusMessage msg = m_zoneDetectionInterface->call(QStringLiteral("getFirstZoneInDirection"), direction);
+    QDBusMessage msg = m_zoneDetectionInterface->call(QStringLiteral("getFirstZoneInDirection"), direction, screenName);
 
     if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()) {
         return msg.arguments().at(0).toString();

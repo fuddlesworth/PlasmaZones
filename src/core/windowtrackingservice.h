@@ -194,6 +194,13 @@ public:
     QStringList preFloatZones(const QString& windowId) const;
 
     /**
+     * @brief Get the screen name where the window was snapped before floating
+     * @param windowId Full window ID
+     * @return Screen name or empty string if unknown
+     */
+    QString preFloatScreen(const QString& windowId) const;
+
+    /**
      * @brief Clear pre-float zone after restore
      */
     void clearPreFloatZone(const QString& windowId);
@@ -318,10 +325,11 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Find the first empty zone in the current layout
+     * @brief Find the first empty zone in the layout for a screen
+     * @param screenName Screen to find layout for (empty = active layout)
      * @return Zone ID or empty string if all occupied
      */
-    QString findEmptyZone() const;
+    QString findEmptyZone(const QString& screenName = QString()) const;
 
     /**
      * @brief Get geometry for a zone on a specific screen
@@ -340,11 +348,12 @@ public:
     QRect multiZoneGeometry(const QStringList& zoneIds, const QString& screenName = QString()) const;
 
     /**
-     * @brief Calculate rotation data for all windows in layout
+     * @brief Calculate rotation data for windows on a specific screen
      * @param clockwise true for clockwise rotation
+     * @param screenFilter When non-empty, only rotate windows on this screen
      * @return List of rotation entries
      */
-    QVector<RotationEntry> calculateRotation(bool clockwise) const;
+    QVector<RotationEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     /**
      * @brief Calculate resnap data for windows from previous layout to current layout
@@ -480,11 +489,13 @@ public:
      * @brief Get pre-float zone assignments for persistence
      */
     const QHash<QString, QStringList>& preFloatZoneAssignments() const { return m_preFloatZoneAssignments; }
+    const QHash<QString, QString>& preFloatScreenAssignments() const { return m_preFloatScreenAssignments; }
 
     /**
      * @brief Set pre-float zone assignments (loaded from KConfig by adaptor)
      */
     void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments) { m_preFloatZoneAssignments = assignments; }
+    void setPreFloatScreenAssignments(const QHash<QString, QString>& assignments) { m_preFloatScreenAssignments = assignments; }
 
 Q_SIGNALS:
     /**
@@ -539,8 +550,9 @@ private:
     QHash<QString, int> m_pendingZoneDesktops;         // stableId -> desktop
     QHash<QString, QString> m_pendingZoneLayouts;      // stableId -> layoutId (for layout validation on restore)
 
-    // Pre-float zone (for unfloat restore)
+    // Pre-float zone and screen (for unfloat restore to correct monitor)
     QHash<QString, QStringList> m_preFloatZoneAssignments;
+    QHash<QString, QString> m_preFloatScreenAssignments;
 
     // User-snapped classes (for auto-snap eligibility)
     QSet<QString> m_userSnappedClasses;

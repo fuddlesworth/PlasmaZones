@@ -110,10 +110,13 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
         return nullptr;
     }
 
-    // Use activeLayout as reference for cycling (not per-screen assignment)
-    Layout* currentLayout = m_activeLayout;
+    // Use per-screen layout as reference for cycling so each screen cycles independently
+    Layout* currentLayout = nullptr;
+    if (!screenName.isEmpty()) {
+        currentLayout = layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
+    }
     if (!currentLayout) {
-        currentLayout = layoutForScreen(screenName);
+        currentLayout = m_activeLayout;
     }
     if (!currentLayout) {
         currentLayout = visible.first();
@@ -131,9 +134,15 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
     int newIndex = (currentIndex + direction + visible.size()) % visible.size();
     Layout* newLayout = visible.at(newIndex);
 
-    // Update both active layout and per-screen assignment
+    // Per-screen assignment + update global active layout.
+    // setActiveLayout MUST be called to update m_previousLayout and fire
+    // activeLayoutChanged (needed for resnap buffer population, stale assignment
+    // cleanup, OSD, etc.). Per-screen assignments are still respected by
+    // resolveLayoutForScreen() since they take priority over the global active.
+    if (!screenName.isEmpty()) {
+        assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, newLayout);
+    }
     setActiveLayout(newLayout);
-    assignLayout(screenName, 0, QString(), newLayout);
     return newLayout;
 }
 
@@ -333,9 +342,9 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenName)
     auto layout = layoutForShortcut(number);
     if (layout) {
         qCDebug(lcLayout) << "Found layout for shortcut" << number << ":" << layout->name();
+        // Assign to current monitor + current virtual desktop + current activity (not global default)
+        assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
         setActiveLayout(layout);
-        // Persist the layout assignment to this monitor (all desktops, all activities)
-        assignLayout(screenName, 0, QString(), layout);
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
         qCDebug(lcLayout) << "No layout assigned to quick slot" << number << "- attempting fallback to layout index"
@@ -344,8 +353,8 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenName)
             layout = m_layouts.at(number - 1);
             if (layout) {
                 qCDebug(lcLayout) << "Using fallback layout:" << layout->name();
+                assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
                 setActiveLayout(layout);
-                assignLayout(screenName, 0, QString(), layout);
             }
         } else {
             qCWarning(lcLayout) << "No layout available for quick slot" << number << "(have" << m_layouts.size()

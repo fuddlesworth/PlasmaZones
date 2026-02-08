@@ -150,6 +150,16 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenName)
     if (m_currentScreenName != screenName) {
         m_currentScreenName = screenName;
         m_cacheValid = false;
+
+        // Sync current layout ID to what's actually assigned to this screen
+        // (not the global active layout, which may belong to a different screen)
+        if (m_layoutManager && !screenName.isEmpty()) {
+            Layout* screenLayout = m_layoutManager->layoutForScreen(
+                screenName, m_currentVirtualDesktop, m_currentActivity);
+            if (screenLayout) {
+                m_currentLayoutId = screenLayout->id().toString();
+            }
+        }
     }
 }
 
@@ -175,9 +185,20 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
     if (uuidOpt && m_layoutManager) {
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
+            if (!m_currentScreenName.isEmpty()) {
+                // Per-screen assignment + update global active layout.
+                // setActiveLayout MUST also be called to update m_previousLayout
+                // and fire activeLayoutChanged (needed by resnap buffer, stale
+                // assignment cleanup, OSD, etc.). Per-screen assignments are still
+                // respected by resolveLayoutForScreen() since they take priority.
+                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop,
+                                              m_currentActivity, layout);
+            }
+            // Always update global active layout (fires activeLayoutChanged)
             m_layoutManager->setActiveLayout(layout);
             setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied unified layout:" << entry.name;
+            qCInfo(lcDaemon) << "Applied unified layout:" << entry.name
+                             << "to screen:" << m_currentScreenName;
             Q_EMIT layoutApplied(layout);
             return true;
         }

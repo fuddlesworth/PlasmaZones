@@ -292,6 +292,23 @@ public:
     virtual void setActiveLayout(Layout* layout) = 0;
     virtual void setActiveLayoutById(const QUuid& id) = 0;
 
+    // Current context for per-screen layout lookups
+    virtual int currentVirtualDesktop() const = 0;
+    virtual QString currentActivity() const = 0;
+
+    /**
+     * @brief Convenience: resolve layout for screen using current desktop/activity context
+     *
+     * Equivalent to layoutForScreen(screenName, currentVirtualDesktop(), currentActivity())
+     * with a fallback to activeLayout() when no per-screen assignment matches.
+     * Use this everywhere a "give me the layout for this screen right now" is needed.
+     */
+    Layout* resolveLayoutForScreen(const QString& screenName) const
+    {
+        Layout* layout = layoutForScreen(screenName, currentVirtualDesktop(), currentActivity());
+        return layout ? layout : activeLayout();
+    }
+
     // Layout assignments
     virtual Layout* layoutForScreen(const QString& screenName, int virtualDesktop = 0,
                                     const QString& activity = QString()) const = 0;
@@ -451,8 +468,9 @@ Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is selected from the zone selector
      * @param layoutId The UUID of the selected manual layout
+     * @param screenName The screen where the selection was made
      */
-    void manualLayoutSelected(const QString& layoutId);
+    void manualLayoutSelected(const QString& layoutId, const QString& screenName);
 };
 
 } // namespace PlasmaZones

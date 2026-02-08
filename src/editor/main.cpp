@@ -11,6 +11,7 @@
 #include <QQmlContext>
 #include <QCommandLineParser>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QScreen>
 #include <QCursor>
 #include <QObject>
@@ -107,7 +108,8 @@ int main(int argc, char* argv[])
     // Expose screen list to QML
     engine.rootContext()->setContextProperty(QStringLiteral("availableScreens"), QVariant::fromValue(app.screens()));
 
-    // Load main QML
+    // Load main QML (Window starts with visible:false — QML calls
+    // editorController.showFullScreenOnTargetScreen() which sets screen from C++)
     engine.loadFromModule("org.plasmazones.editor", "EditorWindow");
 
     if (engine.rootObjects().isEmpty()) {

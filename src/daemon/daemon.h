@@ -98,7 +98,7 @@ public:
     Q_INVOKABLE void clearHighlight();
 
     // OSD notifications
-    void showLayoutOsd(Layout* layout);
+    void showLayoutOsd(Layout* layout, const QString& screenName = QString());
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);

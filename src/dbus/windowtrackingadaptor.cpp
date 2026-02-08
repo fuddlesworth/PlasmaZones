@@ -122,7 +122,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
 // Window Snapping - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString& zoneId)
+void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenName)
 {
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
@@ -146,24 +146,25 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
         m_service->clearStalePendingAssignment(windowId);
     }
 
-    // Determine screen for this zone
-    QString screenName = detectScreenForZone(zoneId);
+    // Use caller-provided screen name if available, otherwise auto-detect,
+    // then fall back to cursor/active screen as tertiary fallback
+    QString resolvedScreen = resolveScreenForSnap(screenName, zoneId);
 
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 
     // Delegate to service
-    m_service->assignWindowToZone(windowId, zoneId, screenName, currentDesktop);
+    m_service->assignWindowToZone(windowId, zoneId, resolvedScreen, currentDesktop);
 
     // Update last used zone (skip zone selector special IDs and auto-snapped windows)
     if (!zoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
         QString windowClass = Utils::extractWindowClass(windowId);
-        m_service->updateLastUsedZone(zoneId, screenName, windowClass, currentDesktop);
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
-    qCDebug(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId;
+    qCDebug(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 }
 
-void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds)
+void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenName)
 {
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
@@ -182,22 +183,23 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
         m_service->clearStalePendingAssignment(windowId);
     }
 
-    // Determine screen for the primary zone
+    // Use caller-provided screen name if available, otherwise auto-detect,
+    // then fall back to cursor/active screen as tertiary fallback
     QString primaryZoneId = zoneIds.first();
-    QString screenName = detectScreenForZone(primaryZoneId);
+    QString resolvedScreen = resolveScreenForSnap(screenName, primaryZoneId);
 
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
 
     // Delegate to service with all zone IDs
-    m_service->assignWindowToZones(windowId, zoneIds, screenName, currentDesktop);
+    m_service->assignWindowToZones(windowId, zoneIds, resolvedScreen, currentDesktop);
 
     // Update last used zone with primary (skip zone selector special IDs and auto-snapped)
     if (!primaryZoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
         QString windowClass = Utils::extractWindowClass(windowId);
-        m_service->updateLastUsedZone(primaryZoneId, screenName, windowClass, currentDesktop);
+        m_service->updateLastUsedZone(primaryZoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
-    qCDebug(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds;
+    qCDebug(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen" << resolvedScreen;
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -279,7 +281,7 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
 QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenName)
 {
     QJsonObject result;
-    result[QStringLiteral("found")] = false;
+    result[QLatin1String("found")] = false;
 
     if (windowId.isEmpty()) {
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
@@ -291,12 +293,26 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
     }
 
+    // Use the saved pre-float screen (where the window was snapped before floating)
+    // rather than the current window screen, since floating may have moved it cross-monitor.
+    // If the saved screen name no longer exists (monitor replugged under a different
+    // connector name), fall back to the caller's screen so unfloat still works.
+    QString restoreScreen = m_service->preFloatScreen(windowId);
+    if (!restoreScreen.isEmpty() && !Utils::findScreenByName(restoreScreen)) {
+        qCDebug(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
+                              << "no longer exists, falling back to" << screenName;
+        restoreScreen.clear();
+    }
+    if (restoreScreen.isEmpty()) {
+        restoreScreen = screenName;
+    }
+
     // Calculate geometry (combined for multi-zone)
     QRect geo;
     if (zoneIds.size() > 1) {
-        geo = m_service->multiZoneGeometry(zoneIds, screenName);
+        geo = m_service->multiZoneGeometry(zoneIds, restoreScreen);
     } else {
-        geo = m_service->zoneGeometry(zoneIds.first(), screenName);
+        geo = m_service->zoneGeometry(zoneIds.first(), restoreScreen);
     }
 
     if (!geo.isValid()) {
@@ -304,16 +320,17 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
         return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
     }
 
-    result[QStringLiteral("found")] = true;
+    result[QLatin1String("found")] = true;
     QJsonArray zoneArray;
     for (const QString& z : zoneIds) {
         zoneArray.append(z);
     }
-    result[QStringLiteral("zoneIds")] = zoneArray;
-    result[QStringLiteral("x")] = geo.x();
-    result[QStringLiteral("y")] = geo.y();
-    result[QStringLiteral("width")] = geo.width();
-    result[QStringLiteral("height")] = geo.height();
+    result[QLatin1String("zoneIds")] = zoneArray;
+    result[QLatin1String("x")] = geo.x();
+    result[QLatin1String("y")] = geo.y();
+    result[QLatin1String("width")] = geo.width();
+    result[QLatin1String("height")] = geo.height();
+    result[QLatin1String("screenName")] = restoreScreen;
 
     qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << zoneIds << "geo:" << geo;
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
@@ -437,10 +454,25 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }
 
+void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenName)
+{
+    if (screenName.isEmpty()) {
+        return;
+    }
+    m_lastCursorScreenName = screenName;
+    qCDebug(lcDbusWindow) << "Cursor screen changed to" << screenName;
+}
+
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenName)
 {
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {
         return;
+    }
+
+    // Track the active window's screen as fallback for shortcut screen detection.
+    // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
+    if (!screenName.isEmpty()) {
+        m_lastActiveScreenName = screenName;
     }
 
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenName;
@@ -569,7 +601,6 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
                                                    int& snapX, int& snapY, int& snapWidth, int& snapHeight,
                                                    bool& shouldRestore)
 {
-    Q_UNUSED(screenName)
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldRestore = false;
 
@@ -632,11 +663,11 @@ QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
     QJsonArray windowGeometries;
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
         QJsonObject windowObj;
-        windowObj[QStringLiteral("windowId")] = it.key();
-        windowObj[QStringLiteral("x")] = it.value().x();
-        windowObj[QStringLiteral("y")] = it.value().y();
-        windowObj[QStringLiteral("width")] = it.value().width();
-        windowObj[QStringLiteral("height")] = it.value().height();
+        windowObj[QLatin1String("windowId")] = it.key();
+        windowObj[QLatin1String("x")] = it.value().x();
+        windowObj[QLatin1String("y")] = it.value().y();
+        windowObj[QLatin1String("width")] = it.value().width();
+        windowObj[QLatin1String("height")] = it.value().height();
         windowGeometries.append(windowObj);
     }
 
@@ -706,19 +737,19 @@ void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
     Q_EMIT focusWindowInZoneRequested(QStringLiteral("navigate:") + direction, QString());
 }
 
-void WindowTrackingAdaptor::pushToEmptyZone()
+void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "pushToEmptyZone called";
+    qCDebug(lcDbusWindow) << "pushToEmptyZone called, screen:" << screenName;
 
-    // Delegate to service
-    QString emptyZoneId = m_service->findEmptyZone();
+    // Delegate to service with screen context
+    QString emptyZoneId = m_service->findEmptyZone(screenName);
     if (emptyZoneId.isEmpty()) {
         qCDebug(lcDbusWindow) << "No empty zone found";
         Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("no_empty_zone"), QString(), QString(), QString());
         return;
     }
 
-    QRect geo = m_service->zoneGeometry(emptyZoneId, QString());
+    QRect geo = m_service->zoneGeometry(emptyZoneId, screenName);
     if (!geo.isValid()) {
         qCWarning(lcDbusWindow) << "Could not get geometry for empty zone" << emptyZoneId;
         Q_EMIT navigationFeedback(false, QStringLiteral("push"), QStringLiteral("geometry_error"), QString(), QString(), QString());
@@ -753,9 +784,10 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     Q_EMIT swapWindowsRequested(QStringLiteral("swap:") + direction, QString(), QString());
 }
 
-void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
+void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber;
+    qCDebug(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber
+                          << "screen:" << screenName;
 
     if (zoneNumber < 1 || zoneNumber > 9) {
         qCWarning(lcDbusWindow) << "Invalid zone number:" << zoneNumber << "(must be 1-9)";
@@ -763,7 +795,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
         return;
     }
 
-    auto* layout = getValidatedActiveLayout(QStringLiteral("snapToZoneByNumber"));
+    // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     if (!layout) {
         Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_active_layout"), QString(), QString(), QString());
         return;
@@ -784,24 +817,25 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber)
     }
 
     QString zoneId = targetZone->id().toString();
-    QRect geo = m_service->zoneGeometry(zoneId, QString());
+    QRect geo = m_service->zoneGeometry(zoneId, screenName);
     if (!geo.isValid()) {
         qCWarning(lcDbusWindow) << "Could not get geometry for zone" << zoneNumber;
         Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("geometry_error"), QString(), QString(), QString());
         return;
     }
 
-    qCDebug(lcDbusWindow) << "Snapping to zone" << zoneNumber << "(" << zoneId << ")";
+    qCDebug(lcDbusWindow) << "Snapping to zone" << zoneNumber << "(" << zoneId << ") on screen" << screenName;
     Q_EMIT moveWindowToZoneRequested(zoneId, rectToJson(geo));
     Q_EMIT navigationFeedback(true, QStringLiteral("snap"), QString(), QString(), QString(), QString());
 }
 
-void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
+void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "rotateWindowsInLayout called, clockwise:" << clockwise;
+    qCDebug(lcDbusWindow) << "rotateWindowsInLayout called, clockwise:" << clockwise
+                          << "screen:" << screenName;
 
-    // Delegate rotation calculation to service
-    QVector<RotationEntry> rotationEntries = m_service->calculateRotation(clockwise);
+    // Delegate rotation calculation to service, filtered to cursor screen
+    QVector<RotationEntry> rotationEntries = m_service->calculateRotation(clockwise, screenName);
 
     if (rotationEntries.isEmpty()) {
         auto* layout = getValidatedActiveLayout(QStringLiteral("rotateWindowsInLayout"));
@@ -818,13 +852,13 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise)
     QJsonArray rotationArray;
     for (const RotationEntry& entry : rotationEntries) {
         QJsonObject moveObj;
-        moveObj[QStringLiteral("windowId")] = entry.windowId;
-        moveObj[QStringLiteral("sourceZoneId")] = entry.sourceZoneId;
-        moveObj[QStringLiteral("targetZoneId")] = entry.targetZoneId;
-        moveObj[QStringLiteral("x")] = entry.targetGeometry.x();
-        moveObj[QStringLiteral("y")] = entry.targetGeometry.y();
-        moveObj[QStringLiteral("width")] = entry.targetGeometry.width();
-        moveObj[QStringLiteral("height")] = entry.targetGeometry.height();
+        moveObj[QLatin1String("windowId")] = entry.windowId;
+        moveObj[QLatin1String("sourceZoneId")] = entry.sourceZoneId;
+        moveObj[QLatin1String("targetZoneId")] = entry.targetZoneId;
+        moveObj[QLatin1String("x")] = entry.targetGeometry.x();
+        moveObj[QLatin1String("y")] = entry.targetGeometry.y();
+        moveObj[QLatin1String("width")] = entry.targetGeometry.width();
+        moveObj[QLatin1String("height")] = entry.targetGeometry.height();
         rotationArray.append(moveObj);
     }
 
@@ -898,8 +932,8 @@ void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString
 
 QString WindowTrackingAdaptor::findEmptyZone()
 {
-    // Delegate to service
-    return m_service->findEmptyZone();
+    // Use cursor screen for per-screen layout resolution
+    return m_service->findEmptyZone(m_lastCursorScreenName);
 }
 
 QString WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
@@ -1076,6 +1110,15 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("PreFloatZoneAssignments"),
                         QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
+    // Save pre-float screen assignments (for unfloating to correct monitor)
+    QJsonObject preFloatScreensObj;
+    for (auto it = m_service->preFloatScreenAssignments().constBegin();
+         it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
+        preFloatScreensObj[it.key()] = it.value();
+    }
+    tracking.writeEntry(QStringLiteral("PreFloatScreenAssignments"),
+                        QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
+
     // Save user-snapped classes
     QJsonArray userSnappedArray;
     for (const QString& windowClass : m_service->userSnappedClasses()) {
@@ -1197,6 +1240,22 @@ void WindowTrackingAdaptor::loadState()
         tracking.readEntry(QStringLiteral("PreFloatZoneAssignments"), QString()));
     m_service->setPreFloatZoneAssignments(preFloatZones);
 
+    // Load pre-float screen assignments (for unfloating to correct monitor)
+    QHash<QString, QString> preFloatScreens;
+    QString preFloatScreensJson = tracking.readEntry(QStringLiteral("PreFloatScreenAssignments"), QString());
+    if (!preFloatScreensJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(preFloatScreensJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isString()) {
+                    preFloatScreens[it.key()] = it.value().toString();
+                }
+            }
+        }
+    }
+    m_service->setPreFloatScreenAssignments(preFloatScreens);
+
     // Load user-snapped classes
     QSet<QString> userSnappedClasses;
     QString userSnappedJson = tracking.readEntry(QStringLiteral("UserSnappedClasses"), QString());
@@ -1276,12 +1335,29 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     if (!m_layoutManager) {
         return QString();
     }
+    auto zoneUuid = Utils::parseUuid(zoneId);
+    if (!zoneUuid) {
+        return QString();
+    }
+
+    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+
+    // Search per-screen layouts to find which screen's layout contains this zone.
+    // This correctly handles multi-monitor setups where each screen has a different layout.
+    for (QScreen* screen : Utils::allScreens()) {
+        Layout* layout = m_layoutManager->layoutForScreen(screen->name(), currentDesktop, m_layoutManager->currentActivity());
+        if (layout && layout->zoneById(*zoneUuid)) {
+            return screen->name();
+        }
+    }
+
+    // Fallback: zone not in any screen-specific layout, try geometry projection
+    // with the active layout (single-monitor or unconfigured multi-monitor)
     auto* layout = m_layoutManager->activeLayout();
     if (!layout) {
         return QString();
     }
-    auto zoneUuid = Utils::parseUuid(zoneId);
-    Zone* zone = zoneUuid ? layout->zoneById(*zoneUuid) : nullptr;
+    Zone* zone = layout->zoneById(*zoneUuid);
     if (!zone) {
         return QString();
     }
@@ -1297,6 +1373,22 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     return QString();
 }
 
+QString WindowTrackingAdaptor::resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const
+{
+    if (!callerScreen.isEmpty()) {
+        return callerScreen;
+    }
+    QString detected = detectScreenForZone(zoneId);
+    if (!detected.isEmpty()) {
+        return detected;
+    }
+    // Tertiary: use cursor or active window screen
+    if (!m_lastCursorScreenName.isEmpty()) {
+        return m_lastCursorScreenName;
+    }
+    return m_lastActiveScreenName;
+}
+
 void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId)
 {
     if (m_service->isWindowFloating(windowId)) {
@@ -1310,10 +1402,10 @@ void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId)
 QString WindowTrackingAdaptor::rectToJson(const QRect& rect) const
 {
     QJsonObject geomObj;
-    geomObj[QStringLiteral("x")] = rect.x();
-    geomObj[QStringLiteral("y")] = rect.y();
-    geomObj[QStringLiteral("width")] = rect.width();
-    geomObj[QStringLiteral("height")] = rect.height();
+    geomObj[QLatin1String("x")] = rect.x();
+    geomObj[QLatin1String("y")] = rect.y();
+    geomObj[QLatin1String("width")] = rect.width();
+    geomObj[QLatin1String("height")] = rect.height();
     return QString::fromUtf8(QJsonDocument(geomObj).toJson(QJsonDocument::Compact));
 }
 

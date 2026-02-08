@@ -165,7 +165,7 @@ private:
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
     QString queryAdjacentZone(const QString& currentZoneId, const QString& direction);
-    QString queryFirstZoneInDirection(const QString& direction);
+    QString queryFirstZoneInDirection(const QString& direction, const QString& screenName = QString());
     QString queryZoneGeometry(const QString& zoneId);
     QString queryZoneGeometryForScreen(const QString& zoneId, const QString& screenName);
     QString getWindowScreenName(KWin::EffectWindow* w) const;
@@ -258,6 +258,11 @@ private:
     bool m_excludeTransientWindows = true;
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
+
+    // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
+    // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.
+    // Reported to daemon via cursorScreenChanged D-Bus call.
+    QString m_lastCursorScreenName;
 };
 
 } // namespace PlasmaZones

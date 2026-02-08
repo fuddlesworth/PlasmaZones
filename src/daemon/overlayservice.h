@@ -98,8 +98,10 @@ public:
     void clearSelectedZone() override;
 
     // Layout OSD (visual preview when switching layouts)
-    void showLayoutOsd(Layout* layout);
-    void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category);
+    // screenName: target screen (empty = screen under cursor, fallback to primary)
+    void showLayoutOsd(Layout* layout, const QString& screenName = QString());
+    void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
+                       const QString& screenName = QString());
 
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
@@ -125,6 +127,13 @@ private:
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList(const QString& screenName = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
+
+    /**
+     * @brief Resolve the layout for a given screen with fallback chain
+     *
+     * Tries: per-screen assignment → activeLayout → m_layout
+     */
+    Layout* resolveScreenLayout(QScreen* screen) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
     QHash<QScreen*, QQuickWindow*> m_overlayWindows;
@@ -163,13 +172,23 @@ private:
     void destroyNavigationOsdWindow(QScreen* screen);
 
     /**
+     * @brief Re-assert a window's screen and geometry before showing on Wayland
+     *
+     * On Wayland, LayerShellQt reads QWindow::screen() at surface commit time.
+     * Call this before show() to ensure the window maps to the correct output.
+     */
+    static void assertWindowOnScreen(QWindow* window, QScreen* screen);
+
+    /**
      * @brief Prepare layout OSD window for display
      * @param window Output: the prepared window (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
+     * @param screenName Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
-    bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio);
+    bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
+                                const QString& screenName = QString());
 
     /**
      * @brief Create a QML window from a resource URL

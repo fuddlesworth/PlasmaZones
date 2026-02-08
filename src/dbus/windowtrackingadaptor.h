@@ -39,10 +39,27 @@ public:
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override = default;
 
+    /**
+     * @brief Last screen reported by the KWin effect's windowActivated call
+     *
+     * The KWin effect has reliable screen info on both X11 and Wayland.
+     * Use this as a fallback when cursor screen is unavailable.
+     */
+    QString lastActiveScreenName() const { return m_lastActiveScreenName; }
+
+    /**
+     * @brief Last screen the cursor was on, reported by the KWin effect
+     *
+     * Updated whenever the cursor crosses to a different monitor.
+     * This is the primary source for shortcut screen detection on Wayland,
+     * since QCursor::pos() is unreliable for background daemons.
+     */
+    QString lastCursorScreenName() const { return m_lastCursorScreenName; }
+
 public Q_SLOTS:
     // Window snapping notifications (from KWin script)
-    void windowSnapped(const QString& windowId, const QString& zoneId);
-    void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds);
+    void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenName);
+    void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenName);
     void windowUnsnapped(const QString& windowId);
     /**
      * Record whether a window is sticky (on all virtual desktops).
@@ -134,6 +151,13 @@ public Q_SLOTS:
      * @param screenName Screen where the window is located
      */
     void windowActivated(const QString& windowId, const QString& screenName);
+
+    /**
+     * Update cursor screen when cursor crosses to a different monitor
+     * Called by the KWin effect's slotMouseChanged when screen changes.
+     * @param screenName Name of the screen the cursor is now on
+     */
+    void cursorScreenChanged(const QString& screenName);
 
     /**
      * Report navigation feedback from KWin effect (D-Bus method)
@@ -269,9 +293,10 @@ public Q_SLOTS:
 
     /**
      * @brief Push the focused window to the first empty zone
+     * @param screenName Screen to find layout/geometry for (empty = active layout)
      * @note Emits moveWindowToZoneRequested signal for KWin script to handle
      */
-    void pushToEmptyZone();
+    void pushToEmptyZone(const QString& screenName = QString());
 
     /**
      * @brief Restore the focused window to its original size
@@ -296,18 +321,20 @@ public Q_SLOTS:
     /**
      * @brief Snap the focused window to a zone by its number
      * @param zoneNumber Zone number (1-9)
-     * @note Finds zone with matching zoneNumber property in current layout and snaps window to it
+     * @param screenName Screen to resolve layout for (empty = active layout)
+     * @note Finds zone with matching zoneNumber property in the screen's layout and snaps window to it
      */
-    void snapToZoneByNumber(int zoneNumber);
+    void snapToZoneByNumber(int zoneNumber, const QString& screenName = QString());
 
     /**
-     * @brief Rotate all windows in the current layout clockwise or counterclockwise
+     * @brief Rotate windows in the layout for a specific screen
      * @param clockwise true for clockwise rotation, false for counterclockwise
+     * @param screenName Screen to rotate on (empty = all screens)
      * @note Windows in zone N move to zone N+1 (clockwise) or N-1 (counterclockwise)
      * @note Last zone wraps around to first zone and vice versa
      * @note Emits rotateWindowsRequested signal for KWin effect to handle
      */
-    void rotateWindowsInLayout(bool clockwise);
+    void rotateWindowsInLayout(bool clockwise, const QString& screenName = QString());
 
     /**
      * @brief Cycle focus between windows stacked in the same zone
@@ -580,10 +607,25 @@ private:
     QString detectScreenForZone(const QString& zoneId) const;
 
     /**
+     * @brief Resolve screen name for a snap operation with 3-tier fallback
+     *
+     * 1. Caller-provided screenName (from KWin effect)
+     * 2. detectScreenForZone auto-detection
+     * 3. lastCursorScreenName or lastActiveScreenName
+     */
+    QString resolveScreenForSnap(const QString& callerScreen, const QString& zoneId) const;
+
+    /**
      * @brief Clear floating state when a window is being snapped
      * @param windowId Window ID being snapped
      */
     void clearFloatingStateForSnap(const QString& windowId);
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Screen tracking (from KWin effect's D-Bus calls)
+    // ═══════════════════════════════════════════════════════════════════════════════
+    QString m_lastActiveScreenName;   // From windowActivated (focused window's screen)
+    QString m_lastCursorScreenName;   // From cursorScreenChanged (cursor's screen)
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)

@@ -173,6 +173,12 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
     });
 
     m_geometrySensors.insert(screen, sensor);
+
+    // Set geometry before show() to ensure the sensor lands on the correct Wayland output.
+    // On Wayland, QWindow::setScreen() alone is insufficient — the compositor uses the
+    // initial geometry to determine output binding. Without this, all sensors may end up
+    // on the primary output and report its available geometry instead of their own.
+    sensor->setGeometry(screen->geometry());
     sensor->show();
 
     // Query KDE Plasma for panel information via D-Bus (most accurate method)
@@ -216,21 +222,10 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     }
 
     QRect screenGeom = screen->geometry();
+    QString screenName = screen->name();
 
-    // Get panel offsets from KDE Plasma D-Bus query
-    // Map screen to index: find this screen's position in QGuiApplication::screens()
-    // Plasma and Qt can use different screen orderings on multi-monitor setups.
-    int screenIndex = -1;
-    const auto screenList = QGuiApplication::screens();
-    for (int i = 0; i < screenList.size(); ++i) {
-        if (screenList[i] == screen) {
-            screenIndex = i;
-            break;
-        }
-    }
-
-    qCDebug(lcScreen) << "calculateAvailableGeometry screen= " << screen->name() << " index= " << screenIndex
-                      << " totalScreens= " << screenList.size();
+    qCDebug(lcScreen) << "calculateAvailableGeometry screen=" << screenName
+                      << "geometry=" << screenGeom;
 
     int topOffset = 0;
     int bottomOffset = 0;
@@ -238,8 +233,9 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     int rightOffset = 0;
     bool hasDbusData = false;
 
-    if (screenIndex >= 0 && m_panelOffsets.contains(screenIndex)) {
-        const ScreenPanelOffsets& offsets = m_panelOffsets.value(screenIndex);
+    // Look up panel offsets by screen name (populated by D-Bus query with geometry matching)
+    if (m_panelOffsets.contains(screenName)) {
+        const ScreenPanelOffsets& offsets = m_panelOffsets.value(screenName);
         topOffset = offsets.top;
         bottomOffset = offsets.bottom;
         leftOffset = offsets.left;
@@ -290,9 +286,21 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
                               << sensorGeom.height() << "Using:" << finalWidth << "x" << finalHeight;
         }
     } else if (hasSensorData) {
-        // Only sensor data - use it (no D-Bus available)
-        finalWidth = sensorGeom.width();
-        finalHeight = sensorGeom.height();
+        // Only sensor data, no D-Bus panel info for this screen.
+        if (m_panelGeometryReceived
+            && (sensorGeom.width() < screenGeom.width() || sensorGeom.height() < screenGeom.height())) {
+            // D-Bus query succeeded but found no panels on this screen,
+            // yet sensor reports less than full screen. The sensor likely
+            // landed on a different output (Wayland screen binding issue).
+            qCWarning(lcScreen) << "Sensor for" << screenName << "reports" << sensorGeom.size()
+                                << "but D-Bus found no panels on this screen."
+                                << "Using full screen geometry instead.";
+            finalWidth = screenGeom.width();
+            finalHeight = screenGeom.height();
+        } else {
+            finalWidth = sensorGeom.width();
+            finalHeight = sensorGeom.height();
+        }
     } else if (hasDbusData) {
         // Only D-Bus data - use it
         finalWidth = dbusWidth;
@@ -352,7 +360,9 @@ void ScreenManager::queryKdePlasmaPanels()
     // which includes both thickness and any floating gap the theme defines.
     // p.height is the panel thickness (perpendicular dimension) in Plasma's API
     // p.location is one of: "top", "bottom", "left", "right"
-    // p.screen is the screen index (0-based)
+    // p.screen is the screen index (0-based) — NOTE: Plasma's screen ordering can differ
+    //   from Qt's QGuiApplication::screens() ordering on multi-monitor setups.
+    //   We include the screen geometry in the output so we can match by geometry.
     // p.floating is a boolean indicating if the panel is in floating mode (Plasma 6)
     // screenGeometry(screenIndex) returns the screen's full geometry
     QString script = QStringLiteral(R"(
@@ -376,7 +386,10 @@ void ScreenManager::queryKdePlasmaPanels()
                     offset = (sg.x + sg.width) - pg.x;
                 }
             }
-            print("PANEL:" + p.screen + ":" + loc + ":" + offset + ":" + floating + "\n");
+            // Include screen geometry so we can match by geometry instead of index
+            // (Plasma and Qt can have different screen orderings)
+            var sgStr = sg ? (sg.x + "," + sg.y + "," + sg.width + "," + sg.height) : "";
+            print("PANEL:" + p.screen + ":" + loc + ":" + offset + ":" + floating + ":" + sgStr + "\n");
         });
     )");
 
@@ -394,27 +407,49 @@ void ScreenManager::queryKdePlasmaPanels()
             QString output = reply.value();
             qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply= " << output;
 
-            // Parse the output: PANEL:screenIndex:location:offset:floating
-            // The offset is calculated from actual panel geometry (includes thickness + floating gap)
-            // The floating field is included for diagnostic logging only
-            static QRegularExpression panelRegex(QStringLiteral("PANEL:(\\d+):(\\w+):(\\d+)(?::(\\d+))?"));
+            // Parse: PANEL:plasmaIndex:location:offset:floating:x,y,w,h
+            // Match panels to Qt screens by geometry (Plasma and Qt can have different screen orderings)
+            static QRegularExpression panelRegex(
+                QStringLiteral("PANEL:(\\d+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
             QRegularExpressionMatchIterator it = panelRegex.globalMatch(output);
+
+            const auto qtScreens = QGuiApplication::screens();
 
             while (it.hasNext()) {
                 QRegularExpressionMatch match = it.next();
-                int screenIndex = match.captured(1).toInt();
+                int plasmaIndex = match.captured(1).toInt();
                 QString location = match.captured(2);
                 int totalOffset = match.captured(3).toInt();
                 bool isFloating = !match.captured(4).isEmpty() && match.captured(4).toInt() != 0;
 
-                qCDebug(lcScreen) << "  Parsed panel screen= " << screenIndex << " location= " << location
-                                  << " offset= " << totalOffset << " floating= " << isFloating;
-
-                if (!m_panelOffsets.contains(screenIndex)) {
-                    m_panelOffsets.insert(screenIndex, ScreenPanelOffsets{});
+                // Find the Qt screen matching this Plasma screen's geometry
+                QString screenName;
+                if (!match.captured(5).isEmpty()) {
+                    QRect plasmaGeom(match.captured(5).toInt(), match.captured(6).toInt(),
+                                     match.captured(7).toInt(), match.captured(8).toInt());
+                    for (auto* qs : qtScreens) {
+                        if (qs->geometry() == plasmaGeom) {
+                            screenName = qs->name();
+                            break;
+                        }
+                    }
                 }
 
-                ScreenPanelOffsets& offsets = m_panelOffsets[screenIndex];
+                if (screenName.isEmpty()) {
+                    qCWarning(lcScreen) << "  Could not match Plasma screen" << plasmaIndex
+                                        << "to any Qt screen by geometry — skipping panel";
+                    continue;
+                }
+
+                qCDebug(lcScreen) << "  Parsed panel screen=" << screenName << "(plasma idx" << plasmaIndex << ")"
+                                  << " location=" << location << " offset=" << totalOffset
+                                  << " floating=" << isFloating;
+
+                if (!m_panelOffsets.contains(screenName)) {
+                    m_panelOffsets.insert(screenName, ScreenPanelOffsets{});
+                }
+
+                ScreenPanelOffsets& offsets = m_panelOffsets[screenName];
                 if (location == QLatin1String("top")) {
                     offsets.top = totalOffset;
                 } else if (location == QLatin1String("bottom")) {
@@ -431,8 +466,9 @@ void ScreenManager::queryKdePlasmaPanels()
 
         // Log final panel offsets
         for (auto it = m_panelOffsets.constBegin(); it != m_panelOffsets.constEnd(); ++it) {
-            qCDebug(lcScreen) << "  Screen " << it.key() << " panel offsets T= " << it.value().top << " B= " << it.value().bottom
-                              << " L= " << it.value().left << " R= " << it.value().right;
+            qCDebug(lcScreen) << "  Screen" << it.key() << "panel offsets T=" << it.value().top
+                              << "B=" << it.value().bottom << "L=" << it.value().left
+                              << "R=" << it.value().right;
         }
 
         // Now recalculate geometry for all screens with updated panel data
