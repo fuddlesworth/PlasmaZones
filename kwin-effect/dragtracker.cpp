@@ -38,7 +38,7 @@ void DragTracker::pollWindowMoves()
         m_draggedWindowId = m_effect->getWindowId(movingWindow);
         m_lastCursorPos = KWin::effects->cursorPos();
 
-        qCDebug(lcEffect) << "Window move started -" << movingWindow->windowClass();
+        qCInfo(lcEffect) << "Window move started -" << movingWindow->windowClass();
         Q_EMIT dragStarted(movingWindow, m_draggedWindowId, movingWindow->frameGeometry());
     }
     // Detect ongoing drag - send position updates
@@ -58,7 +58,7 @@ void DragTracker::pollWindowMoves()
     }
     // Detect end of drag
     else if (!movingWindow && m_draggedWindow) {
-        qCDebug(lcEffect) << "Window move finished";
+        qCInfo(lcEffect) << "Window move finished";
         // Save the window pointer before clearing
         KWin::EffectWindow* windowToSnap = m_draggedWindow;
         QString windowIdToSnap = m_draggedWindowId;

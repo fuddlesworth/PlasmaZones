@@ -36,7 +36,7 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
 
     // Runtime null checks for release builds - log warning but don't crash
     if (!overlay || !detector || !layoutManager || !settings || !windowTracking) {
-        qCCritical(lcDbusWindow) << "One or more required dependencies are null!"
+        qCWarning(lcDbusWindow) << "One or more required dependencies are null!"
                                  << "overlay:" << (overlay != nullptr) << "detector:" << (detector != nullptr)
                                  << "layoutManager:" << (layoutManager != nullptr)
                                  << "settings:" << (settings != nullptr)

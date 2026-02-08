@@ -32,7 +32,7 @@ bool queryShadersEnabled()
     QDBusInterface settingsIface = createSettingsInterface();
 
     if (!settingsIface.isValid()) {
-        qCWarning(lcEditor) << "Cannot query shaders: daemon D-Bus interface unavailable";
+        qCWarning(lcDbus) << "Cannot query shaders: daemon D-Bus interface unavailable";
         return false;
     }
 
@@ -45,13 +45,13 @@ QVariantList queryAvailableShaders()
     QDBusInterface settingsIface = createSettingsInterface();
 
     if (!settingsIface.isValid()) {
-        qCWarning(lcEditor) << "Cannot query shaders: daemon D-Bus interface unavailable";
+        qCWarning(lcDbus) << "Cannot query shaders: daemon D-Bus interface unavailable";
         return QVariantList();
     }
 
     QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
     if (!reply.isValid()) {
-        qCWarning(lcEditor) << "D-Bus availableShaders call failed:" << reply.error().message();
+        qCWarning(lcDbus) << "D-Bus availableShaders call failed:" << reply.error().message();
         return QVariantList();
     }
 
@@ -67,10 +67,10 @@ QVariantList queryAvailableShaders()
             if (map.contains(QLatin1String("id")) && map.contains(QLatin1String("name"))) {
                 result.append(map);
             } else {
-                qCWarning(lcEditor) << "Shader entry missing required fields (id/name):" << map;
+                qCWarning(lcDbus) << "Shader entry missing required fields (id/name):" << map;
             }
         } else {
-            qCWarning(lcEditor) << "Unexpected shader list item type after conversion:" << converted.typeName();
+            qCWarning(lcDbus) << "Unexpected shader list item type after conversion:" << converted.typeName();
         }
     }
 
@@ -97,7 +97,7 @@ QVariantMap queryShaderInfo(const QString& shaderId)
         return converted.toMap();
     }
 
-    qCWarning(lcEditor) << "D-Bus shaderInfo call failed:" << reply.error().message();
+    qCWarning(lcDbus) << "D-Bus shaderInfo call failed:" << reply.error().message();
     return QVariantMap();
 }
 

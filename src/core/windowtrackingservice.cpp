@@ -1175,7 +1175,7 @@ void WindowTrackingService::onLayoutChanged()
             qCInfo(lcCore) << "Resnap buffer:" << m_resnapBuffer.size()
                           << "windows (zone position -> window)";
             for (const ResnapEntry& e : m_resnapBuffer) {
-                qCInfo(lcCore) << "  Zone" << e.zonePosition << "<-" << e.windowId;
+                qCDebug(lcCore) << "  Zone" << e.zonePosition << "<-" << e.windowId;
             }
         }
     }

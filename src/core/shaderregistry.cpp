@@ -130,7 +130,7 @@ void ShaderRegistry::ensureUserShaderDirExists() const
     QDir dir(userShaderDir());
     if (!dir.exists()) {
         if (dir.mkpath(QStringLiteral("."))) {
-            qCDebug(lcCore) << "Created user shader directory:" << dir.absolutePath();
+            qCInfo(lcCore) << "Created user shader directory:" << dir.absolutePath();
         } else {
             qCWarning(lcCore) << "Failed to create user shader directory:" << dir.absolutePath();
         }
@@ -206,7 +206,7 @@ void ShaderRegistry::loadSystemShaders()
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
 
     if (allDirs.isEmpty()) {
-        qCDebug(lcCore) << "No system shader directories found";
+        qCInfo(lcCore) << "No system shader directories found";
         return;
     }
 
@@ -229,7 +229,7 @@ void ShaderRegistry::loadSystemShaders()
             loadShaderFromDir(dir.filePath(entry), false);
         }
 
-        qCDebug(lcCore) << "Loaded shaders= " << (m_shaders.size() - beforeCount) << " from= " << shaderDir;
+        qCInfo(lcCore) << "Loaded shaders= " << (m_shaders.size() - beforeCount) << " from= " << shaderDir;
     }
 }
 
@@ -252,7 +252,7 @@ void ShaderRegistry::loadUserShaders()
     }
 
     if (m_shaders.size() != beforeCount) {
-        qCDebug(lcCore) << "Loaded shaders= " << (m_shaders.size() - beforeCount) << " from= " << userDir;
+        qCInfo(lcCore) << "Loaded shaders= " << (m_shaders.size() - beforeCount) << " from= " << userDir;
     }
 }
 

@@ -99,7 +99,7 @@ void ScreenManager::stop()
 QVector<QScreen*> ScreenManager::screens() const
 {
     if (!qApp) {
-        qCWarning(lcScreen) << "screens() called before QGuiApplication initialized";
+        qCCritical(lcScreen) << "screens() called before QGuiApplication initialized";
         return {};
     }
 
@@ -292,7 +292,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
             // D-Bus query succeeded but found no panels on this screen,
             // yet sensor reports less than full screen. The sensor likely
             // landed on a different output (Wayland screen binding issue).
-            qCWarning(lcScreen) << "Sensor for" << screenName << "reports" << sensorGeom.size()
+            qCDebug(lcScreen) << "Sensor for" << screenName << "reports" << sensorGeom.size()
                                 << "but D-Bus found no panels on this screen."
                                 << "Using full screen geometry instead.";
             finalWidth = screenGeom.width();
@@ -325,7 +325,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
 
     QString source =
         hasSensorData ? QStringLiteral("sensor") : (hasDbusData ? QStringLiteral("D-Bus") : QStringLiteral("fallback"));
-    qCDebug(lcScreen) << "calculateAvailableGeometry screen= " << screenKey << " screenGeom= " << screenGeom
+    qCInfo(lcScreen) << "calculateAvailableGeometry screen= " << screenKey << " screenGeom= " << screenGeom
                       << " available= " << availGeom << " source= " << source;
 
     // Update cache and emit signal
@@ -349,7 +349,7 @@ void ScreenManager::queryKdePlasmaPanels()
         // Still emit panelGeometryReady so components don't hang waiting
         if (!m_panelGeometryReceived) {
             m_panelGeometryReceived = true;
-            qCDebug(lcScreen) << "Panel geometry ready (no Plasma shell) - emitting signal";
+            qCInfo(lcScreen) << "Panel geometry ready (no Plasma shell) - emitting signal";
             Q_EMIT panelGeometryReady();
         }
         return;
@@ -466,7 +466,7 @@ void ScreenManager::queryKdePlasmaPanels()
 
         // Log final panel offsets
         for (auto it = m_panelOffsets.constBegin(); it != m_panelOffsets.constEnd(); ++it) {
-            qCDebug(lcScreen) << "  Screen" << it.key() << "panel offsets T=" << it.value().top
+            qCInfo(lcScreen) << "  Screen" << it.key() << "panel offsets T=" << it.value().top
                               << "B=" << it.value().bottom << "L=" << it.value().left
                               << "R=" << it.value().right;
         }
@@ -479,7 +479,7 @@ void ScreenManager::queryKdePlasmaPanels()
         // Emit panelGeometryReady on first successful query
         if (!m_panelGeometryReceived) {
             m_panelGeometryReceived = true;
-            qCDebug(lcScreen) << "Panel geometry ready - emitting signal";
+            qCInfo(lcScreen) << "Panel geometry ready - emitting signal";
             Q_EMIT panelGeometryReady();
         }
 

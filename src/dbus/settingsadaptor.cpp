@@ -29,7 +29,7 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
     m_saveTimer->setInterval(SaveDebounceMs);
     connect(m_saveTimer, &QTimer::timeout, this, [this]() {
         m_settings->save();
-        qCDebug(lcDbusSettings) << "Debounced settings save completed";
+        qCInfo(lcDbusSettings) << "Debounced settings save completed";
     });
 
     // Connect to interface signals (DIP)
@@ -43,7 +43,7 @@ SettingsAdaptor::~SettingsAdaptor()
     if (m_saveTimer->isActive()) {
         m_saveTimer->stop();
         m_settings->save();
-        qCDebug(lcDbusSettings) << "Flushed pending settings save on destruction";
+        qCInfo(lcDbusSettings) << "Flushed pending settings save on destruction";
     }
 }
 

@@ -204,7 +204,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Connect to daemon's settingsChanged D-Bus signal
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
                                           QStringLiteral("settingsChanged"), this, SLOT(slotSettingsChanged()));
-    qCDebug(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
+    qCInfo(lcEffect) << "Connected to daemon settingsChanged D-Bus signal";
 
     // Connect to keyboard navigation D-Bus signals
     connectNavigationSignals();
@@ -224,7 +224,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         DBus::ServiceName, QDBusConnection::sessionBus(),
         QDBusServiceWatcher::WatchForRegistration, this);
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
-        qCDebug(lcEffect) << "Daemon service registered — scheduling state re-push";
+        qCInfo(lcEffect) << "Daemon service registered — scheduling state re-push";
 
         // Reset stale D-Bus interfaces so ensureInterface recreates them on next use
         m_dbusInterface.reset();
@@ -312,7 +312,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         });
     }
 
-    qCDebug(lcEffect) << "Initialized - C++ effect with D-Bus support and mouseChanged connection";
+    qCInfo(lcEffect) << "Initialized - C++ effect with D-Bus support and mouseChanged connection";
 }
 
 PlasmaZonesEffect::~PlasmaZonesEffect()
@@ -490,7 +490,7 @@ void PlasmaZonesEffect::slotScreenGeometryChanged()
     // We wait 500ms after the last signal before actually applying changes.
 
     QRect currentGeometry = KWin::effects->virtualScreenGeometry();
-    qCDebug(lcEffect) << "virtualScreenGeometryChanged fired"
+    qCInfo(lcEffect) << "virtualScreenGeometryChanged fired"
                       << "- current:" << currentGeometry << "- previous:" << m_lastVirtualScreenGeometry
                       << "- pending:" << m_pendingScreenChange;
 
@@ -550,7 +550,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
         }
 
         QJsonArray geometries = doc.array();
-        qCDebug(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
+        qCInfo(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
 
         // Build a map of stableId -> EffectWindow for faster lookup
         // Using stable IDs ensures windows can be found after session restore
@@ -896,7 +896,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("runningWindowsRequested"), this,
                                           SLOT(slotRunningWindowsRequested()));
 
-    qCDebug(lcEffect) << "Connected to keyboard navigation D-Bus signals";
+    qCInfo(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::getActiveWindow() const
@@ -1052,7 +1052,7 @@ void PlasmaZonesEffect::slotCycleWindowsInZoneRequested(const QString& directive
 
 void PlasmaZonesEffect::slotPendingRestoresAvailable()
 {
-    qCDebug(lcEffect) << "Pending restores available - retrying restoration for all visible windows";
+    qCInfo(lcEffect) << "Pending restores available - retrying restoration for all visible windows";
 
     if (!ensureWindowTrackingReady("pending restores")) {
         return;

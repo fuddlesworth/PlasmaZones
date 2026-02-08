@@ -139,7 +139,7 @@ void OverlayAdaptor::switchToLayout(const QString& layoutId)
     m_layoutManager->setActiveLayout(layout);
     m_overlayService->updateLayout(layout);
     Q_EMIT layoutSwitched(layoutId);
-    qCDebug(lcDbus) << "Switched to layout:" << layout->name();
+    qCInfo(lcDbus) << "Switched to layout:" << layout->name();
 }
 
 } // namespace PlasmaZones

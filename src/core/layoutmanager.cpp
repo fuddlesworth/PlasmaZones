@@ -337,7 +337,7 @@ Layout* LayoutManager::layoutForShortcut(int number) const
 
 void LayoutManager::applyQuickLayout(int number, const QString& screenName)
 {
-    qCDebug(lcLayout) << "applyQuickLayout called: number=" << number << "screen=" << screenName;
+    qCInfo(lcLayout) << "applyQuickLayout called: number=" << number << "screen=" << screenName;
 
     auto layout = layoutForShortcut(number);
     if (layout) {
@@ -347,12 +347,12 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenName)
         setActiveLayout(layout);
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
-        qCDebug(lcLayout) << "No layout assigned to quick slot" << number << "- attempting fallback to layout index"
+        qCInfo(lcLayout) << "No layout assigned to quick slot" << number << "- attempting fallback to layout index"
                           << (number - 1);
         if (number >= 1 && number <= m_layouts.size()) {
             layout = m_layouts.at(number - 1);
             if (layout) {
-                qCDebug(lcLayout) << "Using fallback layout:" << layout->name();
+                qCInfo(lcLayout) << "Using fallback layout:" << layout->name();
                 assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
                 setActiveLayout(layout);
             }
@@ -373,7 +373,7 @@ void LayoutManager::setQuickLayoutSlot(int number, const QUuid& layoutId)
     if (layoutId.isNull()) {
         // Clear the slot
         m_quickLayoutShortcuts.remove(number);
-        qCDebug(lcLayout) << "Cleared quick layout slot" << number;
+        qCInfo(lcLayout) << "Cleared quick layout slot" << number;
     } else {
         // Verify layout exists
         if (!layoutById(layoutId)) {
@@ -381,7 +381,7 @@ void LayoutManager::setQuickLayoutSlot(int number, const QUuid& layoutId)
             return;
         }
         m_quickLayoutShortcuts[number] = layoutId;
-        qCDebug(lcLayout) << "Assigned layout" << layoutId << "to quick slot" << number;
+        qCInfo(lcLayout) << "Assigned layout" << layoutId << "to quick slot" << number;
     }
 
     // Save changes
@@ -420,7 +420,7 @@ void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QUuid>& slots)
 
     // Save once at the end
     saveAssignments();
-    qCDebug(lcLayout) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
+    qCInfo(lcLayout) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
 }
 
 void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignments)
@@ -456,7 +456,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignm
     }
 
     saveAssignments();
-    qCDebug(lcLayout) << "Batch set" << count << "screen assignments";
+    qCInfo(lcLayout) << "Batch set" << count << "screen assignments";
 }
 
 void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments)
@@ -493,7 +493,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QU
     }
 
     saveAssignments();
-    qCDebug(lcLayout) << "Batch set" << count << "desktop assignments";
+    qCInfo(lcLayout) << "Batch set" << count << "desktop assignments";
 }
 
 void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments)
@@ -530,7 +530,7 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
     }
 
     saveAssignments();
-    qCDebug(lcLayout) << "Batch set" << count << "activity assignments";
+    qCInfo(lcLayout) << "Batch set" << count << "activity assignments";
 }
 
 QHash<QPair<QString, int>, QUuid> LayoutManager::desktopAssignments() const
@@ -619,10 +619,10 @@ void LayoutManager::loadLayouts(const QString& defaultLayoutId)
     for (const QString& dir : allDirs) {
         int beforeCount = m_layouts.size();
         loadLayoutsFromDirectory(dir);
-        qCDebug(lcLayout) << "Loaded layouts= " << (m_layouts.size() - beforeCount) << " from= " << dir;
+        qCInfo(lcLayout) << "Loaded layouts= " << (m_layouts.size() - beforeCount) << " from= " << dir;
     }
 
-    qCDebug(lcLayout) << "Total layouts= " << m_layouts.size();
+    qCInfo(lcLayout) << "Total layouts= " << m_layouts.size();
 
     // Sort by defaultOrder (from layout JSON) so the preferred default is first when defaultLayoutId is empty
     std::stable_sort(m_layouts.begin(), m_layouts.end(), [](Layout* a, Layout* b) {
@@ -712,7 +712,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                 // No duplicate - add the layout
                 m_layouts.append(layout);
                 connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
-                qCDebug(lcLayout) << "  Loaded layout name= " << layout->name() << " zones= " << layout->zoneCount()
+                qCInfo(lcLayout) << "  Loaded layout name= " << layout->name() << " zones= " << layout->zoneCount()
                                   << " source= " << (layout->isSystemLayout() ? "system" : "user") << " from= " << filePath;
             } else {
                 // Duplicate ID found - user layouts (from .local) should override system layouts
@@ -725,10 +725,10 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                     m_layouts.replace(index, layout);
                     connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
                     delete existing;
-                    qCDebug(lcLayout) << "  User layout overrides system layout name= " << layout->name() << " from= " << filePath;
+                    qCInfo(lcLayout) << "  User layout overrides system layout name= " << layout->name() << " from= " << filePath;
                 } else {
                     // Same source type or system trying to override user - skip
-                    qCDebug(lcLayout) << "  Skipping duplicate layout name= " << layout->name() << " id= " << layout->id();
+                    qCInfo(lcLayout) << "  Skipping duplicate layout name= " << layout->name() << " id= " << layout->id();
                     delete layout;
                 }
             }
@@ -789,7 +789,7 @@ void LayoutManager::loadAssignments()
     QFile file(filePath);
 
     if (!file.exists()) {
-        qCDebug(lcLayout) << "Assignments file does not exist, using defaults:" << filePath;
+        qCInfo(lcLayout) << "Assignments file does not exist, using defaults:" << filePath;
         return;
     }
 
@@ -862,7 +862,7 @@ void LayoutManager::loadAssignments()
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         Layout* layout = layoutById(it.value());
         QString layoutName = layout ? layout->name() : QStringLiteral("(unknown)");
-        qCInfo(lcLayout) << "  Assignment screen= " << it.key().screenName
+        qCDebug(lcLayout) << "  Assignment screen= " << it.key().screenName
                          << " desktop= " << it.key().virtualDesktop
                          << " activity= " << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
                          << " layout= " << layoutName;
@@ -915,7 +915,7 @@ void LayoutManager::saveAssignments()
         qCWarning(lcLayout) << "Failed to flush assignments file:" << filePath << "Error:" << file.errorString();
     }
 
-    qCDebug(lcLayout) << "Saved assignments to:" << filePath;
+    qCInfo(lcLayout) << "Saved assignments to:" << filePath;
 }
 
 void LayoutManager::importLayout(const QString& filePath)
@@ -968,7 +968,7 @@ void LayoutManager::importLayout(const QString& filePath)
     addLayout(layout);
     saveLayouts();
 
-    qCDebug(lcLayout) << "Successfully imported layout:" << layout->name() << "from" << filePath;
+    qCInfo(lcLayout) << "Successfully imported layout:" << layout->name() << "from" << filePath;
 }
 
 void LayoutManager::exportLayout(Layout* layout, const QString& filePath)
@@ -1001,7 +1001,7 @@ void LayoutManager::exportLayout(Layout* layout, const QString& filePath)
         qCWarning(lcLayout) << "Failed to flush layout export file:" << filePath << "Error:" << file.errorString();
     }
 
-    qCDebug(lcLayout) << "Successfully exported layout:" << layout->name() << "to" << filePath;
+    qCInfo(lcLayout) << "Successfully exported layout:" << layout->name() << "to" << filePath;
 }
 
 void LayoutManager::ensureLayoutDirectory()

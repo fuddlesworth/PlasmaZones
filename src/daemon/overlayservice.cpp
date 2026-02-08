@@ -1580,7 +1580,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay",
                                  initProps);
         if (window) {
-            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screen->name();
+            qCDebug(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screen->name();
         } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;

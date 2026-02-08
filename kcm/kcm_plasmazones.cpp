@@ -2020,7 +2020,7 @@ void KCMPlasmaZones::watchAsyncDbusCall(QDBusPendingCall call, const QString& op
         w->deleteLater();
         QDBusPendingReply<> reply = *w;
         if (reply.isError()) {
-            qCWarning(lcConfig) << operation << "D-Bus call failed:" << reply.error().message();
+            qCWarning(lcKcm) << operation << "D-Bus call failed:" << reply.error().message();
         }
     });
 }

@@ -75,7 +75,7 @@ bool ActivityManager::init()
                 if (m_activitiesAvailable && !wasAvailable) {
                     // Service just became available - fetch current activity
                     m_currentActivity = controller->currentActivity();
-                    qCDebug(lcCore) << "KActivities service now running, current activity:"
+                    qCInfo(lcCore) << "KActivities service now running, current activity:"
                                     << m_currentActivity << "(" << activityName(m_currentActivity) << ")";
 
                     // Emit signals so UI can update
@@ -89,7 +89,7 @@ bool ActivityManager::init()
                         updateActiveLayout();
                     }
                 } else if (!m_activitiesAvailable && wasAvailable) {
-                    qCDebug(lcCore) << "KActivities service stopped";
+                    qCWarning(lcCore) << "KActivities service stopped";
                     m_currentActivity.clear();
                     Q_EMIT activitiesChanged();
                 }
@@ -101,18 +101,18 @@ bool ActivityManager::init()
 
     if (m_activitiesAvailable) {
         m_currentActivity = controller->currentActivity();
-        qCDebug(lcCore) << "KActivities available, current activity:" << m_currentActivity
+        qCInfo(lcCore) << "KActivities available, current activity:" << m_currentActivity
                         << "(" << activityName(m_currentActivity) << ")";
     } else if (status == KActivities::Controller::Unknown) {
         // Service status unknown - it may become available later
-        qCDebug(lcCore) << "KActivities service status unknown - waiting for connection";
+        qCInfo(lcCore) << "KActivities service status unknown - waiting for connection";
     } else {
-        qCDebug(lcCore) << "KActivities service not running - activity support disabled";
+        qCInfo(lcCore) << "KActivities service not running - activity support disabled";
     }
 
     return true; // Always return true - activities are optional
 #else
-    qCDebug(lcCore) << "KActivities support not compiled in - activity support disabled";
+    qCInfo(lcCore) << "KActivities support not compiled in - activity support disabled";
     m_activitiesAvailable = false;
     return true; // Return true since activities are optional
 #endif
@@ -201,7 +201,7 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
     }
 
     m_currentActivity = activityId;
-    qCDebug(lcCore) << "Activity changed activity= " << activityId << " name= " << activityName(activityId);
+    qCInfo(lcCore) << "Activity changed activity= " << activityId << " name= " << activityName(activityId);
 
     updateActiveLayout();
     Q_EMIT currentActivityChanged(activityId);
@@ -209,13 +209,13 @@ void ActivityManager::onCurrentActivityChanged(const QString& activityId)
 
 void ActivityManager::onActivityAdded(const QString& activityId)
 {
-    qCDebug(lcCore) << "Activity added activity= " << activityId << " name= " << activityName(activityId);
+    qCInfo(lcCore) << "Activity added activity= " << activityId << " name= " << activityName(activityId);
     Q_EMIT activitiesChanged();
 }
 
 void ActivityManager::onActivityRemoved(const QString& activityId)
 {
-    qCDebug(lcCore) << "Activity removed activity= " << activityId;
+    qCInfo(lcCore) << "Activity removed activity= " << activityId;
     Q_EMIT activitiesChanged();
 }
 

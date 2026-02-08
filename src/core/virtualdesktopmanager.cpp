@@ -50,7 +50,7 @@ void VirtualDesktopManager::initKWinDBus()
 
     if (m_kwinVDInterface->isValid()) {
         m_useKWinDBus = true;
-        qCDebug(lcCore) << "Using KWin D-Bus interface for virtual desktops";
+        qCInfo(lcCore) << "Using KWin D-Bus interface for virtual desktops";
 
         // Get initial state
         refreshFromKWin();
@@ -76,7 +76,7 @@ void VirtualDesktopManager::initKWinDBus()
                                               QStringLiteral("org.kde.KWin.VirtualDesktopManager"),
                                               QStringLiteral("desktopRemoved"), this, SLOT(onKWinDesktopRemoved()));
     } else {
-        qCDebug(lcCore) << "KWin D-Bus interface not available";
+        qCWarning(lcCore) << "KWin D-Bus interface not available";
         delete m_kwinVDInterface;
         m_kwinVDInterface = nullptr;
     }
@@ -182,7 +182,7 @@ void VirtualDesktopManager::refreshFromKWin()
                 }
             }
         } else {
-            qCDebug(lcCore) << "Failed to get virtual desktops:" << reply.error().message();
+            qCWarning(lcCore) << "Failed to get virtual desktops:" << reply.error().message();
         }
 
         // Update count if desktops property gave us more accurate info
@@ -219,7 +219,7 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
     }
 
     m_currentDesktop = newDesktop;
-    qCDebug(lcCore) << "Virtual desktop changed desktop= " << m_currentDesktop << " id= " << desktopId;
+    qCInfo(lcCore) << "Virtual desktop changed desktop= " << m_currentDesktop << " id= " << desktopId;
 
     updateActiveLayout();
     Q_EMIT currentDesktopChanged(m_currentDesktop);
@@ -227,14 +227,14 @@ void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
 
 void VirtualDesktopManager::onKWinDesktopCreated()
 {
-    qCDebug(lcCore) << "Desktop created, refreshing";
+    qCInfo(lcCore) << "Desktop created, refreshing";
     refreshFromKWin();
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
 
 void VirtualDesktopManager::onKWinDesktopRemoved()
 {
-    qCDebug(lcCore) << "Desktop removed, refreshing";
+    qCInfo(lcCore) << "Desktop removed, refreshing";
     refreshFromKWin();
     Q_EMIT desktopCountChanged(m_desktopCount);
 }
@@ -307,7 +307,7 @@ void VirtualDesktopManager::onCurrentDesktopChanged(int desktop)
     }
 
     m_currentDesktop = desktop;
-    qCDebug(lcCore) << "Virtual desktop changed to:" << desktop;
+    qCInfo(lcCore) << "Virtual desktop changed to:" << desktop;
 
     updateActiveLayout();
     Q_EMIT currentDesktopChanged(desktop);
@@ -319,7 +319,7 @@ void VirtualDesktopManager::onNumberOfDesktopsChanged(int count)
         return;
     }
 
-    qCDebug(lcCore) << "Number of virtual desktops changed to:" << count;
+    qCInfo(lcCore) << "Number of virtual desktops changed to:" << count;
     m_desktopCount = count;
 
     // Refresh names when count changes

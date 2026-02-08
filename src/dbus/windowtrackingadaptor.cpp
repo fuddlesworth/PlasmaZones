@@ -161,7 +161,7 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
         m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
-    qCDebug(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
+    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenName)
@@ -199,7 +199,7 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
         m_service->updateLastUsedZone(primaryZoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
-    qCDebug(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen" << resolvedScreen;
+    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen" << resolvedScreen;
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -220,7 +220,7 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     // Delegate to service
     m_service->unassignWindow(windowId);
 
-    qCDebug(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
+    qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
@@ -248,7 +248,7 @@ void WindowTrackingAdaptor::windowUnsnappedForFloat(const QString& windowId)
     // Delegate to service
     m_service->unsnapForFloat(windowId);
 
-    qCDebug(lcDbusWindow) << "Window" << windowId << "unsnapped for float from zone" << previousZoneId;
+    qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped for float from zone" << previousZoneId;
 }
 
 bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zoneIdOut)
@@ -562,7 +562,7 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
 
-    qCDebug(lcDbusWindow) << "Snapping new window" << windowId << "to last used zone" << result.zoneId;
+    qCInfo(lcDbusWindow) << "Snapping new window" << windowId << "to last used zone" << result.zoneId;
 }
 
 void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky,
@@ -594,7 +594,7 @@ void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
 
-    qCDebug(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
+    qCInfo(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
 }
 
 void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, const QString& screenName, bool sticky,
@@ -639,7 +639,7 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
         m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
     }
 
-    qCDebug(lcDbusWindow) << "Restoring window window= " << windowId << " zone(s)= " << result.zoneIds;
+    qCInfo(lcDbusWindow) << "Restoring window window= " << windowId << " zone(s)= " << result.zoneIds;
 }
 
 void WindowTrackingAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
@@ -700,7 +700,7 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     }
     // Delegate to service
     m_service->setWindowFloating(windowId, floating);
-    qCDebug(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
+    qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
     // Notify effect so it can update its local cache
     Q_EMIT windowFloatingChanged(Utils::extractStableId(windowId), floating);
 }
@@ -1128,7 +1128,7 @@ void WindowTrackingAdaptor::saveState()
                         QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
     config->sync();
-    qCDebug(lcDbusWindow) << "Saved state to KConfig";
+    qCInfo(lcDbusWindow) << "Saved state to KConfig";
 }
 
 void WindowTrackingAdaptor::loadState()

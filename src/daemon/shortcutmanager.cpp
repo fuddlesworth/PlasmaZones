@@ -166,7 +166,7 @@ void ShortcutManager::updateShortcuts()
 {
     // Called when settingsChanged() is emitted (e.g., after KCM reload)
     // Refresh all shortcuts from current settings values
-    qCDebug(lcShortcuts) << "Updating all shortcuts from settings";
+    qCInfo(lcShortcuts) << "Updating all shortcuts from settings";
 
     // Core shortcuts
     updateEditorShortcut();
@@ -287,7 +287,7 @@ void ShortcutManager::onNextLayout()
 
 void ShortcutManager::onQuickLayout(int number)
 {
-    qCDebug(lcShortcuts) << "Quick layout shortcut triggered for slot" << number;
+    qCInfo(lcShortcuts) << "Quick layout shortcut triggered for slot" << number;
     Q_EMIT quickLayoutRequested(number);
 }
 
@@ -451,67 +451,67 @@ void ShortcutManager::setupResnapToNewLayoutShortcut()
 
 void ShortcutManager::onMoveWindowLeft()
 {
-    qCDebug(lcShortcuts) << "Move window left triggered";
+    qCInfo(lcShortcuts) << "Move window left triggered";
     Q_EMIT moveWindowRequested(NavigationDirection::Left);
 }
 
 void ShortcutManager::onMoveWindowRight()
 {
-    qCDebug(lcShortcuts) << "Move window right triggered";
+    qCInfo(lcShortcuts) << "Move window right triggered";
     Q_EMIT moveWindowRequested(NavigationDirection::Right);
 }
 
 void ShortcutManager::onMoveWindowUp()
 {
-    qCDebug(lcShortcuts) << "Move window up triggered";
+    qCInfo(lcShortcuts) << "Move window up triggered";
     Q_EMIT moveWindowRequested(NavigationDirection::Up);
 }
 
 void ShortcutManager::onMoveWindowDown()
 {
-    qCDebug(lcShortcuts) << "Move window down triggered";
+    qCInfo(lcShortcuts) << "Move window down triggered";
     Q_EMIT moveWindowRequested(NavigationDirection::Down);
 }
 
 void ShortcutManager::onFocusZoneLeft()
 {
-    qCDebug(lcShortcuts) << "Focus zone left triggered";
+    qCInfo(lcShortcuts) << "Focus zone left triggered";
     Q_EMIT focusZoneRequested(NavigationDirection::Left);
 }
 
 void ShortcutManager::onFocusZoneRight()
 {
-    qCDebug(lcShortcuts) << "Focus zone right triggered";
+    qCInfo(lcShortcuts) << "Focus zone right triggered";
     Q_EMIT focusZoneRequested(NavigationDirection::Right);
 }
 
 void ShortcutManager::onFocusZoneUp()
 {
-    qCDebug(lcShortcuts) << "Focus zone up triggered";
+    qCInfo(lcShortcuts) << "Focus zone up triggered";
     Q_EMIT focusZoneRequested(NavigationDirection::Up);
 }
 
 void ShortcutManager::onFocusZoneDown()
 {
-    qCDebug(lcShortcuts) << "Focus zone down triggered";
+    qCInfo(lcShortcuts) << "Focus zone down triggered";
     Q_EMIT focusZoneRequested(NavigationDirection::Down);
 }
 
 void ShortcutManager::onPushToEmptyZone()
 {
-    qCDebug(lcShortcuts) << "Push to empty zone triggered";
+    qCInfo(lcShortcuts) << "Push to empty zone triggered";
     Q_EMIT pushToEmptyZoneRequested();
 }
 
 void ShortcutManager::onRestoreWindowSize()
 {
-    qCDebug(lcShortcuts) << "Restore window size triggered";
+    qCInfo(lcShortcuts) << "Restore window size triggered";
     Q_EMIT restoreWindowSizeRequested();
 }
 
 void ShortcutManager::onToggleWindowFloat()
 {
-    qCDebug(lcShortcuts) << "Toggle window float triggered";
+    qCInfo(lcShortcuts) << "Toggle window float triggered";
     Q_EMIT toggleWindowFloatRequested();
 }
 
@@ -521,25 +521,25 @@ void ShortcutManager::onToggleWindowFloat()
 
 void ShortcutManager::onSwapWindowLeft()
 {
-    qCDebug(lcShortcuts) << "Swap window left triggered";
+    qCInfo(lcShortcuts) << "Swap window left triggered";
     Q_EMIT swapWindowRequested(NavigationDirection::Left);
 }
 
 void ShortcutManager::onSwapWindowRight()
 {
-    qCDebug(lcShortcuts) << "Swap window right triggered";
+    qCInfo(lcShortcuts) << "Swap window right triggered";
     Q_EMIT swapWindowRequested(NavigationDirection::Right);
 }
 
 void ShortcutManager::onSwapWindowUp()
 {
-    qCDebug(lcShortcuts) << "Swap window up triggered";
+    qCInfo(lcShortcuts) << "Swap window up triggered";
     Q_EMIT swapWindowRequested(NavigationDirection::Up);
 }
 
 void ShortcutManager::onSwapWindowDown()
 {
-    qCDebug(lcShortcuts) << "Swap window down triggered";
+    qCInfo(lcShortcuts) << "Swap window down triggered";
     Q_EMIT swapWindowRequested(NavigationDirection::Down);
 }
 
@@ -549,7 +549,7 @@ void ShortcutManager::onSwapWindowDown()
 
 void ShortcutManager::onSnapToZone(int zoneNumber)
 {
-    qCDebug(lcShortcuts) << "Snap to zone" << zoneNumber << "triggered";
+    qCInfo(lcShortcuts) << "Snap to zone" << zoneNumber << "triggered";
     Q_EMIT snapToZoneRequested(zoneNumber);
 }
 
@@ -559,13 +559,13 @@ void ShortcutManager::onSnapToZone(int zoneNumber)
 
 void ShortcutManager::onRotateWindowsClockwise()
 {
-    qCDebug(lcShortcuts) << "Rotate windows clockwise triggered";
+    qCInfo(lcShortcuts) << "Rotate windows clockwise triggered";
     Q_EMIT rotateWindowsRequested(true);
 }
 
 void ShortcutManager::onRotateWindowsCounterclockwise()
 {
-    qCDebug(lcShortcuts) << "Rotate windows counterclockwise triggered";
+    qCInfo(lcShortcuts) << "Rotate windows counterclockwise triggered";
     Q_EMIT rotateWindowsRequested(false);
 }
 
@@ -575,19 +575,19 @@ void ShortcutManager::onRotateWindowsCounterclockwise()
 
 void ShortcutManager::onCycleWindowForward()
 {
-    qCDebug(lcShortcuts) << "Cycle window forward triggered";
+    qCInfo(lcShortcuts) << "Cycle window forward triggered";
     Q_EMIT cycleWindowsInZoneRequested(true);
 }
 
 void ShortcutManager::onCycleWindowBackward()
 {
-    qCDebug(lcShortcuts) << "Cycle window backward triggered";
+    qCInfo(lcShortcuts) << "Cycle window backward triggered";
     Q_EMIT cycleWindowsInZoneRequested(false);
 }
 
 void ShortcutManager::onResnapToNewLayout()
 {
-    qCDebug(lcShortcuts) << "Resnap to new layout triggered";
+    qCInfo(lcShortcuts) << "Resnap to new layout triggered";
     Q_EMIT resnapToNewLayoutRequested();
 }
 
