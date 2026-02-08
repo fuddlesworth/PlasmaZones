@@ -385,6 +385,24 @@ void ZoneSelectorController::onProximityCheckTimeout()
     updateProximity();
 }
 
+int ZoneSelectorController::resolvedTriggerDistance() const
+{
+    if (m_settings && m_screen) {
+        ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(m_screen->name());
+        return config.triggerDistance;
+    }
+    return m_triggerDistance;
+}
+
+int ZoneSelectorController::resolvedPosition() const
+{
+    if (m_settings && m_screen) {
+        ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(m_screen->name());
+        return config.position;
+    }
+    return static_cast<int>(ZoneSelectorPosition::Top);
+}
+
 void ZoneSelectorController::updateProximity()
 {
     // Update screen from cursor position (handles cross-monitor drag)
@@ -404,20 +422,61 @@ void ZoneSelectorController::updateProximity()
         return;
     }
 
-    // Get screen geometry
-    QRectF screenGeometry = m_screen->geometry();
-    qreal screenTop = screenGeometry.top();
-    qreal screenCenterX = screenGeometry.center().x();
+    // Get screen geometry and resolved position for this screen
+    const QRectF screenGeometry = m_screen->geometry();
+    const auto pos = static_cast<ZoneSelectorPosition>(resolvedPosition());
+    const int effectiveTriggerDistance = resolvedTriggerDistance();
 
-    // Calculate distance from top edge
-    qreal distanceFromTop = m_cursorPosition.y() - screenTop;
+    // Determine which edge to measure distance from based on selector position
+    // Top positions (TopLeft, Top, TopRight) → distance from top edge
+    // Bottom positions (BottomLeft, Bottom, BottomRight) → distance from bottom edge
+    // Left → distance from left edge
+    // Right → distance from right edge
+    qreal distanceFromEdge = 0.0;
+    bool inTriggerZone = false;
 
-    // Check if cursor is within horizontal trigger zone (centered area)
-    qreal horizontalDistance = qAbs(m_cursorPosition.x() - screenCenterX);
-    bool inHorizontalZone = horizontalDistance < (screenGeometry.width() / 2 - m_edgeTriggerZone);
+    switch (pos) {
+    case ZoneSelectorPosition::TopLeft:
+    case ZoneSelectorPosition::Top:
+    case ZoneSelectorPosition::TopRight: {
+        distanceFromEdge = m_cursorPosition.y() - screenGeometry.top();
+        // Horizontal zone check: cursor must be within the center area (excluding edge margins)
+        qreal hDist = qAbs(m_cursorPosition.x() - screenGeometry.center().x());
+        inTriggerZone = hDist < (screenGeometry.width() / 2 - m_edgeTriggerZone);
+        break;
+    }
+    case ZoneSelectorPosition::BottomLeft:
+    case ZoneSelectorPosition::Bottom:
+    case ZoneSelectorPosition::BottomRight: {
+        distanceFromEdge = screenGeometry.bottom() - m_cursorPosition.y();
+        qreal hDist = qAbs(m_cursorPosition.x() - screenGeometry.center().x());
+        inTriggerZone = hDist < (screenGeometry.width() / 2 - m_edgeTriggerZone);
+        break;
+    }
+    case ZoneSelectorPosition::Left: {
+        distanceFromEdge = m_cursorPosition.x() - screenGeometry.left();
+        // Vertical zone check: cursor must be within the center area vertically
+        qreal vDist = qAbs(m_cursorPosition.y() - screenGeometry.center().y());
+        inTriggerZone = vDist < (screenGeometry.height() / 2 - m_edgeTriggerZone);
+        break;
+    }
+    case ZoneSelectorPosition::Right: {
+        distanceFromEdge = screenGeometry.right() - m_cursorPosition.x();
+        qreal vDist = qAbs(m_cursorPosition.y() - screenGeometry.center().y());
+        inTriggerZone = vDist < (screenGeometry.height() / 2 - m_edgeTriggerZone);
+        break;
+    }
+    default: {
+        // Fallback to top edge
+        distanceFromEdge = m_cursorPosition.y() - screenGeometry.top();
+        qreal hDist = qAbs(m_cursorPosition.x() - screenGeometry.center().x());
+        inTriggerZone = hDist < (screenGeometry.width() / 2 - m_edgeTriggerZone);
+        break;
+    }
+    }
 
-    // Calculate proximity (0.0 = at edge, 1.0 = far away)
-    qreal proximity = qBound(0.0, distanceFromTop / static_cast<qreal>(m_triggerDistance), 1.0);
+    // Calculate proximity: 0.0 = at the edge, 1.0 = far away
+    qreal proximity = qBound(0.0, distanceFromEdge / static_cast<qreal>(effectiveTriggerDistance), 1.0);
 
     if (m_cursorProximity != proximity) {
         m_cursorProximity = proximity;
@@ -428,7 +487,7 @@ void ZoneSelectorController::updateProximity()
     bool cursorOverSelector = m_selectorGeometry.isValid() && m_selectorGeometry.contains(m_cursorPosition);
 
     // State transitions based on proximity
-    if (m_isDragging && inHorizontalZone) {
+    if (m_isDragging && inTriggerZone) {
         if (proximity < 0.3 && m_state == State::Hidden) {
             // Close to edge - show selector
             show();

@@ -663,13 +663,15 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
         return false;
     }
 
-    int triggerDistance = m_settings->zoneSelectorTriggerDistance();
-    ZoneSelectorPosition position = m_settings->zoneSelectorPosition();
-
     QScreen* screen = screenAtPoint(cursorX, cursorY);
     if (!screen) {
         return false;
     }
+
+    // Use per-screen resolved config (per-screen override > global default)
+    const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(screen->name());
+    const int triggerDistance = config.triggerDistance;
+    const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
     QRect screenGeom = screen->geometry();
     qreal screenAspectRatio =
@@ -679,7 +681,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
     const int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
 
     // Match overlayservice's size mode logic exactly
-    const ZoneSelectorSizeMode sizeMode = m_settings->zoneSelectorSizeMode();
+    const auto sizeMode = static_cast<ZoneSelectorSizeMode>(config.sizeMode);
     int indicatorWidth = 0;
     int indicatorHeight = 0;
 
@@ -689,11 +691,11 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
         indicatorHeight = qRound(static_cast<qreal>(indicatorWidth) / screenAspectRatio);
     } else {
         // Manual mode: Use explicit settings
-        indicatorWidth = m_settings->zoneSelectorPreviewWidth();
-        if (m_settings->zoneSelectorPreviewLockAspect()) {
+        indicatorWidth = config.previewWidth;
+        if (config.previewLockAspect) {
             indicatorHeight = qRound(static_cast<qreal>(indicatorWidth) / screenAspectRatio);
         } else {
-            indicatorHeight = m_settings->zoneSelectorPreviewHeight();
+            indicatorHeight = config.previewHeight;
         }
     }
 
@@ -707,8 +709,8 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
     const int labelSpace = labelTopMargin + labelHeight; // = 28
 
     const int safeLayoutCount = std::max(1, layoutCount);
-    const ZoneSelectorLayoutMode mode = m_settings->zoneSelectorLayoutMode();
-    const int maxRows = m_settings->zoneSelectorMaxRows();
+    const auto mode = static_cast<ZoneSelectorLayoutMode>(config.layoutMode);
+    const int maxRows = config.maxRows;
     int columns = 1;
     int totalRows = 1;
 
@@ -717,7 +719,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
         totalRows = safeLayoutCount;
     } else if (mode == ZoneSelectorLayoutMode::Grid) {
         // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
-        columns = std::max(1, m_settings->zoneSelectorGridColumns());
+        columns = std::max(1, config.gridColumns);
         totalRows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / columns));
     } else {
         // Horizontal mode

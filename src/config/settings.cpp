@@ -730,6 +730,52 @@ void Settings::load()
     // Max visible rows before scrolling (Auto mode)
     m_zoneSelectorMaxRows = readValidatedInt(zoneSelector, "MaxRows", ConfigDefaults::maxRows(), 1, 10, "zone selector max rows");
 
+    // Per-screen zone selector overrides (groups matching ZoneSelector:*)
+    m_perScreenZoneSelectorSettings.clear();
+    const QStringList allGroups = config->groupList();
+    const QLatin1String perScreenPrefix("ZoneSelector:");
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(perScreenPrefix)) {
+            QString screenName = groupName.mid(perScreenPrefix.size());
+            if (screenName.isEmpty()) {
+                continue;
+            }
+            KConfigGroup screenGroup = config->group(groupName);
+            QVariantMap overrides;
+            if (screenGroup.hasKey(QLatin1String("Position"))) {
+                overrides[QStringLiteral("Position")] = qBound(0, screenGroup.readEntry(QLatin1String("Position"), 0), 8);
+            }
+            if (screenGroup.hasKey(QLatin1String("LayoutMode"))) {
+                overrides[QStringLiteral("LayoutMode")] = qBound(0, screenGroup.readEntry(QLatin1String("LayoutMode"), 0), 2);
+            }
+            if (screenGroup.hasKey(QLatin1String("SizeMode"))) {
+                overrides[QStringLiteral("SizeMode")] = qBound(0, screenGroup.readEntry(QLatin1String("SizeMode"), 0), 1);
+            }
+            if (screenGroup.hasKey(QLatin1String("MaxRows"))) {
+                overrides[QStringLiteral("MaxRows")] = qBound(1, screenGroup.readEntry(QLatin1String("MaxRows"), 0), 10);
+            }
+            if (screenGroup.hasKey(QLatin1String("PreviewWidth"))) {
+                overrides[QStringLiteral("PreviewWidth")] = qBound(80, screenGroup.readEntry(QLatin1String("PreviewWidth"), 0), 400);
+            }
+            if (screenGroup.hasKey(QLatin1String("PreviewHeight"))) {
+                overrides[QStringLiteral("PreviewHeight")] = qBound(60, screenGroup.readEntry(QLatin1String("PreviewHeight"), 0), 300);
+            }
+            if (screenGroup.hasKey(QLatin1String("PreviewLockAspect"))) {
+                overrides[QStringLiteral("PreviewLockAspect")] = screenGroup.readEntry(QLatin1String("PreviewLockAspect"), true);
+            }
+            if (screenGroup.hasKey(QLatin1String("GridColumns"))) {
+                overrides[QStringLiteral("GridColumns")] = qBound(1, screenGroup.readEntry(QLatin1String("GridColumns"), 0), 10);
+            }
+            if (screenGroup.hasKey(QLatin1String("TriggerDistance"))) {
+                overrides[QStringLiteral("TriggerDistance")] = qBound(10, screenGroup.readEntry(QLatin1String("TriggerDistance"), 0), 200);
+            }
+            if (!overrides.isEmpty()) {
+                m_perScreenZoneSelectorSettings[screenName] = overrides;
+                qCDebug(lcConfig) << "Loaded per-screen zone selector overrides for" << screenName << ":" << overrides.keys();
+            }
+        }
+    }
+
     // Shader Effects (defaults from .kcfg via ConfigDefaults)
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
     m_enableShaderEffects = shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
@@ -874,6 +920,25 @@ void Settings::save()
     zoneSelector.writeEntry(QLatin1String("SizeMode"), static_cast<int>(m_zoneSelectorSizeMode));
     zoneSelector.writeEntry(QLatin1String("MaxRows"), m_zoneSelectorMaxRows);
 
+    // Per-screen zone selector overrides - delete stale groups, write current ones
+    const QStringList allGroups = config->groupList();
+    const QLatin1String perScreenPrefix("ZoneSelector:");
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(perScreenPrefix)) {
+            QString screenName = groupName.mid(perScreenPrefix.size());
+            if (!m_perScreenZoneSelectorSettings.contains(screenName)) {
+                config->deleteGroup(groupName);
+            }
+        }
+    }
+    for (auto it = m_perScreenZoneSelectorSettings.constBegin(); it != m_perScreenZoneSelectorSettings.constEnd(); ++it) {
+        KConfigGroup screenGroup = config->group(QStringLiteral("ZoneSelector:") + it.key());
+        const QVariantMap& overrides = it.value();
+        for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
+            screenGroup.writeEntry(oit.key(), oit.value());
+        }
+    }
+
     // Shader Effects
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
     shaders.writeEntry(QLatin1String("EnableShaderEffects"), m_enableShaderEffects);
@@ -936,12 +1001,133 @@ void Settings::reset()
     for (const QString& groupName : groups) {
         config->deleteGroup(groupName);
     }
+
+    // Also delete per-screen zone selector override groups
+    const QStringList allGroups = config->groupList();
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(QLatin1String("ZoneSelector:"))) {
+            config->deleteGroup(groupName);
+        }
+    }
     config->sync();
 
     // Reload from (now empty) config - will use ConfigDefaults for all values
     load();
 
     qCDebug(lcConfig) << "Settings reset to defaults";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-Screen Zone Selector Config
+// ═══════════════════════════════════════════════════════════════════════════════
+
+ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenName) const
+{
+    // Start with global defaults
+    ZoneSelectorConfig config = {
+        static_cast<int>(m_zoneSelectorPosition),
+        static_cast<int>(m_zoneSelectorLayoutMode),
+        static_cast<int>(m_zoneSelectorSizeMode),
+        m_zoneSelectorMaxRows,
+        m_zoneSelectorPreviewWidth,
+        m_zoneSelectorPreviewHeight,
+        m_zoneSelectorPreviewLockAspect,
+        m_zoneSelectorGridColumns,
+        m_zoneSelectorTriggerDistance
+    };
+
+    // Apply per-screen overrides if they exist
+    auto it = m_perScreenZoneSelectorSettings.constFind(screenName);
+    if (it == m_perScreenZoneSelectorSettings.constEnd()) {
+        return config;
+    }
+
+    const QVariantMap& overrides = it.value();
+    if (overrides.contains(QStringLiteral("Position"))) {
+        config.position = qBound(0, overrides.value(QStringLiteral("Position")).toInt(), 8);
+    }
+    if (overrides.contains(QStringLiteral("LayoutMode"))) {
+        config.layoutMode = qBound(0, overrides.value(QStringLiteral("LayoutMode")).toInt(), 2);
+    }
+    if (overrides.contains(QStringLiteral("SizeMode"))) {
+        config.sizeMode = qBound(0, overrides.value(QStringLiteral("SizeMode")).toInt(), 1);
+    }
+    if (overrides.contains(QStringLiteral("MaxRows"))) {
+        config.maxRows = qBound(1, overrides.value(QStringLiteral("MaxRows")).toInt(), 10);
+    }
+    if (overrides.contains(QStringLiteral("PreviewWidth"))) {
+        config.previewWidth = qBound(80, overrides.value(QStringLiteral("PreviewWidth")).toInt(), 400);
+    }
+    if (overrides.contains(QStringLiteral("PreviewHeight"))) {
+        config.previewHeight = qBound(60, overrides.value(QStringLiteral("PreviewHeight")).toInt(), 300);
+    }
+    if (overrides.contains(QStringLiteral("PreviewLockAspect"))) {
+        config.previewLockAspect = overrides.value(QStringLiteral("PreviewLockAspect")).toBool();
+    }
+    if (overrides.contains(QStringLiteral("GridColumns"))) {
+        config.gridColumns = qBound(1, overrides.value(QStringLiteral("GridColumns")).toInt(), 10);
+    }
+    if (overrides.contains(QStringLiteral("TriggerDistance"))) {
+        config.triggerDistance = qBound(10, overrides.value(QStringLiteral("TriggerDistance")).toInt(), 200);
+    }
+
+    return config;
+}
+
+QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenName) const
+{
+    return m_perScreenZoneSelectorSettings.value(screenName);
+}
+
+void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    if (screenName.isEmpty() || key.isEmpty()) {
+        return;
+    }
+
+    // Validate and clamp per-screen values using the same bounds as global setters
+    QVariant validated = value;
+    if (key == QLatin1String("Position")) {
+        validated = qBound(0, value.toInt(), 8);
+    } else if (key == QLatin1String("LayoutMode")) {
+        validated = qBound(0, value.toInt(), 2);
+    } else if (key == QLatin1String("SizeMode")) {
+        validated = qBound(0, value.toInt(), 1);
+    } else if (key == QLatin1String("MaxRows")) {
+        validated = qBound(1, value.toInt(), 10);
+    } else if (key == QLatin1String("PreviewWidth")) {
+        validated = qBound(80, value.toInt(), 400);
+    } else if (key == QLatin1String("PreviewHeight")) {
+        validated = qBound(60, value.toInt(), 300);
+    } else if (key == QLatin1String("GridColumns")) {
+        validated = qBound(1, value.toInt(), 10);
+    } else if (key == QLatin1String("TriggerDistance")) {
+        validated = qBound(10, value.toInt(), 200);
+    } else if (key == QLatin1String("PreviewLockAspect")) {
+        validated = value.toBool();
+    }
+
+    m_perScreenZoneSelectorSettings[screenName][key] = validated;
+    Q_EMIT perScreenZoneSelectorSettingsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::clearPerScreenZoneSelectorSettings(const QString& screenName)
+{
+    if (m_perScreenZoneSelectorSettings.remove(screenName)) {
+        Q_EMIT perScreenZoneSelectorSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenName) const
+{
+    return m_perScreenZoneSelectorSettings.contains(screenName);
+}
+
+QStringList Settings::screensWithZoneSelectorOverrides() const
+{
+    return m_perScreenZoneSelectorSettings.keys();
 }
 
 QString Settings::loadColorsFromFile(const QString& filePath)

@@ -18,6 +18,25 @@ enum class ZoneSelectorSizeMode;
 enum class StickyWindowHandling;
 enum class OsdStyle;
 
+/**
+ * @brief Per-screen zone selector configuration
+ *
+ * Holds all zone selector settings that can be overridden per-monitor.
+ * Used by OverlayService and ZoneSelectorController to apply resolved
+ * (per-screen override > global default) settings for each screen.
+ */
+struct ZoneSelectorConfig {
+    int position = 1;           // ZoneSelectorPosition enum value (Top)
+    int layoutMode = 0;         // ZoneSelectorLayoutMode enum value (Grid)
+    int sizeMode = 0;           // ZoneSelectorSizeMode enum value (Auto)
+    int maxRows = 4;
+    int previewWidth = 180;
+    int previewHeight = 101;
+    bool previewLockAspect = true;
+    int gridColumns = 5;
+    int triggerDistance = 50;
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -179,6 +198,21 @@ public:
     virtual void setZoneSelectorSizeMode(ZoneSelectorSizeMode mode) = 0;
     virtual int zoneSelectorMaxRows() const = 0;
     virtual void setZoneSelectorMaxRows(int rows) = 0;
+
+    // Per-screen zone selector config resolution
+    virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenName*/) const {
+        return {
+            static_cast<int>(zoneSelectorPosition()),
+            static_cast<int>(zoneSelectorLayoutMode()),
+            static_cast<int>(zoneSelectorSizeMode()),
+            zoneSelectorMaxRows(),
+            zoneSelectorPreviewWidth(),
+            zoneSelectorPreviewHeight(),
+            zoneSelectorPreviewLockAspect(),
+            zoneSelectorGridColumns(),
+            zoneSelectorTriggerDistance()
+        };
+    }
 };
 
 /**

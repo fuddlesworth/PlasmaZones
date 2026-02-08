@@ -6,6 +6,8 @@
 #include "../core/interfaces.h"
 #include "../core/constants.h"
 #include <KConfigGroup>
+#include <QHash>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -561,6 +563,14 @@ public:
     }
     void setZoneSelectorMaxRows(int rows) override;
 
+    // Per-screen zone selector config (override > global fallback)
+    ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenName) const override;
+    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+    Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
+
     // Shader Effects
     bool enableShaderEffects() const override
     {
@@ -919,6 +929,9 @@ private:
     int m_zoneSelectorPreviewHeight = 101; // preview height in pixels (Manual mode, when unlocked)
     bool m_zoneSelectorPreviewLockAspect = true;
     int m_zoneSelectorGridColumns = 5; // grid columns (Manual mode)
+
+    // Per-screen zone selector overrides (screenName -> settings map)
+    QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
 
     // Shader Effects (defaults from plasmazones.kcfg via ConfigDefaults)
     bool m_enableShaderEffects = true;

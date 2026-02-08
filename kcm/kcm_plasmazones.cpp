@@ -2415,6 +2415,42 @@ void KCMPlasmaZones::setMonitorDisabled(const QString& screenName, bool disabled
     }
 }
 
+// Per-screen zone selector settings
+QVariantMap KCMPlasmaZones::getPerScreenZoneSelectorSettings(const QString& screenName) const
+{
+    return m_settings ? m_settings->getPerScreenZoneSelectorSettings(screenName) : QVariantMap();
+}
+
+void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    m_settings->setPerScreenZoneSelectorSetting(screenName, key, value);
+    Q_EMIT perScreenZoneSelectorSettingsChanged();
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearPerScreenZoneSelectorSettings(const QString& screenName)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    m_settings->clearPerScreenZoneSelectorSettings(screenName);
+    Q_EMIT perScreenZoneSelectorSettingsChanged();
+    setNeedsSave(true);
+}
+
+bool KCMPlasmaZones::hasPerScreenZoneSelectorSettings(const QString& screenName) const
+{
+    return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(screenName) : false;
+}
+
+QStringList KCMPlasmaZones::screensWithZoneSelectorOverrides() const
+{
+    return m_settings ? m_settings->screensWithZoneSelectorOverrides() : QStringList();
+}
+
 void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
 {
     if (screenName.isEmpty()) {
