@@ -363,6 +363,12 @@ set(plasmazones_editor_SRCS
 # Create the executable first
 add_executable(plasmazones-editor ${plasmazones_editor_SRCS})
 
+# ColorUtils.js is a stateless utility imported explicitly by each QML file that uses it;
+# skip its qmldir entry to avoid re-evaluation in every importer (Qt 6.8+ dev warning)
+set_source_files_properties(editor/qml/ColorUtils.js PROPERTIES
+    QT_QML_SKIP_QMLDIR_ENTRY TRUE
+)
+
 # Add QML module to the executable
 qt_add_qml_module(plasmazones-editor
     URI org.plasmazones.editor
