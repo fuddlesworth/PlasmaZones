@@ -219,8 +219,6 @@ private Q_SLOTS:
 private:
     void updateProximity();
     void checkEdgeProximity();
-    int resolvedTriggerDistance() const;
-    int resolvedPosition() const;
     static QString stateToString(State state);
     static State stringToState(const QString& state);
 

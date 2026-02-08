@@ -3,6 +3,7 @@
 
 #include "overlayservice.h"
 #include "../config/configdefaults.h"
+#include "../core/zoneselectorlayout.h"
 
 #include "../core/layout.h"
 #include "../core/layoutmanager.h"
@@ -202,134 +203,6 @@ QQuickItem* findQmlItemByName(QQuickItem* item, const QString& objectName)
     }
 
     return nullptr;
-}
-
-struct ZoneSelectorLayout
-{
-    int indicatorWidth = 180;
-    int indicatorHeight = 101;
-    int indicatorSpacing = 18;
-    int containerPadding = 36;
-    int containerTopMargin = 10;
-    int containerSideMargin = 10; // Margin from left/right screen edge
-    int labelTopMargin = 8;
-    int labelHeight = 20;
-    int labelSpace = 28;
-    int paddingSide = 18;
-    int columns = 1;
-    int rows = 1; // Visible rows (may be limited by maxRows)
-    int totalRows = 1; // Total rows (for scroll content height)
-    int contentWidth = 0;
-    int contentHeight = 0;
-    int scrollContentHeight = 0; // Full content height for scrolling
-    int scrollContentWidth = 0;  // Full content width for horizontal scrolling
-    int containerWidth = 0;
-    int containerHeight = 0;
-    int barHeight = 0;
-    int barWidth = 0;
-    bool needsScrolling = false;
-    bool needsHorizontalScrolling = false;
-};
-
-ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
-{
-    ZoneSelectorLayout layout;
-    const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
-    const qreal screenAspectRatio =
-        screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
-
-    // Determine size mode (Auto vs Manual)
-    const auto sizeMode = static_cast<ZoneSelectorSizeMode>(config.sizeMode);
-    const int maxRows = config.maxRows;
-
-    if (sizeMode == ZoneSelectorSizeMode::Auto) {
-        // Auto-sizing: Calculate preview size as ~10% of screen width, bounded 120-280px
-        // This follows KDE HIG principles for adaptive sizing
-        const int autoWidth = qBound(120, screenGeom.width() / 10, 280);
-        layout.indicatorWidth = autoWidth;
-        // Always lock aspect ratio in Auto mode for consistent appearance
-        layout.indicatorHeight = qRound(static_cast<qreal>(layout.indicatorWidth) / screenAspectRatio);
-    } else {
-        // Manual mode: Use explicit config
-        layout.indicatorWidth = config.previewWidth;
-        if (config.previewLockAspect) {
-            layout.indicatorHeight = qRound(static_cast<qreal>(layout.indicatorWidth) / screenAspectRatio);
-        } else {
-            layout.indicatorHeight = config.previewHeight;
-        }
-    }
-
-    const int safeLayoutCount = std::max(1, layoutCount);
-    const auto layoutMode = static_cast<ZoneSelectorLayoutMode>(config.layoutMode);
-
-    if (layoutMode == ZoneSelectorLayoutMode::Vertical) {
-        layout.columns = 1;
-        layout.rows = safeLayoutCount;
-    } else if (layoutMode == ZoneSelectorLayoutMode::Grid) {
-        // Always respect explicit grid columns setting (Auto mode only affects preview dimensions)
-        layout.columns = std::max(1, config.gridColumns);
-        layout.rows = static_cast<int>(std::ceil(static_cast<qreal>(safeLayoutCount) / layout.columns));
-    } else {
-        // Horizontal mode
-        layout.columns = safeLayoutCount;
-        layout.rows = 1;
-    }
-
-    // Store total rows before limiting for visible area
-    layout.totalRows = layout.rows;
-
-    layout.labelSpace = layout.labelTopMargin + layout.labelHeight;
-    layout.paddingSide = layout.containerPadding / 2;
-
-    // Step 1: Apply maxRows setting (Auto mode, Grid only)
-    // maxRows only makes sense for Grid: in Vertical each layout is a row (maxRows would
-    // arbitrarily hide layouts), in Horizontal there's always 1 row. Screen-based clamping
-    // in Step 2 handles overflow for all modes.
-    int visibleRows = layout.rows;
-    if (sizeMode == ZoneSelectorSizeMode::Auto && layoutMode == ZoneSelectorLayoutMode::Grid && layout.rows > maxRows) {
-        visibleRows = maxRows;
-    }
-
-    // Step 2: Screen-based clamping (all size modes)
-    // Ensure the popup never exceeds screen bounds, enabling scrolling for overflow
-    const int screenH = screenGeom.height();
-    const int screenW = screenGeom.width();
-    const int maxContentH = std::max(0, screenH - layout.containerPadding - 2 * layout.containerTopMargin);
-    const int maxContentW = std::max(0, screenW - layout.containerPadding - 2 * layout.containerSideMargin);
-    const int rowUnitH = layout.indicatorHeight + layout.labelSpace + layout.indicatorSpacing;
-    if (rowUnitH > 0) {
-        const int maxFittingRows = std::max(1, (maxContentH + layout.indicatorSpacing) / rowUnitH);
-        if (visibleRows > maxFittingRows) {
-            visibleRows = maxFittingRows;
-        }
-    }
-
-    layout.rows = visibleRows;
-    layout.needsScrolling = (layout.totalRows > visibleRows);
-
-    // Full content dimensions (all items, for scroll content)
-    layout.scrollContentWidth = layout.columns * layout.indicatorWidth + (layout.columns - 1) * layout.indicatorSpacing;
-    layout.scrollContentHeight = layout.totalRows * (layout.indicatorHeight + layout.labelSpace)
-        + (layout.totalRows - 1) * layout.indicatorSpacing;
-
-    // Visible content dimensions (may be clamped to screen)
-    layout.contentWidth = layout.scrollContentWidth;
-    layout.contentHeight =
-        visibleRows * (layout.indicatorHeight + layout.labelSpace) + (visibleRows - 1) * layout.indicatorSpacing;
-
-    // Horizontal screen clamping (primarily for horizontal layout mode)
-    if (layout.contentWidth > maxContentW && maxContentW > 0) {
-        layout.contentWidth = maxContentW;
-        layout.needsHorizontalScrolling = true;
-    }
-
-    layout.containerWidth = layout.contentWidth + layout.containerPadding;
-    layout.containerHeight = layout.contentHeight + layout.containerPadding;
-    layout.barHeight = layout.containerTopMargin + layout.containerHeight;
-    // Include side margins so corner/side positions have room for margin
-    layout.barWidth = layout.containerSideMargin + layout.containerWidth + layout.containerSideMargin;
-
-    return layout;
 }
 
 void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, const ZoneSelectorConfig& config,

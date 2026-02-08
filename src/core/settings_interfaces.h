@@ -37,6 +37,24 @@ struct ZoneSelectorConfig {
     int triggerDistance = 50;
 };
 
+/**
+ * @brief Config key names for per-screen zone selector overrides
+ *
+ * Used in KConfig group keys ([ZoneSelector:ScreenName]), QVariantMap
+ * override storage, and QML writeSetting() calls.
+ */
+namespace ZoneSelectorConfigKey {
+inline constexpr const char Position[] = "Position";
+inline constexpr const char LayoutMode[] = "LayoutMode";
+inline constexpr const char SizeMode[] = "SizeMode";
+inline constexpr const char MaxRows[] = "MaxRows";
+inline constexpr const char PreviewWidth[] = "PreviewWidth";
+inline constexpr const char PreviewHeight[] = "PreviewHeight";
+inline constexpr const char PreviewLockAspect[] = "PreviewLockAspect";
+inline constexpr const char GridColumns[] = "GridColumns";
+inline constexpr const char TriggerDistance[] = "TriggerDistance";
+} // namespace ZoneSelectorConfigKey
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════

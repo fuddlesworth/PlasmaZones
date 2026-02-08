@@ -71,6 +71,68 @@ QString normalizeUuidString(const QString& uuidStr)
     // Return in default format (with braces) for consistent comparison
     return uuid.toString();
 }
+// Validate a per-screen zone selector override value.
+// Returns a valid QVariant with the clamped value for known keys,
+// or an invalid (default-constructed) QVariant for unknown keys or invalid Position=4.
+QVariant validatePerScreenValue(const QString& key, const QVariant& value)
+{
+    namespace K = ZoneSelectorConfigKey;
+    if (key == QLatin1String(K::Position)) {
+        int pos = qBound(0, value.toInt(), 8);
+        if (pos == 4) { return {}; } // Center is invalid
+        return pos;
+    }
+    if (key == QLatin1String(K::LayoutMode))       return qBound(0, value.toInt(), 2);
+    if (key == QLatin1String(K::SizeMode))          return qBound(0, value.toInt(), 1);
+    if (key == QLatin1String(K::MaxRows))            return qBound(1, value.toInt(), 10);
+    if (key == QLatin1String(K::PreviewWidth))       return qBound(80, value.toInt(), 400);
+    if (key == QLatin1String(K::PreviewHeight))      return qBound(60, value.toInt(), 300);
+    if (key == QLatin1String(K::GridColumns))         return qBound(1, value.toInt(), 10);
+    if (key == QLatin1String(K::TriggerDistance))     return qBound(10, value.toInt(), 200);
+    if (key == QLatin1String(K::PreviewLockAspect))  return value.toBool();
+    return {}; // Unknown key
+}
+
+// Apply validated overrides from a QVariantMap onto a ZoneSelectorConfig struct
+void applyPerScreenOverrides(ZoneSelectorConfig& config, const QVariantMap& overrides)
+{
+    namespace K = ZoneSelectorConfigKey;
+    auto applyInt = [&](const char* key, int& field) {
+        auto it = overrides.constFind(QLatin1String(key));
+        if (it != overrides.constEnd()) {
+            QVariant v = validatePerScreenValue(QLatin1String(key), it.value());
+            if (v.isValid()) { field = v.toInt(); }
+        }
+    };
+    applyInt(K::Position, config.position);
+    applyInt(K::LayoutMode, config.layoutMode);
+    applyInt(K::SizeMode, config.sizeMode);
+    applyInt(K::MaxRows, config.maxRows);
+    applyInt(K::PreviewWidth, config.previewWidth);
+    applyInt(K::PreviewHeight, config.previewHeight);
+    applyInt(K::GridColumns, config.gridColumns);
+    applyInt(K::TriggerDistance, config.triggerDistance);
+    // PreviewLockAspect (bool)
+    auto lockIt = overrides.constFind(QLatin1String(K::PreviewLockAspect));
+    if (lockIt != overrides.constEnd()) {
+        QVariant v = validatePerScreenValue(QLatin1String(K::PreviewLockAspect), lockIt.value());
+        if (v.isValid()) { config.previewLockAspect = v.toBool(); }
+    }
+}
+
+// Known per-screen config keys for iteration during load
+constexpr const char* kPerScreenKeys[] = {
+    ZoneSelectorConfigKey::Position,
+    ZoneSelectorConfigKey::LayoutMode,
+    ZoneSelectorConfigKey::SizeMode,
+    ZoneSelectorConfigKey::MaxRows,
+    ZoneSelectorConfigKey::PreviewWidth,
+    ZoneSelectorConfigKey::PreviewHeight,
+    ZoneSelectorConfigKey::PreviewLockAspect,
+    ZoneSelectorConfigKey::GridColumns,
+    ZoneSelectorConfigKey::TriggerDistance,
+};
+
 } // anonymous namespace
 
 Settings::Settings(QObject* parent)
@@ -742,35 +804,21 @@ void Settings::load()
             }
             KConfigGroup screenGroup = config->group(groupName);
             QVariantMap overrides;
-            if (screenGroup.hasKey(QLatin1String("Position"))) {
-                int pos = qBound(0, screenGroup.readEntry(QLatin1String("Position"), 0), 8);
-                if (pos != 4) { // Center is invalid
-                    overrides[QStringLiteral("Position")] = pos;
+            for (const char* key : kPerScreenKeys) {
+                QLatin1String keyStr(key);
+                if (screenGroup.hasKey(keyStr)) {
+                    // Read raw value: bool for PreviewLockAspect, int for everything else
+                    QVariant raw;
+                    if (keyStr == QLatin1String(ZoneSelectorConfigKey::PreviewLockAspect)) {
+                        raw = screenGroup.readEntry(keyStr, true);
+                    } else {
+                        raw = screenGroup.readEntry(keyStr, 0);
+                    }
+                    QVariant validated = validatePerScreenValue(keyStr, raw);
+                    if (validated.isValid()) {
+                        overrides[QString::fromLatin1(key)] = validated;
+                    }
                 }
-            }
-            if (screenGroup.hasKey(QLatin1String("LayoutMode"))) {
-                overrides[QStringLiteral("LayoutMode")] = qBound(0, screenGroup.readEntry(QLatin1String("LayoutMode"), 0), 2);
-            }
-            if (screenGroup.hasKey(QLatin1String("SizeMode"))) {
-                overrides[QStringLiteral("SizeMode")] = qBound(0, screenGroup.readEntry(QLatin1String("SizeMode"), 0), 1);
-            }
-            if (screenGroup.hasKey(QLatin1String("MaxRows"))) {
-                overrides[QStringLiteral("MaxRows")] = qBound(1, screenGroup.readEntry(QLatin1String("MaxRows"), 0), 10);
-            }
-            if (screenGroup.hasKey(QLatin1String("PreviewWidth"))) {
-                overrides[QStringLiteral("PreviewWidth")] = qBound(80, screenGroup.readEntry(QLatin1String("PreviewWidth"), 0), 400);
-            }
-            if (screenGroup.hasKey(QLatin1String("PreviewHeight"))) {
-                overrides[QStringLiteral("PreviewHeight")] = qBound(60, screenGroup.readEntry(QLatin1String("PreviewHeight"), 0), 300);
-            }
-            if (screenGroup.hasKey(QLatin1String("PreviewLockAspect"))) {
-                overrides[QStringLiteral("PreviewLockAspect")] = screenGroup.readEntry(QLatin1String("PreviewLockAspect"), true);
-            }
-            if (screenGroup.hasKey(QLatin1String("GridColumns"))) {
-                overrides[QStringLiteral("GridColumns")] = qBound(1, screenGroup.readEntry(QLatin1String("GridColumns"), 0), 10);
-            }
-            if (screenGroup.hasKey(QLatin1String("TriggerDistance"))) {
-                overrides[QStringLiteral("TriggerDistance")] = qBound(10, screenGroup.readEntry(QLatin1String("TriggerDistance"), 0), 200);
             }
             if (!overrides.isEmpty()) {
                 m_perScreenZoneSelectorSettings[screenName] = overrides;
@@ -1045,38 +1093,7 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
         return config;
     }
 
-    const QVariantMap& overrides = it.value();
-    if (overrides.contains(QStringLiteral("Position"))) {
-        int pos = qBound(0, overrides.value(QStringLiteral("Position")).toInt(), 8);
-        if (pos != 4) { // Center is invalid
-            config.position = pos;
-        }
-    }
-    if (overrides.contains(QStringLiteral("LayoutMode"))) {
-        config.layoutMode = qBound(0, overrides.value(QStringLiteral("LayoutMode")).toInt(), 2);
-    }
-    if (overrides.contains(QStringLiteral("SizeMode"))) {
-        config.sizeMode = qBound(0, overrides.value(QStringLiteral("SizeMode")).toInt(), 1);
-    }
-    if (overrides.contains(QStringLiteral("MaxRows"))) {
-        config.maxRows = qBound(1, overrides.value(QStringLiteral("MaxRows")).toInt(), 10);
-    }
-    if (overrides.contains(QStringLiteral("PreviewWidth"))) {
-        config.previewWidth = qBound(80, overrides.value(QStringLiteral("PreviewWidth")).toInt(), 400);
-    }
-    if (overrides.contains(QStringLiteral("PreviewHeight"))) {
-        config.previewHeight = qBound(60, overrides.value(QStringLiteral("PreviewHeight")).toInt(), 300);
-    }
-    if (overrides.contains(QStringLiteral("PreviewLockAspect"))) {
-        config.previewLockAspect = overrides.value(QStringLiteral("PreviewLockAspect")).toBool();
-    }
-    if (overrides.contains(QStringLiteral("GridColumns"))) {
-        config.gridColumns = qBound(1, overrides.value(QStringLiteral("GridColumns")).toInt(), 10);
-    }
-    if (overrides.contains(QStringLiteral("TriggerDistance"))) {
-        config.triggerDistance = qBound(10, overrides.value(QStringLiteral("TriggerDistance")).toInt(), 200);
-    }
-
+    applyPerScreenOverrides(config, it.value());
     return config;
 }
 
@@ -1091,31 +1108,10 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const 
         return;
     }
 
-    // Validate and clamp per-screen values using the same bounds as global setters
-    // Reject unknown keys to prevent config pollution
-    QVariant validated;
-    if (key == QLatin1String("Position")) {
-        int pos = qBound(0, value.toInt(), 8);
-        if (pos == 4) { return; } // Center is invalid
-        validated = pos;
-    } else if (key == QLatin1String("LayoutMode")) {
-        validated = qBound(0, value.toInt(), 2);
-    } else if (key == QLatin1String("SizeMode")) {
-        validated = qBound(0, value.toInt(), 1);
-    } else if (key == QLatin1String("MaxRows")) {
-        validated = qBound(1, value.toInt(), 10);
-    } else if (key == QLatin1String("PreviewWidth")) {
-        validated = qBound(80, value.toInt(), 400);
-    } else if (key == QLatin1String("PreviewHeight")) {
-        validated = qBound(60, value.toInt(), 300);
-    } else if (key == QLatin1String("GridColumns")) {
-        validated = qBound(1, value.toInt(), 10);
-    } else if (key == QLatin1String("TriggerDistance")) {
-        validated = qBound(10, value.toInt(), 200);
-    } else if (key == QLatin1String("PreviewLockAspect")) {
-        validated = value.toBool();
-    } else {
-        qCWarning(lcConfig) << "Unknown per-screen zone selector key:" << key;
+    // Validate and clamp using centralized validation (rejects unknown keys)
+    QVariant validated = validatePerScreenValue(key, value);
+    if (!validated.isValid()) {
+        qCWarning(lcConfig) << "Unknown or invalid per-screen zone selector key:" << key;
         return;
     }
 
