@@ -743,7 +743,10 @@ void Settings::load()
             KConfigGroup screenGroup = config->group(groupName);
             QVariantMap overrides;
             if (screenGroup.hasKey(QLatin1String("Position"))) {
-                overrides[QStringLiteral("Position")] = qBound(0, screenGroup.readEntry(QLatin1String("Position"), 0), 8);
+                int pos = qBound(0, screenGroup.readEntry(QLatin1String("Position"), 0), 8);
+                if (pos != 4) { // Center is invalid
+                    overrides[QStringLiteral("Position")] = pos;
+                }
             }
             if (screenGroup.hasKey(QLatin1String("LayoutMode"))) {
                 overrides[QStringLiteral("LayoutMode")] = qBound(0, screenGroup.readEntry(QLatin1String("LayoutMode"), 0), 2);
@@ -920,20 +923,20 @@ void Settings::save()
     zoneSelector.writeEntry(QLatin1String("SizeMode"), static_cast<int>(m_zoneSelectorSizeMode));
     zoneSelector.writeEntry(QLatin1String("MaxRows"), m_zoneSelectorMaxRows);
 
-    // Per-screen zone selector overrides - delete stale groups, write current ones
+    // Per-screen zone selector overrides - delete all old groups, rewrite current ones
     const QStringList allGroups = config->groupList();
     const QLatin1String perScreenPrefix("ZoneSelector:");
     for (const QString& groupName : allGroups) {
         if (groupName.startsWith(perScreenPrefix)) {
-            QString screenName = groupName.mid(perScreenPrefix.size());
-            if (!m_perScreenZoneSelectorSettings.contains(screenName)) {
-                config->deleteGroup(groupName);
-            }
+            config->deleteGroup(groupName);
         }
     }
     for (auto it = m_perScreenZoneSelectorSettings.constBegin(); it != m_perScreenZoneSelectorSettings.constEnd(); ++it) {
-        KConfigGroup screenGroup = config->group(QStringLiteral("ZoneSelector:") + it.key());
         const QVariantMap& overrides = it.value();
+        if (overrides.isEmpty()) {
+            continue;
+        }
+        KConfigGroup screenGroup = config->group(QStringLiteral("ZoneSelector:") + it.key());
         for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
             screenGroup.writeEntry(oit.key(), oit.value());
         }
@@ -1044,7 +1047,10 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
 
     const QVariantMap& overrides = it.value();
     if (overrides.contains(QStringLiteral("Position"))) {
-        config.position = qBound(0, overrides.value(QStringLiteral("Position")).toInt(), 8);
+        int pos = qBound(0, overrides.value(QStringLiteral("Position")).toInt(), 8);
+        if (pos != 4) { // Center is invalid
+            config.position = pos;
+        }
     }
     if (overrides.contains(QStringLiteral("LayoutMode"))) {
         config.layoutMode = qBound(0, overrides.value(QStringLiteral("LayoutMode")).toInt(), 2);
@@ -1086,9 +1092,12 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const 
     }
 
     // Validate and clamp per-screen values using the same bounds as global setters
-    QVariant validated = value;
+    // Reject unknown keys to prevent config pollution
+    QVariant validated;
     if (key == QLatin1String("Position")) {
-        validated = qBound(0, value.toInt(), 8);
+        int pos = qBound(0, value.toInt(), 8);
+        if (pos == 4) { return; } // Center is invalid
+        validated = pos;
     } else if (key == QLatin1String("LayoutMode")) {
         validated = qBound(0, value.toInt(), 2);
     } else if (key == QLatin1String("SizeMode")) {
@@ -1105,9 +1114,17 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const 
         validated = qBound(10, value.toInt(), 200);
     } else if (key == QLatin1String("PreviewLockAspect")) {
         validated = value.toBool();
+    } else {
+        qCWarning(lcConfig) << "Unknown per-screen zone selector key:" << key;
+        return;
     }
 
-    m_perScreenZoneSelectorSettings[screenName][key] = validated;
+    // Only emit if value actually changed
+    QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[screenName];
+    if (screenSettings.value(key) == validated) {
+        return;
+    }
+    screenSettings[key] = validated;
     Q_EMIT perScreenZoneSelectorSettingsChanged();
     Q_EMIT settingsChanged();
 }

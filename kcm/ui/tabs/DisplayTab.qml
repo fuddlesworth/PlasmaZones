@@ -38,6 +38,17 @@ ScrollView {
         return ""
     }
 
+    // Clamp selectedScreenIndex when screens change (e.g., monitor hot-unplug)
+    onSelectedScreenIndexChanged: reloadPerScreenOverrides()
+    Connections {
+        target: kcm
+        function onScreensChanged() {
+            if (root.selectedScreenIndex > kcm.screens.length) {
+                root.selectedScreenIndex = 0
+            }
+        }
+    }
+
     // Per-screen override cache (loaded from C++ when screen selection changes)
     property var perScreenOverrides: ({})
 
@@ -140,6 +151,7 @@ ScrollView {
                         id: monitorCombo
                         Layout.fillWidth: true
                         textRole: "text"
+                        Accessible.name: i18n("Monitor selection")
                         model: {
                             var items = [{ text: i18n("All Monitors (Default)") }]
                             for (var i = 0; i < kcm.screens.length; i++) {
