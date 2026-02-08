@@ -31,6 +31,8 @@ ScrollView {
     // selectedScreenIndex: 0 = "All Monitors (Default)", 1+ = specific screen
     property int selectedScreenIndex: 0
     readonly property bool isPerScreen: selectedScreenIndex > 0
+    // Derived from perScreenOverrides so QML re-evaluates when writeSetting() updates it
+    readonly property bool hasOverrides: isPerScreen && Object.keys(perScreenOverrides).length > 0
     readonly property string selectedScreenName: {
         if (selectedScreenIndex > 0 && selectedScreenIndex <= kcm.screens.length) {
             return kcm.screens[selectedScreenIndex - 1].name || ""
@@ -176,10 +178,10 @@ ScrollView {
 
                         Kirigami.InlineMessage {
                             Layout.fillWidth: true
-                            type: kcm.hasPerScreenZoneSelectorSettings(root.selectedScreenName)
+                            type: root.hasOverrides
                                 ? Kirigami.MessageType.Positive
                                 : Kirigami.MessageType.Information
-                            text: kcm.hasPerScreenZoneSelectorSettings(root.selectedScreenName)
+                            text: root.hasOverrides
                                 ? i18n("Custom settings for this monitor")
                                 : i18n("Using default settings — changes below create an override")
                             visible: true
@@ -188,7 +190,7 @@ ScrollView {
                         Button {
                             text: i18n("Reset to Default")
                             icon.name: "edit-clear"
-                            visible: kcm.hasPerScreenZoneSelectorSettings(root.selectedScreenName)
+                            visible: root.hasOverrides
                             onClicked: {
                                 kcm.clearPerScreenZoneSelectorSettings(root.selectedScreenName)
                                 root.reloadPerScreenOverrides()
