@@ -294,10 +294,17 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     }
 
     // Use the saved pre-float screen (where the window was snapped before floating)
-    // rather than the current window screen, since floating may have moved it cross-monitor
+    // rather than the current window screen, since floating may have moved it cross-monitor.
+    // If the saved screen name no longer exists (monitor replugged under a different
+    // connector name), fall back to the caller's screen so unfloat still works.
     QString restoreScreen = m_service->preFloatScreen(windowId);
+    if (!restoreScreen.isEmpty() && !Utils::findScreenByName(restoreScreen)) {
+        qCDebug(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
+                              << "no longer exists, falling back to" << screenName;
+        restoreScreen.clear();
+    }
     if (restoreScreen.isEmpty()) {
-        restoreScreen = screenName; // Fallback to current screen if not saved
+        restoreScreen = screenName;
     }
 
     // Calculate geometry (combined for multi-zone)
