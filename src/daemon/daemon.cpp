@@ -419,9 +419,13 @@ void Daemon::start()
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
         m_overlayService->handleScreenAdded(screen);
-        if (m_layoutManager->activeLayout()) {
-            // Use actualAvailableGeometry() to position zones within usable area (excluding panels/taskbars)
-            m_layoutManager->activeLayout()->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
+        // Use per-screen layout (falls back to activeLayout if no assignment)
+        Layout* screenLayout = m_layoutManager->layoutForScreen(
+            screen->name(), m_virtualDesktopManager->currentDesktop(),
+            m_activityManager && ActivityManager::isAvailable()
+                ? m_activityManager->currentActivity() : QString());
+        if (screenLayout) {
+            screenLayout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
         }
     });
 
@@ -474,7 +478,7 @@ void Daemon::start()
     // the screen reported by the KWin effect's windowActivated D-Bus call.
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen && m_unifiedLayoutController) {
+        if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
             screen = Utils::findScreenByName(m_unifiedLayoutController->currentScreenName());
         }
         if (screen) {
@@ -554,7 +558,11 @@ void Daemon::start()
     // Push to empty zone shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        m_windowTrackingAdaptor->pushToEmptyZone(screen ? screen->name() : QString());
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for pushToEmptyZone shortcut — skipping";
+            return;
+        }
+        m_windowTrackingAdaptor->pushToEmptyZone(screen->name());
     });
 
     // Restore window size shortcut
@@ -581,13 +589,21 @@ void Daemon::start()
     // Rotate windows in layout shortcuts
     connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool clockwise) {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screen ? screen->name() : QString());
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for rotateWindows shortcut — skipping";
+            return;
+        }
+        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screen->name());
     });
 
     // Snap to zone by number shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen ? screen->name() : QString());
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for snapToZone shortcut — skipping";
+            return;
+        }
+        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen->name());
     });
 
     // Cycle windows within zone shortcut
@@ -646,12 +662,10 @@ void Daemon::start()
                 m_activityManager && ActivityManager::isAvailable()
                     ? m_activityManager->currentActivity() : QString(),
                 layout);
-        } else {
-            // Only change global active layout when no per-screen context is available.
-            // With a screen name, assignLayout() is sufficient — changing the global active
-            // would affect screens that weren't targeted by this selection.
-            m_layoutManager->setActiveLayout(layout);
         }
+        // Always update global active layout — fires activeLayoutChanged which
+        // populates the resnap buffer, cleans stale assignments, updates OSD, etc.
+        m_layoutManager->setActiveLayout(layout);
         qCInfo(lcDaemon) << "Manual layout selected from zone selector:" << layout->name()
                          << "on screen:" << screenName;
         m_overlayService->showLayoutOsd(layout, screenName);

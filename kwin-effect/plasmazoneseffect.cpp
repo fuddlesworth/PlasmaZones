@@ -224,31 +224,40 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         DBus::ServiceName, QDBusConnection::sessionBus(),
         QDBusServiceWatcher::WatchForRegistration, this);
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
-        qCDebug(lcEffect) << "Daemon service registered — re-pushing state";
+        qCDebug(lcEffect) << "Daemon service registered — scheduling state re-push";
 
-        // Reset stale D-Bus interfaces so ensureInterface recreates them
+        // Reset stale D-Bus interfaces so ensureInterface recreates them on next use
         m_dbusInterface.reset();
         m_windowTrackingInterface.reset();
         m_zoneDetectionInterface.reset();
         m_settingsInterface.reset();
 
-        // Re-push cursor screen
-        if (!m_lastCursorScreenName.isEmpty()
-            && ensureWindowTrackingReady("daemon re-register cursor screen")) {
-            m_windowTrackingInterface->asyncCall(
-                QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
-            qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastCursorScreenName;
-        }
+        // Defer re-push by 2s to avoid blocking the compositor.
+        // QDBusInterface constructor performs synchronous introspection. If we call
+        // ensureWindowTrackingReady() immediately, the daemon may still be in its
+        // start() method (event loop not yet running) and unable to respond,
+        // causing KWin to freeze until the D-Bus timeout expires.
+        QTimer::singleShot(2000, this, [this]() {
+            qCDebug(lcEffect) << "Re-pushing state after daemon registration";
 
-        // Re-notify active window (gives daemon lastActiveScreenName)
-        KWin::EffectWindow* activeWindow = getActiveWindow();
-        if (activeWindow) {
-            notifyWindowActivated(activeWindow);
-        }
+            // Re-push cursor screen
+            if (!m_lastCursorScreenName.isEmpty()
+                && ensureWindowTrackingReady("daemon re-register cursor screen")) {
+                m_windowTrackingInterface->asyncCall(
+                    QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
+                qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastCursorScreenName;
+            }
 
-        // Re-sync floating state and settings from daemon
-        syncFloatingWindowsFromDaemon();
-        loadExclusionSettings();
+            // Re-notify active window (gives daemon lastActiveScreenName)
+            KWin::EffectWindow* activeWindow = getActiveWindow();
+            if (activeWindow) {
+                notifyWindowActivated(activeWindow);
+            }
+
+            // Re-sync floating state and settings from daemon
+            syncFloatingWindowsFromDaemon();
+            loadExclusionSettings();
+        });
     });
 
     // Sync floating window state from daemon's persisted state

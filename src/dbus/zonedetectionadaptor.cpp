@@ -115,7 +115,8 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
 {
     QStringList zoneIds;
 
-    auto* layout = m_layoutManager->activeLayout();
+    // Use per-screen layout (falls back to activeLayout if no assignment)
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     if (!layout) {
         return zoneIds;
     }

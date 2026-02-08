@@ -134,12 +134,15 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
     int newIndex = (currentIndex + direction + visible.size()) % visible.size();
     Layout* newLayout = visible.at(newIndex);
 
-    // Per-screen assignment — don't change global active layout
+    // Per-screen assignment + update global active layout.
+    // setActiveLayout MUST be called to update m_previousLayout and fire
+    // activeLayoutChanged (needed for resnap buffer population, stale assignment
+    // cleanup, OSD, etc.). Per-screen assignments are still respected by
+    // resolveLayoutForScreen() since they take priority over the global active.
     if (!screenName.isEmpty()) {
         assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, newLayout);
-    } else {
-        setActiveLayout(newLayout);
     }
+    setActiveLayout(newLayout);
     return newLayout;
 }
 

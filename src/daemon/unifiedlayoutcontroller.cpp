@@ -186,14 +186,16 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
-                // Per-screen assignment only — don't change global active layout
-                // so other screens keep their own assigned layouts
+                // Per-screen assignment + update global active layout.
+                // setActiveLayout MUST also be called to update m_previousLayout
+                // and fire activeLayoutChanged (needed by resnap buffer, stale
+                // assignment cleanup, OSD, etc.). Per-screen assignments are still
+                // respected by resolveLayoutForScreen() since they take priority.
                 m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop,
                                               m_currentActivity, layout);
-            } else {
-                // No screen context — fall back to global
-                m_layoutManager->setActiveLayout(layout);
             }
+            // Always update global active layout (fires activeLayoutChanged)
+            m_layoutManager->setActiveLayout(layout);
             setCurrentLayoutId(entry.id);
             qCInfo(lcDaemon) << "Applied unified layout:" << entry.name
                              << "to screen:" << m_currentScreenName;
