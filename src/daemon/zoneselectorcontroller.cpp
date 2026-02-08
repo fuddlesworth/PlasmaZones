@@ -6,9 +6,10 @@
 #include "../core/constants.h"
 #include "../core/layoututils.h"
 #include "../core/utils.h"
-#include <QScreen>
-#include <QQuickItem>
 #include <QGuiApplication>
+#include <QQuickItem>
+#include <QScreen>
+#include <QUuid>
 #include "../core/logging.h"
 
 namespace PlasmaZones {
@@ -335,9 +336,19 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Layout assignment and activation are handled by the daemon's manualLayoutSelected
-    // handler (connected to OverlayService::onZoneSelected -> manualLayoutSelected signal).
-    // Doing it here as well would double-assign and double-save.
+    // Defensive: set the active layout directly so the switch happens even if the
+    // signal chain (QML zoneSelected → OverlayService::onZoneSelected →
+    // manualLayoutSelected → daemon handler) is broken. setActiveLayout is
+    // idempotent — the daemon handler becomes a no-op for the same layout.
+    if (m_layoutManager) {
+        QUuid uuid = QUuid::fromString(layoutId);
+        if (!uuid.isNull()) {
+            Layout* layout = m_layoutManager->layoutById(uuid);
+            if (layout && layout != m_layoutManager->activeLayout()) {
+                m_layoutManager->setActiveLayout(layout);
+            }
+        }
+    }
 }
 
 void ZoneSelectorController::hoverLayout(const QString& layoutId)

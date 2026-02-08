@@ -1377,7 +1377,11 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     updateZoneSelectorWindowLayout(window, screen, m_settings, layoutCount);
 
     window->setVisible(false);
-    connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this, SLOT(onZoneSelected(QString, int, QVariant)));
+    auto conn = connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this, SLOT(onZoneSelected(QString, int, QVariant)));
+    if (!conn) {
+        qCWarning(lcOverlay) << "Failed to connect zoneSelected signal for screen" << screen->name()
+                             << "- zone selector layout switching will not work";
+    }
     m_zoneSelectorWindows.insert(screen, window);
 }
 
@@ -2294,7 +2298,10 @@ void OverlayService::createLayoutOsdWindow(QScreen* screen)
         layerWindow->setExclusiveZone(-1);
     }
 
-    connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
+    auto layoutOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
+    if (!layoutOsdConn) {
+        qCWarning(lcOverlay) << "Failed to connect dismissed signal for layout OSD on screen" << screen->name();
+    }
     window->setVisible(false);
     m_layoutOsdWindows.insert(screen, window);
 }
@@ -2456,7 +2463,10 @@ void OverlayService::createNavigationOsdWindow(QScreen* screen)
         layerWindow->setExclusiveZone(-1);
     }
 
-    connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
+    auto navOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
+    if (!navOsdConn) {
+        qCWarning(lcOverlay) << "Failed to connect dismissed signal for navigation OSD on screen" << screen->name();
+    }
     window->setVisible(false);
     m_navigationOsdWindows.insert(screen, window);
     m_navigationOsdCreationFailed.remove(screen);
