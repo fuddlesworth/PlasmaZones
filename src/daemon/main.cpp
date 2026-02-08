@@ -34,6 +34,10 @@ int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
 
+    // Daemon must survive monitor power-off (DP disconnect destroys all overlay
+    // windows; without this, Qt sees zero windows and calls quit()).
+    app.setQuitOnLastWindowClosed(false);
+
     // Register ZoneShaderItem for QML
     // This enables RenderNodeOverlay.qml to use the GPU-accelerated shader item
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
