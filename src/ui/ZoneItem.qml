@@ -122,31 +122,6 @@ Item {
 
     }
 
-    // Keyboard shortcut hint
-    Rectangle {
-        width: shortcutLabel.width + Kirigami.Units.gridUnit * 2
-        height: shortcutLabel.height + Kirigami.Units.gridUnit
-        radius: Kirigami.Units.smallSpacing // Use theme spacing
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.7)
-        visible: zoneItem.isHighlighted && zoneItem.zoneNumber <= 9
-
-        anchors {
-            bottom: parent.bottom
-            horizontalCenter: parent.horizontalCenter
-            bottomMargin: Kirigami.Units.gridUnit // Use theme spacing
-        }
-
-        Label {
-            id: shortcutLabel
-
-            anchors.centerIn: parent
-            text: i18n("Meta+Alt+%1", zoneItem.zoneNumber)
-            font.pixelSize: Math.round(Kirigami.Theme.defaultFont.pixelSize * 0.6875) // ~11px for default size - use theme font
-            color: Kirigami.Theme.textColor
-        }
-
-    }
-
     // Mouse interaction
     MouseArea {
         anchors.fill: parent
