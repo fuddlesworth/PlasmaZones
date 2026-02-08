@@ -641,10 +641,10 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     bool nearEdge = isNearTriggerEdge(cursorX, cursorY);
 
     if (nearEdge && !m_zoneSelectorShown) {
-        // Show zone selector when cursor approaches trigger edge
+        // Show zone selector on the cursor's screen only
         m_zoneSelectorShown = true;
         // Call directly - QDBusAbstractAdaptor signals don't work for internal Qt connections
-        m_overlayService->showZoneSelector();
+        m_overlayService->showZoneSelector(screen);
     } else if (!nearEdge && m_zoneSelectorShown) {
         // Hide zone selector when cursor moves away from edge
         m_zoneSelectorShown = false;

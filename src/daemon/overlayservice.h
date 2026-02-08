@@ -77,7 +77,7 @@ public:
 
     // Zone selector management (IOverlayService interface)
     bool isZoneSelectorVisible() const override;
-    void showZoneSelector() override;
+    void showZoneSelector(QScreen* screen = nullptr) override;
     void hideZoneSelector() override;
     void updateSelectorPosition(int cursorX, int cursorY) override;
 

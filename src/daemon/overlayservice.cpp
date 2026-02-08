@@ -1139,7 +1139,7 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
     m_navigationOsdCreationFailed.remove(screen);
 }
 
-void OverlayService::showZoneSelector()
+void OverlayService::showZoneSelector(QScreen* targetScreen)
 {
     if (m_zoneSelectorVisible) {
         return;
@@ -1153,6 +1153,10 @@ void OverlayService::showZoneSelector()
     m_zoneSelectorVisible = true;
 
     for (auto* screen : Utils::allScreens()) {
+        // Only show on the target screen (nullptr = all screens)
+        if (targetScreen && screen != targetScreen) {
+            continue;
+        }
         // Skip monitors where PlasmaZones is disabled
         if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
             continue;
