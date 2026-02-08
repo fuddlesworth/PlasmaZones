@@ -288,10 +288,13 @@ public:
     virtual void removeLayoutById(const QUuid& id) = 0;
     virtual Layout* duplicateLayout(Layout* source) = 0;
 
-    // Active layout
+    // Active layout (internal — used for resnap/geometry/overlay machinery)
     virtual Layout* activeLayout() const = 0;
     virtual void setActiveLayout(Layout* layout) = 0;
     virtual void setActiveLayoutById(const QUuid& id) = 0;
+
+    // Default layout (settings-based fallback for the layout cascade)
+    virtual Layout* defaultLayout() const = 0;
 
     // Current context for per-screen layout lookups
     virtual int currentVirtualDesktop() const = 0;
@@ -301,13 +304,13 @@ public:
      * @brief Convenience: resolve layout for screen using current desktop/activity context
      *
      * Equivalent to layoutForScreen(screenName, currentVirtualDesktop(), currentActivity())
-     * with a fallback to activeLayout() when no per-screen assignment matches.
+     * with a fallback to defaultLayout() when no per-screen assignment matches.
      * Use this everywhere a "give me the layout for this screen right now" is needed.
      */
     Layout* resolveLayoutForScreen(const QString& screenName) const
     {
         Layout* layout = layoutForScreen(screenName, currentVirtualDesktop(), currentActivity());
-        return layout ? layout : activeLayout();
+        return layout ? layout : defaultLayout();
     }
 
     // Layout assignments
@@ -337,7 +340,7 @@ public:
     virtual QVector<Layout*> builtInLayouts() const = 0;
 
     // Persistence
-    virtual void loadLayouts(const QString& defaultLayoutId = QString()) = 0;
+    virtual void loadLayouts() = 0;
     virtual void saveLayouts() = 0;
     virtual void loadAssignments() = 0;
     virtual void saveAssignments() = 0;

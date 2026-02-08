@@ -73,6 +73,16 @@ bool LayoutManager::shouldSkipLayoutAssignment(const QUuid& layoutId, const QStr
     return false;
 }
 
+Layout* LayoutManager::defaultLayout() const
+{
+    if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
+        if (Layout* layout = layoutById(QUuid(m_settings->defaultLayoutId()))) {
+            return layout;
+        }
+    }
+    return m_layouts.isEmpty() ? nullptr : m_layouts.first();
+}
+
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
 // Filters out hidden layouts and respects visibility allow-lists
@@ -116,7 +126,7 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
         currentLayout = layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
     }
     if (!currentLayout) {
-        currentLayout = m_activeLayout;
+        currentLayout = defaultLayout();
     }
     if (!currentLayout) {
         currentLayout = visible.first();
@@ -208,8 +218,7 @@ void LayoutManager::removeLayout(Layout* layout)
 
     // Update active layout if needed
     if (wasActive) {
-        m_activeLayout = m_layouts.isEmpty() ? nullptr : m_layouts.first();
-        Q_EMIT activeLayoutChanged(m_activeLayout);
+        setActiveLayout(defaultLayout());
     }
 
     // Delete layout file (using stored path)
@@ -603,7 +612,7 @@ QVector<Layout*> LayoutManager::builtInLayouts() const
     return result;
 }
 
-void LayoutManager::loadLayouts(const QString& defaultLayoutId)
+void LayoutManager::loadLayouts()
 {
     ensureLayoutDirectory();
 
@@ -629,18 +638,14 @@ void LayoutManager::loadLayouts(const QString& defaultLayoutId)
         return (a ? a->defaultOrder() : 999) < (b ? b->defaultOrder() : 999);
     });
 
-    // Set initial active layout if none set: use defaultLayoutId when non-empty and found, else first
+    // Set initial active layout if none set: use defaultLayout() (settings-based fallback)
     if (!m_activeLayout && !m_layouts.isEmpty()) {
-        Layout* initial = nullptr;
-        if (!defaultLayoutId.isEmpty()) {
-            initial = layoutById(QUuid(defaultLayoutId));
+        Layout* initial = defaultLayout();
+        if (initial) {
+            qCInfo(lcLayout) << "Active layout name= " << initial->name()
+                             << " id= " << initial->id().toString()
+                             << " zones= " << initial->zoneCount();
         }
-        if (!initial) {
-            initial = m_layouts.first();
-        }
-        qCInfo(lcLayout) << "Active layout name= " << initial->name()
-                         << " id= " << initial->id().toString()
-                         << " zones= " << initial->zoneCount();
         setActiveLayout(initial);
     }
 

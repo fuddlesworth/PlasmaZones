@@ -925,7 +925,7 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
         screenLayout =
             m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (!screenLayout) {
-            screenLayout = m_layoutManager->activeLayout();
+            screenLayout = m_layoutManager->defaultLayout();
         }
     }
     if (!screenLayout) {

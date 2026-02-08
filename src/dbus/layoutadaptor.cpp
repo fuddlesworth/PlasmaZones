@@ -199,7 +199,10 @@ QJsonObject LayoutAdaptor::buildActivityInfoJson(const QString& activityId) cons
 
 QString LayoutAdaptor::getActiveLayout()
 {
-    auto* layout = m_layoutManager->activeLayout();
+    // Return the default layout (settings-based fallback) rather than
+    // the transient internal active layout, so KCM and other D-Bus
+    // consumers see the user's configured default.
+    auto* layout = m_layoutManager->defaultLayout();
     if (!layout) {
         return QString();
     }
@@ -786,16 +789,26 @@ QString LayoutAdaptor::getAllScreenAssignments()
 {
     QJsonObject root;
     const int desktopCount = getVirtualDesktopCount();
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString currentActivity = m_activityManager ? m_activityManager->currentActivity() : QString();
 
     for (QScreen* screen : Utils::allScreens()) {
         QString screenName = screen->name();
         QJsonObject screenObj;
 
-        for (int desktop = 0; desktop <= desktopCount; ++desktop) {
+        // "default" key: resolve with current desktop+activity so the KCM
+        // sees the *effective* layout (including per-desktop assignments
+        // from cycleLayout / applyQuickLayout).
+        auto* effectiveLayout = m_layoutManager->layoutForScreen(screenName, currentDesktop, currentActivity);
+        if (effectiveLayout) {
+            screenObj[QStringLiteral("default")] = effectiveLayout->id().toString();
+        }
+
+        // Per-desktop entries (desktop > 0)
+        for (int desktop = 1; desktop <= desktopCount; ++desktop) {
             auto* layout = m_layoutManager->layoutForScreen(screenName, desktop, QString());
             if (layout) {
-                QString key = (desktop == 0) ? QStringLiteral("default") : QString::number(desktop);
-                screenObj[key] = layout->id().toString();
+                screenObj[QString::number(desktop)] = layout->id().toString();
             }
         }
 

@@ -514,7 +514,6 @@ private Q_SLOTS:
     void checkDaemonStatus();
     void refreshVirtualDesktops();
     void refreshActivities();
-    void onActiveLayoutIdChanged(const QString& layoutId);
     void onScreenLayoutChanged(const QString& screenName, const QString& layoutId);
     void onQuickLayoutSlotsChanged();
     void onSettingsChanged();

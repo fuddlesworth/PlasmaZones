@@ -96,13 +96,6 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("daemonReady"), this,
                                           SLOT(loadLayouts()));
 
-    // Listen for active layout ID changes (e.g., when layout changes via hotkey)
-    // This updates the selection in the settings panel to match the current layout
-    bool activeLayoutConnected = QDBusConnection::sessionBus().connect(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("activeLayoutIdChanged"), this, SLOT(onActiveLayoutIdChanged(QString)));
-    Q_UNUSED(activeLayoutConnected);
-
     // Listen for screen changes from the daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::Screen), QStringLiteral("screenAdded"), this,
@@ -1851,36 +1844,18 @@ void KCMPlasmaZones::loadLayouts()
     m_layouts = newLayouts;
     Q_EMIT layoutsChanged();
 
-    // Fetch the active layout from the daemon
+    // Select the default layout (settings-based fallback) rather than
+    // the transient internal active layout, so the KCM highlights the
+    // layout the user actually configured as their default.
     if (!newLayouts.isEmpty()) {
-        QDBusMessage activeReply =
-            callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getActiveLayout"));
-        if (activeReply.type() == QDBusMessage::ReplyMessage && !activeReply.arguments().isEmpty()) {
-            QString activeLayoutJson = activeReply.arguments().first().toString();
-            if (!activeLayoutJson.isEmpty()) {
-                QJsonDocument doc = QJsonDocument::fromJson(activeLayoutJson.toUtf8());
-                if (doc.isObject()) {
-                    QString activeId = doc.object().value(QStringLiteral("id")).toString();
-                    if (!activeId.isEmpty()) {
-                        m_layoutToSelect = activeId;
-                    }
-                }
-            }
+        QString defaultId = defaultLayoutId();
+        if (!defaultId.isEmpty()) {
+            m_layoutToSelect = defaultId;
         }
     }
 
     // Emit layoutToSelectChanged after layoutsChanged so the model is updated first
     if (!m_layoutToSelect.isEmpty()) {
-        Q_EMIT layoutToSelectChanged();
-    }
-}
-
-void KCMPlasmaZones::onActiveLayoutIdChanged(const QString& layoutId)
-{
-    // When active layout changes externally (e.g., via quick layout hotkey),
-    // update the selection in the settings panel UI
-    if (!layoutId.isEmpty()) {
-        m_layoutToSelect = layoutId;
         Q_EMIT layoutToSelectChanged();
     }
 }

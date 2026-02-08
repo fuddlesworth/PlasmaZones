@@ -213,9 +213,9 @@ void ZoneSelectorController::setScreen(QScreen* screen)
         Layout* screenLayout = m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
-        } else if (m_layoutManager->activeLayout()) {
-            // Fall back to global active layout
-            setActiveLayoutId(m_layoutManager->activeLayout()->id().toString());
+        } else if (auto* def = m_layoutManager->defaultLayout()) {
+            // Fall back to default layout
+            setActiveLayoutId(def->id().toString());
         }
     }
 }

@@ -85,6 +85,7 @@ public:
     {
         return m_activeLayout;
     }
+    Layout* defaultLayout() const override;
     /**
      * @brief Get the layout that was active before the most recent switch
      * @return Previous layout. On first setActiveLayout, equals activeLayout.
@@ -159,7 +160,7 @@ public:
     Q_INVOKABLE void createBuiltInLayouts() override;
     QVector<Layout*> builtInLayouts() const override;
 
-    Q_INVOKABLE void loadLayouts(const QString& defaultLayoutId = QString()) override;
+    Q_INVOKABLE void loadLayouts() override;
     void setSettings(ISettings* settings);
     Q_INVOKABLE void saveLayouts() override;
     Q_INVOKABLE void loadAssignments() override;

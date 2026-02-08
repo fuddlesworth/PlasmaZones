@@ -191,20 +191,20 @@ bool Daemon::init()
     }
 
     m_layoutManager->setSettings(m_settings.get());
-    // Load layouts (pass defaultLayoutId so initial active uses Settings default when set)
-    m_layoutManager->loadLayouts(m_settings->defaultLayoutId());
+    // Load layouts (defaultLayout() reads settings internally)
+    m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();
 
-    // Configure overlay service with settings, layout manager, and active layout
+    // Configure overlay service with settings, layout manager, and default layout
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
-    if (m_layoutManager->activeLayout()) {
-        m_overlayService->setLayout(m_layoutManager->activeLayout());
-        m_zoneDetector->setLayout(m_layoutManager->activeLayout());
-        qCInfo(lcDaemon) << "Overlay configured layout= " << m_layoutManager->activeLayout()->name()
-                         << " zones= " << m_layoutManager->activeLayout()->zoneCount();
+    if (auto* defLayout = m_layoutManager->defaultLayout()) {
+        m_overlayService->setLayout(defLayout);
+        m_zoneDetector->setLayout(defLayout);
+        qCInfo(lcDaemon) << "Overlay configured layout= " << defLayout->name()
+                         << " zones= " << defLayout->zoneCount();
     } else {
-        qCWarning(lcDaemon) << "No active layout available for overlay";
+        qCWarning(lcDaemon) << "No default layout available for overlay";
     }
 
     // Connect layout changes to zone detector and overlay service
@@ -263,6 +263,8 @@ bool Daemon::init()
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.
     m_layoutAdaptor = new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
+    // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
+    connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
 
     // Overlay adaptor - overlay visibility and highlighting

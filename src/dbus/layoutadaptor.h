@@ -154,10 +154,11 @@ Q_SIGNALS:
     void virtualDesktopCountChanged(int count);
 
     /**
-     * @brief Emitted when the active layout changes (for KCM UI sync)
-     * @param layoutId The ID of the newly active layout
-     * @note This allows the settings panel to update its selection when
-     *       the layout is changed externally (e.g., via quick layout hotkey)
+     * @brief Emitted when the internal active layout changes
+     * @param layoutId The ID of the newly active layout (transient, internal)
+     * @note Used by resnap, geometry recalc, and overlay machinery.
+     *       getActiveLayout() returns the settings-based default layout,
+     *       which may differ from the ID in this signal.
      */
     void activeLayoutIdChanged(const QString& layoutId);
 
@@ -185,8 +186,10 @@ private Q_SLOTS:
     void onLayoutsChanged();
     void onLayoutAssigned(const QString& screen, Layout* layout);
 
-private:
+public:
     void invalidateCache();
+
+private:
     void connectLayoutManagerSignals();
     void connectVirtualDesktopSignals();
     void connectActivitySignals();
