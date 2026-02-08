@@ -108,7 +108,7 @@ Kirigami.Card {
 
                 onAccepted: {
                     if (text.length > 0 && zoneSpinBox.value > 0) {
-                        root.addRule(text, zoneSpinBox.value)
+                        root.addRule(text, zoneSpinBox.value, screenCombo.currentValue)
                         text = ""
                     }
                 }
@@ -127,6 +127,14 @@ Kirigami.Card {
                 Accessible.name: i18n("Zone number")
             }
 
+            ScreenComboBox {
+                id: screenCombo
+                kcm: root.kcm
+                noneText: i18n("Any Screen")
+                implicitWidth: Kirigami.Units.gridUnit * 12
+                Accessible.name: i18n("Target screen")
+            }
+
             Button {
                 text: i18n("Add")
                 icon.name: "list-add"
@@ -135,7 +143,7 @@ Kirigami.Card {
                 ToolTip.visible: hovered
                 Accessible.name: i18n("Add app-to-zone rule")
                 onClicked: {
-                    root.addRule(patternField.text, zoneSpinBox.value)
+                    root.addRule(patternField.text, zoneSpinBox.value, screenCombo.currentValue)
                     patternField.text = ""
                 }
             }
@@ -180,16 +188,20 @@ Kirigami.Card {
 
                     Label {
                         text: modelData.pattern
-                        Layout.fillWidth: true
                         Layout.alignment: Qt.AlignVCenter
                         elide: Text.ElideRight
+                        Layout.maximumWidth: Math.min(implicitWidth, parent.width * 0.45)
                     }
 
                     Label {
-                        text: i18n("→ Zone %1", modelData.zoneNumber)
+                        text: modelData.targetScreen
+                            ? i18n("→ Zone %1 on %2", modelData.zoneNumber, modelData.targetScreen)
+                            : i18n("→ Zone %1", modelData.zoneNumber)
                         opacity: 0.7
                         Layout.alignment: Qt.AlignVCenter
                     }
+
+                    Item { Layout.fillWidth: true }
 
                     ToolButton {
                         icon.name: "edit-delete"
@@ -261,7 +273,7 @@ Kirigami.Card {
         }
     }
 
-    function addRule(pattern, zoneNumber) {
+    function addRule(pattern, zoneNumber, targetScreen) {
         let trimmed = pattern.trim()
         if (trimmed.length === 0) {
             return
@@ -270,16 +282,20 @@ Kirigami.Card {
         if (layoutId === "" || !kcm) {
             return
         }
-        // Check for duplicate pattern (case-insensitive)
+        let screen = targetScreen || ""
+        // Check for duplicate: same pattern AND same targetScreen
         let lowerPattern = trimmed.toLowerCase()
         for (let i = 0; i < currentRules.length; ++i) {
-            if (currentRules[i].pattern.toLowerCase() === lowerPattern) {
+            let rule = currentRules[i]
+            if (rule.pattern.toLowerCase() === lowerPattern
+                    && (rule.targetScreen || "") === screen) {
                 duplicateWarning.visible = true
                 duplicateTimer.restart()
                 return
             }
         }
-        kcm.addAppRuleToLayout(layoutId, trimmed, zoneNumber)
+        kcm.addAppRuleToLayout(layoutId, trimmed, zoneNumber, screen)
+        screenCombo.reset()
         refreshRules()
     }
 

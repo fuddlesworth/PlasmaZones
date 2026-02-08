@@ -361,7 +361,8 @@ public Q_SLOTS:
     // App-to-zone rules management
     Q_INVOKABLE QVariantList getAppRulesForLayout(const QString& layoutId) const;
     Q_INVOKABLE void setAppRulesForLayout(const QString& layoutId, const QVariantList& rules);
-    Q_INVOKABLE void addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber);
+    Q_INVOKABLE void addAppRuleToLayout(const QString& layoutId, const QString& pattern,
+                                         int zoneNumber, const QString& targetScreen = QString());
     Q_INVOKABLE void removeAppRuleFromLayout(const QString& layoutId, int index);
 
     // Exclusion management

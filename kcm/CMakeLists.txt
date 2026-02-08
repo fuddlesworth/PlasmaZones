@@ -40,6 +40,7 @@ install(FILES
     ui/ColorButton.qml
     ui/LayoutComboBox.qml
     ui/AssignmentRow.qml
+    ui/ScreenComboBox.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones
 )
 

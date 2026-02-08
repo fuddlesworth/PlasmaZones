@@ -207,6 +207,9 @@ QVariantList Layout::appRulesVariant() const
         QVariantMap map;
         map[QStringLiteral("pattern")] = rule.pattern;
         map[QStringLiteral("zoneNumber")] = rule.zoneNumber;
+        if (!rule.targetScreen.isEmpty()) {
+            map[QStringLiteral("targetScreen")] = rule.targetScreen;
+        }
         result.append(map);
     }
     return result;
@@ -220,6 +223,7 @@ void Layout::setAppRulesVariant(const QVariantList& rules)
         AppRule rule;
         rule.pattern = map.value(QStringLiteral("pattern")).toString();
         rule.zoneNumber = map.value(QStringLiteral("zoneNumber")).toInt();
+        rule.targetScreen = map.value(QStringLiteral("targetScreen")).toString();
         if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
             newRules.append(rule);
         }
@@ -227,17 +231,17 @@ void Layout::setAppRulesVariant(const QVariantList& rules)
     setAppRules(newRules);
 }
 
-int Layout::matchAppRule(const QString& windowClass) const
+AppRuleMatch Layout::matchAppRule(const QString& windowClass) const
 {
     if (windowClass.isEmpty() || m_appRules.isEmpty()) {
-        return 0;
+        return {};
     }
     for (const auto& rule : m_appRules) {
         if (windowClass.contains(rule.pattern, Qt::CaseInsensitive)) {
-            return rule.zoneNumber;
+            return {rule.zoneNumber, rule.targetScreen};
         }
     }
-    return 0;
+    return {};
 }
 
 QJsonObject AppRule::toJson() const
@@ -245,6 +249,9 @@ QJsonObject AppRule::toJson() const
     QJsonObject obj;
     obj[JsonKeys::Pattern] = pattern;
     obj[JsonKeys::ZoneNumber] = zoneNumber;
+    if (!targetScreen.isEmpty()) {
+        obj[JsonKeys::TargetScreen] = targetScreen;
+    }
     return obj;
 }
 
@@ -253,6 +260,7 @@ AppRule AppRule::fromJson(const QJsonObject& obj)
     AppRule rule;
     rule.pattern = obj[JsonKeys::Pattern].toString();
     rule.zoneNumber = obj[JsonKeys::ZoneNumber].toInt();
+    rule.targetScreen = obj[JsonKeys::TargetScreen].toString();
     return rule;
 }
 

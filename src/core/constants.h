@@ -147,6 +147,7 @@ inline constexpr QLatin1String RefreshRate{"refreshRate"};
 inline constexpr QLatin1String AppRules{"appRules"};
 inline constexpr QLatin1String Pattern{"pattern"};
 // ZoneNumber is reused from zone keys above
+inline constexpr QLatin1String TargetScreen{"targetScreen"};
 
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};

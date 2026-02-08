@@ -1177,6 +1177,7 @@ void KCMPlasmaZones::save()
                 PlasmaZones::AppRule rule;
                 rule.pattern = ruleMap[QStringLiteral("pattern")].toString();
                 rule.zoneNumber = ruleMap[QStringLiteral("zoneNumber")].toInt();
+                rule.targetScreen = ruleMap[QStringLiteral("targetScreen")].toString();
                 rulesArray.append(rule.toJson());
             }
 
@@ -2617,6 +2618,10 @@ QVariantList KCMPlasmaZones::getAppRulesForLayout(const QString& layoutId) const
         QVariantMap rule;
         rule[QStringLiteral("pattern")] = ruleObj[QLatin1String("pattern")].toString();
         rule[QStringLiteral("zoneNumber")] = ruleObj[QLatin1String("zoneNumber")].toInt();
+        QString ts = ruleObj[QLatin1String("targetScreen")].toString();
+        if (!ts.isEmpty()) {
+            rule[QStringLiteral("targetScreen")] = ts;
+        }
         result.append(rule);
     }
     return result;
@@ -2628,7 +2633,8 @@ void KCMPlasmaZones::setAppRulesForLayout(const QString& layoutId, const QVarian
     setNeedsSave(true);
 }
 
-void KCMPlasmaZones::addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber)
+void KCMPlasmaZones::addAppRuleToLayout(const QString& layoutId, const QString& pattern,
+                                         int zoneNumber, const QString& targetScreen)
 {
     QString trimmed = pattern.trimmed();
     if (trimmed.isEmpty() || zoneNumber < 1) {
@@ -2637,10 +2643,11 @@ void KCMPlasmaZones::addAppRuleToLayout(const QString& layoutId, const QString& 
 
     QVariantList rules = getAppRulesForLayout(layoutId);
 
-    // Check for duplicate pattern (case-insensitive)
+    // Check for duplicate: same pattern AND same targetScreen
     for (const auto& ruleVar : rules) {
         QVariantMap existing = ruleVar.toMap();
-        if (existing[QStringLiteral("pattern")].toString().compare(trimmed, Qt::CaseInsensitive) == 0) {
+        if (existing[QStringLiteral("pattern")].toString().compare(trimmed, Qt::CaseInsensitive) == 0
+            && existing[QStringLiteral("targetScreen")].toString() == targetScreen) {
             return;
         }
     }
@@ -2648,6 +2655,9 @@ void KCMPlasmaZones::addAppRuleToLayout(const QString& layoutId, const QString& 
     QVariantMap newRule;
     newRule[QStringLiteral("pattern")] = trimmed;
     newRule[QStringLiteral("zoneNumber")] = zoneNumber;
+    if (!targetScreen.isEmpty()) {
+        newRule[QStringLiteral("targetScreen")] = targetScreen;
+    }
     rules.append(newRule);
     setAppRulesForLayout(layoutId, rules);
 }

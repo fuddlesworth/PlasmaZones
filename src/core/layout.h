@@ -25,14 +25,28 @@ namespace PlasmaZones {
 struct PLASMAZONES_EXPORT AppRule {
     QString pattern;       // Window class or app name pattern (case-insensitive substring match)
     int zoneNumber = 0;    // 1-based zone number to snap to
+    QString targetScreen;  // Optional: snap to zone on this screen instead of current
 
-    bool operator==(const AppRule& other) const { return pattern == other.pattern && zoneNumber == other.zoneNumber; }
+    bool operator==(const AppRule& other) const {
+        return pattern == other.pattern
+            && zoneNumber == other.zoneNumber
+            && targetScreen == other.targetScreen;
+    }
     bool operator!=(const AppRule& other) const { return !(*this == other); }
 
     // Serialization helpers (centralized to avoid DRY violations)
     QJsonObject toJson() const;
     static AppRule fromJson(const QJsonObject& obj);
     static QVector<AppRule> fromJsonArray(const QJsonArray& array);
+};
+
+/**
+ * @brief Result of matching a window class against app rules
+ */
+struct PLASMAZONES_EXPORT AppRuleMatch {
+    int zoneNumber = 0;
+    QString targetScreen;
+    bool matched() const { return zoneNumber > 0; }
 };
 
 /**
@@ -201,7 +215,7 @@ public:
     void setAppRules(const QVector<AppRule>& rules);
     QVariantList appRulesVariant() const;
     void setAppRulesVariant(const QVariantList& rules);
-    int matchAppRule(const QString& windowClass) const;
+    AppRuleMatch matchAppRule(const QString& windowClass) const;
 
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const

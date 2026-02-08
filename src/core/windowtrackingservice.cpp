@@ -346,45 +346,101 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         }
     }
 
-    // Get the layout for this screen (respects per-screen/desktop/activity assignments)
-    Layout* layout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(windowScreenName) : nullptr;
-    if (!layout) {
+    if (!m_layoutManager) {
         return SnapResult::noSnap();
     }
 
-    // Extract window class and check against app rules
     QString windowClass = Utils::extractWindowClass(windowId);
-    int zoneNumber = layout->matchAppRule(windowClass);
-    if (zoneNumber <= 0) {
+    if (windowClass.isEmpty()) {
         return SnapResult::noSnap();
     }
 
-    // Find the zone by number
-    Zone* zone = layout->zoneByNumber(zoneNumber);
-    if (!zone) {
-        qCDebug(lcCore) << "App rule matched zone" << zoneNumber << "for" << windowClass
-                        << "but zone not found in layout";
-        return SnapResult::noSnap();
+    // Helper: given a match and a resolved screen name, build the SnapResult
+    auto buildResult = [&](const AppRuleMatch& match, const QString& resolvedScreen) -> SnapResult {
+        // Determine which screen to resolve the zone on
+        QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
+
+        // Validate that the target screen exists
+        QScreen* screen = Utils::findScreenByName(effectiveScreen);
+        if (!screen) {
+            if (!match.targetScreen.isEmpty()) {
+                qCDebug(lcCore) << "App rule targetScreen" << match.targetScreen
+                                << "not found (disconnected?) - skipping rule";
+            }
+            return SnapResult::noSnap();
+        }
+
+        // Get the layout for the effective screen to find the zone
+        Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(effectiveScreen);
+        if (!targetLayout) {
+            return SnapResult::noSnap();
+        }
+
+        Zone* zone = targetLayout->zoneByNumber(match.zoneNumber);
+        if (!zone) {
+            return SnapResult::noSnap();
+        }
+
+        QString zoneId = zone->id().toString();
+        QRect geo = zoneGeometry(zoneId, effectiveScreen);
+        if (!geo.isValid()) {
+            return SnapResult::noSnap();
+        }
+
+        qCInfo(lcCore) << "App rule matched:" << windowClass << "-> zone" << match.zoneNumber
+                       << "on screen" << effectiveScreen << "(" << zoneId << ")";
+
+        SnapResult result;
+        result.shouldSnap = true;
+        result.geometry = geo;
+        result.zoneId = zoneId;
+        result.zoneIds = QStringList{zoneId};
+        result.screenName = effectiveScreen;
+        return result;
+    };
+
+    // Phase 1: Check the current screen's layout first (preserves existing behavior)
+    Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
+    if (currentLayout) {
+        AppRuleMatch match = currentLayout->matchAppRule(windowClass);
+        if (match.matched()) {
+            SnapResult result = buildResult(match, windowScreenName);
+            if (result.isValid()) {
+                return result;
+            }
+        }
     }
 
-    // Calculate geometry
-    QString zoneId = zone->id().toString();
-    QString screenName = windowScreenName.isEmpty() ? QString() : windowScreenName;
-    QRect geo = zoneGeometry(zoneId, screenName);
-    if (!geo.isValid()) {
-        return SnapResult::noSnap();
+    // Phase 2: Scan other screens' layouts for cross-screen rules
+    // Only accept matches that have targetScreen set (rules without targetScreen
+    // are local to their layout's screen and shouldn't fire from other screens)
+    QSet<QUuid> checkedLayouts;
+    if (currentLayout) {
+        checkedLayouts.insert(currentLayout->id());
     }
 
-    qCInfo(lcCore) << "App rule matched:" << windowClass << "-> zone" << zoneNumber
-                   << "(" << zoneId << ")";
+    for (QScreen* screen : Utils::allScreens()) {
+        QString screenName = screen->name();
+        if (screenName == windowScreenName) {
+            continue;
+        }
 
-    SnapResult result;
-    result.shouldSnap = true;
-    result.geometry = geo;
-    result.zoneId = zoneId;
-    result.zoneIds = QStringList{zoneId};
-    result.screenName = screenName;
-    return result;
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+        if (!layout || checkedLayouts.contains(layout->id())) {
+            continue;
+        }
+        checkedLayouts.insert(layout->id());
+
+        AppRuleMatch match = layout->matchAppRule(windowClass);
+        if (match.matched() && !match.targetScreen.isEmpty()) {
+            SnapResult result = buildResult(match, screenName);
+            if (result.isValid()) {
+                return result;
+            }
+        }
+    }
+
+    return SnapResult::noSnap();
 }
 
 SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowId,

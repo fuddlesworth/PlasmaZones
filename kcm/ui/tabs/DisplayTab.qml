@@ -28,28 +28,12 @@ ScrollView {
     readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16/9)
 
     // Per-screen monitor selector state
-    // selectedScreenIndex: 0 = "All Monitors (Default)", 1+ = specific screen
-    property int selectedScreenIndex: 0
-    readonly property bool isPerScreen: selectedScreenIndex > 0
+    property string selectedScreenName: ""
+    readonly property bool isPerScreen: selectedScreenName !== ""
     // Derived from perScreenOverrides so QML re-evaluates when writeSetting() updates it
     readonly property bool hasOverrides: isPerScreen && Object.keys(perScreenOverrides).length > 0
-    readonly property string selectedScreenName: {
-        if (selectedScreenIndex > 0 && selectedScreenIndex <= kcm.screens.length) {
-            return kcm.screens[selectedScreenIndex - 1].name || ""
-        }
-        return ""
-    }
 
-    // Clamp selectedScreenIndex when screens change (e.g., monitor hot-unplug)
-    onSelectedScreenIndexChanged: reloadPerScreenOverrides()
-    Connections {
-        target: kcm
-        function onScreensChanged() {
-            if (root.selectedScreenIndex > kcm.screens.length) {
-                root.selectedScreenIndex = 0
-            }
-        }
-    }
+    onSelectedScreenNameChanged: reloadPerScreenOverrides()
 
     // Per-screen override cache (loaded from C++ when screen selection changes)
     property var perScreenOverrides: ({})
@@ -149,25 +133,14 @@ ScrollView {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    ComboBox {
+                    ScreenComboBox {
                         id: monitorCombo
                         Layout.fillWidth: true
-                        textRole: "text"
+                        kcm: root.kcm
+                        noneText: i18n("All Monitors (Default)")
                         Accessible.name: i18n("Monitor selection")
-                        model: {
-                            var items = [{ text: i18n("All Monitors (Default)") }]
-                            for (var i = 0; i < kcm.screens.length; i++) {
-                                var s = kcm.screens[i]
-                                var label = s.name || ("Monitor " + (i + 1))
-                                if (s.resolution) label += " (" + s.resolution + ")"
-                                items.push({ text: label })
-                            }
-                            return items
-                        }
-                        currentIndex: root.selectedScreenIndex
-                        onActivated: function(index) {
-                            root.selectedScreenIndex = index
-                            root.reloadPerScreenOverrides()
+                        onActivated: {
+                            root.selectedScreenName = currentScreenName
                         }
                     }
 
