@@ -54,6 +54,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QPointer>
+#include <QTimer>
 #include <QUuid>
 #include <QtMath>
 #include <QRegularExpression>
@@ -506,6 +508,11 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         const auto screens = QGuiApplication::screens();
         for (auto* screen : screens) {
             if (screen->name() == m_targetScreen) {
+                // Already on the correct screen — nothing to do
+                if (window->screen() == screen && window->isVisible()) {
+                    return;
+                }
+
                 qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
                                   << "geometry:" << screen->geometry();
 
@@ -514,8 +521,22 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
                 // already-mapped surface to a different output. To switch screens we
                 // must destroy the native window (wl_surface) and let Qt recreate it
                 // so the new surface gets mapped to the correct output.
+                // When the window is already visible (mid-session screen switch), defer
+                // the destroy+recreate to avoid tearing down the surface inside the
+                // current render frame or signal handler (QTBUG-88997).
                 if (window->isVisible()) {
-                    window->destroy(); // tears down the wl_surface
+                    QPointer<QQuickWindow> safeWindow(window);
+                    QScreen* targetScreen = screen;
+                    QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
+                        if (!safeWindow || !targetScreen) {
+                            return;
+                        }
+                        safeWindow->destroy();
+                        safeWindow->setScreen(targetScreen);
+                        safeWindow->setGeometry(targetScreen->geometry());
+                        safeWindow->showFullScreen();
+                    });
+                    return;
                 }
 
                 window->setScreen(screen);
