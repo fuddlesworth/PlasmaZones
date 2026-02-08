@@ -30,14 +30,18 @@ ZoneDetectionAdaptor::ZoneDetectionAdaptor(IZoneDetector* detector, ILayoutManag
 
 QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 {
-    auto* layout = DbusHelpers::getActiveLayoutOrWarn(m_layoutManager, QStringLiteral("detect zone"));
-    if (!layout) {
+    // Determine which screen contains (x,y), fall back to primary
+    QScreen* screen = QGuiApplication::screenAt(QPoint(x, y));
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
         return QString();
     }
 
-    // Get primary screen geometry
-    QScreen* screen = DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("detectZoneAtPosition"));
-    if (!screen) {
+    // Use per-screen layout resolution instead of global activeLayout
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
+    if (!layout) {
         return QString();
     }
 
@@ -139,9 +143,18 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
 {
     QStringList zoneIds;
 
-    auto* layout = m_layoutManager->activeLayout();
+    // Determine which screen contains (x,y), fall back to primary
+    QScreen* screen = QGuiApplication::screenAt(QPoint(x, y));
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        return zoneIds;
+    }
+
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
     if (!layout) {
-        qCWarning(lcDbus) << "Cannot detect multi-zone - no active layout";
+        qCWarning(lcDbus) << "Cannot detect multi-zone - no layout for screen" << screen->name();
         return zoneIds;
     }
 
@@ -311,9 +324,9 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     return QString();
 }
 
-QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber)
+QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& screenName)
 {
-    auto* layout = m_layoutManager->activeLayout();
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     if (!layout) {
         return QString();
     }
@@ -326,16 +339,18 @@ QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber)
     return zone->id().toString();
 }
 
-QStringList ZoneDetectionAdaptor::getAllZoneGeometries()
+QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenName)
 {
     QStringList result;
 
-    auto* layout = DbusHelpers::getActiveLayoutOrWarn(m_layoutManager, QStringLiteral("get all zone geometries"));
+    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     if (!layout) {
         return result;
     }
 
-    QScreen* screen = DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"));
+    QScreen* screen = screenName.isEmpty()
+        ? DbusHelpers::getPrimaryScreenOrWarn(QStringLiteral("getAllZoneGeometries"))
+        : DbusHelpers::getScreenOrWarn(screenName, QStringLiteral("getAllZoneGeometries"));
     if (!screen) {
         return result;
     }

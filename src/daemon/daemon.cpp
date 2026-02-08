@@ -99,10 +99,15 @@ QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
     // Fall back to focused window's screen.
     const QString& activeScreen = trackingAdaptor->lastActiveScreenName();
     if (!activeScreen.isEmpty()) {
-        return Utils::findScreenByName(activeScreen);
+        QScreen* screen = Utils::findScreenByName(activeScreen);
+        if (screen) {
+            return screen;
+        }
     }
 
-    return nullptr;
+    // Last resort: primary screen (daemon just started, no KWin effect data yet)
+    qCDebug(lcDaemon) << "resolveShortcutScreen: falling back to primary screen";
+    return Utils::primaryScreen();
 }
 } // anonymous namespace
 

@@ -10,6 +10,7 @@
 #include <QMap>
 #include <QSet>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
 #include <functional>
 
 class QTimer;
@@ -527,6 +528,9 @@ private:
     // Returns the reply message; check reply.type() == QDBusMessage::ErrorMessage for errors
     static constexpr int DBusTimeoutMs = 5000; // 5 second timeout
     QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {}) const;
+
+    // Fire-and-forget async D-Bus call with error logging
+    void watchAsyncDbusCall(QDBusPendingCall call, const QString& operation);
 
     /**
      * @brief Get Editor config group from plasmazonesrc

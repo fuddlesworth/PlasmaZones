@@ -59,11 +59,11 @@ public Q_SLOTS:
      */
     QString getFirstZoneInDirection(const QString& direction, const QString& screenName = QString());
 
-    // Get zone info by zone number (1-indexed)
-    QString getZoneByNumber(int zoneNumber);
+    // Get zone info by zone number (1-indexed), optionally for a specific screen
+    QString getZoneByNumber(int zoneNumber, const QString& screenName = QString());
 
-    // Get all zone geometries for the active layout
-    QStringList getAllZoneGeometries();
+    // Get all zone geometries, optionally for a specific screen
+    QStringList getAllZoneGeometries(const QString& screenName = QString());
 
     /**
      * @brief Get current keyboard modifier state

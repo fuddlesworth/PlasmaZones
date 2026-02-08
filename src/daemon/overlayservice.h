@@ -128,6 +128,13 @@ private:
     QVariantList buildLayoutsList(const QString& screenName = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
 
+    /**
+     * @brief Resolve the layout for a given screen with fallback chain
+     *
+     * Tries: per-screen assignment → activeLayout → m_layout
+     */
+    Layout* resolveScreenLayout(QScreen* screen) const;
+
     std::unique_ptr<QQmlEngine> m_engine;
     QHash<QScreen*, QQuickWindow*> m_overlayWindows;
     QHash<QScreen*, QQuickWindow*> m_zoneSelectorWindows;

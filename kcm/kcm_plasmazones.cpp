@@ -1430,14 +1430,7 @@ void KCMPlasmaZones::deleteLayout(const QString& layoutId)
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"));
     msg << layoutId;
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcConfig) << "deleteLayout D-Bus call failed:" << reply.error().message();
-        }
-    });
+    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("deleteLayout"));
     QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
 }
 
@@ -1481,14 +1474,7 @@ void KCMPlasmaZones::exportLayout(const QString& layoutId, const QString& filePa
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("exportLayout"));
     msg << layoutId << filePath;
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcConfig) << "exportLayout D-Bus call failed:" << reply.error().message();
-        }
-    });
+    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("exportLayout"));
 }
 
 void KCMPlasmaZones::editLayout(const QString& layoutId)
@@ -1499,14 +1485,7 @@ void KCMPlasmaZones::editLayout(const QString& layoutId)
         QString(DBus::ServiceName), QString(DBus::ObjectPath),
         QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForLayoutOnScreen"));
     msg << layoutId << screenName;
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcConfig) << "editLayout D-Bus call failed:" << reply.error().message();
-        }
-    });
+    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("editLayout"));
 }
 
 void KCMPlasmaZones::openEditor()
@@ -1524,14 +1503,7 @@ void KCMPlasmaZones::openEditor()
             QString(DBus::ServiceName), QString(DBus::ObjectPath),
             QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
     }
-    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcConfig) << "openEditor D-Bus call failed:" << reply.error().message();
-        }
-    });
+    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("openEditor"));
 }
 
 void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
@@ -2039,6 +2011,18 @@ QDBusMessage KCMPlasmaZones::callDaemon(const QString& interface, const QString&
     }
 
     return reply;
+}
+
+void KCMPlasmaZones::watchAsyncDbusCall(QDBusPendingCall call, const QString& operation)
+{
+    auto* watcher = new QDBusPendingCallWatcher(std::move(call), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [operation](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcConfig) << operation << "D-Bus call failed:" << reply.error().message();
+        }
+    });
 }
 
 QString KCMPlasmaZones::currentScreenName() const

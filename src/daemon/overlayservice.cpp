@@ -1036,6 +1036,22 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
     }
 }
 
+Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
+{
+    Layout* screenLayout = nullptr;
+    if (m_layoutManager && screen) {
+        screenLayout =
+            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        if (!screenLayout) {
+            screenLayout = m_layoutManager->activeLayout();
+        }
+    }
+    if (!screenLayout) {
+        screenLayout = m_layout;
+    }
+    return screenLayout;
+}
+
 void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
@@ -1417,21 +1433,9 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     // Set active layout ID for this screen
     // Per-screen assignment takes priority so each monitor highlights its own layout
     QString activeLayoutId;
-    if (m_layoutManager) {
-        Layout* screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-        if (screenLayout) {
-            activeLayoutId = screenLayout->id().toString();
-        } else {
-            Layout* activeLayout = m_layoutManager->activeLayout();
-            if (activeLayout) {
-                activeLayoutId = activeLayout->id().toString();
-            } else if (m_layout) {
-                activeLayoutId = m_layout->id().toString();
-            }
-        }
-    } else if (m_layout) {
-        activeLayoutId = m_layout->id().toString();
+    Layout* screenLayout = resolveScreenLayout(screen);
+    if (screenLayout) {
+        activeLayoutId = screenLayout->id().toString();
     }
     writeQmlProperty(window, QStringLiteral("activeLayoutId"), activeLayoutId);
 
@@ -1598,17 +1602,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     // Set shader-specific properties (use QQmlProperty so QML bindings see updates)
     // Use per-screen layout (same resolution as updateOverlayWindow) so each monitor
     // gets the correct shader when per-screen assignments differ
-    Layout* screenLayout = nullptr;
-    if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-        if (!screenLayout) {
-            screenLayout = m_layoutManager->activeLayout();
-        }
-    }
-    if (!screenLayout) {
-        screenLayout = m_layout;
-    }
+    Layout* screenLayout = resolveScreenLayout(screen);
 
     if (usingShader && screenLayout) {
         auto* registry = ShaderRegistry::instance();
@@ -1691,17 +1685,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
 
     // Get the layout for this screen to use layout-specific settings
     // Prefer per-screen assignment, fall back to global active layout
-    Layout* screenLayout = nullptr;
-    if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-        if (!screenLayout) {
-            screenLayout = m_layoutManager->activeLayout();
-        }
-    }
-    if (!screenLayout) {
-        screenLayout = m_layout;
-    }
+    Layout* screenLayout = resolveScreenLayout(screen);
 
     // Update settings-based properties on the window itself (QML root)
     if (m_settings) {
@@ -1816,19 +1800,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
 
     // Get the layout for this specific screen, fall back to global active layout
     // Per-screen assignments take priority so each monitor shows its own layout
-    Layout* screenLayout = nullptr;
-    if (m_layoutManager) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-        if (!screenLayout) {
-            screenLayout = m_layoutManager->activeLayout();
-        }
-    }
-
-    // Fall back to the global layout if nothing else is set
-    if (!screenLayout) {
-        screenLayout = m_layout;
-    }
+    Layout* screenLayout = resolveScreenLayout(screen);
 
     if (!screenLayout) {
         return zonesList;
@@ -2153,17 +2125,7 @@ void OverlayService::updateZonesForAllWindows()
         window->setProperty("highlightedCount", highlightedCount);
 
         if (useShaderOverlay()) {
-            Layout* screenLayout = nullptr;
-            if (m_layoutManager) {
-                screenLayout =
-                    m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-                if (!screenLayout) {
-                    screenLayout = m_layoutManager->activeLayout();
-                }
-            }
-            if (!screenLayout) {
-                screenLayout = m_layout;
-            }
+            Layout* screenLayout = resolveScreenLayout(screen);
             updateLabelsTextureForWindow(window, patched, screen, screenLayout);
         }
     }
@@ -2377,16 +2339,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
-    Layout* screenLayout = nullptr;
-    if (m_layoutManager) {
-        screenLayout = m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
-        if (!screenLayout) {
-            screenLayout = m_layoutManager->activeLayout();
-        }
-    }
-    if (!screenLayout) {
-        screenLayout = m_layout;
-    }
+    Layout* screenLayout = resolveScreenLayout(screen);
     if (!screenLayout || screenLayout->zones().isEmpty()) {
         qCDebug(lcOverlay) << "No layout or zones available for navigation OSD";
         return;
