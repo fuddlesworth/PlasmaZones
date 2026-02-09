@@ -31,7 +31,7 @@ void ModeTracker::recordManualLayout(const QString& layoutId)
     }
 
     save();
-    qCDebug(lcDaemon) << "Recorded manual layout:" << layoutId;
+    qCInfo(lcDaemon) << "Recorded manual layout:" << layoutId;
 }
 
 void ModeTracker::recordManualLayout(const QUuid& layoutId)

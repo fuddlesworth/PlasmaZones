@@ -109,7 +109,7 @@ void UpdateChecker::checkForUpdates()
     Q_EMIT checkingChanged();
     Q_EMIT errorMessageChanged();
 
-    qCDebug(lcUpdateChecker) << "Checking for updates at" << GITHUB_API_URL;
+    qCInfo(lcUpdateChecker) << "Checking for updates at" << GITHUB_API_URL;
 
     QNetworkRequest request{QUrl(GITHUB_API_URL)};
     request.setHeader(QNetworkRequest::UserAgentHeader,

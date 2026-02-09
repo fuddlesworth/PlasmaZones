@@ -97,7 +97,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
     // Check exclusion list - if window is excluded, don't allow snapping
     if (m_settings->isWindowExcluded(appName, windowClass)) {
-        qCDebug(lcDbusWindow) << "Window excluded from snapping - appName:" << appName << "windowClass:" << windowClass;
+        qCInfo(lcDbusWindow) << "Window excluded from snapping - appName:" << appName << "windowClass:" << windowClass;
         m_snapCancelled = true;
         m_draggedWindowId.clear();
         return;
@@ -796,7 +796,7 @@ void WindowDragAdaptor::onLayoutChanged()
     // This handles the case where user changes layout via hotkey/GUI while dragging
     // On next dragMoved(), fresh geometry will be calculated from the new layout
     if (!m_draggedWindowId.isEmpty()) {
-        qCDebug(lcDbusWindow) << "Layout changed mid-drag, clearing cached zone state";
+        qCInfo(lcDbusWindow) << "Layout changed mid-drag, clearing cached zone state";
         m_currentZoneId.clear();
         m_currentZoneGeometry = QRect();
         m_currentMultiZoneGeometry = QRect();

@@ -389,7 +389,7 @@ void VirtualDesktopManager::updateActiveLayout()
     auto* layout = m_layoutManager->layoutForScreen(screen->name(), m_currentDesktop, QString());
 
     if (layout && layout != m_layoutManager->activeLayout()) {
-        qCDebug(lcCore) << "Switching to layout" << layout->name() << "for desktop" << m_currentDesktop << "on screen"
+        qCInfo(lcCore) << "Switching to layout" << layout->name() << "for desktop" << m_currentDesktop << "on screen"
                         << screen->name();
         m_layoutManager->setActiveLayout(layout);
     }

@@ -33,7 +33,7 @@ void ZoneDetector::setLayout(Layout* layout)
         m_layout = layout;
         // Connect to new layout's destroyed signal to prevent dangling pointer
         if (m_layout) {
-            qCDebug(lcZone) << "Layout set with" << m_layout->zones().size() << "zones";
+            qCInfo(lcZone) << "Layout set with" << m_layout->zones().size() << "zones";
             connect(m_layout, &QObject::destroyed, this, [this]() {
                 qCDebug(lcZone) << "Layout destroyed, clearing";
                 m_layout = nullptr;

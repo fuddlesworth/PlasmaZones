@@ -74,7 +74,7 @@ QVariantList queryAvailableShaders()
         }
     }
 
-    qCDebug(lcEditor) << "Loaded" << result.size() << "shaders";
+    qCInfo(lcEditor) << "Loaded" << result.size() << "shaders";
     return result;
 }
 

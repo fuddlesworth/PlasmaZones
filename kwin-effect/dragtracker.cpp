@@ -45,7 +45,7 @@ void DragTracker::pollWindowMoves()
     else if (movingWindow && movingWindow == m_draggedWindow) {
         // Re-check if window has gone fullscreen during drag
         if (movingWindow->isFullScreen()) {
-            qCDebug(lcEffect) << "Window went fullscreen mid-drag, stopping tracking";
+            qCInfo(lcEffect) << "Window went fullscreen mid-drag, stopping tracking";
             m_draggedWindow = nullptr;
             m_draggedWindowId.clear();
             return;

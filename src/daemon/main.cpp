@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
     // Handle activation requests (e.g., user launches plasmazonesd when already running)
     // Log the activation but don't take action - overlay activation is via drag+modifier
     QObject::connect(&service, &KDBusService::activateRequested, &daemon, []() {
-        qCDebug(PlasmaZones::lcDaemon) << "Already running - activation request ignored";
+        qCInfo(PlasmaZones::lcDaemon) << "Already running - activation request ignored";
     });
 
     int result = app.exec();

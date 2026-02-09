@@ -34,7 +34,7 @@ NavigationHandler::NavigationHandler(PlasmaZonesEffect* effect, QObject* parent)
 
 void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, const QString& zoneGeometry)
 {
-    qCDebug(lcEffect) << "Move window to zone requested -" << targetZoneId;
+    qCInfo(lcEffect) << "Move window to zone requested -" << targetZoneId;
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("move"));
     if (!activeWindow) {
@@ -193,7 +193,7 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
 void NavigationHandler::handleFocusWindowInZone(const QString& targetZoneId, const QString& windowId)
 {
     Q_UNUSED(windowId)
-    qCDebug(lcEffect) << "Focus window in zone requested -" << targetZoneId;
+    qCInfo(lcEffect) << "Focus window in zone requested -" << targetZoneId;
 
     if (targetZoneId.isEmpty()) {
         return;
@@ -278,7 +278,7 @@ void NavigationHandler::handleFocusWindowInZone(const QString& targetZoneId, con
 
 void NavigationHandler::handleRestoreWindow()
 {
-    qCDebug(lcEffect) << "Restore window requested";
+    qCInfo(lcEffect) << "Restore window requested";
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("restore"));
     if (!activeWindow) {
@@ -348,7 +348,7 @@ void NavigationHandler::handleRestoreWindow()
 void NavigationHandler::handleToggleWindowFloat(bool shouldFloat)
 {
     Q_UNUSED(shouldFloat)
-    qCDebug(lcEffect) << "Toggle float requested";
+    qCInfo(lcEffect) << "Toggle float requested";
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("float"));
     if (!activeWindow) {
@@ -418,7 +418,7 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
         // Floating ON - restore pre-snap geometry (like drag-unsnap does) and mark as floating
         m_floatingWindows.insert(stableId);
 
-        qCDebug(lcEffect) << "Floating window:" << windowId << "stableId:" << stableId;
+        qCInfo(lcEffect) << "Floating window:" << windowId << "stableId:" << stableId;
 
         if (iface && iface->isValid()) {
             // Use QPointer for safe async handling
@@ -547,7 +547,7 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
                                      static_cast<int>(floatingGeom.width()), static_cast<int>(floatingGeom.height()));
                 }
 
-                qCDebug(lcEffect) << "Applying unfloat geometry:" << geometry << "to zones:" << zoneIds
+                qCInfo(lcEffect) << "Applying unfloat geometry:" << geometry << "to zones:" << zoneIds
                                   << "on screen:" << restoreScreen;
                 m_effect->applySnapGeometry(safeWindow, geometry);
 
@@ -572,7 +572,7 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
 {
     Q_UNUSED(targetWindowId)
     Q_UNUSED(zoneGeometry)
-    qCDebug(lcEffect) << "Swap windows requested -" << targetZoneId;
+    qCInfo(lcEffect) << "Swap windows requested -" << targetZoneId;
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("swap"));
     if (!activeWindow) {
@@ -847,7 +847,7 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
 
 void NavigationHandler::handleRotateWindows(bool clockwise, const QString& rotationData)
 {
-    qCDebug(lcEffect) << "Rotate windows requested, clockwise:" << clockwise;
+    qCInfo(lcEffect) << "Rotate windows requested, clockwise:" << clockwise;
 
     KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
     QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
@@ -876,7 +876,7 @@ void NavigationHandler::handleRotateWindows(bool clockwise, const QString& rotat
 
 void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
 {
-    qCDebug(lcEffect) << "Resnap to new layout requested";
+    qCInfo(lcEffect) << "Resnap to new layout requested";
 
     KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
     QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
@@ -931,7 +931,7 @@ void NavigationHandler::handleSnapAllWindows(const QString& snapData, const QStr
 void NavigationHandler::handleCycleWindowsInZone(const QString& directive, const QString& unused)
 {
     Q_UNUSED(unused)
-    qCDebug(lcEffect) << "Cycle windows in zone requested -" << directive;
+    qCInfo(lcEffect) << "Cycle windows in zone requested -" << directive;
 
     if (!directive.startsWith(CycleDirectivePrefix)) {
         m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("invalid_directive"));

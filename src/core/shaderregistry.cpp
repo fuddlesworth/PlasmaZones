@@ -167,7 +167,7 @@ void ShaderRegistry::onUserShaderDirChanged(const QString& path)
 
 void ShaderRegistry::performDebouncedRefresh()
 {
-    qCDebug(lcCore) << "User shader directory changed, refreshing...";
+    qCInfo(lcCore) << "User shader directory changed, refreshing...";
     refresh();
 }
 

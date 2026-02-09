@@ -789,7 +789,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
     switch (style) {
     case OsdStyle::None:
         // No OSD
-        qCDebug(lcDaemon) << "OSD disabled, skipping for layout:" << layoutName;
+        qCInfo(lcDaemon) << "OSD disabled, skipping for layout:" << layoutName;
         return;
 
     case OsdStyle::Text:
@@ -803,7 +803,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
             msg << QStringLiteral("plasmazones") << displayText;
 
             QDBusConnection::sessionBus().asyncCall(msg);
-            qCDebug(lcDaemon) << "Showing text OSD for layout:" << layoutName;
+            qCInfo(lcDaemon) << "Showing text OSD for layout:" << layoutName;
         }
         break;
 
@@ -811,7 +811,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
         // Use visual layout preview OSD
         if (m_overlayService) {
             m_overlayService->showLayoutOsd(layout, screenName);
-            qCDebug(lcDaemon) << "Showing preview OSD for layout:" << layoutName << "on screen:" << screenName;
+            qCInfo(lcDaemon) << "Showing preview OSD for layout:" << layoutName << "on screen:" << screenName;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
         }

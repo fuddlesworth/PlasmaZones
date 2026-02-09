@@ -319,7 +319,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     // connector name), fall back to the caller's screen so unfloat still works.
     QString restoreScreen = m_service->preFloatScreen(windowId);
     if (!restoreScreen.isEmpty() && !Utils::findScreenByName(restoreScreen)) {
-        qCDebug(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
+        qCInfo(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
                               << "no longer exists, falling back to" << screenName;
         restoreScreen.clear();
     }
@@ -649,7 +649,7 @@ void WindowTrackingAdaptor::snapToEmptyZone(const QString& windowId, const QStri
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
 
-    qCDebug(lcDbusWindow) << "Auto-assign snapping window" << windowId << "to empty zone" << result.zoneId;
+    qCInfo(lcDbusWindow) << "Auto-assign snapping window" << windowId << "to empty zone" << result.zoneId;
 }
 
 void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, const QString& screenName, bool sticky,
@@ -772,7 +772,7 @@ QStringList WindowTrackingAdaptor::getFloatingWindows()
 
 void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
 {
-    qCDebug(lcDbusWindow) << "moveWindowToAdjacentZone called with direction:" << direction;
+    qCInfo(lcDbusWindow) << "moveWindowToAdjacentZone called with direction:" << direction;
 
     if (!validateDirection(direction, QStringLiteral("move"))) {
         return;
@@ -783,7 +783,7 @@ void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
 
 void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
 {
-    qCDebug(lcDbusWindow) << "focusAdjacentZone called with direction:" << direction;
+    qCInfo(lcDbusWindow) << "focusAdjacentZone called with direction:" << direction;
 
     if (!validateDirection(direction, QStringLiteral("focus"))) {
         return;
@@ -794,7 +794,7 @@ void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
 
 void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "pushToEmptyZone called, screen:" << screenName;
+    qCInfo(lcDbusWindow) << "pushToEmptyZone called, screen:" << screenName;
 
     // Delegate to service with screen context
     QString emptyZoneId = m_service->findEmptyZone(screenName);
@@ -818,19 +818,19 @@ void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenName)
 
 void WindowTrackingAdaptor::restoreWindowSize()
 {
-    qCDebug(lcDbusWindow) << "restoreWindowSize called";
+    qCInfo(lcDbusWindow) << "restoreWindowSize called";
     Q_EMIT restoreWindowRequested();
 }
 
 void WindowTrackingAdaptor::toggleWindowFloat()
 {
-    qCDebug(lcDbusWindow) << "toggleWindowFloat called";
+    qCInfo(lcDbusWindow) << "toggleWindowFloat called";
     Q_EMIT toggleWindowFloatRequested(true);
 }
 
 void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 {
-    qCDebug(lcDbusWindow) << "swapWindowWithAdjacentZone called with direction:" << direction;
+    qCInfo(lcDbusWindow) << "swapWindowWithAdjacentZone called with direction:" << direction;
 
     if (!validateDirection(direction, QStringLiteral("swap"))) {
         return;
@@ -841,7 +841,7 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 
 void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber
+    qCInfo(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber
                           << "screen:" << screenName;
 
     if (zoneNumber < 1 || zoneNumber > 9) {
@@ -917,7 +917,7 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
 
 void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
 {
-    qCDebug(lcDbusWindow) << "cycleWindowsInZone called, forward:" << forward;
+    qCInfo(lcDbusWindow) << "cycleWindowsInZone called, forward:" << forward;
     QString directive = forward ? QStringLiteral("cycle:forward") : QStringLiteral("cycle:backward");
     Q_EMIT cycleWindowsInZoneRequested(directive, QString());
 }

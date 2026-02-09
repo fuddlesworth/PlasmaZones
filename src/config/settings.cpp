@@ -659,7 +659,7 @@ void Settings::load()
                 m_dragActivationModifier = DragModifier::Shift;
             } else {
                 m_dragActivationModifier = static_cast<DragModifier>(ConfigDefaults::dragActivationModifier());
-                qCDebug(lcConfig)
+                qCInfo(lcConfig)
                     << "Migrated ShiftDrag=false to DragActivationModifier=Alt (was causing login overlay issue)";
             }
             activation.writeEntry(QLatin1String("DragActivationModifier"), static_cast<int>(m_dragActivationModifier));
@@ -895,7 +895,7 @@ void Settings::load()
         applySystemColorScheme();
     }
 
-    qCDebug(lcConfig) << "Settings loaded successfully";
+    qCInfo(lcConfig) << "Settings loaded successfully";
 
     // Notify listeners so the overlay updates when KCM saves settings.
     Q_EMIT settingsChanged();
@@ -1075,7 +1075,7 @@ void Settings::reset()
     // Reload from (now empty) config - will use ConfigDefaults for all values
     load();
 
-    qCDebug(lcConfig) << "Settings reset to defaults";
+    qCInfo(lcConfig) << "Settings reset to defaults";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

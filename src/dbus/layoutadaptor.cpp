@@ -176,7 +176,7 @@ void LayoutAdaptor::launchEditor(const QStringList& args, const QString& descrip
         return QStringLiteral("plasmazones-editor");
     }();
 
-    qCDebug(lcDbusLayout) << "Launching editor" << description;
+    qCInfo(lcDbusLayout) << "Launching editor" << description;
     if (!QProcess::startDetached(editor, args)) {
         qCWarning(lcDbusLayout) << "Failed to launch editor" << description;
     }
@@ -281,7 +281,7 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     layout->setHiddenFromSelector(hidden);
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
-    qCDebug(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
     Q_EMIT layoutListChanged();
 }
@@ -296,7 +296,7 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     layout->setAutoAssign(enabled);
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
-    qCDebug(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
+    qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
     Q_EMIT layoutListChanged();
 }

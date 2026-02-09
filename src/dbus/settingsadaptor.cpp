@@ -289,7 +289,7 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
             // Use debounced save instead of immediate save (performance optimization)
             // This batches multiple rapid setting changes into a single disk write
             scheduleSave();
-            qCDebug(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
+            qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
         } else {
             qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
         }

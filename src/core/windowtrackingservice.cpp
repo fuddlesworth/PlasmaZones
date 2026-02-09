@@ -279,7 +279,7 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
         if (!screenName.isEmpty()) {
             m_preFloatScreenAssignments[stableId] = screenName;
         }
-        qCDebug(lcCore) << "Saved pre-float zones for" << stableId << "->" << zoneIds << "screen:" << screenName;
+        qCInfo(lcCore) << "Saved pre-float zones for" << stableId << "->" << zoneIds << "screen:" << screenName;
         unassignWindow(windowId);
     }
     // Note: If window not in assignments, it's already unsnapped - no action needed
@@ -365,7 +365,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         QScreen* screen = Utils::findScreenByName(effectiveScreen);
         if (!screen) {
             if (!match.targetScreen.isEmpty()) {
-                qCDebug(lcCore) << "App rule targetScreen" << match.targetScreen
+                qCInfo(lcCore) << "App rule targetScreen" << match.targetScreen
                                 << "not found (disconnected?) - skipping rule";
             }
             return SnapResult::noSnap();
@@ -618,7 +618,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         // Use QUuid comparison to avoid string format issues (with/without braces)
         QUuid savedUuid = QUuid::fromString(savedLayoutId);
         if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
-            qCDebug(lcCore) << "Window" << stableId << "was saved with layout" << savedLayoutId
+            qCInfo(lcCore) << "Window" << stableId << "was saved with layout" << savedLayoutId
                             << "but current layout for screen" << savedScreen << "desktop" << savedDesktop
                             << "is" << currentLayout->id().toString()
                             << "- skipping session restore";
@@ -671,7 +671,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
                             qCWarning(lcCore) << "Zone-number fallback partial match for" << stableId
                                               << "- requested:" << savedNumbers.size() << "zones, matched:" << fallbackIds.size();
                         }
-                        qCDebug(lcCore) << "Zone-number fallback for" << stableId
+                        qCInfo(lcCore) << "Zone-number fallback for" << stableId
                                         << "numbers:" << savedNumbers << "->" << fallbackIds;
                     }
                 }
@@ -1220,7 +1220,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
                 m_pendingZoneNumbers.remove(stableId);
             }
 
-            qCDebug(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId
+            qCInfo(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId
                             << "screen:" << screenName << "desktop:" << desktop
                             << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"))
                             << "zoneNumbers:" << zoneNumbers;

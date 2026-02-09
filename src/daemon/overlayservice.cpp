@@ -843,7 +843,7 @@ void OverlayService::setSettings(ISettings* settings)
 
                     // Only recreate if the overlay type actually needs to change
                     if (wasUsingShader != shouldUseShader) {
-                        qCDebug(lcOverlay) << "Shader effects setting changed, recreating overlay windows"
+                        qCInfo(lcOverlay) << "Shader effects setting changed, recreating overlay windows"
                                            << "(was:" << wasUsingShader << "now:" << shouldUseShader << ")";
 
                         // Stop shader animation if it was running
@@ -917,7 +917,7 @@ void OverlayService::setSettings(ISettings* settings)
                 m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
                 m_cavaService->setFramerate(m_settings->shaderFrameRate());
                 m_cavaService->start();
-                qCDebug(lcOverlay) << "CAVA started eagerly (audio visualization enabled)";
+                qCInfo(lcOverlay) << "CAVA started eagerly (audio visualization enabled)";
             }
         }
     }
@@ -984,7 +984,7 @@ void OverlayService::setCurrentVirtualDesktop(int desktop)
 {
     if (m_currentVirtualDesktop != desktop) {
         m_currentVirtualDesktop = desktop;
-        qCDebug(lcOverlay) << "Virtual desktop changed to" << desktop;
+        qCInfo(lcOverlay) << "Virtual desktop changed to" << desktop;
 
         // Update zone selector windows with the new active layout for this desktop
         if (!m_zoneSelectorWindows.isEmpty()) {
@@ -1005,7 +1005,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 {
     if (m_currentActivity != activityId) {
         m_currentActivity = activityId;
-        qCDebug(lcOverlay) << "Activity changed activity= " << activityId;
+        qCInfo(lcOverlay) << "Activity changed activity= " << activityId;
 
         // Update zone selector windows with the new active layout for this activity
         if (!m_zoneSelectorWindows.isEmpty()) {
@@ -1519,7 +1519,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay",
                                  initProps);
         if (window) {
-            qCDebug(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screen->name();
+            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screen->name();
         } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
@@ -2135,7 +2135,7 @@ void OverlayService::onPrepareForSleep(bool goingToSleep)
     if (m_visible && m_shaderTimer.isValid()) {
         m_shaderTimer.restart();
         m_lastFrameTime.store(0);
-        qCDebug(lcOverlay) << "Shader timer restarted after system resume";
+        qCInfo(lcOverlay) << "Shader timer restarted after system resume";
     }
 }
 
@@ -2217,7 +2217,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
-    qCDebug(lcOverlay) << "Showing layout OSD for:" << layout->name() << "on screen:" << screenName;
+    qCInfo(lcOverlay) << "Showing layout OSD for:" << layout->name() << "on screen:" << screenName;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -2248,7 +2248,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
 
-    qCDebug(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category << "on screen:" << screenName;
+    qCInfo(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category << "on screen:" << screenName;
 }
 
 void OverlayService::hideLayoutOsd()
@@ -2418,7 +2418,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Show with animation
     QMetaObject::invokeMethod(window, "show");
 
-    qCDebug(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action
+    qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action
                        << "reason=" << reason << "highlightedZones=" << highlightedZoneIds;
 }
 

@@ -130,7 +130,7 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
                                                  static_cast<int>(currentGeom.x()), static_cast<int>(currentGeom.y()),
                                                  static_cast<int>(currentGeom.width()),
                                                  static_cast<int>(currentGeom.height()));
-            qCDebug(lcEffect) << "Stored pre-snap geometry for window" << capturedWindowId;
+            qCInfo(lcEffect) << "Stored pre-snap geometry for window" << capturedWindowId;
         }
     });
 }
@@ -238,7 +238,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // start() method (event loop not yet running) and unable to respond,
         // causing KWin to freeze until the D-Bus timeout expires.
         QTimer::singleShot(2000, this, [this]() {
-            qCDebug(lcEffect) << "Re-pushing state after daemon registration";
+            qCInfo(lcEffect) << "Re-pushing state after daemon registration";
 
             // Re-push cursor screen
             if (!m_lastCursorScreenName.isEmpty()
@@ -425,7 +425,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
                     // This prevents sending drag updates during fullscreen transitions
                     // which could interfere with games entering fullscreen mode
                     if (window->isFullScreen()) {
-                        qCDebug(lcEffect) << "Window went fullscreen during drag, stopping tracking";
+                        qCInfo(lcEffect) << "Window went fullscreen during drag, stopping tracking";
                         m_dragTracker->reset();
                         return;
                     }
@@ -511,7 +511,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
     }
 
     QRect currentGeometry = KWin::effects->virtualScreenGeometry();
-    qCDebug(lcEffect) << "Applying debounced screen geometry change"
+    qCInfo(lcEffect) << "Applying debounced screen geometry change"
                       << "- previous:" << m_lastVirtualScreenGeometry << "- current:" << currentGeometry;
 
     m_pendingScreenChange = false;
@@ -578,7 +578,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
                 // Only apply if the geometry actually changed
                 QRectF currentWindowGeometry = window->frameGeometry();
                 if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
-                    qCDebug(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
+                    qCInfo(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
                                       << newGeometry;
                     applySnapGeometry(window, newGeometry);
                 } else {
@@ -591,7 +591,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
 
 void PlasmaZonesEffect::slotSettingsChanged()
 {
-    qCDebug(lcEffect) << "Daemon signaled settingsChanged - reloading settings";
+    qCInfo(lcEffect) << "Daemon signaled settingsChanged - reloading settings";
     loadExclusionSettings();
 }
 
@@ -1051,7 +1051,7 @@ void PlasmaZonesEffect::slotResnapToNewLayoutRequested(const QString& resnapData
 
 void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenName)
 {
-    qCDebug(lcEffect) << "Snap all windows requested for screen:" << screenName;
+    qCInfo(lcEffect) << "Snap all windows requested for screen:" << screenName;
 
     if (!ensureWindowTrackingReady("snap all windows")) {
         return;
@@ -1194,13 +1194,13 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& stableId, bool 
     // Update local floating cache when daemon notifies us of state changes
     // This keeps the effect's cache in sync with the daemon, preventing
     // inverted toggle behavior when a floating window is drag-snapped.
-    qCDebug(lcEffect) << "Floating state changed for" << stableId << "- isFloating:" << isFloating;
+    qCInfo(lcEffect) << "Floating state changed for" << stableId << "- isFloating:" << isFloating;
     m_navigationHandler->setWindowFloating(stableId, isFloating);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()
 {
-    qCDebug(lcEffect) << "Running windows requested by KCM";
+    qCInfo(lcEffect) << "Running windows requested by KCM";
 
     QJsonArray windowArray;
     QSet<QString> seenClasses;
@@ -1427,7 +1427,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
         QString releaseScreenName = reply.argumentAt<5>();
         bool restoreSizeOnly = reply.argumentAt<6>();
 
-        qCDebug(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
+        qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
                           << "releaseScreen=" << releaseScreenName
                           << "restoreSizeOnly=" << restoreSizeOnly
                           << "geometry=" << QRect(snapX, snapY, snapWidth, snapHeight);
@@ -1482,7 +1482,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
                 if (reply.argumentAt<4>() && window) {
                     QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(),
                              reply.argumentAt<2>(), reply.argumentAt<3>());
-                    qCDebug(lcEffect) << method << "snapping" << windowId << "to:" << geo;
+                    qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap) ensurePreSnapGeometryStored(window, windowId);
                     applySnapGeometry(window, geo);
                     return;
@@ -1583,7 +1583,7 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     }
 
     QString windowId = getWindowId(w);
-    qCDebug(lcEffect) << "Notifying daemon: windowClosed" << windowId;
+    qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowClosed"), windowId);
 }
 

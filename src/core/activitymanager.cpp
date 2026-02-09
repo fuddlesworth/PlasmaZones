@@ -275,7 +275,7 @@ void ActivityManager::updateActiveLayout()
     auto* layout = m_layoutManager->layoutForScreen(screen->name(), currentDesktop, m_currentActivity);
 
     if (layout && layout != m_layoutManager->activeLayout()) {
-        qCDebug(lcCore) << "Switching to layout" << layout->name() << "for activity"
+        qCInfo(lcCore) << "Switching to layout" << layout->name() << "for activity"
                         << activityName(m_currentActivity) << "(" << m_currentActivity << ")"
                         << "desktop" << currentDesktop << "on screen" << screen->name();
         m_layoutManager->setActiveLayout(layout);
