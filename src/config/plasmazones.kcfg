@@ -591,6 +591,16 @@
       <label>Default shader parameters (JSON string)</label>
       <default>{}</default>
     </entry>
+    <entry name="EnableAudioVisualizer" type="Bool">
+      <label>Enable CAVA audio visualization for shaders</label>
+      <default>false</default>
+    </entry>
+    <entry name="AudioSpectrumBarCount" type="Int">
+      <label>Number of audio spectrum bars (16-256)</label>
+      <default>64</default>
+      <min>16</min>
+      <max>256</max>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

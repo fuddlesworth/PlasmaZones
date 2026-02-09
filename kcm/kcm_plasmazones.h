@@ -82,6 +82,11 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
                    enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
+    Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer WRITE setEnableAudioVisualizer NOTIFY
+                   enableAudioVisualizerChanged)
+    Q_PROPERTY(bool cavaAvailable READ cavaAvailable CONSTANT)
+    Q_PROPERTY(int audioSpectrumBarCount READ audioSpectrumBarCount WRITE setAudioSpectrumBarCount NOTIFY
+                   audioSpectrumBarCountChanged)
 
     // Zones
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
@@ -220,6 +225,9 @@ public:
     bool enableBlur() const;
     bool enableShaderEffects() const;
     int shaderFrameRate() const;
+    bool enableAudioVisualizer() const;
+    bool cavaAvailable() const;
+    int audioSpectrumBarCount() const;
     int zonePadding() const;
     int outerGap() const;
     int adjacentThreshold() const;
@@ -307,6 +315,8 @@ public:
     void setEnableBlur(bool enable);
     void setEnableShaderEffects(bool enable);
     void setShaderFrameRate(int fps);
+    void setEnableAudioVisualizer(bool enable);
+    void setAudioSpectrumBarCount(int count);
     void setZonePadding(int padding);
     void setOuterGap(int gap);
     void setAdjacentThreshold(int threshold);
@@ -451,6 +461,8 @@ Q_SIGNALS:
     void enableBlurChanged();
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
+    void enableAudioVisualizerChanged();
+    void audioSpectrumBarCountChanged();
     void zonePaddingChanged();
     void outerGapChanged();
     void adjacentThresholdChanged();

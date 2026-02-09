@@ -16,6 +16,10 @@
 #include "../core/layout.h"
 
 class QQmlEngine;
+
+namespace PlasmaZones {
+class CavaService;
+}
 class QQuickWindow;
 class QScreen;
 class QTimer;
@@ -205,8 +209,12 @@ private:
                                   const char* windowType,
                                   const QVariantMap& initialProperties = QVariantMap());
 
+    // Audio viz: push spectrum to overlay windows
+    void onAudioSpectrumUpdated(const QVector<float>& spectrum);
+
     // Shader support methods
-    bool useShaderOverlay() const;
+    bool useShaderForScreen(QScreen* screen) const;
+    bool anyScreenUsesShader() const;
     bool canUseShaders() const;
     void startShaderAnimation();
     void stopShaderAnimation();
@@ -237,6 +245,9 @@ private:
     // Shader state
     bool m_zoneDataDirty = true;
     QString m_pendingShaderError;
+
+    // CAVA audio visualization
+    std::unique_ptr<CavaService> m_cavaService;
 
     // Zone data version for shader synchronization
     int m_zoneDataVersion = 0;

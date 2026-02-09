@@ -15,6 +15,7 @@
 #include <QColor>
 #include <QMutex>
 #include <QStringList>
+#include <QVariantList>
 #include <QVector>
 #include <atomic>
 
@@ -165,6 +166,10 @@ class PLASMAZONES_EXPORT ZoneShaderItem : public QQuickItem
 
     // Labels texture (pre-rendered zone numbers for shader pass)
     Q_PROPERTY(QImage labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY labelsTextureChanged FINAL)
+
+    /** Audio spectrum from CAVA (0-1 per bar). Empty = disabled. Set from C++ OverlayService.
+     *  Accepts QVector<float> (fast C++ path) or QVariantList (QML path). */
+    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY audioSpectrumChanged FINAL)
 
     // Status
     Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
@@ -343,6 +348,11 @@ public:
     QImage labelsTexture() const;
     void setLabelsTexture(const QImage& image);
 
+    QVariant audioSpectrumVariant() const;
+    void setAudioSpectrumVariant(const QVariant& spectrum);
+    /** Direct setter from C++ avoiding QVariantList round-trip. */
+    void setAudioSpectrumRaw(const QVector<float>& spectrum);
+
     // Status getters
     Status status() const
     {
@@ -405,6 +415,7 @@ Q_SIGNALS:
     void customParamsChanged(); // Emitted when any customParams1-4 changes
     void customColorsChanged(); // Emitted when any customColor1-8 changes
     void labelsTextureChanged();
+    void audioSpectrumChanged();
     void statusChanged();
     void errorLogChanged();
 
@@ -501,6 +512,8 @@ private:
     // Labels texture (main thread writes, render thread reads via updatePaintNode)
     QImage m_labelsTexture;
     mutable QMutex m_labelsTextureMutex;
+
+    QVector<float> m_audioSpectrum;
 
     // Thread-safe zone data storage
     // Protected by m_zoneDataMutex for render thread access

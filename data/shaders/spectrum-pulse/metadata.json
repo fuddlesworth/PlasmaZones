@@ -1,0 +1,21 @@
+{
+    "id": "spectrum-pulse",
+    "name": "Spectrum Pulse",
+    "description": "Reactive neon energy — bass expands the glow, energy pulses race around borders, spectrum paints a flowing aurora, treble fires off sparks. Enable CAVA audio visualization in settings.",
+    "author": "PlasmaZones",
+    "version": "2.0",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {"id": "glowIntensity", "name": "Glow Intensity", "type": "float", "slot": 0, "default": 2.5, "min": 1, "max": 5},
+        {"id": "reactivity", "name": "Audio Reactivity", "type": "float", "slot": 1, "default": 1.5, "min": 0.5, "max": 3},
+        {"id": "waveHeight", "name": "Spectrum Aurora Height", "type": "float", "slot": 2, "default": 0.15, "min": 0.05, "max": 0.4},
+        {"id": "bassExpand", "name": "Bass Glow Expansion", "type": "float", "slot": 3, "default": 1.5, "min": 0, "max": 3},
+        {"id": "flowSpeed", "name": "Energy Flow Speed", "type": "float", "slot": 4, "default": 2.0, "min": 0.5, "max": 4},
+        {"id": "plasmaDetail", "name": "Plasma Turbulence", "type": "float", "slot": 5, "default": 0.8, "min": 0, "max": 2},
+        {"id": "colorMix", "name": "Audio Color Shift", "type": "float", "slot": 6, "default": 0.5, "min": 0, "max": 1},
+        {"id": "idleAnimation", "name": "Idle Animation", "type": "float", "slot": 7, "default": 1.0, "min": 0, "max": 2},
+        {"id": "primaryColor", "name": "Primary Neon", "type": "color", "slot": 0, "default": "#00ffff"},
+        {"id": "accentColor", "name": "Accent Glow", "type": "color", "slot": 1, "default": "#ff00ff"}
+    ]
+}

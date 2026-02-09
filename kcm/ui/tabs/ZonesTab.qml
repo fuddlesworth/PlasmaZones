@@ -229,11 +229,31 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
+                    // Visual effects
                     CheckBox {
                         Kirigami.FormData.label: i18n("Blur:")
                         text: i18n("Enable blur behind zones")
                         checked: kcm.enableBlur
                         onToggled: kcm.enableBlur = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Numbers:")
+                        text: i18n("Show zone numbers")
+                        checked: kcm.showZoneNumbers
+                        onToggled: kcm.showZoneNumbers = checked
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Animation:")
+                        text: i18n("Flash zones when switching layouts")
+                        checked: kcm.flashZonesOnSwitch
+                        onToggled: kcm.flashZonesOnSwitch = checked
+                    }
+
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Shader Effects")
                     }
 
                     CheckBox {
@@ -245,7 +265,7 @@ ScrollView {
                     }
 
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Shader FPS:")
+                        Kirigami.FormData.label: i18n("Frame rate:")
                         enabled: shaderEffectsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
@@ -265,18 +285,51 @@ ScrollView {
                         }
                     }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Numbers:")
-                        text: i18n("Show zone numbers")
-                        checked: kcm.showZoneNumbers
-                        onToggled: kcm.showZoneNumbers = checked
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Audio Visualization")
                     }
 
                     CheckBox {
-                        Kirigami.FormData.label: i18n("Animation:")
-                        text: i18n("Flash zones when switching layouts")
-                        checked: kcm.flashZonesOnSwitch
-                        onToggled: kcm.flashZonesOnSwitch = checked
+                        id: audioVizCheck
+                        Kirigami.FormData.label: i18n("Audio:")
+                        text: i18n("Enable CAVA audio spectrum")
+                        enabled: shaderEffectsCheck.checked && kcm.cavaAvailable
+                        checked: kcm.enableAudioVisualizer
+                        onToggled: kcm.enableAudioVisualizer = checked
+
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: kcm.cavaAvailable
+                            ? i18n("Feeds audio spectrum data to shaders that support it.")
+                            : i18n("CAVA is not installed. Install cava to enable audio visualization.")
+                    }
+
+                    Kirigami.InlineMessage {
+                        Layout.fillWidth: true
+                        type: Kirigami.MessageType.Warning
+                        text: i18n("CAVA is not installed. Install the <b>cava</b> package to enable audio-reactive shader effects.")
+                        visible: !kcm.cavaAvailable && shaderEffectsCheck.checked
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Spectrum bars:")
+                        enabled: shaderEffectsCheck.checked && audioVizCheck.checked && kcm.cavaAvailable
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: audioBarsSlider
+                            Layout.preferredWidth: root.constants.sliderPreferredWidth
+                            from: 16
+                            to: 256
+                            stepSize: 1
+                            value: kcm.audioSpectrumBarCount
+                            onMoved: kcm.audioSpectrumBarCount = Math.round(value)
+                        }
+
+                        Label {
+                            text: Math.round(audioBarsSlider.value)
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth + 15
+                        }
                     }
                 }
             }

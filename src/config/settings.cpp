@@ -404,6 +404,8 @@ SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelector
 // Shader Effects implementations
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
 SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged, 30, 144)
+SETTINGS_SETTER(bool, EnableAudioVisualizer, m_enableAudioVisualizer, enableAudioVisualizerChanged)
+SETTINGS_SETTER_CLAMPED(AudioSpectrumBarCount, m_audioSpectrumBarCount, audioSpectrumBarCountChanged, 16, 256)
 
 // Global Shortcuts implementations
 SETTINGS_SETTER(const QString&, OpenEditorShortcut, m_openEditorShortcut, openEditorShortcutChanged)
@@ -832,6 +834,8 @@ void Settings::load()
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
     m_enableShaderEffects = shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
     m_shaderFrameRate = qBound(30, shaders.readEntry(QLatin1String("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
+    m_enableAudioVisualizer = shaders.readEntry(QLatin1String("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
+    m_audioSpectrumBarCount = qBound(16, shaders.readEntry(QLatin1String("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()), 256);
 
     // Global Shortcuts (all KGlobalAccel shortcuts in one group)
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));
@@ -997,6 +1001,8 @@ void Settings::save()
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
     shaders.writeEntry(QLatin1String("EnableShaderEffects"), m_enableShaderEffects);
     shaders.writeEntry(QLatin1String("ShaderFrameRate"), m_shaderFrameRate);
+    shaders.writeEntry(QLatin1String("EnableAudioVisualizer"), m_enableAudioVisualizer);
+    shaders.writeEntry(QLatin1String("AudioSpectrumBarCount"), m_audioSpectrumBarCount);
 
     // Global Shortcuts (all KGlobalAccel shortcuts in one group)
     KConfigGroup globalShortcuts = config->group(QStringLiteral("GlobalShortcuts"));

@@ -241,6 +241,18 @@ void ZoneShaderNodeRhi::prepare()
             m_shaderError = QStringLiteral("Failed to create labels sampler");
             return;
         }
+        // Audio spectrum texture (binding 6): 1x1 dummy when disabled. RGBA8; shader samples .r
+        m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        if (!m_audioSpectrumTexture->create()) {
+            m_shaderError = QStringLiteral("Failed to create audio spectrum texture");
+            return;
+        }
+        m_audioSpectrumSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                     QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+        if (!m_audioSpectrumSampler->create()) {
+            m_shaderError = QStringLiteral("Failed to create audio spectrum sampler");
+            return;
+        }
     }
 
     if (m_shaderDirty) {
@@ -473,6 +485,40 @@ void ZoneShaderNodeRhi::prepare()
             batch->uploadTexture(m_dummyChannelTexture.get(), onePixel);
             cb->resourceUpdate(batch);
             m_dummyChannelTextureNeedsUpload = false;
+        }
+    }
+
+    // Audio spectrum texture: resize if needed, upload when dirty
+    if (m_audioSpectrumDirty && m_audioSpectrumTexture && m_audioSpectrumSampler) {
+        m_audioSpectrumDirty = false;
+        const int bars = m_audioSpectrum.size();
+        const QSize targetSize = bars > 0 ? QSize(bars, 1) : QSize(1, 1);
+        if (m_audioSpectrumTexture->pixelSize() != targetSize) {
+            m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!m_audioSpectrumTexture->create()) {
+                return;
+            }
+            m_srb.reset();
+            m_srbB.reset();
+            if (!ensurePipeline()) {
+                return;
+            }
+        }
+        QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
+        if (batch && bars > 0) {
+            QImage img(bars, 1, QImage::Format_RGBA8888);
+            for (int i = 0; i < bars; ++i) {
+                const float v = qBound(0.0f, m_audioSpectrum[i], 1.0f);
+                const quint8 u = static_cast<quint8>(qRound(v * 255.0f));
+                img.setPixel(i, 0, qRgba(u, 0, 0, 255));
+            }
+            batch->uploadTexture(m_audioSpectrumTexture.get(), img);
+            cb->resourceUpdate(batch);
+        } else if (batch && bars == 0) {
+            QImage onePixel(1, 1, QImage::Format_RGBA8888);
+            onePixel.fill(0);
+            batch->uploadTexture(m_audioSpectrumTexture.get(), onePixel);
+            cb->resourceUpdate(batch);
         }
     }
 }
@@ -757,6 +803,16 @@ void ZoneShaderNodeRhi::setLabelsTexture(const QImage& image)
 {
     m_labelsImage = image;
     m_labelsTextureDirty = true;
+    m_uniformsDirty = true;
+}
+
+void ZoneShaderNodeRhi::setAudioSpectrum(const QVector<float>& spectrum)
+{
+    if (m_audioSpectrum == spectrum) {
+        return;
+    }
+    m_audioSpectrum = spectrum;
+    m_audioSpectrumDirty = true;
     m_uniformsDirty = true;
 }
 
@@ -1119,12 +1175,20 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                 QVector<QRhiShaderResourceBinding> bindings;
                 bindings.append(QRhiShaderResourceBinding::uniformBuffer(
                     0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+                if (m_labelsTexture && m_labelsSampler) {
+                    bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                        1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+                }
                 for (int j = 0; j < i; ++j) {
                     if (m_multiBufferTextures[j] && m_bufferSampler) {
                         bindings.append(QRhiShaderResourceBinding::sampledTexture(
                             2 + j, QRhiShaderResourceBinding::FragmentStage,
                             m_multiBufferTextures[j].get(), m_bufferSampler.get()));
                     }
+                }
+                if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
+                    bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                        6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
                 }
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
@@ -1176,9 +1240,17 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         QVector<QRhiShaderResourceBinding> bindings;
         bindings.append(QRhiShaderResourceBinding::uniformBuffer(
             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+        if (m_labelsTexture && m_labelsSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+        }
         if (channel0Texture && m_bufferSampler) {
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 2, QRhiShaderResourceBinding::FragmentStage, channel0Texture, m_bufferSampler.get()));
+        }
+        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
         }
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
@@ -1253,6 +1325,10 @@ bool ZoneShaderNodeRhi::ensurePipeline()
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 2, QRhiShaderResourceBinding::FragmentStage, channel0Texture, channel0Sampler));
         }
+        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+        }
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -1276,6 +1352,10 @@ bool ZoneShaderNodeRhi::ensurePipeline()
                 bindings.append(QRhiShaderResourceBinding::sampledTexture(
                     2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
+        }
+        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
         }
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
@@ -1438,6 +1518,7 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
         m_uniforms.iChannelResolution[i][2] = 0.0f;
         m_uniforms.iChannelResolution[i][3] = 0.0f;
     }
+    m_uniforms.iAudioSpectrumSize = m_audioSpectrum.size();
 }
 
 void ZoneShaderNodeRhi::releaseRhiResources()
@@ -1469,6 +1550,8 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_srb.reset();
     m_labelsTexture.reset();
     m_labelsSampler.reset();
+    m_audioSpectrumTexture.reset();
+    m_audioSpectrumSampler.reset();
     m_ubo.reset();
     m_vbo.reset();
     m_vertexShader = QShader();
@@ -1487,6 +1570,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_timeDirty = true;
     m_zoneDataDirty = true;
     m_labelsTextureDirty = true;
+    m_audioSpectrumDirty = true;
     // Next prepare() will re-create all RHI resources and do a full UBO upload
 }
 

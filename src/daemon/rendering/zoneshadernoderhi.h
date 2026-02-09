@@ -62,6 +62,7 @@ public:
     void setCustomColor7(const QColor& color) override;
     void setCustomColor8(const QColor& color) override;
     void setLabelsTexture(const QImage& image) override;
+    void setAudioSpectrum(const QVector<float>& spectrum) override;
     void setBufferShaderPath(const QString& path) override;
     void setBufferShaderPaths(const QStringList& paths) override;
     void setBufferFeedback(bool enable) override;
@@ -182,6 +183,12 @@ private:
     std::unique_ptr<QRhiTexture> m_labelsTexture;
     std::unique_ptr<QRhiSampler> m_labelsSampler;
     bool m_labelsTextureDirty = false;
+
+    // Audio spectrum texture (binding 6)
+    QVector<float> m_audioSpectrum;
+    std::unique_ptr<QRhiTexture> m_audioSpectrumTexture;
+    std::unique_ptr<QRhiSampler> m_audioSpectrumSampler;
+    bool m_audioSpectrumDirty = false;
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */

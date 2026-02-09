@@ -137,6 +137,10 @@ public:
     virtual void setEnableShaderEffects(bool enable) = 0;
     virtual int shaderFrameRate() const = 0;
     virtual void setShaderFrameRate(int fps) = 0;
+    virtual bool enableAudioVisualizer() const = 0;
+    virtual void setEnableAudioVisualizer(bool enable) = 0;
+    virtual int audioSpectrumBarCount() const = 0;
+    virtual void setAudioSpectrumBarCount(int count) = 0;
 };
 
 /**

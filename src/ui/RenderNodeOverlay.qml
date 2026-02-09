@@ -45,6 +45,9 @@ Window {
     // Pre-rendered zone labels texture (set from C++ when shader overlay + showNumbers)
     property var labelsTexture
 
+    // Audio spectrum from CAVA (0-1 per bar). Set from C++ when audio viz enabled. Empty = disabled.
+    property var audioSpectrum: []
+
     // Appearance properties
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
@@ -167,6 +170,9 @@ Window {
 
             // Shader params map
             shaderParams: root.shaderParams
+
+            // Audio spectrum for audio-reactive shaders
+            audioSpectrum: root.audioSpectrum
 
             onStatusChanged: {
                 // Only log errors - success is expected, loading is transient
@@ -295,10 +301,10 @@ Window {
         function buildCustomParams(slot) {
             var prefix = "customParams" + slot + "_"
             return Qt.vector4d(
-                getParam(prefix + "x", 0.0),
-                getParam(prefix + "y", 0.0),
-                getParam(prefix + "z", 0.0),
-                getParam(prefix + "w", 0.0)
+                getParam(prefix + "x", -1.0),
+                getParam(prefix + "y", -1.0),
+                getParam(prefix + "z", -1.0),
+                getParam(prefix + "w", -1.0)
             )
         }
 

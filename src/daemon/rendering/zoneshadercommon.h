@@ -70,6 +70,9 @@ struct alignas(16) ZoneShaderUniforms
 
     // Multi-pass: iChannelResolution[i] = size of texture bound to iChannel i (std140: vec2[4], each 16-byte aligned)
     float iChannelResolution[4][4]; // [i][0]=x, [i][1]=y; [i][2],[i][3] padding
+
+    // Audio spectrum (CAVA): number of bars; 0 = disabled. Texture at binding 6.
+    int iAudioSpectrumSize;
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
