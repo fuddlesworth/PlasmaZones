@@ -1,3 +1,56 @@
+plasmazones (1.8.0-1) unstable; urgency=medium
+
+  * CAVA audio visualization service for audio-reactive shaders
+  * Spectrum Pulse shader with audio-reactive neon energy
+  * Audio-reactive shader uniforms (spectrum data passed to GPU)
+  * KCM settings for audio visualizer (enable/disable, spectrum bar count)
+  * Auto-assign windows to first empty zone per layout
+  * App-to-zone auto-snap rules with screen-targeting
+  * Window picker dialog for exclude lists
+  * Per-monitor zone selector settings
+  * Snap-all-windows shortcut (Meta+Ctrl+S)
+  * Fix overlay/zone-selector mutual exclusion during drag
+  * Fix per-screen shader decisions for multi-monitor setups
+  * Comprehensive multi-monitor per-screen targeting and isolation
+  * Fix daemon crash on monitor power-off (DP hotplug disconnect)
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Mon, 09 Feb 2026 00:00:00 +0000
+
+plasmazones (1.7.0-1) unstable; urgency=medium
+
+  * Add layout visibility filtering (per-screen/desktop/activity)
+  * Default OSD style to visual preview for new installs
+  * Fix stale screen restrictions on monitor disconnect
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Fri, 06 Feb 2026 00:00:00 +0000
+
+plasmazones (1.6.2-1) unstable; urgency=medium
+
+  * Fix editor not moving to selected screen on multi-monitor setups
+  * Fix editor defaulting to wrong screen on Wayland
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Fri, 06 Feb 2026 00:00:00 +0000
+
+plasmazones (1.6.1-1) unstable; urgency=medium
+
+  * Add Liquid Metal shader with multipass rendering
+  * Fix AUR -bin package build failure (.INSTALL dotfile in package root)
+  * Fix Liquid Metal surface drift, mouse Y, zone params swizzle
+  * Remove 5 low-quality shaders
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Fri, 06 Feb 2026 00:00:00 +0000
+
+plasmazones (1.6.0-1) unstable; urgency=medium
+
+  * Multi-zone snapping support in window tracking
+  * Fix shader parameter accumulation bug in layout JSON
+  * Atomic undo for shader switching
+  * Post-install messages note KWin restart requirement
+  * Remove dead properties (Layout::author, Layout::shortcut, Zone::shortcut)
+  * Remove dead files (ZoneEditor.qml, LayoutPicker.qml, ShaderOverlay.qml, shadercompiler.cpp, zonedataprovider.cpp)
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Thu, 05 Feb 2026 00:00:00 +0000
+
 plasmazones (1.5.9-1) unstable; urgency=medium
 
   * Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md

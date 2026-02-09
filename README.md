@@ -48,13 +48,17 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ### Window Snapping
 
-- Drag with modifier to snap windows to zones
+- Drag with modifier key or mouse button to snap windows to zones
+- Snap all visible windows to zones at once
+- Auto-assign windows to first empty zone per layout
+- Multi-zone snapping support
 - Move windows between zones with keyboard shortcuts
 - Focus adjacent zones without mouse
 - Cycle through windows stacked in the same zone (monocle-style)
 - Push window to first empty zone
 - Restore original size on unsnap
 - Per-window floating toggle
+- App-to-zone rules: auto-snap specific applications to designated zones
 
 <p align="center">
   <img src="docs/media/videos/keyboard-nav.gif" alt="Keyboard Navigation" />
@@ -70,6 +74,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 - Fill available space / auto-expand
 - Fullscreen editing mode
 - Per-zone colors and styling
+- Layout visibility filtering: restrict layouts to specific screens, desktops, or activities
 
 <p align="center">
   <img src="docs/media/videos/editor.gif" alt="Layout Editor" />
@@ -77,27 +82,24 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ### Shader Effects
 
-GPU-accelerated zone overlays with 17 built-in effects, including multipass shaders with 3D raymarching and bloom:
+GPU-accelerated zone overlays with 14 built-in effects, including multipass shaders with 3D raymarching and bloom:
 
 | Effect | Description |
 |--------|-------------|
 | Aretha Shell | Cyberpunk effect with color grading, hex grid, and data streams |
-| Aurora Sweep | Clean gradient overlay with animated light sweep |
 | Cosmic Flow | Flowing fractal noise with animated color palette |
 | Crystalline Labels | Zone numbers fractured into Voronoi cells with stained-glass edges |
 | Filled Labels | Zone numbers filled with gradient (vertical, horizontal, or radial) |
+| Flow Labels | Animated flowing plasma zone numbers driven by FBM noise and configurable color palette |
 | Fractal Flow | Organic fractal-like flowing pattern with iterative distortion |
-| Glitch Labels | Digital glitch effect on zone numbers with slice displacement |
 | Magnetic Field | Mouse-reactive magnetic field with orbiting particles |
-| Minimalist | Clean card style with soft shadows and thin borders |
 | Neon Glow | Cyberpunk neon borders with bloom and pulsing |
 | Nexus Cascade | Multi-pass plasma with distortion, bloom, and chromatic aberration |
 | Particle Field | Animated floating particles with glow and smooth motion |
-| Ripple Labels | Liquid surface with concentric ripples and refracted zone numbers |
 | Rotating Tiles | Rotating tiled grid with radial wave and pulsing edges |
+| Spectrum Pulse | Audio-reactive neon energy with bass glow, spectrum aurora, and CAVA integration |
 | Toxic Circuit | Glowing circuit traces with toxic drip and digital corruption |
 | Voronoi Stained Glass | 3D raymarched stained glass with lead came, backlighting, and bloom |
-| Warped Labels | Animated wave distortion and chromatic aberration on zone numbers |
 
 <p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
@@ -126,21 +128,26 @@ See a preview of the layout when switching, not just text.
 - Per-monitor layouts (same or different)
 - Per-virtual-desktop layouts
 - Per-activity layouts (optional, requires PlasmaActivities)
+- Per-monitor zone selector settings
+- Per-screen shader selection
+- Screen-targeted app-to-zone rules
 
 ### System Settings Integration
 
-Full KCM module for configuration — no config file editing required. Includes built-in update checker with GitHub release notifications.
+Full KCM module with 7 tabs — no config file editing required. Includes built-in update checker with GitHub release notifications.
 
 <details>
 <summary>Screenshots</summary>
 
 | Tab | Description |
 |-----|-------------|
-| ![Settings](docs/media/screenshots/kcm-settings.png) | **General** — Enable daemon, open editor, manage layouts |
-| ![Appearance](docs/media/screenshots/kcm-appearance.png) | **Appearance** — Shader effects, colors, opacity, borders, highlight animations |
-| ![Behavior](docs/media/screenshots/kcm-behavior.png) | **Behavior** — Drag modifiers, snap thresholds, auto-snap, session persistence |
-| ![Zone Selector](docs/media/screenshots/kcm-zoneselector.png) | **Zone Selector** — Edge trigger distance, display duration, selector appearance |
-| ![Shortcuts](docs/media/screenshots/kcm-shortcuts.png) | **Shortcuts** — All keyboard shortcuts for layout switching, window navigation, editor |
+| ![Layouts](docs/media/screenshots/kcm-layouts.png) | **Layouts** — Manage layouts, visibility filtering, import/export |
+| ![Editor](docs/media/screenshots/kcm-editor.png) | **Editor** — Editor preferences and template settings |
+| ![Assignments](docs/media/screenshots/kcm-assignments.png) | **Assignments** — Monitor, desktop, and activity layout assignments; quick layout slots |
+| ![Zones](docs/media/screenshots/kcm-zones.png) | **Zones** — Drag modifiers, snap thresholds, zone selector, OSD settings |
+| ![Display](docs/media/screenshots/kcm-display.png) | **Display** — Shader effects, colors, opacity, borders, highlight animations |
+| ![Exclusions](docs/media/screenshots/kcm-exclusions.png) | **Exclusions** — Window exclusion lists with interactive window picker |
+| ![About](docs/media/screenshots/kcm-about.png) | **About** — Version info, update checker, links |
 
 </details>
 
@@ -266,6 +273,7 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 | Move window left/right/up/down | `Meta+Alt+Shift+Arrow` |
 | Swap window left/right/up/down | `Meta+Ctrl+Alt+Arrow` |
 | Push to empty zone | `Meta+Alt+Return` |
+| Snap all windows to zones | `Meta+Ctrl+S` |
 | Restore window size | `Meta+Alt+Escape` |
 | Toggle float | `Meta+Alt+F` |
 
@@ -418,6 +426,7 @@ src/
 │   └── rendering/  # GPU rendering (QRhi), label texture builder
 ├── editor/         # Visual layout editor
 │   ├── qml/        # Editor QML UI
+│   ├── helpers/    # D-Bus queries, serialization, batch operations
 │   ├── services/   # Editor services (snapping, templates, zone manager)
 │   └── undo/       # Undo/redo command system
 ├── dbus/           # D-Bus adaptors (6 interfaces)
@@ -426,16 +435,19 @@ src/
 └── shared/         # Shared QML components and plugins
 kcm/                # System Settings module (KCM)
 └── ui/             # KCM QML pages
-kwin-effect/        # KWin effect plugin (window tracking)
+    └── tabs/       # Tab components (7 tabs)
+kwin-effect/        # KWin effect plugin (modifier detection, window tracking)
 data/
 ├── layouts/        # Default layout templates (12)
-└── shaders/        # Built-in GLSL shader effects (17)
+└── shaders/        # Built-in GLSL shader effects (14)
 packaging/
-├── arch/           # AUR PKGBUILD (source + binary)
+├── arch/           # AUR PKGBUILD (source, binary, git)
+├── debian/         # Debian packaging (control, changelog, triggers)
 └── rpm/            # RPM spec
+cmake/              # CMake helpers (extract-pot, format-qml, uninstall)
 tests/              # Unit and integration tests
 dbus/               # D-Bus XML interface definitions
-icons/              # Application icons (hicolor)
+icons/              # Application icons (hicolor + hicolor-light)
 po/                 # Translations (KI18n/Gettext)
 docs/               # Documentation and media
 ```

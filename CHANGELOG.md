@@ -5,6 +5,39 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-09
+
+### Added
+- CAVA audio visualization service for audio-reactive shaders ([#92])
+- Spectrum Pulse shader: audio-reactive neon energy with bass glow, spectrum aurora, and CAVA integration ([#92])
+- Audio-reactive shader uniforms: spectrum data and audio levels passed to GPU ([#92])
+- KCM settings for audio visualizer (enable/disable, spectrum bar count)
+- Auto-assign windows to first empty zone per layout ([#90])
+- App-to-zone auto-snap rules per layout with screen-targeting
+- Window picker dialog for exclude lists
+- Per-monitor zone selector settings ([#89])
+- Snap-all-windows shortcut (`Meta+Ctrl+S`)
+
+### Changed
+- Replace global active layout with `defaultLayout()` for user-facing surfaces
+- DRY per-screen config validation and shared layout computation
+- Audit and normalize log levels across entire codebase
+
+### Fixed
+- Mutual exclusion between overlay and zone selector during drag ([#92])
+- Per-screen shader decisions for multi-monitor setups ([#92])
+- Comprehensive multi-monitor per-screen targeting and isolation ([#87])
+- Per-screen layout isolation and shortcut screen guards ([#87])
+- Zone selector showing on all monitors instead of target screen
+- Per-screen zone selector validation and edge cases
+- Zone selector defensive setActiveLayout and QML signal verification
+- Per-screen override message/button not updating reactively in KCM
+- Daemon survives monitor power-off (DP hotplug disconnect)
+- Editor: defer window destroy during mid-session screen switch
+- Unfloat: fall back when saved pre-float screen no longer exists
+- Remove misleading shortcut hint from zone overlay
+- WrapVulkanHeaders noise in feature summary; ColorUtils.js QML warning
+
 ## [1.7.0] - 2026-02-06
 
 ### Added
@@ -209,6 +242,11 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[1.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.2...v1.7.0
+[1.6.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.1...v1.6.2
+[1.6.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.9...v1.6.0
 [1.5.9]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.5.2...v1.5.9
 [1.5.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.4...v1.5.2
 [1.3.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.3.3...v1.3.4
@@ -257,3 +295,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#78]: https://github.com/fuddlesworth/PlasmaZones/pull/78
 [#79]: https://github.com/fuddlesworth/PlasmaZones/pull/79
 [#80]: https://github.com/fuddlesworth/PlasmaZones/pull/80
+[#87]: https://github.com/fuddlesworth/PlasmaZones/pull/87
+[#89]: https://github.com/fuddlesworth/PlasmaZones/pull/89
+[#90]: https://github.com/fuddlesworth/PlasmaZones/pull/90
+[#92]: https://github.com/fuddlesworth/PlasmaZones/pull/92

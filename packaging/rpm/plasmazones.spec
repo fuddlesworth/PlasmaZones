@@ -165,6 +165,21 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Mon Feb  9 2026 fuddlesworth - 1.8.0-1
+- CAVA audio visualization service for audio-reactive shaders
+- Spectrum Pulse shader with audio-reactive neon energy
+- Audio-reactive shader uniforms (spectrum data passed to GPU)
+- KCM settings for audio visualizer (enable/disable, spectrum bar count)
+- Auto-assign windows to first empty zone per layout
+- App-to-zone auto-snap rules with screen-targeting
+- Window picker dialog for exclude lists
+- Per-monitor zone selector settings
+- Snap-all-windows shortcut (Meta+Ctrl+S)
+- Fix overlay/zone-selector mutual exclusion during drag
+- Fix per-screen shader decisions for multi-monitor setups
+- Comprehensive multi-monitor per-screen targeting and isolation
+- Fix daemon crash on monitor power-off (DP hotplug disconnect)
+
 * Fri Feb  6 2026 fuddlesworth - 1.7.0-1
 - Add layout visibility filtering (per-screen/desktop/activity)
 - Default OSD style to visual preview for new installs
