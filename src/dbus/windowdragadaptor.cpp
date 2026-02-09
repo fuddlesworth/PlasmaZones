@@ -384,9 +384,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_overlayService->updateMousePosition(cursorX, cursorY);
     }
 
-    // Check if we should show/hide the zone selector based on cursor proximity to edge
-    checkZoneSelectorTrigger(cursorX, cursorY);
-
     // KWin Effect provides modifiers via the mouseChanged signal.
     Qt::KeyboardModifiers mods;
     if (modifiers != 0) {
@@ -404,12 +401,25 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse;
     bool multiZoneModifierHeld = checkModifier(multiZoneMod, mods);
 
-    if (multiZoneModifierHeld) {
-        handleMultiZoneModifier(cursorX, cursorY, mods);
-    } else if (zoneActivationHeld) {
-        handleSingleZoneModifier(cursorX, cursorY);
+    // Mutual exclusion: overlay (modifier-triggered) and zone selector (edge-triggered)
+    // cannot be active simultaneously. Modifier takes priority as an explicit user action.
+    if (multiZoneModifierHeld || zoneActivationHeld) {
+        // Modifier held: overlay takes priority — dismiss zone selector if open
+        if (m_zoneSelectorShown) {
+            m_zoneSelectorShown = false;
+            m_overlayService->hideZoneSelector();
+            m_overlayService->clearSelectedZone();
+        }
+
+        if (multiZoneModifierHeld) {
+            handleMultiZoneModifier(cursorX, cursorY, mods);
+        } else {
+            handleSingleZoneModifier(cursorX, cursorY);
+        }
     } else {
+        // No modifier: hide overlay, allow zone selector
         hideOverlayAndClearZoneState();
+        checkZoneSelectorTrigger(cursorX, cursorY);
     }
 }
 
