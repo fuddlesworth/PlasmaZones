@@ -1,0 +1,22 @@
+{
+    "id": "sonic-ripple",
+    "name": "Sonic Ripple",
+    "description": "Concentric audio rings radiate from the zone center — bass kicks launch expanding shockwaves, mids drive ring density, treble sparks the edges. Every beat is visible. Enable CAVA audio visualization in settings.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {"id": "reactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 0, "default": 1.5, "min": 0.5, "max": 3.0},
+        {"id": "ringCount", "name": "Spectrum Rings", "group": "Audio", "type": "float", "slot": 1, "default": 24.0, "min": 8.0, "max": 48.0},
+        {"id": "bassShockwave", "name": "Bass Shockwave", "group": "Audio", "type": "float", "slot": 2, "default": 1.5, "min": 0.0, "max": 3.0},
+        {"id": "ringSpeed", "name": "Ring Expansion Speed", "group": "Animation", "type": "float", "slot": 3, "default": 1.0, "min": 0.2, "max": 3.0},
+        {"id": "rotationSpeed", "name": "Rotation Speed", "group": "Animation", "type": "float", "slot": 4, "default": 0.15, "min": 0.0, "max": 0.5},
+        {"id": "idleAnimation", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 5, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "glowIntensity", "name": "Glow Intensity", "group": "Appearance", "type": "float", "slot": 6, "default": 2.0, "min": 0.5, "max": 4.0},
+        {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 7, "default": 0.88, "min": 0.5, "max": 1.0},
+        {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#00ccff"},
+        {"id": "accentColor", "name": "Accent Color", "group": "Colors", "type": "color", "slot": 1, "default": "#ff3399"},
+        {"id": "bassColor", "name": "Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#ff6600"}
+    ]
+}
