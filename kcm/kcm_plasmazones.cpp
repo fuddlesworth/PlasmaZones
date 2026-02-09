@@ -169,9 +169,10 @@ int KCMPlasmaZones::multiZoneModifier() const
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
     return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->multiZoneModifier()));
 }
-bool KCMPlasmaZones::middleClickMultiZone() const
+int KCMPlasmaZones::zoneSpanModifier() const
 {
-    return m_settings->middleClickMultiZone();
+    // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
+    return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->zoneSpanModifier()));
 }
 
 // Display getters
@@ -510,11 +511,13 @@ void KCMPlasmaZones::setMultiZoneModifier(int bitmask)
     }
 }
 
-void KCMPlasmaZones::setMiddleClickMultiZone(bool enable)
+void KCMPlasmaZones::setZoneSpanModifier(int bitmask)
 {
-    if (m_settings->middleClickMultiZone() != enable) {
-        m_settings->setMiddleClickMultiZone(enable);
-        Q_EMIT middleClickMultiZoneChanged();
+    // Convert Qt::KeyboardModifier bitmask to DragModifier enum for storage
+    int enumValue = ModifierUtils::bitmaskToDragModifier(bitmask);
+    if (static_cast<int>(m_settings->zoneSpanModifier()) != enumValue) {
+        m_settings->setZoneSpanModifier(static_cast<DragModifier>(enumValue));
+        Q_EMIT zoneSpanModifierChanged();
         setNeedsSave(true);
     }
 }
@@ -1391,13 +1394,14 @@ void KCMPlasmaZones::defaults()
     Q_EMIT dragActivationModifierChanged();
     Q_EMIT dragActivationMouseButtonChanged();
     Q_EMIT multiZoneModifierChanged();
-    Q_EMIT middleClickMultiZoneChanged();
+    Q_EMIT zoneSpanModifierChanged();
     Q_EMIT showZonesOnAllMonitorsChanged();
     Q_EMIT disabledMonitorsChanged();
     Q_EMIT showZoneNumbersChanged();
     Q_EMIT flashZonesOnSwitchChanged();
     Q_EMIT showOsdOnLayoutSwitchChanged();
     Q_EMIT showNavigationOsdChanged();
+    Q_EMIT osdStyleChanged();
     Q_EMIT useSystemColorsChanged();
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
@@ -1419,6 +1423,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT moveNewWindowsToLastZoneChanged();
     Q_EMIT restoreOriginalSizeOnUnsnapChanged();
     Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT restoreWindowsToZonesOnLoginChanged();
     Q_EMIT defaultLayoutIdChanged();
     Q_EMIT excludedApplicationsChanged();
     Q_EMIT excludedWindowClassesChanged();
@@ -2013,12 +2018,16 @@ void KCMPlasmaZones::onSettingsChanged()
         // and QML only updates when values differ.
         Q_EMIT shiftDragToActivateChanged();
         Q_EMIT dragActivationModifierChanged();
+        Q_EMIT dragActivationMouseButtonChanged();
         Q_EMIT multiZoneModifierChanged();
-        Q_EMIT middleClickMultiZoneChanged();
+        Q_EMIT zoneSpanModifierChanged();
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT disabledMonitorsChanged();
         Q_EMIT showZoneNumbersChanged();
         Q_EMIT flashZonesOnSwitchChanged();
+        Q_EMIT showOsdOnLayoutSwitchChanged();
+        Q_EMIT showNavigationOsdChanged();
+        Q_EMIT osdStyleChanged();
         Q_EMIT useSystemColorsChanged();
         Q_EMIT highlightColorChanged();
         Q_EMIT inactiveColorChanged();
@@ -2029,6 +2038,10 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT borderWidthChanged();
         Q_EMIT borderRadiusChanged();
         Q_EMIT enableBlurChanged();
+        Q_EMIT enableShaderEffectsChanged();
+        Q_EMIT shaderFrameRateChanged();
+        Q_EMIT enableAudioVisualizerChanged();
+        Q_EMIT audioSpectrumBarCountChanged();
         Q_EMIT zonePaddingChanged();
         Q_EMIT outerGapChanged();
         Q_EMIT adjacentThresholdChanged();
@@ -2036,9 +2049,13 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT moveNewWindowsToLastZoneChanged();
         Q_EMIT restoreOriginalSizeOnUnsnapChanged();
         Q_EMIT stickyWindowHandlingChanged();
+        Q_EMIT restoreWindowsToZonesOnLoginChanged();
         Q_EMIT defaultLayoutIdChanged();
         Q_EMIT excludedApplicationsChanged();
         Q_EMIT excludedWindowClassesChanged();
+        Q_EMIT excludeTransientWindowsChanged();
+        Q_EMIT minimumWindowWidthChanged();
+        Q_EMIT minimumWindowHeightChanged();
         Q_EMIT zoneSelectorEnabledChanged();
         Q_EMIT zoneSelectorTriggerDistanceChanged();
         Q_EMIT zoneSelectorPositionChanged();

@@ -380,21 +380,27 @@ ScrollView {
                         id: multiZoneModifiers
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Multi-zone modifier:")
+                        Kirigami.FormData.label: i18n("Proximity snap modifier:")
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.multiZoneModifier
                         tooltipEnabled: root.isCurrentTab
-                        customTooltipText: i18n("Hold this modifier while dragging to span windows across multiple zones")
+                        customTooltipText: i18n("Hold this modifier while dragging to snap to adjacent zones detected by edge proximity")
                         onValueModified: (value) => {
                             kcm.multiZoneModifier = value
                         }
                     }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Middle click:")
-                        text: i18n("Use middle mouse button to select multiple zones")
-                        checked: kcm.middleClickMultiZone
-                        onToggled: kcm.middleClickMultiZone = checked
+                    ModifierAndMouseCheckBoxes {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.constants.sliderPreferredWidth
+                        Kirigami.FormData.label: i18n("Paint-to-span modifier:")
+                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
+                        modifierValue: kcm.zoneSpanModifier
+                        tooltipEnabled: root.isCurrentTab
+                        customTooltipText: i18n("Hold this modifier while dragging to paint across zones — each zone the cursor enters is added to the selection")
+                        onValueModified: (value) => {
+                            kcm.zoneSpanModifier = value
+                        }
                     }
 
                     RowLayout {

@@ -219,21 +219,6 @@ void Settings::setDragActivationMouseButton(int button)
     }
 }
 
-void Settings::setSkipSnapModifier(DragModifier modifier)
-{
-    if (m_skipSnapModifier != modifier) {
-        m_skipSnapModifier = modifier;
-        Q_EMIT skipSnapModifierChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setSkipSnapModifierInt(int modifier)
-{
-    if (modifier >= 0 && modifier <= static_cast<int>(DragModifier::AlwaysActive)) {
-        setSkipSnapModifier(static_cast<DragModifier>(modifier));
-    }
-}
 
 void Settings::setMultiZoneModifier(DragModifier modifier)
 {
@@ -251,8 +236,23 @@ void Settings::setMultiZoneModifierInt(int modifier)
     }
 }
 
+void Settings::setZoneSpanModifier(DragModifier modifier)
+{
+    if (m_zoneSpanModifier != modifier) {
+        m_zoneSpanModifier = modifier;
+        Q_EMIT zoneSpanModifierChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setZoneSpanModifierInt(int modifier)
+{
+    if (modifier >= 0 && modifier <= static_cast<int>(DragModifier::CtrlAltMeta)) {
+        setZoneSpanModifier(static_cast<DragModifier>(modifier));
+    }
+}
+
 // Simple bool setters
-SETTINGS_SETTER(bool, MiddleClickMultiZone, m_middleClickMultiZone, middleClickMultiZoneChanged)
 SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
 SETTINGS_SETTER(const QStringList&, DisabledMonitors, m_disabledMonitors, disabledMonitorsChanged)
 
@@ -277,7 +277,9 @@ void Settings::setOsdStyle(OsdStyle style)
 
 void Settings::setOsdStyleInt(int style)
 {
-    setOsdStyle(static_cast<OsdStyle>(style));
+    if (style >= 0 && style <= static_cast<int>(OsdStyle::Preview)) {
+        setOsdStyle(static_cast<OsdStyle>(style));
+    }
 }
 
 void Settings::setUseSystemColors(bool use)
@@ -681,10 +683,6 @@ void Settings::load()
         m_dragActivationMouseButton = 0;
     }
 
-    // Skip-snap modifier: hold this to move window without snapping
-    int skipMod = activation.readEntry(QLatin1String("SkipSnapModifier"), ConfigDefaults::skipSnapModifier());
-    m_skipSnapModifier = static_cast<DragModifier>(qBound(0, skipMod, 8));
-
     // Multi-zone modifier: hold this to span windows across multiple zones
     int multiZoneMod = activation.readEntry(QLatin1String("MultiZoneModifier"), ConfigDefaults::multiZoneModifier());
     if (multiZoneMod < 0 || multiZoneMod > static_cast<int>(DragModifier::CtrlAltMeta)) {
@@ -694,7 +692,25 @@ void Settings::load()
     m_multiZoneModifier = static_cast<DragModifier>(multiZoneMod);
     qCDebug(lcConfig) << "Loaded MultiZoneModifier= " << multiZoneMod;
 
-    m_middleClickMultiZone = activation.readEntry(QLatin1String("MiddleClickMultiZone"), ConfigDefaults::middleClickMultiZone());
+    // Zone span modifier: hold this key for paint-to-span zone selection
+    // Migration: if old MiddleClickMultiZone key exists but new ZoneSpanModifier doesn't,
+    // honour the old disabled state so upgrading users don't get unexpected zone-span activation
+    if (activation.hasKey(QLatin1String("MiddleClickMultiZone")) && !activation.hasKey(QLatin1String("ZoneSpanModifier"))) {
+        bool oldVal = activation.readEntry(QLatin1String("MiddleClickMultiZone"), true);
+        if (!oldVal) {
+            activation.writeEntry(QLatin1String("ZoneSpanModifier"), static_cast<int>(DragModifier::Disabled));
+            qCInfo(lcConfig) << "Migrated MiddleClickMultiZone=false to ZoneSpanModifier=Disabled";
+        }
+        activation.deleteEntry(QLatin1String("MiddleClickMultiZone"));
+        activation.sync();
+    }
+    int zoneSpanMod = activation.readEntry(QLatin1String("ZoneSpanModifier"), ConfigDefaults::zoneSpanModifier());
+    if (zoneSpanMod < 0 || zoneSpanMod > static_cast<int>(DragModifier::CtrlAltMeta)) {
+        qCWarning(lcConfig) << "Invalid ZoneSpanModifier value:" << zoneSpanMod << "using default";
+        zoneSpanMod = ConfigDefaults::zoneSpanModifier();
+    }
+    m_zoneSpanModifier = static_cast<DragModifier>(zoneSpanMod);
+    qCDebug(lcConfig) << "Loaded ZoneSpanModifier= " << zoneSpanMod;
 
     // Display (defaults from .kcfg via ConfigDefaults)
     m_showZonesOnAllMonitors = display.readEntry(QLatin1String("ShowOnAllMonitors"), ConfigDefaults::showOnAllMonitors());
@@ -915,9 +931,8 @@ void Settings::save()
     activation.writeEntry(QLatin1String("ShiftDrag"), m_shiftDragToActivate); // Deprecated, kept for compatibility
     activation.writeEntry(QLatin1String("DragActivationModifier"), static_cast<int>(m_dragActivationModifier));
     activation.writeEntry(QLatin1String("DragActivationMouseButton"), m_dragActivationMouseButton);
-    activation.writeEntry(QLatin1String("SkipSnapModifier"), static_cast<int>(m_skipSnapModifier));
     activation.writeEntry(QLatin1String("MultiZoneModifier"), static_cast<int>(m_multiZoneModifier));
-    activation.writeEntry(QLatin1String("MiddleClickMultiZone"), m_middleClickMultiZone);
+    activation.writeEntry(QLatin1String("ZoneSpanModifier"), static_cast<int>(m_zoneSpanModifier));
 
     // Display
     display.writeEntry(QLatin1String("ShowOnAllMonitors"), m_showZonesOnAllMonitors);

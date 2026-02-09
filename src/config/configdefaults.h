@@ -37,9 +37,8 @@ public:
     static bool shiftDrag() { return instance().defaultShiftDragValue(); }
     static int dragActivationModifier() { return instance().defaultDragActivationModifierValue(); }
     static int dragActivationMouseButton() { return instance().defaultDragActivationMouseButtonValue(); }
-    static int skipSnapModifier() { return instance().defaultSkipSnapModifierValue(); }
     static int multiZoneModifier() { return instance().defaultMultiZoneModifierValue(); }
-    static bool middleClickMultiZone() { return instance().defaultMiddleClickMultiZoneValue(); }
+    static int zoneSpanModifier() { return instance().defaultZoneSpanModifierValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Display Settings
@@ -187,7 +186,7 @@ public:
     // Update Notifications
     // ═══════════════════════════════════════════════════════════════════════════
 
-    static QString dismissedUpdateVersion() { return QString(); }  // Default is empty string
+    static QString dismissedUpdateVersion() { return QString(); }  // Default is empty string (matches .kcfg)
 
 private:
     // Lazily-initialized singleton instance
