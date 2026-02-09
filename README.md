@@ -139,15 +139,34 @@ Full KCM module with 7 tabs — no config file editing required. Includes built-
 <details>
 <summary>Screenshots</summary>
 
-| Tab | Description |
-|-----|-------------|
-| ![Layouts](docs/media/screenshots/kcm-layouts.png) | **Layouts** — Manage layouts, visibility filtering, import/export |
-| ![Editor](docs/media/screenshots/kcm-editor.png) | **Editor** — Editor preferences and template settings |
-| ![Assignments](docs/media/screenshots/kcm-assignments.png) | **Assignments** — Monitor, desktop, and activity layout assignments; quick layout slots |
-| ![Zones](docs/media/screenshots/kcm-zones.png) | **Zones** — Drag modifiers, snap thresholds, zone selector, OSD settings |
-| ![Display](docs/media/screenshots/kcm-display.png) | **Display** — Shader effects, colors, opacity, borders, highlight animations |
-| ![Exclusions](docs/media/screenshots/kcm-exclusions.png) | **Exclusions** — Window exclusion lists with interactive window picker |
-| ![About](docs/media/screenshots/kcm-about.png) | **About** — Version info, update checker, links |
+#### Layouts
+Create, duplicate, and manage zone layouts with built-in templates, import/export, visibility filtering.
+
+![Layouts](docs/media/screenshots/kcm-settings.png)
+
+#### Editor
+Keyboard shortcuts for zone operations (duplicate, split, fill), grid/edge snapping, snap modifier keys.
+
+#### Assignments
+Per-monitor, virtual desktop, and activity layout assignments; quick-switch keyboard slots; app-to-zone auto-snap rules.
+
+#### Zones
+Colors, opacity, borders, blur, shader effects, zone numbers, OSD style, animations, activation modifiers, multi-zone selection, zone padding, and window snap behavior.
+
+![Zones — Appearance](docs/media/screenshots/kcm-appearance.png)
+
+![Zones — Behavior](docs/media/screenshots/kcm-behavior.png)
+
+#### Display
+Zone selector popup configuration: enable/disable, screen position, trigger distance, grid/list mode, preview sizing, per-monitor overrides.
+
+![Display](docs/media/screenshots/kcm-zoneselector.png)
+
+#### Exclusions
+Window class exclusion lists with interactive window picker, minimum size thresholds.
+
+#### About
+Version info, update checker with GitHub release notifications, repository/wiki/bug report links, license, credits.
 
 </details>
 
