@@ -23,6 +23,7 @@
 #include <QDBusPendingReply>
 #include <QDBusPendingCallWatcher>
 #include <QStandardPaths>
+#include <algorithm>
 #include <QTimer>
 #include <QFile>
 #include <QDir>
@@ -1929,6 +1930,11 @@ void KCMPlasmaZones::loadLayouts()
 
     // No fallback layouts - if daemon isn't running, show empty list
     // The QML UI should handle this gracefully with a message like "Enable daemon to see layouts"
+
+    std::sort(newLayouts.begin(), newLayouts.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QStringLiteral("name")).toString().toLower()
+             < b.toMap().value(QStringLiteral("name")).toString().toLower();
+    });
 
     m_layouts = newLayouts;
     Q_EMIT layoutsChanged();
