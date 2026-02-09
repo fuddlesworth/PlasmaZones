@@ -145,9 +145,8 @@ Q_SIGNALS:
     void shiftDragToActivateChanged(); // Deprecated
     void dragActivationModifierChanged();
     void dragActivationMouseButtonChanged();
-    void skipSnapModifierChanged();
     void multiZoneModifierChanged();
-    void middleClickMultiZoneChanged();
+    void zoneSpanModifierChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();

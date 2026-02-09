@@ -50,8 +50,8 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
                    dragActivationMouseButtonChanged)
     Q_PROPERTY(int multiZoneModifier READ multiZoneModifier WRITE setMultiZoneModifier NOTIFY multiZoneModifierChanged)
-    Q_PROPERTY(bool middleClickMultiZone READ middleClickMultiZone WRITE setMiddleClickMultiZone NOTIFY
-                   middleClickMultiZoneChanged)
+    Q_PROPERTY(int zoneSpanModifier READ zoneSpanModifier WRITE setZoneSpanModifier NOTIFY
+                   zoneSpanModifierChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -205,7 +205,7 @@ public:
     int dragActivationModifier() const;
     int dragActivationMouseButton() const;
     int multiZoneModifier() const;
-    bool middleClickMultiZone() const;
+    int zoneSpanModifier() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
     bool showZoneNumbers() const;
@@ -296,7 +296,7 @@ public:
     void setDragActivationModifier(int modifier);
     void setDragActivationMouseButton(int button);
     void setMultiZoneModifier(int modifier);
-    void setMiddleClickMultiZone(bool enable);
+    void setZoneSpanModifier(int modifier);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
@@ -441,7 +441,7 @@ Q_SIGNALS:
     void dragActivationModifierChanged();
     void dragActivationMouseButtonChanged();
     void multiZoneModifierChanged();
-    void middleClickMultiZoneChanged();
+    void zoneSpanModifierChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();

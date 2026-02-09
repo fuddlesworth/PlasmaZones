@@ -33,11 +33,9 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
                    dragActivationMouseButtonChanged)
     Q_PROPERTY(
-        int skipSnapModifier READ skipSnapModifierInt WRITE setSkipSnapModifierInt NOTIFY skipSnapModifierChanged)
-    Q_PROPERTY(
         int multiZoneModifier READ multiZoneModifierInt WRITE setMultiZoneModifierInt NOTIFY multiZoneModifierChanged)
-    Q_PROPERTY(bool middleClickMultiZone READ middleClickMultiZone WRITE setMiddleClickMultiZone NOTIFY
-                   middleClickMultiZoneChanged)
+    Q_PROPERTY(
+        int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
 
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -263,16 +261,6 @@ public:
     int dragActivationMouseButton() const override { return m_dragActivationMouseButton; }
     void setDragActivationMouseButton(int button) override;
 
-    DragModifier skipSnapModifier() const override
-    {
-        return m_skipSnapModifier;
-    }
-    void setSkipSnapModifier(DragModifier modifier) override;
-    int skipSnapModifierInt() const
-    {
-        return static_cast<int>(m_skipSnapModifier);
-    }
-    void setSkipSnapModifierInt(int modifier);
     DragModifier multiZoneModifier() const override
     {
         return m_multiZoneModifier;
@@ -284,11 +272,16 @@ public:
     }
     void setMultiZoneModifierInt(int modifier);
 
-    bool middleClickMultiZone() const override
+    DragModifier zoneSpanModifier() const override
     {
-        return m_middleClickMultiZone;
+        return m_zoneSpanModifier;
     }
-    void setMiddleClickMultiZone(bool enable) override;
+    void setZoneSpanModifier(DragModifier modifier) override;
+    int zoneSpanModifierInt() const
+    {
+        return static_cast<int>(m_zoneSpanModifier);
+    }
+    void setZoneSpanModifierInt(int modifier);
 
     bool showZonesOnAllMonitors() const override
     {
@@ -887,9 +880,8 @@ private:
     // Default: Alt+Drag to show zones (matches reset() function and common user expectation)
     DragModifier m_dragActivationModifier = DragModifier::Alt; // Default: Alt for zone activation
     int m_dragActivationMouseButton = 0; // 0=None, Qt::MouseButton bits (2=Right, 4=Middle, etc.)
-    DragModifier m_skipSnapModifier = DragModifier::Shift; // Default: Shift to skip snap
     DragModifier m_multiZoneModifier = DragModifier::CtrlAlt; // Default: Ctrl+Alt for multi-zone
-    bool m_middleClickMultiZone = true;
+    DragModifier m_zoneSpanModifier = DragModifier::AltMeta;
 
     // Display
     bool m_showZonesOnAllMonitors = false;

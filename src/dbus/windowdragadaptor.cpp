@@ -110,6 +110,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+    m_modifierConflictWarned = false;
     m_snapCancelled = false;
     m_overlayShown = false;
     m_zoneSelectorShown = false;
@@ -164,6 +166,51 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     }
 }
 
+QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout) const
+{
+    if (zones.isEmpty()) {
+        return QRectF();
+    }
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
+    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGap, true);
+    for (int i = 1; i < zones.size(); ++i) {
+        combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGap, true));
+    }
+    return combined;
+}
+
+QStringList WindowDragAdaptor::zoneIdsToStringList(const QVector<QUuid>& ids)
+{
+    QStringList result;
+    result.reserve(ids.size());
+    for (const QUuid& id : ids) {
+        result.append(id.toString());
+    }
+    return result;
+}
+
+Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen)
+{
+    outScreen = screenAtPoint(x, y);
+    if (!outScreen || (m_settings && m_settings->isMonitorDisabled(outScreen->name()))) {
+        return nullptr;
+    }
+
+    if (!m_overlayShown) {
+        m_overlayService->showAtPosition(x, y);
+        m_overlayShown = true;
+    }
+
+    auto* layout = m_layoutManager->resolveLayoutForScreen(outScreen->name());
+    if (!layout) {
+        return nullptr;
+    }
+
+    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(outScreen));
+    return layout;
+}
+
 void WindowDragAdaptor::hideOverlayAndClearZoneState()
 {
     if (m_overlayShown && m_overlayService) {
@@ -181,31 +228,92 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     m_isMultiZoneMode = false;
     m_currentZoneGeometry = QRect();
     m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+}
+
+void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
+{
+    QScreen* screen = nullptr;
+    auto* layout = prepareHandlerContext(x, y, screen);
+    if (!layout) {
+        return;
+    }
+
+    // Clear stale multi-zone state from proximity mode when transitioning to paint-to-span
+    if (m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
+        m_currentAdjacentZoneIds.clear();
+        m_isMultiZoneMode = false;
+        m_currentMultiZoneGeometry = QRect();
+    }
+
+    // Convert cursor position to relative coordinates within available area
+    QRectF availableGeom = ScreenManager::actualAvailableGeometry(screen);
+    if (availableGeom.width() <= 0 || availableGeom.height() <= 0) {
+        return;
+    }
+
+    qreal relX = static_cast<qreal>(x - availableGeom.x()) / availableGeom.width();
+    qreal relY = static_cast<qreal>(y - availableGeom.y()) / availableGeom.height();
+
+    // Find zone at cursor position
+    Zone* foundZone = nullptr;
+    for (auto* zone : layout->zones()) {
+        QRectF relGeom = zone->relativeGeometry();
+        if (relGeom.contains(QPointF(relX, relY))) {
+            foundZone = zone;
+            break;
+        }
+    }
+
+    // Accumulate painted zones (never remove during a paint drag)
+    if (foundZone) {
+        m_paintedZoneIds.insert(foundZone->id());
+    }
+
+    // Build zone list and combined geometry from all painted zones
+    if (!m_paintedZoneIds.isEmpty()) {
+        QVector<Zone*> paintedZones;
+        for (auto* zone : layout->zones()) {
+            if (m_paintedZoneIds.contains(zone->id())) {
+                paintedZones.append(zone);
+            }
+        }
+
+        if (!paintedZones.isEmpty()) {
+            QRectF combinedGeom = computeCombinedZoneGeometry(paintedZones, screen, layout);
+
+            // Update multi-zone state
+            QVector<QUuid> zoneIds;
+            zoneIds.reserve(paintedZones.size());
+            for (auto* zone : paintedZones) {
+                zoneIds.append(zone->id());
+            }
+
+            m_currentZoneId = paintedZones.first()->id().toString();
+            m_currentAdjacentZoneIds = zoneIds;
+            m_isMultiZoneMode = (paintedZones.size() > 1);
+            m_currentMultiZoneGeometry = combinedGeom.toRect();
+            if (paintedZones.size() == 1) {
+                m_currentZoneGeometry = combinedGeom.toRect();
+            }
+
+            // Highlight all painted zones
+            m_zoneDetector->setLayout(layout);
+            m_zoneDetector->highlightZones(paintedZones);
+            m_overlayService->highlightZones(zoneIdsToStringList(zoneIds));
+        }
+    }
 }
 
 void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifiers mods)
 {
     Q_UNUSED(mods);
 
-    QScreen* screen = screenAtPoint(x, y);
-    if (!screen || (m_settings && m_settings->isMonitorDisabled(screen->name()))) {
-        return;
-    }
-
-    // Show overlay if not visible
-    if (!m_overlayShown) {
-        m_overlayService->showAtPosition(x, y);
-        m_overlayShown = true;
-    }
-
-    // Get layout assigned to this specific screen (uses current desktop + activity context)
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
+    QScreen* screen = nullptr;
+    auto* layout = prepareHandlerContext(x, y, screen);
     if (!layout) {
         return;
     }
-
-    // Recalculate zone geometries for the current screen before detection.
-    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
 
     m_zoneDetector->setLayout(layout);
 
@@ -239,20 +347,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
             m_currentAdjacentZoneIds = newAdjacentZoneIds;
             m_isMultiZoneMode = true;
 
-            // Calculate combined geometry with gaps
-            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-            int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
-            QRectF combinedGeom =
-                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, true);
-            for (Zone* zone : result.adjacentZones) {
-                if (zone && zone != result.primaryZone) {
-                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
-                    combinedGeom = combinedGeom.united(zoneGeom);
-                }
-            }
-            m_currentMultiZoneGeometry = combinedGeom.toRect();
-
-            // Highlight all zones in multi-zone selection
+            // Build de-duplicated zone list for geometry and highlighting
             QVector<Zone*> zonesToHighlight;
             zonesToHighlight.append(result.primaryZone);
             for (Zone* zone : result.adjacentZones) {
@@ -260,14 +355,10 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
                     zonesToHighlight.append(zone);
                 }
             }
-            m_zoneDetector->highlightZones(zonesToHighlight);
 
-            // Update overlay to show multi-zone selection
-            QStringList zoneIds;
-            for (const QUuid& id : m_currentAdjacentZoneIds) {
-                zoneIds.append(id.toString());
-            }
-            m_overlayService->highlightZones(zoneIds);
+            m_currentMultiZoneGeometry = computeCombinedZoneGeometry(zonesToHighlight, screen, layout).toRect();
+            m_zoneDetector->highlightZones(zonesToHighlight);
+            m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
         }
     } else if (result.primaryZone) {
         // Single zone detected (fallback from multi-zone detection)
@@ -302,25 +393,11 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
 
 void WindowDragAdaptor::handleSingleZoneModifier(int x, int y)
 {
-    QScreen* screen = screenAtPoint(x, y);
-    if (!screen || (m_settings && m_settings->isMonitorDisabled(screen->name()))) {
-        return;
-    }
-
-    // Show overlay if not visible
-    if (!m_overlayShown) {
-        m_overlayService->showAtPosition(x, y);
-        m_overlayShown = true;
-    }
-
-    // Get layout assigned to this specific screen (uses current desktop + activity context)
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
+    QScreen* screen = nullptr;
+    auto* layout = prepareHandlerContext(x, y, screen);
     if (!layout) {
         return;
     }
-
-    // Recalculate zone geometries for the current screen before detection.
-    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
 
     m_zoneDetector->setLayout(layout);
 
@@ -396,14 +473,30 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Get modifier settings and current activation state (keyboard or mouse)
     int dragActivationMod = static_cast<int>(m_settings->dragActivationModifier());
     int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
+    int zoneSpanMod = static_cast<int>(m_settings->zoneSpanModifier());
     const int activationButton = m_settings->dragActivationMouseButton();
     const bool activationByMouse = (activationButton != 0 && (mouseButtons & activationButton) != 0);
     bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse;
     bool multiZoneModifierHeld = checkModifier(multiZoneMod, mods);
+    bool zoneSpanModifierHeld = checkModifier(zoneSpanMod, mods);
+
+    // Warn once per drag about modifier conflicts (zone span shadows other modifiers)
+    if (!m_modifierConflictWarned && zoneSpanMod != 0) {
+        if (zoneSpanMod == multiZoneMod) {
+            qCWarning(lcDbusWindow) << "zoneSpanModifier and multiZoneModifier are both set to"
+                                    << zoneSpanMod << "- multi-zone proximity mode will be unreachable";
+            m_modifierConflictWarned = true;
+        } else if (zoneSpanMod == dragActivationMod) {
+            qCWarning(lcDbusWindow) << "zoneSpanModifier and dragActivationModifier are both set to"
+                                    << zoneSpanMod << "- single-zone mode will be unreachable";
+            m_modifierConflictWarned = true;
+        }
+    }
 
     // Mutual exclusion: overlay (modifier-triggered) and zone selector (edge-triggered)
     // cannot be active simultaneously. Modifier takes priority as an explicit user action.
-    if (multiZoneModifierHeld || zoneActivationHeld) {
+    // Priority: zone span > multi-zone > single zone > none
+    if (zoneSpanModifierHeld || multiZoneModifierHeld || zoneActivationHeld) {
         // Modifier held: overlay takes priority — dismiss zone selector if open
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
@@ -411,13 +504,24 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             m_overlayService->clearSelectedZone();
         }
 
-        if (multiZoneModifierHeld) {
-            handleMultiZoneModifier(cursorX, cursorY, mods);
+        if (zoneSpanModifierHeld) {
+            handleZoneSpanModifier(cursorX, cursorY);
         } else {
-            handleSingleZoneModifier(cursorX, cursorY);
+            // Transitioning away from zone span: clear painted zones
+            if (!m_paintedZoneIds.isEmpty()) {
+                m_paintedZoneIds.clear();
+            }
+            if (multiZoneModifierHeld) {
+                handleMultiZoneModifier(cursorX, cursorY, mods);
+            } else {
+                handleSingleZoneModifier(cursorX, cursorY);
+            }
         }
     } else {
-        // No modifier: hide overlay, allow zone selector
+        // No modifier: hide overlay, clear painted zones, allow zone selector
+        if (!m_paintedZoneIds.isEmpty()) {
+            m_paintedZoneIds.clear();
+        }
         hideOverlayAndClearZoneState();
         checkZoneSelectorTrigger(cursorX, cursorY);
     }
@@ -601,6 +705,7 @@ void WindowDragAdaptor::cancelSnap()
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
 
     // Hide overlay and zone selector UI
     hideOverlayAndSelector();
@@ -652,7 +757,7 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         return;
     }
 
-    bool nearEdge = isNearTriggerEdge(cursorX, cursorY);
+    bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY);
 
     if (nearEdge && !m_zoneSelectorShown) {
         // Show zone selector on the cursor's screen only
@@ -671,14 +776,9 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 }
 
-bool WindowDragAdaptor::isNearTriggerEdge(int cursorX, int cursorY) const
+bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY) const
 {
-    if (!m_settings) {
-        return false;
-    }
-
-    QScreen* screen = screenAtPoint(cursorX, cursorY);
-    if (!screen) {
+    if (!m_settings || !screen) {
         return false;
     }
 
@@ -761,6 +861,7 @@ void WindowDragAdaptor::resetDragState()
     m_currentAdjacentZoneIds.clear();
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
     m_snapCancelled = false;
     m_wasSnapped = false;
 }
@@ -802,6 +903,7 @@ void WindowDragAdaptor::onLayoutChanged()
         m_currentMultiZoneGeometry = QRect();
         m_currentAdjacentZoneIds.clear();
         m_isMultiZoneMode = false;
+        m_paintedZoneIds.clear();
 
         // Clear highlight state since zones are now invalid
         if (m_zoneDetector) {

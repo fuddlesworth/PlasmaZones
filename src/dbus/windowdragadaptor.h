@@ -10,6 +10,7 @@
 #include <QString>
 #include <QRect>
 #include <QUuid>
+#include <QSet>
 #include <QVector>
 #include <memory>
 
@@ -21,6 +22,7 @@ class IOverlayService;
 class IZoneDetector;
 class LayoutManager; // Concrete type needed for signal connections
 class ISettings;
+class Layout;
 class Zone;
 class WindowTrackingAdaptor;
 
@@ -114,7 +116,19 @@ private:
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
+    // Shared preamble for drag handler methods (DRY extraction)
+    // Returns layout for the screen at (x,y), or nullptr if screen disabled/no layout.
+    // Shows overlay if not visible. Sets outScreen to the resolved screen.
+    Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen);
+
+    // Compute bounding rectangle of multiple zones with gaps applied
+    QRectF computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout) const;
+
+    // Convert zone UUIDs to string list (for overlay service)
+    static QStringList zoneIdsToStringList(const QVector<QUuid>& ids);
+
     // Refactored dragMoved helpers
+    void handleZoneSpanModifier(int x, int y);
     void handleMultiZoneModifier(int x, int y, Qt::KeyboardModifiers mods);
     void handleSingleZoneModifier(int x, int y);
     void hideOverlayAndClearZoneState();
@@ -142,9 +156,13 @@ private:
     bool m_isMultiZoneMode = false;
     QRect m_currentMultiZoneGeometry; // Combined geometry for multi-zone
 
+    // Paint-to-span state (zone span modifier)
+    QSet<QUuid> m_paintedZoneIds; // Accumulates zones during paint-to-span drag
+    bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
+
     // Zone selector methods
     void checkZoneSelectorTrigger(int cursorX, int cursorY);
-    bool isNearTriggerEdge(int cursorX, int cursorY) const;
+    bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY) const;
 
     // dragStopped() helpers
     void hideOverlayAndSelector();

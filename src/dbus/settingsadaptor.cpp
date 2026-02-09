@@ -134,19 +134,6 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
 
-    // Skip-snap modifier: hold this key to move window without snapping
-    m_getters[QStringLiteral("skipSnapModifier")] = [this]() {
-        return static_cast<int>(m_settings->skipSnapModifier());
-    };
-    m_setters[QStringLiteral("skipSnapModifier")] = [this](const QVariant& v) {
-        int mod = v.toInt();
-        if (mod >= 0 && mod <= static_cast<int>(DragModifier::AlwaysActive)) {
-            m_settings->setSkipSnapModifier(static_cast<DragModifier>(mod));
-            return true;
-        }
-        return false;
-    };
-
     // Multi-zone modifier: hold this key to span windows across multiple zones
     m_getters[QStringLiteral("multiZoneModifier")] = [this]() {
         return static_cast<int>(m_settings->multiZoneModifier());
@@ -173,7 +160,18 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
 
-    REGISTER_BOOL_SETTING("middleClickMultiZone", middleClickMultiZone, setMiddleClickMultiZone)
+    // Zone span modifier: hold this key for paint-to-span zone selection
+    m_getters[QStringLiteral("zoneSpanModifier")] = [this]() {
+        return static_cast<int>(m_settings->zoneSpanModifier());
+    };
+    m_setters[QStringLiteral("zoneSpanModifier")] = [this](const QVariant& v) {
+        int mod = v.toInt();
+        if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
+            m_settings->setZoneSpanModifier(static_cast<DragModifier>(mod));
+            return true;
+        }
+        return false;
+    };
 
     // Display settings
     REGISTER_BOOL_SETTING("showZonesOnAllMonitors", showZonesOnAllMonitors, setShowZonesOnAllMonitors)
