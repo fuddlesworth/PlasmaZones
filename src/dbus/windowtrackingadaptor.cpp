@@ -617,6 +617,41 @@ void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString
     qCInfo(lcDbusWindow) << "App rule snapping window" << windowId << "to zone" << result.zoneId;
 }
 
+void WindowTrackingAdaptor::snapToEmptyZone(const QString& windowId, const QString& windowScreenName, bool sticky,
+                                             int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+{
+    snapX = snapY = snapWidth = snapHeight = 0;
+    shouldSnap = false;
+
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    qCDebug(lcDbusWindow) << "snapToEmptyZone called windowId= " << windowId << "screen= " << windowScreenName;
+    SnapResult result = m_service->calculateSnapToEmptyZone(windowId, windowScreenName, sticky);
+    if (!result.shouldSnap) {
+        qCDebug(lcDbusWindow) << "snapToEmptyZone: no snap";
+        return;
+    }
+
+    snapX = result.geometry.x();
+    snapY = result.geometry.y();
+    snapWidth = result.geometry.width();
+    snapHeight = result.geometry.height();
+    shouldSnap = true;
+
+    clearFloatingStateForSnap(windowId);
+
+    // Mark as auto-snapped so windowSnapped() won't update last-used zone or clear pending
+    m_service->markAsAutoSnapped(windowId);
+
+    // Track the assignment
+    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    m_service->assignWindowToZone(windowId, result.zoneId, result.screenName, currentDesktop);
+
+    qCDebug(lcDbusWindow) << "Auto-assign snapping window" << windowId << "to empty zone" << result.zoneId;
+}
+
 void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, const QString& screenName, bool sticky,
                                                    int& snapX, int& snapY, int& snapWidth, int& snapHeight,
                                                    bool& shouldRestore)
@@ -1087,6 +1122,18 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("PendingWindowLayoutAssignments"),
                         QString::fromUtf8(QJsonDocument(pendingLayoutAssignmentsObj).toJson(QJsonDocument::Compact)));
 
+    // Save pending zone numbers (for zone-number fallback when UUIDs change)
+    QJsonObject pendingZoneNumbersObj;
+    for (auto it = m_service->pendingZoneNumbers().constBegin(); it != m_service->pendingZoneNumbers().constEnd(); ++it) {
+        QJsonArray numArray;
+        for (int num : it.value()) {
+            numArray.append(num);
+        }
+        pendingZoneNumbersObj[it.key()] = numArray;
+    }
+    tracking.writeEntry(QStringLiteral("PendingWindowZoneNumbers"),
+                        QString::fromUtf8(QJsonDocument(pendingZoneNumbersObj).toJson(QJsonDocument::Compact)));
+
     // Save pre-snap geometries
     QJsonObject geometriesObj;
     for (auto it = m_service->preSnapGeometries().constBegin(); it != m_service->preSnapGeometries().constEnd(); ++it) {
@@ -1200,6 +1247,30 @@ void WindowTrackingAdaptor::loadState()
         }
     }
     m_service->setPendingLayoutAssignments(pendingLayouts);
+
+    // Load pending zone numbers (for zone-number fallback when UUIDs change)
+    QHash<QString, QList<int>> pendingZoneNumbers;
+    QString pendingZoneNumbersJson = tracking.readEntry(QStringLiteral("PendingWindowZoneNumbers"), QString());
+    if (!pendingZoneNumbersJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(pendingZoneNumbersJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isArray()) {
+                    QList<int> numbers;
+                    for (const QJsonValue& v : it.value().toArray()) {
+                        if (v.isDouble()) {
+                            numbers.append(v.toInt());
+                        }
+                    }
+                    if (!numbers.isEmpty()) {
+                        pendingZoneNumbers[it.key()] = numbers;
+                    }
+                }
+            }
+        }
+    }
+    m_service->setPendingZoneNumbers(pendingZoneNumbers);
 
     // Load pre-snap geometries
     QHash<QString, QRect> preSnapGeometries;

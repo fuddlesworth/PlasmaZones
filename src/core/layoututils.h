@@ -46,6 +46,7 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
     QString description; ///< Optional description
     int zoneCount;       ///< Number of zones
     QVariantList zones;  ///< Zone data for preview rendering
+    bool autoAssign = false; ///< Auto-assign: new windows fill first empty zone
 
     bool operator==(const UnifiedLayoutEntry& other) const { return id == other.id; }
     bool operator!=(const UnifiedLayoutEntry& other) const { return id != other.id; }

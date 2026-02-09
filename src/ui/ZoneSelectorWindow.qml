@@ -611,6 +611,7 @@ Window {
 
                                 anchors.verticalCenter: parent.verticalCenter
                                 category: indicator.layoutCategory
+                                autoAssign: indicator.modelData.autoAssign === true
                             }
 
                             Label {

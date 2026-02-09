@@ -13,7 +13,10 @@
 #include <QDBusInterface>
 #include <QHash>
 #include <QPoint>
+#include <QPointer>
 #include <QRect>
+
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -186,6 +189,14 @@ private:
 
     // Apply snap geometry to window
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry);
+
+    // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
+    // iface must remain valid for the duration of the async call (caller guarantees
+    // ownership via unique_ptr member; the reference is only used to initiate the call,
+    // not captured in the async lambda).
+    void tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method, const QList<QVariant>& args,
+                          QPointer<KWin::EffectWindow> window, const QString& windowId,
+                          bool storePreSnap, std::function<void()> fallback);
 
     // Extract stable ID from full window ID (strips pointer address)
     // Stable ID = windowClass:resourceName (without pointer address)

@@ -101,7 +101,7 @@ public:
     // screenName: target screen (empty = screen under cursor, fallback to primary)
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
-                       const QString& screenName = QString());
+                       bool autoAssign = false, const QString& screenName = QString());
 
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,

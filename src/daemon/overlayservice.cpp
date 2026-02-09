@@ -2122,7 +2122,8 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(window, QStringLiteral("category"), 0);
+    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
+    writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
     writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
@@ -2132,7 +2133,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
-                                   const QString& screenName)
+                                   bool autoAssign, const QString& screenName)
 {
     if (zones.isEmpty()) {
         qCDebug(lcOverlay) << "Skipping OSD for empty layout:" << name;
@@ -2153,6 +2154,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("category"), category);
+    writeQmlProperty(window, QStringLiteral("autoAssign"), autoAssign);
     writeQmlProperty(window, QStringLiteral("zones"), zones);
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
@@ -2211,6 +2213,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
                                        const QString& sourceZoneId, const QString& targetZoneId,
                                        const QString& screenName)
 {
+    qCDebug(lcOverlay) << "showNavigationOsd called: action=" << action << "reason=" << reason
+                       << "screen=" << screenName << "success=" << success;
+
     // Only show OSD for successful actions - failures (no windows, no zones, etc.) don't need feedback
     if (!success) {
         qCDebug(lcOverlay) << "Skipping navigation OSD for failure:" << action << reason;
@@ -2241,7 +2246,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     Layout* screenLayout = resolveScreenLayout(screen);
     if (!screenLayout || screenLayout->zones().isEmpty()) {
-        qCDebug(lcOverlay) << "No layout or zones available for navigation OSD";
+        qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << screen->name()
+                           << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
+                           << "zones=" << (screenLayout ? screenLayout->zones().size() : 0);
         return;
     }
 
@@ -2260,6 +2267,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
             qCWarning(lcOverlay) << "Failed to get navigation OSD window for screen:" << screen->name();
             m_navigationOsdCreationFailed.insert(screen, true);
         }
+        qCDebug(lcOverlay) << "No navigation OSD window for screen:" << screen->name();
         return;
     }
 
@@ -2303,21 +2311,21 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     QVariantList zonesList = LayoutUtils::zonesToVariantList(screenLayout, ZoneField::Minimal);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
-    // Get screen geometry for window positioning
-    const QRect screenGeom = screen->geometry();
+    // Hide any existing navigation OSD before showing new one (prevent overlap)
+    hideNavigationOsd();
 
-    // Set explicit window size before positioning - text-only OSD
+    // Ensure the window is on the correct Wayland output (must come before sizing —
+    // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight)
+    assertWindowOnScreen(window, screen);
+
+    // Size and center: setWidth/setHeight AFTER assertWindowOnScreen so the final
+    // QWindow geometry matches the OSD size (same pattern as sizeAndCenterOsd for LayoutOsd)
+    const QRect screenGeom = screen->geometry();
     const int osdWidth = 240; // Compact width for text
     const int osdHeight = 70; // Text message + margins
     window->setWidth(osdWidth);
     window->setHeight(osdHeight);
-
-    // Ensure the window is on the correct Wayland output before positioning/show
-    assertWindowOnScreen(window, screen);
     centerLayerWindowOnScreen(window, screenGeom, osdWidth, osdHeight);
-
-    // Hide any existing navigation OSD before showing new one (prevent overlap)
-    hideNavigationOsd();
 
     // Show with animation
     QMetaObject::invokeMethod(window, "show");

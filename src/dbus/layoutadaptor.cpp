@@ -286,6 +286,21 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     Q_EMIT layoutListChanged();
 }
 
+void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
+{
+    auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout auto-assign"));
+    if (!layout) {
+        return;
+    }
+
+    layout->setAutoAssign(enabled);
+    // Note: saveLayouts() is triggered automatically via layoutModified signal
+
+    qCDebug(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
+    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+    Q_EMIT layoutListChanged();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Layout Management
 // ═══════════════════════════════════════════════════════════════════════════════

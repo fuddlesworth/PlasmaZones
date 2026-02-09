@@ -19,6 +19,7 @@ Rectangle {
     property string layoutName: ""
     property var zones: [] // Array of zone objects with relativeGeometry
     property int category: 0  // 0=Manual (matches LayoutCategory in C++)
+    property bool autoAssign: false
     // State
     property bool isActive: false
     property bool isHovered: false
@@ -120,6 +121,7 @@ Rectangle {
 
                 anchors.verticalCenter: parent.verticalCenter
                 category: root.category
+                autoAssign: root.autoAssign === true
             }
 
             Label {

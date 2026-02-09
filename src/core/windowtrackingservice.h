@@ -244,6 +244,16 @@ public:
                                         bool isSticky) const;
 
     /**
+     * @brief Calculate snap result for new window to first empty zone (auto-assign)
+     * @param windowId Full window ID
+     * @param windowScreenName Screen where window currently is
+     * @param isSticky Whether window is on all desktops
+     * @return SnapResult with geometry and zone info
+     */
+    SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenName,
+                                         bool isSticky) const;
+
+    /**
      * @brief Calculate snap result to restore from persisted session
      * @param windowId Full window ID
      * @param screenName Screen for geometry calculation
@@ -452,6 +462,11 @@ public:
     const QHash<QString, QString>& pendingLayoutAssignments() const { return m_pendingZoneLayouts; }
 
     /**
+     * @brief Get pending zone numbers (for zone-number fallback on session restore)
+     */
+    const QHash<QString, QList<int>>& pendingZoneNumbers() const { return m_pendingZoneNumbers; }
+
+    /**
      * @brief Get user-snapped classes
      */
     const QSet<QString>& userSnappedClasses() const { return m_userSnappedClasses; }
@@ -475,6 +490,11 @@ public:
      * @brief Set pending layout assignments (loaded from KConfig by adaptor)
      */
     void setPendingLayoutAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneLayouts = assignments; }
+
+    /**
+     * @brief Set pending zone numbers (loaded from KConfig by adaptor)
+     */
+    void setPendingZoneNumbers(const QHash<QString, QList<int>>& numbers) { m_pendingZoneNumbers = numbers; }
 
     /**
      * @brief Set pre-snap geometries (loaded from KConfig by adaptor)
@@ -530,6 +550,7 @@ private:
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
+    QString findEmptyZoneInLayout(Layout* layout, const QString& screenName) const;
     QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString()) const;
 
     // Dependencies
@@ -562,6 +583,7 @@ private:
     QHash<QString, QString> m_pendingZoneScreens;      // stableId -> screenName
     QHash<QString, int> m_pendingZoneDesktops;         // stableId -> desktop
     QHash<QString, QString> m_pendingZoneLayouts;      // stableId -> layoutId (for layout validation on restore)
+    QHash<QString, QList<int>> m_pendingZoneNumbers;  // stableId -> zone numbers (fallback when UUIDs change)
 
     // Pre-float zone and screen (for unfloat restore to correct monitor)
     QHash<QString, QStringList> m_preFloatZoneAssignments;

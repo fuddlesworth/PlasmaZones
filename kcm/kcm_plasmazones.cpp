@@ -1149,6 +1149,20 @@ void KCMPlasmaZones::save()
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Layout auto-assign (autoAssign)
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (!m_pendingAutoAssignStates.isEmpty()) {
+        for (auto it = m_pendingAutoAssignStates.cbegin(); it != m_pendingAutoAssignStates.cend(); ++it) {
+            QDBusMessage autoAssignReply = callDaemon(layoutInterface, QStringLiteral("setLayoutAutoAssign"),
+                                                       {it.key(), it.value()});
+            if (autoAssignReply.type() == QDBusMessage::ErrorMessage) {
+                failedOperations.append(QStringLiteral("Layout auto-assign (%1)").arg(it.key()));
+            }
+        }
+        m_pendingAutoAssignStates.clear();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // App-to-zone rules (per-layout)
     // ═══════════════════════════════════════════════════════════════════════════
     if (!m_pendingAppRules.isEmpty()) {
@@ -1264,6 +1278,9 @@ void KCMPlasmaZones::load()
     // Clear pending layout visibility changes (discard unsaved changes)
     m_pendingHiddenStates.clear();
 
+    // Clear pending auto-assign changes (discard unsaved changes)
+    m_pendingAutoAssignStates.clear();
+
     // Clear pending app rules (discard unsaved changes)
     m_pendingAppRules.clear();
 
@@ -1302,6 +1319,9 @@ void KCMPlasmaZones::defaults()
     // Reset all layouts to visible (clear hidden states)
     m_pendingHiddenStates.clear();
 
+    // Reset all layouts to manual (clear auto-assign states)
+    m_pendingAutoAssignStates.clear();
+
     // Stage empty app rules for all layouts (clears any daemon-side rules on Apply)
     m_pendingAppRules.clear();
     for (int i = 0; i < m_layouts.size(); ++i) {
@@ -1314,10 +1334,19 @@ void KCMPlasmaZones::defaults()
     Q_EMIT appRulesRefreshed();
     for (int i = 0; i < m_layouts.size(); ++i) {
         QVariantMap layout = m_layouts[i].toMap();
+        bool changed = false;
         if (layout[QStringLiteral("hiddenFromSelector")].toBool()) {
             layout[QStringLiteral("hiddenFromSelector")] = false;
-            m_layouts[i] = layout;
             m_pendingHiddenStates[layout[QStringLiteral("id")].toString()] = false;
+            changed = true;
+        }
+        if (layout[QStringLiteral("autoAssign")].toBool()) {
+            layout[QStringLiteral("autoAssign")] = false;
+            m_pendingAutoAssignStates[layout[QStringLiteral("id")].toString()] = false;
+            changed = true;
+        }
+        if (changed) {
+            m_layouts[i] = layout;
         }
     }
     Q_EMIT layoutsChanged();
@@ -1510,6 +1539,25 @@ void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
         QVariantMap layout = m_layouts[i].toMap();
         if (layout[QStringLiteral("id")].toString() == layoutId) {
             layout[QStringLiteral("hiddenFromSelector")] = hidden;
+            m_layouts[i] = layout;
+            break;
+        }
+    }
+    Q_EMIT layoutsChanged();
+
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled)
+{
+    // Stage the change locally (applied on save)
+    m_pendingAutoAssignStates[layoutId] = enabled;
+
+    // Update local model so the UI reflects the change immediately
+    for (int i = 0; i < m_layouts.size(); ++i) {
+        QVariantMap layout = m_layouts[i].toMap();
+        if (layout[QStringLiteral("id")].toString() == layoutId) {
+            layout[QStringLiteral("autoAssign")] = enabled;
             m_layouts[i] = layout;
             break;
         }

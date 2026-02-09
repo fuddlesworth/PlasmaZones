@@ -357,6 +357,7 @@ public Q_SLOTS:
     Q_INVOKABLE void editLayout(const QString& layoutId);
     Q_INVOKABLE void openEditor();
     Q_INVOKABLE void setLayoutHidden(const QString& layoutId, bool hidden);
+    Q_INVOKABLE void setLayoutAutoAssign(const QString& layoutId, bool enabled);
 
     // App-to-zone rules management
     Q_INVOKABLE QVariantList getAppRulesForLayout(const QString& layoutId) const;
@@ -582,6 +583,10 @@ private:
     // Pending layout visibility changes (staged until Apply)
     // Key: layoutId, Value: hiddenFromSelector state
     QHash<QString, bool> m_pendingHiddenStates;
+
+    // Pending auto-assign changes (staged until Apply)
+    // Key: layoutId, Value: autoAssign state
+    QHash<QString, bool> m_pendingAutoAssignStates;
 
     // Pending app-to-zone rules (staged until Apply)
     // Key: layoutId, Value: rules list (QVariantList of {pattern, zoneNumber})

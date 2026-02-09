@@ -249,6 +249,9 @@ public Q_SLOTS:
     void snapToAppRule(const QString& windowId, const QString& windowScreenName, bool sticky,
                        int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
 
+    void snapToEmptyZone(const QString& windowId, const QString& windowScreenName, bool sticky,
+                         int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
+
     /**
      * Restore a window to its persisted zone from the previous session
      * This uses stable window identifiers (windowClass:resourceName) to match

@@ -15,6 +15,7 @@
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -173,7 +174,7 @@ void WindowTrackingService::storePreSnapGeometry(const QString& windowId, const 
         // Keep max 100 entries, removing an arbitrary entry when exceeded
         static constexpr int MaxPreSnapGeometries = 100;
         if (m_preSnapGeometries.size() > MaxPreSnapGeometries) {
-            // Remove first entry (oldest in insertion order for QHash)
+            // Remove an arbitrary entry (QHash iteration order is unspecified)
             auto it = m_preSnapGeometries.begin();
             if (it != m_preSnapGeometries.end()) {
                 m_preSnapGeometries.erase(it);
@@ -509,6 +510,53 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     return result;
 }
 
+SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& windowId,
+                                                            const QString& windowScreenName,
+                                                            bool isSticky) const
+{
+    // Do NOT skip floating windows here: this is called when the user explicitly dropped
+    // a window on a monitor (dragStopped, no zone snap). If that monitor has auto-assign,
+    // filling the first empty zone is intended. Floating list is for restore/last-zone
+    // auto-snap; we clear floating state when we assign in snapToEmptyZone.
+
+    // Check sticky window handling (auto-assign is an auto-snap, not a restore)
+    if (isSticky && m_settings) {
+        auto handling = m_settings->stickyWindowHandling();
+        if (handling == StickyWindowHandling::IgnoreAll ||
+            handling == StickyWindowHandling::RestoreOnly) {
+            qCDebug(lcCore) << "snapToEmptyZone: no snap - window" << Utils::extractStableId(windowId)
+                           << "sticky handling" << static_cast<int>(handling);
+            return SnapResult::noSnap();
+        }
+    }
+
+    // Check layout has autoAssign enabled
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
+    if (!layout) {
+        qCDebug(lcCore) << "snapToEmptyZone: no snap - no layout for screen" << windowScreenName;
+        return SnapResult::noSnap();
+    }
+    if (!layout->autoAssign()) {
+        qCDebug(lcCore) << "snapToEmptyZone: no snap - layout" << layout->name() << "autoAssign=false";
+        return SnapResult::noSnap();
+    }
+
+    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution
+    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenName);
+    if (emptyZoneId.isEmpty()) {
+        qCDebug(lcCore) << "snapToEmptyZone: no snap - no empty zone on" << windowScreenName;
+        return SnapResult::noSnap();
+    }
+
+    QRect geo = zoneGeometry(emptyZoneId, windowScreenName);
+    if (!geo.isValid()) {
+        qCDebug(lcCore) << "snapToEmptyZone: no snap - invalid geometry for zone" << emptyZoneId;
+        return SnapResult::noSnap();
+    }
+
+    return {true, geo, emptyZoneId, {emptyZoneId}, windowScreenName};
+}
+
 SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& windowId,
                                                                const QString& screenName,
                                                                bool isSticky) const
@@ -598,6 +646,39 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     } else {
         geo = zoneGeometry(zoneId, savedScreen);
     }
+
+    // Zone-number fallback: zone UUIDs may have changed after layout edit.
+    // Re-resolve layout for this screen and look up by zone number instead.
+    if (!geo.isValid() && !savedLayoutId.isEmpty()) {
+        QList<int> savedNumbers = m_pendingZoneNumbers.value(stableId);
+        if (!savedNumbers.isEmpty()) {
+            Layout* fallbackLayout = m_layoutManager
+                ? m_layoutManager->resolveLayoutForScreen(savedScreen) : nullptr;
+            if (fallbackLayout) {
+                QStringList fallbackIds;
+                for (int num : savedNumbers) {
+                    Zone* z = fallbackLayout->zoneByNumber(num);
+                    if (z) fallbackIds.append(z->id().toString());
+                }
+                if (!fallbackIds.isEmpty()) {
+                    geo = (fallbackIds.size() > 1)
+                        ? multiZoneGeometry(fallbackIds, savedScreen)
+                        : zoneGeometry(fallbackIds.first(), savedScreen);
+                    if (geo.isValid()) {
+                        zoneId = fallbackIds.first();
+                        zoneIds = fallbackIds;
+                        if (fallbackIds.size() < savedNumbers.size()) {
+                            qCWarning(lcCore) << "Zone-number fallback partial match for" << stableId
+                                              << "- requested:" << savedNumbers.size() << "zones, matched:" << fallbackIds.size();
+                        }
+                        qCDebug(lcCore) << "Zone-number fallback for" << stableId
+                                        << "numbers:" << savedNumbers << "->" << fallbackIds;
+                    }
+                }
+            }
+        }
+    }
+
     if (!geo.isValid()) {
         return SnapResult::noSnap();
     }
@@ -643,6 +724,7 @@ bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
         m_pendingZoneScreens.remove(stableId);
         m_pendingZoneDesktops.remove(stableId);
         m_pendingZoneLayouts.remove(stableId);
+        m_pendingZoneNumbers.remove(stableId);
         qCDebug(lcCore) << "Cleared stale pending assignment for" << stableId;
         scheduleSaveState();
     }
@@ -673,6 +755,7 @@ void WindowTrackingService::consumePendingAssignment(const QString& windowId)
         m_pendingZoneScreens.remove(stableId);
         m_pendingZoneDesktops.remove(stableId);
         m_pendingZoneLayouts.remove(stableId);
+        m_pendingZoneNumbers.remove(stableId);
         qCDebug(lcCore) << "Consumed pending assignment for" << stableId;
         scheduleSaveState();
     }
@@ -708,21 +791,32 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
     return occupiedZoneIds;
 }
 
-QString WindowTrackingService::findEmptyZone(const QString& screenName) const
+QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QString& screenName) const
 {
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     if (!layout) {
         return QString();
     }
 
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenName);
 
-    for (Zone* zone : layout->zones()) {
+    // Sort by zone number so "first empty" is the lowest-numbered empty zone
+    QVector<Zone*> sortedZones = layout->zones();
+    std::sort(sortedZones.begin(), sortedZones.end(), [](const Zone* a, const Zone* b) {
+        return a->zoneNumber() < b->zoneNumber();
+    });
+
+    for (Zone* zone : sortedZones) {
         if (!occupiedZoneIds.contains(zone->id())) {
             return zone->id().toString();
         }
     }
     return QString();
+}
+
+QString WindowTrackingService::findEmptyZone(const QString& screenName) const
+{
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    return findEmptyZoneInLayout(layout, screenName);
 }
 
 QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& screenName) const
@@ -1114,9 +1208,22 @@ void WindowTrackingService::windowClosed(const QString& windowId)
                 m_pendingZoneLayouts.remove(stableId);
             }
 
+            // Save zone numbers for fallback when zone UUIDs get regenerated on layout edit
+            QList<int> zoneNumbers;
+            for (const QString& zId : zoneIds) {
+                Zone* z = findZoneById(zId);
+                if (z) zoneNumbers.append(z->zoneNumber());
+            }
+            if (!zoneNumbers.isEmpty()) {
+                m_pendingZoneNumbers[stableId] = zoneNumbers;
+            } else {
+                m_pendingZoneNumbers.remove(stableId);
+            }
+
             qCDebug(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId
                             << "screen:" << screenName << "desktop:" << desktop
-                            << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"));
+                            << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"))
+                            << "zoneNumbers:" << zoneNumbers;
         }
     }
 
