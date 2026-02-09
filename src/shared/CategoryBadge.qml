@@ -26,7 +26,9 @@ Rectangle {
     implicitHeight: Kirigami.Units.gridUnit * heightScale
     radius: Kirigami.Units.smallSpacing / 2
 
-    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, manualBackgroundOpacity)
+    color: root.autoAssign
+        ? Qt.rgba(Kirigami.Theme.activeTextColor.r, Kirigami.Theme.activeTextColor.g, Kirigami.Theme.activeTextColor.b, manualBackgroundOpacity)
+        : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, manualBackgroundOpacity)
 
     Label {
         id: categoryLabel
@@ -35,7 +37,7 @@ Rectangle {
         text: root.autoAssign ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual")
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
         font.weight: Font.Medium
-        color: Kirigami.Theme.textColor
-        opacity: root.manualTextOpacity
+        color: root.autoAssign ? Kirigami.Theme.activeTextColor : Kirigami.Theme.textColor
+        opacity: root.autoAssign ? 0.8 : root.manualTextOpacity
     }
 }
