@@ -196,6 +196,8 @@ Q_SIGNALS:
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
+    void enableAudioVisualizerChanged();
+    void audioSpectrumBarCountChanged();
     // Global shortcuts
     void openEditorShortcutChanged();
     void previousLayoutShortcutChanged();

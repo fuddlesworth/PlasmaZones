@@ -122,6 +122,8 @@ public:
 
     static bool enableShaderEffects() { return instance().defaultEnableShaderEffectsValue(); }
     static int shaderFrameRate() { return instance().defaultShaderFrameRateValue(); }
+    static bool enableAudioVisualizer() { return instance().defaultEnableAudioVisualizerValue(); }
+    static int audioSpectrumBarCount() { return instance().defaultAudioSpectrumBarCountValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Mode Tracking Settings

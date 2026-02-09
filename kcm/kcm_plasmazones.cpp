@@ -679,6 +679,39 @@ void KCMPlasmaZones::setShaderFrameRate(int fps)
     }
 }
 
+bool KCMPlasmaZones::enableAudioVisualizer() const
+{
+    return m_settings->enableAudioVisualizer();
+}
+
+bool KCMPlasmaZones::cavaAvailable() const
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("cava")).isEmpty();
+}
+
+int KCMPlasmaZones::audioSpectrumBarCount() const
+{
+    return m_settings->audioSpectrumBarCount();
+}
+
+void KCMPlasmaZones::setEnableAudioVisualizer(bool enable)
+{
+    if (m_settings->enableAudioVisualizer() != enable) {
+        m_settings->setEnableAudioVisualizer(enable);
+        Q_EMIT enableAudioVisualizerChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAudioSpectrumBarCount(int count)
+{
+    if (m_settings->audioSpectrumBarCount() != count) {
+        m_settings->setAudioSpectrumBarCount(count);
+        Q_EMIT audioSpectrumBarCountChanged();
+        setNeedsSave(true);
+    }
+}
+
 // Zone setters
 void KCMPlasmaZones::setZonePadding(int padding)
 {
@@ -1377,6 +1410,8 @@ void KCMPlasmaZones::defaults()
     Q_EMIT enableBlurChanged();
     Q_EMIT enableShaderEffectsChanged();
     Q_EMIT shaderFrameRateChanged();
+    Q_EMIT enableAudioVisualizerChanged();
+    Q_EMIT audioSpectrumBarCountChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT outerGapChanged();
     Q_EMIT adjacentThresholdChanged();

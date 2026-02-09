@@ -7,9 +7,10 @@
 #include <QSGRenderNode>
 #include <QColor>
 #include <QImage>
-#include <QStringList>
-#include <QVector4D>
 #include <QString>
+#include <QStringList>
+#include <QVector>
+#include <QVector4D>
 
 namespace PlasmaZones {
 
@@ -56,6 +57,12 @@ public:
     virtual void setLabelsTexture(const QImage& image)
     {
         Q_UNUSED(image)
+    }
+
+    /** Audio spectrum (CAVA bar values 0-1). Empty = disabled. Default no-op. */
+    virtual void setAudioSpectrum(const QVector<float>& spectrum)
+    {
+        Q_UNUSED(spectrum)
     }
 
     /** Multi-pass: optional buffer pass fragment shader path. No-op if backend does not support multipass. */

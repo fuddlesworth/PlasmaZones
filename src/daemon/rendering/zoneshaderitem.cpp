@@ -422,6 +422,45 @@ void ZoneShaderItem::setLabelsTexture(const QImage& image)
     update();
 }
 
+QVariant ZoneShaderItem::audioSpectrumVariant() const
+{
+    return QVariant::fromValue(m_audioSpectrum);
+}
+
+void ZoneShaderItem::setAudioSpectrumVariant(const QVariant& spectrum)
+{
+    // Fast path: QVector<float> from C++ OverlayService (no per-element conversion)
+    if (spectrum.metaType() == QMetaType::fromType<QVector<float>>()) {
+        setAudioSpectrumRaw(spectrum.value<QVector<float>>());
+        return;
+    }
+    // Slow path: QVariantList from QML (JS array)
+    const QVariantList list = spectrum.toList();
+    QVector<float> vec;
+    vec.reserve(list.size());
+    for (const QVariant& v : list) {
+        bool ok = false;
+        const float f = v.toFloat(&ok);
+        vec.append(ok ? qBound(0.0f, f, 1.0f) : 0.0f);
+    }
+    if (m_audioSpectrum == vec) {
+        return;
+    }
+    m_audioSpectrum = std::move(vec);
+    Q_EMIT audioSpectrumChanged();
+    update();
+}
+
+void ZoneShaderItem::setAudioSpectrumRaw(const QVector<float>& spectrum)
+{
+    if (m_audioSpectrum == spectrum) {
+        return;
+    }
+    m_audioSpectrum = spectrum;
+    Q_EMIT audioSpectrumChanged();
+    update();
+}
+
 QVector4D ZoneShaderItem::customColorByIndex(int index) const
 {
     switch (index) {
@@ -638,6 +677,11 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         QMutexLocker lock(&m_labelsTextureMutex);
         node->setLabelsTexture(m_labelsTexture);
     }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Sync audio spectrum (CAVA bar data for audio-reactive shaders)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    node->setAudioSpectrum(m_audioSpectrum);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Sync buffer shader path (multipass)

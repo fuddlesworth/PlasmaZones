@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "overlayservice.h"
+#include "cavaservice.h"
 #include "../config/configdefaults.h"
 #include "../core/zoneselectorlayout.h"
 
@@ -386,6 +387,10 @@ OverlayService::OverlayService(QObject* parent)
 
     // Reset shader error state on construction (fresh start after reboot)
     m_pendingShaderError.clear();
+
+    m_cavaService = std::make_unique<CavaService>(this);
+    connect(m_cavaService.get(), &CavaService::spectrumUpdated,
+            this, &OverlayService::onAudioSpectrumUpdated);
 }
 
 bool OverlayService::isVisible() const
@@ -561,10 +566,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
 
     // Check if we need to recreate windows - this handles the case where windows
     // were created before shaders were ready (e.g., at startup after reboot)
-    const bool shouldUseShader = useShaderOverlay();
-    bool needsRecreate = false;
+    // Check per-screen: each monitor's layout may differ in shader usage
+    QList<QScreen*> screensToRecreate;
 
-    // Check if any existing windows are the wrong type
     for (auto* screen : Utils::allScreens()) {
         if (!m_overlayWindows.contains(screen)) {
             continue;
@@ -577,21 +581,20 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         // Use isShaderOverlay property set at creation time (more reliable than shaderSource
         // which can be set on non-shader windows by updateOverlayWindow())
         const bool windowIsShader = window->property("isShaderOverlay").toBool();
+        const bool shouldUseShader = useShaderForScreen(screen);
         if (windowIsShader != shouldUseShader) {
-            needsRecreate = true;
-            qCDebug(lcOverlay) << "Overlay window type mismatch detected, will recreate"
+            screensToRecreate.append(screen);
+            qCDebug(lcOverlay) << "Overlay window type mismatch detected for screen" << screen->name()
                                << "(window is shader:" << windowIsShader << "should be:" << shouldUseShader << ")";
-            break;
         }
     }
 
-    // Recreate windows if type mismatch detected
-    if (needsRecreate) {
-        const auto screens = m_overlayWindows.keys();
-        for (QScreen* screen : screens) {
+    // Recreate only the windows with type mismatch
+    if (!screensToRecreate.isEmpty()) {
+        for (QScreen* screen : screensToRecreate) {
             destroyOverlayWindow(screen);
         }
-        for (QScreen* screen : screens) {
+        for (QScreen* screen : screensToRecreate) {
             if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
                 createOverlayWindow(screen);
                 updateOverlayWindow(screen);
@@ -603,7 +606,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         }
     }
 
-    if (shouldUseShader) {
+    if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();
     }
@@ -665,7 +668,7 @@ void OverlayService::updateLayout(Layout* layout)
 
         // Shader state management - MUST be outside flashZonesOnSwitch block
         // to ensure shader animations work regardless of flash setting
-        if (useShaderOverlay()) {
+        if (anyScreenUsesShader()) {
             // Ensure shader timing + updates continue after layout switch
             {
                 QMutexLocker locker(&m_shaderTimerMutex);
@@ -813,6 +816,9 @@ void OverlayService::setSettings(ISettings* settings)
         if (m_settings) {
             disconnect(m_settings, &ISettings::settingsChanged, this, nullptr);
             disconnect(m_settings, &ISettings::enableShaderEffectsChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::enableAudioVisualizerChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
+            disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
         }
 
         m_settings = settings;
@@ -833,7 +839,7 @@ void OverlayService::setSettings(ISettings* settings)
                     // Check if we were using shaders before the setting changed
                     // (shader timer running indicates we were using shader overlay)
                     const bool wasUsingShader = m_shaderUpdateTimer && m_shaderUpdateTimer->isActive();
-                    const bool shouldUseShader = useShaderOverlay();
+                    const bool shouldUseShader = anyScreenUsesShader();
 
                     // Only recreate if the overlay type actually needs to change
                     if (wasUsingShader != shouldUseShader) {
@@ -848,13 +854,13 @@ void OverlayService::setSettings(ISettings* settings)
                         // Store current visibility state
                         const bool wasVisible = m_visible;
 
-                        // Recreate all overlay windows
+                        // Recreate all overlay windows (each gets correct type per-screen)
                         const auto screens = m_overlayWindows.keys();
                         for (QScreen* screen : screens) {
                             destroyOverlayWindow(screen);
                         }
 
-                        // Recreate windows with correct type
+                        // Recreate windows with correct type per-screen
                         for (QScreen* screen : screens) {
                             if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
                                 createOverlayWindow(screen);
@@ -865,7 +871,7 @@ void OverlayService::setSettings(ISettings* settings)
                             }
                         }
 
-                        // Start shader animation if needed
+                        // Start shader animation if any screen needs it
                         if (shouldUseShader && wasVisible) {
                             updateZonesForAllWindows(); // Push initial zone data
                             startShaderAnimation();
@@ -873,6 +879,46 @@ void OverlayService::setSettings(ISettings* settings)
                     }
                 }
             });
+
+            connect(m_settings, &ISettings::enableAudioVisualizerChanged, this, [this]() {
+                // Start/stop CAVA regardless of overlay visibility so it's warm when needed
+                if (m_settings->enableAudioVisualizer()) {
+                    if (m_cavaService) {
+                        m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
+                        m_cavaService->setFramerate(qBound(30, m_settings->shaderFrameRate(), 144));
+                        m_cavaService->start();
+                    }
+                } else {
+                    if (m_cavaService) {
+                        m_cavaService->stop();
+                        for (auto* window : std::as_const(m_overlayWindows)) {
+                            if (window) {
+                                writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+                            }
+                        }
+                    }
+                }
+            });
+
+            connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, [this]() {
+                if (m_cavaService && m_cavaService->isRunning()) {
+                    m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
+                }
+            });
+
+            connect(m_settings, &ISettings::shaderFrameRateChanged, this, [this]() {
+                if (m_cavaService && m_cavaService->isRunning() && m_settings) {
+                    m_cavaService->setFramerate(qBound(30, m_settings->shaderFrameRate(), 144));
+                }
+            });
+
+            // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
+            if (m_settings->enableAudioVisualizer() && m_cavaService) {
+                m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
+                m_cavaService->setFramerate(qBound(30, m_settings->shaderFrameRate(), 144));
+                m_cavaService->start();
+                qCDebug(lcOverlay) << "CAVA started eagerly (audio visualization enabled)";
+            }
         }
     }
 }
@@ -1456,8 +1502,8 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         return;
     }
 
-    // Choose overlay type based on shader settings
-    bool usingShader = useShaderOverlay();
+    // Choose overlay type based on shader settings for THIS screen's layout
+    bool usingShader = useShaderForScreen(screen);
 
     // Expose overlayService to QML context for error reporting
     m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
@@ -1602,7 +1648,8 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     // Update shader-specific properties if using shader overlay
     // Only update if this window is actually a shader overlay window (check isShaderOverlay property)
     const bool windowIsShader = window->property("isShaderOverlay").toBool();
-    if (windowIsShader && useShaderOverlay() && screenLayout) {
+    const bool screenUsesShader = useShaderForScreen(screen);
+    if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = ShaderRegistry::instance();
         if (registry) {
             const QString shaderId = screenLayout->shaderId();
@@ -1621,7 +1668,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
             writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(translatedParams));
         }
-    } else if (windowIsShader && !useShaderOverlay()) {
+    } else if (windowIsShader && !screenUsesShader) {
         // Clear shader properties if window is shader type but shaders are now disabled
         writeQmlProperty(window, QStringLiteral("shaderSource"), QUrl());
         writeQmlProperty(window, QStringLiteral("bufferShaderPath"), QString());
@@ -1640,7 +1687,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     window->setProperty("zones", patched);
 
     // Shader overlay: zoneCount, highlightedCount, zoneDataVersion, labelsTexture
-    if (useShaderOverlay()) {
+    if (windowIsShader && screenUsesShader) {
         int highlightedCount = 0;
         for (const QVariant& z : patched) {
             if (z.toMap().value(QLatin1String("isHighlighted")).toBool()) {
@@ -1930,6 +1977,38 @@ bool OverlayService::useShaderOverlay() const
     return registry && registry->shader(m_layout->shaderId()).isValid();
 }
 
+bool OverlayService::useShaderForScreen(QScreen* screen) const
+{
+    if (!canUseShaders()) {
+        return false;
+    }
+    if (m_settings && !m_settings->enableShaderEffects()) {
+        return false;
+    }
+    Layout* screenLayout = resolveScreenLayout(screen);
+    if (!screenLayout || ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
+        return false;
+    }
+    auto* registry = ShaderRegistry::instance();
+    return registry && registry->shader(screenLayout->shaderId()).isValid();
+}
+
+bool OverlayService::anyScreenUsesShader() const
+{
+    if (!canUseShaders()) {
+        return false;
+    }
+    if (m_settings && !m_settings->enableShaderEffects()) {
+        return false;
+    }
+    for (auto* screen : m_overlayWindows.keys()) {
+        if (useShaderForScreen(screen)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void OverlayService::startShaderAnimation()
 {
     if (!m_shaderUpdateTimer) {
@@ -1944,14 +2023,39 @@ void OverlayService::startShaderAnimation()
     const int interval = qRound(1000.0 / frameRate);
     m_shaderUpdateTimer->start(interval);
 
+    // CAVA runs independently (started in setSettings / enableAudioVisualizerChanged).
+    // Just sync config in case frame rate changed since CAVA was started.
+    if (m_cavaService && m_cavaService->isRunning() && m_settings) {
+        m_cavaService->setFramerate(frameRate);
+    }
+
     qCDebug(lcOverlay) << "Shader animation started at" << (1000 / interval) << "fps";
 }
 
 void OverlayService::stopShaderAnimation()
 {
+    // Don't stop CAVA here — it stays warm for instant audio data on next show().
+    // Just clear the spectrum from overlay windows so they don't render stale data.
+    for (auto* window : std::as_const(m_overlayWindows)) {
+        if (window) {
+            writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
+        }
+    }
     if (m_shaderUpdateTimer) {
         m_shaderUpdateTimer->stop();
         qCDebug(lcOverlay) << "Shader animation stopped";
+    }
+}
+
+void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
+{
+    // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
+    // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
+    const QVariant wrapped = QVariant::fromValue(spectrum);
+    for (auto* window : std::as_const(m_overlayWindows)) {
+        if (window) {
+            writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
+        }
     }
 }
 
@@ -2021,7 +2125,7 @@ void OverlayService::updateZonesForAllWindows()
         window->setProperty("zoneCount", patched.size());
         window->setProperty("highlightedCount", highlightedCount);
 
-        if (useShaderOverlay()) {
+        if (useShaderForScreen(screen)) {
             Layout* screenLayout = resolveScreenLayout(screen);
             updateLabelsTextureForWindow(window, patched, screen, screenLayout);
         }

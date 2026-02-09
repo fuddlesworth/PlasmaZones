@@ -202,6 +202,8 @@ set(plasmazones_daemon_SRCS
     daemon/main.cpp
     daemon/daemon.cpp
     daemon/daemon.h
+    daemon/cavaservice.cpp
+    daemon/cavaservice.h
     daemon/overlayservice.cpp
     daemon/overlayservice.h
     daemon/shortcutmanager.cpp

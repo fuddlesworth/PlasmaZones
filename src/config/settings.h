@@ -129,6 +129,10 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
                    enableShaderEffectsChanged)
     Q_PROPERTY(int shaderFrameRate READ shaderFrameRate WRITE setShaderFrameRate NOTIFY shaderFrameRateChanged)
+    Q_PROPERTY(bool enableAudioVisualizer READ enableAudioVisualizer WRITE setEnableAudioVisualizer NOTIFY
+                   enableAudioVisualizerChanged)
+    Q_PROPERTY(int audioSpectrumBarCount READ audioSpectrumBarCount WRITE setAudioSpectrumBarCount NOTIFY
+                   audioSpectrumBarCountChanged)
 
     // Global Shortcuts (configurable via KCM, registered with KGlobalAccel)
     Q_PROPERTY(
@@ -586,6 +590,16 @@ public:
         return m_shaderFrameRate;
     }
     void setShaderFrameRate(int fps) override;
+    bool enableAudioVisualizer() const override
+    {
+        return m_enableAudioVisualizer;
+    }
+    void setEnableAudioVisualizer(bool enable) override;
+    int audioSpectrumBarCount() const override
+    {
+        return m_audioSpectrumBarCount;
+    }
+    void setAudioSpectrumBarCount(int count) override;
 
     // Global Shortcuts (for KGlobalAccel)
     QString openEditorShortcut() const
@@ -946,6 +960,8 @@ private:
     // Shader Effects (defaults from plasmazones.kcfg via ConfigDefaults)
     bool m_enableShaderEffects = true;
     int m_shaderFrameRate = 60;
+    bool m_enableAudioVisualizer = false;
+    int m_audioSpectrumBarCount = 64;
 
     // Global Shortcuts (configurable, registered with KGlobalAccel)
     QString m_openEditorShortcut = QStringLiteral("Meta+Shift+E");
