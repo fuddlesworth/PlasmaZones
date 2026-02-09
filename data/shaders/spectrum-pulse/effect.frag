@@ -95,15 +95,15 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
 
-    // Parameters with defaults
-    float glowIntensity = customParams[0].x > 0.1   ? customParams[0].x : 2.5;
-    float reactivity    = customParams[0].y > 0.1   ? customParams[0].y : 1.5;
-    float waveHeight    = customParams[0].z > 0.01  ? customParams[0].z : 0.15;
-    float bassExpand    = customParams[0].w > 0.001  ? customParams[0].w : 1.5;
-    float flowSpeed     = customParams[1].x > 0.1   ? customParams[1].x : 2.0;
-    float plasmaDetail  = customParams[1].y > 0.001  ? customParams[1].y : 0.8;
-    float colorMix      = customParams[1].z > 0.001  ? customParams[1].z : 0.5;
-    float idleAnim      = customParams[1].w > 0.01  ? customParams[1].w : 1.0;
+    // Parameters with defaults (sentinel: -1.0 = unset → use default)
+    float glowIntensity = customParams[0].x >= 0.0 ? customParams[0].x : 2.5;
+    float reactivity    = customParams[0].y >= 0.0 ? customParams[0].y : 1.5;
+    float waveHeight    = customParams[0].z >= 0.0 ? customParams[0].z : 0.15;
+    float bassExpand    = customParams[0].w >= 0.0 ? customParams[0].w : 1.5;
+    float flowSpeed     = customParams[1].x >= 0.0 ? customParams[1].x : 2.0;
+    float plasmaDetail  = customParams[1].y >= 0.0 ? customParams[1].y : 0.8;
+    float colorMix      = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
+    float idleAnim      = customParams[1].w >= 0.0 ? customParams[1].w : 1.0;
 
     // Zone geometry
     vec2 rectPos  = zoneRectPos(rect);

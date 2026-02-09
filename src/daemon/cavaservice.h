@@ -44,7 +44,7 @@ public:
     }
     void setBarCount(int count);
 
-    /** Target framerate for CAVA (30-120). */
+    /** Target framerate for CAVA (30-144). */
     int framerate() const
     {
         return m_framerate;
@@ -64,6 +64,7 @@ private:
     void onReadyReadStandardOutput();
     void onProcessStateChanged(QProcess::ProcessState state);
     void onProcessError(QProcess::ProcessError error);
+    void restartAsync();
     static QString detectAudioMethod();
 
     static constexpr qsizetype kMaxStdoutBufferSize = 65536; // 64 KB
@@ -75,6 +76,7 @@ private:
     QString m_config;
     QVector<float> m_spectrum;
     bool m_stopping = false; // suppress error reporting during intentional stop
+    bool m_pendingRestart = false; // suppress error reporting during async restart
 };
 
 } // namespace PlasmaZones

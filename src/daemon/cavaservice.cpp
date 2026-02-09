@@ -94,20 +94,18 @@ void CavaService::setBarCount(int count)
     if (m_barCount != clamped) {
         m_barCount = clamped;
         if (isRunning()) {
-            stop();
-            start();
+            restartAsync();
         }
     }
 }
 
 void CavaService::setFramerate(int fps)
 {
-    const int clamped = qBound(30, fps, 120);
+    const int clamped = qBound(30, fps, 144);
     if (m_framerate != clamped) {
         m_framerate = clamped;
         if (isRunning()) {
-            stop();
-            start();
+            restartAsync();
         }
     }
 }
@@ -211,13 +209,28 @@ void CavaService::onProcessStateChanged(QProcess::ProcessState state)
 
 void CavaService::onProcessError(QProcess::ProcessError error)
 {
-    // Suppress errors from intentional stop() — SIGTERM causes QProcess::Crashed
-    if (m_stopping) {
+    // Suppress errors from intentional stop() or restartAsync() — SIGTERM causes QProcess::Crashed
+    if (m_stopping || m_pendingRestart) {
         return;
     }
     const QString msg = m_process ? m_process->errorString() : QStringLiteral("Unknown error");
     qCWarning(lcOverlay) << "CAVA process error:" << error << msg;
     Q_EMIT errorOccurred(msg);
+}
+
+void CavaService::restartAsync()
+{
+    if (!m_process || m_process->state() == QProcess::NotRunning) {
+        start();
+        return;
+    }
+    m_pendingRestart = true;
+    // One-shot: restart after the current process exits
+    connect(m_process, &QProcess::finished, this, [this]() {
+        m_pendingRestart = false;
+        start();
+    }, Qt::SingleShotConnection);
+    m_process->terminate();
 }
 
 } // namespace PlasmaZones

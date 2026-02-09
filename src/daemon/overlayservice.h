@@ -213,7 +213,6 @@ private:
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
 
     // Shader support methods
-    bool useShaderOverlay() const;
     bool useShaderForScreen(QScreen* screen) const;
     bool anyScreenUsesShader() const;
     bool canUseShaders() const;

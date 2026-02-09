@@ -885,7 +885,7 @@ void OverlayService::setSettings(ISettings* settings)
                 if (m_settings->enableAudioVisualizer()) {
                     if (m_cavaService) {
                         m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                        m_cavaService->setFramerate(qBound(30, m_settings->shaderFrameRate(), 144));
+                        m_cavaService->setFramerate(m_settings->shaderFrameRate());
                         m_cavaService->start();
                     }
                 } else {
@@ -901,21 +901,21 @@ void OverlayService::setSettings(ISettings* settings)
             });
 
             connect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, [this]() {
-                if (m_cavaService && m_cavaService->isRunning()) {
+                if (m_cavaService) {
                     m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
                 }
             });
 
             connect(m_settings, &ISettings::shaderFrameRateChanged, this, [this]() {
-                if (m_cavaService && m_cavaService->isRunning() && m_settings) {
-                    m_cavaService->setFramerate(qBound(30, m_settings->shaderFrameRate(), 144));
+                if (m_cavaService && m_settings) {
+                    m_cavaService->setFramerate(m_settings->shaderFrameRate());
                 }
             });
 
             // Eagerly start CAVA at daemon boot so spectrum data is warm when overlay shows
             if (m_settings->enableAudioVisualizer() && m_cavaService) {
                 m_cavaService->setBarCount(m_settings->audioSpectrumBarCount());
-                m_cavaService->setFramerate(qBound(30, m_settings->shaderFrameRate(), 144));
+                m_cavaService->setFramerate(m_settings->shaderFrameRate());
                 m_cavaService->start();
                 qCDebug(lcOverlay) << "CAVA started eagerly (audio visualization enabled)";
             }
@@ -1960,23 +1960,6 @@ bool OverlayService::canUseShaders() const
 #endif
 }
 
-bool OverlayService::useShaderOverlay() const
-{
-    if (!canUseShaders()) {
-        return false;
-    }
-    if (!m_layout || ShaderRegistry::isNoneShader(m_layout->shaderId())) {
-        return false;
-    }
-    // Don't permanently give up after one error - retry each show (fallbacks mask bugs)
-    if (m_settings && !m_settings->enableShaderEffects()) {
-        return false; // User disabled shaders globally
-    }
-
-    auto* registry = ShaderRegistry::instance();
-    return registry && registry->shader(m_layout->shaderId()).isValid();
-}
-
 bool OverlayService::useShaderForScreen(QScreen* screen) const
 {
     if (!canUseShaders()) {
@@ -2052,8 +2035,9 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
+    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
+        auto* window = it.value();
+        if (window && useShaderForScreen(it.key())) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
         }
     }

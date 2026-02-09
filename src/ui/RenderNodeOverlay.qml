@@ -301,10 +301,10 @@ Window {
         function buildCustomParams(slot) {
             var prefix = "customParams" + slot + "_"
             return Qt.vector4d(
-                getParam(prefix + "x", 0.0),
-                getParam(prefix + "y", 0.0),
-                getParam(prefix + "z", 0.0),
-                getParam(prefix + "w", 0.0)
+                getParam(prefix + "x", -1.0),
+                getParam(prefix + "y", -1.0),
+                getParam(prefix + "z", -1.0),
+                getParam(prefix + "w", -1.0)
             )
         }
 
