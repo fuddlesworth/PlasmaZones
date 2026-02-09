@@ -358,6 +358,8 @@ set(plasmazones_editor_SRCS
     editor/undo/commands/UpdateShaderIdCommand.h
     editor/undo/commands/UpdateShaderParamsCommand.cpp
     editor/undo/commands/UpdateShaderParamsCommand.h
+    editor/undo/commands/UpdateGapOverrideCommand.cpp
+    editor/undo/commands/UpdateGapOverrideCommand.h
     editor/undo/commands/UpdateVisibilityCommand.cpp
     editor/undo/commands/UpdateVisibilityCommand.h
 )
@@ -404,6 +406,8 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
         editor/qml/VisibilitySettingsDialog.qml
+        editor/qml/LayoutSettingsDialog.qml
+        editor/qml/SectionHeader.qml
         editor/qml/ParameterDelegate.qml
         # SRP-extracted components from PropertyPanel
         editor/qml/ColorUtils.js

@@ -28,6 +28,7 @@
 #include "undo/commands/DividerResizeCommand.h"
 #include "undo/commands/UpdateShaderIdCommand.h"
 #include "undo/commands/UpdateShaderParamsCommand.h"
+#include "undo/commands/UpdateGapOverrideCommand.h"
 #include "undo/commands/UpdateVisibilityCommand.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
@@ -273,6 +274,18 @@ void EditorController::setZonePadding(int padding)
         padding = -1;
     }
     if (m_zonePadding != padding) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::ZonePadding,
+                                                 m_zonePadding, padding);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setZonePaddingDirect(int padding)
+{
+    if (padding < -1) {
+        padding = -1;
+    }
+    if (m_zonePadding != padding) {
         m_zonePadding = padding;
         markUnsaved();
         Q_EMIT zonePaddingChanged();
@@ -280,6 +293,18 @@ void EditorController::setZonePadding(int padding)
 }
 
 void EditorController::setOuterGap(int gap)
+{
+    if (gap < -1) {
+        gap = -1;
+    }
+    if (m_outerGap != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap,
+                                                 m_outerGap, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapDirect(int gap)
 {
     if (gap < -1) {
         gap = -1;

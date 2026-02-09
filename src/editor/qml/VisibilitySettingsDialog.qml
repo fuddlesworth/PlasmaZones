@@ -19,7 +19,26 @@ Kirigami.Dialog {
     required property var editorController
 
     title: i18nc("@title:window", "Zone Selector Visibility")
-    standardButtons: Kirigami.Dialog.Close
+    standardButtons: Kirigami.Dialog.NoButton
+
+    footer: Item {
+        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
+        implicitWidth: footerLayout.implicitWidth
+
+        RowLayout {
+            id: footerLayout
+            anchors.fill: parent
+            anchors.margins: Kirigami.Units.largeSpacing
+
+            Item { Layout.fillWidth: true }
+
+            Button {
+                text: i18nc("@action:button", "Apply")
+                icon.name: "dialog-ok-apply"
+                onClicked: root.close()
+            }
+        }
+    }
     preferredWidth: Kirigami.Units.gridUnit * 18
     padding: Kirigami.Units.largeSpacing
 
@@ -187,28 +206,4 @@ Kirigami.Dialog {
         }
     }
 
-    // ─── Inline components ────────────────────────────
-    component SectionHeader: RowLayout {
-        required property string title
-        required property string icon
-        Layout.fillWidth: true
-        spacing: Kirigami.Units.smallSpacing
-
-        Rectangle {
-            width: Math.round(Kirigami.Units.smallSpacing * 0.75)
-            height: sectionLabel.height
-            color: Kirigami.Theme.highlightColor
-            radius: Math.round(Kirigami.Units.smallSpacing / 4)
-        }
-        Kirigami.Icon {
-            source: parent.icon
-            width: Kirigami.Units.iconSizes.small
-            height: Kirigami.Units.iconSizes.small
-        }
-        Label {
-            id: sectionLabel
-            text: parent.title
-            font.weight: Font.DemiBold
-        }
-    }
 }

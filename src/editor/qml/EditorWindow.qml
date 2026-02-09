@@ -239,6 +239,7 @@ Window {
         helpDialog: helpDialog
         shaderDialog: shaderDialog
         visibilityDialog: visibilityDialog
+        layoutSettingsDialog: layoutSettingsDialog
         importDialog: importDialog
         editorWindow: editorWindow
         exportDialog: exportDialog
@@ -664,6 +665,14 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     VisibilitySettingsDialog {
         id: visibilityDialog
+        editorController: editorWindow._editorController
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // LAYOUT SETTINGS DIALOG
+    // ═══════════════════════════════════════════════════════════════════
+    LayoutSettingsDialog {
+        id: layoutSettingsDialog
         editorController: editorWindow._editorController
     }
 

@@ -21,6 +21,7 @@ ToolBar {
     required property var helpDialog
     required property var shaderDialog
     required property var visibilityDialog
+    required property var layoutSettingsDialog
     required property var importDialog
     required property var exportDialog
     required property var editorWindow
@@ -249,171 +250,11 @@ ToolBar {
 
             icon.name: "configure"
             enabled: editorController !== null && editorController !== undefined
-            onClicked: layoutSettingsPopup.open()
+            onClicked: topBar.layoutSettingsDialog.open()
             ToolTip.text: i18nc("@tooltip", "Layout-specific settings (gaps)")
             ToolTip.visible: hovered
             Accessible.name: i18nc("@action", "Layout Settings")
             Accessible.description: i18nc("@info", "Configure per-layout gap overrides")
-
-            Popup {
-                id: layoutSettingsPopup
-                x: -width + parent.width
-                y: parent.height + Kirigami.Units.smallSpacing
-                width: 320
-                padding: Kirigami.Units.largeSpacing
-
-                // Sync UI state when values change externally (undo/redo, load layout)
-                Connections {
-                    target: editorController
-                    function onZonePaddingChanged() {
-                        zonePaddingOverrideCheck.checked = editorController.hasZonePaddingOverride
-                        if (editorController.hasZonePaddingOverride) {
-                            zonePaddingSpin.value = editorController.zonePadding
-                        } else {
-                            zonePaddingSpin.value = editorController.globalZonePadding
-                        }
-                    }
-                    function onOuterGapChanged() {
-                        outerGapOverrideCheck.checked = editorController.hasOuterGapOverride
-                        if (editorController.hasOuterGapOverride) {
-                            outerGapSpin.value = editorController.outerGap
-                        } else {
-                            outerGapSpin.value = editorController.globalOuterGap
-                        }
-                    }
-                    function onGlobalZonePaddingChanged() {
-                        if (!editorController.hasZonePaddingOverride) {
-                            zonePaddingSpin.value = editorController.globalZonePadding
-                        }
-                    }
-                    function onGlobalOuterGapChanged() {
-                        if (!editorController.hasOuterGapOverride) {
-                            outerGapSpin.value = editorController.globalOuterGap
-                        }
-                    }
-                }
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: Kirigami.Units.mediumSpacing
-
-                    Label {
-                        text: i18nc("@title", "Layout Gap Overrides")
-                        font.bold: true
-                        Layout.fillWidth: true
-                    }
-
-                    Label {
-                        text: i18nc("@info", "Override global settings for this layout only.")
-                        wrapMode: Text.WordWrap
-                        opacity: 0.7
-                        Layout.fillWidth: true
-                        Layout.bottomMargin: Kirigami.Units.smallSpacing
-                    }
-
-                    // Zone Padding override
-                    GridLayout {
-                        columns: 3
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
-                        Layout.fillWidth: true
-
-                        CheckBox {
-                            id: zonePaddingOverrideCheck
-                            text: i18nc("@option:check", "Zone Padding")
-                            checked: editorController ? editorController.hasZonePaddingOverride : false
-                            Layout.fillWidth: true
-                            onToggled: {
-                                if (editorController) {
-                                    if (checked) {
-                                        editorController.zonePadding = editorController.globalZonePadding
-                                    } else {
-                                        editorController.clearZonePaddingOverride()
-                                    }
-                                }
-                            }
-                        }
-
-                        SpinBox {
-                            id: zonePaddingSpin
-                            from: 0
-                            to: 100
-                            value: editorController ? editorController.globalZonePadding : 8
-                            enabled: zonePaddingOverrideCheck.checked
-                            Layout.preferredWidth: 90
-                            onValueModified: {
-                                if (editorController && zonePaddingOverrideCheck.checked) {
-                                    editorController.zonePadding = value
-                                }
-                            }
-                            Component.onCompleted: {
-                                if (editorController && editorController.hasZonePaddingOverride) {
-                                    value = editorController.zonePadding
-                                }
-                            }
-                        }
-
-                        Label {
-                            text: zonePaddingOverrideCheck.checked
-                                ? i18nc("@label", "px")
-                                : i18nc("@label showing global default", "px (global)")
-                            opacity: zonePaddingOverrideCheck.checked ? 1.0 : 0.6
-                        }
-
-                        // Outer Gap override
-                        CheckBox {
-                            id: outerGapOverrideCheck
-                            text: i18nc("@option:check", "Edge Gap")
-                            checked: editorController ? editorController.hasOuterGapOverride : false
-                            Layout.fillWidth: true
-                            onToggled: {
-                                if (editorController) {
-                                    if (checked) {
-                                        editorController.outerGap = editorController.globalOuterGap
-                                    } else {
-                                        editorController.clearOuterGapOverride()
-                                    }
-                                }
-                            }
-                        }
-
-                        SpinBox {
-                            id: outerGapSpin
-                            from: 0
-                            to: 100
-                            value: editorController ? editorController.globalOuterGap : 8
-                            enabled: outerGapOverrideCheck.checked
-                            Layout.preferredWidth: 90
-                            onValueModified: {
-                                if (editorController && outerGapOverrideCheck.checked) {
-                                    editorController.outerGap = value
-                                }
-                            }
-                            Component.onCompleted: {
-                                if (editorController && editorController.hasOuterGapOverride) {
-                                    value = editorController.outerGap
-                                }
-                            }
-                        }
-
-                        Label {
-                            text: outerGapOverrideCheck.checked
-                                ? i18nc("@label", "px")
-                                : i18nc("@label showing global default", "px (global)")
-                            opacity: outerGapOverrideCheck.checked ? 1.0 : 0.6
-                        }
-                    }
-
-                    // Info about where to change global settings
-                    Label {
-                        text: i18nc("@info", "Change global defaults in System Settings.")
-                        opacity: 0.5
-                        font.italic: true
-                        Layout.fillWidth: true
-                        Layout.topMargin: Kirigami.Units.smallSpacing
-                    }
-                }
-            }
         }
 
         // Visual separator

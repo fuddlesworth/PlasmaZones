@@ -219,6 +219,10 @@ public:
     void setCurrentShaderId(const QString& id);
     void setCurrentShaderParams(const QVariantMap& params);
 
+    // Gap override setters - Direct (for undo/redo, bypass command creation)
+    void setZonePaddingDirect(int padding);
+    void setOuterGapDirect(int gap);
+
     // Shader setters - Direct (for undo/redo, bypass command creation)
     void setCurrentShaderIdDirect(const QString& id);
     void setCurrentShaderParamsDirect(const QVariantMap& params);
