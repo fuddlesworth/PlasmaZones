@@ -180,6 +180,7 @@ ComboBox {
                     QFZCommon.CategoryBadge {
                         visible: hasLayout && modelData.category >= 0
                         category: modelData.category
+                        autoAssign: modelData.layout?.autoAssign === true
                     }
                 }
 

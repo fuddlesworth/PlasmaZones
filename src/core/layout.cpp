@@ -78,6 +78,7 @@ Layout::Layout(const Layout& other)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_defaultOrder(other.m_defaultOrder)
     , m_appRules(other.m_appRules)
+    , m_autoAssign(other.m_autoAssign)
     , m_shaderId(other.m_shaderId)
     , m_shaderParams(other.m_shaderParams)
     , m_hiddenFromSelector(other.m_hiddenFromSelector)
@@ -118,6 +119,8 @@ Layout& Layout::operator=(const Layout& other)
         m_shaderParams = other.m_shaderParams;
         bool rulesChanged = m_appRules != other.m_appRules;
         m_appRules = other.m_appRules;
+        bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
+        m_autoAssign = other.m_autoAssign;
         m_hiddenFromSelector = other.m_hiddenFromSelector;
         m_allowedScreens = other.m_allowedScreens;
         m_allowedDesktops = other.m_allowedDesktops;
@@ -139,6 +142,7 @@ Layout& Layout::operator=(const Layout& other)
         if (desktopsChanged) Q_EMIT allowedDesktopsChanged();
         if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
         if (rulesChanged) Q_EMIT appRulesChanged();
+        if (autoAssignDiff) Q_EMIT autoAssignChanged();
     }
     return *this;
 }
@@ -155,6 +159,7 @@ LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
 LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
 LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
 LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
+LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
 
 void Layout::setAllowedScreens(const QStringList& screens)
 {
@@ -511,6 +516,11 @@ QJsonObject Layout::toJson() const
         json[JsonKeys::AppRules] = rulesArray;
     }
 
+    // Auto-assign - only serialize if true
+    if (m_autoAssign) {
+        json[JsonKeys::AutoAssign] = true;
+    }
+
     // Visibility filtering - only serialize non-default values
     if (m_hiddenFromSelector) {
         json[JsonKeys::HiddenFromSelector] = true;
@@ -555,6 +565,9 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     if (json.contains(JsonKeys::AppRules)) {
         layout->m_appRules = AppRule::fromJsonArray(json[JsonKeys::AppRules].toArray());
     }
+
+    // Auto-assign
+    layout->m_autoAssign = json[JsonKeys::AutoAssign].toBool(false);
 
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);

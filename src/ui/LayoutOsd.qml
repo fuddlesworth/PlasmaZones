@@ -22,6 +22,7 @@ Window {
     property var zones: []
     // Layout category: 0=Manual (matches LayoutCategory in C++)
     property int category: 0
+    property bool autoAssign: false
 
     // Screen info for aspect ratio (bounded to prevent layout issues)
     property real screenAspectRatio: 16 / 9
@@ -228,6 +229,7 @@ Window {
 
                 anchors.verticalCenter: parent.verticalCenter
                 category: root.category
+                autoAssign: root.autoAssign === true
             }
 
             Label {

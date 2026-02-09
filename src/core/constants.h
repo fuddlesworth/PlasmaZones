@@ -149,6 +149,9 @@ inline constexpr QLatin1String Pattern{"pattern"};
 // ZoneNumber is reused from zone keys above
 inline constexpr QLatin1String TargetScreen{"targetScreen"};
 
+// Auto-assign keys
+inline constexpr QLatin1String AutoAssign{"autoAssign"};
+
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 }

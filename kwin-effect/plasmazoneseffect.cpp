@@ -1290,97 +1290,40 @@ void PlasmaZonesEffect::callSnapToLastZone(KWin::EffectWindow* window)
     // Use QPointer to safely handle window destruction during async calls
     QPointer<KWin::EffectWindow> safeWindow = window;
 
-    // Priority chain: App Rules -> Session Restore -> Snap to Last Zone
+    // Priority chain (built bottom-up so each step's fallback is the next):
+    //
+    // screenName strategy: Steps 1-2 (app rules, session restore) use the screenName
+    // captured at call time — app rules should match the screen where the window opened,
+    // and persisted zones are stored against the original screen. Steps 3-4 (auto-assign,
+    // last zone) re-query getWindowScreenName(safeWindow) live because the window may have
+    // been moved between async steps and these features should target the current screen.
 
-    // FIRST: Try app-to-zone rules (highest priority - explicit user intent)
-    QDBusPendingCall appRuleCall =
-        m_windowTrackingInterface->asyncCall(QStringLiteral("snapToAppRule"), windowId, screenName, sticky);
+    // FOURTH: Snap to last zone (final fallback)
+    auto tryLastZone = [this, safeWindow, windowId, sticky]() {
+        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) return;
+        QString screen = getWindowScreenName(safeWindow);
+        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToLastZone"),
+                          {windowId, screen, sticky}, safeWindow, windowId, true, nullptr);
+    };
 
-    QDBusPendingCallWatcher* appRuleWatcher = new QDBusPendingCallWatcher(appRuleCall, this);
-    connect(appRuleWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, screenName, sticky](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
+    // THIRD: Auto-assign to empty zone
+    auto tryEmptyZone = [this, safeWindow, windowId, sticky, tryLastZone]() {
+        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) return;
+        QString screen = getWindowScreenName(safeWindow);
+        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"),
+                          {windowId, screen, sticky}, safeWindow, windowId, true, tryLastZone);
+    };
 
-                QDBusPendingReply<int, int, int, int, bool> reply = *w;
-                if (!reply.isError()) {
-                    bool shouldSnap = reply.argumentAt<4>();
-                    if (shouldSnap && safeWindow) {
-                        QRect snapGeometry(reply.argumentAt<0>(), reply.argumentAt<1>(),
-                                           reply.argumentAt<2>(), reply.argumentAt<3>());
-                        qCDebug(lcEffect) << "App rule snapping window" << windowId
-                                          << "to geometry:" << snapGeometry;
-                        ensurePreSnapGeometryStored(safeWindow, windowId);
-                        applySnapGeometry(safeWindow, snapGeometry);
-                        return; // App rule matched, skip other snap methods
-                    }
-                } else {
-                    qCDebug(lcEffect) << "snapToAppRule error:" << reply.error().message();
-                }
+    // SECOND: Restore from persisted zone (uses captured screenName — persisted zone matches open-time screen)
+    auto tryRestore = [this, safeWindow, windowId, screenName, sticky, tryEmptyZone]() {
+        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) return;
+        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("restoreToPersistedZone"),
+                          {windowId, screenName, sticky}, safeWindow, windowId, true, tryEmptyZone);
+    };
 
-                // SECOND: Try to restore to persisted zone from previous session
-                if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
-                    return;
-                }
-
-                QDBusPendingCall restoreCall =
-                    m_windowTrackingInterface->asyncCall(QStringLiteral("restoreToPersistedZone"), windowId, screenName, sticky);
-
-                QDBusPendingCallWatcher* restoreWatcher = new QDBusPendingCallWatcher(restoreCall, this);
-                connect(restoreWatcher, &QDBusPendingCallWatcher::finished, this,
-                        [this, safeWindow, windowId, sticky](QDBusPendingCallWatcher* rw) {
-                            rw->deleteLater();
-
-                            QDBusPendingReply<int, int, int, int, bool> restoreReply = *rw;
-                            if (!restoreReply.isError()) {
-                                bool shouldRestore = restoreReply.argumentAt<4>();
-                                if (shouldRestore && safeWindow) {
-                                    QRect snapGeometry(restoreReply.argumentAt<0>(), restoreReply.argumentAt<1>(),
-                                                       restoreReply.argumentAt<2>(), restoreReply.argumentAt<3>());
-                                    qCDebug(lcEffect)
-                                        << "Restoring window" << windowId << "to persisted zone geometry:" << snapGeometry;
-                                    ensurePreSnapGeometryStored(safeWindow, windowId);
-                                    applySnapGeometry(safeWindow, snapGeometry);
-                                    return; // Successfully restored, don't fall back to snapToLastZone
-                                }
-                            } else {
-                                qCDebug(lcEffect) << "restoreToPersistedZone error:" << restoreReply.error().message();
-                            }
-
-                            // THIRD: No persisted zone found, try "snap to last zone" feature
-                            if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) {
-                                return;
-                            }
-
-                            QString windowScreenName = getWindowScreenName(safeWindow);
-                            QDBusPendingCall snapCall = m_windowTrackingInterface->asyncCall(QStringLiteral("snapToLastZone"),
-                                                                                             windowId, windowScreenName, sticky);
-
-                            QDBusPendingCallWatcher* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
-                            connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
-                                    [this, safeWindow, windowId](QDBusPendingCallWatcher* sw) {
-                                        sw->deleteLater();
-
-                                        QDBusPendingReply<int, int, int, int, bool> snapReply = *sw;
-                                        if (snapReply.isError()) {
-                                            qCDebug(lcEffect) << "snapToLastZone not applied:" << snapReply.error().message();
-                                            return;
-                                        }
-
-                                        int snapX = snapReply.argumentAt<0>();
-                                        int snapY = snapReply.argumentAt<1>();
-                                        int snapWidth = snapReply.argumentAt<2>();
-                                        int snapHeight = snapReply.argumentAt<3>();
-                                        bool shouldSnap = snapReply.argumentAt<4>();
-
-                                        if (shouldSnap && safeWindow) {
-                                            QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
-                                            qCDebug(lcEffect) << "Auto-snapping new window" << windowId
-                                                              << "to last zone geometry:" << snapGeometry;
-                                            applySnapGeometry(safeWindow, snapGeometry);
-                                        }
-                                    });
-                        });
-            });
+    // FIRST: App rules (highest priority — uses captured screenName for open-time screen matching)
+    tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToAppRule"),
+                      {windowId, screenName, sticky}, safeWindow, windowId, true, tryRestore);
 }
 
 void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)
@@ -1452,20 +1395,25 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
         return;
     }
 
+    // Cursor position at release (from last poll during drag) - daemon uses this for release screen
+    QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
+
     // Make ASYNC call to get snap geometry - prevents UI freeze if daemon is slow
-    // D-Bus signature: dragStopped(s) -> (iiiib)
-    // The method has out parameters: snapX, snapY, snapWidth, snapHeight, shouldSnap
-    QDBusPendingCall pendingCall = m_dbusInterface->asyncCall(QStringLiteral("dragStopped"), windowId);
+    // D-Bus signature: dragStopped(sii) -> (iiiibs)
+    QDBusPendingCall pendingCall = m_dbusInterface->asyncCall(
+        QStringLiteral("dragStopped"), windowId, static_cast<int>(cursorAtRelease.x()),
+        static_cast<int>(cursorAtRelease.y()));
 
     // Use QPointer to safely handle window destruction during async call
     QPointer<KWin::EffectWindow> safeWindow = window;
 
     // Create watcher to handle the reply
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
 
-        QDBusPendingReply<int, int, int, int, bool> reply = *w;
+        QDBusPendingReply<int, int, int, int, bool, QString, bool> reply = *w;
         if (reply.isError()) {
             qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
             return;
@@ -1476,8 +1424,12 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
         int snapWidth = reply.argumentAt<2>();
         int snapHeight = reply.argumentAt<3>();
         bool shouldSnap = reply.argumentAt<4>();
+        QString releaseScreenName = reply.argumentAt<5>();
+        bool restoreSizeOnly = reply.argumentAt<6>();
 
         qCDebug(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
+                          << "releaseScreen=" << releaseScreenName
+                          << "restoreSizeOnly=" << restoreSizeOnly
                           << "geometry=" << QRect(snapX, snapY, snapWidth, snapHeight);
 
         if (shouldSnap && safeWindow) {
@@ -1486,11 +1438,57 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
             if (safeWindow->isFullScreen()) {
                 qCDebug(lcEffect) << "Window is fullscreen at drag stop, skipping snap";
             } else {
-                QRect snapGeometry(snapX, snapY, snapWidth, snapHeight);
+                QRect snapGeometry;
+                if (restoreSizeOnly) {
+                    // Drag-to-unsnap: apply only pre-snap width/height, keep current position
+                    QRectF frame = safeWindow->frameGeometry();
+                    snapGeometry = QRect(static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                                         snapWidth, snapHeight);
+                } else {
+                    snapGeometry = QRect(snapX, snapY, snapWidth, snapHeight);
+                }
                 applySnapGeometry(safeWindow, snapGeometry);
             }
         }
+
+        // Auto-fill: if window was dropped without snapping to a zone, try snapping to
+        // the first empty zone on the release screen (where the user released the drag).
+        // Use daemon-provided releaseScreenName (cursor position), not window's current
+        // screen - after cross-screen drag the window may still report the old screen.
+        if (!shouldSnap && safeWindow && !releaseScreenName.isEmpty() && ensureWindowTrackingReady("auto-fill on drop")) {
+            bool sticky = isWindowSticky(safeWindow);
+            tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"),
+                              {windowId, releaseScreenName, sticky}, safeWindow, windowId, true, nullptr);
+        }
     });
+}
+
+void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method,
+                                          const QList<QVariant>& args,
+                                          QPointer<KWin::EffectWindow> window, const QString& windowId,
+                                          bool storePreSnap, std::function<void()> fallback)
+{
+    QDBusPendingCall call = iface.asyncCallWithArgumentList(method, args);
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, window, windowId, storePreSnap, method, fallback](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<int, int, int, int, bool> reply = *w;
+                if (reply.isError()) {
+                    qCDebug(lcEffect) << method << "error:" << reply.error().message();
+                    if (fallback) fallback();
+                    return;
+                }
+                if (reply.argumentAt<4>() && window) {
+                    QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(),
+                             reply.argumentAt<2>(), reply.argumentAt<3>());
+                    qCDebug(lcEffect) << method << "snapping" << windowId << "to:" << geo;
+                    if (storePreSnap) ensurePreSnapGeometryStored(window, windowId);
+                    applySnapGeometry(window, geo);
+                    return;
+                }
+                if (fallback) fallback();
+            });
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry)

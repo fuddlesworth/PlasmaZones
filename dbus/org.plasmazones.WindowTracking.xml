@@ -262,6 +262,33 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
             </arg>
         </method>
+        <method name="snapToEmptyZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Snap window to first empty zone (auto-assign). Only fires if layout has autoAssign enabled."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to snap."/>
+            </arg>
+            <arg name="windowScreenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
+            </arg>
+            <arg name="shouldSnap" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if auto-assign matched and window should be snapped."/>
+            </arg>
+        </method>
         <method name="restoreToPersistedZone">
             <annotation name="org.gtk.GDBus.DocString" value="Restore window to its zone from the previous session. Returns geometry and shouldRestore."/>
             <arg name="windowId" type="s" direction="in">

@@ -74,14 +74,18 @@ public Q_SLOTS:
     /**
      * Called when window drag ends
      * @param windowId Unique window identifier
+     * @param cursorX Cursor X at release (global; used for release screen detection)
+     * @param cursorY Cursor Y at release (global)
      * @param snapX Output: X position for window
      * @param snapY Output: Y position for window
      * @param snapWidth Output: Width for window
      * @param snapHeight Output: Height for window
      * @param shouldApplyGeometry Output: True if KWin should apply the geometry
+     * @param releaseScreenName Output: Screen name where the drag was released, for auto-fill on drop
+     * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current position (drag-to-unsnap)
      */
-    void dragStopped(const QString& windowId, int& snapX, int& snapY, int& snapWidth, int& snapHeight,
-                     bool& shouldApplyGeometry);
+    void dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY, int& snapWidth,
+                     int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName, bool& restoreSizeOnly);
 
     /**
      * Cancel current snap operation (Escape key)

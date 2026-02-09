@@ -85,6 +85,24 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Destination file path."/>
             </arg>
         </method>
+        <method name="setLayoutHidden">
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a layout is hidden from the zone selector."/>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID."/>
+            </arg>
+            <arg name="hidden" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to hide from zone selector."/>
+            </arg>
+        </method>
+        <method name="setLayoutAutoAssign">
+            <annotation name="org.gtk.GDBus.DocString" value="Set whether a layout auto-assigns new windows to empty zones."/>
+            <arg name="layoutId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID."/>
+            </arg>
+            <arg name="enabled" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to enable auto-assign."/>
+            </arg>
+        </method>
         <method name="openEditor">
             <annotation name="org.gtk.GDBus.DocString" value="Launch the layout editor for the active layout."/>
         </method>

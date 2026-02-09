@@ -52,9 +52,15 @@
         </method>
 
         <method name="dragStopped">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap). cursorX/Y are the cursor position at release (for release screen detection)."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="cursorX" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Cursor X at release (global coordinates)."/>
+            </arg>
+            <arg name="cursorY" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Cursor Y at release (global coordinates)."/>
             </arg>
             <arg name="snapX" type="i" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Snap X position (if shouldSnap)."/>
@@ -70,6 +76,12 @@
             </arg>
             <arg name="shouldSnap" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="True if KWin should apply the snap geometry."/>
+            </arg>
+            <arg name="releaseScreenName" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name where the drag was released (cursor position). Use for auto-fill on drop."/>
+            </arg>
+            <arg name="restoreSizeOnly" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="If true with shouldSnap: apply only width/height; keep window at current position (drag-to-unsnap). Float-toggle shortcut restores full x/y/w/h."/>
             </arg>
         </method>
 

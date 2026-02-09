@@ -58,6 +58,9 @@ public Q_SLOTS:
     // Visibility filtering
     void setLayoutHidden(const QString& layoutId, bool hidden);
 
+    // Auto-assign
+    void setLayoutAutoAssign(const QString& layoutId, bool enabled);
+
     // Editor support
     bool updateLayout(const QString& layoutJson);
     QString createLayoutFromJson(const QString& layoutJson);

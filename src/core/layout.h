@@ -99,6 +99,9 @@ class PLASMAZONES_EXPORT Layout : public QObject
     // App-to-zone rules
     Q_PROPERTY(QVariantList appRules READ appRulesVariant WRITE setAppRulesVariant NOTIFY appRulesChanged)
 
+    // Auto-assign: new windows fill first empty zone
+    Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
+
     // Visibility filtering
     Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
     Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
@@ -217,6 +220,10 @@ public:
     void setAppRulesVariant(const QVariantList& rules);
     AppRuleMatch matchAppRule(const QString& windowClass) const;
 
+    // Auto-assign: new windows fill first empty zone
+    bool autoAssign() const { return m_autoAssign; }
+    void setAutoAssign(bool enabled);
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -278,6 +285,7 @@ Q_SIGNALS:
     void allowedDesktopsChanged();
     void allowedActivitiesChanged();
     void appRulesChanged();
+    void autoAssignChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
@@ -297,6 +305,9 @@ private:
 
     // App-to-zone rules
     QVector<AppRule> m_appRules;
+
+    // Auto-assign: new windows fill first empty zone
+    bool m_autoAssign = false;
 
     // Shader support
     QString m_shaderId; // Shader effect ID (empty = no shader)

@@ -413,21 +413,31 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     }
 }
 
-void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& snapY, int& snapWidth, int& snapHeight,
-                                    bool& shouldApplyGeometry)
+void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY,
+                                    int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
+                                    QString& releaseScreenNameOut, bool& restoreSizeOnlyOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
-    // Used for both zone snapping and geometry restoration on unsnap
+    // restoreSizeOnly: when true with shouldApplyGeometry, effect uses current position + returned size (drag-to-unsnap)
     snapX = 0;
     snapY = 0;
     snapWidth = 0;
     snapHeight = 0;
     shouldApplyGeometry = false;
+    releaseScreenNameOut.clear();
+    restoreSizeOnlyOut = false;
 
     if (windowId != m_draggedWindowId) {
         return;
     }
+
+    // Release screen: use cursor position passed from effect (at release time), not last dragMoved
+    QScreen* releaseScreen = screenAtPoint(cursorX, cursorY);
+    QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
+    releaseScreenNameOut = releaseScreenName;
+    qCDebug(lcDbusWindow) << "dragStopped cursor= (" << cursorX << "," << cursorY << ") releaseScreen= "
+                         << releaseScreenName;
 
     // Capture zone state into locals right away. If another window starts dragging before
     // the async D-Bus reply for this dragStopped() is processed, dragMoved() would overwrite
@@ -443,10 +453,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
     const int capturedLastCursorX = m_lastCursorX;
     const int capturedLastCursorY = m_lastCursorY;
-
-    // Determine the screen where the drag was released
-    QScreen* releaseScreen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
-    QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
 
     // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
     bool useOverlayZone = true;
@@ -547,26 +553,23 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int& snapX, int& sn
     }
 
     // Handle unsnap - window was snapped but dropped outside any zone
-    // Use captured wasSnapped value for consistency
+    // Use same state as float shortcut: save zone for restore and mark floating, so unfloat/snap-back works.
     if (!shouldApplyGeometry && capturedWasSnapped) {
-        // Only call windowUnsnapped if we actually track this window. capturedWasSnapped
-        // can be true from geometry fallback (e.g. daemon restarted) when we don't have
-        // it in m_windowZoneAssignments; calling windowUnsnapped would log a false
-        // "Window not found for unsnap" warning.
         if (m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty()) {
-            m_windowTracking->windowUnsnapped(windowId);
+            m_windowTracking->windowUnsnappedForFloat(windowId);
+            m_windowTracking->setWindowFloating(windowId, true);
         }
 
-        // Restore original geometry if enabled
+        // On drag-to-unsnap: apply only pre-snap width/height; window keeps drop position.
+        // Float-toggle shortcut uses calculateUnfloatRestore and restores full x/y/w/h.
         if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
             int origX, origY, origW, origH;
             if (m_windowTracking
                 && m_windowTracking->getValidatedPreSnapGeometry(windowId, origX, origY, origW, origH)) {
-                snapX = origX;
-                snapY = origY;
                 snapWidth = origW;
                 snapHeight = origH;
                 shouldApplyGeometry = true;
+                restoreSizeOnlyOut = true;
             }
         }
 

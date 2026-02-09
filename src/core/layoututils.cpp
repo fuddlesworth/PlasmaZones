@@ -104,6 +104,7 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
     map[ZoneCount] = layout->zoneCount();
     map[Zones] = zonesToVariantList(layout, zoneFields);
     map[Category] = static_cast<int>(LayoutCategory::Manual);
+    map[AutoAssign] = layout->autoAssign();
 
     return map;
 }
@@ -120,6 +121,7 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
     entry.description = layout->description();
     entry.zoneCount = layout->zoneCount();
     entry.zones = zonesToVariantList(layout, ZoneField::Minimal);
+    entry.autoAssign = layout->autoAssign();
     return entry;
 }
 
@@ -208,6 +210,7 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[ZoneCount] = entry.zoneCount;
     map[Zones] = entry.zones;
     map[Category] = static_cast<int>(LayoutCategory::Manual);
+    map[AutoAssign] = entry.autoAssign;
 
     return map;
 }
@@ -236,6 +239,9 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[IsSystem] = false;
     json[Type] = 0;
     json[Category] = static_cast<int>(LayoutCategory::Manual);
+    if (entry.autoAssign) {
+        json[AutoAssign] = true;
+    }
     // hiddenFromSelector is added by callers that have access to the Layout*
 
     // Convert zones to JSON array
