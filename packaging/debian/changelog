@@ -1,3 +1,13 @@
+plasmazones (1.8.1-1) unstable; urgency=medium
+
+  * Paint-to-span zone modifier for multi-zone window snapping (#94, #96)
+  * Configurable paint-to-span modifier in KCM Zones tab (default Alt+Meta)
+  * Rename multi-zone modifier to proximity snap modifier for clarity
+  * Remove dead skipSnapModifier setting
+  * Fix missing KCM signal emissions and config migration for upgrading users
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Mon, 09 Feb 2026 00:00:00 +0000
+
 plasmazones (1.8.0-1) unstable; urgency=medium
 
   * CAVA audio visualization service for audio-reactive shaders

@@ -5,6 +5,28 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-02-09
+
+### Added
+- Paint-to-span zone modifier: hold a modifier while dragging to progressively paint across zones, window snaps to bounding rectangle on release ([#94], [#96])
+- Configurable "Paint-to-span modifier" in KCM Zones tab (default Alt+Meta)
+- Renamed "Multi-zone modifier" to "Proximity snap modifier" for clarity
+
+### Changed
+- Replaced `middleClickMultiZone` bool setting with `zoneSpanModifier` DragModifier enum
+- Config migration: users who had middle-click multi-zone disabled keep zone span disabled after upgrade
+- Extracted `prepareHandlerContext()`, `computeCombinedZoneGeometry()`, and `zoneIdsToStringList()` helpers in drag handling (DRY)
+- Added `setOsdStyleInt` range validation
+
+### Removed
+- Dead `skipSnapModifier` setting (fully scaffolded but never consumed in drag handling)
+
+### Fixed
+- Missing `restoreWindowsToZonesOnLoginChanged` signal in KCM defaults and settings sync
+- 12 missing signal emissions in KCM `onSettingsChanged()`
+- Painted zone state not cleared on `dragStarted()` causing stale highlights
+- Modifier conflict warning using `static bool` instead of per-instance member
+
 ## [1.8.0] - 2026-02-09
 
 ### Added
@@ -242,6 +264,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[1.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.2...v1.7.0
 [1.6.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.1...v1.6.2
@@ -299,3 +322,5 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#89]: https://github.com/fuddlesworth/PlasmaZones/pull/89
 [#90]: https://github.com/fuddlesworth/PlasmaZones/pull/90
 [#92]: https://github.com/fuddlesworth/PlasmaZones/pull/92
+[#94]: https://github.com/fuddlesworth/PlasmaZones/issues/94
+[#96]: https://github.com/fuddlesworth/PlasmaZones/pull/96

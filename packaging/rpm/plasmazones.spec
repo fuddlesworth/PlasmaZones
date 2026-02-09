@@ -165,6 +165,13 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Mon Feb  9 2026 fuddlesworth - 1.8.1-1
+- Paint-to-span zone modifier for multi-zone window snapping (#94, #96)
+- Configurable paint-to-span modifier in KCM Zones tab (default Alt+Meta)
+- Rename multi-zone modifier to proximity snap modifier for clarity
+- Remove dead skipSnapModifier setting
+- Fix missing KCM signal emissions and config migration for upgrading users
+
 * Mon Feb  9 2026 fuddlesworth - 1.8.0-1
 - CAVA audio visualization service for audio-reactive shaders
 - Spectrum Pulse shader with audio-reactive neon energy
