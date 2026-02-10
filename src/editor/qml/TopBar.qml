@@ -290,7 +290,7 @@ ToolBar {
         ToolButton {
             id: shaderButton
 
-            icon.name: "preferences-desktop-effects"
+            icon.name: "adjustlevels"
             enabled: editorController !== null && editorController.shadersEnabled
             visible: editorController !== null && editorController.shadersEnabled
             onClicked: topBar.shaderDialog.open()
