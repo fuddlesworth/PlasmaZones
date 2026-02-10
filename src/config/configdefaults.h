@@ -65,7 +65,9 @@ public:
     static int borderWidth() { return instance().defaultBorderWidthValue(); }
     static int borderRadius() { return instance().defaultBorderRadiusValue(); }
     static bool enableBlur() { return instance().defaultEnableBlurValue(); }
-    static QString labelFontFamily() { return QString(); }  // Default is empty string (matches .kcfg)
+    // KConfigXT doesn't generate a public defaultLabelFontFamilyValue() for
+    // String entries with empty <default></default>, so we hardcode here.
+    static QString labelFontFamily() { return QString(); }
     static double labelFontSizeScale() { return instance().defaultLabelFontSizeScaleValue(); }
     static int labelFontWeight() { return instance().defaultLabelFontWeightValue(); }
     static bool labelFontItalic() { return instance().defaultLabelFontItalicValue(); }

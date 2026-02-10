@@ -83,6 +83,7 @@ void writeFontProperties(QObject* window, const IZoneVisualizationSettings* sett
     if (!window || !settings) {
         return;
     }
+    writeQmlProperty(window, QStringLiteral("labelFontColor"), settings->labelFontColor());
     writeQmlProperty(window, QStringLiteral("fontFamily"), settings->labelFontFamily());
     writeQmlProperty(window, QStringLiteral("fontSizeScale"), settings->labelFontSizeScale());
     writeQmlProperty(window, QStringLiteral("fontWeight"), settings->labelFontWeight());
@@ -1659,7 +1660,6 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         // Layout's showZoneNumbers takes precedence over global setting
         bool showNumbers = screenLayout ? screenLayout->showZoneNumbers() : m_settings->showZoneNumbers();
         window->setProperty("showNumbers", showNumbers);
-        window->setProperty("labelFontColor", m_settings->labelFontColor());
         writeFontProperties(window, m_settings);
     }
 

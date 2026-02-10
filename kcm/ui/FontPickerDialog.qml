@@ -24,94 +24,94 @@ Kirigami.Dialog {
     property bool selectedStrikeout: false
 
     // Internal working copies
-    property string _family: ""
-    property string _style: ""
-    property int _weight: Font.Bold
-    property bool _italic: false
-    property bool _underline: false
-    property bool _strikeout: false
+    property string workingFamily: ""
+    property string workingStyle: ""
+    property int workingWeight: Font.Bold
+    property bool workingItalic: false
+    property bool workingUnderline: false
+    property bool workingStrikeout: false
 
-    property var _allFamilies: []
-    property string _searchText: ""
-    property var _styles: []
-    property bool _wasDefault: false
-    property string _systemFont: ""
+    property var allFontFamilies: []
+    property string searchText: ""
+    property var availableStyles: []
+    property bool wasDefault: false
+    property string systemFontFamily: ""
 
     function open() {
-        _weight = selectedWeight
-        _italic = selectedItalic
-        _underline = selectedUnderline
-        _strikeout = selectedStrikeout
+        workingWeight = selectedWeight
+        workingItalic = selectedItalic
+        workingUnderline = selectedUnderline
+        workingStrikeout = selectedStrikeout
 
-        if (_allFamilies.length === 0) {
-            _allFamilies = Qt.fontFamilies()
+        if (allFontFamilies.length === 0) {
+            allFontFamilies = Qt.fontFamilies()
         }
 
         // Resolve system default font for display when no family is set
-        _systemFont = Qt.application.font.family
-        _wasDefault = (selectedFamily === "")
-        _family = _wasDefault ? _systemFont : selectedFamily
+        systemFontFamily = Qt.application.font.family
+        wasDefault = (selectedFamily === "")
+        workingFamily = wasDefault ? systemFontFamily : selectedFamily
 
-        _searchText = ""
-        _updateStyles()
+        searchText = ""
+        updateStyles()
         visible = true
 
-        Qt.callLater(_scrollToSelection)
+        Qt.callLater(scrollToSelection)
     }
 
-    function _updateStyles() {
-        if (_family === "") {
-            _styles = []
-            _style = ""
+    function updateStyles() {
+        if (workingFamily === "") {
+            availableStyles = []
+            workingStyle = ""
             return
         }
-        _styles = kcm.fontStylesForFamily(_family)
+        availableStyles = kcm.fontStylesForFamily(workingFamily)
         // Find the style matching current weight/italic
-        _style = _findMatchingStyle()
+        workingStyle = findMatchingStyle()
     }
 
-    function _findMatchingStyle() {
+    function findMatchingStyle() {
         // Try to find a style that matches current weight + italic
-        for (var i = 0; i < _styles.length; i++) {
-            var sw = kcm.fontStyleWeight(_family, _styles[i])
-            var si = kcm.fontStyleItalic(_family, _styles[i])
-            if (sw === _weight && si === _italic) {
-                return _styles[i]
+        for (var i = 0; i < availableStyles.length; i++) {
+            var sw = kcm.fontStyleWeight(workingFamily, availableStyles[i])
+            var si = kcm.fontStyleItalic(workingFamily, availableStyles[i])
+            if (sw === workingWeight && si === workingItalic) {
+                return availableStyles[i]
             }
         }
         // Fall back to closest weight match
         var bestIdx = 0
         var bestDist = 9999
-        for (var j = 0; j < _styles.length; j++) {
-            var w = kcm.fontStyleWeight(_family, _styles[j])
-            var it = kcm.fontStyleItalic(_family, _styles[j])
-            var dist = Math.abs(w - _weight) + (it !== _italic ? 500 : 0)
+        for (var j = 0; j < availableStyles.length; j++) {
+            var w = kcm.fontStyleWeight(workingFamily, availableStyles[j])
+            var it = kcm.fontStyleItalic(workingFamily, availableStyles[j])
+            var dist = Math.abs(w - workingWeight) + (it !== workingItalic ? 500 : 0)
             if (dist < bestDist) {
                 bestDist = dist
                 bestIdx = j
             }
         }
-        if (_styles.length > 0) {
-            _weight = kcm.fontStyleWeight(_family, _styles[bestIdx])
-            _italic = kcm.fontStyleItalic(_family, _styles[bestIdx])
-            return _styles[bestIdx]
+        if (availableStyles.length > 0) {
+            workingWeight = kcm.fontStyleWeight(workingFamily, availableStyles[bestIdx])
+            workingItalic = kcm.fontStyleItalic(workingFamily, availableStyles[bestIdx])
+            return availableStyles[bestIdx]
         }
         return ""
     }
 
-    function _scrollToSelection() {
-        if (_family !== "") {
-            var families = _filteredFamilies()
+    function scrollToSelection() {
+        if (workingFamily !== "") {
+            var families = filteredFamilies()
             for (var i = 0; i < families.length; i++) {
-                if (families[i] === _family) {
+                if (families[i] === workingFamily) {
                     familyList.positionViewAtIndex(i, ListView.Center)
                     break
                 }
             }
         }
-        if (_style !== "") {
-            for (var j = 0; j < _styles.length; j++) {
-                if (_styles[j] === _style) {
+        if (workingStyle !== "") {
+            for (var j = 0; j < availableStyles.length; j++) {
+                if (availableStyles[j] === workingStyle) {
                     styleList.positionViewAtIndex(j, ListView.Center)
                     break
                 }
@@ -119,21 +119,21 @@ Kirigami.Dialog {
         }
     }
 
-    function _filteredFamilies() {
-        if (_searchText === "") return _allFamilies
-        var lower = _searchText.toLowerCase()
-        return _allFamilies.filter(function(f) {
+    function filteredFamilies() {
+        if (searchText === "") return allFontFamilies
+        var lower = searchText.toLowerCase()
+        return allFontFamilies.filter(function(f) {
             return f.toLowerCase().indexOf(lower) !== -1
         })
     }
 
     onAccepted: {
         // If user didn't change from system default, keep empty (= follow system)
-        selectedFamily = (_wasDefault && _family === _systemFont) ? "" : _family
-        selectedWeight = _weight
-        selectedItalic = _italic
-        selectedUnderline = _underline
-        selectedStrikeout = _strikeout
+        selectedFamily = (wasDefault && workingFamily === systemFontFamily) ? "" : workingFamily
+        selectedWeight = workingWeight
+        selectedItalic = workingItalic
+        selectedUnderline = workingUnderline
+        selectedStrikeout = workingStrikeout
     }
 
     ColumnLayout {
@@ -144,8 +144,8 @@ Kirigami.Dialog {
             id: searchField
             Layout.fillWidth: true
             placeholderText: i18n("Search fonts...")
-            text: dialog._searchText
-            onTextChanged: dialog._searchText = text
+            text: dialog.searchText
+            onTextChanged: dialog.searchText = text
         }
 
         // Two-column: Family | Style
@@ -172,7 +172,7 @@ Kirigami.Dialog {
                     Layout.fillHeight: true
                     Layout.minimumHeight: Kirigami.Units.gridUnit * 12
                     clip: true
-                    model: dialog._filteredFamilies()
+                    model: dialog.filteredFamilies()
 
                     ScrollBar.vertical: ScrollBar {
                         policy: ScrollBar.AsNeeded
@@ -182,11 +182,11 @@ Kirigami.Dialog {
                         width: familyList.width - (familyList.ScrollBar.vertical.visible ? familyList.ScrollBar.vertical.width : 0)
                         text: modelData
                         font.family: modelData
-                        highlighted: modelData === dialog._family
+                        highlighted: modelData === dialog.workingFamily
                         onClicked: {
-                            dialog._family = modelData
-                            dialog._wasDefault = false
-                            dialog._updateStyles()
+                            dialog.workingFamily = modelData
+                            dialog.wasDefault = false
+                            dialog.updateStyles()
                         }
                     }
                 }
@@ -214,7 +214,7 @@ Kirigami.Dialog {
                     Layout.fillHeight: true
                     Layout.minimumHeight: Kirigami.Units.gridUnit * 12
                     clip: true
-                    model: dialog._styles
+                    model: dialog.availableStyles
 
                     ScrollBar.vertical: ScrollBar {
                         policy: ScrollBar.AsNeeded
@@ -223,11 +223,11 @@ Kirigami.Dialog {
                     delegate: ItemDelegate {
                         width: styleList.width - (styleList.ScrollBar.vertical.visible ? styleList.ScrollBar.vertical.width : 0)
                         text: modelData
-                        highlighted: modelData === dialog._style
+                        highlighted: modelData === dialog.workingStyle
                         onClicked: {
-                            dialog._style = modelData
-                            dialog._weight = kcm.fontStyleWeight(dialog._family, modelData)
-                            dialog._italic = kcm.fontStyleItalic(dialog._family, modelData)
+                            dialog.workingStyle = modelData
+                            dialog.workingWeight = kcm.fontStyleWeight(dialog.workingFamily, modelData)
+                            dialog.workingItalic = kcm.fontStyleItalic(dialog.workingFamily, modelData)
                         }
                     }
                 }
@@ -250,14 +250,14 @@ Kirigami.Dialog {
 
             CheckBox {
                 text: i18n("Underline")
-                checked: dialog._underline
-                onToggled: dialog._underline = checked
+                checked: dialog.workingUnderline
+                onToggled: dialog.workingUnderline = checked
             }
 
             CheckBox {
                 text: i18n("Strikeout")
-                checked: dialog._strikeout
-                onToggled: dialog._strikeout = checked
+                checked: dialog.workingStrikeout
+                onToggled: dialog.workingStrikeout = checked
             }
         }
 
@@ -272,11 +272,11 @@ Kirigami.Dialog {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: i18n("AaBbCc 123")
-            font.family: dialog._family
-            font.weight: dialog._weight
-            font.italic: dialog._italic
-            font.underline: dialog._underline
-            font.strikeout: dialog._strikeout
+            font.family: dialog.workingFamily
+            font.weight: dialog.workingWeight
+            font.italic: dialog.workingItalic
+            font.underline: dialog.workingUnderline
+            font.strikeout: dialog.workingStrikeout
             font.pixelSize: Kirigami.Units.gridUnit * 2
         }
     }

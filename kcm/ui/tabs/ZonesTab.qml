@@ -216,7 +216,7 @@ ScrollView {
                     }
 
                     RowLayout {
-                        Kirigami.FormData.label: i18n("Number color:")
+                        Kirigami.FormData.label: i18n("Color:")
                         visible: !useSystemColorsCheck.checked
                         spacing: Kirigami.Units.smallSpacing
 
@@ -251,10 +251,12 @@ ScrollView {
                                 || kcm.labelFontItalic
                                 || kcm.labelFontUnderline
                                 || kcm.labelFontStrikeout
+                                || Math.abs(kcm.labelFontSizeScale - 1.0) > 0.01
                             ToolTip.text: i18n("Reset to defaults")
                             ToolTip.visible: hovered
                             onClicked: {
                                 kcm.labelFontFamily = ""
+                                kcm.labelFontSizeScale = 1.0
                                 kcm.labelFontWeight = Font.Bold
                                 kcm.labelFontItalic = false
                                 kcm.labelFontUnderline = false

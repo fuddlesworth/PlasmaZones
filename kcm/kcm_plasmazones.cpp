@@ -700,6 +700,7 @@ void KCMPlasmaZones::setLabelFontFamily(const QString& family)
 }
 void KCMPlasmaZones::setLabelFontSizeScale(qreal scale)
 {
+    scale = qBound(0.25, scale, 3.0);
     if (!qFuzzyCompare(m_settings->labelFontSizeScale(), scale)) {
         m_settings->setLabelFontSizeScale(scale);
         Q_EMIT labelFontSizeScaleChanged();
