@@ -41,6 +41,8 @@ set(plasmazones_core_SRCS
     core/dbusvariantutils.h
     core/zone.cpp
     core/zone.h
+    core/tilingalgorithm.cpp
+    core/tilingalgorithm.h
     core/layout.cpp
     core/layout.h
     core/layoutmanager.cpp
