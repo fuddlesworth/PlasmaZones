@@ -370,39 +370,61 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
         }
 
         // Try auto-tile first (Dynamic layouts) — #108
-        // This is synchronous because the effect needs geometry immediately.
+        // Async D-Bus to avoid blocking the compositor event loop (REVIEW-5)
         if (ensureWindowTrackingReady("auto-tile window opened")) {
-            QString windowId = getWindowId(w);
+            QString tileWindowId = getWindowId(w);  // Renamed to avoid shadowing outer windowId (REVIEW-6a)
             QString screenName = getWindowScreenName(w);
             bool sticky = isWindowSticky(w);
 
-            QDBusMessage reply = m_windowTrackingInterface->call(
-                QStringLiteral("autoTileWindowOpened"), windowId, screenName, sticky);
+            QDBusPendingCall pending = m_windowTrackingInterface->asyncCall(
+                QStringLiteral("autoTileWindowOpened"), tileWindowId, screenName, sticky);
 
-            if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 6) {
-                int x = reply.arguments().at(0).toInt();
-                int y = reply.arguments().at(1).toInt();
-                int rw = reply.arguments().at(2).toInt();
-                int rh = reply.arguments().at(3).toInt();
-                bool handled = reply.arguments().at(4).toBool();
-                QString allGeometriesJson = reply.arguments().at(5).toString();
-
-                if (handled) {
-                    qCInfo(lcEffect) << "Auto-tile handled window" << windowId
-                                      << "geometry:" << x << y << rw << rh;
-                    // Store pre-snap geometry before applying
-                    ensurePreSnapGeometryStored(w, windowId);
-                    // Apply geometry to the new window
-                    applySnapGeometry(w, QRect(x, y, rw, rh));
-                    // Notify daemon of the snap
-                    m_windowTrackingInterface->asyncCall(
-                        QStringLiteral("windowSnapped"), windowId,
-                        QString(), screenName);  // zoneId is empty — daemon already tracked it
-                    // Apply geometries to all other windows that need repositioning
-                    applyAutoTileGeometries(allGeometriesJson);
-                    return;  // Auto-tile handled — skip existing snap chain
+            QPointer<KWin::EffectWindow> safeWindow = w;
+            auto* watcher = new QDBusPendingCallWatcher(pending, this);
+            connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                    [this, safeWindow, tileWindowId](QDBusPendingCallWatcher* call) {
+                call->deleteLater();
+                if (!safeWindow) {
+                    return;
                 }
-            }
+
+                QDBusMessage reply = call->reply();
+                if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 6) {
+                    int x = reply.arguments().at(0).toInt();
+                    int y = reply.arguments().at(1).toInt();
+                    int rw = reply.arguments().at(2).toInt();
+                    int rh = reply.arguments().at(3).toInt();
+                    bool handled = reply.arguments().at(4).toBool();
+                    QString allGeometriesJson = reply.arguments().at(5).toString();
+
+                    if (handled && rw > 0 && rh > 0) {
+                        qCInfo(lcEffect) << "Auto-tile handled window" << tileWindowId
+                                          << "geometry:" << x << y << rw << rh;
+                        ensurePreSnapGeometryStored(safeWindow, tileWindowId);
+                        applySnapGeometry(safeWindow, QRect(x, y, rw, rh));
+                        m_windowTrackingInterface->asyncCall(
+                            QStringLiteral("windowSnapped"), tileWindowId,
+                            QString(), getWindowScreenName(safeWindow));
+                        applyAutoTileGeometries(allGeometriesJson);
+                        return;  // Auto-tile handled — skip snap chain
+                    }
+                }
+
+                // Auto-tile didn't handle — fall through to snap-to-last-zone with delay
+                if (shouldAutoSnapWindow(safeWindow)) {
+                    if (!hasOtherWindowOfClassWithDifferentPid(safeWindow)) {
+                        QPointer<KWin::EffectWindow> delayedWindow = safeWindow;
+                        QTimer::singleShot(100, this, [this, delayedWindow]() {
+                            if (delayedWindow && shouldAutoSnapWindow(delayedWindow)) {
+                                if (!hasOtherWindowOfClassWithDifferentPid(delayedWindow)) {
+                                    callSnapToLastZone(delayedWindow);
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+            return;  // Async in-flight — don't run snap chain below
         }
 
         // Use QPointer to safely handle window destruction during the delay
@@ -1339,9 +1361,10 @@ void PlasmaZonesEffect::applyAutoTileGeometries(const QString& geometriesJson)
         return;
     }
 
-    QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8());
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
     if (!doc.isArray()) {
-        qCWarning(lcEffect) << "applyAutoTileGeometries: invalid JSON";
+        qCWarning(lcEffect) << "applyAutoTileGeometries: invalid JSON:" << parseError.errorString();
         return;
     }
 
@@ -1364,15 +1387,9 @@ void PlasmaZonesEffect::applyAutoTileGeometries(const QString& geometriesJson)
             continue;
         }
 
-        // Find EffectWindow by stable ID match
-        KWin::EffectWindow* effectWindow = nullptr;
+        // Look up by stable ID — buildWindowMap keys by extractStableId (REVIEW-6b)
         QString stableId = extractStableId(windowId);
-        for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-            if (it.key() == stableId || it.key() == windowId) {
-                effectWindow = it.value();
-                break;
-            }
-        }
+        KWin::EffectWindow* effectWindow = windowMap.value(stableId);
 
         if (effectWindow) {
             qCDebug(lcEffect) << "Auto-tile repositioning" << windowId << "to" << x << y << w << h;

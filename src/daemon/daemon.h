@@ -129,7 +129,6 @@ private:
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
 
-    std::unique_ptr<WindowTrackingService> m_windowTrackingService;
     std::unique_ptr<AutoTileService> m_autoTileService;
 
     // Mode tracking

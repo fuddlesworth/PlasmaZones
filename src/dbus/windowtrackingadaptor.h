@@ -10,6 +10,7 @@
 #include <QString>
 #include <QStringList>
 #include <QHash>
+#include <QJsonArray>
 #include <QRect>
 #include <QSet>
 #include <QTimer>
@@ -45,6 +46,15 @@ public:
      * @param service AutoTileService instance (owned by Daemon, not this adaptor)
      */
     void setAutoTileService(AutoTileService* service) { m_autoTileService = service; }
+
+    /**
+     * @brief Access the underlying WindowTrackingService
+     *
+     * Used by Daemon to pass the SAME service instance to AutoTileService,
+     * ensuring all components share a single source of truth for window
+     * tracking state. The adaptor owns this service (Qt parent-child).
+     */
+    WindowTrackingService* windowTrackingService() const { return m_service; }
 
     /**
      * @brief Emit the autoTileGeometriesChanged D-Bus signal

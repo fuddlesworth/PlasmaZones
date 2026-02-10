@@ -162,8 +162,9 @@ QStringList WindowTrackingService::snappedWindowsForScreen(const QString& screen
             continue;
         }
 
-        // Resolve zone number for sorting
-        int zoneNum = 999;
+        // Resolve zone number for sorting (unresolved zones sort to end)
+        static constexpr int kFallbackZoneNumber = 999;
+        int zoneNum = kFallbackZoneNumber;
         Zone* zone = findZoneById(zoneIds.first());
         if (zone) {
             zoneNum = zone->zoneNumber();

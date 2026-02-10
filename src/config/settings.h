@@ -881,17 +881,17 @@ public:
     {
         return m_masterRatioStep;
     }
-    void setMasterRatioStep(qreal step);
+    void setMasterRatioStep(qreal step) override;
     bool countMinimizedWindows() const override
     {
         return m_countMinimizedWindows;
     }
-    void setCountMinimizedWindows(bool count);
+    void setCountMinimizedWindows(bool count) override;
     bool newWindowAsMaster() const override
     {
         return m_newWindowAsMaster;
     }
-    void setNewWindowAsMaster(bool asMaster);
+    void setNewWindowAsMaster(bool asMaster) override;
 
     // Auto-Tiling Shortcuts
     QString promoteMasterShortcut() const

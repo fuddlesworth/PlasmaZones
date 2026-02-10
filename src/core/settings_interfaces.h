@@ -272,8 +272,11 @@ public:
 
     // Auto-tiling settings
     virtual qreal masterRatioStep() const = 0;
+    virtual void setMasterRatioStep(qreal step) = 0;
     virtual bool countMinimizedWindows() const = 0;
+    virtual void setCountMinimizedWindows(bool count) = 0;
     virtual bool newWindowAsMaster() const = 0;
+    virtual void setNewWindowAsMaster(bool asMaster) = 0;
 };
 
 /**

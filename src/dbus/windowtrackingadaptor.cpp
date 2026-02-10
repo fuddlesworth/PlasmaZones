@@ -783,6 +783,12 @@ void WindowTrackingAdaptor::autoTileWindowOpened(const QString& windowId, const 
         }
     }
 
+    // If this window wasn't in the assignments, treat as unhandled (REVIEW-4)
+    if (w <= 0 || h <= 0) {
+        handled = false;
+        return;
+    }
+
     // Use service's JSON serialization (DRY — avoid duplicating assignmentsToJson)
     QJsonArray otherJson = m_autoTileService->assignmentsToJson(otherAssignments);
     allGeometriesJson = QString::fromUtf8(QJsonDocument(otherJson).toJson(QJsonDocument::Compact));

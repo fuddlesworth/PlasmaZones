@@ -128,6 +128,23 @@ void AutoTileService::handleWindowMinimized(const QString& windowId, bool minimi
 
     if (minimized) {
         m_minimizedWindows.insert(windowId);
+
+        // If the minimized window is master, promote the next visible window
+        // so orderedTiledWindows() returns a consistent master-first list
+        if (m_masterWindows.value(screenName) == windowId) {
+            const QStringList& tiledList = m_tiledWindows.value(screenName);
+            QString newMaster;
+            for (const QString& wId : tiledList) {
+                if (wId != windowId && !m_minimizedWindows.contains(wId)) {
+                    newMaster = wId;
+                    break;
+                }
+            }
+            if (!newMaster.isEmpty()) {
+                m_masterWindows[screenName] = newMaster;
+            }
+            // If all windows are minimized, leave master as-is — it will be restored
+        }
     } else {
         m_minimizedWindows.remove(windowId);
     }
@@ -144,14 +161,24 @@ void AutoTileService::handleLayoutChanged(const QString& screenName)
         return;
     }
 
-    if (!resolveDynamicLayout(screenName)) {
-        // Layout is no longer Dynamic — clear our tracking for this screen
+    Layout* layout = resolveDynamicLayout(screenName);
+    if (!layout) {
+        // Layout is no longer Dynamic — clean up all tracking for this screen
+        QStringList windowsToRemove;
+        for (auto it = m_windowScreens.constBegin(); it != m_windowScreens.constEnd(); ++it) {
+            if (it.value() == screenName) {
+                windowsToRemove.append(it.key());
+            }
+        }
+        for (const QString& wId : windowsToRemove) {
+            m_windowScreens.remove(wId);
+            m_minimizedWindows.remove(wId);
+        }
         m_tiledWindows.remove(screenName);
         m_masterWindows.remove(screenName);
         return;
     }
 
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     qCInfo(lcCore) << "AutoTile: layout changed on" << screenName
                    << "algorithm:" << layout->algorithmId();
 

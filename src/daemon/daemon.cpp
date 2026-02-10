@@ -290,14 +290,11 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Window tracking service - business logic for zone assignments
-    m_windowTrackingService = std::make_unique<WindowTrackingService>(
-        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-        m_virtualDesktopManager.get(), this);
-
     // Auto-tile service - dynamic zone regeneration (#108, #106, #107)
+    // Uses the adaptor's WindowTrackingService (single source of truth for zone assignments,
+    // floating state, auto-snap markers, etc.) — NOT a separate service instance.
     m_autoTileService = std::make_unique<AutoTileService>(
-        m_layoutManager.get(), m_windowTrackingService.get(), m_settings.get(), this);
+        m_layoutManager.get(), m_windowTrackingAdaptor->windowTrackingService(), m_settings.get(), this);
     m_windowTrackingAdaptor->setAutoTileService(m_autoTileService.get());
 
     // Connect AutoTileService geometriesChanged to D-Bus signal emission
