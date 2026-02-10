@@ -35,7 +35,7 @@ Q_DECLARE_FLAGS(ZoneFields, ZoneField)
 Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
 
 /**
- * @brief Entry in the unified layout list (manual zone-based layouts)
+ * @brief Entry in the unified layout list
  *
  * Used for quick layout shortcuts (Meta+1-9), layout cycling (Meta+[/]),
  * zone selector display, and D-Bus layout list queries.
@@ -47,6 +47,7 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
     int zoneCount;       ///< Number of zones
     QVariantList zones;  ///< Zone data for preview rendering
     bool autoAssign = false; ///< Auto-assign: new windows fill first empty zone
+    int category = 0;    ///< LayoutCategory: 0=Manual, 1=Auto, 2=Dynamic
 
     bool operator==(const UnifiedLayoutEntry& other) const { return id == other.id; }
     bool operator!=(const UnifiedLayoutEntry& other) const { return id != other.id; }

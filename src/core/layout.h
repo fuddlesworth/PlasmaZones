@@ -4,6 +4,7 @@
 #pragma once
 
 #include "zone.h"
+#include "tilingalgorithm.h"
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QVariantMap>
@@ -62,12 +63,14 @@ enum class LayoutType {
 };
 
 /**
- * @brief Category for layout type (manual zone-based layouts only)
+ * @brief Category for layout behaviour
  *
- * QML Note: Passed as int to QML. Value: 0 = Manual
+ * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Auto, 2 = Dynamic
  */
 enum class LayoutCategory {
-    Manual = 0   ///< Traditional zone-based layout
+    Manual = 0,   ///< Traditional zone-based layout (user-drawn zones)
+    Auto = 1,     ///< Manual zones with auto-assign (windows fill first empty zone)
+    Dynamic = 2   ///< True auto-tiling (zones regenerate at runtime based on window count)
 };
 
 /**
@@ -101,6 +104,13 @@ class PLASMAZONES_EXPORT Layout : public QObject
 
     // Auto-assign: new windows fill first empty zone
     Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
+
+    // Auto-tiling (LayoutCategory::Dynamic)
+    Q_PROPERTY(int category READ categoryInt WRITE setCategoryInt NOTIFY categoryChanged)
+    Q_PROPERTY(QString algorithmId READ algorithmId WRITE setAlgorithmId NOTIFY algorithmIdChanged)
+    Q_PROPERTY(qreal masterRatio READ masterRatio WRITE setMasterRatio NOTIFY masterRatioChanged)
+    Q_PROPERTY(int masterCount READ masterCount WRITE setMasterCount NOTIFY masterCountChanged)
+    Q_PROPERTY(int layoutCapacity READ layoutCapacity WRITE setLayoutCapacity NOTIFY layoutCapacityChanged)
 
     // Visibility filtering
     Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
@@ -224,6 +234,34 @@ public:
     bool autoAssign() const { return m_autoAssign; }
     void setAutoAssign(bool enabled);
 
+    // Auto-tiling
+    LayoutCategory category() const { return m_category; }
+    void setCategory(LayoutCategory cat);
+    int categoryInt() const { return static_cast<int>(m_category); }
+    void setCategoryInt(int cat);
+
+    QString algorithmId() const { return m_algorithmId; }
+    void setAlgorithmId(const QString& id);
+
+    qreal masterRatio() const { return m_masterRatio; }
+    void setMasterRatio(qreal ratio);
+
+    int masterCount() const { return m_masterCount; }
+    void setMasterCount(int count);
+
+    int layoutCapacity() const { return m_layoutCapacity; }
+    void setLayoutCapacity(int capacity);
+
+    bool isAutoTiling() const { return m_category == LayoutCategory::Dynamic; }
+
+    /**
+     * @brief Regenerate zones from the tiling algorithm
+     * @param windowCount Number of windows to create zones for
+     *
+     * Only meaningful for Dynamic layouts. Replaces existing zones entirely.
+     */
+    void regenerateZones(int windowCount);
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -286,6 +324,11 @@ Q_SIGNALS:
     void allowedActivitiesChanged();
     void appRulesChanged();
     void autoAssignChanged();
+    void categoryChanged();
+    void algorithmIdChanged();
+    void masterRatioChanged();
+    void masterCountChanged();
+    void layoutCapacityChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
@@ -308,6 +351,13 @@ private:
 
     // Auto-assign: new windows fill first empty zone
     bool m_autoAssign = false;
+
+    // Auto-tiling
+    LayoutCategory m_category = LayoutCategory::Manual;
+    QString m_algorithmId;
+    qreal m_masterRatio = 0.5;
+    int m_masterCount = 1;
+    int m_layoutCapacity = 0;  // 0 = unlimited
 
     // Shader support
     QString m_shaderId; // Shader effect ID (empty = no shader)
