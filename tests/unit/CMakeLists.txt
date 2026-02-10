@@ -56,3 +56,21 @@ target_link_libraries(test_session_persistence
 
 add_test(NAME SessionPersistence COMMAND test_session_persistence)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tiling Algorithm Tests
+# Tests for all built-in tiling algorithms (BSP, Fibonacci, Master-Stack,
+# Monocle, Three Column) plus generic validation
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_tiling_algorithms
+    test_tiling_algorithms.cpp
+)
+
+target_link_libraries(test_tiling_algorithms
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME TilingAlgorithms COMMAND test_tiling_algorithms)
+

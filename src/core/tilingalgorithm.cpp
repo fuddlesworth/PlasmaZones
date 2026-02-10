@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "tilingalgorithm.h"
+#include "algorithms/bspalgorithm.h"
+#include "algorithms/fibonaccialgorithm.h"
+#include "algorithms/masterstackalgorithm.h"
+#include "algorithms/monoclealgorithm.h"
+#include "algorithms/threecolumnalgorithm.h"
 
 namespace PlasmaZones {
 
@@ -17,8 +22,13 @@ TilingAlgorithmRegistry* TilingAlgorithmRegistry::instance()
 
 TilingAlgorithmRegistry::TilingAlgorithmRegistry()
 {
-    // Register built-in algorithms
+    // Register built-in algorithms (alphabetical order)
+    registerAlgorithm(std::make_unique<BSPTilingAlgorithm>());
     registerAlgorithm(std::make_unique<ColumnsTilingAlgorithm>());
+    registerAlgorithm(std::make_unique<FibonacciTilingAlgorithm>());
+    registerAlgorithm(std::make_unique<MasterStackTilingAlgorithm>());
+    registerAlgorithm(std::make_unique<MonocleTilingAlgorithm>());
+    registerAlgorithm(std::make_unique<ThreeColumnTilingAlgorithm>());
 }
 
 void TilingAlgorithmRegistry::registerAlgorithm(std::unique_ptr<TilingAlgorithm> algorithm)
