@@ -250,6 +250,41 @@ An RPM spec is included in `packaging/rpm/plasmazones.spec` for building package
 
 </details>
 
+<details>
+<summary>Universal Linux / Fedora Atomic (Portable Tarball)</summary>
+
+For distributions where installing system packages is difficult (Fedora Atomic/Silverblue) or if you lack root privileges:
+
+1. Download `plasmazones-linux-x86_64.tar.gz` from the [Latest Release](https://github.com/fuddlesworth/PlasmaZones/releases/latest).
+2. Extract the archive.
+3. Run the installer script:
+
+```bash
+tar xzf plasmazones-linux-x86_64.tar.gz
+cd plasmazones-linux-x86_64
+./install.sh
+```
+
+The script will install PlasmaZones to `~/.local` and help you configure your environment variables.
+
+**Or use the one-liner:**
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/fuddlesworth/PlasmaZones/main/packaging/local-install/web-install.sh)
+```
+
+**Upgrading:**
+
+Run the installer again with a newer tarball. It will detect the existing installation and upgrade in place.
+
+**Uninstalling:**
+
+```bash
+~/.local/share/plasmazones/uninstall.sh
+```
+
+</details>
+
 ---
 
 ## Quick Start
