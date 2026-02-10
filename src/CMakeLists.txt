@@ -33,6 +33,8 @@ set(plasmazones_core_SRCS
     core/layoutfactory.cpp
     core/windowtrackingservice.h
     core/windowtrackingservice.cpp
+    core/autotileservice.h
+    core/autotileservice.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp

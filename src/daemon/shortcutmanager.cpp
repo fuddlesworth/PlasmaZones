@@ -136,6 +136,11 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     // Snap All Windows shortcut
     connect(m_settings, &Settings::snapAllWindowsShortcutChanged, this, &ShortcutManager::updateSnapAllWindowsShortcut);
 
+    // Auto-Tiling shortcuts (#106, #107)
+    connect(m_settings, &Settings::promoteMasterShortcutChanged, this, &ShortcutManager::updatePromoteMasterShortcut);
+    connect(m_settings, &Settings::increaseMasterRatioShortcutChanged, this, &ShortcutManager::updateIncreaseMasterRatioShortcut);
+    connect(m_settings, &Settings::decreaseMasterRatioShortcutChanged, this, &ShortcutManager::updateDecreaseMasterRatioShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -164,6 +169,7 @@ void ShortcutManager::registerShortcuts()
     setupCycleWindowsShortcuts();
     setupResnapToNewLayoutShortcut();
     setupSnapAllWindowsShortcut();
+    setupAutoTileShortcuts();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -219,6 +225,11 @@ void ShortcutManager::updateShortcuts()
 
     // Snap All Windows shortcut
     updateSnapAllWindowsShortcut();
+
+    // Auto-Tiling shortcuts
+    updatePromoteMasterShortcut();
+    updateIncreaseMasterRatioShortcut();
+    updateDecreaseMasterRatioShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -273,6 +284,11 @@ void ShortcutManager::unregisterShortcuts()
 
     // Snap All Windows action
     DELETE_SHORTCUT(m_snapAllWindowsAction);
+
+    // Auto-Tiling actions
+    DELETE_SHORTCUT(m_promoteMasterAction);
+    DELETE_SHORTCUT(m_increaseMasterRatioAction);
+    DELETE_SHORTCUT(m_decreaseMasterRatioAction);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -753,6 +769,55 @@ void ShortcutManager::updateResnapToNewLayoutShortcut()
 void ShortcutManager::updateSnapAllWindowsShortcut()
 {
     UPDATE_SHORTCUT(m_snapAllWindowsAction, snapAllWindowsShortcut);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Auto-Tiling Shortcuts (#106, #107)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void ShortcutManager::setupAutoTileShortcuts()
+{
+    SETUP_SHORTCUT(m_promoteMasterAction, "Promote to Master", "promote_to_master",
+                   promoteMasterShortcut, &ShortcutManager::onPromoteToMaster);
+    SETUP_SHORTCUT(m_increaseMasterRatioAction, "Increase Master Ratio", "increase_master_ratio",
+                   increaseMasterRatioShortcut, &ShortcutManager::onIncreaseMasterRatio);
+    SETUP_SHORTCUT(m_decreaseMasterRatioAction, "Decrease Master Ratio", "decrease_master_ratio",
+                   decreaseMasterRatioShortcut, &ShortcutManager::onDecreaseMasterRatio);
+
+    qCInfo(lcShortcuts) << "Auto-tile shortcuts registered (Meta+Return, Meta+L, Meta+H)";
+}
+
+void ShortcutManager::onPromoteToMaster()
+{
+    qCInfo(lcShortcuts) << "Promote to master triggered";
+    Q_EMIT promoteToMasterRequested();
+}
+
+void ShortcutManager::onIncreaseMasterRatio()
+{
+    qCInfo(lcShortcuts) << "Increase master ratio triggered";
+    Q_EMIT increaseMasterRatioRequested();
+}
+
+void ShortcutManager::onDecreaseMasterRatio()
+{
+    qCInfo(lcShortcuts) << "Decrease master ratio triggered";
+    Q_EMIT decreaseMasterRatioRequested();
+}
+
+void ShortcutManager::updatePromoteMasterShortcut()
+{
+    UPDATE_SHORTCUT(m_promoteMasterAction, promoteMasterShortcut);
+}
+
+void ShortcutManager::updateIncreaseMasterRatioShortcut()
+{
+    UPDATE_SHORTCUT(m_increaseMasterRatioAction, increaseMasterRatioShortcut);
+}
+
+void ShortcutManager::updateDecreaseMasterRatioShortcut()
+{
+    UPDATE_SHORTCUT(m_decreaseMasterRatioAction, decreaseMasterRatioShortcut);
 }
 
 // Undefine macros to keep them local to this file

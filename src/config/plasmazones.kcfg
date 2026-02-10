@@ -236,6 +236,20 @@
       <label>Default layout to use when no explicit assignment exists</label>
       <default></default>
     </entry>
+    <entry name="MasterRatioStep" type="Double">
+      <label>Step size for master area ratio adjustment in auto-tile layouts</label>
+      <default>0.05</default>
+      <min>0.01</min>
+      <max>0.5</max>
+    </entry>
+    <entry name="CountMinimizedWindows" type="Bool">
+      <label>Count minimized windows toward auto-tile zone count</label>
+      <default>true</default>
+    </entry>
+    <entry name="NewWindowAsMaster" type="Bool">
+      <label>New windows become master in auto-tile layouts</label>
+      <default>false</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
@@ -457,6 +471,20 @@
     <entry name="SnapAllWindowsShortcut" type="String">
       <label>Shortcut to snap all visible windows to zones</label>
       <default>Meta+Ctrl+S</default>
+    </entry>
+
+    <!-- Auto-Tiling Shortcuts (#106, #107) -->
+    <entry name="PromoteMaster" type="String">
+      <label>Shortcut to promote focused window to master position</label>
+      <default>Meta+Return</default>
+    </entry>
+    <entry name="IncreaseMasterRatio" type="String">
+      <label>Shortcut to increase master area ratio</label>
+      <default>Meta+L</default>
+    </entry>
+    <entry name="DecreaseMasterRatio" type="String">
+      <label>Shortcut to decrease master area ratio</label>
+      <default>Meta+H</default>
     </entry>
   </group>
 

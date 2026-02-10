@@ -37,6 +37,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/windowtrackingservice.h"
+#include "../core/autotileservice.h"
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../dbus/layoutadaptor.h"
@@ -293,6 +294,29 @@ bool Daemon::init()
     m_windowTrackingService = std::make_unique<WindowTrackingService>(
         m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
         m_virtualDesktopManager.get(), this);
+
+    // Auto-tile service - dynamic zone regeneration (#108, #106, #107)
+    m_autoTileService = std::make_unique<AutoTileService>(
+        m_layoutManager.get(), m_windowTrackingService.get(), m_settings.get(), this);
+    m_windowTrackingAdaptor->setAutoTileService(m_autoTileService.get());
+
+    // Connect AutoTileService geometriesChanged to D-Bus signal emission
+    connect(m_autoTileService.get(), &AutoTileService::geometriesChanged,
+            m_windowTrackingAdaptor, &WindowTrackingAdaptor::emitAutoTileGeometriesChanged);
+
+    // Wire layout changes to auto-tile service for Dynamic layout tracking (#108)
+    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this,
+            [this](Layout*) {
+                // Global layout change — notify auto-tile for all screens
+                const auto screens = QGuiApplication::screens();
+                for (QScreen* screen : screens) {
+                    m_autoTileService->handleLayoutChanged(screen->name());
+                }
+            });
+    connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
+            [this](const QString& screenName, Layout*) {
+                m_autoTileService->handleLayoutChanged(screenName);
+            });
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
@@ -631,6 +655,42 @@ void Daemon::start()
             return;
         }
         m_windowTrackingAdaptor->snapAllWindows(screen->name());
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Auto-Tiling Shortcuts (#106, #107)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Promote to master (Meta+Return) - #106
+    connect(m_shortcutManager.get(), &ShortcutManager::promoteToMasterRequested, this, [this]() {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for promoteMaster shortcut — skipping";
+            return;
+        }
+        m_windowTrackingAdaptor->promoteMasterWindow(screen->name());
+    });
+
+    // Increase master ratio (Meta+L) - #107
+    connect(m_shortcutManager.get(), &ShortcutManager::increaseMasterRatioRequested, this, [this]() {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for increaseMasterRatio shortcut — skipping";
+            return;
+        }
+        qreal step = m_settings ? m_settings->masterRatioStep() : 0.05;
+        m_windowTrackingAdaptor->adjustMasterRatio(screen->name(), step);
+    });
+
+    // Decrease master ratio (Meta+H) - #107
+    connect(m_shortcutManager.get(), &ShortcutManager::decreaseMasterRatioRequested, this, [this]() {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for decreaseMasterRatio shortcut — skipping";
+            return;
+        }
+        qreal step = m_settings ? m_settings->masterRatioStep() : 0.05;
+        m_windowTrackingAdaptor->adjustMasterRatio(screen->name(), -step);
     });
 
     // Initialize mode tracker for last-used layout
