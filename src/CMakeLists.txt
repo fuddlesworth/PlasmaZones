@@ -33,6 +33,8 @@ set(plasmazones_core_SRCS
     core/layoutfactory.cpp
     core/windowtrackingservice.h
     core/windowtrackingservice.cpp
+    core/autotileservice.h
+    core/autotileservice.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp
@@ -41,6 +43,18 @@ set(plasmazones_core_SRCS
     core/dbusvariantutils.h
     core/zone.cpp
     core/zone.h
+    core/tilingalgorithm.cpp
+    core/tilingalgorithm.h
+    core/algorithms/bspalgorithm.cpp
+    core/algorithms/bspalgorithm.h
+    core/algorithms/fibonaccialgorithm.cpp
+    core/algorithms/fibonaccialgorithm.h
+    core/algorithms/masterstackalgorithm.cpp
+    core/algorithms/masterstackalgorithm.h
+    core/algorithms/monoclealgorithm.cpp
+    core/algorithms/monoclealgorithm.h
+    core/algorithms/threecolumnalgorithm.cpp
+    core/algorithms/threecolumnalgorithm.h
     core/layout.cpp
     core/layout.h
     core/layoutmanager.cpp

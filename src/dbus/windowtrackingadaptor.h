@@ -22,6 +22,7 @@ class Zone;
 class IZoneDetector;
 class ISettings;
 class VirtualDesktopManager;
+class AutoTileService;
 
 /**
  * @brief D-Bus adaptor for window-zone tracking
@@ -38,6 +39,19 @@ public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override = default;
+
+    /**
+     * @brief Set the auto-tile service for dynamic layout management (#108, #106, #107)
+     * @param service AutoTileService instance (owned by Daemon, not this adaptor)
+     */
+    void setAutoTileService(AutoTileService* service) { m_autoTileService = service; }
+
+    /**
+     * @brief Emit the autoTileGeometriesChanged D-Bus signal
+     * @param screenName Screen where geometries changed
+     * @param assignmentsJson JSON array of window assignments
+     */
+    void emitAutoTileGeometriesChanged(const QString& screenName, const QJsonArray& assignments);
 
     /**
      * @brief Last screen reported by the KWin effect's windowActivated call
@@ -376,6 +390,52 @@ public Q_SLOTS:
      */
     void snapAllWindows(const QString& screenName);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Auto-Tile Methods (#108, #106, #107)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Handle a window being opened on a dynamic layout screen
+     *
+     * Called by the KWin effect BEFORE the existing auto-snap chain.
+     * If the screen's layout is Dynamic, regenerates zones for the new window count
+     * and returns geometry for all windows (including the new one).
+     *
+     * @param windowId Window identifier
+     * @param screenName Screen where the window appeared
+     * @param isSticky Whether the window is on all desktops
+     * @param x Output: X position for this window (if handled)
+     * @param y Output: Y position for this window (if handled)
+     * @param w Output: Width for this window (if handled)
+     * @param h Output: Height for this window (if handled)
+     * @param handled Output: True if auto-tile handled this window (Dynamic layout)
+     * @param allGeometriesJson Output: JSON array of ALL window assignments for resnapping
+     */
+    void autoTileWindowOpened(const QString& windowId, const QString& screenName, bool isSticky,
+                              int& x, int& y, int& w, int& h,
+                              bool& handled, QString& allGeometriesJson);
+
+    /**
+     * @brief Notify auto-tile that a window was minimized or restored (#108)
+     * @param windowId Window identifier
+     * @param screenName Screen the window is on
+     * @param minimized True if minimized, false if restored
+     */
+    void autoTileWindowMinimized(const QString& windowId, const QString& screenName, bool minimized);
+
+    /**
+     * @brief Promote the focused window to master position (#106)
+     * @param screenName Screen to operate on
+     */
+    void promoteMasterWindow(const QString& screenName);
+
+    /**
+     * @brief Adjust the master area ratio (#107)
+     * @param screenName Screen to operate on
+     * @param delta Ratio change (positive = increase, negative = decrease)
+     */
+    void adjustMasterRatio(const QString& screenName, double delta);
+
     /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
      * @param windowId Window ID
@@ -557,6 +617,13 @@ Q_SIGNALS:
      */
     void snapAllWindowsRequested(const QString& screenName);
 
+    /**
+     * @brief Emitted when auto-tile zones regenerate and all windows need repositioning
+     * @param screenName Screen where geometries changed
+     * @param geometriesJson JSON array: [{windowId, zoneId, x, y, w, h}, ...]
+     */
+    void autoTileGeometriesChanged(const QString& screenName, const QString& geometriesJson);
+
 private Q_SLOTS:
     /**
      * @brief Handle layout change by validating zone assignments
@@ -649,6 +716,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
     // ═══════════════════════════════════════════════════════════════════════════════
+    QString m_lastActiveWindowId;     // From windowActivated (focused window's ID)
     QString m_lastActiveScreenName;   // From windowActivated (focused window's screen)
     QString m_lastCursorScreenName;   // From cursorScreenChanged (cursor's screen)
 
@@ -661,9 +729,10 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager;
 
     // ═══════════════════════════════════════════════════════════════════════════════
-    // Business logic service
+    // Business logic services
     // ═══════════════════════════════════════════════════════════════════════════════
     WindowTrackingService* m_service = nullptr;
+    AutoTileService* m_autoTileService = nullptr;  // Set via setAutoTileService(), owned by Daemon
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: KConfig save/load)

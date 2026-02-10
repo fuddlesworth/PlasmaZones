@@ -84,6 +84,7 @@ private Q_SLOTS:
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
     void slotRunningWindowsRequested();
+    void slotAutoTileGeometriesChanged(const QString& screenName, const QString& geometriesJson);
 
 private:
     // Window management
@@ -189,6 +190,9 @@ private:
 
     // Apply snap geometry to window
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry);
+
+    // Apply auto-tile geometries from JSON to multiple windows
+    void applyAutoTileGeometries(const QString& geometriesJson);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // iface must remain valid for the duration of the async call (caller guarantees

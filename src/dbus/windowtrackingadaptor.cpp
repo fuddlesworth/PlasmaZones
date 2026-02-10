@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "../core/autotileservice.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
@@ -470,6 +471,11 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         return;
     }
 
+    // Notify auto-tile service first (triggers zone regeneration for Dynamic layouts)
+    if (m_autoTileService) {
+        m_autoTileService->handleWindowClosed(windowId);
+    }
+
     m_service->windowClosed(windowId);
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
 }
@@ -488,6 +494,9 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     if (!validateWindowId(windowId, QStringLiteral("process windowActivated"))) {
         return;
     }
+
+    // Track the active window for shortcut operations (promote-to-master, etc.)
+    m_lastActiveWindowId = windowId;
 
     // Track the active window's screen as fallback for shortcut screen detection.
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
@@ -728,6 +737,112 @@ QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
 
     qCDebug(lcDbusWindow) << "Returning updated geometries for" << windowGeometries.size() << "windows";
     return QString::fromUtf8(QJsonDocument(windowGeometries).toJson(QJsonDocument::Compact));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Auto-Tile Operations (#108, #106, #107) - Delegate to AutoTileService
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingAdaptor::autoTileWindowOpened(const QString& windowId, const QString& screenName,
+                                                  bool isSticky [[maybe_unused]],
+                                                  int& x, int& y, int& w, int& h,
+                                                  bool& handled, QString& allGeometriesJson)
+{
+    x = y = w = h = 0;
+    handled = false;
+    allGeometriesJson = QStringLiteral("[]");
+
+    if (!m_autoTileService) {
+        return;
+    }
+
+    if (!m_autoTileService->isScreenDynamic(screenName)) {
+        return;
+    }
+
+    qCInfo(lcDbusWindow) << "Auto-tile: handling window opened" << windowId << "on screen" << screenName;
+
+    AutoTileResult result = m_autoTileService->handleWindowOpened(windowId, screenName);
+    if (!result.handled) {
+        return;
+    }
+
+    handled = true;
+
+    // Find this window's assignment to return its geometry
+    // Build list of other assignments for bulk resnap
+    QVector<WindowAssignment> otherAssignments;
+    for (const auto& assignment : result.assignments) {
+        if (assignment.windowId == windowId) {
+            x = assignment.geometry.x();
+            y = assignment.geometry.y();
+            w = assignment.geometry.width();
+            h = assignment.geometry.height();
+        } else {
+            otherAssignments.append(assignment);
+        }
+    }
+
+    // Use service's JSON serialization (DRY — avoid duplicating assignmentsToJson)
+    QJsonArray otherJson = m_autoTileService->assignmentsToJson(otherAssignments);
+    allGeometriesJson = QString::fromUtf8(QJsonDocument(otherJson).toJson(QJsonDocument::Compact));
+
+    // Mark as auto-snapped so windowSnapped() won't update last-used zone
+    m_service->markAsAutoSnapped(windowId);
+
+    qCInfo(lcDbusWindow) << "Auto-tile: window" << windowId << "assigned to"
+                          << x << y << w << "x" << h
+                          << "with" << otherJson.size() << "other windows to reposition";
+}
+
+void WindowTrackingAdaptor::autoTileWindowMinimized(const QString& windowId, const QString& screenName, bool minimized)
+{
+    if (!m_autoTileService) {
+        return;
+    }
+
+    if (!m_autoTileService->isScreenDynamic(screenName)) {
+        return;
+    }
+
+    qCDebug(lcDbusWindow) << "Auto-tile: window" << (minimized ? "minimized" : "restored")
+                           << windowId << "on" << screenName;
+    m_autoTileService->handleWindowMinimized(windowId, minimized);
+}
+
+void WindowTrackingAdaptor::promoteMasterWindow(const QString& screenName)
+{
+    if (!m_autoTileService) {
+        qCWarning(lcDbusWindow) << "promoteMasterWindow: no AutoTileService available";
+        return;
+    }
+
+    if (m_lastActiveWindowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "promoteMasterWindow: no active window tracked";
+        return;
+    }
+
+    qCInfo(lcDbusWindow) << "Promote to master requested:" << m_lastActiveWindowId << "on screen" << screenName;
+    m_autoTileService->promoteMasterWindow(m_lastActiveWindowId, screenName);
+}
+
+void WindowTrackingAdaptor::adjustMasterRatio(const QString& screenName, double delta)
+{
+    if (!m_autoTileService) {
+        qCWarning(lcDbusWindow) << "adjustMasterRatio: no AutoTileService available";
+        return;
+    }
+
+    qCInfo(lcDbusWindow) << "Adjust master ratio on screen" << screenName << "delta:" << delta;
+    m_autoTileService->adjustMasterRatio(screenName, delta);
+}
+
+void WindowTrackingAdaptor::emitAutoTileGeometriesChanged(const QString& screenName, const QJsonArray& assignments)
+{
+    QString json = QString::fromUtf8(QJsonDocument(assignments).toJson(QJsonDocument::Compact));
+    qCInfo(lcDbusWindow) << "Emitting autoTileGeometriesChanged for screen" << screenName
+                          << "with" << assignments.size() << "assignments";
+    Q_EMIT autoTileGeometriesChanged(screenName, json);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -636,6 +636,25 @@ SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwa
 SETTINGS_SETTER(const QString&, ResnapToNewLayoutShortcut, m_resnapToNewLayoutShortcut, resnapToNewLayoutShortcutChanged)
 SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut, snapAllWindowsShortcutChanged)
 
+// Auto-Tiling Settings
+void Settings::setMasterRatioStep(qreal step)
+{
+    step = qBound(0.01, step, 0.5);
+    if (!qFuzzyCompare(m_masterRatioStep, step)) {
+        m_masterRatioStep = step;
+        Q_EMIT masterRatioStepChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+SETTINGS_SETTER(bool, CountMinimizedWindows, m_countMinimizedWindows, countMinimizedWindowsChanged)
+SETTINGS_SETTER(bool, NewWindowAsMaster, m_newWindowAsMaster, newWindowAsMasterChanged)
+
+// Auto-Tiling Shortcuts
+SETTINGS_SETTER(const QString&, PromoteMasterShortcut, m_promoteMasterShortcut, promoteMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, IncreaseMasterRatioShortcut, m_increaseMasterRatioShortcut, increaseMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, DecreaseMasterRatioShortcut, m_decreaseMasterRatioShortcut, decreaseMasterRatioShortcutChanged)
+
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
     for (const auto& excluded : m_excludedApplications) {
@@ -801,6 +820,12 @@ void Settings::load()
     // Handles migration from configs saved with WithoutBraces format
     m_defaultLayoutId = normalizeUuidString(behavior.readEntry(QLatin1String("DefaultLayoutId"), QString()));
 
+    // Auto-Tiling Settings (#106, #107, #108)
+    qreal ratioStep = behavior.readEntry(QLatin1String("MasterRatioStep"), ConfigDefaults::masterRatioStep());
+    m_masterRatioStep = qBound(0.01, ratioStep, 0.5);
+    m_countMinimizedWindows = behavior.readEntry(QLatin1String("CountMinimizedWindows"), ConfigDefaults::countMinimizedWindows());
+    m_newWindowAsMaster = behavior.readEntry(QLatin1String("NewWindowAsMaster"), ConfigDefaults::newWindowAsMaster());
+
     // Exclusions (defaults from .kcfg via ConfigDefaults)
     m_excludedApplications = exclusions.readEntry(QLatin1String("Applications"), QStringList());
     m_excludedWindowClasses = exclusions.readEntry(QLatin1String("WindowClasses"), QStringList());
@@ -932,6 +957,14 @@ void Settings::load()
     m_snapAllWindowsShortcut =
         globalShortcuts.readEntry(QLatin1String("SnapAllWindowsShortcut"), ConfigDefaults::snapAllWindowsShortcut());
 
+    // Auto-Tiling Shortcuts (#106, #107)
+    m_promoteMasterShortcut =
+        globalShortcuts.readEntry(QLatin1String("PromoteMaster"), ConfigDefaults::promoteMasterShortcut());
+    m_increaseMasterRatioShortcut =
+        globalShortcuts.readEntry(QLatin1String("IncreaseMasterRatio"), ConfigDefaults::increaseMasterRatioShortcut());
+    m_decreaseMasterRatioShortcut =
+        globalShortcuts.readEntry(QLatin1String("DecreaseMasterRatio"), ConfigDefaults::decreaseMasterRatioShortcut());
+
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1004,6 +1037,9 @@ void Settings::save()
     behavior.writeEntry(QLatin1String("StickyWindowHandling"), static_cast<int>(m_stickyWindowHandling));
     behavior.writeEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), m_restoreWindowsToZonesOnLogin);
     behavior.writeEntry(QLatin1String("DefaultLayoutId"), m_defaultLayoutId);
+    behavior.writeEntry(QLatin1String("MasterRatioStep"), m_masterRatioStep);
+    behavior.writeEntry(QLatin1String("CountMinimizedWindows"), m_countMinimizedWindows);
+    behavior.writeEntry(QLatin1String("NewWindowAsMaster"), m_newWindowAsMaster);
 
     // Exclusions
     exclusions.writeEntry(QLatin1String("Applications"), m_excludedApplications);
@@ -1083,6 +1119,9 @@ void Settings::save()
     globalShortcuts.writeEntry(QLatin1String("CycleWindowBackward"), m_cycleWindowBackwardShortcut);
     globalShortcuts.writeEntry(QLatin1String("ResnapToNewLayoutShortcut"), m_resnapToNewLayoutShortcut);
     globalShortcuts.writeEntry(QLatin1String("SnapAllWindowsShortcut"), m_snapAllWindowsShortcut);
+    globalShortcuts.writeEntry(QLatin1String("PromoteMaster"), m_promoteMasterShortcut);
+    globalShortcuts.writeEntry(QLatin1String("IncreaseMasterRatio"), m_increaseMasterRatioShortcut);
+    globalShortcuts.writeEntry(QLatin1String("DecreaseMasterRatio"), m_decreaseMasterRatioShortcut);
 
     config->sync();
 }

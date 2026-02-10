@@ -515,5 +515,73 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Reserved for future use."/>
             </arg>
         </signal>
+
+        <!-- Auto-Tile Methods (#108, #106, #107) -->
+        <method name="autoTileWindowOpened">
+            <annotation name="org.gtk.GDBus.DocString" value="Handle window opened on a Dynamic layout screen. Regenerates zones and returns geometry for this window plus all other windows that need repositioning."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window appeared."/>
+            </arg>
+            <arg name="isSticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="x" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="X position for this window (if handled)."/>
+            </arg>
+            <arg name="y" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Y position for this window (if handled)."/>
+            </arg>
+            <arg name="w" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Width for this window (if handled)."/>
+            </arg>
+            <arg name="h" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Height for this window (if handled)."/>
+            </arg>
+            <arg name="handled" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if auto-tile handled (Dynamic layout). If false, caller should fall through to existing snap chain."/>
+            </arg>
+            <arg name="allGeometriesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of other window assignments: [{windowId, zoneId, x, y, w, h}, ...]. Caller should reposition these windows."/>
+            </arg>
+        </method>
+        <method name="autoTileWindowMinimized">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify auto-tile that a window was minimized or restored. Triggers zone regeneration if the screen uses a Dynamic layout and CountMinimizedWindows is false."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen the window is on."/>
+            </arg>
+            <arg name="minimized" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if minimized, false if restored."/>
+            </arg>
+        </method>
+        <method name="promoteMasterWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Promote the focused window to master position (#106). Swaps it with the current master window."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to operate on."/>
+            </arg>
+        </method>
+        <method name="adjustMasterRatio">
+            <annotation name="org.gtk.GDBus.DocString" value="Adjust the master area ratio (#107). Positive delta increases, negative decreases."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to operate on."/>
+            </arg>
+            <arg name="delta" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Ratio change (e.g. 0.05 or -0.05)."/>
+            </arg>
+        </method>
+        <signal name="autoTileGeometriesChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when auto-tile zones regenerate (window close/minimize/layout change). KWin effect should reposition all listed windows."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where geometries changed."/>
+            </arg>
+            <arg name="geometriesJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array: [{windowId, zoneId, x, y, w, h}, ...]"/>
+            </arg>
+        </signal>
     </interface>
 </node>
