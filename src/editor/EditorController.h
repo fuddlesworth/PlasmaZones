@@ -5,6 +5,7 @@
 
 #include <QObject>
 #include <QVariantList>
+#include <QFont>
 #include <QRectF>
 #include <QUuid>
 #include <QScreen>
@@ -86,6 +87,14 @@ class EditorController : public QObject
     Q_PROPERTY(int globalZonePadding READ globalZonePadding NOTIFY globalZonePaddingChanged)
     Q_PROPERTY(int globalOuterGap READ globalOuterGap NOTIFY globalOuterGapChanged)
 
+    // Label font settings (read-only from global Appearance config)
+    Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
+    Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
+    Q_PROPERTY(int labelFontWeight READ labelFontWeight CONSTANT)
+    Q_PROPERTY(bool labelFontItalic READ labelFontItalic CONSTANT)
+    Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline CONSTANT)
+    Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout CONSTANT)
+
     // Shader properties for current layout
     Q_PROPERTY(QString currentShaderId READ currentShaderId WRITE setCurrentShaderId NOTIFY currentShaderIdChanged)
     Q_PROPERTY(QVariantMap currentShaderParams READ currentShaderParams WRITE setCurrentShaderParams NOTIFY
@@ -149,6 +158,14 @@ public:
     int globalOuterGap() const;
     bool canPaste() const;
     UndoController* undoController() const;
+
+    // Font settings getters
+    QString labelFontFamily() const { return m_labelFontFamily; }
+    qreal labelFontSizeScale() const { return m_labelFontSizeScale; }
+    int labelFontWeight() const { return m_labelFontWeight; }
+    bool labelFontItalic() const { return m_labelFontItalic; }
+    bool labelFontUnderline() const { return m_labelFontUnderline; }
+    bool labelFontStrikeout() const { return m_labelFontStrikeout; }
 
     // Visibility filtering getters
     QStringList allowedScreens() const { return m_allowedScreens; }
@@ -647,6 +664,14 @@ private:
     QStringList m_virtualDesktopNames;
     bool m_activitiesAvailable = false;
     QVariantList m_availableActivities;
+
+    // Label font settings (read-only from Appearance config)
+    QString m_labelFontFamily;
+    qreal m_labelFontSizeScale = 1.0;
+    int m_labelFontWeight = QFont::Bold;
+    bool m_labelFontItalic = false;
+    bool m_labelFontUnderline = false;
+    bool m_labelFontStrikeout = false;
 
     // Multi-zone drag state
     bool m_multiZoneDragActive = false;

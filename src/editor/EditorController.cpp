@@ -2773,6 +2773,15 @@ void EditorController::loadEditorSettings()
     refreshGlobalZonePadding();
     refreshGlobalOuterGap();
 
+    // Load label font settings from global Appearance config (read-only in editor)
+    KConfigGroup appearanceGroup = config->group(QStringLiteral("Appearance"));
+    m_labelFontFamily = appearanceGroup.readEntry(QLatin1String("LabelFontFamily"), QString());
+    m_labelFontSizeScale = qBound(0.25, appearanceGroup.readEntry(QLatin1String("LabelFontSizeScale"), 1.0), 3.0);
+    m_labelFontWeight = appearanceGroup.readEntry(QLatin1String("LabelFontWeight"), static_cast<int>(QFont::Bold));
+    m_labelFontItalic = appearanceGroup.readEntry(QLatin1String("LabelFontItalic"), false);
+    m_labelFontUnderline = appearanceGroup.readEntry(QLatin1String("LabelFontUnderline"), false);
+    m_labelFontStrikeout = appearanceGroup.readEntry(QLatin1String("LabelFontStrikeout"), false);
+
     // Load snapping settings (backward compatible with single SnapInterval)
     bool gridEnabled = editorGroup.readEntry(QLatin1String("GridSnappingEnabled"), true);
     bool edgeEnabled = editorGroup.readEntry(QLatin1String("EdgeSnappingEnabled"), true);

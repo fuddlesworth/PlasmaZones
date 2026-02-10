@@ -298,7 +298,7 @@ void Settings::setUseSystemColors(bool use)
 SETTINGS_SETTER(const QColor&, HighlightColor, m_highlightColor, highlightColorChanged)
 SETTINGS_SETTER(const QColor&, InactiveColor, m_inactiveColor, inactiveColorChanged)
 SETTINGS_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
-SETTINGS_SETTER(const QColor&, NumberColor, m_numberColor, numberColorChanged)
+SETTINGS_SETTER(const QColor&, LabelFontColor, m_labelFontColor, labelFontColorChanged)
 
 void Settings::setActiveOpacity(qreal opacity)
 {
@@ -325,6 +325,25 @@ SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, 0, INT_M
 SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, 0, INT_MAX)
 
 SETTINGS_SETTER(bool, EnableBlur, m_enableBlur, enableBlurChanged)
+SETTINGS_SETTER(const QString&, LabelFontFamily, m_labelFontFamily, labelFontFamilyChanged)
+SETTINGS_SETTER_CLAMPED(LabelFontWeight, m_labelFontWeight, labelFontWeightChanged, 100, 900)
+SETTINGS_SETTER(bool, LabelFontItalic, m_labelFontItalic, labelFontItalicChanged)
+SETTINGS_SETTER(bool, LabelFontUnderline, m_labelFontUnderline, labelFontUnderlineChanged)
+SETTINGS_SETTER(bool, LabelFontStrikeout, m_labelFontStrikeout, labelFontStrikeoutChanged)
+
+// Manual setter: SETTINGS_SETTER_CLAMPED only handles int; this is qreal with
+// qBound clamping to [0.25, 3.0]. qFuzzyCompare is safe here because both
+// operands are always in that range (never near zero where it breaks).
+void Settings::setLabelFontSizeScale(qreal scale)
+{
+    scale = qBound(0.25, scale, 3.0);
+    if (!qFuzzyCompare(m_labelFontSizeScale, scale)) {
+        m_labelFontSizeScale = scale;
+        Q_EMIT labelFontSizeScaleChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, INT_MAX)
 SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, INT_MAX)
 SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 0, INT_MAX)
@@ -728,7 +747,7 @@ void Settings::load()
     m_highlightColor = readValidatedColor(appearance, "HighlightColor", ConfigDefaults::highlightColor(), "highlight");
     m_inactiveColor = readValidatedColor(appearance, "InactiveColor", ConfigDefaults::inactiveColor(), "inactive");
     m_borderColor = readValidatedColor(appearance, "BorderColor", ConfigDefaults::borderColor(), "border");
-    m_numberColor = readValidatedColor(appearance, "NumberColor", ConfigDefaults::numberColor(), "number");
+    m_labelFontColor = readValidatedColor(appearance, "LabelFontColor", ConfigDefaults::labelFontColor(), "label font");
 
     // Validate opacity (0.0 to 1.0)
     qreal activeOpacity = appearance.readEntry(QLatin1String("ActiveOpacity"), ConfigDefaults::activeOpacity());
@@ -750,6 +769,13 @@ void Settings::load()
     m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, INT_MAX, "border radius");
 
     m_enableBlur = appearance.readEntry(QLatin1String("EnableBlur"), ConfigDefaults::enableBlur());
+    m_labelFontFamily = appearance.readEntry(QLatin1String("LabelFontFamily"), ConfigDefaults::labelFontFamily());
+    qreal fontScale = appearance.readEntry(QLatin1String("LabelFontSizeScale"), ConfigDefaults::labelFontSizeScale());
+    m_labelFontSizeScale = qBound(0.25, fontScale, 3.0);
+    m_labelFontWeight = readValidatedInt(appearance, "LabelFontWeight", ConfigDefaults::labelFontWeight(), 100, 900, "label font weight");
+    m_labelFontItalic = appearance.readEntry(QLatin1String("LabelFontItalic"), ConfigDefaults::labelFontItalic());
+    m_labelFontUnderline = appearance.readEntry(QLatin1String("LabelFontUnderline"), ConfigDefaults::labelFontUnderline());
+    m_labelFontStrikeout = appearance.readEntry(QLatin1String("LabelFontStrikeout"), ConfigDefaults::labelFontStrikeout());
 
     // Zones with validation (defaults from .kcfg via ConfigDefaults)
     m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, INT_MAX, "zone padding");
@@ -948,12 +974,18 @@ void Settings::save()
     appearance.writeEntry(QLatin1String("HighlightColor"), m_highlightColor);
     appearance.writeEntry(QLatin1String("InactiveColor"), m_inactiveColor);
     appearance.writeEntry(QLatin1String("BorderColor"), m_borderColor);
-    appearance.writeEntry(QLatin1String("NumberColor"), m_numberColor);
+    appearance.writeEntry(QLatin1String("LabelFontColor"), m_labelFontColor);
     appearance.writeEntry(QLatin1String("ActiveOpacity"), m_activeOpacity);
     appearance.writeEntry(QLatin1String("InactiveOpacity"), m_inactiveOpacity);
     appearance.writeEntry(QLatin1String("BorderWidth"), m_borderWidth);
     appearance.writeEntry(QLatin1String("BorderRadius"), m_borderRadius);
     appearance.writeEntry(QLatin1String("EnableBlur"), m_enableBlur);
+    appearance.writeEntry(QLatin1String("LabelFontFamily"), m_labelFontFamily);
+    appearance.writeEntry(QLatin1String("LabelFontSizeScale"), m_labelFontSizeScale);
+    appearance.writeEntry(QLatin1String("LabelFontWeight"), m_labelFontWeight);
+    appearance.writeEntry(QLatin1String("LabelFontItalic"), m_labelFontItalic);
+    appearance.writeEntry(QLatin1String("LabelFontUnderline"), m_labelFontUnderline);
+    appearance.writeEntry(QLatin1String("LabelFontStrikeout"), m_labelFontStrikeout);
 
     // Zones
     zones.writeEntry(QLatin1String("Padding"), m_zonePadding);
@@ -1180,7 +1212,7 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     setHighlightColor(result.highlightColor);
     setInactiveColor(result.inactiveColor);
     setBorderColor(result.borderColor);
-    setNumberColor(result.numberColor);
+    setLabelFontColor(result.labelFontColor);
 
     m_useSystemColors = false;
     Q_EMIT useSystemColorsChanged();
@@ -1204,12 +1236,12 @@ void Settings::applySystemColorScheme()
     border.setAlpha(Defaults::BorderAlpha);
     m_borderColor = border;
 
-    m_numberColor = scheme.foreground(KColorScheme::NormalText).color();
+    m_labelFontColor = scheme.foreground(KColorScheme::NormalText).color();
 
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
     Q_EMIT borderColorChanged();
-    Q_EMIT numberColorChanged();
+    Q_EMIT labelFontColorChanged();
 }
 
 } // namespace PlasmaZones

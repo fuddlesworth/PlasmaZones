@@ -184,12 +184,30 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_COLOR_SETTING("highlightColor", highlightColor, setHighlightColor)
     REGISTER_COLOR_SETTING("inactiveColor", inactiveColor, setInactiveColor)
     REGISTER_COLOR_SETTING("borderColor", borderColor, setBorderColor)
-    REGISTER_COLOR_SETTING("numberColor", numberColor, setNumberColor)
+    REGISTER_COLOR_SETTING("labelFontColor", labelFontColor, setLabelFontColor)
     REGISTER_DOUBLE_SETTING("activeOpacity", activeOpacity, setActiveOpacity)
     REGISTER_DOUBLE_SETTING("inactiveOpacity", inactiveOpacity, setInactiveOpacity)
     REGISTER_INT_SETTING("borderWidth", borderWidth, setBorderWidth)
     REGISTER_INT_SETTING("borderRadius", borderRadius, setBorderRadius)
     REGISTER_BOOL_SETTING("enableBlur", enableBlur, setEnableBlur)
+    REGISTER_STRING_SETTING("labelFontFamily", labelFontFamily, setLabelFontFamily)
+    // Custom setter with range validation (0.25-3.0) instead of REGISTER_DOUBLE_SETTING
+    m_getters[QStringLiteral("labelFontSizeScale")] = [this]() {
+        return m_settings->labelFontSizeScale();
+    };
+    m_setters[QStringLiteral("labelFontSizeScale")] = [this](const QVariant& v) {
+        bool ok;
+        double val = v.toDouble(&ok);
+        if (!ok || val < 0.25 || val > 3.0) {
+            return false;
+        }
+        m_settings->setLabelFontSizeScale(val);
+        return true;
+    };
+    REGISTER_INT_SETTING("labelFontWeight", labelFontWeight, setLabelFontWeight)
+    REGISTER_BOOL_SETTING("labelFontItalic", labelFontItalic, setLabelFontItalic)
+    REGISTER_BOOL_SETTING("labelFontUnderline", labelFontUnderline, setLabelFontUnderline)
+    REGISTER_BOOL_SETTING("labelFontStrikeout", labelFontStrikeout, setLabelFontStrikeout)
     REGISTER_BOOL_SETTING("enableShaderEffects", enableShaderEffects, setEnableShaderEffects)
     REGISTER_INT_SETTING("shaderFrameRate", shaderFrameRate, setShaderFrameRate)
 

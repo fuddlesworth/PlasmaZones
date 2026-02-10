@@ -91,7 +91,12 @@ Window {
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
-    property color numberColor: Kirigami.Theme.textColor
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
     property real activeOpacity: 0.5 // Match Settings default
@@ -583,6 +588,12 @@ Window {
                                 inactiveOpacity: root.inactiveOpacity
                                 activeOpacity: root.activeOpacity
                                 hoverScale: 1.05
+                                fontFamily: root.fontFamily
+                                fontSizeScale: root.fontSizeScale
+                                fontWeight: root.fontWeight
+                                fontItalic: root.fontItalic
+                                fontUnderline: root.fontUnderline
+                                fontStrikeout: root.fontStrikeout
                                 animationDuration: animationConstants.normalDuration
 
                                 onZoneHovered: function(index) {

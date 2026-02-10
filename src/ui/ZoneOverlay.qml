@@ -25,7 +25,13 @@ Window {
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
-    property color numberColor: Kirigami.Theme.textColor
+    property color labelFontColor: Kirigami.Theme.textColor
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
@@ -160,7 +166,13 @@ Window {
 
                     return root.borderColor;
                 }
-                numberColor: root.numberColor
+                labelFontColor: root.labelFontColor
+                fontFamily: root.fontFamily
+                fontSizeScale: root.fontSizeScale
+                fontWeight: root.fontWeight
+                fontItalic: root.fontItalic
+                fontUnderline: root.fontUnderline
+                fontStrikeout: root.fontStrikeout
                 // Use custom opacity if useCustomColors is true - now uses separate active/inactive opacity
                 activeOpacity: {
                     var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");

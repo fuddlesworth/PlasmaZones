@@ -89,6 +89,12 @@ Item {
                     anchors.centerIn: parent
                     layout: root.modelData
                     isSelected: root.isSelected
+                    fontFamily: root.kcm ? root.kcm.labelFontFamily : ""
+                    fontSizeScale: root.kcm ? root.kcm.labelFontSizeScale : 1.0
+                    fontWeight: root.kcm ? root.kcm.labelFontWeight : Font.Bold
+                    fontItalic: root.kcm ? root.kcm.labelFontItalic : false
+                    fontUnderline: root.kcm ? root.kcm.labelFontUnderline : false
+                    fontStrikeout: root.kcm ? root.kcm.labelFontStrikeout : false
                     transformOrigin: Item.Center
 
                     // Safe scale calculation - fit thumbnail within parent bounds

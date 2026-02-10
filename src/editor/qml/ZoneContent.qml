@@ -14,6 +14,12 @@ Item {
     id: zoneContent
 
     required property var zoneData
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
 
     anchors.fill: parent
 
@@ -36,8 +42,12 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: (zoneContent.zoneData && zoneContent.zoneData.zoneNumber) || 1
             // Guard against negative or zero dimensions causing invalid font size
-            font.pixelSize: Math.max(8, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25)
-            font.bold: true
+            font.pixelSize: Math.max(8, Math.min(zoneContent.width || 0, zoneContent.height || 0) * 0.25) * zoneContent.fontSizeScale
+            font.weight: zoneContent.fontWeight
+            font.italic: zoneContent.fontItalic
+            font.underline: zoneContent.fontUnderline
+            font.strikeout: zoneContent.fontStrikeout
+            font.family: zoneContent.fontFamily
             color: Kirigami.Theme.textColor
             opacity: 0.8
         }

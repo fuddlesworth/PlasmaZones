@@ -46,6 +46,13 @@ Rectangle {
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, borderOpacity)
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, highlightOpacity)
     property color activeColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, activeOpacity)
+    // Font properties for zone number labels
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
     // Preview dimensions
     property int previewWidth: 130
     property int previewHeight: 70
@@ -263,6 +270,12 @@ Rectangle {
                     borderColor: root.borderColor
                     inactiveOpacity: root.inactiveOpacity
                     hoverOpacity: root.hoverOpacity
+                    fontFamily: root.fontFamily
+                    fontSizeScale: root.fontSizeScale
+                    fontWeight: root.fontWeight
+                    fontItalic: root.fontItalic
+                    fontUnderline: root.fontUnderline
+                    fontStrikeout: root.fontStrikeout
                     onClicked: {
                         root.layoutSelected(layoutId);
                     }

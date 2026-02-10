@@ -96,8 +96,8 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     result.highlightColor = accent;
     result.inactiveColor = bg;
     result.borderColor = fg;
-    result.numberColor = fg;  // Same as border but without modified alpha
-    result.numberColor.setAlpha(255);
+    result.labelFontColor = fg;  // Same as border but without modified alpha
+    result.labelFontColor.setAlpha(255);
 
     return result;
 }
@@ -133,8 +133,8 @@ ColorImportResult ColorImporter::parseColorList(const QString& content)
     result.highlightColor = accent;
     result.inactiveColor = bg;
     result.borderColor = fg;
-    result.numberColor = fg;
-    result.numberColor.setAlpha(255);
+    result.labelFontColor = fg;
+    result.labelFontColor.setAlpha(255);
 
     return result;
 }

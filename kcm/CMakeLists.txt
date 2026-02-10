@@ -41,6 +41,7 @@ install(FILES
     ui/LayoutComboBox.qml
     ui/AssignmentRow.qml
     ui/ScreenComboBox.qml
+    ui/FontPickerDialog.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones
 )
 
