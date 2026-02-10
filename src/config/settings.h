@@ -241,19 +241,6 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut
                    NOTIFY snapAllWindowsShortcutChanged)
 
-    // Auto-Tiling Settings (#106, #107, #108)
-    Q_PROPERTY(qreal masterRatioStep READ masterRatioStep WRITE setMasterRatioStep NOTIFY masterRatioStepChanged)
-    Q_PROPERTY(bool countMinimizedWindows READ countMinimizedWindows WRITE setCountMinimizedWindows NOTIFY countMinimizedWindowsChanged)
-    Q_PROPERTY(bool newWindowAsMaster READ newWindowAsMaster WRITE setNewWindowAsMaster NOTIFY newWindowAsMasterChanged)
-
-    // Auto-Tiling Shortcuts
-    Q_PROPERTY(QString promoteMasterShortcut READ promoteMasterShortcut WRITE setPromoteMasterShortcut
-                   NOTIFY promoteMasterShortcutChanged)
-    Q_PROPERTY(QString increaseMasterRatioShortcut READ increaseMasterRatioShortcut WRITE setIncreaseMasterRatioShortcut
-                   NOTIFY increaseMasterRatioShortcutChanged)
-    Q_PROPERTY(QString decreaseMasterRatioShortcut READ decreaseMasterRatioShortcut WRITE setDecreaseMasterRatioShortcut
-                   NOTIFY decreaseMasterRatioShortcutChanged)
-
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -876,40 +863,6 @@ public:
     }
     void setSnapAllWindowsShortcut(const QString& shortcut);
 
-    // Auto-Tiling Settings (#106, #107, #108)
-    qreal masterRatioStep() const override
-    {
-        return m_masterRatioStep;
-    }
-    void setMasterRatioStep(qreal step);
-    bool countMinimizedWindows() const override
-    {
-        return m_countMinimizedWindows;
-    }
-    void setCountMinimizedWindows(bool count);
-    bool newWindowAsMaster() const override
-    {
-        return m_newWindowAsMaster;
-    }
-    void setNewWindowAsMaster(bool asMaster);
-
-    // Auto-Tiling Shortcuts
-    QString promoteMasterShortcut() const
-    {
-        return m_promoteMasterShortcut;
-    }
-    void setPromoteMasterShortcut(const QString& shortcut);
-    QString increaseMasterRatioShortcut() const
-    {
-        return m_increaseMasterRatioShortcut;
-    }
-    void setIncreaseMasterRatioShortcut(const QString& shortcut);
-    QString decreaseMasterRatioShortcut() const
-    {
-        return m_decreaseMasterRatioShortcut;
-    }
-    void setDecreaseMasterRatioShortcut(const QString& shortcut);
-
     // Persistence
     void load() override;
     void save() override;
@@ -1103,15 +1056,6 @@ private:
     // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
     QString m_snapAllWindowsShortcut = QStringLiteral("Meta+Ctrl+S");
 
-    // Auto-Tiling Settings (#106, #107, #108)
-    qreal m_masterRatioStep = 0.05;
-    bool m_countMinimizedWindows = true;
-    bool m_newWindowAsMaster = false;
-
-    // Auto-Tiling Shortcuts
-    QString m_promoteMasterShortcut = QStringLiteral("Meta+Return");
-    QString m_increaseMasterRatioShortcut = QStringLiteral("Meta+L");
-    QString m_decreaseMasterRatioShortcut = QStringLiteral("Meta+H");
 };
 
 } // namespace PlasmaZones

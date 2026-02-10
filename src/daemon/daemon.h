@@ -29,7 +29,6 @@ class WindowTrackingAdaptor;
 class ScreenAdaptor;
 class WindowDragAdaptor;
 class WindowTrackingService;
-class AutoTileService;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
@@ -130,7 +129,6 @@ private:
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
 
     std::unique_ptr<WindowTrackingService> m_windowTrackingService;
-    std::unique_ptr<AutoTileService> m_autoTileService;
 
     // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;

@@ -140,21 +140,6 @@ Q_SIGNALS:
      */
     void snapAllWindowsRequested();
 
-    /**
-     * @brief Emitted when promote to master shortcut is triggered (#106)
-     */
-    void promoteToMasterRequested();
-
-    /**
-     * @brief Emitted when increase master ratio shortcut is triggered (#107)
-     */
-    void increaseMasterRatioRequested();
-
-    /**
-     * @brief Emitted when decrease master ratio shortcut is triggered (#107)
-     */
-    void decreaseMasterRatioRequested();
-
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -227,14 +212,6 @@ private Q_SLOTS:
     void onSnapAllWindows();
     void updateSnapAllWindowsShortcut();
 
-    // Auto-Tiling (#106, #107)
-    void onPromoteToMaster();
-    void onIncreaseMasterRatio();
-    void onDecreaseMasterRatio();
-    void updatePromoteMasterShortcut();
-    void updateIncreaseMasterRatioShortcut();
-    void updateDecreaseMasterRatioShortcut();
-
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -246,7 +223,6 @@ private:
     void setupCycleWindowsShortcuts();
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
-    void setupAutoTileShortcuts();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -291,11 +267,6 @@ private:
 
     // Snap All Windows action
     QAction* m_snapAllWindowsAction = nullptr;
-
-    // Auto-Tiling actions (#106, #107)
-    QAction* m_promoteMasterAction = nullptr;
-    QAction* m_increaseMasterRatioAction = nullptr;
-    QAction* m_decreaseMasterRatioAction = nullptr;
 };
 
 } // namespace PlasmaZones

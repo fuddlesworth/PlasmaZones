@@ -146,45 +146,6 @@ bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
     return m_windowZoneAssignments.contains(windowId);
 }
 
-QStringList WindowTrackingService::snappedWindowsForScreen(const QString& screenName) const
-{
-    // Collect windows on this screen with their primary zone
-    QVector<QPair<QString, int>> windowsWithZoneNum; // (windowId, zoneNumber)
-
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
-        // Filter by screen
-        if (m_windowScreenAssignments.value(it.key()) != screenName) {
-            continue;
-        }
-        const QStringList& zoneIds = it.value();
-        if (zoneIds.isEmpty()) {
-            continue;
-        }
-
-        // Resolve zone number for sorting
-        int zoneNum = 999;
-        Zone* zone = findZoneById(zoneIds.first());
-        if (zone) {
-            zoneNum = zone->zoneNumber();
-        }
-        windowsWithZoneNum.append({it.key(), zoneNum});
-    }
-
-    // Sort by zone number
-    std::sort(windowsWithZoneNum.begin(), windowsWithZoneNum.end(),
-              [](const QPair<QString, int>& a, const QPair<QString, int>& b) {
-                  return a.second < b.second;
-              });
-
-    QStringList result;
-    result.reserve(windowsWithZoneNum.size());
-    for (const auto& pair : windowsWithZoneNum) {
-        result.append(pair.first);
-    }
-    return result;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Pre-Snap Geometry Storage
 // ═══════════════════════════════════════════════════════════════════════════════

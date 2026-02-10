@@ -2236,7 +2236,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
     writeQmlProperty(window, QStringLiteral("layoutId"), layout->id().toString());
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(layout->category()));
+    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
     writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
     writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
     writeFontProperties(window, m_settings);
