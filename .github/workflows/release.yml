@@ -9,7 +9,7 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    # This empty workflow_dispatch event was added to ensure manual triggering is available and to refresh GitHub's workflow cache.
+    # Allow manual triggers
 
 permissions:
   contents: write

@@ -35,7 +35,7 @@ if [ ! -f "$MANIFEST_FILE" ]; then
     echo "Cannot safely uninstall without knowing which files to remove."
     echo ""
     echo "If you installed to a different prefix, run:"
-    echo "  $0 /path/to/prefix"
+    echo "  $0 --prefix /path/to/prefix"
     exit 1
 fi
 
@@ -67,21 +67,21 @@ if command -v systemctl >/dev/null 2>&1; then
         echo "Stopping plasmazones service..."
         systemctl --user stop plasmazones.service
     fi
-    
+
     if systemctl --user is-enabled --quiet plasmazones.service 2>/dev/null; then
         echo "Disabling plasmazones service..."
         systemctl --user disable plasmazones.service
     fi
-    
+
     # Remove service file from user config directory
     rm -f "$HOME/.config/systemd/user/plasmazones.service"
-    
-    # Remove environment configuration
-    rm -f "$HOME/.config/environment.d/10-plasmazones.conf"
-    
+
     # Reload systemd immediately after service removal
     systemctl --user daemon-reload 2>/dev/null || true
 fi
+
+# Always remove environment configuration (created unconditionally by installer)
+rm -f "$HOME/.config/environment.d/10-plasmazones.conf"
 
 # Ask about config removal upfront
 echo ""
@@ -104,7 +104,7 @@ while IFS= read -r line; do
     [[ "$line" =~ ^#.*$ ]] && continue
     [[ -z "$line" ]] && continue
     [[ "$line" =~ ^DIR:.*$ ]] && continue
-    
+
     FILE_PATH="$PREFIX/$line"
     # Remove both regular files and symlinks
     if [ -f "$FILE_PATH" ] || [ -L "$FILE_PATH" ]; then
@@ -128,13 +128,13 @@ done
 if [ "$REMOVE_CONFIG" = true ]; then
     echo "Removing configuration and layouts..."
     rm -rf "$PREFIX/share/plasmazones"
-    rm -rf "$HOME/.config/plasmazonesrc"
+    rm -f "$HOME/.config/plasmazonesrc"
     echo "Configuration removed."
+else
+    # Remove manifest and uninstall script but keep user data
+    rm -f "$MANIFEST_FILE"
+    rm -f "$PREFIX/share/plasmazones/uninstall.sh"
 fi
-
-# Remove manifest and uninstall script (if they still exist)
-rm -f "$MANIFEST_FILE"
-rm -f "$PREFIX/share/plasmazones/uninstall.sh"
 
 # Refresh KDE cache
 if command -v kbuildsycoca6 >/dev/null 2>&1; then
