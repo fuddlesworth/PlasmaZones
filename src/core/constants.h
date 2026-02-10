@@ -114,7 +114,7 @@ inline constexpr QLatin1String ShowZoneNumbers{"showZoneNumbers"};
 inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; // Legacy, for backward compat when loading
 inline constexpr QLatin1String IsSystem{"isSystem"}; // New: determined by source path
 inline constexpr QLatin1String ZoneCount{"zoneCount"};
-inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual, 1=Auto, 2=Dynamic
+inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual
 
 // Shader keys
 inline constexpr QLatin1String ShaderId{"shaderId"};
@@ -151,12 +151,6 @@ inline constexpr QLatin1String TargetScreen{"targetScreen"};
 
 // Auto-assign keys
 inline constexpr QLatin1String AutoAssign{"autoAssign"};
-
-// Auto-tiling keys
-inline constexpr QLatin1String AlgorithmId{"algorithmId"};
-inline constexpr QLatin1String MasterRatio{"masterRatio"};
-inline constexpr QLatin1String MasterCount{"masterCount"};
-inline constexpr QLatin1String LayoutCapacity{"layoutCapacity"};
 
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};

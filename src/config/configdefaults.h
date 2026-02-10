@@ -191,17 +191,6 @@ public:
     static QString snapAllWindowsShortcut() { return instance().defaultSnapAllWindowsShortcutValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Auto-Tiling Settings (#106, #107, #108)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static double masterRatioStep() { return instance().defaultMasterRatioStepValue(); }
-    static bool countMinimizedWindows() { return instance().defaultCountMinimizedWindowsValue(); }
-    static bool newWindowAsMaster() { return instance().defaultNewWindowAsMasterValue(); }
-    static QString promoteMasterShortcut() { return instance().defaultPromoteMasterValue(); }
-    static QString increaseMasterRatioShortcut() { return instance().defaultIncreaseMasterRatioValue(); }
-    static QString decreaseMasterRatioShortcut() { return instance().defaultDecreaseMasterRatioValue(); }
-
-    // ═══════════════════════════════════════════════════════════════════════════
     // Update Notifications
     // ═══════════════════════════════════════════════════════════════════════════
 

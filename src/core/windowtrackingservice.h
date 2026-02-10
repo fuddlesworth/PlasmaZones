@@ -117,15 +117,6 @@ public:
      */
     bool isWindowSnapped(const QString& windowId) const;
 
-    /**
-     * @brief Get snapped windows on a specific screen, sorted by zone number
-     * @param screenName Screen to filter by
-     * @return List of window IDs sorted by their primary zone's zone number
-     *
-     * Used by AutoTileService to determine current window order on a screen.
-     */
-    QStringList snappedWindowsForScreen(const QString& screenName) const;
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Pre-Snap Geometry Storage
     // ═══════════════════════════════════════════════════════════════════════════

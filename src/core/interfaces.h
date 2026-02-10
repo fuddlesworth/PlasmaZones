@@ -261,16 +261,6 @@ Q_SIGNALS:
     // Snap All Windows Shortcut
     void snapAllWindowsShortcutChanged();
 
-    // Auto-Tiling Settings (#106, #107, #108)
-    void masterRatioStepChanged();
-    void countMinimizedWindowsChanged();
-    void newWindowAsMasterChanged();
-
-    // Auto-Tiling Shortcuts
-    void promoteMasterShortcutChanged();
-    void increaseMasterRatioShortcutChanged();
-    void decreaseMasterRatioShortcutChanged();
-
 };
 
 /**

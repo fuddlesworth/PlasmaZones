@@ -269,11 +269,6 @@ public:
     virtual void setStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
-
-    // Auto-tiling settings
-    virtual qreal masterRatioStep() const = 0;
-    virtual bool countMinimizedWindows() const = 0;
-    virtual bool newWindowAsMaster() const = 0;
 };
 
 /**

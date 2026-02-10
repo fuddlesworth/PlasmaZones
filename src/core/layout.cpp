@@ -6,7 +6,6 @@
 #include "layoututils.h"
 #include "logging.h"
 #include "shaderregistry.h"
-#include "tilingalgorithm.h"
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
@@ -80,11 +79,6 @@ Layout::Layout(const Layout& other)
     , m_defaultOrder(other.m_defaultOrder)
     , m_appRules(other.m_appRules)
     , m_autoAssign(other.m_autoAssign)
-    , m_category(other.m_category)
-    , m_algorithmId(other.m_algorithmId)
-    , m_masterRatio(other.m_masterRatio)
-    , m_masterCount(other.m_masterCount)
-    , m_layoutCapacity(other.m_layoutCapacity)
     , m_shaderId(other.m_shaderId)
     , m_shaderParams(other.m_shaderParams)
     , m_hiddenFromSelector(other.m_hiddenFromSelector)
@@ -107,22 +101,7 @@ Layout::~Layout()
 Layout& Layout::operator=(const Layout& other)
 {
     if (this != &other) {
-        // Track all property changes for signal emission
-        bool nameDiff = m_name != other.m_name;
-        bool typeDiff = m_type != other.m_type;
-        bool descDiff = m_description != other.m_description;
-        bool paddingDiff = m_zonePadding != other.m_zonePadding;
-        bool gapDiff = m_outerGap != other.m_outerGap;
-        bool showNumDiff = m_showZoneNumbers != other.m_showZoneNumbers;
-        bool shaderIdDiff = m_shaderId != other.m_shaderId;
-        bool shaderParamsDiff = m_shaderParams != other.m_shaderParams;
-        bool rulesChanged = m_appRules != other.m_appRules;
-        bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
-        bool categoryDiff = m_category != other.m_category;
-        bool algorithmDiff = m_algorithmId != other.m_algorithmId;
-        bool masterRatioDiff = m_masterRatio != other.m_masterRatio;
-        bool masterCountDiff = m_masterCount != other.m_masterCount;
-        bool capacityDiff = m_layoutCapacity != other.m_layoutCapacity;
+        // Track visibility changes for signal emission
         bool hiddenChanged = m_hiddenFromSelector != other.m_hiddenFromSelector;
         bool screensChanged = m_allowedScreens != other.m_allowedScreens;
         bool desktopsChanged = m_allowedDesktops != other.m_allowedDesktops;
@@ -138,13 +117,10 @@ Layout& Layout::operator=(const Layout& other)
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
         m_shaderId = other.m_shaderId;
         m_shaderParams = other.m_shaderParams;
+        bool rulesChanged = m_appRules != other.m_appRules;
         m_appRules = other.m_appRules;
+        bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
         m_autoAssign = other.m_autoAssign;
-        m_category = other.m_category;
-        m_algorithmId = other.m_algorithmId;
-        m_masterRatio = other.m_masterRatio;
-        m_masterCount = other.m_masterCount;
-        m_layoutCapacity = other.m_layoutCapacity;
         m_hiddenFromSelector = other.m_hiddenFromSelector;
         m_allowedScreens = other.m_allowedScreens;
         m_allowedDesktops = other.m_allowedDesktops;
@@ -160,28 +136,13 @@ Layout& Layout::operator=(const Layout& other)
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zonesChanged();
 
-        // Emit signals for all changed properties
-        if (nameDiff) Q_EMIT nameChanged();
-        if (typeDiff) Q_EMIT typeChanged();
-        if (descDiff) Q_EMIT descriptionChanged();
-        if (paddingDiff) Q_EMIT zonePaddingChanged();
-        if (gapDiff) Q_EMIT outerGapChanged();
-        if (showNumDiff) Q_EMIT showZoneNumbersChanged();
-        if (shaderIdDiff) Q_EMIT shaderIdChanged();
-        if (shaderParamsDiff) Q_EMIT shaderParamsChanged();
-        if (rulesChanged) Q_EMIT appRulesChanged();
-        if (autoAssignDiff) Q_EMIT autoAssignChanged();
-        if (categoryDiff) Q_EMIT categoryChanged();
-        if (algorithmDiff) Q_EMIT algorithmIdChanged();
-        if (masterRatioDiff) Q_EMIT masterRatioChanged();
-        if (masterCountDiff) Q_EMIT masterCountChanged();
-        if (capacityDiff) Q_EMIT layoutCapacityChanged();
+        // Emit visibility signals for changed properties
         if (hiddenChanged) Q_EMIT hiddenFromSelectorChanged();
         if (screensChanged) Q_EMIT allowedScreensChanged();
         if (desktopsChanged) Q_EMIT allowedDesktopsChanged();
         if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
-
-        Q_EMIT layoutModified();
+        if (rulesChanged) Q_EMIT appRulesChanged();
+        if (autoAssignDiff) Q_EMIT autoAssignChanged();
     }
     return *this;
 }
@@ -198,138 +159,7 @@ LAYOUT_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
 LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
 LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
 LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
-LAYOUT_SETTER(const QString&, AlgorithmId, m_algorithmId, algorithmIdChanged)
-
-void Layout::setAutoAssign(bool enabled)
-{
-    if (m_autoAssign == enabled) {
-        return;
-    }
-    m_autoAssign = enabled;
-    Q_EMIT autoAssignChanged();
-
-    // Synchronize category: autoAssign=true on Manual → Auto,
-    // autoAssign=false on Auto → Manual
-    if (enabled && m_category == LayoutCategory::Manual) {
-        m_category = LayoutCategory::Auto;
-        Q_EMIT categoryChanged();
-    } else if (!enabled && m_category == LayoutCategory::Auto) {
-        m_category = LayoutCategory::Manual;
-        Q_EMIT categoryChanged();
-    }
-
-    Q_EMIT layoutModified();
-}
-
-void Layout::setCategory(LayoutCategory cat)
-{
-    if (m_category == cat) {
-        return;
-    }
-    m_category = cat;
-
-    // Synchronize autoAssign with category semantics:
-    // Auto implies autoAssign=true, Dynamic manages zones itself
-    if (cat == LayoutCategory::Auto && !m_autoAssign) {
-        m_autoAssign = true;
-        Q_EMIT autoAssignChanged();
-    } else if (cat == LayoutCategory::Dynamic && m_autoAssign) {
-        m_autoAssign = false;
-        Q_EMIT autoAssignChanged();
-    } else if (cat == LayoutCategory::Manual && m_autoAssign) {
-        m_autoAssign = false;
-        Q_EMIT autoAssignChanged();
-    }
-
-    Q_EMIT categoryChanged();
-    Q_EMIT layoutModified();
-}
-
-void Layout::setCategoryInt(int cat)
-{
-    if (cat < 0 || cat > static_cast<int>(LayoutCategory::Dynamic)) {
-        qCWarning(lcLayout) << "setCategoryInt: invalid category value= " << cat;
-        return;
-    }
-    setCategory(static_cast<LayoutCategory>(cat));
-}
-
-void Layout::setMasterRatio(qreal ratio)
-{
-    ratio = qBound(0.1, ratio, 0.9);
-    if (m_masterRatio != ratio) {
-        m_masterRatio = ratio;
-        Q_EMIT masterRatioChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::setMasterCount(int count)
-{
-    if (count < 1) {
-        count = 1;
-    }
-    if (m_masterCount != count) {
-        m_masterCount = count;
-        Q_EMIT masterCountChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::setLayoutCapacity(int capacity)
-{
-    if (capacity < 0) {
-        capacity = 0;
-    }
-    if (m_layoutCapacity != capacity) {
-        m_layoutCapacity = capacity;
-        Q_EMIT layoutCapacityChanged();
-        Q_EMIT layoutModified();
-    }
-}
-
-void Layout::regenerateZones(int windowCount)
-{
-    if (m_category != LayoutCategory::Dynamic) {
-        return;
-    }
-
-    auto* registry = TilingAlgorithmRegistry::instance();
-    auto* alg = registry->algorithm(m_algorithmId);
-    if (!alg) {
-        qCWarning(lcLayout) << "regenerateZones: unknown algorithm id= " << m_algorithmId;
-        return;
-    }
-
-    // Clamp to layout capacity when set (0 = unlimited)
-    if (m_layoutCapacity > 0 && windowCount > m_layoutCapacity) {
-        windowCount = m_layoutCapacity;
-    }
-
-    TilingParams params;
-    params.masterRatio = m_masterRatio;
-    params.masterCount = m_masterCount;
-
-    const auto rects = alg->generateZones(windowCount, params);
-
-    // Delete old zones without going through clearZones() to avoid
-    // emitting zonesChanged/layoutModified in the empty intermediate state
-    qDeleteAll(m_zones);
-    m_zones.clear();
-
-    // Create new zones from algorithm output
-    for (int i = 0; i < rects.size(); ++i) {
-        auto* zone = new Zone(this);
-        zone->setRelativeGeometry(rects[i]);
-        zone->setZoneNumber(i + 1);
-        zone->setName(QStringLiteral("Zone %1").arg(i + 1));
-        m_zones.append(zone);
-    }
-
-    m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
-    Q_EMIT zonesChanged();
-    Q_EMIT layoutModified();
-}
+LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
 
 void Layout::setAllowedScreens(const QStringList& screens)
 {
@@ -691,21 +521,6 @@ QJsonObject Layout::toJson() const
         json[JsonKeys::AutoAssign] = true;
     }
 
-    // Category - only serialize when not Manual (default)
-    if (m_category != LayoutCategory::Manual) {
-        json[JsonKeys::Category] = static_cast<int>(m_category);
-    }
-
-    // Dynamic tiling params - only serialize for Dynamic layouts
-    if (m_category == LayoutCategory::Dynamic) {
-        json[JsonKeys::AlgorithmId] = m_algorithmId;
-        json[JsonKeys::MasterRatio] = m_masterRatio;
-        json[JsonKeys::MasterCount] = m_masterCount;
-        if (m_layoutCapacity > 0) {
-            json[JsonKeys::LayoutCapacity] = m_layoutCapacity;
-        }
-    }
-
     // Visibility filtering - only serialize non-default values
     if (m_hiddenFromSelector) {
         json[JsonKeys::HiddenFromSelector] = true;
@@ -731,10 +546,7 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     }
 
     layout->m_name = json[JsonKeys::Name].toString();
-    int typeInt = json[JsonKeys::Type].toInt();
-    if (typeInt >= 0 && typeInt <= static_cast<int>(LayoutType::Focus)) {
-        layout->m_type = static_cast<LayoutType>(typeInt);
-    }
+    layout->m_type = static_cast<LayoutType>(json[JsonKeys::Type].toInt());
     layout->m_description = json[JsonKeys::Description].toString();
     // Gap overrides: -1 means use global setting (key absent = no override)
     layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;
@@ -754,27 +566,8 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
         layout->m_appRules = AppRule::fromJsonArray(json[JsonKeys::AppRules].toArray());
     }
 
-    // Auto-tiling category (defaults to Manual when absent)
-    int catInt = json[JsonKeys::Category].toInt(0);
-    if (catInt >= 0 && catInt <= static_cast<int>(LayoutCategory::Dynamic)) {
-        layout->m_category = static_cast<LayoutCategory>(catInt);
-    }
-
-    // Algorithm params only meaningful for Dynamic layouts
-    if (layout->m_category == LayoutCategory::Dynamic) {
-        layout->m_algorithmId = json[JsonKeys::AlgorithmId].toString();
-        layout->m_masterRatio = json[JsonKeys::MasterRatio].toDouble(0.5);
-        layout->m_masterCount = json[JsonKeys::MasterCount].toInt(1);
-        layout->m_layoutCapacity = json[JsonKeys::LayoutCapacity].toInt(0);
-    }
-
-    // Auto-assign: read from JSON, then enforce category invariant
+    // Auto-assign
     layout->m_autoAssign = json[JsonKeys::AutoAssign].toBool(false);
-    if (layout->m_category == LayoutCategory::Auto) {
-        layout->m_autoAssign = true;
-    } else if (layout->m_category == LayoutCategory::Dynamic) {
-        layout->m_autoAssign = false;
-    }
 
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);
