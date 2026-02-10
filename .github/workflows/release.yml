@@ -8,6 +8,8 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    # Allow manual triggers
 
 permissions:
   contents: write
@@ -145,6 +147,86 @@ jobs:
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # Build Generic Linux Tarball (Portable)
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-generic:
+    name: Build Tarball (Linux x86_64)
+    needs: version
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
+
+    steps:
+      - name: Install prerequisites
+        run: dnf install -y git tar
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            cmake ninja-build extra-cmake-modules gettext gcc-c++ \
+            qt6-qtbase-devel qt6-qtbase-private-devel \
+            qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtshadertools-devel \
+            kwin-devel wayland-devel libepoxy-devel libdrm-devel \
+            kf6-kconfig-devel kf6-kconfigwidgets-devel \
+            kf6-kcoreaddons-devel kf6-kdbusaddons-devel \
+            kf6-ki18n-devel kf6-kcmutils-devel \
+            kf6-kwindowsystem-devel kf6-kglobalaccel-devel \
+            kf6-knotifications-devel kf6-kcolorscheme-devel \
+            layer-shell-qt-devel plasma-activities-devel
+
+      - name: Configure
+        run: |
+          # Install to /usr inside the AppDir
+          # The installer script will copy this structure to ~/.local
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DBUILD_TESTING=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Install to AppDir
+        run: |
+          mkdir -p AppDir
+          DESTDIR="${PWD}/AppDir" cmake --install build
+
+      - name: Prepare tarball
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          DIRNAME="plasmazones-linux-x86_64"
+          
+          mkdir -p "$DIRNAME"
+          mv AppDir/usr "$DIRNAME/"
+          
+          # Copy installer and uninstaller scripts to root of tarball
+          cp packaging/local-install/install.sh "$DIRNAME/"
+          cp packaging/local-install/uninstall.sh "$DIRNAME/"
+          chmod +x "$DIRNAME/install.sh"
+          chmod +x "$DIRNAME/uninstall.sh"
+          
+          # Create VERSION file for version detection
+          echo "$VERSION" > "$DIRNAME/VERSION"
+          
+          # Copy uninstall.sh to the installed location so it's available after install
+          mkdir -p "$DIRNAME/usr/share/plasmazones"
+          cp packaging/local-install/uninstall.sh "$DIRNAME/usr/share/plasmazones/"
+          chmod +x "$DIRNAME/usr/share/plasmazones/uninstall.sh"
+          
+          # Create tarball
+          tar czf plasmazones-${VERSION}-linux-x86_64.tar.gz "$DIRNAME"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: generic-linux-tarball
+          path: plasmazones-*-linux-x86_64.tar.gz
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # Build Arch Package
   # ═══════════════════════════════════════════════════════════════════════════
   build-arch:
@@ -260,7 +342,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-deb, build-rpm, build-arch]
+    needs: [version, build-deb, build-rpm, build-arch, build-generic]
     runs-on: ubuntu-latest
 
     steps:
@@ -306,6 +388,14 @@ jobs:
             echo "**Fedora:**"
             echo '```bash'
             echo "sudo dnf install plasmazones-${VERSION}-1.fc43.x86_64.rpm"
+            echo '```'
+            echo ""
+            echo "**Universal Linux (AppDir):**"
+            echo "For Fedora Atomic, Steam Deck, or non-root user installation:"
+            echo '```bash'
+            echo "tar xzf plasmazones-${VERSION}-linux-x86_64.tar.gz"
+            echo "cd plasmazones-linux-x86_64"
+            echo "./install.sh"
             echo '```'
             echo ""
             echo "### Post-Installation"
@@ -355,6 +445,7 @@ jobs:
             artifacts/**/*.*deb
             artifacts/**/*.rpm
             artifacts/**/*.pkg.tar.zst
+            artifacts/**/*linux-x86_64.tar.gz
           generate_release_notes: false
           make_latest: true
 
