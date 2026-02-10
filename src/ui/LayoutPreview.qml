@@ -32,6 +32,13 @@ Rectangle {
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.6)
     property real inactiveOpacity: 0.2
     property real hoverOpacity: 0.4
+    // Font properties for zone number labels
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
     // Scale effect on hover
     readonly property real hoverScale: 1.05
 
@@ -87,6 +94,12 @@ Rectangle {
         showZoneNumbers: true
         inactiveOpacity: root.inactiveOpacity
         activeOpacity: root.hoverOpacity
+        fontFamily: root.fontFamily
+        fontSizeScale: root.fontSizeScale
+        fontWeight: root.fontWeight
+        fontItalic: root.fontItalic
+        fontUnderline: root.fontUnderline
+        fontStrikeout: root.fontStrikeout
         animationDuration: constants.animationDuration
     }
 

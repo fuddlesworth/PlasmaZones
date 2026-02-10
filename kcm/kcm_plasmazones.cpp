@@ -223,9 +223,9 @@ QColor KCMPlasmaZones::borderColor() const
 {
     return m_settings->borderColor();
 }
-QColor KCMPlasmaZones::numberColor() const
+QColor KCMPlasmaZones::labelFontColor() const
 {
-    return m_settings->numberColor();
+    return m_settings->labelFontColor();
 }
 qreal KCMPlasmaZones::activeOpacity() const
 {
@@ -246,6 +246,30 @@ int KCMPlasmaZones::borderRadius() const
 bool KCMPlasmaZones::enableBlur() const
 {
     return m_settings->enableBlur();
+}
+QString KCMPlasmaZones::labelFontFamily() const
+{
+    return m_settings->labelFontFamily();
+}
+qreal KCMPlasmaZones::labelFontSizeScale() const
+{
+    return m_settings->labelFontSizeScale();
+}
+int KCMPlasmaZones::labelFontWeight() const
+{
+    return m_settings->labelFontWeight();
+}
+bool KCMPlasmaZones::labelFontItalic() const
+{
+    return m_settings->labelFontItalic();
+}
+bool KCMPlasmaZones::labelFontUnderline() const
+{
+    return m_settings->labelFontUnderline();
+}
+bool KCMPlasmaZones::labelFontStrikeout() const
+{
+    return m_settings->labelFontStrikeout();
 }
 bool KCMPlasmaZones::enableShaderEffects() const
 {
@@ -613,11 +637,11 @@ void KCMPlasmaZones::setBorderColor(const QColor& color)
     }
 }
 
-void KCMPlasmaZones::setNumberColor(const QColor& color)
+void KCMPlasmaZones::setLabelFontColor(const QColor& color)
 {
-    if (m_settings->numberColor() != color) {
-        m_settings->setNumberColor(color);
-        Q_EMIT numberColorChanged();
+    if (m_settings->labelFontColor() != color) {
+        m_settings->setLabelFontColor(color);
+        Q_EMIT labelFontColorChanged();
         setNeedsSave(true);
     }
 }
@@ -663,6 +687,54 @@ void KCMPlasmaZones::setEnableBlur(bool enable)
     if (m_settings->enableBlur() != enable) {
         m_settings->setEnableBlur(enable);
         Q_EMIT enableBlurChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setLabelFontFamily(const QString& family)
+{
+    if (m_settings->labelFontFamily() != family) {
+        m_settings->setLabelFontFamily(family);
+        Q_EMIT labelFontFamilyChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setLabelFontSizeScale(qreal scale)
+{
+    if (!qFuzzyCompare(m_settings->labelFontSizeScale(), scale)) {
+        m_settings->setLabelFontSizeScale(scale);
+        Q_EMIT labelFontSizeScaleChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setLabelFontWeight(int weight)
+{
+    if (m_settings->labelFontWeight() != weight) {
+        m_settings->setLabelFontWeight(weight);
+        Q_EMIT labelFontWeightChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setLabelFontItalic(bool italic)
+{
+    if (m_settings->labelFontItalic() != italic) {
+        m_settings->setLabelFontItalic(italic);
+        Q_EMIT labelFontItalicChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setLabelFontUnderline(bool underline)
+{
+    if (m_settings->labelFontUnderline() != underline) {
+        m_settings->setLabelFontUnderline(underline);
+        Q_EMIT labelFontUnderlineChanged();
+        setNeedsSave(true);
+    }
+}
+void KCMPlasmaZones::setLabelFontStrikeout(bool strikeout)
+{
+    if (m_settings->labelFontStrikeout() != strikeout) {
+        m_settings->setLabelFontStrikeout(strikeout);
+        Q_EMIT labelFontStrikeoutChanged();
         setNeedsSave(true);
     }
 }
@@ -1407,12 +1479,18 @@ void KCMPlasmaZones::defaults()
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
     Q_EMIT borderColorChanged();
-    Q_EMIT numberColorChanged();
+    Q_EMIT labelFontColorChanged();
     Q_EMIT activeOpacityChanged();
     Q_EMIT inactiveOpacityChanged();
     Q_EMIT borderWidthChanged();
     Q_EMIT borderRadiusChanged();
     Q_EMIT enableBlurChanged();
+    Q_EMIT labelFontFamilyChanged();
+    Q_EMIT labelFontSizeScaleChanged();
+    Q_EMIT labelFontWeightChanged();
+    Q_EMIT labelFontItalicChanged();
+    Q_EMIT labelFontUnderlineChanged();
+    Q_EMIT labelFontStrikeoutChanged();
     Q_EMIT enableShaderEffectsChanged();
     Q_EMIT shaderFrameRateChanged();
     Q_EMIT enableAudioVisualizerChanged();
@@ -1680,6 +1758,21 @@ QVariantList KCMPlasmaZones::getRunningWindows()
     return result;
 }
 
+QStringList KCMPlasmaZones::fontStylesForFamily(const QString& family) const
+{
+    return QFontDatabase::styles(family);
+}
+
+int KCMPlasmaZones::fontStyleWeight(const QString& family, const QString& style) const
+{
+    return QFontDatabase::weight(family, style);
+}
+
+bool KCMPlasmaZones::fontStyleItalic(const QString& family, const QString& style) const
+{
+    return QFontDatabase::italic(family, style);
+}
+
 void KCMPlasmaZones::loadColorsFromPywal()
 {
     QString pywalPath = QDir::homePath() + QStringLiteral("/.cache/wal/colors.json");
@@ -1697,7 +1790,7 @@ void KCMPlasmaZones::loadColorsFromPywal()
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
     Q_EMIT borderColorChanged();
-    Q_EMIT numberColorChanged();
+    Q_EMIT labelFontColorChanged();
     Q_EMIT useSystemColorsChanged();
     Q_EMIT colorImportSuccess();
     setNeedsSave(true);
@@ -1714,7 +1807,7 @@ void KCMPlasmaZones::loadColorsFromFile(const QString& filePath)
     Q_EMIT highlightColorChanged();
     Q_EMIT inactiveColorChanged();
     Q_EMIT borderColorChanged();
-    Q_EMIT numberColorChanged();
+    Q_EMIT labelFontColorChanged();
     Q_EMIT useSystemColorsChanged();
     Q_EMIT colorImportSuccess();
     setNeedsSave(true);
@@ -2038,12 +2131,18 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT highlightColorChanged();
         Q_EMIT inactiveColorChanged();
         Q_EMIT borderColorChanged();
-        Q_EMIT numberColorChanged();
+        Q_EMIT labelFontColorChanged();
         Q_EMIT activeOpacityChanged();
         Q_EMIT inactiveOpacityChanged();
         Q_EMIT borderWidthChanged();
         Q_EMIT borderRadiusChanged();
         Q_EMIT enableBlurChanged();
+        Q_EMIT labelFontFamilyChanged();
+        Q_EMIT labelFontSizeScaleChanged();
+        Q_EMIT labelFontWeightChanged();
+        Q_EMIT labelFontItalicChanged();
+        Q_EMIT labelFontUnderlineChanged();
+        Q_EMIT labelFontStrikeoutChanged();
         Q_EMIT enableShaderEffectsChanged();
         Q_EMIT shaderFrameRateChanged();
         Q_EMIT enableAudioVisualizerChanged();

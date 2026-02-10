@@ -77,6 +77,20 @@ void writeQmlProperty(QObject* object, const QString& name, const QVariant& valu
     }
 }
 
+// Push label font settings from IZoneVisualizationSettings to a QML window
+void writeFontProperties(QObject* window, const IZoneVisualizationSettings* settings)
+{
+    if (!window || !settings) {
+        return;
+    }
+    writeQmlProperty(window, QStringLiteral("fontFamily"), settings->labelFontFamily());
+    writeQmlProperty(window, QStringLiteral("fontSizeScale"), settings->labelFontSizeScale());
+    writeQmlProperty(window, QStringLiteral("fontWeight"), settings->labelFontWeight());
+    writeQmlProperty(window, QStringLiteral("fontItalic"), settings->labelFontItalic());
+    writeQmlProperty(window, QStringLiteral("fontUnderline"), settings->labelFontUnderline());
+    writeQmlProperty(window, QStringLiteral("fontStrikeout"), settings->labelFontStrikeout());
+}
+
 // Convert ZoneSelectorPosition to LayerShellQt anchors
 LayerShellQt::Window::Anchors getAnchorsForPosition(ZoneSelectorPosition pos)
 {
@@ -1364,6 +1378,8 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
+        // Font settings for zone number labels
+        writeFontProperties(window, m_settings);
     }
     // Pass resolved per-screen config values to QML
     writeQmlProperty(window, QStringLiteral("selectorPosition"), config.position);
@@ -1643,6 +1659,8 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         // Layout's showZoneNumbers takes precedence over global setting
         bool showNumbers = screenLayout ? screenLayout->showZoneNumbers() : m_settings->showZoneNumbers();
         window->setProperty("showNumbers", showNumbers);
+        window->setProperty("labelFontColor", m_settings->labelFontColor());
+        writeFontProperties(window, m_settings);
     }
 
     // Update shader-specific properties if using shader overlay
@@ -1718,15 +1736,23 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window,
     }
     const bool showNumbers =
         screenLayout ? screenLayout->showZoneNumbers() : (m_settings ? m_settings->showZoneNumbers() : true);
-    const QColor numberColor = m_settings ? m_settings->numberColor() : QColor(Qt::white);
+    const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
     QColor backgroundColor = Qt::black;
     if (m_settings) {
         KColorScheme scheme(QPalette::Active, KColorScheme::View);
         backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
     }
+    const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
+    const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
+    const int fontWeight = m_settings ? m_settings->labelFontWeight() : QFont::Bold;
+    const bool fontItalic = m_settings ? m_settings->labelFontItalic() : false;
+    const bool fontUnderline = m_settings ? m_settings->labelFontUnderline() : false;
+    const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
     const QSize size(qMax(1, static_cast<int>(window->width())), qMax(1, static_cast<int>(window->height())));
     QImage labelsImage =
-        ZoneLabelTextureBuilder::build(patched, size, numberColor, showNumbers, backgroundColor);
+        ZoneLabelTextureBuilder::build(patched, size, labelFontColor, showNumbers, backgroundColor,
+                                       fontFamily, fontSizeScale, fontWeight, fontItalic,
+                                       fontUnderline, fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
@@ -2213,6 +2239,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
     writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
     writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
     writeQmlProperty(window, QStringLiteral("zones"), LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
+    writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
@@ -2244,6 +2271,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("category"), category);
     writeQmlProperty(window, QStringLiteral("autoAssign"), autoAssign);
     writeQmlProperty(window, QStringLiteral("zones"), zones);
+    writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");

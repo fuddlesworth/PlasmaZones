@@ -40,7 +40,13 @@ Window {
 
     // Settings properties
     property bool showNumbers: true
-    property color numberColor: Kirigami.Theme.textColor
+    property color labelFontColor: Kirigami.Theme.textColor
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
 
     // Pre-rendered zone labels texture (set from C++ when shader overlay + showNumbers)
     property var labelsTexture
@@ -217,7 +223,13 @@ Window {
                 highlightColor: (modelData.useCustomColors && modelData.highlightColor) ? modelData.highlightColor : root.highlightColor
                 inactiveColor: (modelData.useCustomColors && modelData.inactiveColor) ? modelData.inactiveColor : root.inactiveColor
                 borderColor: (modelData.useCustomColors && modelData.borderColor) ? modelData.borderColor : root.borderColor
-                numberColor: root.numberColor
+                labelFontColor: root.labelFontColor
+                fontFamily: root.fontFamily
+                fontSizeScale: root.fontSizeScale
+                fontWeight: root.fontWeight
+                fontItalic: root.fontItalic
+                fontUnderline: root.fontUnderline
+                fontStrikeout: root.fontStrikeout
                 activeOpacity: (modelData.useCustomColors && modelData.activeOpacity !== undefined) ? modelData.activeOpacity : root.activeOpacity
                 inactiveOpacity: (modelData.useCustomColors && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
                 borderWidth: (modelData.useCustomColors && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth

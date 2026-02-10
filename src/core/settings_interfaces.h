@@ -117,8 +117,8 @@ public:
     virtual void setInactiveColor(const QColor& color) = 0;
     virtual QColor borderColor() const = 0;
     virtual void setBorderColor(const QColor& color) = 0;
-    virtual QColor numberColor() const = 0;
-    virtual void setNumberColor(const QColor& color) = 0;
+    virtual QColor labelFontColor() const = 0;
+    virtual void setLabelFontColor(const QColor& color) = 0;
     virtual qreal activeOpacity() const = 0;
     virtual void setActiveOpacity(qreal opacity) = 0;
     virtual qreal inactiveOpacity() const = 0;
@@ -129,6 +129,20 @@ public:
     virtual void setBorderRadius(int radius) = 0;
     virtual bool enableBlur() const = 0;
     virtual void setEnableBlur(bool enable) = 0;
+
+    // Label font settings
+    virtual QString labelFontFamily() const = 0;
+    virtual void setLabelFontFamily(const QString& family) = 0;
+    virtual qreal labelFontSizeScale() const = 0;
+    virtual void setLabelFontSizeScale(qreal scale) = 0;
+    virtual int labelFontWeight() const = 0;
+    virtual void setLabelFontWeight(int weight) = 0;
+    virtual bool labelFontItalic() const = 0;
+    virtual void setLabelFontItalic(bool italic) = 0;
+    virtual bool labelFontUnderline() const = 0;
+    virtual void setLabelFontUnderline(bool underline) = 0;
+    virtual bool labelFontStrikeout() const = 0;
+    virtual void setLabelFontStrikeout(bool strikeout) = 0;
 
     // Shader effects
     virtual bool enableShaderEffects() const = 0;

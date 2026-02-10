@@ -17,6 +17,13 @@ Rectangle {
 
     required property var layout
     property bool isSelected: false
+    // Font properties for zone number labels
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
     readonly property real previewOpacity: 0.2 // Increased for better background contrast
     readonly property real borderOpacity: 0.9 // Increased for better border visibility
     readonly property int normalBorderWidth: Math.round(Kirigami.Units.devicePixelRatio)
@@ -59,6 +66,12 @@ Rectangle {
         edgeGap: 1     // Minimal edge gap for thumbnail
         minZoneSize: 8
         showZoneNumbers: true
+        fontFamily: root.fontFamily
+        fontSizeScale: root.fontSizeScale
+        fontWeight: root.fontWeight
+        fontItalic: root.fontItalic
+        fontUnderline: root.fontUnderline
+        fontStrikeout: root.fontStrikeout
     }
 
     // Layout name label

@@ -21,7 +21,7 @@ struct PLASMAZONES_EXPORT ColorImportResult {
     QColor highlightColor;
     QColor inactiveColor;
     QColor borderColor;
-    QColor numberColor;
+    QColor labelFontColor;
 };
 
 /**

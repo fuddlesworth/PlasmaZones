@@ -6,6 +6,7 @@
 #include "../core/interfaces.h"
 #include "../core/constants.h"
 #include <KConfigGroup>
+#include <QFont>
 #include <QHash>
 #include <QVariantMap>
 
@@ -56,12 +57,18 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
     Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
-    Q_PROPERTY(QColor numberColor READ numberColor WRITE setNumberColor NOTIFY numberColorChanged)
+    Q_PROPERTY(QColor labelFontColor READ labelFontColor WRITE setLabelFontColor NOTIFY labelFontColorChanged)
     Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
+    Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
+    Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
+    Q_PROPERTY(int labelFontWeight READ labelFontWeight WRITE setLabelFontWeight NOTIFY labelFontWeightChanged)
+    Q_PROPERTY(bool labelFontItalic READ labelFontItalic WRITE setLabelFontItalic NOTIFY labelFontItalicChanged)
+    Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline WRITE setLabelFontUnderline NOTIFY labelFontUnderlineChanged)
+    Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
     // Zone settings
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
@@ -355,11 +362,11 @@ public:
     }
     void setBorderColor(const QColor& color) override;
 
-    QColor numberColor() const override
+    QColor labelFontColor() const override
     {
-        return m_numberColor;
+        return m_labelFontColor;
     }
-    void setNumberColor(const QColor& color) override;
+    void setLabelFontColor(const QColor& color) override;
 
     qreal activeOpacity() const override
     {
@@ -390,6 +397,37 @@ public:
         return m_enableBlur;
     }
     void setEnableBlur(bool enable) override;
+
+    QString labelFontFamily() const override
+    {
+        return m_labelFontFamily;
+    }
+    void setLabelFontFamily(const QString& family) override;
+    qreal labelFontSizeScale() const override
+    {
+        return m_labelFontSizeScale;
+    }
+    void setLabelFontSizeScale(qreal scale) override;
+    int labelFontWeight() const override
+    {
+        return m_labelFontWeight;
+    }
+    void setLabelFontWeight(int weight) override;
+    bool labelFontItalic() const override
+    {
+        return m_labelFontItalic;
+    }
+    void setLabelFontItalic(bool italic) override;
+    bool labelFontUnderline() const override
+    {
+        return m_labelFontUnderline;
+    }
+    void setLabelFontUnderline(bool underline) override;
+    bool labelFontStrikeout() const override
+    {
+        return m_labelFontStrikeout;
+    }
+    void setLabelFontStrikeout(bool strikeout) override;
 
     int zonePadding() const override
     {
@@ -897,12 +935,18 @@ private:
     QColor m_highlightColor = Defaults::HighlightColor;
     QColor m_inactiveColor = Defaults::InactiveColor;
     QColor m_borderColor = Defaults::BorderColor;
-    QColor m_numberColor = Defaults::NumberColor;
+    QColor m_labelFontColor = Defaults::LabelFontColor;
     qreal m_activeOpacity = Defaults::Opacity;
     qreal m_inactiveOpacity = Defaults::InactiveOpacity;
     int m_borderWidth = Defaults::BorderWidth;
     int m_borderRadius = Defaults::BorderRadius;
     bool m_enableBlur = true;
+    QString m_labelFontFamily;
+    qreal m_labelFontSizeScale = 1.0;
+    int m_labelFontWeight = QFont::Bold;
+    bool m_labelFontItalic = false;
+    bool m_labelFontUnderline = false;
+    bool m_labelFontStrikeout = false;
 
     // Zone settings
     int m_zonePadding = Defaults::ZonePadding;

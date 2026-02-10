@@ -38,6 +38,14 @@ Window {
     property color textColor: Kirigami.Theme.textColor
     property color highlightColor: Kirigami.Theme.highlightColor
 
+    // Font properties for zone number labels
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
+
     // Signals
     signal dismissed()
 
@@ -208,6 +216,12 @@ Window {
                 showZoneNumbers: true
                 inactiveOpacity: 0.3
                 activeOpacity: 0.6
+                fontFamily: root.fontFamily
+                fontSizeScale: root.fontSizeScale
+                fontWeight: root.fontWeight
+                fontItalic: root.fontItalic
+                fontUnderline: root.fontUnderline
+                fontStrikeout: root.fontStrikeout
                 animationDuration: 150
             }
 

@@ -59,12 +59,18 @@ public:
     static QColor highlightColor() { return instance().defaultHighlightColorValue(); }
     static QColor inactiveColor() { return instance().defaultInactiveColorValue(); }
     static QColor borderColor() { return instance().defaultBorderColorValue(); }
-    static QColor numberColor() { return instance().defaultNumberColorValue(); }
+    static QColor labelFontColor() { return instance().defaultLabelFontColorValue(); }
     static double activeOpacity() { return instance().defaultActiveOpacityValue(); }
     static double inactiveOpacity() { return instance().defaultInactiveOpacityValue(); }
     static int borderWidth() { return instance().defaultBorderWidthValue(); }
     static int borderRadius() { return instance().defaultBorderRadiusValue(); }
     static bool enableBlur() { return instance().defaultEnableBlurValue(); }
+    static QString labelFontFamily() { return QString(); }  // Default is empty string (matches .kcfg)
+    static double labelFontSizeScale() { return instance().defaultLabelFontSizeScaleValue(); }
+    static int labelFontWeight() { return instance().defaultLabelFontWeightValue(); }
+    static bool labelFontItalic() { return instance().defaultLabelFontItalicValue(); }
+    static bool labelFontUnderline() { return instance().defaultLabelFontUnderlineValue(); }
+    static bool labelFontStrikeout() { return instance().defaultLabelFontStrikeoutValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone Settings

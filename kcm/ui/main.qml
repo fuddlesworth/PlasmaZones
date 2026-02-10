@@ -260,7 +260,19 @@ KCM.AbstractKCM {
                 borderColorDialog.selectedColor = kcm.borderColor
                 borderColorDialog.open()
             }
+            onRequestLabelFontColorDialog: {
+                labelFontColorDialog.selectedColor = kcm.labelFontColor
+                labelFontColorDialog.open()
+            }
             onRequestColorFileDialog: colorFileDialog.open()
+            onRequestFontDialog: {
+                fontDialog.selectedFamily = kcm.labelFontFamily
+                fontDialog.selectedWeight = kcm.labelFontWeight
+                fontDialog.selectedItalic = kcm.labelFontItalic
+                fontDialog.selectedUnderline = kcm.labelFontUnderline
+                fontDialog.selectedStrikeout = kcm.labelFontStrikeout
+                fontDialog.open()
+            }
         }
 
         // TAB 5: DISPLAY (Zone Selector)
@@ -305,6 +317,25 @@ KCM.AbstractKCM {
         id: borderColorDialog
         title: i18n("Choose Border Color")
         onAccepted: kcm.borderColor = selectedColor
+    }
+
+    ColorDialog {
+        id: labelFontColorDialog
+        title: i18n("Choose Label Color")
+        onAccepted: kcm.labelFontColor = selectedColor
+    }
+
+    // Font dialog
+    FontPickerDialog {
+        id: fontDialog
+        kcm: root.kcmModule
+        onAccepted: {
+            kcm.labelFontFamily = selectedFamily
+            kcm.labelFontWeight = selectedWeight
+            kcm.labelFontItalic = selectedItalic
+            kcm.labelFontUnderline = selectedUnderline
+            kcm.labelFontStrikeout = selectedStrikeout
+        }
     }
 
     // File dialogs

@@ -71,12 +71,18 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(QColor highlightColor READ highlightColor WRITE setHighlightColor NOTIFY highlightColorChanged)
     Q_PROPERTY(QColor inactiveColor READ inactiveColor WRITE setInactiveColor NOTIFY inactiveColorChanged)
     Q_PROPERTY(QColor borderColor READ borderColor WRITE setBorderColor NOTIFY borderColorChanged)
-    Q_PROPERTY(QColor numberColor READ numberColor WRITE setNumberColor NOTIFY numberColorChanged)
+    Q_PROPERTY(QColor labelFontColor READ labelFontColor WRITE setLabelFontColor NOTIFY labelFontColorChanged)
     Q_PROPERTY(qreal activeOpacity READ activeOpacity WRITE setActiveOpacity NOTIFY activeOpacityChanged)
     Q_PROPERTY(qreal inactiveOpacity READ inactiveOpacity WRITE setInactiveOpacity NOTIFY inactiveOpacityChanged)
     Q_PROPERTY(int borderWidth READ borderWidth WRITE setBorderWidth NOTIFY borderWidthChanged)
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
+    Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
+    Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
+    Q_PROPERTY(int labelFontWeight READ labelFontWeight WRITE setLabelFontWeight NOTIFY labelFontWeightChanged)
+    Q_PROPERTY(bool labelFontItalic READ labelFontItalic WRITE setLabelFontItalic NOTIFY labelFontItalicChanged)
+    Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline WRITE setLabelFontUnderline NOTIFY labelFontUnderlineChanged)
+    Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
     // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
@@ -217,12 +223,18 @@ public:
     QColor highlightColor() const;
     QColor inactiveColor() const;
     QColor borderColor() const;
-    QColor numberColor() const;
+    QColor labelFontColor() const;
     qreal activeOpacity() const;
     qreal inactiveOpacity() const;
     int borderWidth() const;
     int borderRadius() const;
     bool enableBlur() const;
+    QString labelFontFamily() const;
+    qreal labelFontSizeScale() const;
+    int labelFontWeight() const;
+    bool labelFontItalic() const;
+    bool labelFontUnderline() const;
+    bool labelFontStrikeout() const;
     bool enableShaderEffects() const;
     int shaderFrameRate() const;
     bool enableAudioVisualizer() const;
@@ -307,12 +319,18 @@ public:
     void setHighlightColor(const QColor& color);
     void setInactiveColor(const QColor& color);
     void setBorderColor(const QColor& color);
-    void setNumberColor(const QColor& color);
+    void setLabelFontColor(const QColor& color);
     void setActiveOpacity(qreal opacity);
     void setInactiveOpacity(qreal opacity);
     void setBorderWidth(int width);
     void setBorderRadius(int radius);
     void setEnableBlur(bool enable);
+    void setLabelFontFamily(const QString& family);
+    void setLabelFontSizeScale(qreal scale);
+    void setLabelFontWeight(int weight);
+    void setLabelFontItalic(bool italic);
+    void setLabelFontUnderline(bool underline);
+    void setLabelFontStrikeout(bool strikeout);
     void setEnableShaderEffects(bool enable);
     void setShaderFrameRate(int fps);
     void setEnableAudioVisualizer(bool enable);
@@ -382,6 +400,11 @@ public Q_SLOTS:
     Q_INVOKABLE void addExcludedWindowClass(const QString& windowClass);
     Q_INVOKABLE void removeExcludedWindowClass(int index);
     Q_INVOKABLE QVariantList getRunningWindows();
+
+    // Font database helpers (for FontPickerDialog)
+    Q_INVOKABLE QStringList fontStylesForFamily(const QString& family) const;
+    Q_INVOKABLE int fontStyleWeight(const QString& family, const QString& style) const;
+    Q_INVOKABLE bool fontStyleItalic(const QString& family, const QString& style) const;
 
     // Pywal integration
     Q_INVOKABLE void loadColorsFromPywal();
@@ -453,12 +476,18 @@ Q_SIGNALS:
     void highlightColorChanged();
     void inactiveColorChanged();
     void borderColorChanged();
-    void numberColorChanged();
+    void labelFontColorChanged();
     void activeOpacityChanged();
     void inactiveOpacityChanged();
     void borderWidthChanged();
     void borderRadiusChanged();
     void enableBlurChanged();
+    void labelFontFamilyChanged();
+    void labelFontSizeScaleChanged();
+    void labelFontWeightChanged();
+    void labelFontItalicChanged();
+    void labelFontUnderlineChanged();
+    void labelFontStrikeoutChanged();
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();
     void enableAudioVisualizerChanged();

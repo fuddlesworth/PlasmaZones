@@ -6,6 +6,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QFont>
+#include <QFontMetricsF>
 
 #include "../../core/constants.h"
 
@@ -30,9 +31,15 @@ QColor outlineColorFor(const QColor& textColor, const QColor& backgroundColor)
 
 QImage ZoneLabelTextureBuilder::build(const QVariantList& zones,
                                       const QSize& size,
-                                      const QColor& numberColor,
+                                      const QColor& labelFontColor,
                                       bool showNumbers,
-                                      const QColor& backgroundColor)
+                                      const QColor& backgroundColor,
+                                      const QString& fontFamily,
+                                      qreal fontSizeScale,
+                                      int fontWeight,
+                                      bool fontItalic,
+                                      bool fontUnderline,
+                                      bool fontStrikeout)
 {
     if (!showNumbers || zones.isEmpty() || size.width() <= 0 || size.height() <= 0) {
         return QImage();
@@ -46,8 +53,8 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones,
     painter.setRenderHint(QPainter::TextAntialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
 
-    const QColor outlineColor = outlineColorFor(numberColor, backgroundColor);
-    const QColor fillColor = numberColor;
+    const QColor outlineColor = outlineColorFor(labelFontColor, backgroundColor);
+    const QColor fillColor = labelFontColor;
 
     for (const QVariant& zoneVar : zones) {
         const QVariantMap z = zoneVar.toMap();
@@ -62,11 +69,15 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones,
         }
 
         const QString text = QString::number(zoneNumber);
-        const qreal fontPixelSize = qMax(static_cast<qreal>(kGridUnit), qMin(w, h) * 0.25);
+        const qreal fontPixelSize = qMax(static_cast<qreal>(kGridUnit), qMin(w, h) * 0.25) * fontSizeScale;
 
         QFont font;
+        if (!fontFamily.isEmpty()) {
+            font.setFamily(fontFamily);
+        }
         font.setPixelSize(static_cast<int>(fontPixelSize));
-        font.setBold(true);
+        font.setWeight(static_cast<QFont::Weight>(qBound(100, fontWeight, 900)));
+        font.setItalic(fontItalic);
 
         const QRectF rect(x, y, w, h);
         const QPointF center = rect.center();
@@ -76,15 +87,49 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones,
 
         // Center the text in the zone rect (addText uses baseline at origin)
         const QRectF textBounds = path.boundingRect();
-        path.translate(center.x() - textBounds.center().x(), center.y() - textBounds.center().y());
+        const qreal translateX = center.x() - textBounds.center().x();
+        const qreal translateY = center.y() - textBounds.center().y();
+        path.translate(translateX, translateY);
 
         // Draw outline (stroke) then fill
-        painter.setPen(QPen(outlineColor, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        const QPen outlinePen(outlineColor, 2.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        painter.setPen(outlinePen);
         painter.setBrush(Qt::NoBrush);
         painter.drawPath(path);
         painter.setPen(Qt::NoPen);
         painter.setBrush(fillColor);
         painter.drawPath(path);
+
+        // QPainterPath::addText only includes glyph outlines, not text decorations.
+        // Draw underline/strikeout manually using font metrics.
+        if (fontUnderline || fontStrikeout) {
+            const QFontMetricsF fm(font);
+            const qreal lineThickness = qMax(1.0, fm.lineWidth());
+            // Baseline was at y=0 before translation
+            const qreal baselineY = translateY;
+            const qreal lineLeft = textBounds.left() + translateX;
+            const qreal lineWidth = textBounds.width();
+
+            auto drawDecoration = [&](qreal yOffset) {
+                const QRectF lineRect(lineLeft, baselineY + yOffset - lineThickness / 2.0,
+                                      lineWidth, lineThickness);
+                QPainterPath lp;
+                lp.addRect(lineRect);
+                painter.setPen(outlinePen);
+                painter.setBrush(Qt::NoBrush);
+                painter.drawPath(lp);
+                painter.setPen(Qt::NoPen);
+                painter.setBrush(fillColor);
+                painter.drawPath(lp);
+            };
+
+            if (fontUnderline) {
+                drawDecoration(fm.underlinePos());
+            }
+            if (fontStrikeout) {
+                drawDecoration(-fm.strikeOutPos());
+            }
+        }
     }
 
     painter.end();

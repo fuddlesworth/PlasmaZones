@@ -26,6 +26,8 @@ ScrollView {
     signal requestHighlightColorDialog()
     signal requestInactiveColorDialog()
     signal requestBorderColorDialog()
+    signal requestLabelFontColorDialog()
+    signal requestFontDialog()
     signal requestColorFileDialog()
 
     clip: true
@@ -207,6 +209,80 @@ ScrollView {
                             text: i18n("px")
                         }
                     }
+
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Zone Labels")
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Number color:")
+                        visible: !useSystemColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
+
+                        ColorButton {
+                            color: kcm.labelFontColor
+                            onClicked: root.requestLabelFontColorDialog()
+                        }
+
+                        Label {
+                            text: kcm.labelFontColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Font:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Button {
+                            text: kcm.labelFontFamily || i18n("System default")
+                            font.family: kcm.labelFontFamily
+                            font.weight: kcm.labelFontWeight
+                            font.italic: kcm.labelFontItalic
+                            icon.name: "font-select-symbolic"
+                            onClicked: root.requestFontDialog()
+                        }
+
+                        Button {
+                            icon.name: "edit-clear"
+                            visible: kcm.labelFontFamily !== ""
+                                || kcm.labelFontWeight !== Font.Bold
+                                || kcm.labelFontItalic
+                                || kcm.labelFontUnderline
+                                || kcm.labelFontStrikeout
+                            ToolTip.text: i18n("Reset to defaults")
+                            ToolTip.visible: hovered
+                            onClicked: {
+                                kcm.labelFontFamily = ""
+                                kcm.labelFontWeight = Font.Bold
+                                kcm.labelFontItalic = false
+                                kcm.labelFontUnderline = false
+                                kcm.labelFontStrikeout = false
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Scale:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        Slider {
+                            id: fontSizeScaleSlider
+                            Layout.preferredWidth: root.constants.sliderPreferredWidth
+                            from: 25
+                            to: 300
+                            stepSize: 5
+                            value: kcm.labelFontSizeScale * 100
+                            onMoved: kcm.labelFontSizeScale = value / 100
+                        }
+
+                        Label {
+                            text: Math.round(fontSizeScaleSlider.value) + "%"
+                            Layout.preferredWidth: root.constants.sliderValueLabelWidth
+                        }
+                    }
+
                 }
             }
         }

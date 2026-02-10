@@ -28,7 +28,7 @@ constexpr int OpaqueAlpha = 255;
 inline const QColor HighlightColor{0, 120, 212, HighlightAlpha}; // Windows blue
 inline const QColor InactiveColor{128, 128, 128, InactiveAlpha};
 inline const QColor BorderColor{255, 255, 255, BorderAlpha};
-inline const QColor NumberColor{255, 255, 255, OpaqueAlpha};
+inline const QColor LabelFontColor{255, 255, 255, OpaqueAlpha};
 
 // Dimensions
 constexpr qreal Opacity = 0.5;

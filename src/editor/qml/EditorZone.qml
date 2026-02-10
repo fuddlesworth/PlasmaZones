@@ -458,6 +458,12 @@ Item {
     ZoneContent {
         anchors.fill: parent
         zoneData: root.zoneData
+        fontFamily: root.controller ? root.controller.labelFontFamily : ""
+        fontSizeScale: root.controller ? root.controller.labelFontSizeScale : 1.0
+        fontWeight: root.controller ? root.controller.labelFontWeight : Font.Bold
+        fontItalic: root.controller ? root.controller.labelFontItalic : false
+        fontUnderline: root.controller ? root.controller.labelFontUnderline : false
+        fontStrikeout: root.controller ? root.controller.labelFontStrikeout : false
     }
 
     // Listen for zone data changes - when zonesChanged is emitted, the Repeater model updates

@@ -95,6 +95,13 @@ Item {
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
     /// Scale factor when zone is hovered (1.0 = no scale, set > 1.0 to enable)
     property real hoverScale: 1.0
+    /// Font properties for zone number labels
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
 
     /// Emitted when a zone is clicked
     signal zoneClicked(int index)
@@ -190,8 +197,12 @@ Item {
                 anchors.centerIn: parent
                 // Use actual zoneNumber from data if available, otherwise fall back to index + 1
                 text: modelData.zoneNumber !== undefined ? modelData.zoneNumber : (index + 1)
-                font.pixelSize: Math.min(parent.width, parent.height) * 0.4
-                font.bold: true
+                font.pixelSize: Math.min(parent.width, parent.height) * 0.4 * root.fontSizeScale
+                font.weight: root.fontWeight
+                font.italic: root.fontItalic
+                font.underline: root.fontUnderline
+                font.strikeout: root.fontStrikeout
+                font.family: root.fontFamily
                 color: Kirigami.Theme.textColor
                 opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
                 visible: root.showZoneNumbers && (!root.isMonocleLayout || index === root.zones.length - 1) && parent.width >= 16 && parent.height >= 16

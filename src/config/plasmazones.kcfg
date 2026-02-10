@@ -102,8 +102,8 @@
       <label>Zone border color</label>
       <default>#C8FFFFFF</default>
     </entry>
-    <entry name="NumberColor" type="Color">
-      <label>Zone number text color</label>
+    <entry name="LabelFontColor" type="Color">
+      <label>Zone label text color</label>
       <default>#FFFFFFFF</default>
     </entry>
     <entry name="ActiveOpacity" type="Double">
@@ -133,6 +133,34 @@
     <entry name="EnableBlur" type="Bool">
       <label>Enable blur effect behind zones</label>
       <default>true</default>
+    </entry>
+    <entry name="LabelFontFamily" type="String">
+      <label>Font family for zone number labels (empty = system default)</label>
+      <default></default>
+    </entry>
+    <entry name="LabelFontSizeScale" type="Double">
+      <label>Scale multiplier for zone number font size</label>
+      <default>1.0</default>
+      <min>0.25</min>
+      <max>3.0</max>
+    </entry>
+    <entry name="LabelFontWeight" type="Int">
+      <label>Font weight for zone number labels (CSS-style: 100-900)</label>
+      <default>700</default>
+      <min>100</min>
+      <max>900</max>
+    </entry>
+    <entry name="LabelFontItalic" type="Bool">
+      <label>Use italic font for zone numbers</label>
+      <default>false</default>
+    </entry>
+    <entry name="LabelFontUnderline" type="Bool">
+      <label>Use underline for zone numbers</label>
+      <default>false</default>
+    </entry>
+    <entry name="LabelFontStrikeout" type="Bool">
+      <label>Use strikeout for zone numbers</label>
+      <default>false</default>
     </entry>
   </group>
 

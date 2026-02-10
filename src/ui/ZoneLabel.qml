@@ -6,16 +6,28 @@ import QtQuick.Controls
 import org.kde.kirigami as Kirigami
 
 /**
- * Zone number/name label overlay.
+ * Zone number/name label overlay (QML fallback rendering path).
  * Used by RenderNodeOverlay to display zone identifiers on top of shader effects.
  * Renders centered text with an outline for visibility on any background.
+ *
+ * Note: The primary rendering path uses ZoneLabelTextureBuilder (QPainter) which
+ * composites labels into a texture for shader pass. This QML component is the
+ * fallback when shader rendering is disabled. Both paths honor the same font
+ * settings (fontFamily, fontSizeScale, fontWeight, fontItalic, fontUnderline,
+ * fontStrikeout) from IZoneVisualizationSettings.
  */
 Item {
     id: root
 
     property int zoneNumber: 1
     property string zoneName: ""
-    property color numberColor: Kirigami.Theme.textColor
+    property color labelFontColor: Kirigami.Theme.textColor
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
 
     // Centered label with outline for visibility
     // Always show zone number for keyboard navigation reference
@@ -23,9 +35,13 @@ Item {
     Label {
         anchors.centerIn: parent
         text: root.zoneNumber.toString()
-        color: root.numberColor
-        font.pixelSize: Math.max(Kirigami.Units.gridUnit, Math.min(parent.width, parent.height) * 0.25)
-        font.bold: true
+        color: root.labelFontColor
+        font.pixelSize: Math.max(Kirigami.Units.gridUnit, Math.min(parent.width, parent.height) * 0.25) * root.fontSizeScale
+        font.weight: root.fontWeight
+        font.italic: root.fontItalic
+        font.underline: root.fontUnderline
+        font.strikeout: root.fontStrikeout
+        font.family: root.fontFamily
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
 
@@ -36,8 +52,8 @@ Item {
         style: Text.Outline
         styleColor: {
             // Use contrasting color for outline based on luminance
-            // Guard against undefined/null numberColor during initialization
-            var c = root.numberColor || Qt.rgba(1, 1, 1, 1)
+            // Guard against undefined/null labelFontColor during initialization
+            var c = root.labelFontColor || Qt.rgba(1, 1, 1, 1)
             var luminance = c.r * 0.299 + c.g * 0.587 + c.b * 0.114
             // Dark outline for light text, light outline for dark text
             return luminance > 0.5

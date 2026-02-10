@@ -19,7 +19,13 @@ Item {
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
-    property color numberColor: Kirigami.Theme.textColor
+    property color labelFontColor: Kirigami.Theme.textColor
+    property string fontFamily: ""
+    property real fontSizeScale: 1.0
+    property int fontWeight: Font.Bold
+    property bool fontItalic: false
+    property bool fontUnderline: false
+    property bool fontStrikeout: false
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
@@ -83,9 +89,13 @@ Item {
 
             anchors.horizontalCenter: parent.horizontalCenter
             text: zoneItem.zoneNumber
-            font.pixelSize: Math.min(zoneItem.width, zoneItem.height) * 0.3
-            font.bold: true
-            color: zoneItem.numberColor
+            font.pixelSize: Math.min(zoneItem.width, zoneItem.height) * 0.3 * zoneItem.fontSizeScale
+            font.weight: zoneItem.fontWeight
+            font.italic: zoneItem.fontItalic
+            font.underline: zoneItem.fontUnderline
+            font.strikeout: zoneItem.fontStrikeout
+            font.family: zoneItem.fontFamily
+            color: zoneItem.labelFontColor
             opacity: zoneItem.isHighlighted ? 1 : 0.7
 
             Behavior on opacity {
@@ -107,7 +117,7 @@ Item {
                 var scaledSize = baseSize * Math.max(0.4, Math.min(1, scaleFactor)); // Scale between 40% and 100% of base
                 return Math.max(8, Math.round(scaledSize)); // Minimum 8px for readability
             }
-            color: zoneItem.numberColor
+            color: zoneItem.labelFontColor
             opacity: zoneItem.isHighlighted ? 0.9 : 0.5
             visible: zoneItem.zoneName.length > 0
 
