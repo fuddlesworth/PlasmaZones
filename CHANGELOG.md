@@ -5,6 +5,25 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-02-09
+
+### Added
+- Full zone label font customization: family, size scale, weight, italic, underline, strikeout ([#97])
+- Font picker dialog in KCM Zones tab with live preview and search
+- Sonic Ripple audio-reactive shader
+
+### Changed
+- Rename `NumberColor` setting to `LabelFontColor` for consistent `LabelFont*` naming across all layers ([#97])
+- Sort layouts alphabetically by name in KCM
+- Use generic `adjustlevels` icon for shader settings button in editor (replaces app-specific icon)
+
+### Fixed
+- Self-referencing `font.family` QML binding preventing font reset from updating previews ([#97])
+- Font reset button now also resets label size scale
+- `qFuzzyCompare` edge case in KCM font scale setter (clamp before compare)
+- Remove dead `labelFontColor` property from zone selector window
+- Auto badge distinguished from Manual badge using `activeTextColor`
+
 ## [1.8.1] - 2026-02-09
 
 ### Added
@@ -264,6 +283,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[1.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.6.2...v1.7.0
@@ -324,3 +344,4 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#92]: https://github.com/fuddlesworth/PlasmaZones/pull/92
 [#94]: https://github.com/fuddlesworth/PlasmaZones/issues/94
 [#96]: https://github.com/fuddlesworth/PlasmaZones/pull/96
+[#97]: https://github.com/fuddlesworth/PlasmaZones/pull/97

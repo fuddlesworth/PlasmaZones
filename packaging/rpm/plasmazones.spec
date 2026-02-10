@@ -165,6 +165,15 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Mon Feb  9 2026 fuddlesworth - 1.8.2-1
+- Full zone label font customization (family, scale, weight, italic, etc.)
+- Font picker dialog in KCM with live preview and search
+- Sonic Ripple audio-reactive shader
+- Rename NumberColor to LabelFontColor for consistent naming (#97)
+- Fix font reset not updating previews (self-referencing QML binding)
+- Sort layouts alphabetically in KCM
+- Fix Auto/Manual badge color distinction
+
 * Mon Feb  9 2026 fuddlesworth - 1.8.1-1
 - Paint-to-span zone modifier for multi-zone window snapping (#94, #96)
 - Configurable paint-to-span modifier in KCM Zones tab (default Alt+Meta)
