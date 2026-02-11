@@ -1447,15 +1447,23 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 qCDebug(lcEffect) << "Window is fullscreen at drag stop, skipping snap";
             } else {
                 QRect snapGeometry;
+                bool shouldApply = true;
                 if (restoreSizeOnly) {
                     // Drag-to-unsnap: apply only pre-snap width/height, keep current position
                     QRectF frame = safeWindow->frameGeometry();
                     snapGeometry = QRect(static_cast<int>(frame.x()), static_cast<int>(frame.y()),
                                          snapWidth, snapHeight);
+                    // Skip if already restored during drag (slotRestoreSizeDuringDrag) to avoid redundant moveResize
+                    if (qAbs(frame.width() - snapWidth) <= 1 && qAbs(frame.height() - snapHeight) <= 1) {
+                        shouldApply = false;
+                        qCDebug(lcEffect) << "Skip restore apply - already at correct size from during-drag restore";
+                    }
                 } else {
                     snapGeometry = QRect(snapX, snapY, snapWidth, snapHeight);
                 }
-                applySnapGeometry(safeWindow, snapGeometry);
+                if (shouldApply) {
+                    applySnapGeometry(safeWindow, snapGeometry);
+                }
             }
         }
 
@@ -1583,27 +1591,23 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
 
 void PlasmaZonesEffect::slotZoneGeometryDuringDrag(const QString& windowId, int x, int y, int width, int height)
 {
-    // Only apply if we have a dragged window and the ID matches
-    if (!m_dragTracker->isDragging() || m_dragTracker->draggedWindowId() != windowId) {
-        return;
-    }
-
-    KWin::EffectWindow* window = m_dragTracker->draggedWindow();
-    if (!window || !shouldHandleWindow(window)) {
-        return;
-    }
-
-    QRect geometry(x, y, width, height);
-    if (!geometry.isValid()) {
-        return;
-    }
-
-    qCDebug(lcEffect) << "Applying zone geometry during drag:" << windowId << geometry;
-    applySnapGeometry(window, geometry, true);
+    // Do NOT apply zone geometry during drag - only apply on release (dragStopped).
+    // Applying during drag caused the window to resize as soon as the cursor entered
+    // a zone, before the user had released to snap. The overlay still highlights the
+    // zone under cursor; geometry is applied only when the user releases the mouse.
+    Q_UNUSED(windowId);
+    Q_UNUSED(x);
+    Q_UNUSED(y);
+    Q_UNUSED(width);
+    Q_UNUSED(height);
 }
 
 void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int width, int height)
 {
+    // Restore pre-snap size when cursor leaves zone during drag. The window may have been
+    // snapped when the drag started (at zone size); when the user drags out of all zones,
+    // we restore to floated state immediately so they see the window return to original size.
+    // This complements the release path (dragStopped) which also handles restore.
     if (!m_dragTracker->isDragging() || m_dragTracker->draggedWindowId() != windowId) {
         return;
     }

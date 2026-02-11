@@ -528,7 +528,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         checkZoneSelectorTrigger(cursorX, cursorY);
     }
 
-    // Apply zone geometry immediately during drag (FancyZones-style)
+    // Emit zone geometry during drag (effect applies only on release; overlay uses for highlight)
     // Only emit when geometry actually changes (per .cursorrules)
     QRect geom = m_isMultiZoneMode ? m_currentMultiZoneGeometry : m_currentZoneGeometry;
     if (geom.isValid()) {
