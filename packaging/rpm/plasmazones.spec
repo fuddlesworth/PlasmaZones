@@ -8,7 +8,7 @@
 # Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        0.0.0
+Version:        1.8.4
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -128,6 +128,7 @@ echo ""
 
 # Libraries
 %{_libdir}/libplasmazones_core.so*
+%{_libdir}/libplasmazones_rendering.so*
 
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
@@ -165,68 +166,103 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
-* Tue Feb 11 2026 fuddlesworth - 1.8.4-1
+* Wed Feb 11 2026 fuddlesworth - 1.8.4-1
 - Shader preset load/save in editor ShaderSettingsDialog
-- Preview shader effects in zone editor (#132)
-- Restore window size immediately when dragging between zones (#133)
-- Overlay follows cursor when dragging to another monitor (#136)
+- Preview shader effects in zone editor ([#132])
+- Restore window size immediately when dragging between zones ([#133])
+- Overlay follows cursor when dragging to another monitor ([#136])
 - Defer window resize until drag release; keep restore-to-float on unsnap
 - Hide shader preview overlay when dialogs open or app loses focus
-- Remove dead zoneGeometryDuringDrag slot
+- PR review feedback for shader preview
+- Dead `zoneGeometryDuringDrag` slot
 
 * Mon Feb  9 2026 fuddlesworth - 1.8.2-1
-- Full zone label font customization (family, scale, weight, italic, etc.)
-- Font picker dialog in KCM with live preview and search
+- Full zone label font customization: family, size scale, weight, italic, underline, strikeout ([#97])
+- Font picker dialog in KCM Zones tab with live preview and search
 - Sonic Ripple audio-reactive shader
-- Rename NumberColor to LabelFontColor for consistent naming (#97)
-- Fix font reset not updating previews (self-referencing QML binding)
-- Sort layouts alphabetically in KCM
-- Fix Auto/Manual badge color distinction
+- Rename `NumberColor` setting to `LabelFontColor` for consistent `LabelFont*` naming across all layers ([#97])
+- Sort layouts alphabetically by name in KCM
+- Use generic `adjustlevels` icon for shader settings button in editor (replaces app-specific icon)
+- Self-referencing `font.family` QML binding preventing font reset from updating previews ([#97])
+- Font reset button now also resets label size scale
+- `qFuzzyCompare` edge case in KCM font scale setter (clamp before compare)
+- Remove dead `labelFontColor` property from zone selector window
+- Auto badge distinguished from Manual badge using `activeTextColor`
 
 * Mon Feb  9 2026 fuddlesworth - 1.8.1-1
-- Paint-to-span zone modifier for multi-zone window snapping (#94, #96)
-- Configurable paint-to-span modifier in KCM Zones tab (default Alt+Meta)
-- Rename multi-zone modifier to proximity snap modifier for clarity
-- Remove dead skipSnapModifier setting
-- Fix missing KCM signal emissions and config migration for upgrading users
+- Paint-to-span zone modifier: hold a modifier while dragging to progressively paint across zones, window snaps to bounding rectangle on release ([#94], [#96])
+- Configurable "Paint-to-span modifier" in KCM Zones tab (default Alt+Meta)
+- Renamed "Multi-zone modifier" to "Proximity snap modifier" for clarity
+- Replaced `middleClickMultiZone` bool setting with `zoneSpanModifier` DragModifier enum
+- Config migration: users who had middle-click multi-zone disabled keep zone span disabled after upgrade
+- Extracted `prepareHandlerContext()`, `computeCombinedZoneGeometry()`, and `zoneIdsToStringList()` helpers in drag handling (DRY)
+- Added `setOsdStyleInt` range validation
+- Dead `skipSnapModifier` setting (fully scaffolded but never consumed in drag handling)
+- Missing `restoreWindowsToZonesOnLoginChanged` signal in KCM defaults and settings sync
+- 12 missing signal emissions in KCM `onSettingsChanged()`
+- Painted zone state not cleared on `dragStarted()` causing stale highlights
+- Modifier conflict warning using `static bool` instead of per-instance member
 
 * Mon Feb  9 2026 fuddlesworth - 1.8.0-1
-- CAVA audio visualization service for audio-reactive shaders
-- Spectrum Pulse shader with audio-reactive neon energy
-- Audio-reactive shader uniforms (spectrum data passed to GPU)
+- CAVA audio visualization service for audio-reactive shaders ([#92])
+- Spectrum Pulse shader: audio-reactive neon energy with bass glow, spectrum aurora, and CAVA integration ([#92])
+- Audio-reactive shader uniforms: spectrum data and audio levels passed to GPU ([#92])
 - KCM settings for audio visualizer (enable/disable, spectrum bar count)
-- Auto-assign windows to first empty zone per layout
-- App-to-zone auto-snap rules with screen-targeting
+- Auto-assign windows to first empty zone per layout ([#90])
+- App-to-zone auto-snap rules per layout with screen-targeting
 - Window picker dialog for exclude lists
-- Per-monitor zone selector settings
-- Snap-all-windows shortcut (Meta+Ctrl+S)
-- Fix overlay/zone-selector mutual exclusion during drag
-- Fix per-screen shader decisions for multi-monitor setups
-- Comprehensive multi-monitor per-screen targeting and isolation
-- Fix daemon crash on monitor power-off (DP hotplug disconnect)
+- Per-monitor zone selector settings ([#89])
+- Snap-all-windows shortcut (`Meta+Ctrl+S`)
+- Replace global active layout with `defaultLayout()` for user-facing surfaces
+- DRY per-screen config validation and shared layout computation
+- Audit and normalize log levels across entire codebase
+- Mutual exclusion between overlay and zone selector during drag ([#92])
+- Per-screen shader decisions for multi-monitor setups ([#92])
+- Comprehensive multi-monitor per-screen targeting and isolation ([#87])
+- Per-screen layout isolation and shortcut screen guards ([#87])
+- Zone selector showing on all monitors instead of target screen
+- Per-screen zone selector validation and edge cases
+- Zone selector defensive setActiveLayout and QML signal verification
+- Per-screen override message/button not updating reactively in KCM
+- Daemon survives monitor power-off (DP hotplug disconnect)
+- Editor: defer window destroy during mid-session screen switch
+- Unfloat: fall back when saved pre-float screen no longer exists
+- Remove misleading shortcut hint from zone overlay
+- WrapVulkanHeaders noise in feature summary; ColorUtils.js QML warning
 
 * Fri Feb  6 2026 fuddlesworth - 1.7.0-1
-- Add layout visibility filtering (per-screen/desktop/activity)
-- Default OSD style to visual preview for new installs
-- Fix stale screen restrictions on monitor disconnect
+- Layout visibility filtering: control which layouts appear in zone selector per screen, virtual desktop, and activity
+   - Tier 1 (KCM): eye toggle to globally hide a layout from the zone selector
+   - Tier 2 (Editor): visibility popup to restrict layouts to specific screens, desktops, or activities
+   - Empty allow-lists = visible everywhere (opt-in model)
+   - Active layout always bypasses filters to prevent empty selector state
+   - Undo/redo support for visibility changes in the editor
+   - Filter badge on KCM layout cards when Tier 2 restrictions are active
+- Layout cycling (Meta+[/]) now respects per-screen visibility filtering
+- OSD style defaults to visual preview instead of text for new installs
+- Duplicated and imported layouts no longer inherit visibility restrictions from the source
+- Stale screen names auto-cleaned from layout restrictions when monitors are disconnected
+- Layout cycling skips hidden/restricted layouts correctly in all directions
 
 * Fri Feb  6 2026 fuddlesworth - 1.6.2-1
-- Fix editor not moving to selected screen on multi-monitor setups
-- Fix editor defaulting to wrong screen on Wayland
+- Editor not moving to selected screen when switching monitors in TopBar or via D-Bus `openEditorForScreen`
+- Editor defaulting to wrong screen on Wayland (now uses cursor screen instead of unreliable `primaryScreen`)
 
 * Fri Feb  6 2026 fuddlesworth - 1.6.1-1
-- Add Liquid Metal shader with multipass rendering
-- Fix AUR -bin package build failure (.INSTALL dotfile in package root)
-- Fix Liquid Metal surface drift, mouse Y, zone params swizzle
-- Remove 5 low-quality shaders
+- Liquid Metal shader: mercury-like fluid surface with environment reflections, Fresnel, bloom, and mouse interaction
+- AUR `-bin` package build failure due to `.INSTALL` dotfile left in package root
+- Liquid Metal: surface drifting to bottom-left (use standing waves instead of travelling)
+- Liquid Metal: inverted mouse Y coordinate
+- Liquid Metal: outer glow rendering outside zones due to zoneParams swizzle bug
+- 5 low-quality shaders: minimalist, aurora-sweep, warped-labels, prism-labels, glitch-labels
 
-* Wed Feb  5 2026 fuddlesworth - 1.6.0-1
+* Thu Feb  5 2026 fuddlesworth - 1.6.0-1
 - Multi-zone snapping support in window tracking
-- Fix shader parameter accumulation bug in layout JSON
-- Atomic undo for shader switching
-- Post-install messages note KWin restart requirement
-- Remove dead properties (Layout::author, Layout::shortcut, Zone::shortcut)
-- Remove dead files (ZoneEditor.qml, LayoutPicker.qml, ShaderOverlay.qml, shadercompiler.cpp, zonedataprovider.cpp)
+- Shader parameters from previously-used shaders accumulating in layout JSON
+- Atomic undo for shader switching (single undo step instead of two)
+- Post-install messages now note that KWin restart is required to load the effect
+- Dead properties: Layout::author, Layout::shortcut, Zone::shortcut (never wired up)
+- Dead files: ZoneEditor.qml, LayoutPicker.qml, ShaderOverlay.qml, shadercompiler.cpp, zonedataprovider.cpp
 
 * Thu Feb  5 2026 fuddlesworth - 1.5.9-1
 - Release pipeline now generates Debian, RPM, and GitHub release notes from CHANGELOG.md
