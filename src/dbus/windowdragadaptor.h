@@ -157,6 +157,7 @@ private:
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
     bool m_overlayShown = false;
+    QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;

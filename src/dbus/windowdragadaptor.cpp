@@ -116,6 +116,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_restoreSizeEmittedDuringDrag = false;
     m_snapCancelled = false;
     m_overlayShown = false;
+    m_overlayScreen = nullptr;
     m_zoneSelectorShown = false;
     m_lastCursorX = 0;
     m_lastCursorY = 0;
@@ -202,6 +203,11 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
     if (!m_overlayShown) {
         m_overlayService->showAtPosition(x, y);
         m_overlayShown = true;
+        m_overlayScreen = outScreen;
+    } else if (m_settings && !m_settings->showZonesOnAllMonitors() && m_overlayScreen != outScreen) {
+        // Cursor moved to different monitor - switch overlay to follow (fixes #136)
+        m_overlayService->showAtPosition(x, y);
+        m_overlayScreen = outScreen;
     }
 
     auto* layout = m_layoutManager->resolveLayoutForScreen(outScreen->name());
@@ -218,6 +224,7 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     if (m_overlayShown && m_overlayService) {
         m_overlayService->hide();
         m_overlayShown = false;
+        m_overlayScreen = nullptr;
     }
     if (m_zoneDetector) {
         m_zoneDetector->clearHighlights();
@@ -861,6 +868,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     if (m_overlayShown && m_overlayService) {
         m_overlayService->hide();
         m_overlayShown = false;
+        m_overlayScreen = nullptr;
     }
 
     // Hide zone selector and clear selection

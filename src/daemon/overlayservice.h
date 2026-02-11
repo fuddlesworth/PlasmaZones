@@ -156,6 +156,7 @@ private:
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
+    QScreen* m_currentOverlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only, for #136)
 
     // Zone selector selection tracking
     QString m_selectedLayoutId;

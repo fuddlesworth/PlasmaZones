@@ -600,10 +600,6 @@ void OverlayService::show()
 
 void OverlayService::showAtPosition(int cursorX, int cursorY)
 {
-    if (m_visible) {
-        return;
-    }
-
     // Check if we should show on all monitors or just the cursor's screen
     bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
 
@@ -622,6 +618,14 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         }
     }
 
+    if (m_visible) {
+        // Already visible: when single-monitor mode, switch overlay if cursor moved to different screen (#136)
+        if (!showOnAllMonitors && cursorScreen && m_currentOverlayScreen != cursorScreen) {
+            initializeOverlay(cursorScreen);
+        }
+        return;
+    }
+
     initializeOverlay(cursorScreen);
 }
 
@@ -631,6 +635,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
     m_visible = true;
+    m_currentOverlayScreen = showOnAllMonitors ? nullptr : cursorScreen;
 
     // Initialize shader timing (shared across all monitors for synchronized effects)
     {
@@ -640,6 +645,17 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         m_frameCount.store(0);
     }
     m_zoneDataDirty = true; // Rebuild zone data on next frame
+
+    // When single-monitor mode, hide overlay on screens we're switching away from (#136)
+    if (!showOnAllMonitors) {
+        for (auto* screen : m_overlayWindows.keys()) {
+            if (screen != cursorScreen) {
+                if (auto* window = m_overlayWindows.value(screen)) {
+                    window->hide();
+                }
+            }
+        }
+    }
 
     for (auto* screen : Utils::allScreens()) {
         // Skip screens that aren't the cursor's screen when single-monitor mode is enabled
@@ -722,6 +738,7 @@ void OverlayService::hide()
     }
 
     m_visible = false;
+    m_currentOverlayScreen = nullptr;
 
     // Stop shader animation
     stopShaderAnimation();
