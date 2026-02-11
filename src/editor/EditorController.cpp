@@ -39,7 +39,6 @@
 #include "helpers/SettingsDbusQueries.h"
 #include "helpers/ShaderDbusQueries.h"
 #include "helpers/BatchOperationScope.h"
-#include "../daemon/rendering/zonelabeltexturebuilder.h"
 
 #include <KConfig>
 #include <KConfigGroup>
@@ -177,9 +176,13 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
     const qreal hw = (resW - padded * 3) / 2.0; // Two equal halves with gap
     const qreal hh = resH - padded * 2;
 
+    // Stable IDs for demo layout so shader doesn't see churn on every update
+    const QString zone1Id = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
+    const QString zone2Id = QStringLiteral("{00000000-0000-0000-0000-000000000002}");
+
     auto makeZone = [&](int zoneNumber, qreal x, qreal y, qreal w, qreal h) {
         QVariantMap out;
-        out[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString();
+        out[QLatin1String(JsonKeys::Id)] = (zoneNumber == 1) ? zone1Id : zone2Id;
         out[QLatin1String(JsonKeys::X)] = x;
         out[QLatin1String(JsonKeys::Y)] = y;
         out[QLatin1String(JsonKeys::Width)] = w;
@@ -213,18 +216,6 @@ QVariantMap EditorController::translateShaderParams(const QString& shaderId, con
     return ShaderDbusQueries::queryTranslateShaderParams(shaderId, params);
 }
 
-QImage EditorController::buildLabelsTextureForPreview(int width, int height, const QColor& labelFontColor) const
-{
-    const QVariantList zones = zonesForShaderPreview(width, height);
-    const QSize size(qMax(1, width), qMax(1, height));
-    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, Qt::black);
-    if (labelsImage.isNull()) {
-        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-        labelsImage.fill(Qt::transparent);
-    }
-    return labelsImage;
-}
-
 void EditorController::showShaderPreviewOverlay(int x, int y, int width, int height, const QString& screenName,
                                                 const QString& shaderId, const QString& shaderParamsJson,
                                                 const QString& zonesJson)
@@ -252,7 +243,9 @@ void EditorController::hideShaderPreviewOverlay()
     QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
                         QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
     if (iface.isValid()) {
-        iface.asyncCall(QStringLiteral("hideShaderPreview"));
+        // Use synchronous call so hide completes before any in-flight async show can leave
+        // a visible overlay after the dialog has closed.
+        iface.call(QStringLiteral("hideShaderPreview"));
     }
 }
 

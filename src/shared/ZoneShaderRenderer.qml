@@ -13,6 +13,8 @@ Item {
     id: root
 
     required property var config
+    // Default to empty object when config is null (callers may not always pass valid config)
+    readonly property var safeConfig: config || ({})
 
     property alias status: zoneShaderItem.status
     property alias errorLog: zoneShaderItem.errorLog
@@ -23,26 +25,26 @@ Item {
         id: zoneShaderItem
         anchors.fill: parent
 
-        shaderSource: root.config ? root.config.shaderSource : ""
-        bufferShaderPath: root.config ? root.config.bufferShaderPath : ""
-        bufferShaderPaths: (root.config && root.config.bufferShaderPaths && root.config.bufferShaderPaths.length > 0)
-            ? Array.from(root.config.bufferShaderPaths)
-            : (root.config && root.config.bufferShaderPath ? [root.config.bufferShaderPath] : [])
-        bufferFeedback: root.config ? (root.config.bufferFeedback || false) : false
-        bufferScale: root.config ? (root.config.bufferScale ?? 1.0) : 1.0
-        bufferWrap: root.config ? (root.config.bufferWrap || "clamp") : "clamp"
+        shaderSource: root.safeConfig.shaderSource || ""
+        bufferShaderPath: root.safeConfig.bufferShaderPath || ""
+        bufferShaderPaths: (root.safeConfig.bufferShaderPaths && root.safeConfig.bufferShaderPaths.length > 0)
+            ? Array.from(root.safeConfig.bufferShaderPaths)
+            : (root.safeConfig.bufferShaderPath ? [root.safeConfig.bufferShaderPath] : [])
+        bufferFeedback: root.safeConfig.bufferFeedback || false
+        bufferScale: root.safeConfig.bufferScale ?? 1.0
+        bufferWrap: root.safeConfig.bufferWrap || "clamp"
 
-        zones: root.config ? root.config.zones : []
-        hoveredZoneIndex: root.config ? (root.config.hoveredZoneIndex ?? -1) : -1
-        shaderParams: root.config ? (root.config.shaderParams || {}) : {}
+        zones: root.safeConfig.zones || []
+        hoveredZoneIndex: root.safeConfig.hoveredZoneIndex ?? -1
+        shaderParams: root.safeConfig.shaderParams || {}
 
-        iTime: root.config ? (root.config.iTime ?? 0) : 0
-        iTimeDelta: root.config ? (root.config.iTimeDelta ?? 0) : 0
-        iFrame: root.config ? (root.config.iFrame ?? 0) : 0
-        iResolution: root.config && root.config.iResolution ? root.config.iResolution : Qt.size(width, height)
-        iMouse: root.config && root.config.iMouse ? root.config.iMouse : Qt.point(0, 0)
+        iTime: root.safeConfig.iTime ?? 0
+        iTimeDelta: root.safeConfig.iTimeDelta ?? 0
+        iFrame: root.safeConfig.iFrame ?? 0
+        iResolution: root.safeConfig.iResolution || Qt.size(width, height)
+        iMouse: root.safeConfig.iMouse || Qt.point(0, 0)
 
-        audioSpectrum: root.config ? (root.config.audioSpectrum || []) : []
+        audioSpectrum: root.safeConfig.audioSpectrum || []
 
         onStatusChanged: {
             if (status === ZoneShaderItem.Error) {
@@ -54,7 +56,7 @@ Item {
     Binding {
         target: zoneShaderItem
         property: "labelsTexture"
-        value: root.config ? root.config.labelsTexture : null
-        when: root.config && root.config.labelsTexture
+        value: root.safeConfig.labelsTexture || null
+        when: root.safeConfig.labelsTexture
     }
 }

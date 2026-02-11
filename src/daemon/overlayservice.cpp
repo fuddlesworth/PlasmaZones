@@ -38,6 +38,9 @@
 #include <KLocalizedContext>
 #include <cmath>
 
+#include <QJsonDocument>
+#include <QJsonParseError>
+
 #include <LayerShellQt/Window>
 #include <LayerShellQt/Shell>
 
@@ -61,6 +64,89 @@ static ZoneSelectorConfig defaultZoneSelectorConfig()
 }
 
 namespace {
+
+// Parse zones from JSON array. Returns empty list on parse error or invalid format.
+// Logs parse errors on failure.
+QVariantList parseZonesJson(const QString& json, const char* context)
+{
+    QVariantList zones;
+    if (json.isEmpty()) {
+        return zones;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcOverlay) << context << "invalid zones JSON:" << parseError.errorString();
+        return zones;
+    }
+    if (!doc.isArray()) {
+        qCWarning(lcOverlay) << context << "zones JSON is not an array";
+        return zones;
+    }
+    for (const QJsonValue& v : doc.array()) {
+        if (v.isObject()) {
+            QVariantMap m;
+            const QJsonObject o = v.toObject();
+            for (auto it = o.begin(); it != o.end(); ++it) {
+                m.insert(it.key(), it.value().toVariant());
+            }
+            zones.append(m);
+        }
+    }
+    return zones;
+}
+
+// Parse shader params from JSON object. Returns empty map on parse error or invalid format.
+// Logs parse errors on failure.
+QVariantMap parseShaderParamsJson(const QString& json, const char* context)
+{
+    QVariantMap shaderParams;
+    if (json.isEmpty()) {
+        return shaderParams;
+    }
+    QJsonParseError parseError;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcOverlay) << context << "invalid shader params JSON:" << parseError.errorString();
+        return shaderParams;
+    }
+    if (!doc.isObject()) {
+        qCWarning(lcOverlay) << context << "shader params JSON is not an object";
+        return shaderParams;
+    }
+    const QJsonObject o = doc.object();
+    for (auto it = o.begin(); it != o.end(); ++it) {
+        shaderParams.insert(it.key(), it.value().toVariant());
+    }
+    return shaderParams;
+}
+
+// Build labels texture for shader preview zones. Uses settings for font when available.
+QImage buildLabelsImageForPreviewZones(const QVariantList& zones,
+                                       const QSize& size,
+                                       const IZoneVisualizationSettings* settings)
+{
+    const QColor labelFontColor = settings ? settings->labelFontColor() : QColor(Qt::white);
+    QColor backgroundColor = Qt::black;
+    if (settings) {
+        KColorScheme scheme(QPalette::Active, KColorScheme::View);
+        backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
+    }
+    const QString fontFamily = settings ? settings->labelFontFamily() : QString();
+    const qreal fontSizeScale = settings ? settings->labelFontSizeScale() : 1.0;
+    const int fontWeight = settings ? settings->labelFontWeight() : QFont::Bold;
+    const bool fontItalic = settings ? settings->labelFontItalic() : false;
+    const bool fontUnderline = settings ? settings->labelFontUnderline() : false;
+    const bool fontStrikeout = settings ? settings->labelFontStrikeout() : false;
+    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor,
+                                                        fontFamily, fontSizeScale, fontWeight, fontItalic,
+                                                        fontUnderline, fontStrikeout);
+    if (labelsImage.isNull()) {
+        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
+        labelsImage.fill(Qt::transparent);
+    }
+    return labelsImage;
+}
 
 // Set a QML property, falling back to setProperty if needed
 void writeQmlProperty(QObject* object, const QString& name, const QVariant& value)
@@ -2554,37 +2640,8 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         return;
     }
 
-    // Parse zones JSON
-    QVariantList zones;
-    if (!zonesJson.isEmpty()) {
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(zonesJson.toUtf8(), &parseError);
-        if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
-            for (const QJsonValue& v : doc.array()) {
-                if (v.isObject()) {
-                    QVariantMap m;
-                    const QJsonObject o = v.toObject();
-                    for (auto it = o.begin(); it != o.end(); ++it) {
-                        m.insert(it.key(), it.value().toVariant());
-                    }
-                    zones.append(m);
-                }
-            }
-        }
-    }
-
-    // Parse shader params JSON
-    QVariantMap shaderParams;
-    if (!shaderParamsJson.isEmpty()) {
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(shaderParamsJson.toUtf8(), &parseError);
-        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
-            const QJsonObject o = doc.object();
-            for (auto it = o.begin(); it != o.end(); ++it) {
-                shaderParams.insert(it.key(), it.value().toVariant());
-            }
-        }
-    }
+    const QVariantList zones = parseZonesJson(zonesJson, "showShaderPreview:");
+    const QVariantMap shaderParams = parseShaderParamsJson(shaderParamsJson, "showShaderPreview:");
 
     if (!m_shaderPreviewWindow || m_shaderPreviewScreen != screen) {
         destroyShaderPreviewWindow();
@@ -2625,27 +2682,8 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zoneCount"), zones.size());
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("highlightedCount"), 0);
 
-    // Labels texture - use same font/settings as main overlay for consistent rendering
-    const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
-    QColor backgroundColor = Qt::black;
-    if (m_settings) {
-        KColorScheme scheme(QPalette::Active, KColorScheme::View);
-        backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
-    }
-    const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
-    const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
-    const int fontWeight = m_settings ? m_settings->labelFontWeight() : QFont::Bold;
-    const bool fontItalic = m_settings ? m_settings->labelFontItalic() : false;
-    const bool fontUnderline = m_settings ? m_settings->labelFontUnderline() : false;
-    const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
     const QSize size(qMax(1, width), qMax(1, height));
-    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor,
-                                                      fontFamily, fontSizeScale, fontWeight, fontItalic,
-                                                      fontUnderline, fontStrikeout);
-    if (labelsImage.isNull()) {
-        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-        labelsImage.fill(Qt::transparent);
-    }
+    const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
 
     // Start iTime animation for preview (shared timer with main overlay)
@@ -2686,58 +2724,18 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height,
     }
 
     if (!zonesJson.isEmpty()) {
-        QVariantList zones;
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(zonesJson.toUtf8(), &parseError);
-        if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
-            for (const QJsonValue& v : doc.array()) {
-                if (v.isObject()) {
-                    QVariantMap m;
-                    const QJsonObject o = v.toObject();
-                    for (auto it = o.begin(); it != o.end(); ++it) {
-                        m.insert(it.key(), it.value().toVariant());
-                    }
-                    zones.append(m);
-                }
-            }
-        }
+        const QVariantList zones = parseZonesJson(zonesJson, "updateShaderPreview:");
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zones"), zones);
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zoneCount"), zones.size());
 
         const int w = qMax(1, m_shaderPreviewWindow->width());
         const int h = qMax(1, m_shaderPreviewWindow->height());
-        const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
-        QColor backgroundColor = Qt::black;
-        if (m_settings) {
-            KColorScheme scheme(QPalette::Active, KColorScheme::View);
-            backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
-        }
-        const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
-        const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
-        const int fontWeight = m_settings ? m_settings->labelFontWeight() : QFont::Bold;
-        const bool fontItalic = m_settings ? m_settings->labelFontItalic() : false;
-        const bool fontUnderline = m_settings ? m_settings->labelFontUnderline() : false;
-        const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
-        QImage labelsImage = ZoneLabelTextureBuilder::build(zones, QSize(w, h), labelFontColor, true, backgroundColor,
-                                                           fontFamily, fontSizeScale, fontWeight, fontItalic,
-                                                           fontUnderline, fontStrikeout);
-        if (labelsImage.isNull()) {
-            labelsImage = QImage(1, 1, QImage::Format_ARGB32);
-            labelsImage.fill(Qt::transparent);
-        }
+        const QImage labelsImage = buildLabelsImageForPreviewZones(zones, QSize(w, h), m_settings);
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
     }
 
     if (!shaderParamsJson.isEmpty()) {
-        QVariantMap shaderParams;
-        QJsonParseError parseError;
-        const QJsonDocument doc = QJsonDocument::fromJson(shaderParamsJson.toUtf8(), &parseError);
-        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
-            const QJsonObject o = doc.object();
-            for (auto it = o.begin(); it != o.end(); ++it) {
-                shaderParams.insert(it.key(), it.value().toVariant());
-            }
-        }
+        const QVariantMap shaderParams = parseShaderParamsJson(shaderParamsJson, "updateShaderPreview:");
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("shaderParams"), QVariant::fromValue(shaderParams));
     }
 }

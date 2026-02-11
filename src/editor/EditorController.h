@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <QColor>
-#include <QImage>
 #include <QObject>
 #include <QVariantList>
 #include <QFont>
@@ -278,15 +276,6 @@ public:
      * @return Shader metadata as QVariantMap, or empty map if not found
      */
     Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
-
-    /**
-     * @brief Build labels texture for shader preview (zone numbers overlay)
-     * @param width Preview width in pixels
-     * @param height Preview height in pixels
-     * @param labelFontColor Text color for zone numbers
-     * @return QImage with zone numbers drawn at zone positions
-     */
-    Q_INVOKABLE QImage buildLabelsTextureForPreview(int width, int height, const QColor& labelFontColor) const;
 
     /**
      * @brief Show shader preview overlay via daemon (avoids multi-pass clear in embedded preview)

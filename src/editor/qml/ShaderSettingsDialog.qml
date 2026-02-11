@@ -52,6 +52,9 @@ Kirigami.Dialog {
     // Accordion state - only one group expanded at a time (-1 = all collapsed)
     property int expandedGroupIndex: 0
 
+    // Prevent preview updates after dialog closed (avoids race with debounce timer)
+    property bool previewAllowed: true
+
     // ═══════════════════════════════════════════════════════════════════════
     // COMPUTED PROPERTIES
     // ═══════════════════════════════════════════════════════════════════════
@@ -95,12 +98,15 @@ Kirigami.Dialog {
     // LIFECYCLE
     // ═══════════════════════════════════════════════════════════════════════
     onOpened: {
+        previewAllowed = true;
         initializePendingState();
         expandedGroupIndex = 0;
         Qt.callLater(root.updateDaemonShaderPreview);
     }
 
     onClosed: {
+        previewAllowed = false;
+        debouncePreviewUpdate.stop();
         if (editorController) {
             editorController.hideShaderPreviewOverlay();
         }
@@ -108,6 +114,12 @@ Kirigami.Dialog {
 
     // Update daemon overlay when params/shader change or layout settles
     function updateDaemonShaderPreview() {
+        if (!previewAllowed) {
+            if (editorController) {
+                editorController.hideShaderPreviewOverlay();
+            }
+            return;
+        }
         if (!editorController || !editorWindow || !root.hasShaderEffect
             || root.pendingShaderId === root.noneShaderId) {
             if (editorController) {
@@ -679,15 +691,6 @@ Kirigami.Dialog {
                 anchors.margins: Kirigami.Units.largeSpacing
                 color: Kirigami.Theme.backgroundColor
                 radius: Kirigami.Units.smallSpacing
-            }
-
-            // Preview rendered by daemon overlay (avoids multi-pass shader clear in embedded view)
-            Label {
-                anchors.centerIn: parent
-                visible: !root.hasShaderEffect
-                text: i18nc("@info:placeholder", "Enable effect to preview")
-                opacity: 0.5
-                font.italic: true
             }
         }
     }
