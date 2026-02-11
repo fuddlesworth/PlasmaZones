@@ -102,6 +102,17 @@ public Q_SLOTS:
     void handleWindowClosed(const QString& windowId);
 
 Q_SIGNALS:
+    /**
+     * Emitted when the zone geometry under the cursor changes during drag.
+     * KWin effect subscribes and applies the geometry immediately for FancyZones-style snap-on-hover.
+     */
+    void zoneGeometryDuringDragChanged(const QString& windowId, int x, int y, int width, int height);
+
+    /**
+     * Emitted when the cursor leaves all zones during drag and the window was snapped.
+     * KWin effect applies pre-snap size immediately (restore-size-only at current position).
+     */
+    void restoreSizeDuringDragChanged(const QString& windowId, int width, int height);
 
 private:
     // Tolerance constants for geometry matching (fallback detection)
@@ -159,6 +170,10 @@ private:
     // Paint-to-span state (zone span modifier)
     QSet<QUuid> m_paintedZoneIds; // Accumulates zones during paint-to-span drag
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
+
+    // Last emitted zone geometry (emit only when changed, per .cursorrules)
+    QRect m_lastEmittedZoneGeometry;
+    bool m_restoreSizeEmittedDuringDrag = false;
 
     // Zone selector methods
     void checkZoneSelectorTrigger(int cursorX, int cursorY);

@@ -84,6 +84,8 @@ private Q_SLOTS:
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
     void slotRunningWindowsRequested();
+    void slotZoneGeometryDuringDrag(const QString& windowId, int x, int y, int width, int height);
+    void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
 
 private:
     // Window management
@@ -188,7 +190,8 @@ private:
                                 const QString& screenName = QString());
 
     // Apply snap geometry to window
-    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry);
+    // When allowDuringDrag is true, applies immediately even if window is in user move state (for FancyZones-style)
+    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // iface must remain valid for the duration of the async call (caller guarantees

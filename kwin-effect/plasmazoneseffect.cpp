@@ -900,6 +900,14 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("runningWindowsRequested"), this,
                                           SLOT(slotRunningWindowsRequested()));
 
+    // Connect to WindowDrag signals for immediate geometry during drag (FancyZones-style)
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                          QStringLiteral("zoneGeometryDuringDragChanged"), this,
+                                          SLOT(slotZoneGeometryDuringDrag(QString, int, int, int, int)));
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                          QStringLiteral("restoreSizeDuringDragChanged"), this,
+                                          SLOT(slotRestoreSizeDuringDrag(QString, int, int)));
+
     qCInfo(lcEffect) << "Connected to keyboard navigation D-Bus signals";
 }
 
@@ -1491,7 +1499,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
             });
 }
 
-void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry)
+void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag)
 {
     if (!window) {
         qCWarning(lcEffect) << "Cannot apply geometry - window is null";
@@ -1513,8 +1521,9 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     qCDebug(lcEffect) << "Setting window geometry from" << window->frameGeometry() << "to" << geometry;
 
     // In KWin 6, we use the window's moveResize methods
-    // First, we need to check if the window is in a valid state
-    if (window->isUserMove() || window->isUserResize()) {
+    // When allowDuringDrag is false: defer if window is in user move/resize (snap on release)
+    // When allowDuringDrag is true: apply immediately (FancyZones-style during drag)
+    if (!allowDuringDrag && (window->isUserMove() || window->isUserResize())) {
         qCDebug(lcEffect) << "Window still in user move/resize state, deferring geometry change";
         // Schedule the geometry change for next frame when the move operation is complete
         // Use QPointer to safely handle window destruction during the timer delay
@@ -1523,7 +1532,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             // Re-check all conditions including fullscreen - window state can change during delay
             // QPointer automatically becomes null if the window is destroyed
             if (safeWindow && !safeWindow->isUserMove() && !safeWindow->isUserResize() && !safeWindow->isFullScreen()) {
-                applySnapGeometry(safeWindow, geometry);
+                applySnapGeometry(safeWindow, geometry, false);
             }
         });
         return;
@@ -1570,6 +1579,50 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
 
     // Not a pointer format, return as-is
     return windowId;
+}
+
+void PlasmaZonesEffect::slotZoneGeometryDuringDrag(const QString& windowId, int x, int y, int width, int height)
+{
+    // Only apply if we have a dragged window and the ID matches
+    if (!m_dragTracker->isDragging() || m_dragTracker->draggedWindowId() != windowId) {
+        return;
+    }
+
+    KWin::EffectWindow* window = m_dragTracker->draggedWindow();
+    if (!window || !shouldHandleWindow(window)) {
+        return;
+    }
+
+    QRect geometry(x, y, width, height);
+    if (!geometry.isValid()) {
+        return;
+    }
+
+    qCDebug(lcEffect) << "Applying zone geometry during drag:" << windowId << geometry;
+    applySnapGeometry(window, geometry, true);
+}
+
+void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int width, int height)
+{
+    if (!m_dragTracker->isDragging() || m_dragTracker->draggedWindowId() != windowId) {
+        return;
+    }
+
+    KWin::EffectWindow* window = m_dragTracker->draggedWindow();
+    if (!window || !shouldHandleWindow(window)) {
+        return;
+    }
+
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+
+    // Restore-size-only: keep current position, apply pre-snap width/height
+    QRectF frame = window->frameGeometry();
+    QRect geometry(static_cast<int>(frame.x()), static_cast<int>(frame.y()), width, height);
+
+    qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
+    applySnapGeometry(window, geometry, true);
 }
 
 void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)

@@ -112,6 +112,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
     m_modifierConflictWarned = false;
+    m_lastEmittedZoneGeometry = QRect();
+    m_restoreSizeEmittedDuringDrag = false;
     m_snapCancelled = false;
     m_overlayShown = false;
     m_zoneSelectorShown = false;
@@ -525,6 +527,28 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         hideOverlayAndClearZoneState();
         checkZoneSelectorTrigger(cursorX, cursorY);
     }
+
+    // Apply zone geometry immediately during drag (FancyZones-style)
+    // Only emit when geometry actually changes (per .cursorrules)
+    QRect geom = m_isMultiZoneMode ? m_currentMultiZoneGeometry : m_currentZoneGeometry;
+    if (geom.isValid()) {
+        if (geom != m_lastEmittedZoneGeometry) {
+            m_lastEmittedZoneGeometry = geom;
+            m_restoreSizeEmittedDuringDrag = false;
+            Q_EMIT zoneGeometryDuringDragChanged(windowId, geom.x(), geom.y(), geom.width(), geom.height());
+        }
+    } else {
+        // Cursor left all zones: restore pre-snap size immediately if window was snapped
+        if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_settings
+            && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
+            int origX, origY, origW, origH;
+            if (m_windowTracking->getValidatedPreSnapGeometry(windowId, origX, origY, origW, origH)) {
+                m_restoreSizeEmittedDuringDrag = true;
+                m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit
+                Q_EMIT restoreSizeDuringDragChanged(windowId, origW, origH);
+            }
+        }
+    }
 }
 
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY,
@@ -706,6 +730,8 @@ void WindowDragAdaptor::cancelSnap()
     m_isMultiZoneMode = false;
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
+    m_lastEmittedZoneGeometry = QRect();
+    m_restoreSizeEmittedDuringDrag = false;
 
     // Hide overlay and zone selector UI
     hideOverlayAndSelector();
@@ -864,6 +890,8 @@ void WindowDragAdaptor::resetDragState()
     m_paintedZoneIds.clear();
     m_snapCancelled = false;
     m_wasSnapped = false;
+    m_lastEmittedZoneGeometry = QRect();
+    m_restoreSizeEmittedDuringDrag = false;
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)
