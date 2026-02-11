@@ -104,5 +104,35 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
         </signal>
+        <signal name="zoneGeometryDuringDragChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the zone geometry under the cursor changes during drag. KWin effect applies the geometry immediately for FancyZones-style snap-on-hover behavior."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="x" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone X position (pixels)."/>
+            </arg>
+            <arg name="y" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone Y position (pixels)."/>
+            </arg>
+            <arg name="width" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone width (pixels)."/>
+            </arg>
+            <arg name="height" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone height (pixels)."/>
+            </arg>
+        </signal>
+        <signal name="restoreSizeDuringDragChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the cursor leaves all zones during drag and the window was snapped. KWin effect applies pre-snap size immediately (restore-size-only at current position)."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="width" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Pre-snap width (pixels)."/>
+            </arg>
+            <arg name="height" type="i">
+                <annotation name="org.gtk.GDBus.DocString" value="Pre-snap height (pixels)."/>
+            </arg>
+        </signal>
     </interface>
 </node>
