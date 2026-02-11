@@ -55,6 +55,9 @@ Kirigami.Dialog {
     // Prevent preview updates after dialog closed (avoids race with debounce timer)
     property bool previewAllowed: true
 
+    // Preset load/save error message (shown inline when non-empty)
+    property string presetErrorMessage: ""
+
     // ═══════════════════════════════════════════════════════════════════════
     // COMPUTED PROPERTIES
     // ═══════════════════════════════════════════════════════════════════════
@@ -99,9 +102,21 @@ Kirigami.Dialog {
     // ═══════════════════════════════════════════════════════════════════════
     onOpened: {
         previewAllowed = true;
+        presetErrorMessage = "";
         initializePendingState();
         expandedGroupIndex = 0;
         Qt.callLater(root.updateDaemonShaderPreview);
+    }
+
+    Connections {
+        target: editorController
+        enabled: editorController !== null
+        function onShaderPresetLoadFailed(error) {
+            root.presetErrorMessage = error;
+        }
+        function onShaderPresetSaveFailed(error) {
+            root.presetErrorMessage = error;
+        }
     }
 
     onClosed: {
@@ -320,6 +335,20 @@ Kirigami.Dialog {
         return noneShaderId;
     }
 
+    function filePathFromUrl(url) {
+        if (!url) return "";
+        return url.toString().replace(/^file:\/\/+/, "/");
+    }
+
+    function preparePresetDialog(dialog) {
+        if (editorController) {
+            var dir = editorController.shaderPresetDirectory();
+            if (dir && dir.length > 0) {
+                dialog.currentFolder = Qt.resolvedUrl("file://" + dir);
+            }
+        }
+    }
+
     function buildParameterGroups(params) {
         if (!params || params.length === 0) return [];
 
@@ -501,11 +530,25 @@ Kirigami.Dialog {
             visible: root.hasShaderEffect && root.shaderParams.length > 0
         }
 
-        Label {
+        RowLayout {
             Layout.fillWidth: true
             visible: root.hasShaderEffect && root.shaderParams.length > 0
-            text: i18nc("@title:group", "Parameters")
-            font.weight: Font.DemiBold
+            spacing: Kirigami.Units.smallSpacing
+
+            Label {
+                Layout.fillWidth: true
+                text: i18nc("@title:group", "Parameters")
+                font.weight: Font.DemiBold
+            }
+
+            ToolButton {
+                icon.name: "roll"
+                display: ToolButton.IconOnly
+                ToolTip.text: i18nc("@info:tooltip", "Randomize all parameters")
+                Accessible.name: i18nc("@action:button", "Random")
+                Accessible.description: ToolTip.text
+                onClicked: root.randomizeParameters()
+            }
         }
 
         // Message when shader has no parameters
@@ -638,6 +681,23 @@ Kirigami.Dialog {
         }
 
         // ═══════════════════════════════════════════════════════════════════
+        // PRESET ERROR MESSAGE (inline when load/save fails)
+        // ═══════════════════════════════════════════════════════════════════
+        Kirigami.InlineMessage {
+            Layout.fillWidth: true
+            visible: root.presetErrorMessage !== ""
+            type: Kirigami.MessageType.Error
+            text: root.presetErrorMessage
+            actions: [
+                Kirigami.Action {
+                    icon.name: "dialog-close"
+                    text: i18nc("@action:button", "Dismiss")
+                    onTriggered: root.presetErrorMessage = ""
+                }
+            ]
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
         // FOOTER BUTTONS - Right-aligned at bottom of panel
         // ═══════════════════════════════════════════════════════════════════
         RowLayout {
@@ -645,10 +705,28 @@ Kirigami.Dialog {
             spacing: Kirigami.Units.smallSpacing
 
             Button {
-                text: i18nc("@action:button", "Random")
-                icon.name: "roll"
-                visible: root.shaderParams.length > 0
-                onClicked: root.randomizeParameters()
+                text: i18nc("@action:button", "Load Preset")
+                icon.name: "document-open"
+                ToolTip.text: i18nc("@info:tooltip", "Load shader settings from a preset file")
+                Accessible.name: text
+                Accessible.description: ToolTip.text
+                onClicked: {
+                    preparePresetDialog(loadPresetDialog);
+                    loadPresetDialog.open();
+                }
+            }
+
+            Button {
+                text: i18nc("@action:button", "Save Preset")
+                icon.name: "document-save-as"
+                enabled: root.hasShaderEffect
+                ToolTip.text: i18nc("@info:tooltip", "Save current shader settings as a preset file")
+                Accessible.name: text
+                Accessible.description: ToolTip.text
+                onClicked: {
+                    preparePresetDialog(savePresetDialog);
+                    savePresetDialog.open();
+                }
             }
 
             Item { Layout.fillWidth: true }
@@ -709,6 +787,58 @@ Kirigami.Dialog {
         onAccepted: {
             if (paramId) {
                 root.setPendingParam(paramId, selectedColor.toString());
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SHADER PRESET FILE DIALOGS
+    // ═══════════════════════════════════════════════════════════════════════
+    FileDialog {
+        id: savePresetDialog
+
+        title: i18nc("@title:window", "Save Shader Preset")
+        nameFilters: [i18nc("@item:inlistbox", "JSON files (*.json)"), i18nc("@item:inlistbox", "All files (*)")]
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+
+        onAccepted: {
+            if (!editorController) return;
+            var path = filePathFromUrl(selectedFile);
+            if (!path.toLowerCase().endsWith(".json")) {
+                path = path + ".json";
+            }
+            var presetName = "";
+            var lastSlash = path.lastIndexOf("/");
+            var fileName = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
+            var dotIndex = fileName.lastIndexOf(".");
+            if (dotIndex > 0) {
+                presetName = fileName.substring(0, dotIndex);
+            } else {
+                presetName = fileName;
+            }
+            var ok = editorController.saveShaderPreset(path, root.pendingShaderId, root.pendingParams || {}, presetName);
+            if (ok) {
+                root.presetErrorMessage = "";
+            }
+        }
+    }
+
+    FileDialog {
+        id: loadPresetDialog
+
+        title: i18nc("@title:window", "Load Shader Preset")
+        nameFilters: [i18nc("@item:inlistbox", "JSON files (*.json)"), i18nc("@item:inlistbox", "All files (*)")]
+        fileMode: FileDialog.OpenFile
+
+        onAccepted: {
+            if (!editorController) return;
+            var path = filePathFromUrl(selectedFile);
+            var result = editorController.loadShaderPreset(path);
+            if (result && result.shaderId) {
+                root.pendingShaderId = result.shaderId;
+                root.pendingParams = result.shaderParams || {};
+                root.presetErrorMessage = "";
             }
         }
     }

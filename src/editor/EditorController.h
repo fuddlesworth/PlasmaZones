@@ -469,6 +469,12 @@ public Q_SLOTS:
     Q_INVOKABLE void importLayout(const QString& filePath);
     Q_INVOKABLE void exportLayout(const QString& filePath);
 
+    // Shader preset operations
+    Q_INVOKABLE bool saveShaderPreset(const QString& filePath, const QString& shaderId, const QVariantMap& shaderParams,
+                                      const QString& presetName);
+    Q_INVOKABLE QVariantMap loadShaderPreset(const QString& filePath);
+    Q_INVOKABLE QString shaderPresetDirectory();
+
     // Clipboard operations
     /**
      * @brief Copies selected zones to clipboard
@@ -544,6 +550,8 @@ Q_SIGNALS:
     void layoutSaved();
     void layoutLoadFailed(const QString& error);
     void layoutSaveFailed(const QString& error);
+    void shaderPresetLoadFailed(const QString& error);
+    void shaderPresetSaveFailed(const QString& error);
     void editorClosed();
 
     // Validation signals
