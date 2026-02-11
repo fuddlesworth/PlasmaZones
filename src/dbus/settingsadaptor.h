@@ -69,6 +69,14 @@ public Q_SLOTS:
     QVariantMap defaultShaderParams(const QString& shaderId);
 
     /**
+     * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
+     * @param shaderId UUID of the shader
+     * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
+     * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
+     */
+    QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params);
+
+    /**
      * @brief Check if shader effects are enabled (compiled with shader support)
      * @return true if shaders are available
      */

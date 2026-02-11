@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <plasmazones_export.h>
+#include <plasmazones_rendering_export.h>
 #include <QQuickItem>
 #include <QUrl>
 #include <QSizeF>
@@ -111,7 +111,7 @@ struct ZoneDataSnapshot
  * }
  * @endcode
  */
-class PLASMAZONES_EXPORT ZoneShaderItem : public QQuickItem
+class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
 {
     Q_OBJECT
     QML_ELEMENT
@@ -131,6 +131,8 @@ class PLASMAZONES_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(QVariantList zones READ zones WRITE setZones NOTIFY zonesChanged FINAL)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zoneCountChanged FINAL)
     Q_PROPERTY(int highlightedCount READ highlightedCount NOTIFY highlightedCountChanged FINAL)
+    /** Zone index under cursor for hover highlight (preview mode). -1 = none. Avoids full zones churn on mouse move. */
+    Q_PROPERTY(int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
 
     // Shader source
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
@@ -238,6 +240,12 @@ public:
     {
         return m_highlightedCount;
     }
+
+    int hoveredZoneIndex() const
+    {
+        return m_hoveredZoneIndex;
+    }
+    void setHoveredZoneIndex(int index);
 
     // Shader source getter/setter
     QUrl shaderSource() const
@@ -405,6 +413,7 @@ Q_SIGNALS:
     void zonesChanged();
     void zoneCountChanged();
     void highlightedCountChanged();
+    void hoveredZoneIndexChanged();
     void shaderSourceChanged();
     void bufferShaderPathChanged();
     void bufferShaderPathsChanged();
@@ -452,6 +461,13 @@ private:
     void parseZoneData();
 
     /**
+     * @brief Update only highlight flags in m_zoneData (no full parse).
+     * Used when only hoveredZoneIndex changed to avoid shader restart.
+     * Precondition: setZones must have been called so m_zoneData is populated.
+     */
+    void updateHoveredHighlightOnly();
+
+    /**
      * @brief Set error status with message
      */
     void setError(const QString& error);
@@ -481,6 +497,7 @@ private:
     QVariantList m_zones;
     int m_zoneCount = 0;
     int m_highlightedCount = 0;
+    int m_hoveredZoneIndex = -1;
 
     // Shader configuration
     QUrl m_shaderSource;

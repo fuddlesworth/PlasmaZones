@@ -122,6 +122,12 @@ vec4 compositeLabelsFlow(vec4 color, vec2 uv) {
     float outlinePx = customParams[2].x > 0.0 ? customParams[2].x : 14.0;
     float alphaCutoff = customParams[2].y > 0.0 ? customParams[2].y : 0.38;
 
+    // Scale outline for small resolutions (e.g. shader preview) to avoid sampling into adjacent
+    // zones and creating ghosting/multiple copies of the number instead of a clean blocky outline.
+    float minRes = min(res.x, res.y);
+    float scale = min(1.0, minRes / 600.0); // 600px reference; smaller previews get thinner outline
+    outlinePx *= scale;
+
     float labelAlpha = texture(uZoneLabels, uv).a;
     if (labelAlpha < 0.001) {
         float outlineA = labelOutlineAlpha(uv, outlinePx / res.x, outlinePx / res.y);

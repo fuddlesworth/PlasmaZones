@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common 1.0
 import PlasmaZones 1.0
 
 /**
@@ -65,35 +66,6 @@ Window {
 
     // Custom shader parameters (16 floats in 4 vec4s + 4 colors)
     // These are rebuilt whenever shaderParams changes to ensure reactivity
-    property vector4d customParams1: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customParams2: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customParams3: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customParams4: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customColor1: Qt.vector4d(1.0, 1.0, 1.0, 0.0)
-    property vector4d customColor2: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customColor3: Qt.vector4d(1.0, 1.0, 1.0, 0.0)
-    property vector4d customColor4: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customColor5: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customColor6: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customColor7: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-    property vector4d customColor8: Qt.vector4d(0.0, 0.0, 0.0, 0.0)
-
-    // Update custom params when shaderParams changes
-    onShaderParamsChanged: {
-        customParams1 = internal.buildCustomParams(1)
-        customParams2 = internal.buildCustomParams(2)
-        customParams3 = internal.buildCustomParams(3)
-        customParams4 = internal.buildCustomParams(4)
-        customColor1 = internal.buildCustomColor(1)
-        customColor2 = internal.buildCustomColor(2)
-        customColor3 = internal.buildCustomColor(3)
-        customColor4 = internal.buildCustomColor(4)
-        customColor5 = internal.buildCustomColor(5)
-        customColor6 = internal.buildCustomColor(6)
-        customColor7 = internal.buildCustomColor(7)
-        customColor8 = internal.buildCustomColor(8)
-    }
-
     // Compatibility properties
     property string highlightedZoneId: ""
     // Note: Using 'var' for highlightedZoneIds because it's a dynamic list from C++
@@ -101,6 +73,40 @@ Window {
 
     signal zoneClicked(int index)
     signal zoneHovered(int index)
+
+    // Zone index under cursor for hover highlight (preview mode). -1 = none.
+    // Using index avoids full zones array churn on mouse move, preventing shader restart.
+    readonly property int hoveredZoneIndex: {
+        if (root.highlightedCount > 0) return -1;  // Main overlay uses zone selector
+        var zones = root.zones || [];
+        var mouse = root.mousePosition;
+        for (var i = 0; i < zones.length; i++) {
+            var z = zones[i];
+            var x = (z.x !== undefined) ? z.x : 0;
+            var y = (z.y !== undefined) ? z.y : 0;
+            var w = (z.width !== undefined) ? z.width : 0;
+            var h = (z.height !== undefined) ? z.height : 0;
+            if (mouse.x >= x && mouse.x < x + w && mouse.y >= y && mouse.y < y + h) return i;
+        }
+        return -1;
+    }
+
+    // Zones with isHighlighted patched for Repeater (basic zones fallback only).
+    readonly property var zonesForDisplay: {
+        var zones = root.zones || [];
+        if (root.highlightedCount > 0) return zones;
+        var idx = root.hoveredZoneIndex;
+        if (idx < 0) return zones;
+        var result = [];
+        for (var i = 0; i < zones.length; i++) {
+            var z = zones[i];
+            var zone = {};
+            for (var k in z) zone[k] = z[k];
+            zone.isHighlighted = (i === idx);
+            result.push(zone);
+        }
+        return result;
+    }
 
     // Window flags - LayerShellQt handles the overlay behavior on Wayland
     flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
@@ -122,77 +128,44 @@ Window {
             onPositionChanged: function(mouse) {
                 root.mousePosition = Qt.point(mouse.x, mouse.y)
             }
+            onExited: {
+                root.mousePosition = Qt.point(-1, -1)
+            }
         }
 
         // ===================================================================
-        // ZONE SHADER ITEM - GPU-accelerated render node based rendering
+        // ZONE SHADER RENDERER - shared with editor preview
         // ===================================================================
-        ZoneShaderItem {
-            id: zoneShaderItem
+        QtObject {
+            id: shaderConfig
+            property url shaderSource: root.shaderSource
+            property string bufferShaderPath: root.bufferShaderPath
+            property var bufferShaderPaths: root.bufferShaderPaths
+            property bool bufferFeedback: root.bufferFeedback
+            property real bufferScale: root.bufferScale
+            property string bufferWrap: root.bufferWrap
+            property var zones: root.zones
+            property int hoveredZoneIndex: root.hoveredZoneIndex
+            property var shaderParams: root.shaderParams
+            property real iTime: root.iTime
+            property real iTimeDelta: root.iTimeDelta
+            property int iFrame: root.iFrame
+            property size iResolution: Qt.size(root.width, root.height)
+            property point iMouse: root.mousePosition
+            property var labelsTexture: root.labelsTexture
+            property var audioSpectrum: root.audioSpectrum
+        }
+
+        ZoneShaderRenderer {
+            id: zoneShaderRenderer
             anchors.fill: parent
             visible: root.shaderSource.toString() !== "" && status !== ZoneShaderItem.Error
+            config: shaderConfig
 
-            // Shader source
-            shaderSource: root.shaderSource
-            bufferShaderPath: root.bufferShaderPath
-            // C++ passes bufferShaderPaths as QVariantList (array). Fallback to single path if empty.
-            bufferShaderPaths: (root.bufferShaderPaths && root.bufferShaderPaths.length > 0)
-                ? Array.from(root.bufferShaderPaths)
-                : (root.bufferShaderPath ? [root.bufferShaderPath] : [])
-            bufferFeedback: root.bufferFeedback
-            bufferScale: root.bufferScale
-            bufferWrap: root.bufferWrap
-
-            // Zone data
-            zones: root.zones
-
-            // Animation uniforms
-            iTime: root.iTime
-            iTimeDelta: root.iTimeDelta
-            iFrame: root.iFrame
-
-            // Resolution
-            iResolution: Qt.size(root.width, root.height)
-
-            // Mouse position
-            iMouse: root.mousePosition
-
-            // Labels texture (pre-rendered zone numbers for shader pass)
-            labelsTexture: root.labelsTexture
-
-            // Custom parameters (16 floats + 4 colors)
-            customParams1: root.customParams1
-            customParams2: root.customParams2
-            customParams3: root.customParams3
-            customParams4: root.customParams4
-            customColor1: root.customColor1
-            customColor2: root.customColor2
-            customColor3: root.customColor3
-            customColor4: root.customColor4
-            customColor5: root.customColor5
-            customColor6: root.customColor6
-            customColor7: root.customColor7
-            customColor8: root.customColor8
-
-            // Shader params map
-            shaderParams: root.shaderParams
-
-            // Audio spectrum for audio-reactive shaders
-            audioSpectrum: root.audioSpectrum
-
-            onStatusChanged: {
-                // Only log errors - success is expected, loading is transient
-                if (status === ZoneShaderItem.Error) {
-                    console.error("RenderNodeOverlay: Shader error:", errorLog)
-                    if (typeof overlayService !== "undefined") {
-                        overlayService.onShaderError(errorLog)
-                    }
-                }
-            }
-
-            onErrorLogChanged: {
-                if (errorLog.length > 0) {
-                    console.error("RenderNodeOverlay: Shader error:", errorLog)
+            onShaderError: function(log) {
+                console.error("RenderNodeOverlay: Shader error:", log)
+                if (typeof overlayService !== "undefined") {
+                    overlayService.onShaderError(log)
                 }
             }
         }
@@ -201,14 +174,14 @@ Window {
         // BASIC ZONES - When no shader or shader not ready
         // ===================================================================
         Repeater {
-            model: root.zones
+            model: root.zonesForDisplay
             // Note: 'visible' on Repeater has no effect - delegate visibility is controlled below
 
             delegate: ZoneItem {
                 required property var modelData
                 required property int index
 
-                visible: root.shaderSource.toString() === "" || zoneShaderItem.status !== ZoneShaderItem.Ready
+                visible: root.shaderSource.toString() === "" || zoneShaderRenderer.status !== ZoneShaderItem.Ready
 
                 x: modelData.x !== undefined ? modelData.x : 0
                 y: modelData.y !== undefined ? modelData.y : 0
@@ -239,7 +212,7 @@ Window {
 
         // Shader error - fail visibly, don't mask with fallback
         Rectangle {
-            visible: root.shaderSource.toString() !== "" && zoneShaderItem.status === ZoneShaderItem.Error
+            visible: root.shaderSource.toString() !== "" && zoneShaderRenderer.status === ZoneShaderItem.Error
             anchors.centerIn: parent
             width: Math.min(parent.width * 0.5, 400)
             height: shaderErrorText.implicitHeight + Kirigami.Units.gridUnit * 2
@@ -251,7 +224,7 @@ Window {
             Text {
                 id: shaderErrorText
                 anchors.centerIn: parent
-                text: zoneShaderItem.errorLog || i18n("Shader error")
+                text: zoneShaderRenderer.errorLog || i18n("Shader error")
                 color: Kirigami.Theme.textColor
                 wrapMode: Text.WordWrap
                 width: parent.width - Kirigami.Units.gridUnit * 2
@@ -259,76 +232,4 @@ Window {
         }
     }
 
-    QtObject {
-        id: internal
-
-        // Helper to safely get a numeric value from shaderParams
-        function getParam(key, defaultValue) {
-            var p = root.shaderParams || {}
-            if (p.hasOwnProperty(key)) {
-                var val = p[key]
-                // Handle various numeric types
-                if (typeof val === "number") return val
-                if (typeof val === "string") {
-                    var parsed = parseFloat(val)
-                    return isNaN(parsed) ? defaultValue : parsed
-                }
-            }
-            return defaultValue
-        }
-
-        // Helper to convert a color value to vec4
-        // Handles: QColor objects, color strings ("#rrggbb"), or pre-converted objects
-        function colorToVec4(colorValue, defaultR, defaultG, defaultB, defaultA) {
-            if (!colorValue) {
-                return Qt.vector4d(defaultR, defaultG, defaultB, defaultA)
-            }
-
-            // If it's already a color-like object with r,g,b,a properties
-            if (typeof colorValue === "object" && colorValue.r !== undefined) {
-                return Qt.vector4d(
-                    colorValue.r !== undefined ? colorValue.r : defaultR,
-                    colorValue.g !== undefined ? colorValue.g : defaultG,
-                    colorValue.b !== undefined ? colorValue.b : defaultB,
-                    colorValue.a !== undefined ? colorValue.a : defaultA
-                )
-            }
-
-            // If it's a string (hex color), use Qt.color() to parse
-            if (typeof colorValue === "string") {
-                try {
-                    var c = Qt.color(colorValue)
-                    return Qt.vector4d(c.r, c.g, c.b, c.a)
-                } catch (e) {
-                    console.warn("RenderNodeOverlay: Failed to parse color:", colorValue)
-                    return Qt.vector4d(defaultR, defaultG, defaultB, defaultA)
-                }
-            }
-
-            return Qt.vector4d(defaultR, defaultG, defaultB, defaultA)
-        }
-
-        // Build customParams vec4 for slot 1-4
-        // Slot 1: params 0-3, Slot 2: params 4-7, Slot 3: params 8-11, Slot 4: params 12-15
-        function buildCustomParams(slot) {
-            var prefix = "customParams" + slot + "_"
-            return Qt.vector4d(
-                getParam(prefix + "x", -1.0),
-                getParam(prefix + "y", -1.0),
-                getParam(prefix + "z", -1.0),
-                getParam(prefix + "w", -1.0)
-            )
-        }
-
-        // Build customColor vec4 for color 1-4
-        function buildCustomColor(colorNum) {
-            var p = root.shaderParams || {}
-            var key = "customColor" + colorNum
-            // Default: white with alpha 0 (not set) for colors 1,3; black with alpha 0 for 2,4
-            var defaultR = (colorNum === 1 || colorNum === 3) ? 1.0 : 0.0
-            var defaultG = (colorNum === 1 || colorNum === 3) ? 1.0 : 0.0
-            var defaultB = (colorNum === 1 || colorNum === 3) ? 1.0 : 0.0
-            return colorToVec4(p[key], defaultR, defaultG, defaultB, 0.0)
-        }
-    }
 }

@@ -911,6 +911,9 @@ void OverlayService::setSettings(ISettings* settings)
                                 writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
                             }
                         }
+                        if (m_shaderPreviewWindow) {
+                            writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+                        }
                     }
                 }
             });
@@ -2050,6 +2053,9 @@ void OverlayService::stopShaderAnimation()
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
         }
     }
+    if (m_shaderPreviewWindow) {
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), QVariantList());
+    }
     if (m_shaderUpdateTimer) {
         m_shaderUpdateTimer->stop();
         qCDebug(lcOverlay) << "Shader animation stopped";
@@ -2066,6 +2072,10 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
         if (window && useShaderForScreen(it.key())) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
         }
+    }
+    // Shader preview (editor dialog) when visible and audio viz enabled
+    if (m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible() && m_settings && m_settings->enableAudioVisualizer()) {
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), wrapped);
     }
 }
 
@@ -2101,11 +2111,16 @@ void OverlayService::updateShaderUniforms()
     // Update ALL shader overlay windows with synchronized time
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
-            // Set time uniforms on the window (QML root)
-            window->setProperty("iTime", static_cast<qreal>(iTime));
-            window->setProperty("iTimeDelta", static_cast<qreal>(iTimeDelta));
-            window->setProperty("iFrame", frame);
+            writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
+            writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
+            writeQmlProperty(window, QStringLiteral("iFrame"), frame);
         }
+    }
+    // Update shader preview overlay (editor dialog) when visible
+    if (m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible()) {
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("iTime"), static_cast<qreal>(iTime));
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("iFrame"), frame);
     }
 }
 
@@ -2497,6 +2512,288 @@ void OverlayService::destroyNavigationOsdWindow(QScreen* screen)
     }
     // Clear failed flag when destroying window
     m_navigationOsdCreationFailed.remove(screen);
+}
+
+void OverlayService::showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+                                       const QString& shaderId, const QString& shaderParamsJson,
+                                       const QString& zonesJson)
+{
+    if (width <= 0 || height <= 0) {
+        qCWarning(lcOverlay) << "showShaderPreview: invalid size" << width << "x" << height;
+        return;
+    }
+    if (ShaderRegistry::isNoneShader(shaderId)) {
+        hideShaderPreview();
+        return;
+    }
+
+    QScreen* screen = nullptr;
+    if (!screenName.isEmpty()) {
+        screen = Utils::findScreenByName(screenName);
+    }
+    if (!screen) {
+        screen = Utils::findScreenAtPosition(x, y);
+    }
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        qCWarning(lcOverlay) << "showShaderPreview: no screen available";
+        return;
+    }
+
+    auto* registry = ShaderRegistry::instance();
+    if (!registry || !registry->shadersEnabled()) {
+        qCDebug(lcOverlay) << "showShaderPreview: shaders not available";
+        return;
+    }
+
+    const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
+    if (!info.isValid()) {
+        qCWarning(lcOverlay) << "showShaderPreview: shader not found:" << shaderId;
+        return;
+    }
+
+    // Parse zones JSON
+    QVariantList zones;
+    if (!zonesJson.isEmpty()) {
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(zonesJson.toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+            for (const QJsonValue& v : doc.array()) {
+                if (v.isObject()) {
+                    QVariantMap m;
+                    const QJsonObject o = v.toObject();
+                    for (auto it = o.begin(); it != o.end(); ++it) {
+                        m.insert(it.key(), it.value().toVariant());
+                    }
+                    zones.append(m);
+                }
+            }
+        }
+    }
+
+    // Parse shader params JSON
+    QVariantMap shaderParams;
+    if (!shaderParamsJson.isEmpty()) {
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(shaderParamsJson.toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonObject o = doc.object();
+            for (auto it = o.begin(); it != o.end(); ++it) {
+                shaderParams.insert(it.key(), it.value().toVariant());
+            }
+        }
+    }
+
+    if (!m_shaderPreviewWindow || m_shaderPreviewScreen != screen) {
+        destroyShaderPreviewWindow();
+        createShaderPreviewWindow(screen);
+    }
+
+    if (!m_shaderPreviewWindow) {
+        return;
+    }
+
+    m_shaderPreviewScreen = screen;
+    m_shaderPreviewWindow->setScreen(screen);
+    m_shaderPreviewWindow->setGeometry(x, y, width, height);
+
+    if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
+        const QRect screenGeom = screen->geometry();
+        const int localX = x - screenGeom.x();
+        const int localY = y - screenGeom.y();
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorLeft));
+        layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+    }
+
+    // Shader properties
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("shaderSource"), info.shaderUrl);
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
+    QVariantList pathList;
+    for (const QString& p : info.bufferShaderPaths) {
+        pathList.append(p);
+    }
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("bufferShaderPaths"), pathList);
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("bufferFeedback"), info.bufferFeedback);
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("bufferScale"), info.bufferScale);
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("bufferWrap"), info.bufferWrap);
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("shaderParams"), QVariant::fromValue(shaderParams));
+
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zones"), zones);
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zoneCount"), zones.size());
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("highlightedCount"), 0);
+
+    // Labels texture - use same font/settings as main overlay for consistent rendering
+    const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
+    QColor backgroundColor = Qt::black;
+    if (m_settings) {
+        KColorScheme scheme(QPalette::Active, KColorScheme::View);
+        backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
+    }
+    const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
+    const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
+    const int fontWeight = m_settings ? m_settings->labelFontWeight() : QFont::Bold;
+    const bool fontItalic = m_settings ? m_settings->labelFontItalic() : false;
+    const bool fontUnderline = m_settings ? m_settings->labelFontUnderline() : false;
+    const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
+    const QSize size(qMax(1, width), qMax(1, height));
+    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor,
+                                                      fontFamily, fontSizeScale, fontWeight, fontItalic,
+                                                      fontUnderline, fontStrikeout);
+    if (labelsImage.isNull()) {
+        labelsImage = QImage(1, 1, QImage::Format_ARGB32);
+        labelsImage.fill(Qt::transparent);
+    }
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
+
+    // Start iTime animation for preview (shared timer with main overlay)
+    // Must start m_shaderTimer - updateShaderUniforms() uses it and returns early if invalid
+    {
+        QMutexLocker locker(&m_shaderTimerMutex);
+        if (!m_shaderTimer.isValid()) {
+            m_shaderTimer.start();
+            m_lastFrameTime.store(0);
+            m_frameCount.store(0);
+        }
+    }
+    startShaderAnimation();
+
+    m_shaderPreviewWindow->show();
+    qCDebug(lcOverlay) << "showShaderPreview: x=" << x << "y=" << y << "size=" << width << "x" << height
+                       << "shader=" << shaderId << "zones=" << zones.size();
+}
+
+void OverlayService::updateShaderPreview(int x, int y, int width, int height,
+                                         const QString& shaderParamsJson, const QString& zonesJson)
+{
+    if (!m_shaderPreviewWindow) {
+        return;
+    }
+
+    if (width > 0 && height > 0) {
+        QScreen* screen = m_shaderPreviewWindow->screen();
+        if (screen) {
+            m_shaderPreviewWindow->setGeometry(x, y, width, height);
+            if (auto* layerWindow = LayerShellQt::Window::get(m_shaderPreviewWindow)) {
+                const QRect screenGeom = screen->geometry();
+                const int localX = x - screenGeom.x();
+                const int localY = y - screenGeom.y();
+                layerWindow->setMargins(QMargins(localX, localY, 0, 0));
+            }
+        }
+    }
+
+    if (!zonesJson.isEmpty()) {
+        QVariantList zones;
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(zonesJson.toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
+            for (const QJsonValue& v : doc.array()) {
+                if (v.isObject()) {
+                    QVariantMap m;
+                    const QJsonObject o = v.toObject();
+                    for (auto it = o.begin(); it != o.end(); ++it) {
+                        m.insert(it.key(), it.value().toVariant());
+                    }
+                    zones.append(m);
+                }
+            }
+        }
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zones"), zones);
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("zoneCount"), zones.size());
+
+        const int w = qMax(1, m_shaderPreviewWindow->width());
+        const int h = qMax(1, m_shaderPreviewWindow->height());
+        const QColor labelFontColor = m_settings ? m_settings->labelFontColor() : QColor(Qt::white);
+        QColor backgroundColor = Qt::black;
+        if (m_settings) {
+            KColorScheme scheme(QPalette::Active, KColorScheme::View);
+            backgroundColor = scheme.background(KColorScheme::NormalBackground).color();
+        }
+        const QString fontFamily = m_settings ? m_settings->labelFontFamily() : QString();
+        const qreal fontSizeScale = m_settings ? m_settings->labelFontSizeScale() : 1.0;
+        const int fontWeight = m_settings ? m_settings->labelFontWeight() : QFont::Bold;
+        const bool fontItalic = m_settings ? m_settings->labelFontItalic() : false;
+        const bool fontUnderline = m_settings ? m_settings->labelFontUnderline() : false;
+        const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
+        QImage labelsImage = ZoneLabelTextureBuilder::build(zones, QSize(w, h), labelFontColor, true, backgroundColor,
+                                                           fontFamily, fontSizeScale, fontWeight, fontItalic,
+                                                           fontUnderline, fontStrikeout);
+        if (labelsImage.isNull()) {
+            labelsImage = QImage(1, 1, QImage::Format_ARGB32);
+            labelsImage.fill(Qt::transparent);
+        }
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
+    }
+
+    if (!shaderParamsJson.isEmpty()) {
+        QVariantMap shaderParams;
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(shaderParamsJson.toUtf8(), &parseError);
+        if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+            const QJsonObject o = doc.object();
+            for (auto it = o.begin(); it != o.end(); ++it) {
+                shaderParams.insert(it.key(), it.value().toVariant());
+            }
+        }
+        writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("shaderParams"), QVariant::fromValue(shaderParams));
+    }
+}
+
+void OverlayService::hideShaderPreview()
+{
+    destroyShaderPreviewWindow();
+}
+
+void OverlayService::createShaderPreviewWindow(QScreen* screen)
+{
+    if (m_shaderPreviewWindow) {
+        return;
+    }
+
+    m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
+
+    QImage placeholder(1, 1, QImage::Format_ARGB32);
+    placeholder.fill(Qt::transparent);
+    QVariantMap initProps;
+    initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
+
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen,
+                                  "shader preview overlay", initProps);
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to create shader preview overlay window";
+        return;
+    }
+
+    window->setProperty("isShaderOverlay", true);
+
+    if (auto* layerWindow = LayerShellQt::Window::get(window)) {
+        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
+        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
+        layerWindow->setScope(QStringLiteral("plasmazones-shader-preview"));
+        layerWindow->setExclusiveZone(-1);
+    }
+
+    m_shaderPreviewWindow = window;
+    m_shaderPreviewScreen = screen;
+    window->setVisible(false);
+}
+
+void OverlayService::destroyShaderPreviewWindow()
+{
+    if (m_shaderPreviewWindow) {
+        m_shaderPreviewWindow->close();
+        m_shaderPreviewWindow->deleteLater();
+        m_shaderPreviewWindow = nullptr;
+    }
+    m_shaderPreviewScreen = nullptr;
+    // Stop shader timer only if main overlay is also not visible
+    if (!m_visible && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
+        stopShaderAnimation();
+    }
 }
 
 } // namespace PlasmaZones

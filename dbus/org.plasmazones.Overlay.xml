@@ -188,5 +188,46 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Selected zone index (1-based)."/>
             </arg>
         </signal>
+
+        <!-- Shader preview overlay (editor dialog) - dedicated window avoids multi-pass clear issues -->
+        <method name="showShaderPreview">
+            <annotation name="org.gtk.GDBus.DocString" value="Show shader preview overlay at given screen coordinates (called from editor Shader Settings dialog)."/>
+            <arg name="x" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Global X coordinate for preview top-left."/>
+            </arg>
+            <arg name="y" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Global Y coordinate for preview top-left."/>
+            </arg>
+            <arg name="width" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Preview width in pixels."/>
+            </arg>
+            <arg name="height" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Preview height in pixels."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (empty = screen containing x,y)."/>
+            </arg>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="shaderParamsJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON map of uniform names to values (from translateParamsToUniforms)."/>
+            </arg>
+            <arg name="zonesJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of zone objects (x,y,width,height in preview pixel coords)."/>
+            </arg>
+        </method>
+        <method name="updateShaderPreview">
+            <annotation name="org.gtk.GDBus.DocString" value="Update existing shader preview geometry and/or params."/>
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+            <arg name="width" type="i" direction="in"/>
+            <arg name="height" type="i" direction="in"/>
+            <arg name="shaderParamsJson" type="s" direction="in"/>
+            <arg name="zonesJson" type="s" direction="in"/>
+        </method>
+        <method name="hideShaderPreview">
+            <annotation name="org.gtk.GDBus.DocString" value="Hide and destroy the shader preview overlay."/>
+        </method>
     </interface>
 </node>

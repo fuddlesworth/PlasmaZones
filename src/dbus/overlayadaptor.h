@@ -57,6 +57,13 @@ public Q_SLOTS:
     // Switch to a specific layout
     void switchToLayout(const QString& layoutId);
 
+    // Shader preview overlay (editor Shader Settings dialog)
+    void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+                           const QString& shaderId, const QString& shaderParamsJson, const QString& zonesJson);
+    void updateShaderPreview(int x, int y, int width, int height,
+                             const QString& shaderParamsJson, const QString& zonesJson);
+    void hideShaderPreview();
+
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
     void zoneHighlightChanged(const QString& zoneId);

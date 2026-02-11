@@ -472,6 +472,14 @@ public:
     virtual QRect getSelectedZoneGeometry(QScreen* screen) const = 0;
     virtual void clearSelectedZone() = 0;
 
+    // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
+    virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+                                  const QString& shaderId, const QString& shaderParamsJson,
+                                  const QString& zonesJson) = 0;
+    virtual void updateShaderPreview(int x, int y, int width, int height,
+                                     const QString& shaderParamsJson, const QString& zonesJson) = 0;
+    virtual void hideShaderPreview() = 0;
+
 Q_SIGNALS:
     void visibilityChanged(bool visible);
     void zoneActivated(Zone* zone);

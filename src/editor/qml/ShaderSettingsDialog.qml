@@ -6,22 +6,25 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common 1.0
+import PlasmaZones 1.0
 
 /**
  * @brief Shader settings dialog
  *
  * Provides a consistent UX for configuring shader effects on zone overlays.
- * Uses section-based layout appropriate for dialogs.
+ * Side-by-side layout: settings on the left, live preview on the right.
  * Supports both grouped parameters (with accordion sections) and flat parameters.
  */
 Kirigami.Dialog {
     id: root
 
     required property var editorController
+    property var editorWindow: null
 
     title: i18nc("@title:window", "Shader Settings")
-    preferredWidth: Kirigami.Units.gridUnit * 28
-    preferredHeight: Kirigami.Units.gridUnit * 30
+    preferredWidth: root.hasShaderEffect ? Kirigami.Units.gridUnit * 56 : Kirigami.Units.gridUnit * 32
+    preferredHeight: root.hasShaderEffect ? Kirigami.Units.gridUnit * 32 : Kirigami.Units.gridUnit * 10
     padding: Kirigami.Units.largeSpacing
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -94,12 +97,55 @@ Kirigami.Dialog {
     onOpened: {
         initializePendingState();
         expandedGroupIndex = 0;
+        Qt.callLater(root.updateDaemonShaderPreview);
+    }
+
+    onClosed: {
+        if (editorController) {
+            editorController.hideShaderPreviewOverlay();
+        }
+    }
+
+    // Update daemon overlay when params/shader change or layout settles
+    function updateDaemonShaderPreview() {
+        if (!editorController || !editorWindow || !root.hasShaderEffect
+            || root.pendingShaderId === root.noneShaderId) {
+            if (editorController) {
+                editorController.hideShaderPreviewOverlay();
+            }
+            return;
+        }
+        if (!previewContainer.visible || previewBackground.width <= 0 || previewBackground.height <= 0) {
+            return;
+        }
+        var pt = previewBackground.mapToItem(editorWindow.contentItem, 0, 0);
+        var gx = Math.round(editorWindow.x + pt.x);
+        var gy = Math.round(editorWindow.y + pt.y);
+        var w = Math.max(1, Math.floor(previewBackground.width));
+        var h = Math.max(1, Math.floor(previewBackground.height));
+        var zones = editorController.zonesForShaderPreview(w, h);
+        var params = editorController.translateShaderParams(root.pendingShaderId, root.pendingParams || {});
+        var zonesJson = JSON.stringify(zones);
+        var paramsJson = JSON.stringify(params);
+        var screenName = "";
+        editorController.showShaderPreviewOverlay(gx, gy, w, h, screenName,
+                                                 root.pendingShaderId, paramsJson, zonesJson);
     }
 
     onPendingShaderIdChanged: {
         if (visible) {
             initializePendingParamsForShader();
         }
+        debouncePreviewUpdate.restart();
+    }
+
+    onPendingParamsChanged: debouncePreviewUpdate.restart()
+
+    Timer {
+        id: debouncePreviewUpdate
+        interval: 150
+        repeat: false
+        onTriggered: root.updateDaemonShaderPreview()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -296,61 +342,30 @@ Kirigami.Dialog {
         return result;
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // FOOTER BUTTONS
-    // ═══════════════════════════════════════════════════════════════════════
     standardButtons: Kirigami.Dialog.NoButton
 
-    footer: Item {
-        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
-        implicitWidth: footerLayout.implicitWidth
-
-        RowLayout {
-            id: footerLayout
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.largeSpacing
-            spacing: Kirigami.Units.smallSpacing
-
-            // Left side - Random button
-            Button {
-                text: i18nc("@action:button", "Random")
-                icon.name: "roll"
-                visible: root.shaderParams.length > 0
-                onClicked: root.randomizeParameters()
-            }
-
-            Item { Layout.fillWidth: true }
-
-            // Right side - Defaults and Apply
-            Button {
-                text: i18nc("@action:button", "Defaults")
-                icon.name: "edit-undo"
-                visible: root.shaderParams.length > 0
-                onClicked: root.resetToDefaults()
-            }
-
-            Button {
-                text: i18nc("@action:button", "Apply")
-                icon.name: "dialog-ok-apply"
-                onClicked: {
-                    root.applyChanges();
-                    root.close();
-                }
-            }
-        }
-    }
-
     // ═══════════════════════════════════════════════════════════════════════
-    // MAIN CONTENT
+    // MAIN CONTENT - Side-by-side: settings left, preview right
     // ═══════════════════════════════════════════════════════════════════════
-    ColumnLayout {
+    RowLayout {
         spacing: Kirigami.Units.largeSpacing
+        Layout.fillWidth: true
+        Layout.fillHeight: root.hasShaderEffect
 
         // ═══════════════════════════════════════════════════════════════════
-        // EFFECT SELECTION SECTION
+        // LEFT: Settings panel - original layout/width (28gu), unchanged
         // ═══════════════════════════════════════════════════════════════════
-        Kirigami.FormLayout {
-            Layout.fillWidth: true
+        ColumnLayout {
+            Layout.fillHeight: root.hasShaderEffect
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 28
+            Layout.minimumWidth: Kirigami.Units.gridUnit * 28
+            spacing: Kirigami.Units.largeSpacing
+
+            // ═══════════════════════════════════════════════════════════════
+            // EFFECT SELECTION SECTION
+            // ═══════════════════════════════════════════════════════════════
+            Kirigami.FormLayout {
+                Layout.fillWidth: true
 
             CheckBox {
                 id: enableEffectCheck
@@ -467,6 +482,7 @@ Kirigami.Dialog {
 
         // ═══════════════════════════════════════════════════════════════════
         // PARAMETERS SECTION
+        // Shader preview is now in the editor canvas (zones rendered with shader)
         // ═══════════════════════════════════════════════════════════════════
         Kirigami.Separator {
             Layout.fillWidth: true
@@ -600,6 +616,79 @@ Kirigami.Dialog {
             text: i18nc("@info", "Enable the shader effect to configure visual effects for zone overlays.")
             wrapMode: Text.WordWrap
             opacity: 0.7
+        }
+
+        // Spacer: pushes footer buttons to bottom when shader enabled; minimal gap when disabled
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: root.hasShaderEffect
+            Layout.minimumHeight: root.hasShaderEffect ? Kirigami.Units.gridUnit * 2 : Kirigami.Units.smallSpacing
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // FOOTER BUTTONS - Right-aligned at bottom of panel
+        // ═══════════════════════════════════════════════════════════════════
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            Button {
+                text: i18nc("@action:button", "Random")
+                icon.name: "roll"
+                visible: root.shaderParams.length > 0
+                onClicked: root.randomizeParameters()
+            }
+
+            Item { Layout.fillWidth: true }
+
+            Button {
+                text: i18nc("@action:button", "Defaults")
+                icon.name: "edit-undo"
+                visible: root.shaderParams.length > 0
+                onClicked: root.resetToDefaults()
+            }
+
+            Button {
+                text: i18nc("@action:button", "Apply")
+                icon.name: "dialog-ok-apply"
+                onClicked: {
+                    root.applyChanges();
+                    root.close();
+                }
+            }
+        }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // RIGHT: Live shader preview (hidden when effect disabled - no space)
+        // ═══════════════════════════════════════════════════════════════════
+        Item {
+            id: previewContainer
+            Layout.preferredWidth: root.hasShaderEffect ? Kirigami.Units.gridUnit * 24 : 0
+            Layout.preferredHeight: root.hasShaderEffect ? Kirigami.Units.gridUnit * 22 : 0
+            Layout.minimumWidth: root.hasShaderEffect ? Kirigami.Units.gridUnit * 20 : 0
+            Layout.minimumHeight: root.hasShaderEffect ? Kirigami.Units.gridUnit * 18 : 0
+            Layout.maximumHeight: root.hasShaderEffect ? Kirigami.Units.gridUnit * 22 : 0
+            Layout.alignment: Qt.AlignCenter
+            visible: root.hasShaderEffect
+            clip: true
+
+            Rectangle {
+                id: previewBackground
+                anchors.fill: parent
+                anchors.margins: Kirigami.Units.largeSpacing
+                color: Kirigami.Theme.backgroundColor
+                radius: Kirigami.Units.smallSpacing
+            }
+
+            // Preview rendered by daemon overlay (avoids multi-pass shader clear in embedded view)
+            Label {
+                anchors.centerIn: parent
+                visible: !root.hasShaderEffect
+                text: i18nc("@info:placeholder", "Enable effect to preview")
+                opacity: 0.5
+                font.italic: true
+            }
         }
     }
 

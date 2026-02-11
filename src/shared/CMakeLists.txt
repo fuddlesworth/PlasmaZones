@@ -14,6 +14,7 @@ qt_add_qml_module(plasmazones_shared_qml
     QML_FILES
         CategoryBadge.qml
         ZonePreview.qml
+        ZoneShaderRenderer.qml
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/plasmazones/common
 )
 

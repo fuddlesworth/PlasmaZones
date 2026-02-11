@@ -142,4 +142,22 @@ void OverlayAdaptor::switchToLayout(const QString& layoutId)
     qCInfo(lcDbus) << "Switched to layout:" << layout->name();
 }
 
+void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+                                       const QString& shaderId, const QString& shaderParamsJson,
+                                       const QString& zonesJson)
+{
+    m_overlayService->showShaderPreview(x, y, width, height, screenName, shaderId, shaderParamsJson, zonesJson);
+}
+
+void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height,
+                                        const QString& shaderParamsJson, const QString& zonesJson)
+{
+    m_overlayService->updateShaderPreview(x, y, width, height, shaderParamsJson, zonesJson);
+}
+
+void OverlayAdaptor::hideShaderPreview()
+{
+    m_overlayService->hideShaderPreview();
+}
+
 } // namespace PlasmaZones

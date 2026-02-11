@@ -596,7 +596,6 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
                 cb->draw(4);
                 cb->endPass();
             }
-            // iChannelResolution already set and uploaded in prepare() via syncUniformsFromData()
         } else {
             if (m_bufferFeedback && !m_bufferFeedbackCleared && m_bufferRenderTarget && m_bufferRenderTargetB) {
                 cb->beginPass(m_bufferRenderTarget.get(), clearColor, { 1.0f, 0 });
@@ -621,12 +620,39 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             cb->draw(4);
             cb->endPass();
         }
+        // Must begin our own pass: multi-pass shaders read from buffer textures while
+        // writing to rt. Drawing inline in the scene graph's pass causes Vulkan error
+        // "Texture used with different accesses within the same pass". beginPass(rt)
+        // starts a new pass with correct barriers. Downside: it clears the window, so
+        // when embedded (e.g. editor preview), the dialog content is wiped. Overlay is
+        // fullscreen so no issue. TODO: render to offscreen texture and composite for
+        // embedded mode to preserve dialog content.
         const QColor mainClear(0, 0, 0, 0);
         cb->beginPass(rt, mainClear, { 1.0f, 0 });
     }
 
+    // Use item's rect in render target (device pixels) so we render only within the item,
+    // not full screen. Essential when ZoneShaderItem is in a small preview (e.g. editor dialog).
     QSize outputSize = rt->pixelSize();
-    cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+    int vpX = 0;
+    int vpY = 0;
+    int vpW = outputSize.width();
+    int vpH = outputSize.height();
+    if (m_item && m_item->window() && m_item->width() > 0 && m_item->height() > 0) {
+        QQuickWindow* win = m_item->window();
+        const qreal dpr = win->devicePixelRatio();
+        const QPointF topLeft = m_item->mapToItem(win->contentItem(), QPointF(0, 0));
+        vpX = qRound(topLeft.x() * dpr);
+        vpY = qRound(topLeft.y() * dpr);
+        vpW = qRound(m_item->width() * dpr);
+        vpH = qRound(m_item->height() * dpr);
+        // Clamp to render target bounds (e.g. when item is partially off-screen)
+        vpX = qBound(0, vpX, outputSize.width() - 1);
+        vpY = qBound(0, vpY, outputSize.height() - 1);
+        vpW = qBound(1, vpW, outputSize.width() - vpX);
+        vpH = qBound(1, vpH, outputSize.height() - vpY);
+    }
+    cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
     cb->setGraphicsPipeline(m_pipeline.get());
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
     QRhiShaderResourceBindings* imageSrb = (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
