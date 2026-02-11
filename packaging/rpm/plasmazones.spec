@@ -165,6 +165,15 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Tue Feb 11 2026 fuddlesworth - 1.8.4-1
+- Shader preset load/save in editor ShaderSettingsDialog
+- Preview shader effects in zone editor (#132)
+- Restore window size immediately when dragging between zones (#133)
+- Overlay follows cursor when dragging to another monitor (#136)
+- Defer window resize until drag release; keep restore-to-float on unsnap
+- Hide shader preview overlay when dialogs open or app loses focus
+- Remove dead zoneGeometryDuringDrag slot
+
 * Mon Feb  9 2026 fuddlesworth - 1.8.2-1
 - Full zone label font customization (family, scale, weight, italic, etc.)
 - Font picker dialog in KCM with live preview and search

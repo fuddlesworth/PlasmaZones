@@ -5,6 +5,22 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-02-11
+
+### Added
+- Shader preset load/save in editor ShaderSettingsDialog
+- Preview shader effects in zone editor ([#132])
+- Restore window size immediately when dragging between zones ([#133])
+
+### Fixed
+- Overlay follows cursor when dragging to another monitor ([#136])
+- Defer window resize until drag release; keep restore-to-float on unsnap
+- Hide shader preview overlay when dialogs open or app loses focus
+- PR review feedback for shader preview
+
+### Removed
+- Dead `zoneGeometryDuringDrag` slot
+
 ## [1.8.2] - 2026-02-09
 
 ### Added
@@ -283,6 +299,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[1.8.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.3...v1.8.4
 [1.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.7.0...v1.8.0
@@ -345,3 +362,6 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#94]: https://github.com/fuddlesworth/PlasmaZones/issues/94
 [#96]: https://github.com/fuddlesworth/PlasmaZones/pull/96
 [#97]: https://github.com/fuddlesworth/PlasmaZones/pull/97
+[#132]: https://github.com/fuddlesworth/PlasmaZones/pull/132
+[#133]: https://github.com/fuddlesworth/PlasmaZones/pull/133
+[#136]: https://github.com/fuddlesworth/PlasmaZones/pull/136

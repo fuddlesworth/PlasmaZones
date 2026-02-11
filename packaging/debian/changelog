@@ -1,3 +1,15 @@
+plasmazones (1.8.4-1) unstable; urgency=medium
+
+  * Shader preset load/save in editor ShaderSettingsDialog
+  * Preview shader effects in zone editor (#132)
+  * Restore window size immediately when dragging between zones (#133)
+  * Overlay follows cursor when dragging to another monitor (#136)
+  * Defer window resize until drag release; keep restore-to-float on unsnap
+  * Hide shader preview overlay when dialogs open or app loses focus
+  * Remove dead zoneGeometryDuringDrag slot
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Tue, 11 Feb 2026 00:00:00 +0000
+
 plasmazones (1.8.2-1) unstable; urgency=medium
 
   * Full zone label font customization (family, scale, weight, italic, etc.)
