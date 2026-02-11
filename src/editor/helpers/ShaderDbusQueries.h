@@ -45,6 +45,16 @@ QVariantList queryAvailableShaders();
  */
 QVariantMap queryShaderInfo(const QString& shaderId);
 
+/**
+ * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
+ * @param shaderId The shader ID
+ * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
+ * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
+ *
+ * Returns empty map if daemon unavailable or shader not found.
+ */
+QVariantMap queryTranslateShaderParams(const QString& shaderId, const QVariantMap& params);
+
 } // namespace ShaderDbusQueries
 
 } // namespace PlasmaZones

@@ -14,6 +14,7 @@
 #include <memory>
 
 
+#include <plasmazones_rendering_export.h>
 #include <rhi/qrhi.h>
 
 namespace PlasmaZones {
@@ -202,6 +203,7 @@ struct WarmShaderBakeResult {
  * shared bake cache. Safe to call from any thread (e.g. after ShaderRegistry::refresh()).
  * @return success and error message (e.g. from QShaderBaker) for UI reporting
  */
-WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath);
+PLASMAZONES_RENDERING_EXPORT WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath,
+                                                                              const QString& fragmentPath);
 
 } // namespace PlasmaZones

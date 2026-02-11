@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <plasmazones_rendering_export.h>
 #include <QColor>
 #include <QFont>
 #include <QImage>
@@ -18,7 +19,7 @@ namespace PlasmaZones {
  * positions. Uses QPainter for text rendering with outline for visibility.
  * Output is premultiplied alpha for correct shader compositing.
  */
-class ZoneLabelTextureBuilder
+class PLASMAZONES_RENDERING_EXPORT ZoneLabelTextureBuilder
 {
 public:
     /**

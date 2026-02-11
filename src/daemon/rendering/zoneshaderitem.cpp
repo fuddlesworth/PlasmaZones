@@ -118,6 +118,21 @@ void ZoneShaderItem::setZones(const QVariantList& zones)
     update();
 }
 
+void ZoneShaderItem::setHoveredZoneIndex(int index)
+{
+    // Clamp to valid range: -1 (none) or 0..(zoneCount-1)
+    const int clamped = (index < 0 || index >= m_zones.size()) ? -1 : index;
+    if (m_hoveredZoneIndex == clamped) {
+        return;
+    }
+    m_hoveredZoneIndex = clamped;
+    if (!m_zones.isEmpty()) {
+        updateHoveredHighlightOnly();  // Lightweight: only update highlight flags, avoids full parse/sync
+    }
+    Q_EMIT hoveredZoneIndexChanged();
+    update();
+}
+
 void ZoneShaderItem::setShaderSource(const QUrl& source)
 {
     if (m_shaderSource == source) {
@@ -510,6 +525,7 @@ void ZoneShaderItem::parseZoneData()
     newBorderColors.reserve(m_zones.size());
 
     int highlightedCount = 0;
+    int index = 0;
 
     for (const QVariant& zoneVar : std::as_const(m_zones)) {
         const QVariantMap z = zoneVar.toMap();
@@ -530,9 +546,10 @@ void ZoneShaderItem::parseZoneData()
         rect.width = pw / resW;
         rect.height = ph / resH;
 
-        // Extract zone number and highlighted state
+        // Extract zone number and highlighted state (zone selector or hover override)
         rect.zoneNumber = z.value(QLatin1String(JsonKeys::ZoneNumber), 0).toInt();
-        rect.highlighted = z.value(QLatin1String(JsonKeys::IsHighlighted), false).toBool();
+        rect.highlighted = z.value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
+            || (m_hoveredZoneIndex >= 0 && index == m_hoveredZoneIndex);
 
         // Extract shader border properties (stored in snapshot for thread-safe access)
         rect.borderRadius = z.value(QLatin1String("shaderBorderRadius"), 8.0f).toFloat();
@@ -563,6 +580,7 @@ void ZoneShaderItem::parseZoneData()
         borderColor.b = z.value(QLatin1String("borderB"), 1.0f).toFloat();
         borderColor.a = z.value(QLatin1String("borderA"), 1.0f).toFloat();
         newBorderColors.append(borderColor);
+        ++index;
     }
 
     // Update zone counts
@@ -580,6 +598,38 @@ void ZoneShaderItem::parseZoneData()
         m_zoneData.version = ++m_dataVersion;
     }
 
+    m_zoneDataDirty = true;
+}
+
+void ZoneShaderItem::updateHoveredHighlightOnly()
+{
+    // Precondition: m_zoneData must be populated by a prior setZones/parseZoneData call.
+    if (m_zoneData.rects.size() != static_cast<qsizetype>(m_zones.size())) {
+        qWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
+                           << "zones=" << m_zones.size() << ") - setZones must be called first";
+        return;
+    }
+    int highlightedCount = 0;
+    {
+        QMutexLocker lock(&m_zoneDataMutex);
+        for (int i = 0; i < m_zoneData.rects.size(); ++i) {
+            const bool fromZone = (i < m_zones.size())
+                ? m_zones[i].toMap().value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
+                : false;
+            const bool hovered = (m_hoveredZoneIndex >= 0 && i == m_hoveredZoneIndex);
+            m_zoneData.rects[i].highlighted = fromZone || hovered;
+            if (m_zoneData.rects[i].highlighted) {
+                ++highlightedCount;
+            }
+        }
+        m_zoneData.highlightedCount = highlightedCount;
+        m_zoneData.version = ++m_dataVersion;
+    }
+    const int oldCount = m_highlightedCount;
+    m_highlightedCount = highlightedCount;
+    if (oldCount != m_highlightedCount) {
+        Q_EMIT highlightedCountChanged();
+    }
     m_zoneDataDirty = true;
 }
 

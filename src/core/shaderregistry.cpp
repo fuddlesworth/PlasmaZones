@@ -450,6 +450,12 @@ QVariantMap ShaderRegistry::shaderInfoToVariantMap(const ShaderInfo& info) const
         map[QStringLiteral("previewPath")] = QString(); // Empty string, not null
     }
 
+    // Multipass shader metadata (for editor preview)
+    map[QStringLiteral("bufferShaderPaths")] = info.bufferShaderPaths;
+    map[QStringLiteral("bufferFeedback")] = info.bufferFeedback;
+    map[QStringLiteral("bufferScale")] = info.bufferScale;
+    map[QStringLiteral("bufferWrap")] = info.bufferWrap;
+
     // Parameters list (empty list is OK for D-Bus)
     QVariantList params;
     for (const ParameterInfo& param : info.parameters) {
@@ -615,11 +621,12 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
         if (storedParams.contains(param.id)) {
             QVariant value = storedParams.value(param.id);
 
-            // Handle color type - convert to Qt color object if it's a string
+            // Handle color type - keep as QString for D-Bus compatibility (QColor is not
+            // registered with D-Bus and causes marshalling crash when returned over D-Bus)
             if (param.type == QLatin1String("color") && value.typeId() == QMetaType::QString) {
                 QColor color(value.toString());
                 if (color.isValid()) {
-                    result[uniformName] = QVariant::fromValue(color);
+                    result[uniformName] = color.name(QColor::HexArgb);
                 } else {
                     result[uniformName] = param.defaultValue;
                 }
@@ -629,9 +636,8 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
         } else {
             // Use default value for missing parameters
             if (param.type == QLatin1String("color")) {
-                // Ensure color default is a QColor object
                 QColor color(param.defaultValue.toString());
-                result[uniformName] = color.isValid() ? QVariant::fromValue(color) : param.defaultValue;
+                result[uniformName] = color.isValid() ? color.name(QColor::HexArgb) : param.defaultValue;
             } else {
                 result[uniformName] = param.defaultValue;
             }

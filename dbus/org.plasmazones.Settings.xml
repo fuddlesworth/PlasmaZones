@@ -104,5 +104,18 @@
                 <annotation name="org.gtk.GDBus.DocString" value="New position enum value."/>
             </arg>
         </signal>
+
+        <method name="translateShaderParams">
+            <annotation name="org.gtk.GDBus.DocString" value="Translate shader params from param IDs to uniform names for ZoneShaderItem."/>
+            <arg name="shaderId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Shader UUID."/>
+            </arg>
+            <arg name="params" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of param IDs to values (e.g. intensity: 0.5)."/>
+            </arg>
+            <arg name="result" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of uniform names to values (e.g. customParams1_x: 0.5)."/>
+            </arg>
+        </method>
     </interface>
 </node>

@@ -343,6 +343,12 @@ QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
     return registry ? registry->defaultParams(shaderId) : QVariantMap();
 }
 
+QVariantMap SettingsAdaptor::translateShaderParams(const QString& shaderId, const QVariantMap& params)
+{
+    auto* registry = ShaderRegistry::instance();
+    return registry ? registry->translateParamsToUniforms(shaderId, params) : QVariantMap();
+}
+
 bool SettingsAdaptor::shadersEnabled()
 {
     auto* registry = ShaderRegistry::instance();

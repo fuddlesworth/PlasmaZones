@@ -112,6 +112,13 @@ public:
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
                            const QString& screenName = QString());
 
+    // Shader preview overlay (editor Shader Settings dialog - dedicated window avoids multi-pass clear issues)
+    void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
+                          const QString& shaderId, const QString& shaderParamsJson, const QString& zonesJson) override;
+    void updateShaderPreview(int x, int y, int width, int height,
+                             const QString& shaderParamsJson, const QString& zonesJson) override;
+    void hideShaderPreview() override;
+
 public Q_SLOTS:
     void hideLayoutOsd();
     void hideNavigationOsd();
@@ -160,6 +167,10 @@ private:
 
     // Navigation OSD windows
     QHash<QScreen*, QQuickWindow*> m_navigationOsdWindows;
+
+    // Shader preview overlay (editor dialog)
+    QQuickWindow* m_shaderPreviewWindow = nullptr;
+    QScreen* m_shaderPreviewScreen = nullptr;
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
@@ -174,6 +185,9 @@ private:
     void destroyLayoutOsdWindow(QScreen* screen);
     void createNavigationOsdWindow(QScreen* screen);
     void destroyNavigationOsdWindow(QScreen* screen);
+
+    void createShaderPreviewWindow(QScreen* screen);
+    void destroyShaderPreviewWindow();
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland

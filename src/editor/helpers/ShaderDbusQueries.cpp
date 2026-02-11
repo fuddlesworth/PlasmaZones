@@ -101,5 +101,27 @@ QVariantMap queryShaderInfo(const QString& shaderId)
     return QVariantMap();
 }
 
+QVariantMap queryTranslateShaderParams(const QString& shaderId, const QVariantMap& params)
+{
+    if (ShaderRegistry::isNoneShader(shaderId)) {
+        return QVariantMap();
+    }
+
+    QDBusInterface settingsIface = createSettingsInterface();
+
+    if (!settingsIface.isValid()) {
+        return QVariantMap();
+    }
+
+    QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("translateShaderParams"), shaderId, params);
+    if (reply.isValid()) {
+        QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));
+        return converted.toMap();
+    }
+
+    qCWarning(lcDbus) << "D-Bus translateShaderParams call failed:" << reply.error().message();
+    return QVariantMap();
+}
+
 } // namespace ShaderDbusQueries
 } // namespace PlasmaZones

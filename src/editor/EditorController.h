@@ -102,7 +102,6 @@ class EditorController : public QObject
     Q_PROPERTY(QVariantList availableShaders READ availableShaders NOTIFY availableShadersChanged)
     Q_PROPERTY(QVariantList currentShaderParameters READ currentShaderParameters NOTIFY currentShaderParametersChanged)
     Q_PROPERTY(bool shadersEnabled READ shadersEnabled NOTIFY shadersEnabledChanged)
-    Q_PROPERTY(bool hasShaderEffect READ hasShaderEffect NOTIFY currentShaderIdChanged)
     Q_PROPERTY(QString noneShaderUuid READ noneShaderUuid CONSTANT)
 
     // Visibility filtering (Tier 2 per-context allow-lists)
@@ -194,7 +193,6 @@ public:
     {
         return m_shadersEnabled;
     }
-    bool hasShaderEffect() const;
     QString noneShaderUuid() const;
 
     // Property setters
@@ -255,6 +253,55 @@ public:
     Q_INVOKABLE void resetShaderParameters();
     Q_INVOKABLE void switchShader(const QString& id, const QVariantMap& params);
     Q_INVOKABLE void refreshAvailableShaders();
+
+    /**
+     * @brief Convert current zones to format expected by ZoneShaderItem for preview
+     * @param width Preview width in pixels
+     * @param height Preview height in pixels
+     * @return Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
+     */
+    Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
+
+    /**
+     * @brief Translate shader params from param IDs to uniform names for ZoneShaderItem
+     * @param shaderId Shader UUID
+     * @param params Map of param IDs to values (e.g. {"intensity": 0.5})
+     * @return Map of uniform names to values (e.g. {"customParams1_x": 0.5})
+     */
+    Q_INVOKABLE QVariantMap translateShaderParams(const QString& shaderId, const QVariantMap& params) const;
+
+    /**
+     * @brief Gets shader info from daemon via D-Bus (for shader preview in dialogs)
+     * @param shaderId Shader ID to query
+     * @return Shader metadata as QVariantMap, or empty map if not found
+     */
+    Q_INVOKABLE QVariantMap getShaderInfo(const QString& shaderId) const;
+
+    /**
+     * @brief Show shader preview overlay via daemon (avoids multi-pass clear in embedded preview)
+     * @param x Global X coordinate for preview top-left
+     * @param y Global Y coordinate for preview top-left
+     * @param width Preview width in pixels
+     * @param height Preview height in pixels
+     * @param screenName Screen name (empty = screen containing x,y)
+     * @param shaderId Shader UUID
+     * @param shaderParamsJson JSON map of uniform names to values
+     * @param zonesJson JSON array of zone objects (pixel coords)
+     */
+    Q_INVOKABLE void showShaderPreviewOverlay(int x, int y, int width, int height, const QString& screenName,
+                                              const QString& shaderId, const QString& shaderParamsJson,
+                                              const QString& zonesJson);
+
+    /**
+     * @brief Update existing shader preview overlay geometry and/or params
+     */
+    Q_INVOKABLE void updateShaderPreviewOverlay(int x, int y, int width, int height,
+                                                const QString& shaderParamsJson, const QString& zonesJson);
+
+    /**
+     * @brief Hide and destroy the shader preview overlay
+     */
+    Q_INVOKABLE void hideShaderPreviewOverlay();
 
 public Q_SLOTS:
     // Layout operations
@@ -587,13 +634,6 @@ private:
      * This enables reactive QML bindings to update when clipboard changes.
      */
     void onClipboardChanged();
-
-    /**
-     * @brief Gets shader info from daemon via D-Bus
-     * @param shaderId Shader ID to query
-     * @return Shader metadata as QVariantMap, or empty map if not found
-     */
-    QVariantMap getShaderInfo(const QString& shaderId) const;
 
     // Layout data
     QString m_layoutId;

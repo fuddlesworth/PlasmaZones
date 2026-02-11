@@ -5,7 +5,9 @@
 
 #include "EditorController.h"
 #include "../core/logging.h"
+#include "../daemon/rendering/zoneshaderitem.h"
 
+#include <QFile>
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -19,11 +21,24 @@
 #include <KLocalizedString>
 #include <KLocalizedContext>
 #include <KAboutData>
+#include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
 
 int main(int argc, char* argv[])
 {
+    // Ensure D-Bus session bus is reachable when launched from CLI (e.g. IDE terminal)
+    // where DBUS_SESSION_BUS_ADDRESS may be unset. Use systemd default path.
+    if (qEnvironmentVariableIsEmpty("DBUS_SESSION_BUS_ADDRESS")) {
+        const QString runtimeDir = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        if (!runtimeDir.isEmpty()) {
+            const QString busPath = runtimeDir + QStringLiteral("/bus");
+            if (QFile::exists(busPath)) {
+                qputenv("DBUS_SESSION_BUS_ADDRESS", QByteArray("unix:path=" + busPath.toUtf8()));
+            }
+        }
+    }
+
     QGuiApplication app(argc, argv);
 
     KLocalizedString::setApplicationDomain("plasmazones-editor");
@@ -52,6 +67,9 @@ int main(int argc, char* argv[])
 
     // Use Fusion style for consistent look
     QQuickStyle::setStyle(QStringLiteral("org.kde.desktop"));
+
+    // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
+    qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
     // Create controller
     EditorController controller;

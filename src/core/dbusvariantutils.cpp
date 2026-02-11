@@ -26,8 +26,14 @@ QVariant convertDbusArgument(const QVariant& value)
             return result;
         }
         case QDBusArgument::ArrayType: {
-            // Extract the entire list at once using operator>>, which is more
-            // reliable than beginArray()/endArray() for nested structures
+            // D-Bus "as" (array of strings) must be extracted as QStringList, not QVariantList
+            QString sig = arg.currentSignature();
+            if (sig == QLatin1String("as")) {
+                QStringList strList;
+                arg >> strList;
+                return QVariant::fromValue(strList);
+            }
+            // Extract other arrays as QVariantList
             QVariantList list;
             arg >> list;
             QVariantList result;

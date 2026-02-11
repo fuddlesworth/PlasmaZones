@@ -46,6 +46,7 @@
 #include <KLocalizedString>
 #include <QCoreApplication>
 #include <QClipboard>
+#include <QColor>
 #include <QMimeData>
 #include <QGuiApplication>
 #include <QDBusConnection>
@@ -158,6 +159,96 @@ QVariantList EditorController::zones() const
 {
     return m_zoneManager ? m_zoneManager->zones() : QVariantList();
 }
+
+QVariantList EditorController::zonesForShaderPreview(int width, int height) const
+{
+    QVariantList result;
+    if (width <= 0 || height <= 0) {
+        return result;
+    }
+
+    // Use a simplified 2-zone layout (1 and 2 side-by-side) for the shader preview.
+    // This matches how the overlay looks with typical layouts and avoids cramming
+    // many zone numbers into the small preview area.
+    const qreal resW = static_cast<qreal>(width);
+    const qreal resH = static_cast<qreal>(height);
+    const int padded = 4;
+    const qreal hw = (resW - padded * 3) / 2.0; // Two equal halves with gap
+    const qreal hh = resH - padded * 2;
+
+    // Stable IDs for demo layout so shader doesn't see churn on every update
+    const QString zone1Id = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
+    const QString zone2Id = QStringLiteral("{00000000-0000-0000-0000-000000000002}");
+
+    auto makeZone = [&](int zoneNumber, qreal x, qreal y, qreal w, qreal h) {
+        QVariantMap out;
+        out[QLatin1String(JsonKeys::Id)] = (zoneNumber == 1) ? zone1Id : zone2Id;
+        out[QLatin1String(JsonKeys::X)] = x;
+        out[QLatin1String(JsonKeys::Y)] = y;
+        out[QLatin1String(JsonKeys::Width)] = w;
+        out[QLatin1String(JsonKeys::Height)] = h;
+        out[QLatin1String(JsonKeys::ZoneNumber)] = zoneNumber;
+        out[QLatin1String(JsonKeys::IsHighlighted)] = false;
+        const QColor fillColor = Defaults::HighlightColor;
+        const qreal alpha = Defaults::Opacity;
+        out[QLatin1String("fillR")] = fillColor.redF() * alpha;
+        out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
+        out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
+        out[QLatin1String("fillA")] = alpha;
+        const QColor borderColor = Defaults::BorderColor;
+        out[QLatin1String("borderR")] = borderColor.redF();
+        out[QLatin1String("borderG")] = borderColor.greenF();
+        out[QLatin1String("borderB")] = borderColor.blueF();
+        out[QLatin1String("borderA")] = borderColor.alphaF();
+        out[QLatin1String("shaderBorderRadius")] = 8.0;
+        out[QLatin1String("shaderBorderWidth")] = 2.0;
+        return out;
+    };
+
+    result.append(makeZone(1, padded, padded, hw, hh));
+    result.append(makeZone(2, padded * 2 + hw, padded, hw, hh));
+
+    return result;
+}
+
+QVariantMap EditorController::translateShaderParams(const QString& shaderId, const QVariantMap& params) const
+{
+    return ShaderDbusQueries::queryTranslateShaderParams(shaderId, params);
+}
+
+void EditorController::showShaderPreviewOverlay(int x, int y, int width, int height, const QString& screenName,
+                                                const QString& shaderId, const QString& shaderParamsJson,
+                                                const QString& zonesJson)
+{
+    QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                        QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
+    if (iface.isValid()) {
+        iface.asyncCall(QStringLiteral("showShaderPreview"), x, y, width, height, screenName, shaderId,
+                        shaderParamsJson, zonesJson);
+    }
+}
+
+void EditorController::updateShaderPreviewOverlay(int x, int y, int width, int height,
+                                                  const QString& shaderParamsJson, const QString& zonesJson)
+{
+    QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                        QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
+    if (iface.isValid()) {
+        iface.asyncCall(QStringLiteral("updateShaderPreview"), x, y, width, height, shaderParamsJson, zonesJson);
+    }
+}
+
+void EditorController::hideShaderPreviewOverlay()
+{
+    QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                        QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
+    if (iface.isValid()) {
+        // Use synchronous call so hide completes before any in-flight async show can leave
+        // a visible overlay after the dialog has closed.
+        iface.call(QStringLiteral("hideShaderPreview"));
+    }
+}
+
 QString EditorController::selectedZoneId() const
 {
     return m_selectedZoneId;
@@ -3252,11 +3343,6 @@ QVariantList EditorController::currentShaderParameters() const
     // Return cached parameters - populated when shader is selected
     // This avoids D-Bus calls on every QML property access
     return m_cachedShaderParameters;
-}
-
-bool EditorController::hasShaderEffect() const
-{
-    return !ShaderRegistry::isNoneShader(m_currentShaderId);
 }
 
 QString EditorController::noneShaderUuid() const
