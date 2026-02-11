@@ -119,27 +119,45 @@ Kirigami.Dialog {
         }
     }
 
+    // Hide overlay when editor loses focus (alt-tab, another app, native dialogs);
+    // restore when editor becomes active again. Only applies while dialog is open.
+    readonly property bool appActive: Qt.application.state === Qt.ApplicationActive
+
+    onAppActiveChanged: {
+        if (!root.visible || !root.hasShaderEffect) return;
+        if (appActive) {
+            root.restoreShaderPreview();
+        } else {
+            root.hideShaderPreview();
+        }
+    }
+
     onClosed: {
         previewAllowed = false;
         debouncePreviewUpdate.stop();
+        root.hideShaderPreview();
+    }
+
+    // Centralize overlay visibility to avoid duplication and ensure consistent behavior
+    function hideShaderPreview() {
         if (editorController) {
             editorController.hideShaderPreviewOverlay();
         }
     }
 
+    function restoreShaderPreview() {
+        Qt.callLater(root.updateDaemonShaderPreview);
+    }
+
     // Update daemon overlay when params/shader change or layout settles
     function updateDaemonShaderPreview() {
         if (!previewAllowed) {
-            if (editorController) {
-                editorController.hideShaderPreviewOverlay();
-            }
+            root.hideShaderPreview();
             return;
         }
         if (!editorController || !editorWindow || !root.hasShaderEffect
             || root.pendingShaderId === root.noneShaderId) {
-            if (editorController) {
-                editorController.hideShaderPreviewOverlay();
-            }
+            root.hideShaderPreview();
             return;
         }
         if (!previewContainer.visible || previewBackground.width <= 0 || previewBackground.height <= 0) {
@@ -322,6 +340,7 @@ Kirigami.Dialog {
         shaderColorDialog.selectedColor = currentColor;
         shaderColorDialog.paramId = paramId;
         shaderColorDialog.paramName = paramName;
+        root.hideShaderPreview();
         shaderColorDialog.open();
     }
 
@@ -712,6 +731,7 @@ Kirigami.Dialog {
                 Accessible.description: ToolTip.text
                 onClicked: {
                     preparePresetDialog(loadPresetDialog);
+                    root.hideShaderPreview();
                     loadPresetDialog.open();
                 }
             }
@@ -725,6 +745,7 @@ Kirigami.Dialog {
                 Accessible.description: ToolTip.text
                 onClicked: {
                     preparePresetDialog(savePresetDialog);
+                    root.hideShaderPreview();
                     savePresetDialog.open();
                 }
             }
@@ -788,7 +809,9 @@ Kirigami.Dialog {
             if (paramId) {
                 root.setPendingParam(paramId, selectedColor.toString());
             }
+            root.restoreShaderPreview();
         }
+        onRejected: function() { root.restoreShaderPreview(); }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -821,7 +844,9 @@ Kirigami.Dialog {
             if (ok) {
                 root.presetErrorMessage = "";
             }
+            root.restoreShaderPreview();
         }
+        onRejected: function() { root.restoreShaderPreview(); }
     }
 
     FileDialog {
@@ -840,6 +865,8 @@ Kirigami.Dialog {
                 root.pendingParams = result.shaderParams || {};
                 root.presetErrorMessage = "";
             }
+            root.restoreShaderPreview();
         }
+        onRejected: function() { root.restoreShaderPreview(); }
     }
 }
