@@ -900,10 +900,9 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("runningWindowsRequested"), this,
                                           SLOT(slotRunningWindowsRequested()));
 
-    // Connect to WindowDrag signals for immediate geometry during drag (FancyZones-style)
-    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-                                          QStringLiteral("zoneGeometryDuringDragChanged"), this,
-                                          SLOT(slotZoneGeometryDuringDrag(QString, int, int, int, int)));
+    // Connect to WindowDrag signals for during-drag behavior
+    // Note: zoneGeometryDuringDragChanged is emitted by daemon for overlay highlight; geometry is applied
+    // only on release (dragStopped), not during drag, so the effect does not subscribe to it.
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
                                           QStringLiteral("restoreSizeDuringDragChanged"), this,
                                           SLOT(slotRestoreSizeDuringDrag(QString, int, int)));
@@ -1587,19 +1586,6 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
 
     // Not a pointer format, return as-is
     return windowId;
-}
-
-void PlasmaZonesEffect::slotZoneGeometryDuringDrag(const QString& windowId, int x, int y, int width, int height)
-{
-    // Do NOT apply zone geometry during drag - only apply on release (dragStopped).
-    // Applying during drag caused the window to resize as soon as the cursor entered
-    // a zone, before the user had released to snap. The overlay still highlights the
-    // zone under cursor; geometry is applied only when the user releases the mouse.
-    Q_UNUSED(windowId);
-    Q_UNUSED(x);
-    Q_UNUSED(y);
-    Q_UNUSED(width);
-    Q_UNUSED(height);
 }
 
 void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int width, int height)

@@ -84,7 +84,6 @@ private Q_SLOTS:
     void slotPendingRestoresAvailable();
     void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
     void slotRunningWindowsRequested();
-    void slotZoneGeometryDuringDrag(const QString& windowId, int x, int y, int width, int height);
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
 
 private:
