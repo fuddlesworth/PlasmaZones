@@ -5,7 +5,7 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.0] - 2026-02-12
+## [1.9.1] - 2026-02-12
 
 ### Added
 - Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
@@ -315,7 +315,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[1.9.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.4...v1.9.0
+[1.9.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.4...v1.9.1
 [1.8.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.3...v1.8.4
 [1.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.0...v1.8.1

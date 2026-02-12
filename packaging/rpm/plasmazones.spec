@@ -8,7 +8,7 @@
 # Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        1.9.0
+Version:        1.9.1
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -169,7 +169,7 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
-* Thu Feb 12 2026 fuddlesworth - 1.9.0-1
+* Thu Feb 12 2026 fuddlesworth - 1.9.1-1
 - Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
 - Snap Assist overlay with window thumbnails, zone-mapped layout, and KCM setting to enable/disable
 - `getEmptyZonesJson` and `showSnapAssist` D-Bus APIs for Snap Assist integration
