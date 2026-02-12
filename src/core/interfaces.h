@@ -412,10 +412,6 @@ public:
     virtual qreal edgeThreshold() const = 0;
     virtual void setEdgeThreshold(qreal threshold) = 0;
 
-    // Multi-zone snapping
-    virtual bool multiZoneEnabled() const = 0;
-    virtual void setMultiZoneEnabled(bool enabled) = 0;
-
 Q_SIGNALS:
     void layoutChanged();
     void zoneHighlighted(Zone* zone);
@@ -423,7 +419,6 @@ Q_SIGNALS:
     void highlightsCleared();
     void adjacentThresholdChanged();
     void edgeThresholdChanged();
-    void multiZoneEnabledChanged();
 };
 
 /**

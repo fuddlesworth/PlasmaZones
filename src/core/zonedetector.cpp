@@ -66,14 +66,6 @@ void ZoneDetector::setEdgeThreshold(qreal threshold)
     }
 }
 
-void ZoneDetector::setMultiZoneEnabled(bool enabled)
-{
-    if (m_multiZoneEnabled != enabled) {
-        m_multiZoneEnabled = enabled;
-        Q_EMIT multiZoneEnabledChanged();
-    }
-}
-
 ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
 {
     ZoneDetectionResult result;
@@ -112,7 +104,7 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
 {
     ZoneDetectionResult result;
 
-    if (!m_layout || !m_multiZoneEnabled) {
+    if (!m_layout) {
         return detectZone(cursorPos);
     }
 

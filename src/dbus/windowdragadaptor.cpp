@@ -339,11 +339,6 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
     // Convert cursor position to screen-relative coordinates for detection
     QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
 
-    // Ensure multi-zone detection is enabled
-    if (!m_zoneDetector->multiZoneEnabled()) {
-        m_zoneDetector->setMultiZoneEnabled(true);
-    }
-
     // Call detectMultiZone instead of detectZone
     ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
 
