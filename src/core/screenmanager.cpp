@@ -451,7 +451,7 @@ void ScreenManager::queryKdePlasmaPanels()
                 bool panelAutoHides = (hiding == QLatin1String("autohide") 
                     || hiding == QLatin1String("dodgewindows") || hiding == QLatin1String("windowsgobelow"));
 
-                if (!panelAutoHides) {
+                if (panelAutoHides) {
                     totalOffset = 0;
                 }
 
