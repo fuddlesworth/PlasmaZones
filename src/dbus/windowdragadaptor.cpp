@@ -492,10 +492,13 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     int dragActivationMod = static_cast<int>(m_settings->dragActivationModifier());
     int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
     int zoneSpanMod = static_cast<int>(m_settings->zoneSpanModifier());
+    const bool multiZoneAlwaysOn = (multiZoneMod == static_cast<int>(DragModifier::AlwaysActive));
     const int activationButton = m_settings->dragActivationMouseButton();
     const bool activationByMouse = (activationButton != 0 && (mouseButtons & activationButton) != 0);
     bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse;
-    bool multiZoneModifierHeld = checkModifier(multiZoneMod, mods);
+    // AlwaysActive should not independently activate the overlay;
+    // it only enables proximity snap while the overlay is already open.
+    bool multiZoneModifierHeld = multiZoneAlwaysOn ? false : checkModifier(multiZoneMod, mods);
     bool zoneSpanModifierHeld = checkModifier(zoneSpanMod, mods);
 
     // Warn once per drag about modifier conflicts (zone span shadows other modifiers)
@@ -529,7 +532,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             if (!m_paintedZoneIds.isEmpty()) {
                 m_paintedZoneIds.clear();
             }
-            if (multiZoneModifierHeld) {
+            if (multiZoneModifierHeld || multiZoneAlwaysOn) {
                 handleMultiZoneModifier(cursorX, cursorY, mods);
             } else {
                 handleSingleZoneModifier(cursorX, cursorY);
