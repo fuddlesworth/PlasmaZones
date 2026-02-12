@@ -50,6 +50,8 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
                    dragActivationMouseButtonChanged)
     Q_PROPERTY(int multiZoneModifier READ multiZoneModifier WRITE setMultiZoneModifier NOTIFY multiZoneModifierChanged)
+    Q_PROPERTY(bool proximitySnapAlwaysOn READ proximitySnapAlwaysOn WRITE setProximitySnapAlwaysOn NOTIFY
+                   proximitySnapAlwaysOnChanged)
     Q_PROPERTY(int zoneSpanModifier READ zoneSpanModifier WRITE setZoneSpanModifier NOTIFY
                    zoneSpanModifierChanged)
 
@@ -212,6 +214,7 @@ public:
     int dragActivationModifier() const;
     int dragActivationMouseButton() const;
     int multiZoneModifier() const;
+    bool proximitySnapAlwaysOn() const;
     int zoneSpanModifier() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
@@ -310,6 +313,7 @@ public:
     void setDragActivationModifier(int modifier);
     void setDragActivationMouseButton(int button);
     void setMultiZoneModifier(int modifier);
+    void setProximitySnapAlwaysOn(bool alwaysOn);
     void setZoneSpanModifier(int modifier);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
@@ -467,6 +471,7 @@ Q_SIGNALS:
     void dragActivationModifierChanged();
     void dragActivationMouseButtonChanged();
     void multiZoneModifierChanged();
+    void proximitySnapAlwaysOnChanged();
     void zoneSpanModifierChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
@@ -592,6 +597,8 @@ private:
      */
     static KConfigGroup editorConfigGroup();
 
+    void syncProximitySnapFallbackFromSettings();
+
     Settings* m_settings = nullptr;
     UpdateChecker* m_updateChecker = nullptr;
     QString m_dismissedUpdateVersion;  // Cached to avoid repeated config reads
@@ -641,6 +648,9 @@ private:
     // Fill on drop settings (stored separately in Editor group)
     bool m_fillOnDropEnabled = true;
     int m_fillOnDropModifier = 0x04000000; // Qt::ControlModifier
+
+    // Last modifier used when proximity snap is not always-on; restored when user unchecks "Always on"
+    int m_proximitySnapFallbackModifier = 5; // DragModifier::CtrlAlt (kcfg default)
 
     // Save guard to prevent re-entry during synchronous D-Bus operations
     bool m_saveInProgress = false;

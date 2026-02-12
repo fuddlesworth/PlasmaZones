@@ -2,43 +2,42 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "kcm_plasmazones.h"
-#include "../src/config/settings.h"
-#include "../src/config/updatechecker.h"
-#include "version.h"
-#include "../src/core/constants.h"
-#include "../src/core/layout.h"
-#include "../src/core/interfaces.h" // For DragModifier enum
-#include "../src/core/logging.h"
-#include "../src/core/modifierutils.h"
-
-#include <KPluginFactory>
-#include <KLocalizedString>
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
+#include <algorithm>
 #include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingReply>
 #include <QDBusPendingCallWatcher>
-#include <QStandardPaths>
-#include <algorithm>
-#include <QTimer>
-#include <QFile>
-#include <QDir>
-#include <QDesktopServices>
-#include <QProcess>
-#include <QDBusConnectionInterface>
 #include <QDBusReply>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QProcess>
 #include <QSet>
-#include <QtGui/QtGui> // For Qt::KeyboardModifier flags
-#include <KGlobalAccel>
+#include <QStandardPaths>
+#include <QTimer>
+#include <QtGui/QtGui>
 #include <QtQml/qqmlextensionplugin.h>
+#include <KConfig>
+#include <KConfigGroup>
+#include <KGlobalAccel>
+#include <KLocalizedString>
+#include <KPluginFactory>
+#include <KSharedConfig>
+#include "../src/config/settings.h"
+#include "../src/config/updatechecker.h"
+#include "../src/core/constants.h"
+#include "../src/core/interfaces.h"
+#include "../src/core/layout.h"
+#include "../src/core/logging.h"
+#include "../src/core/modifierutils.h"
+#include "version.h"
 
 // Import static QML module for shared components
 Q_IMPORT_QML_PLUGIN(org_plasmazones_commonPlugin)
@@ -51,6 +50,7 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     : KQuickConfigModule(parent, data)
 {
     m_settings = new Settings(this);
+    syncProximitySnapFallbackFromSettings();
     loadLayouts();
     refreshScreens();
 
@@ -170,6 +170,12 @@ int KCMPlasmaZones::multiZoneModifier() const
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
     return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->multiZoneModifier()));
 }
+
+bool KCMPlasmaZones::proximitySnapAlwaysOn() const
+{
+    return static_cast<int>(m_settings->multiZoneModifier()) == static_cast<int>(DragModifier::AlwaysActive);
+}
+
 int KCMPlasmaZones::zoneSpanModifier() const
 {
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
@@ -533,10 +539,43 @@ void KCMPlasmaZones::setMultiZoneModifier(int bitmask)
 {
     // Convert Qt::KeyboardModifier bitmask to DragModifier enum for storage
     int enumValue = ModifierUtils::bitmaskToDragModifier(bitmask);
-    if (static_cast<int>(m_settings->multiZoneModifier()) != enumValue) {
+    const int current = static_cast<int>(m_settings->multiZoneModifier());
+    if (current != enumValue) {
+        const bool wasAlwaysOn = (current == static_cast<int>(DragModifier::AlwaysActive));
         m_settings->setMultiZoneModifier(static_cast<DragModifier>(enumValue));
+        if (enumValue != static_cast<int>(DragModifier::AlwaysActive)) {
+            m_proximitySnapFallbackModifier = enumValue;
+        }
         Q_EMIT multiZoneModifierChanged();
+        if (wasAlwaysOn != (enumValue == static_cast<int>(DragModifier::AlwaysActive))) {
+            Q_EMIT proximitySnapAlwaysOnChanged();
+        }
         setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setProximitySnapAlwaysOn(bool alwaysOn)
+{
+    const int current = static_cast<int>(m_settings->multiZoneModifier());
+    if (alwaysOn) {
+        if (current != static_cast<int>(DragModifier::AlwaysActive)) {
+            m_proximitySnapFallbackModifier = current;
+            m_settings->setMultiZoneModifier(DragModifier::AlwaysActive);
+            Q_EMIT multiZoneModifierChanged();
+            Q_EMIT proximitySnapAlwaysOnChanged();
+            setNeedsSave(true);
+        }
+    } else {
+        int target = m_proximitySnapFallbackModifier;
+        if (target == static_cast<int>(DragModifier::AlwaysActive) || target < 0 || target > 10) {
+            target = static_cast<int>(DragModifier::CtrlAlt);
+        }
+        if (current != target) {
+            m_settings->setMultiZoneModifier(static_cast<DragModifier>(target));
+            Q_EMIT multiZoneModifierChanged();
+            Q_EMIT proximitySnapAlwaysOnChanged();
+            setNeedsSave(true);
+        }
     }
 }
 
@@ -1340,9 +1379,20 @@ void KCMPlasmaZones::save()
     m_saveInProgress = false;
 }
 
+void KCMPlasmaZones::syncProximitySnapFallbackFromSettings()
+{
+    const int current = static_cast<int>(m_settings->multiZoneModifier());
+    if (current != static_cast<int>(DragModifier::AlwaysActive)) {
+        m_proximitySnapFallbackModifier = current;
+    } else {
+        m_proximitySnapFallbackModifier = static_cast<int>(DragModifier::CtrlAlt);
+    }
+}
+
 void KCMPlasmaZones::load()
 {
     m_settings->load();
+    syncProximitySnapFallbackFromSettings();
     loadLayouts();
     refreshScreens();
 
@@ -1417,6 +1467,7 @@ void KCMPlasmaZones::load()
 void KCMPlasmaZones::defaults()
 {
     m_settings->reset();
+    syncProximitySnapFallbackFromSettings();
 
     // Find "Columns (2)" layout and set it as the default
     for (const QVariant& layoutVar : m_layouts) {
@@ -1481,6 +1532,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT dragActivationModifierChanged();
     Q_EMIT dragActivationMouseButtonChanged();
     Q_EMIT multiZoneModifierChanged();
+    Q_EMIT proximitySnapAlwaysOnChanged();
     Q_EMIT zoneSpanModifierChanged();
     Q_EMIT showZonesOnAllMonitorsChanged();
     Q_EMIT disabledMonitorsChanged();
@@ -2126,6 +2178,7 @@ void KCMPlasmaZones::onSettingsChanged()
     // reload settings from the config file
     if (m_settings) {
         m_settings->load();
+        syncProximitySnapFallbackFromSettings();
 
         // Emit signals for all properties that might have changed. Not tracking which
         // ones actually changed since external changes are rare, signal emission is cheap,
@@ -2134,6 +2187,7 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT dragActivationModifierChanged();
         Q_EMIT dragActivationMouseButtonChanged();
         Q_EMIT multiZoneModifierChanged();
+        Q_EMIT proximitySnapAlwaysOnChanged();
         Q_EMIT zoneSpanModifierChanged();
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT disabledMonitorsChanged();

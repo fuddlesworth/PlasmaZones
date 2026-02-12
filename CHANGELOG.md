@@ -5,6 +5,12 @@ All notable changes to PlasmaZones are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- KCM: "Proximity snap always on" checkbox — enables always-on proximity snap without holding the modifier (per [#143])
+- Escape key cancels overlay during window drag — overlay stays hidden until the next drag of a stationary window
+
 ## [1.9.1] - 2026-02-12
 
 ### Added

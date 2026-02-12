@@ -4,8 +4,9 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <QObject>
+#include <QAction>
 #include <QDBusAbstractAdaptor>
+#include <QObject>
 #include <QDBusInterface>
 #include <QString>
 #include <QRect>
@@ -173,9 +174,15 @@ private:
     QSet<QUuid> m_paintedZoneIds; // Accumulates zones during paint-to-span drag
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
 
+    // Escape shortcut to cancel overlay during drag (registered on drag start, unregistered on drag end)
+    QAction* m_cancelOverlayAction = nullptr;
+
     // Last emitted zone geometry (emit only when changed, per .cursorrules)
     QRect m_lastEmittedZoneGeometry;
     bool m_restoreSizeEmittedDuringDrag = false;
+
+    void registerCancelOverlayShortcut();
+    void unregisterCancelOverlayShortcut();
 
     // Zone selector methods
     void checkZoneSelectorTrigger(int cursorX, int cursorY);

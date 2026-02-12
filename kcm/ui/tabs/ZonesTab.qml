@@ -454,11 +454,27 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Multi-Zone Selection")
                     }
 
+                    CheckBox {
+                        id: proximitySnapAlwaysOnCheckBox
+                        Layout.fillWidth: true
+                        Kirigami.FormData.label: i18n("Proximity snap:")
+                        text: i18n("Proximity snap always active")
+                        checked: kcm.proximitySnapAlwaysOn
+                        onCheckedChanged: {
+                            if (checked !== kcm.proximitySnapAlwaysOn) {
+                                kcm.proximitySnapAlwaysOn = checked
+                            }
+                        }
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("Proximity snap is always active during zone selection — no need to hold the modifier key")
+                    }
+
                     ModifierAndMouseCheckBoxes {
                         id: multiZoneModifiers
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Proximity snap modifier:")
+                        visible: !kcm.proximitySnapAlwaysOn
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.multiZoneModifier
                         tooltipEnabled: root.isCurrentTab

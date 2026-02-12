@@ -2,6 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowdragadaptor.h"
+#include <QAction>
+#include <QGuiApplication>
+#include <QKeySequence>
+#include <QScreen>
+#include <cmath>
+#include <KGlobalAccel>
+#include <KLocalizedString>
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -13,9 +20,6 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/constants.h"
-#include <QGuiApplication>
-#include <QScreen>
-#include <cmath>
 
 namespace PlasmaZones {
 
@@ -48,6 +52,11 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     // Uses LayoutManager (concrete) because ILayoutManager is a pure interface without signals
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowDragAdaptor::onLayoutChanged);
     connect(m_layoutManager, &LayoutManager::layoutAssigned, this, &WindowDragAdaptor::onLayoutChanged);
+
+    // Escape shortcut to cancel overlay during drag (registered when drag starts, unregistered when drag ends)
+    m_cancelOverlayAction = new QAction(i18n("Cancel zone overlay"), this);
+    m_cancelOverlayAction->setObjectName(QStringLiteral("cancel_overlay_during_drag"));
+    connect(m_cancelOverlayAction, &QAction::triggered, this, &WindowDragAdaptor::cancelSnap);
 }
 
 QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
@@ -63,29 +72,28 @@ bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers
     bool metaHeld = mods.testFlag(Qt::MetaModifier);
 
     switch (modifierSetting) {
-    case 0:
-        return false; // Disabled - overlay never shows
-    case 1:
+    case static_cast<int>(DragModifier::Disabled):
+        return false;
+    case static_cast<int>(DragModifier::Shift):
         return shiftHeld;
-    case 2:
+    case static_cast<int>(DragModifier::Ctrl):
         return ctrlHeld;
-    case 3:
+    case static_cast<int>(DragModifier::Alt):
         return altHeld;
-    case 4:
+    case static_cast<int>(DragModifier::Meta):
         return metaHeld;
-    case 5:
-        return ctrlHeld && altHeld; // Ctrl+Alt
-    case 6:
-        return ctrlHeld && shiftHeld; // Ctrl+Shift
-    case 7:
-        return altHeld && shiftHeld; // Alt+Shift
-    case 8:
-        return true; // AlwaysActive - overlay always shows on drag
-                     // Use this on Wayland if modifier detection doesn't work
-    case 9:
-        return altHeld && metaHeld; // Alt+Meta
-    case 10:
-        return ctrlHeld && altHeld && metaHeld; // Ctrl+Alt+Meta
+    case static_cast<int>(DragModifier::CtrlAlt):
+        return ctrlHeld && altHeld;
+    case static_cast<int>(DragModifier::CtrlShift):
+        return ctrlHeld && shiftHeld;
+    case static_cast<int>(DragModifier::AltShift):
+        return altHeld && shiftHeld;
+    case static_cast<int>(DragModifier::AlwaysActive):
+        return true;
+    case static_cast<int>(DragModifier::AltMeta):
+        return altHeld && metaHeld;
+    case static_cast<int>(DragModifier::CtrlAltMeta):
+        return ctrlHeld && altHeld && metaHeld;
     default:
         return false;
     }
@@ -103,6 +111,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         return;
     }
 
+    registerCancelOverlayShortcut();
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
     m_currentZoneId.clear();
@@ -761,6 +770,7 @@ void WindowDragAdaptor::cancelSnap()
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
 
+    unregisterCancelOverlayShortcut();
     // Hide overlay and zone selector UI
     hideOverlayAndSelector();
 }
@@ -773,6 +783,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
     // If this window was being dragged, clean up drag state
     if (windowId == m_draggedWindowId) {
+        unregisterCancelOverlayShortcut();
         hideOverlayAndClearZoneState();
 
         // Hide zone selector if shown
@@ -792,6 +803,20 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
     // Delegate tracking cleanup to WindowTrackingAdaptor
     if (m_windowTracking) {
         m_windowTracking->windowClosed(windowId);
+    }
+}
+
+void WindowDragAdaptor::registerCancelOverlayShortcut()
+{
+    if (m_cancelOverlayAction) {
+        KGlobalAccel::setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
+    }
+}
+
+void WindowDragAdaptor::unregisterCancelOverlayShortcut()
+{
+    if (m_cancelOverlayAction) {
+        KGlobalAccel::setGlobalShortcut(m_cancelOverlayAction, QKeySequence());
     }
 }
 
@@ -909,6 +934,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
 
 void WindowDragAdaptor::resetDragState()
 {
+    unregisterCancelOverlayShortcut();
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
     m_currentZoneId.clear();
