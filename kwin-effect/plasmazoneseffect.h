@@ -8,7 +8,9 @@
 #include <effect/effectwindow.h>
 #include <effect/globals.h> // For ElectricBorder enum
 
+#include <QJsonArray>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QDBusInterface>
 #include <QHash>
@@ -85,6 +87,8 @@ private Q_SLOTS:
     void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
+    void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
+                                                const QString& geometryJson);
 
 private:
     // Window management
@@ -116,6 +120,17 @@ private:
      * Consolidates interface validation pattern
      */
     bool ensureWindowTrackingReady(const char* methodName);
+    bool ensureOverlayInterface(const char* methodName);
+
+    /**
+     * @brief Build candidate windows for Snap Assist (excluding just-snapped and already-snapped)
+     * @param excludeWindowId Window ID to exclude (the one just snapped)
+     * @param screenName Screen where snap occurred (filter by same screen)
+     * @param snappedStableIds Set of stable IDs of windows already snapped to zones (excluded)
+     * @return JSON array of {windowId, kwinHandle, icon, caption}
+     */
+    QJsonArray buildSnapAssistCandidates(const QString& excludeWindowId, const QString& screenName,
+                                          const QSet<QString>& snappedStableIds = QSet<QString>()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -196,14 +211,29 @@ private:
     // iface must remain valid for the duration of the async call (caller guarantees
     // ownership via unique_ptr member; the reference is only used to initiate the call,
     // not captured in the async lambda).
+    // onSnapSuccess: optional callback when snap is applied, receives (windowId, screenName)
     void tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method, const QList<QVariant>& args,
                           QPointer<KWin::EffectWindow> window, const QString& windowId,
-                          bool storePreSnap, std::function<void()> fallback);
+                          bool storePreSnap, std::function<void()> fallback,
+                          std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr);
+
+    /**
+     * If there are empty zones and unsnapped candidates, show Snap Assist.
+     * Used to continue Snap Assist after each snap until all zones filled or no candidates.
+     */
+    void showSnapAssistContinuationIfNeeded(const QString& screenName);
 
     // Extract stable ID from full window ID (strips pointer address)
     // Stable ID = windowClass:resourceName (without pointer address)
     // This allows matching windows across KWin restarts
     static QString extractStableId(const QString& windowId);
+
+    /**
+     * @brief Derive short name from window class for icon/app display
+     * X11: "resourceName resourceClass" → first part (e.g., "dolphin")
+     * Wayland app_id: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
+     */
+    static QString deriveShortNameFromWindowClass(const QString& windowClass);
 
     // reserveScreenEdges() and unreserveScreenEdges() have been removed. The daemon
     // disables KWin Quick Tile via kwriteconfig6. Reserving edges would turn on the
@@ -249,6 +279,7 @@ private:
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
+    std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
     std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
 
     // Polling timer for detecting window moves
@@ -272,6 +303,7 @@ private:
     bool m_excludeTransientWindows = true;
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
+    bool m_snapAssistEnabled = true;
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

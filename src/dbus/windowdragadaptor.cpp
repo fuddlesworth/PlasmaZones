@@ -560,7 +560,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY,
                                     int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
-                                    QString& releaseScreenNameOut, bool& restoreSizeOnlyOut)
+                                    QString& releaseScreenNameOut, bool& restoreSizeOnlyOut,
+                                    bool& snapAssistRequestedOut, QString& emptyZonesJsonOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
@@ -572,6 +573,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     shouldApplyGeometry = false;
     releaseScreenNameOut.clear();
     restoreSizeOnlyOut = false;
+    snapAssistRequestedOut = false;
+    emptyZonesJsonOut.clear();
 
     if (windowId != m_draggedWindowId) {
         return;
@@ -721,6 +724,24 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // Clear pre-snap geometry to prevent memory accumulation
         if (m_windowTracking) {
             m_windowTracking->clearPreSnapGeometry(windowId);
+        }
+    }
+
+    // Snap Assist: only when we actually SNAPPED to a zone (not when restoring size on unsnap).
+    // Empty zones are those with no windows AFTER windowSnapped (called above). The zone(s)
+    // we just snapped to are now occupied, so they are excluded. Remaining empty zones
+    // are offered for the user to fill via the window picker.
+    const bool actuallySnapped = shouldApplyGeometry && !restoreSizeOnlyOut;
+    if (actuallySnapped && m_settings && m_settings->snapAssistEnabled() && releaseScreen && m_layoutManager
+        && m_windowTracking) {
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenName);
+        if (layout) {
+            QString emptyJson = GeometryUtils::buildEmptyZonesJson(layout, releaseScreen, m_settings,
+                [this](const Zone* z) { return m_windowTracking->getWindowsInZone(z->id().toString()).isEmpty(); });
+            if (!emptyJson.isEmpty() && emptyJson != QLatin1String("[]")) {
+                snapAssistRequestedOut = true;
+                emptyZonesJsonOut = emptyJson;
+            }
         }
     }
 

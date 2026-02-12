@@ -7,6 +7,7 @@
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -147,6 +148,21 @@ PLASMAZONES_EXPORT QRectF extractZoneGeometry(const QVariantMap& zone);
  * Sets x, y, width, height keys in the zone map.
  */
 PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
+
+/**
+ * @brief Build JSON array of empty zones for Snap Assist
+ * @param layout Layout containing zones
+ * @param screen Screen to calculate geometry for
+ * @param settings Settings for zone padding/outer gap
+ * @param isZoneEmpty Predicate: returns true if zone has no windows
+ * @return JSON array string (compact format)
+ *
+ * Used by WindowTrackingService::getEmptyZonesJson and WindowDragAdaptor::dragStopped
+ * to avoid duplicating the empty-zones JSON building logic.
+ */
+PLASMAZONES_EXPORT QString buildEmptyZonesJson(
+    Layout* layout, QScreen* screen, ISettings* settings,
+    const std::function<bool(const Zone*)>& isZoneEmpty);
 
 } // namespace GeometryUtils
 

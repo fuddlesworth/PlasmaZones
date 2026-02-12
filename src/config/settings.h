@@ -92,6 +92,7 @@ class PLASMAZONES_EXPORT Settings : public ISettings
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
 
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
@@ -498,6 +499,12 @@ public:
         return m_restoreWindowsToZonesOnLogin;
     }
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
+
+    bool snapAssistEnabled() const override
+    {
+        return m_snapAssistEnabled;
+    }
+    void setSnapAssistEnabled(bool enabled) override;
 
     QString defaultLayoutId() const override
     {
@@ -964,6 +971,7 @@ private:
     bool m_restoreOriginalSizeOnUnsnap = true;
     StickyWindowHandling m_stickyWindowHandling = StickyWindowHandling::TreatAsNormal;
     bool m_restoreWindowsToZonesOnLogin = true;
+    bool m_snapAssistEnabled = true;
 
     // Default layout (used when no explicit assignment exists)
     QString m_defaultLayoutId;

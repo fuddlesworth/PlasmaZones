@@ -87,7 +87,8 @@ public Q_SLOTS:
      * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current position (drag-to-unsnap)
      */
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY, int& snapWidth,
-                     int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName, bool& restoreSizeOnly);
+                     int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName, bool& restoreSizeOnly,
+                     bool& snapAssistRequested, QString& emptyZonesJson);
 
     /**
      * Cancel current snap operation (Escape key)

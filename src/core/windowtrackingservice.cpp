@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingservice.h"
+#include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
 #include "zone.h"
@@ -817,6 +818,27 @@ QString WindowTrackingService::findEmptyZone(const QString& screenName) const
 {
     Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
     return findEmptyZoneInLayout(layout, screenName);
+}
+
+QString WindowTrackingService::getEmptyZonesJson(const QString& screenName) const
+{
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    if (!layout) {
+        return QStringLiteral("[]");
+    }
+
+    QScreen* screen = screenName.isEmpty()
+        ? Utils::primaryScreen()
+        : Utils::findScreenByName(screenName);
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        return QStringLiteral("[]");
+    }
+
+    return GeometryUtils::buildEmptyZonesJson(layout, screen, m_settings,
+        [this](const Zone* z) { return windowsInZone(z->id().toString()).isEmpty(); });
 }
 
 QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& screenName) const

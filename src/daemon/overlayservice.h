@@ -19,6 +19,7 @@ class QQmlEngine;
 
 namespace PlasmaZones {
 class CavaService;
+class WindowThumbnailService;
 }
 class QQuickWindow;
 class QScreen;
@@ -119,6 +120,13 @@ public:
                              const QString& shaderParamsJson, const QString& zonesJson) override;
     void hideShaderPreview() override;
 
+    // Snap Assist overlay (window picker after snapping)
+    void showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+                        const QString& candidatesJson) override;
+    void hideSnapAssist() override;
+    bool isSnapAssistVisible() const override;
+    void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
+
 public Q_SLOTS:
     void hideLayoutOsd();
     void hideNavigationOsd();
@@ -126,6 +134,9 @@ public Q_SLOTS:
 
     // Shader error reporting from QML
     void onShaderError(const QString& errorLog);
+
+private Q_SLOTS:
+    void onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson);
 
 private:
     void createOverlayWindow(QScreen* screen);
@@ -172,6 +183,12 @@ private:
     // Shader preview overlay (editor dialog)
     QQuickWindow* m_shaderPreviewWindow = nullptr;
     QScreen* m_shaderPreviewScreen = nullptr;
+
+    // Snap Assist overlay (window picker after snapping)
+    QQuickWindow* m_snapAssistWindow = nullptr;
+    QScreen* m_snapAssistScreen = nullptr;
+    std::unique_ptr<WindowThumbnailService> m_thumbnailService;
+    QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
@@ -189,6 +206,12 @@ private:
 
     void createShaderPreviewWindow(QScreen* screen);
     void destroyShaderPreviewWindow();
+
+    void createSnapAssistWindow();
+    void destroySnapAssistWindow();
+
+    /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
+    void updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl);
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland

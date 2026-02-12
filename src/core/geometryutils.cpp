@@ -7,6 +7,9 @@
 #include "interfaces.h"
 #include "constants.h"
 #include "screenmanager.h"
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QScreen>
 #include <QVariantMap>
 
@@ -197,6 +200,38 @@ void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
     zone[QLatin1String("y")] = rect.y();
     zone[QLatin1String("width")] = rect.width();
     zone[QLatin1String("height")] = rect.height();
+}
+
+QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
+                            const std::function<bool(const Zone*)>& isZoneEmpty)
+{
+    if (!layout || !screen) {
+        return QStringLiteral("[]");
+    }
+
+    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
+
+    QJsonArray arr;
+    for (Zone* zone : layout->zones()) {
+        if (!isZoneEmpty(zone)) {
+            continue;
+        }
+        int zonePadding = getEffectiveZonePadding(layout, settings);
+        int outerGap = getEffectiveOuterGap(layout, settings);
+        QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+        QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, screen);
+
+        QJsonObject obj;
+        obj[JsonKeys::ZoneId] = zone->id().toString();
+        obj[JsonKeys::X] = overlayGeom.x();
+        obj[JsonKeys::Y] = overlayGeom.y();
+        obj[JsonKeys::Width] = overlayGeom.width();
+        obj[JsonKeys::Height] = overlayGeom.height();
+        obj[JsonKeys::BorderWidth] = zone->borderWidth();
+        obj[JsonKeys::BorderRadius] = zone->borderRadius();
+        arr.append(obj);
+    }
+    return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
 } // namespace GeometryUtils

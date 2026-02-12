@@ -315,6 +315,10 @@ bool KCMPlasmaZones::restoreWindowsToZonesOnLogin() const
 {
     return m_settings->restoreWindowsToZonesOnLogin();
 }
+bool KCMPlasmaZones::snapAssistEnabled() const
+{
+    return m_settings->snapAssistEnabled();
+}
 QString KCMPlasmaZones::defaultLayoutId() const
 {
     return m_settings->defaultLayoutId();
@@ -861,6 +865,15 @@ void KCMPlasmaZones::setRestoreWindowsToZonesOnLogin(bool restore)
     if (m_settings->restoreWindowsToZonesOnLogin() != restore) {
         m_settings->setRestoreWindowsToZonesOnLogin(restore);
         Q_EMIT restoreWindowsToZonesOnLoginChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setSnapAssistEnabled(bool enabled)
+{
+    if (m_settings->snapAssistEnabled() != enabled) {
+        m_settings->setSnapAssistEnabled(enabled);
+        Q_EMIT snapAssistEnabledChanged();
         setNeedsSave(true);
     }
 }
@@ -1504,6 +1517,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT restoreOriginalSizeOnUnsnapChanged();
     Q_EMIT stickyWindowHandlingChanged();
     Q_EMIT restoreWindowsToZonesOnLoginChanged();
+    Q_EMIT snapAssistEnabledChanged();
     Q_EMIT defaultLayoutIdChanged();
     Q_EMIT excludedApplicationsChanged();
     Q_EMIT excludedWindowClassesChanged();

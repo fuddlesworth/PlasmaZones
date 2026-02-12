@@ -129,6 +129,8 @@ QT_PLUGIN_PATH=$PREFIX/$LIBDIR/qt6/plugins:\${QT_PLUGIN_PATH}
 QML2_IMPORT_PATH=$PREFIX/$LIBDIR/qt6/qml:\${QML2_IMPORT_PATH}
 XDG_DATA_DIRS=$PREFIX/share:\${XDG_DATA_DIRS}
 LD_LIBRARY_PATH=$PREFIX/$LIBDIR:\${LD_LIBRARY_PATH}
+# Snap Assist thumbnails: local install runs from custom path, KWin desktop matching fails.
+KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1
 EOF
 
 chmod 644 "$ENV_FILE"

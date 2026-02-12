@@ -367,6 +367,7 @@ void Settings::setStickyWindowHandlingInt(int handling)
 
 // Session and exclusion setters
 SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
+SETTINGS_SETTER(bool, SnapAssistEnabled, m_snapAssistEnabled, snapAssistEnabledChanged)
 
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
@@ -797,6 +798,7 @@ void Settings::load()
         static_cast<StickyWindowHandling>(qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
                                                  static_cast<int>(StickyWindowHandling::IgnoreAll)));
     m_restoreWindowsToZonesOnLogin = behavior.readEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), ConfigDefaults::restoreWindowsToZonesOnLogin());
+    m_snapAssistEnabled = behavior.readEntry(QLatin1String("SnapAssistEnabled"), ConfigDefaults::snapAssistEnabled());
     // Normalize UUID to default format (with braces) for consistent comparison
     // Handles migration from configs saved with WithoutBraces format
     m_defaultLayoutId = normalizeUuidString(behavior.readEntry(QLatin1String("DefaultLayoutId"), QString()));
@@ -1003,6 +1005,7 @@ void Settings::save()
     behavior.writeEntry(QLatin1String("RestoreSizeOnUnsnap"), m_restoreOriginalSizeOnUnsnap);
     behavior.writeEntry(QLatin1String("StickyWindowHandling"), static_cast<int>(m_stickyWindowHandling));
     behavior.writeEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), m_restoreWindowsToZonesOnLogin);
+    behavior.writeEntry(QLatin1String("SnapAssistEnabled"), m_snapAssistEnabled);
     behavior.writeEntry(QLatin1String("DefaultLayoutId"), m_defaultLayoutId);
 
     // Exclusions

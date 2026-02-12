@@ -99,6 +99,7 @@ public:
     static bool restoreOriginalSizeOnUnsnap() { return instance().defaultRestoreSizeOnUnsnapValue(); }
     static int stickyWindowHandling() { return instance().defaultStickyWindowHandlingValue(); }
     static bool restoreWindowsToZonesOnLogin() { return instance().defaultRestoreWindowsToZonesOnLoginValue(); }
+    static bool snapAssistEnabled() { return instance().defaultSnapAssistEnabledValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Exclusion Settings

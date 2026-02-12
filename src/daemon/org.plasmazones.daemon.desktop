@@ -10,3 +10,4 @@ Icon=plasmazones
 NoDisplay=true
 X-KDE-StartupNotify=false
 X-DBUS-ServiceName=org.plasmazones
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
