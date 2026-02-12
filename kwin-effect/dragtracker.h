@@ -42,6 +42,13 @@ public:
     // Called by effect's poll timer
     void pollWindowMoves();
 
+    // Force-end drag when a relevant mouse button is released.
+    // Called from slotMouseChanged to end the drag immediately at button release,
+    // rather than waiting for the poll timer. Fires on either LMB release or
+    // activation-button release (e.g. RMB), whichever comes first. This is
+    // essential because KWin keeps isUserMove() true until ALL buttons are released.
+    void forceEnd(const QPointF& cursorPos);
+
     // Called when window is closed during drag
     void handleWindowClosed(KWin::EffectWindow* window);
 
@@ -54,10 +61,16 @@ Q_SIGNALS:
     void dragStopped(KWin::EffectWindow* window, const QString& windowId);
 
 private:
+    // Clear drag state and emit dragStopped (shared by pollWindowMoves and forceEnd)
+    void finishDrag();
+
     PlasmaZonesEffect* m_effect;
     KWin::EffectWindow* m_draggedWindow = nullptr;
     QString m_draggedWindowId;
     QPointF m_lastCursorPos;
+
+    // After forceEnd(), suppress new drag detection for this window until isUserMove() clears
+    KWin::EffectWindow* m_forceEndedWindow = nullptr;
 };
 
 } // namespace PlasmaZones

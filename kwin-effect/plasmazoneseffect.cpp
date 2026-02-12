@@ -452,17 +452,46 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     const bool modifiersChanged = (m_currentModifiers != modifiers);
     const bool buttonsChanged = (oldbuttons != buttons);
 
+    if (buttonsChanged && m_dragTracker->isDragging()) {
+        qCInfo(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->" << static_cast<int>(buttons);
+    }
+
     if (modifiersChanged) {
         m_currentModifiers = modifiers;
         qCDebug(lcEffect) << "Modifiers changed to" << static_cast<int>(modifiers);
     }
     m_currentMouseButtons = buttons;
 
-    // When modifiers or mouse buttons change during a drag, push state to daemon immediately.
-    // Otherwise mouse activation would only update on the next move (e.g. 50 ms poll), making it feel slower than keys.
-    if ((modifiersChanged || buttonsChanged) && m_dragTracker->isDragging()) {
-        QPointF cursorPos = KWin::effects->cursorPos();
-        callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+    if (m_dragTracker->isDragging()) {
+        // Check if the configured activation button (e.g. RMB) was released.
+        // When a mouse button is used for zone activation, releasing it should
+        // lock the zone and commit the snap — the same way releasing a keyboard
+        // modifier would. The actual window placement defers (100 ms retry loop
+        // in applySnapGeometry) until isUserMove() clears when all buttons are
+        // released, but the zone decision is captured at this cursor position.
+        const auto activationBtn = Qt::MouseButton(m_dragActivationMouseButton);
+        const bool activationBtnReleased = m_dragActivationMouseButton != 0
+            && (oldbuttons & activationBtn) && !(buttons & activationBtn);
+
+        if (activationBtnReleased) {
+            m_dragTracker->forceEnd(pos);
+        } else if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {
+            // Primary button released = drag is over. Force-end regardless of whether
+            // other buttons (e.g. right-click for zone activation) are still held.
+            //
+            // KWin keeps isUserMove() true while any button is held, so without
+            // forceEnd the poll timer wouldn't detect drag end until ALL buttons
+            // are released.
+            //
+            // After forceEnd, applySnapGeometry will defer (retry every 100 ms)
+            // until isUserMove() clears when the remaining buttons are released.
+            m_dragTracker->forceEnd(pos);
+        } else if (modifiersChanged || buttonsChanged) {
+            // Push modifier/button changes to daemon during drag immediately.
+            // Otherwise mouse activation would only update on the next move (e.g. 50 ms poll).
+            QPointF cursorPos = KWin::effects->cursorPos();
+            callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+        }
     }
 
     // Track which screen the cursor is on for shortcut screen detection.
@@ -872,12 +901,15 @@ void PlasmaZonesEffect::loadExclusionSettings()
 
     // Load settings asynchronously to avoid blocking KWin startup
     // Each setting is loaded independently so partial failures don't block others
-    // Shared state: delete interface only when ALL 4 callbacks have completed
+    // Shared state: delete interface only when ALL callbacks have completed
     struct SettingsLoadState {
         int completed = 0;
         QDBusInterface* iface = nullptr;
     };
-    constexpr int settingsLoadTotalExpected = 4;
+    // Must match the number of asyncCall+watcher blocks below (currently 5:
+    // excludeTransientWindows, minimumWindowWidth, minimumWindowHeight,
+    // snapAssistEnabled, dragActivationMouseButton)
+    constexpr int settingsLoadTotalExpected = 5;
     auto* loadState = new SettingsLoadState{0, settingsInterface};
 
     auto onSettingLoaded = [loadState](QDBusPendingCallWatcher* w) {
@@ -953,6 +985,23 @@ void PlasmaZonesEffect::loadExclusionSettings()
                 m_snapAssistEnabled = value.toBool();
             }
             qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
+        }
+    });
+
+    // Load dragActivationMouseButton (for activation-button-release snap trigger)
+    QDBusPendingCall mouseButtonCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("dragActivationMouseButton"));
+    auto* mouseButtonWatcher = new QDBusPendingCallWatcher(mouseButtonCall, this);
+    connect(mouseButtonWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            if (value.canConvert<QDBusVariant>()) {
+                m_dragActivationMouseButton = value.value<QDBusVariant>().variant().toInt();
+            } else {
+                m_dragActivationMouseButton = value.toInt();
+            }
+            qCDebug(lcEffect) << "Loaded dragActivationMouseButton:" << m_dragActivationMouseButton;
         }
     });
 
@@ -1649,6 +1698,21 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                     snapGeometry = QRect(snapX, snapY, snapWidth, snapHeight);
                 }
                 if (shouldApply) {
+                    // If the window is still in user-move state because only the
+                    // activation mouse button is held (LMB already released),
+                    // cancel KWin's interactive move so we can snap immediately.
+                    // Without this, applySnapGeometry defers (100 ms retry) until
+                    // ALL buttons are released, causing a noticeable delay when
+                    // using a mouse button (e.g. RMB) for zone activation.
+                    if (safeWindow->isUserMove()
+                        && !(m_currentMouseButtons & Qt::LeftButton)) {
+                        KWin::Window* kw = safeWindow->window();
+                        if (kw) {
+                            qCDebug(lcEffect) << "Cancelling interactive move"
+                                " (activation button held, LMB released)";
+                            kw->cancelInteractiveMoveResize();
+                        }
+                    }
                     applySnapGeometry(safeWindow, snapGeometry);
                 }
             }
@@ -1727,7 +1791,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
             });
 }
 
-void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag)
+void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag, int retriesLeft)
 {
     if (!window) {
         qCWarning(lcEffect) << "Cannot apply geometry - window is null";
@@ -1752,15 +1816,21 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // When allowDuringDrag is false: defer if window is in user move/resize (snap on release)
     // When allowDuringDrag is true: apply immediately (FancyZones-style during drag)
     if (!allowDuringDrag && (window->isUserMove() || window->isUserResize())) {
-        qCDebug(lcEffect) << "Window still in user move/resize state, deferring geometry change";
-        // Schedule the geometry change for next frame when the move operation is complete
-        // Use QPointer to safely handle window destruction during the timer delay
+        if (retriesLeft <= 0) {
+            qCWarning(lcEffect) << "Giving up snap geometry — window still in user move after max retries";
+            return;
+        }
+        qCDebug(lcEffect) << "Window still in user move/resize state, deferring geometry change"
+                          << "(retries left:" << retriesLeft << ")";
+        // Schedule the geometry change for when the move operation completes.
+        // Use QPointer to safely handle window destruction during the timer delay.
+        // This covers the brief race where forceEnd fired but KWin hasn't cleared
+        // isUserMove yet (takes ~1 frame). The activation-button-held case is
+        // handled earlier in callDragStopped via cancelInteractiveMoveResize.
         QPointer<KWin::EffectWindow> safeWindow = window;
-        QTimer::singleShot(100, this, [this, safeWindow, geometry]() {
-            // Re-check all conditions including fullscreen - window state can change during delay
-            // QPointer automatically becomes null if the window is destroyed
-            if (safeWindow && !safeWindow->isUserMove() && !safeWindow->isUserResize() && !safeWindow->isFullScreen()) {
-                applySnapGeometry(safeWindow, geometry, false);
+        QTimer::singleShot(100, this, [this, safeWindow, geometry, retriesLeft]() {
+            if (safeWindow && !safeWindow->isFullScreen()) {
+                applySnapGeometry(safeWindow, geometry, false, retriesLeft - 1);
             }
         });
         return;

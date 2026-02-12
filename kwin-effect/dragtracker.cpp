@@ -32,8 +32,18 @@ void DragTracker::pollWindowMoves()
         }
     }
 
+    // Clear force-end suppression once the window stops moving
+    if (m_forceEndedWindow && (!movingWindow || movingWindow != m_forceEndedWindow)) {
+        m_forceEndedWindow = nullptr;
+    }
+
     // Detect start of drag
     if (movingWindow && !m_draggedWindow) {
+        // Suppress re-entry after forceEnd() — this window's drag was already ended
+        if (movingWindow == m_forceEndedWindow) {
+            return;
+        }
+
         m_draggedWindow = movingWindow;
         m_draggedWindowId = m_effect->getWindowId(movingWindow);
         m_lastCursorPos = KWin::effects->cursorPos();
@@ -58,17 +68,35 @@ void DragTracker::pollWindowMoves()
     }
     // Detect end of drag
     else if (!movingWindow && m_draggedWindow) {
-        qCInfo(lcEffect) << "Window move finished";
-        // Save the window pointer before clearing
-        KWin::EffectWindow* windowToSnap = m_draggedWindow;
-        QString windowIdToSnap = m_draggedWindowId;
-
-        // Clear state first to prevent re-entry issues
-        m_draggedWindow = nullptr;
-        m_draggedWindowId.clear();
-
-        Q_EMIT dragStopped(windowToSnap, windowIdToSnap);
+        qCInfo(lcEffect) << "Window move finished (isUserMove went false)";
+        finishDrag();
     }
+}
+
+void DragTracker::forceEnd(const QPointF& cursorPos)
+{
+    if (!m_draggedWindow) {
+        return;
+    }
+
+    qCInfo(lcEffect) << "Force-ending drag (button released)";
+
+    m_lastCursorPos = cursorPos;
+    m_forceEndedWindow = m_draggedWindow;
+
+    finishDrag();
+}
+
+void DragTracker::finishDrag()
+{
+    KWin::EffectWindow* windowToSnap = m_draggedWindow;
+    QString windowIdToSnap = m_draggedWindowId;
+
+    // Clear state first to prevent re-entry issues
+    m_draggedWindow = nullptr;
+    m_draggedWindowId.clear();
+
+    Q_EMIT dragStopped(windowToSnap, windowIdToSnap);
 }
 
 void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
@@ -77,6 +105,9 @@ void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
         m_draggedWindow = nullptr;
         m_draggedWindowId.clear();
     }
+    if (m_forceEndedWindow == window) {
+        m_forceEndedWindow = nullptr;
+    }
 }
 
 void DragTracker::reset()
@@ -84,6 +115,7 @@ void DragTracker::reset()
     m_draggedWindow = nullptr;
     m_draggedWindowId.clear();
     m_lastCursorPos = QPointF();
+    m_forceEndedWindow = nullptr;
 }
 
 } // namespace PlasmaZones

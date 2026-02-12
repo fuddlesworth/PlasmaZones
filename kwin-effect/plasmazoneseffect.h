@@ -205,7 +205,8 @@ private:
 
     // Apply snap geometry to window
     // When allowDuringDrag is true, applies immediately even if window is in user move state (for FancyZones-style)
-    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false);
+    // retriesLeft caps the deferred-retry chain (avoids unbounded timers if isUserMove gets stuck)
+    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false, int retriesLeft = 20);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // iface must remain valid for the duration of the async call (caller guarantees
@@ -304,6 +305,10 @@ private:
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
     bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
+
+    // Mouse button configured for zone activation during drag (0=None, Qt::MouseButton bits)
+    // Loaded from daemon via D-Bus so forceEnd can fire on activation-button release.
+    int m_dragActivationMouseButton = 0;
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.
