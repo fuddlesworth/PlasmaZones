@@ -613,6 +613,15 @@ ScrollView {
                         ToolTip.text: i18n("When enabled, windows return to their previous zones after logging in or restarting the session.")
                     }
 
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Snap Assist:")
+                        text: i18n("Show window picker after snapping to fill empty zones")
+                        checked: kcm.snapAssistEnabled
+                        onToggled: kcm.snapAssistEnabled = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, after snapping a window you can pick another window to fill the remaining empty zones.")
+                    }
+
                     ComboBox {
                         id: stickyHandlingCombo
                         Kirigami.FormData.label: i18n("Sticky windows:")

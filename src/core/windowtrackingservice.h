@@ -342,6 +342,13 @@ public:
     QString findEmptyZone(const QString& screenName = QString()) const;
 
     /**
+     * @brief Get JSON array of all empty zones for Snap Assist continuation
+     * @param screenName Screen to find layout for (e.g. DP-1)
+     * @return JSON array of {zoneId, x, y, width, height, borderWidth, borderRadius} in overlay coordinates
+     */
+    QString getEmptyZonesJson(const QString& screenName) const;
+
+    /**
      * @brief Get geometry for a zone on a specific screen
      * @param zoneId Zone UUID string
      * @param screenName Screen name (empty = primary)

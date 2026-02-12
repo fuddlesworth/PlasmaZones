@@ -67,6 +67,15 @@
                 <annotation name="org.gtk.GDBus.DocString" value="All snapped window IDs."/>
             </arg>
         </method>
+        <method name="getEmptyZonesJson">
+            <annotation name="org.gtk.GDBus.DocString" value="Return JSON array of empty zones for Snap Assist continuation. Same format as emptyZonesJson from dragStopped."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1)."/>
+            </arg>
+            <arg name="emptyZonesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height, borderWidth, borderRadius}."/>
+            </arg>
+        </method>
         <method name="getLastUsedZoneId">
             <annotation name="org.gtk.GDBus.DocString" value="Return the last zone a window was snapped to (for auto-snap)."/>
             <arg name="zoneId" type="s" direction="out">
@@ -513,6 +522,18 @@
             </arg>
             <arg name="unused" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Reserved for future use."/>
+            </arg>
+        </signal>
+        <signal name="moveSpecificWindowToZoneRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a specific window (e.g. from Snap Assist) should be moved to a zone."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier to move."/>
+            </arg>
+            <arg name="zoneId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Target zone UUID."/>
+            </arg>
+            <arg name="geometryJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON {x, y, width, height} for the zone."/>
             </arg>
         </signal>
     </interface>

@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -37,6 +38,12 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector
 
     connect(m_zoneDetector, &IZoneDetector::highlightsCleared, this, [this]() {
         Q_EMIT zoneHighlightChanged(QString());
+    });
+
+    connect(m_overlayService, &IOverlayService::snapAssistShown, this, [this](const QString& screenName,
+                                                                              const QString& emptyZonesJson,
+                                                                              const QString& candidatesJson) {
+        Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
     });
 }
 
@@ -158,6 +165,38 @@ void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height,
 void OverlayAdaptor::hideShaderPreview()
 {
     m_overlayService->hideShaderPreview();
+}
+
+bool OverlayAdaptor::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+                                    const QString& candidatesJson)
+{
+    // Return false when we know overlay won't be shown (avoids misleading "success")
+    if (emptyZonesJson.isEmpty() || emptyZonesJson == QLatin1String("[]")
+        || candidatesJson.isEmpty() || candidatesJson == QLatin1String("[]")) {
+        return false;
+    }
+    // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
+    // call; returning quickly prevents compositor freeze during overlay creation.
+    // Note: Return value means "request accepted for deferred processing", not "overlay shown".
+    QTimer::singleShot(0, m_overlayService, [this, screenName, emptyZonesJson, candidatesJson]() {
+        m_overlayService->showSnapAssist(screenName, emptyZonesJson, candidatesJson);
+    });
+    return true;
+}
+
+void OverlayAdaptor::hideSnapAssist()
+{
+    m_overlayService->hideSnapAssist();
+}
+
+bool OverlayAdaptor::isSnapAssistVisible()
+{
+    return m_overlayService->isSnapAssistVisible();
+}
+
+void OverlayAdaptor::setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl)
+{
+    m_overlayService->setSnapAssistThumbnail(kwinHandle, dataUrl);
 }
 
 } // namespace PlasmaZones

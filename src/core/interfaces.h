@@ -181,6 +181,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void snapAssistEnabledChanged();
     void defaultLayoutIdChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();
@@ -480,6 +481,13 @@ public:
                                      const QString& shaderParamsJson, const QString& zonesJson) = 0;
     virtual void hideShaderPreview() = 0;
 
+    // Snap Assist overlay (window picker after snapping)
+    virtual void showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+                                const QString& candidatesJson) = 0;
+    virtual void hideSnapAssist() = 0;
+    virtual bool isSnapAssistVisible() const = 0;
+    virtual void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) = 0;
+
 Q_SIGNALS:
     void visibilityChanged(bool visible);
     void zoneActivated(Zone* zone);
@@ -493,6 +501,22 @@ Q_SIGNALS:
      * @param screenName The screen where the selection was made
      */
     void manualLayoutSelected(const QString& layoutId, const QString& screenName);
+
+    /**
+     * @brief Emitted when user selects a window from Snap Assist to snap to a zone
+     * @param windowId Window identifier to snap
+     * @param zoneId Target zone UUID
+     * @param geometryJson JSON {x, y, width, height} - used for display only; daemon fetches authoritative geometry
+     * @param screenName Screen where the zone is (e.g. DP-1) for geometry lookup
+     */
+    void snapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson,
+                                  const QString& screenName);
+
+    /**
+     * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
+     */
+    void snapAssistShown(const QString& screenName, const QString& emptyZonesJson,
+                         const QString& candidatesJson);
 };
 
 } // namespace PlasmaZones

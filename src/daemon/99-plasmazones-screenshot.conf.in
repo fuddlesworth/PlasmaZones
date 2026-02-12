@@ -1,0 +1,4 @@
+# PlasmaZones Snap Assist: bypass KWin screenshot auth when desktop matching fails.
+# Only needed when thumbnails show icons only (e.g. local install, custom path).
+# To disable: ln -sf /dev/null /etc/environment.d/99-plasmazones-screenshot.conf
+KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1

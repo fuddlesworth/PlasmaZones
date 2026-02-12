@@ -19,7 +19,11 @@
 #include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
 #include <QLoggingCategory>
+#include <QBuffer>
+#include <QIcon>
+#include <QImage>
 #include <QJsonDocument>
+#include <QPixmap>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonParseError>
@@ -230,6 +234,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_dbusInterface.reset();
         m_windowTrackingInterface.reset();
         m_zoneDetectionInterface.reset();
+        m_overlayInterface.reset();
         m_settingsInterface.reset();
 
         // Defer re-push by 2s to avoid blocking the compositor.
@@ -622,6 +627,12 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
         return false;
     }
 
+    // Never snap our own windows (daemon overlays, Snap Assist, editor)
+    const QString windowClass = w->windowClass();
+    if (windowClass.contains(QLatin1String("plasmazones"), Qt::CaseInsensitive)) {
+        return false;
+    }
+
     // Skip special windows
     if (w->isSpecialWindow()) {
         return false;
@@ -764,6 +775,77 @@ bool PlasmaZonesEffect::ensureWindowTrackingReady(const char* methodName)
     return true;
 }
 
+bool PlasmaZonesEffect::ensureOverlayInterface(const char* methodName)
+{
+    ensureInterface(m_overlayInterface, DBus::Interface::Overlay, "Overlay");
+    if (!m_overlayInterface || !m_overlayInterface->isValid()) {
+        qCDebug(lcEffect) << "Cannot" << methodName << "- Overlay interface not available";
+        return false;
+    }
+    return true;
+}
+
+QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWindowId,
+                                                        const QString& screenName,
+                                                        const QSet<QString>& snappedStableIds) const
+{
+    // Candidates: unsnapped windows (including floated — user can snap them to fill empty zones)
+    QJsonArray candidates;
+    const auto windows = KWin::effects->stackingOrder();
+
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || !shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
+            continue;
+        }
+
+        QString windowId = getWindowId(w);
+        QString stableId = extractStableId(windowId);
+        if (stableId == extractStableId(excludeWindowId)) {
+            continue; // Exclude the just-snapped window
+        }
+        if (snappedStableIds.contains(stableId)) {
+            continue; // Exclude windows already snapped to zones (candidates must be unsnapped)
+        }
+
+        QString winScreenName = getWindowScreenName(w);
+        if (!screenName.isEmpty() && winScreenName != screenName) {
+            continue; // Same screen only
+        }
+
+        QString windowClass = w->windowClass();
+        QString iconName = deriveShortNameFromWindowClass(windowClass);
+        if (iconName.isEmpty()) {
+            iconName = QStringLiteral("application-x-executable");
+        }
+
+        QJsonObject obj;
+        obj[QLatin1String("windowId")] = windowId;
+        obj[QLatin1String("kwinHandle")] = w->internalId().toString();
+        obj[QLatin1String("icon")] = iconName;
+        obj[QLatin1String("caption")] = w->caption();
+
+        // Use EffectWindow::icon() for proper app icon (KWin resolves from .desktop)
+        QIcon winIcon = w->icon();
+        if (!winIcon.isNull()) {
+            QPixmap pix = winIcon.pixmap(64, 64);
+            if (!pix.isNull()) {
+                QByteArray ba;
+                QBuffer buffer(&ba);
+                buffer.open(QIODevice::WriteOnly);
+                if (pix.toImage().save(&buffer, "PNG")) {
+                    QString dataUrl = QStringLiteral("data:image/png;base64,")
+                        + QString::fromUtf8(ba.toBase64());
+                    obj[QLatin1String("iconPng")] = dataUrl;
+                }
+            }
+        }
+
+        candidates.append(obj);
+    }
+    return candidates;
+}
+
 void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
 {
     // Delegate to NavigationHandler
@@ -790,12 +872,27 @@ void PlasmaZonesEffect::loadExclusionSettings()
 
     // Load settings asynchronously to avoid blocking KWin startup
     // Each setting is loaded independently so partial failures don't block others
+    // Shared state: delete interface only when ALL 4 callbacks have completed
+    struct SettingsLoadState {
+        int completed = 0;
+        QDBusInterface* iface = nullptr;
+    };
+    constexpr int settingsLoadTotalExpected = 4;
+    auto* loadState = new SettingsLoadState{0, settingsInterface};
+
+    auto onSettingLoaded = [loadState](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (++loadState->completed == settingsLoadTotalExpected) {
+            loadState->iface->deleteLater();
+            delete loadState;
+        }
+    };
 
     // Load excludeTransientWindows
     QDBusPendingCall excludeCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("excludeTransientWindows"));
     auto* excludeWatcher = new QDBusPendingCallWatcher(excludeCall, this);
-    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -811,8 +908,8 @@ void PlasmaZonesEffect::loadExclusionSettings()
     // Load minimumWindowWidth
     QDBusPendingCall widthCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowWidth"));
     auto* widthWatcher = new QDBusPendingCallWatcher(widthCall, this);
-    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -828,8 +925,8 @@ void PlasmaZonesEffect::loadExclusionSettings()
     // Load minimumWindowHeight
     QDBusPendingCall heightCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowHeight"));
     auto* heightWatcher = new QDBusPendingCallWatcher(heightCall, this);
-    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, settingsInterface](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -840,8 +937,23 @@ void PlasmaZonesEffect::loadExclusionSettings()
             }
             qCDebug(lcEffect) << "Loaded minimumWindowHeight:" << m_minimumWindowHeight;
         }
-        // Clean up the interface after the last setting is loaded
-        settingsInterface->deleteLater();
+    });
+
+    // Load snapAssistEnabled (for Snap Assist continuation gating)
+    QDBusPendingCall snapAssistCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("snapAssistEnabled"));
+    auto* snapAssistWatcher = new QDBusPendingCallWatcher(snapAssistCall, this);
+    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            QVariant value = reply.value();
+            if (value.canConvert<QDBusVariant>()) {
+                m_snapAssistEnabled = value.value<QDBusVariant>().variant().toBool();
+            } else {
+                m_snapAssistEnabled = value.toBool();
+            }
+            qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
+        }
     });
 
     qCDebug(lcEffect) << "Loading exclusion settings asynchronously, using defaults until loaded";
@@ -885,6 +997,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("snapAllWindowsRequested"), this,
                                           SLOT(slotSnapAllWindowsRequested(QString)));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("moveSpecificWindowToZoneRequested"), this,
+                                          SLOT(slotMoveSpecificWindowToZoneRequested(QString, QString, QString)));
 
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("pendingRestoresAvailable"), this,
@@ -1022,6 +1138,85 @@ void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneI
 {
     // Delegate to NavigationHandler
     m_navigationHandler->handleMoveWindowToZone(targetZoneId, zoneGeometry);
+}
+
+void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
+                                                             const QString& geometryJson)
+{
+    QRect geometry = parseZoneGeometry(geometryJson);
+    if (!geometry.isValid()) {
+        qCWarning(lcEffect) << "slotMoveSpecificWindowToZoneRequested: invalid geometry" << geometryJson;
+        return;
+    }
+
+    QString stableId = extractStableId(windowId);
+    QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap(true);
+    KWin::EffectWindow* targetWindow = nullptr;
+    for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
+        if (extractStableId(getWindowId(it.value())) == stableId) {
+            targetWindow = it.value();
+            break;
+        }
+    }
+
+    if (!targetWindow) {
+        qCWarning(lcEffect) << "slotMoveSpecificWindowToZoneRequested: window not found" << windowId;
+        emitNavigationFeedback(false, QStringLiteral("snap_assist"), QStringLiteral("window_not_found"));
+        return;
+    }
+
+    ensurePreSnapGeometryStored(targetWindow, getWindowId(targetWindow));
+    applySnapGeometry(targetWindow, geometry);
+
+    QString screenName = getWindowScreenName(targetWindow);
+    if (ensureWindowTrackingReady("snap assist windowSnapped")) {
+        m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), getWindowId(targetWindow), zoneId,
+                                             screenName);
+        m_windowTrackingInterface->asyncCall(QStringLiteral("recordSnapIntent"), getWindowId(targetWindow), true);
+
+        // Snap Assist continuation: if more empty zones and unsnapped windows remain, re-show
+        showSnapAssistContinuationIfNeeded(screenName);
+    }
+}
+
+void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screenName)
+{
+    if (screenName.isEmpty() || !m_snapAssistEnabled || !ensureWindowTrackingReady("snap assist continuation")) {
+        return;
+    }
+    QDBusPendingCall emptyCall =
+        m_windowTrackingInterface->asyncCall(QStringLiteral("getEmptyZonesJson"), screenName);
+    auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, screenName](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QString> reply = *w;
+                if (!reply.isValid() || reply.value().isEmpty()
+                    || reply.value() == QLatin1String("[]")) {
+                    return;
+                }
+                QString emptyZonesJson = reply.value();
+                if (!ensureOverlayInterface("snap assist continuation")) {
+                    return;
+                }
+                QSet<QString> snappedStableIds;
+                QDBusReply<QStringList> snapReply =
+                    m_windowTrackingInterface->call(QStringLiteral("getSnappedWindows"));
+                if (snapReply.isValid()) {
+                    for (const QString& id : snapReply.value()) {
+                        snappedStableIds.insert(extractStableId(id));
+                    }
+                }
+                QJsonArray candidates =
+                    buildSnapAssistCandidates(QString(), screenName, snappedStableIds);
+                if (candidates.isEmpty()) {
+                    return;
+                }
+                m_overlayInterface->call(QStringLiteral("showSnapAssist"), screenName,
+                                         emptyZonesJson,
+                                         QString::fromUtf8(
+                                             QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
+            });
 }
 
 void PlasmaZonesEffect::slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId)
@@ -1239,18 +1434,9 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         }
         seenClasses.insert(windowClass);
 
-        // Derive a short app name from the window class:
-        //   X11: "resourceName resourceClass" → first part (e.g., "dolphin")
-        //   Wayland app_id: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
-        QString appName = windowClass;
-        int spaceIdx = windowClass.indexOf(QLatin1Char(' '));
-        if (spaceIdx > 0) {
-            appName = windowClass.left(spaceIdx);
-        } else {
-            int dotIdx = windowClass.lastIndexOf(QLatin1Char('.'));
-            if (dotIdx >= 0 && dotIdx < windowClass.length() - 1) {
-                appName = windowClass.mid(dotIdx + 1);
-            }
+        QString appName = deriveShortNameFromWindowClass(windowClass);
+        if (appName.isEmpty()) {
+            appName = windowClass;
         }
 
         QJsonObject obj;
@@ -1420,7 +1606,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
             [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
 
-        QDBusPendingReply<int, int, int, int, bool, QString, bool> reply = *w;
+        QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, QString> reply = *w;
         if (reply.isError()) {
             qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
             return;
@@ -1433,6 +1619,8 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
         bool shouldSnap = reply.argumentAt<4>();
         QString releaseScreenName = reply.argumentAt<5>();
         bool restoreSizeOnly = reply.argumentAt<6>();
+        bool snapAssistRequested = reply.argumentAt<7>();
+        QString emptyZonesJson = reply.argumentAt<8>();
 
         qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
                           << "releaseScreen=" << releaseScreenName
@@ -1472,8 +1660,35 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
         // screen - after cross-screen drag the window may still report the old screen.
         if (!shouldSnap && safeWindow && !releaseScreenName.isEmpty() && ensureWindowTrackingReady("auto-fill on drop")) {
             bool sticky = isWindowSticky(safeWindow);
+            auto onSnapSuccess = [this](const QString&, const QString& snappedScreenName) {
+                showSnapAssistContinuationIfNeeded(snappedScreenName);
+            };
             tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"),
-                              {windowId, releaseScreenName, sticky}, safeWindow, windowId, true, nullptr);
+                              {windowId, releaseScreenName, sticky}, safeWindow, windowId, true, nullptr,
+                              onSnapSuccess);
+        }
+
+        // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist
+        if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenName.isEmpty()
+            && ensureOverlayInterface("snap assist") && ensureWindowTrackingReady("snap assist")) {
+            QSet<QString> snappedStableIds;
+            QDBusReply<QStringList> snapReply =
+                m_windowTrackingInterface->call(QStringLiteral("getSnappedWindows"));
+            if (snapReply.isValid()) {
+                for (const QString& id : snapReply.value()) {
+                    snappedStableIds.insert(extractStableId(id));
+                }
+            }
+            QJsonArray candidates = buildSnapAssistCandidates(windowId, releaseScreenName, snappedStableIds);
+            if (!candidates.isEmpty()) {
+                QDBusMessage msg = m_overlayInterface->call(QStringLiteral("showSnapAssist"),
+                                                            releaseScreenName, emptyZonesJson,
+                                                            QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
+                if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()
+                    && msg.arguments().constFirst().toBool()) {
+                    qCInfo(lcEffect) << "Snap Assist shown with" << candidates.size() << "candidates";
+                }
+            }
         }
     });
 }
@@ -1481,12 +1696,14 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
 void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method,
                                           const QList<QVariant>& args,
                                           QPointer<KWin::EffectWindow> window, const QString& windowId,
-                                          bool storePreSnap, std::function<void()> fallback)
+                                          bool storePreSnap, std::function<void()> fallback,
+                                          std::function<void(const QString&, const QString&)> onSnapSuccess)
 {
     QDBusPendingCall call = iface.asyncCallWithArgumentList(method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback](QDBusPendingCallWatcher* w) {
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args](
+                QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
                 if (reply.isError()) {
@@ -1500,6 +1717,10 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap) ensurePreSnapGeometryStored(window, windowId);
                     applySnapGeometry(window, geo);
+                    // args[1] is screenName (e.g. for snapToEmptyZone, snapToLastZone)
+                    if (onSnapSuccess && args.size() >= 2) {
+                        onSnapSuccess(windowId, args[1].toString());
+                    }
                     return;
                 }
                 if (fallback) fallback();
@@ -1586,6 +1807,22 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
 
     // Not a pointer format, return as-is
     return windowId;
+}
+
+QString PlasmaZonesEffect::deriveShortNameFromWindowClass(const QString& windowClass)
+{
+    if (windowClass.isEmpty()) {
+        return QString();
+    }
+    int spaceIdx = windowClass.indexOf(QLatin1Char(' '));
+    if (spaceIdx > 0) {
+        return windowClass.left(spaceIdx);
+    }
+    int dotIdx = windowClass.lastIndexOf(QLatin1Char('.'));
+    if (dotIdx >= 0 && dotIdx < windowClass.length() - 1) {
+        return windowClass.mid(dotIdx + 1);
+    }
+    return windowClass;
 }
 
 void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int width, int height)

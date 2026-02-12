@@ -229,5 +229,52 @@
         <method name="hideShaderPreview">
             <annotation name="org.gtk.GDBus.DocString" value="Hide and destroy the shader preview overlay."/>
         </method>
+
+        <!-- Snap Assist: show window picker to fill empty zones after snapping -->
+        <method name="showSnapAssist">
+            <annotation name="org.gtk.GDBus.DocString" value="Show Snap Assist overlay with candidate windows. Called by KWin effect after dragStopped when snapAssistRequested is true."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the snap occurred (e.g. DP-1)."/>
+            </arg>
+            <arg name="emptyZonesJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height} for empty zones."/>
+            </arg>
+            <arg name="candidatesJson" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, kwinHandle, icon, caption} for candidate windows."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if overlay was shown."/>
+            </arg>
+        </method>
+        <method name="hideSnapAssist">
+            <annotation name="org.gtk.GDBus.DocString" value="Hide the Snap Assist overlay."/>
+        </method>
+        <method name="isSnapAssistVisible">
+            <annotation name="org.gtk.GDBus.DocString" value="Returns true if Snap Assist overlay is visible."/>
+            <arg name="visible" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if Snap Assist is visible."/>
+            </arg>
+        </method>
+        <method name="setSnapAssistThumbnail">
+            <annotation name="org.gtk.GDBus.DocString" value="Deliver a window thumbnail from KWin script (WindowThumbnail + grabToImage). Called by plasmazones-snapassist script."/>
+            <arg name="kwinHandle" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="KWin internal UUID (EffectWindow::internalId().toString())."/>
+            </arg>
+            <arg name="dataUrl" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="data:image/png;base64,... thumbnail image."/>
+            </arg>
+        </method>
+        <signal name="snapAssistShown">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails via WindowThumbnail and call setSnapAssistThumbnail."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where snap occurred (e.g. DP-1)."/>
+            </arg>
+            <arg name="emptyZonesJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of empty zones."/>
+            </arg>
+            <arg name="candidatesJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of candidate windows with kwinHandle."/>
+            </arg>
+        </signal>
     </interface>
 </node>

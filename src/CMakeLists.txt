@@ -249,6 +249,8 @@ set(plasmazones_daemon_SRCS
     daemon/cavaservice.h
     daemon/overlayservice.cpp
     daemon/overlayservice.h
+    daemon/windowthumbnailservice.cpp
+    daemon/windowthumbnailservice.h
     daemon/shortcutmanager.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
@@ -321,6 +323,14 @@ install(FILES
 install(FILES
     config/plasmazones.kcfg
     DESTINATION ${KDE_INSTALL_KCFGDIR}
+)
+
+# Daemon desktop file: use full Exec path so KWin's fetchRestrictedDBusInterfacesFromPid
+# can match the process (it compares executable path to desktop Exec).
+configure_file(
+    daemon/org.plasmazones.daemon.desktop.in
+    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.daemon.desktop
+    @ONLY
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -500,8 +510,21 @@ install(FILES
     DESTINATION ${KDE_INSTALL_APPDIR}
 )
 
-# Desktop file for the daemon (for XDG portal registration, NoDisplay=true)
+# Desktop file for the daemon (for XDG portal registration, NoDisplay=true).
+# Uses configured .desktop with full Exec path for KWin screenshot auth.
 install(FILES
-    daemon/org.plasmazones.daemon.desktop
+    ${CMAKE_CURRENT_BINARY_DIR}/org.plasmazones.daemon.desktop
     DESTINATION ${KDE_INSTALL_APPDIR}
+)
+
+# Snap Assist thumbnails: daemon captures via KWin ScreenShot2. When desktop matching fails
+# (e.g. local install), set KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 in environment.
+configure_file(
+    daemon/99-plasmazones-screenshot.conf.in
+    ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
+    @ONLY
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/99-plasmazones-screenshot.conf
+    DESTINATION ${KDE_INSTALL_LIBDIR}/environment.d
 )

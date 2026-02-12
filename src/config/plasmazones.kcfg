@@ -232,6 +232,10 @@
       <label>Restore windows to their zones after login/session restart</label>
       <default>true</default>
     </entry>
+    <entry name="SnapAssistEnabled" type="Bool">
+      <label>Show window picker after snapping to fill empty zones (Snap Assist)</label>
+      <default>true</default>
+    </entry>
     <entry name="DefaultLayoutId" type="String">
       <label>Default layout to use when no explicit assignment exists</label>
       <default></default>

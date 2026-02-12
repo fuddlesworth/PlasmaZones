@@ -691,6 +691,26 @@ void Daemon::start()
         }
     });
 
+    // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
+    // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
+    connect(m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this,
+            [this](const QString& windowId, const QString& zoneId, const QString& geometryJson,
+                   const QString& screenName) {
+                QString geometryToUse = geometryJson;
+                QString effectiveScreen = screenName;
+                if (effectiveScreen.isEmpty() && QGuiApplication::primaryScreen()) {
+                    effectiveScreen = QGuiApplication::primaryScreen()->name();
+                }
+                if (!effectiveScreen.isEmpty()) {
+                    QString authGeometry =
+                        m_windowTrackingAdaptor->getZoneGeometryForScreen(zoneId, effectiveScreen);
+                    if (!authGeometry.isEmpty()) {
+                        geometryToUse = authGeometry;
+                    }
+                }
+                m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometryToUse);
+            });
+
     // Connect navigation feedback signal to show OSD (Qt signal from WindowTrackingAdaptor)
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
             [this](bool success, const QString& action, const QString& reason,

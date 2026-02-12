@@ -204,6 +204,13 @@ public Q_SLOTS:
     QStringList getSnappedWindows();
 
     /**
+     * Get JSON array of empty zones for Snap Assist continuation
+     * @param screenName Screen name (e.g. DP-1)
+     * @return JSON array of {zoneId, x, y, width, height, borderWidth, borderRadius}
+     */
+    QString getEmptyZonesJson(const QString& screenName);
+
+    /**
      * Get the last zone a window was snapped to
      * @return Zone ID of last used zone, or empty string if none
      */
@@ -556,6 +563,22 @@ Q_SIGNALS:
      * @param screenName Screen to operate on
      */
     void snapAllWindowsRequested(const QString& screenName);
+
+    /**
+     * @brief Request to move a specific window to a zone (e.g. from Snap Assist selection)
+     * @param windowId Window identifier to move
+     * @param zoneId Target zone UUID
+     * @param geometryJson JSON {x, y, width, height} for the zone
+     */
+    void moveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
+                                          const QString& geometryJson);
+
+public Q_SLOTS:
+    /**
+     * @brief Emit moveSpecificWindowToZoneRequested - called when user selects from Snap Assist
+     */
+    void requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId,
+                                         const QString& geometryJson);
 
 private Q_SLOTS:
     /**

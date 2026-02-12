@@ -71,6 +71,7 @@ set(KNOWN_FILES
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/kcm_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_PLUGINDIR@/plasma/kcms/systemsettings/kcm_plasmazones.so"
     "$ENV{DESTDIR}@KDE_INSTALL_FULL_SYSTEMDUSERUNITDIR@/plasmazones.service"
+    "$ENV{DESTDIR}@KDE_INSTALL_FULL_LIBDIR@/environment.d/99-plasmazones-screenshot.conf"
 )
 
 foreach(f ${KNOWN_FILES})

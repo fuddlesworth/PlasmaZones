@@ -537,6 +537,11 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
     return m_service->snappedWindows();
 }
 
+QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenName)
+{
+    return m_service->getEmptyZonesJson(screenName);
+}
+
 QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId)
 {
     if (!validateWindowId(windowId, QStringLiteral("get multi-zone for window"))) {
@@ -949,6 +954,13 @@ void WindowTrackingAdaptor::snapAllWindows(const QString& screenName)
 {
     qCDebug(lcDbusWindow) << "snapAllWindows called for screen:" << screenName;
     Q_EMIT snapAllWindowsRequested(screenName);
+}
+
+void WindowTrackingAdaptor::requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId,
+                                                           const QString& geometryJson)
+{
+    qCDebug(lcDbusWindow) << "requestMoveSpecificWindowToZone: window=" << windowId << "zone=" << zoneId;
+    Q_EMIT moveSpecificWindowToZoneRequested(windowId, zoneId, geometryJson);
 }
 
 QString WindowTrackingAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenName)

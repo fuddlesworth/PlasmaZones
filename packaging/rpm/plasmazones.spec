@@ -162,6 +162,9 @@ echo ""
 # Systemd user service
 %{_userunitdir}/plasmazones.service
 
+# Snap Assist: env.d config for KWin screenshot auth (system installs use .desktop; this is fallback)
+%{_libdir}/environment.d/99-plasmazones-screenshot.conf
+
 # Translations (optional - may not exist yet)
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 

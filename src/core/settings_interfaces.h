@@ -269,6 +269,8 @@ public:
     virtual void setStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
+    virtual bool snapAssistEnabled() const = 0;
+    virtual void setSnapAssistEnabled(bool enabled) = 0;
 };
 
 /**

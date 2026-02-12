@@ -110,6 +110,7 @@ class KCMPlasmaZones : public KQuickConfigModule
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
 
     // Exclusions
@@ -248,6 +249,7 @@ public:
     bool restoreOriginalSizeOnUnsnap() const;
     int stickyWindowHandling() const;
     bool restoreWindowsToZonesOnLogin() const;
+    bool snapAssistEnabled() const;
     QString defaultLayoutId() const;
     QStringList excludedApplications() const;
     QStringList excludedWindowClasses() const;
@@ -343,6 +345,7 @@ public:
     void setRestoreOriginalSizeOnUnsnap(bool restore);
     void setStickyWindowHandling(int handling);
     void setRestoreWindowsToZonesOnLogin(bool restore);
+    void setSnapAssistEnabled(bool enabled);
     void setDefaultLayoutId(const QString& layoutId);
     void setExcludedApplications(const QStringList& apps);
     void setExcludedWindowClasses(const QStringList& classes);
@@ -500,6 +503,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void snapAssistEnabledChanged();
     void defaultLayoutIdChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();

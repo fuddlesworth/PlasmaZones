@@ -80,6 +80,7 @@ inline constexpr const char* DefaultBorderColor = "#CCFFFFFF";
 namespace JsonKeys {
 // Zone keys
 inline constexpr QLatin1String Id{"id"};
+inline constexpr QLatin1String ZoneId{"zoneId"};
 inline constexpr QLatin1String Name{"name"};
 inline constexpr QLatin1String ZoneNumber{"zoneNumber"};
 inline constexpr QLatin1String RelativeGeometry{"relativeGeometry"};

@@ -5,7 +5,7 @@
 Type=Application
 Name=PlasmaZones Daemon
 Comment=Window tiling zone management daemon
-Exec=plasmazonesd
+Exec=@KDE_INSTALL_FULL_BINDIR@/plasmazonesd
 Icon=plasmazones
 NoDisplay=true
 X-KDE-StartupNotify=false

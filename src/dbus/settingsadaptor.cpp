@@ -224,6 +224,7 @@ void SettingsAdaptor::initializeRegistry()
                           setKeepWindowsInZonesOnResolutionChange)
     REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
+    REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
 
     // Exclusions
     REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)

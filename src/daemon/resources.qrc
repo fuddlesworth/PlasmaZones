@@ -10,5 +10,6 @@
         <file alias="LayoutPreview.qml">../ui/LayoutPreview.qml</file>
         <file alias="LayoutOsd.qml">../ui/LayoutOsd.qml</file>
         <file alias="NavigationOsd.qml">../ui/NavigationOsd.qml</file>
+        <file alias="SnapAssistOverlay.qml">../ui/SnapAssistOverlay.qml</file>
     </qresource>
 </RCC>

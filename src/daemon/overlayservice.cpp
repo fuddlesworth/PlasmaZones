@@ -3,6 +3,7 @@
 
 #include "overlayservice.h"
 #include "cavaservice.h"
+#include "windowthumbnailservice.h"
 #include "../config/configdefaults.h"
 #include "../core/zoneselectorlayout.h"
 
@@ -39,6 +40,7 @@
 #include <cmath>
 
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QJsonParseError>
 
 #include <LayerShellQt/Window>
@@ -2809,6 +2811,211 @@ void OverlayService::destroyShaderPreviewWindow()
     if (!m_visible && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
         stopShaderAnimation();
     }
+}
+
+void OverlayService::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
+                                     const QString& candidatesJson)
+{
+    if (emptyZonesJson.isEmpty() || candidatesJson.isEmpty()) {
+        qCDebug(lcOverlay) << "showSnapAssist: no empty zones or candidates";
+        return;
+    }
+
+    QScreen* screen = nullptr;
+    if (!screenName.isEmpty()) {
+        screen = Utils::findScreenByName(screenName);
+    }
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        qCWarning(lcOverlay) << "showSnapAssist: no screen available";
+        return;
+    }
+
+    // Always destroy and recreate to avoid stale QML state (zone sizes wrong after continuation)
+    destroySnapAssistWindow();
+    createSnapAssistWindow();
+    if (!m_snapAssistWindow) {
+        return;
+    }
+
+    m_snapAssistScreen = screen;
+    m_snapAssistWindow->setScreen(screen);
+
+    // Parse JSON using shared helper (same format: array of objects)
+    const QVariantList zonesList = parseZonesJson(emptyZonesJson, "showSnapAssist:");
+    QVariantList candidatesList = parseZonesJson(candidatesJson, "showSnapAssist:");
+
+    // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
+    // Requires KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 when desktop matching fails (local install).
+    // Sequential capture (one at a time) to avoid overwhelming KWin; concurrent CaptureWindow
+    // requests can cause thumbnails to stop working after the first few.
+    if (!m_thumbnailService) {
+        m_thumbnailService = std::make_unique<WindowThumbnailService>(this);
+        connect(m_thumbnailService.get(), &WindowThumbnailService::captureFinished, this,
+                [this](const QString& kwinHandle, const QString& dataUrl) {
+                    updateSnapAssistCandidateThumbnail(kwinHandle, dataUrl);
+                    processNextThumbnailCapture();
+                });
+    }
+    // Apply cached thumbnails and queue only uncached ones (reuse across continuation)
+    m_snapAssistCandidates.clear();
+    m_thumbnailCaptureQueue.clear();
+    if (m_thumbnailService->isAvailable()) {
+        for (int i = 0; i < candidatesList.size(); ++i) {
+            QVariantMap cand = candidatesList[i].toMap();
+            QString kwinHandle = cand.value(QStringLiteral("kwinHandle")).toString();
+            if (!kwinHandle.isEmpty()) {
+                auto it = m_thumbnailCache.constFind(kwinHandle);
+                if (it != m_thumbnailCache.constEnd() && !it.value().isEmpty()) {
+                    cand[QStringLiteral("thumbnail")] = it.value();
+                } else {
+                    m_thumbnailCaptureQueue.append(kwinHandle);
+                }
+            }
+            m_snapAssistCandidates.append(cand);
+        }
+        qCDebug(lcOverlay) << "showSnapAssist: " << m_thumbnailCache.size() << "cached,"
+                          << m_thumbnailCaptureQueue.size() << "to capture";
+        processNextThumbnailCapture();
+    } else {
+        m_snapAssistCandidates = candidatesList;
+        qCDebug(lcOverlay) << "showSnapAssist: thumbnail service not available (auth?)";
+    }
+
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("emptyZones"), zonesList);
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screen->geometry().width());
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screen->geometry().height());
+
+    // Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
+    if (m_settings) {
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderColor"), m_settings->borderColor());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderWidth"), m_settings->borderWidth());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
+    }
+
+    // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
+    if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
+        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
+        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
+        layerWindow->setAnchors(LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+            | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setExclusiveZone(-1);
+        layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
+    }
+
+    assertWindowOnScreen(m_snapAssistWindow, screen);
+    m_snapAssistWindow->setGeometry(screen->geometry());
+    m_snapAssistWindow->show();
+    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenName << "zones=" << zonesList.size()
+                      << "candidates=" << candidatesList.size();
+
+    Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
+}
+
+void OverlayService::setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl)
+{
+    updateSnapAssistCandidateThumbnail(kwinHandle, dataUrl);
+}
+
+void OverlayService::updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl)
+{
+    if (dataUrl.isEmpty()) {
+        return;
+    }
+    m_thumbnailCache.insert(kwinHandle, dataUrl);
+    if (!m_snapAssistWindow || !m_snapAssistWindow->isVisible()) {
+        return;
+    }
+    for (int i = 0; i < m_snapAssistCandidates.size(); ++i) {
+        QVariantMap cand = m_snapAssistCandidates[i].toMap();
+        if (cand.value(QStringLiteral("kwinHandle")).toString() == kwinHandle) {
+            cand[QStringLiteral("thumbnail")] = dataUrl;
+            m_snapAssistCandidates[i] = cand;
+            writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
+            qCDebug(lcOverlay) << "SnapAssist: thumbnail updated for" << kwinHandle;
+            break;
+        }
+    }
+}
+
+void OverlayService::processNextThumbnailCapture()
+{
+    if (!m_thumbnailService || !m_thumbnailService->isAvailable() || m_thumbnailCaptureQueue.isEmpty()) {
+        return;
+    }
+    const QString kwinHandle = m_thumbnailCaptureQueue.takeFirst();
+    m_thumbnailService->captureWindowAsync(kwinHandle, 256);
+}
+
+void OverlayService::hideSnapAssist()
+{
+    m_thumbnailCache.clear();
+    destroySnapAssistWindow();
+}
+
+bool OverlayService::isSnapAssistVisible() const
+{
+    return m_snapAssistWindow && m_snapAssistWindow->isVisible();
+}
+
+void OverlayService::createSnapAssistWindow()
+{
+    if (m_snapAssistWindow) {
+        return;
+    }
+
+    QScreen* screen = Utils::primaryScreen();
+    if (!screen) {
+        qCWarning(lcOverlay) << "createSnapAssistWindow: no screen";
+        return;
+    }
+
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")), screen, "snap assist");
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to create snap assist overlay";
+        return;
+    }
+
+    connect(window, &QObject::destroyed, this, [this]() {
+        m_snapAssistWindow = nullptr;
+        m_snapAssistScreen = nullptr;
+    });
+
+    // Connect windowSelected from QML: convert overlay-local geometry to screen
+    // coordinates before emitting (KWin effect needs global coordinates for moveResize)
+    connect(window, SIGNAL(windowSelected(QString, QString, QString)), this,
+            SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+
+    m_snapAssistWindow = window;
+    m_snapAssistScreen = screen;
+    window->setVisible(false);
+}
+
+void OverlayService::destroySnapAssistWindow()
+{
+    if (m_snapAssistWindow) {
+        m_snapAssistWindow->close();
+        m_snapAssistWindow->deleteLater();
+        m_snapAssistWindow = nullptr;
+    }
+    m_snapAssistScreen = nullptr;
+}
+
+void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
+                                                const QString& geometryJson)
+{
+    QString screenName = m_snapAssistScreen ? m_snapAssistScreen->name() : QString();
+    // geometryJson is overlay-local; daemon will fetch authoritative zone geometry from service
+    Q_EMIT snapAssistWindowSelected(windowId, zoneId, geometryJson, screenName);
 }
 
 } // namespace PlasmaZones
