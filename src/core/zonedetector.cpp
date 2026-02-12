@@ -10,8 +10,9 @@
 
 namespace PlasmaZones {
 
-ZoneDetector::ZoneDetector(QObject* parent)
+ZoneDetector::ZoneDetector(ISettings* settings, QObject* parent)
     : IZoneDetector(parent)
+    , m_settings(settings)
     , m_highlighter(std::make_unique<ZoneHighlighter>(this))
 {
     // Forward highlighter signals for backward compatibility
@@ -44,15 +45,6 @@ void ZoneDetector::setLayout(Layout* layout)
         }
         m_highlighter->clearHighlights();
         Q_EMIT layoutChanged();
-    }
-}
-
-void ZoneDetector::setAdjacentThreshold(qreal threshold)
-{
-    threshold = qMax(0.0, threshold);
-    if (!qFuzzyCompare(m_adjacentThreshold, threshold)) {
-        m_adjacentThreshold = threshold;
-        Q_EMIT adjacentThresholdChanged();
     }
 }
 
@@ -177,7 +169,7 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
             continue;
         }
         qreal distance = zone->distanceToPoint(cursorPos);
-        if (distance <= m_adjacentThreshold || zone->containsPoint(cursorPos)) {
+        if (distance <= m_settings->adjacentThreshold() || zone->containsPoint(cursorPos)) {
             nearbyZones.append(zone);
         }
     }
