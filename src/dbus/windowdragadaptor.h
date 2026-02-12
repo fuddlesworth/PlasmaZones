@@ -158,6 +158,7 @@ private:
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
+    bool m_mouseActivationLatched = false; // Latches mouse-button activation until drag ends
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
     bool m_zoneSelectorShown = false;

@@ -124,6 +124,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_snapCancelled = false;
+    m_mouseActivationLatched = false;
     m_overlayShown = false;
     m_overlayScreen = nullptr;
     m_zoneSelectorShown = false;
@@ -495,7 +496,10 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     const bool multiZoneAlwaysOn = (multiZoneMod == static_cast<int>(DragModifier::AlwaysActive));
     const int activationButton = m_settings->dragActivationMouseButton();
     const bool activationByMouse = (activationButton != 0 && (mouseButtons & activationButton) != 0);
-    bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse;
+    if (activationByMouse) {
+        m_mouseActivationLatched = true;
+    }
+    bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse || m_mouseActivationLatched;
     // AlwaysActive should not independently activate the overlay;
     // it only enables proximity snap while the overlay is already open.
     bool multiZoneModifierHeld = multiZoneAlwaysOn ? false : checkModifier(multiZoneMod, mods);
@@ -800,6 +804,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_draggedWindowId.clear();
         m_originalGeometry = QRect();
         m_snapCancelled = false;
+        m_mouseActivationLatched = false;
         m_wasSnapped = false;
     }
 
@@ -947,6 +952,7 @@ void WindowDragAdaptor::resetDragState()
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
     m_snapCancelled = false;
+    m_mouseActivationLatched = false;
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
