@@ -8,7 +8,7 @@
 # Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        1.8.4
+Version:        1.9.0
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -169,6 +169,9 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Thu Feb 12 2026 fuddlesworth - 1.9.0-1
+- Zone padding and outer gap in individual layout settings now persist correctly when saving ([#145])
+
 * Wed Feb 11 2026 fuddlesworth - 1.8.4-1
 - Shader preset load/save in editor ShaderSettingsDialog
 - Preview shader effects in zone editor ([#132])
