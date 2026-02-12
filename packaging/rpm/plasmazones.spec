@@ -170,7 +170,14 @@ echo ""
 
 %changelog
 * Thu Feb 12 2026 fuddlesworth - 1.9.0-1
+- Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
+- Snap Assist overlay with window thumbnails, zone-mapped layout, and KCM setting to enable/disable
+- `getEmptyZonesJson` and `showSnapAssist` D-Bus APIs for Snap Assist integration
 - Zone padding and outer gap in individual layout settings now persist correctly when saving ([#145])
+- Default layouts no longer include redundant zone padding override (use global setting by default)
+- Snap Assist: overlay zone appearance matches zone colors and borders; thumbnail caching across continuation
+- Snap Assist: KWin effect default for snapAssistEnabled until D-Bus loaded (avoids race)
+- Packaging: add env.d to RPM %files; remove redundant Snap Assist message from Arch install
 
 * Wed Feb 11 2026 fuddlesworth - 1.8.4-1
 - Shader preset load/save in editor ShaderSettingsDialog

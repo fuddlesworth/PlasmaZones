@@ -7,8 +7,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.9.0] - 2026-02-12
 
+### Added
+- Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
+- Snap Assist overlay with window thumbnails, zone-mapped layout, and KCM setting to enable/disable
+- `getEmptyZonesJson` and `showSnapAssist` D-Bus APIs for Snap Assist integration
+
 ### Fixed
 - Zone padding and outer gap in individual layout settings now persist correctly when saving ([#145])
+- Default layouts no longer include redundant zone padding override (use global setting by default)
+- Snap Assist: overlay zone appearance matches zone colors and borders; thumbnail caching across continuation
+- Snap Assist: KWin effect default for snapAssistEnabled until D-Bus loaded (avoids race)
+
+### Changed
+- Packaging: add env.d to RPM %files; remove redundant Snap Assist message from Arch install
 
 ## [1.8.4] - 2026-02-11
 
@@ -366,9 +377,11 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#90]: https://github.com/fuddlesworth/PlasmaZones/pull/90
 [#92]: https://github.com/fuddlesworth/PlasmaZones/pull/92
 [#94]: https://github.com/fuddlesworth/PlasmaZones/issues/94
+[#95]: https://github.com/fuddlesworth/PlasmaZones/issues/95
 [#96]: https://github.com/fuddlesworth/PlasmaZones/pull/96
 [#97]: https://github.com/fuddlesworth/PlasmaZones/pull/97
 [#132]: https://github.com/fuddlesworth/PlasmaZones/pull/132
 [#133]: https://github.com/fuddlesworth/PlasmaZones/pull/133
 [#136]: https://github.com/fuddlesworth/PlasmaZones/pull/136
+[#139]: https://github.com/fuddlesworth/PlasmaZones/pull/139
 [#145]: https://github.com/fuddlesworth/PlasmaZones/issues/145
