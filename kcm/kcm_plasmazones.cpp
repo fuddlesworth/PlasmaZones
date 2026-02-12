@@ -30,6 +30,7 @@
 #include <KLocalizedString>
 #include <KPluginFactory>
 #include <KSharedConfig>
+#include "../src/config/configdefaults.h"
 #include "../src/config/settings.h"
 #include "../src/config/updatechecker.h"
 #include "../src/core/constants.h"
@@ -480,7 +481,7 @@ int KCMPlasmaZones::defaultDragActivationMouseButton() const
 
 int KCMPlasmaZones::defaultMultiZoneModifier() const
 {
-    return ModifierUtils::dragModifierToBitmask(5); // DragModifier::CtrlAlt
+    return ModifierUtils::dragModifierToBitmask(ConfigDefaults::multiZoneModifier());
 }
 
 int KCMPlasmaZones::defaultZoneSpanModifier() const

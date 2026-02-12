@@ -925,7 +925,7 @@ private:
     // Default: Alt+Drag to show zones (matches reset() function and common user expectation)
     DragModifier m_dragActivationModifier = DragModifier::Alt; // Default: Alt for zone activation
     int m_dragActivationMouseButton = 0; // 0=None, Qt::MouseButton bits (2=Right, 4=Middle, etc.)
-    DragModifier m_multiZoneModifier = DragModifier::CtrlAlt; // Default: Ctrl+Alt for multi-zone
+    DragModifier m_multiZoneModifier = DragModifier::AlwaysActive; // Default: always active for proximity snap
     DragModifier m_zoneSpanModifier = DragModifier::AltMeta;
 
     // Display
