@@ -7,6 +7,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.2] - 2026-02-12
+
 ### Added
 - KCM: "Proximity snap always on" checkbox — enables always-on proximity snap without holding the modifier (per [#143])
 - Escape key cancels overlay during window drag — overlay stays hidden until the next drag of a stationary window
@@ -321,6 +323,7 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[1.9.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.4...v1.9.1
 [1.8.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.3...v1.8.4
 [1.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.1...v1.8.2
@@ -390,4 +393,5 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#133]: https://github.com/fuddlesworth/PlasmaZones/pull/133
 [#136]: https://github.com/fuddlesworth/PlasmaZones/pull/136
 [#139]: https://github.com/fuddlesworth/PlasmaZones/pull/139
+[#143]: https://github.com/fuddlesworth/PlasmaZones/discussions/143
 [#145]: https://github.com/fuddlesworth/PlasmaZones/issues/145
