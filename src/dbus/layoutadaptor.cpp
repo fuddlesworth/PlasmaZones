@@ -445,6 +445,18 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
 
+    // Update per-layout gap overrides (-1 = use global setting)
+    if (obj.contains(JsonKeys::ZonePadding)) {
+        layout->setZonePadding(obj[JsonKeys::ZonePadding].toInt(-1));
+    } else {
+        layout->clearZonePaddingOverride();
+    }
+    if (obj.contains(JsonKeys::OuterGap)) {
+        layout->setOuterGap(obj[JsonKeys::OuterGap].toInt(-1));
+    } else {
+        layout->clearOuterGapOverride();
+    }
+
     // Update shader settings
     layout->setShaderId(obj[JsonKeys::ShaderId].toString());
     if (obj.contains(JsonKeys::ShaderParams)) {
