@@ -2849,33 +2849,56 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
     // Requires KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 when desktop matching fails (local install).
+    // Sequential capture (one at a time) to avoid overwhelming KWin; concurrent CaptureWindow
+    // requests can cause thumbnails to stop working after the first few.
     if (!m_thumbnailService) {
         m_thumbnailService = std::make_unique<WindowThumbnailService>(this);
         connect(m_thumbnailService.get(), &WindowThumbnailService::captureFinished, this,
                 [this](const QString& kwinHandle, const QString& dataUrl) {
                     updateSnapAssistCandidateThumbnail(kwinHandle, dataUrl);
+                    processNextThumbnailCapture();
                 });
     }
-    m_snapAssistCandidates = candidatesList;
+    // Apply cached thumbnails and queue only uncached ones (reuse across continuation)
+    m_snapAssistCandidates.clear();
+    m_thumbnailCaptureQueue.clear();
     if (m_thumbnailService->isAvailable()) {
-        const int thumbSize = 256;
-        int requested = 0;
         for (int i = 0; i < candidatesList.size(); ++i) {
-            QString kwinHandle = candidatesList[i].toMap().value(QStringLiteral("kwinHandle")).toString();
+            QVariantMap cand = candidatesList[i].toMap();
+            QString kwinHandle = cand.value(QStringLiteral("kwinHandle")).toString();
             if (!kwinHandle.isEmpty()) {
-                m_thumbnailService->captureWindowAsync(kwinHandle, thumbSize);
-                ++requested;
+                auto it = m_thumbnailCache.constFind(kwinHandle);
+                if (it != m_thumbnailCache.constEnd() && !it.value().isEmpty()) {
+                    cand[QStringLiteral("thumbnail")] = it.value();
+                } else {
+                    m_thumbnailCaptureQueue.append(kwinHandle);
+                }
             }
+            m_snapAssistCandidates.append(cand);
         }
-        qCDebug(lcOverlay) << "showSnapAssist: requested" << requested << "thumbnails";
+        qCDebug(lcOverlay) << "showSnapAssist: " << m_thumbnailCache.size() << "cached,"
+                          << m_thumbnailCaptureQueue.size() << "to capture";
+        processNextThumbnailCapture();
     } else {
+        m_snapAssistCandidates = candidatesList;
         qCDebug(lcOverlay) << "showSnapAssist: thumbnail service not available (auth?)";
     }
 
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("emptyZones"), zonesList);
-    writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), candidatesList);
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screen->geometry().width());
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screen->geometry().height());
+
+    // Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
+    if (m_settings) {
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderColor"), m_settings->borderColor());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderWidth"), m_settings->borderWidth());
+        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
+    }
 
     // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
     if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
@@ -2905,10 +2928,11 @@ void OverlayService::setSnapAssistThumbnail(const QString& kwinHandle, const QSt
 
 void OverlayService::updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl)
 {
-    if (!m_snapAssistWindow || !m_snapAssistWindow->isVisible()) {
+    if (dataUrl.isEmpty()) {
         return;
     }
-    if (dataUrl.isEmpty()) {
+    m_thumbnailCache.insert(kwinHandle, dataUrl);
+    if (!m_snapAssistWindow || !m_snapAssistWindow->isVisible()) {
         return;
     }
     for (int i = 0; i < m_snapAssistCandidates.size(); ++i) {
@@ -2923,8 +2947,18 @@ void OverlayService::updateSnapAssistCandidateThumbnail(const QString& kwinHandl
     }
 }
 
+void OverlayService::processNextThumbnailCapture()
+{
+    if (!m_thumbnailService || !m_thumbnailService->isAvailable() || m_thumbnailCaptureQueue.isEmpty()) {
+        return;
+    }
+    const QString kwinHandle = m_thumbnailCaptureQueue.takeFirst();
+    m_thumbnailService->captureWindowAsync(kwinHandle, 256);
+}
+
 void OverlayService::hideSnapAssist()
 {
+    m_thumbnailCache.clear();
     destroySnapAssistWindow();
 }
 

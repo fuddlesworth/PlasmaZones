@@ -189,6 +189,8 @@ private:
     QScreen* m_snapAssistScreen = nullptr;
     std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
+    QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
+    QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
@@ -212,6 +214,8 @@ private:
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
     void updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl);
+    /** Process next thumbnail in queue (sequential capture to avoid KWin overload). */
+    void processNextThumbnailCapture();
 
     /**
      * @brief Re-assert a window's screen and geometry before showing on Wayland

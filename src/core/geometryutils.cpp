@@ -227,8 +227,18 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         obj[JsonKeys::Y] = overlayGeom.y();
         obj[JsonKeys::Width] = overlayGeom.width();
         obj[JsonKeys::Height] = overlayGeom.height();
-        obj[JsonKeys::BorderWidth] = zone->borderWidth();
-        obj[JsonKeys::BorderRadius] = zone->borderRadius();
+        obj[JsonKeys::UseCustomColors] = zone->useCustomColors();
+        obj[JsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
+        obj[JsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
+        obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
+        obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
+        obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
+        obj[JsonKeys::BorderWidth] =
+            zone->useCustomColors() ? zone->borderWidth()
+                                   : (settings ? settings->borderWidth() : Defaults::BorderWidth);
+        obj[JsonKeys::BorderRadius] =
+            zone->useCustomColors() ? zone->borderRadius()
+                                   : (settings ? settings->borderRadius() : Defaults::BorderRadius);
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

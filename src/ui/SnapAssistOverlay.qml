@@ -21,6 +21,18 @@ Window {
     property int screenWidth: 1920
     property int screenHeight: 1080
 
+    // Zone appearance defaults (set from C++ when available; fallback matches ZoneOverlay)
+    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
+        Kirigami.Theme.highlightColor.b, 0.7)
+    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+        Kirigami.Theme.textColor.b, 0.4)
+    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+        Kirigami.Theme.textColor.b, 0.9)
+    property real activeOpacity: 0.5
+    property real inactiveOpacity: 0.3
+    property int borderWidth: Kirigami.Units.smallSpacing
+    property int borderRadius: Kirigami.Units.gridUnit
+
     signal windowSelected(string windowId, string zoneId, string geometryJson)
 
     flags: Qt.FramelessWindowHint | Qt.Tool
@@ -58,16 +70,32 @@ Window {
 
             visible: zone && zone.zoneId && root.candidates.length > 0
 
-            // Zone background - matches main overlay (no inner margins, use zone borderRadius)
+            // Zone background - matches main overlay colors/borders including zone overrides
             Rectangle {
                 id: zoneBg
                 anchors.fill: parent
-                radius: (zone && zone.borderRadius !== undefined) ? zone.borderRadius : Kirigami.Units.gridUnit
-                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g,
-                              Kirigami.Theme.backgroundColor.b, 0.6)
-                border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
-                    Kirigami.Theme.textColor.b, 0.3)
-                border.width: (zone && zone.borderWidth !== undefined) ? zone.borderWidth : 1
+                // useCustomColors: zone override; else root (settings)
+                readonly property bool useCustom: zone && (zone.useCustomColors === true || zone.useCustomColors === 1)
+                readonly property color fillColor: useCustom && zone.inactiveColor
+                    ? zone.inactiveColor
+                    : root.inactiveColor
+                readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined
+                    ? zone.inactiveOpacity
+                    : root.inactiveOpacity
+                readonly property color strokeColor: useCustom && zone.borderColor
+                    ? zone.borderColor
+                    : root.borderColor
+                readonly property int strokeWidth: useCustom && zone.borderWidth !== undefined
+                    ? zone.borderWidth
+                    : root.borderWidth
+                readonly property int cornerRadius: useCustom && zone.borderRadius !== undefined
+                    ? zone.borderRadius
+                    : root.borderRadius
+
+                radius: zoneBg.cornerRadius
+                color: Qt.rgba(zoneBg.fillColor.r, zoneBg.fillColor.g, zoneBg.fillColor.b, zoneBg.fillOpacity)
+                border.color: zoneBg.strokeColor
+                border.width: zoneBg.strokeWidth
             }
 
             // Grid of candidate cards inside zone - centered, scaled like zone numbers
@@ -192,9 +220,8 @@ Window {
                             Accessible.name: candidate && candidate.caption
                                 ? i18n("Snap %1 to this zone", candidate.caption)
                                 : i18n("Snap window to this zone")
-                            ToolTip.visible: cardMouse.containsMouse
-                            ToolTip.text: candidate ? candidate.caption : ""
-                            ToolTip.delay: Kirigami.Units.toolTipDelay
+                            // ToolTip disabled: Breeze ToolTip causes binding loop on contentWidth
+                            // when used inside Repeater+Flow. Accessible.name provides screen reader info.
                             onClicked: {
                                 const wId = candidate ? candidate.windowId : ""
                                 const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : ""
