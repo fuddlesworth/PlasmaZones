@@ -20,9 +20,6 @@ post_install() {
     echo "      kbuildsycoca6 --noincremental"
     echo "  or log out and back in."
     echo ""
-    echo "  Snap Assist thumbnails require a fresh session to pick up the"
-    echo "  screenshot auth. Log out and back in after install."
-    echo ""
 }
 
 post_upgrade() {
