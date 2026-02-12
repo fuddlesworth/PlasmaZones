@@ -1,4 +1,4 @@
-plasmazones (1.9.0-1) unstable; urgency=medium
+plasmazones (1.9.1-1) unstable; urgency=medium
 
   * Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
   * Snap Assist overlay with window thumbnails, zone-mapped layout, and KCM setting to enable/disable
