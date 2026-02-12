@@ -129,7 +129,10 @@ QT_PLUGIN_PATH=$PREFIX/$LIBDIR/qt6/plugins:\${QT_PLUGIN_PATH}
 QML2_IMPORT_PATH=$PREFIX/$LIBDIR/qt6/qml:\${QML2_IMPORT_PATH}
 XDG_DATA_DIRS=$PREFIX/share:\${XDG_DATA_DIRS}
 LD_LIBRARY_PATH=$PREFIX/$LIBDIR:\${LD_LIBRARY_PATH}
-# Snap Assist thumbnails: local install runs from custom path, KWin desktop matching fails.
+# Snap Assist thumbnails: local install runs from custom path, so KWin's desktop file
+# matching for ScreenShot2 auth fails. This disables the permission check.
+# WARNING: Bypasses screenshot security. Only use for local/development installs.
+# System installs use X-KDE-DBUS-Restricted-Interfaces in the .desktop file instead.
 KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1
 EOF
 

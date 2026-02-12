@@ -137,7 +137,7 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
 
                 const QVariantMap metadata = reply.value();
                 QFuture<QImage> future = QtConcurrent::run(
-                    [this, readFd, metadata, maxSize]() -> QImage {
+                    [readFd, metadata, maxSize]() -> QImage {
                         QImage image = readImageFromPipe(readFd, metadata);
                         if (!image.isNull() && maxSize > 0
                             && (image.width() > maxSize || image.height() > maxSize)) {

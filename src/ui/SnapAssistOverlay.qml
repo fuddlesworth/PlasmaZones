@@ -35,6 +35,16 @@ Window {
 
     signal windowSelected(string windowId, string zoneId, string geometryJson)
 
+    // Layout constants (extracted from magic numbers for maintainability)
+    readonly property real cardScaleBase: 0.35
+    readonly property real cardWidthMultiplier: 2.2
+    readonly property real minCardWidth: 100
+    readonly property real minIconSize: 24
+    readonly property real iconSizeRatio: 0.6
+    readonly property real zoneSizeRefForFont: 200
+    readonly property real minFontScale: 0.4
+    readonly property real minFontPx: 8
+
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
 
@@ -103,16 +113,16 @@ Window {
                 id: candidateFlow
 
                 readonly property real zoneSize: Math.min(zoneContainer.width, zoneContainer.height) || 1
-                readonly property real cardScale: 0.35 / Math.max(1, Math.sqrt(root.candidates.length))
+                readonly property real cardScale: root.cardScaleBase / Math.max(1, Math.sqrt(root.candidates.length))
                 readonly property real cardBaseSize: zoneSize * cardScale
-                readonly property real iconSize: Math.max(24, cardBaseSize * 0.6)
-                readonly property real cardWidth: Math.max(100, cardBaseSize * 2.2)
-                // Scale font like ZoneItem zone name: base on theme, scale with zone size (200px reference)
+                readonly property real iconSize: Math.max(root.minIconSize, cardBaseSize * root.iconSizeRatio)
+                readonly property real cardWidth: Math.max(root.minCardWidth, cardBaseSize * root.cardWidthMultiplier)
+                // Scale font like ZoneItem zone name: base on theme, scale with zone size
                 readonly property real fontPixelSize: {
                     var baseSize = Kirigami.Theme.defaultFont.pixelSize
-                    var scaleFactor = zoneSize / 200
-                    var scaledSize = baseSize * Math.max(0.4, Math.min(1, scaleFactor))
-                    return Math.max(8, Math.round(scaledSize))
+                    var scaleFactor = zoneSize / root.zoneSizeRefForFont
+                    var scaledSize = baseSize * Math.max(root.minFontScale, Math.min(1, scaleFactor))
+                    return Math.max(root.minFontPx, Math.round(scaledSize))
                 }
 
                 readonly property real flowWidth: zoneContainer.width - Kirigami.Units.smallSpacing * 2
@@ -139,12 +149,12 @@ Window {
                 spacing: flowSpacing
 
                 Repeater {
-                    model: root.candidates.length
+                    model: root.candidates
 
                     Item {
                         id: candidateCard
 
-                        property var candidate: root.candidates[index]
+                        property var candidate: modelData
                         property bool hovered: cardMouse.containsMouse
 
                         width: candidateFlow.cardWidth + Kirigami.Units.smallSpacing * 2

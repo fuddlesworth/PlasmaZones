@@ -303,7 +303,7 @@ private:
     bool m_excludeTransientWindows = true;
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
-    bool m_snapAssistEnabled = true;
+    bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

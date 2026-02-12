@@ -872,12 +872,27 @@ void PlasmaZonesEffect::loadExclusionSettings()
 
     // Load settings asynchronously to avoid blocking KWin startup
     // Each setting is loaded independently so partial failures don't block others
+    // Shared state: delete interface only when ALL 4 callbacks have completed
+    struct SettingsLoadState {
+        int completed = 0;
+        QDBusInterface* iface = nullptr;
+    };
+    constexpr int settingsLoadTotalExpected = 4;
+    auto* loadState = new SettingsLoadState{0, settingsInterface};
+
+    auto onSettingLoaded = [loadState](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        if (++loadState->completed == settingsLoadTotalExpected) {
+            loadState->iface->deleteLater();
+            delete loadState;
+        }
+    };
 
     // Load excludeTransientWindows
     QDBusPendingCall excludeCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("excludeTransientWindows"));
     auto* excludeWatcher = new QDBusPendingCallWatcher(excludeCall, this);
-    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -893,8 +908,8 @@ void PlasmaZonesEffect::loadExclusionSettings()
     // Load minimumWindowWidth
     QDBusPendingCall widthCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowWidth"));
     auto* widthWatcher = new QDBusPendingCallWatcher(widthCall, this);
-    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -910,8 +925,8 @@ void PlasmaZonesEffect::loadExclusionSettings()
     // Load minimumWindowHeight
     QDBusPendingCall heightCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowHeight"));
     auto* heightWatcher = new QDBusPendingCallWatcher(heightCall, this);
-    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -927,8 +942,8 @@ void PlasmaZonesEffect::loadExclusionSettings()
     // Load snapAssistEnabled (for Snap Assist continuation gating)
     QDBusPendingCall snapAssistCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("snapAssistEnabled"));
     auto* snapAssistWatcher = new QDBusPendingCallWatcher(snapAssistCall, this);
-    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this, [this, settingsInterface](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
+        onSettingLoaded(w);
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             QVariant value = reply.value();
@@ -939,8 +954,6 @@ void PlasmaZonesEffect::loadExclusionSettings()
             }
             qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
         }
-        // Clean up the interface after the last setting is loaded
-        settingsInterface->deleteLater();
     });
 
     qCDebug(lcEffect) << "Loading exclusion settings asynchronously, using defaults until loaded";

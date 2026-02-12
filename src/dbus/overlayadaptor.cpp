@@ -170,8 +170,14 @@ void OverlayAdaptor::hideShaderPreview()
 bool OverlayAdaptor::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
                                     const QString& candidatesJson)
 {
+    // Return false when we know overlay won't be shown (avoids misleading "success")
+    if (emptyZonesJson.isEmpty() || emptyZonesJson == QLatin1String("[]")
+        || candidatesJson.isEmpty() || candidatesJson == QLatin1String("[]")) {
+        return false;
+    }
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
     // call; returning quickly prevents compositor freeze during overlay creation.
+    // Note: Return value means "request accepted for deferred processing", not "overlay shown".
     QTimer::singleShot(0, m_overlayService, [this, screenName, emptyZonesJson, candidatesJson]() {
         m_overlayService->showSnapAssist(screenName, emptyZonesJson, candidatesJson);
     });
