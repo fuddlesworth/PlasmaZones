@@ -4,7 +4,6 @@
     "description": "Spiral subdivision layout inspired by golden ratio",
     "type": 5,
     "builtIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {

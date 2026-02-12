@@ -4,7 +4,6 @@
     "description": "Six zones in a 3 column by 2 row grid",
     "type": 3,
     "isBuiltIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {

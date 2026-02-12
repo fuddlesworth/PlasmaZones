@@ -4,7 +4,6 @@
     "description": "Binary space partitioning - recursive split layout",
     "type": 5,
     "builtIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {

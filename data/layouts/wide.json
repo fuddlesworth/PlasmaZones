@@ -4,7 +4,6 @@
     "description": "Large top area with row of smaller areas below",
     "type": 5,
     "builtIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {

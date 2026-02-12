@@ -4,7 +4,6 @@
     "description": "Large center with smaller sides (like Windows FancyZones)",
     "type": 4,
     "isBuiltIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {
