@@ -9,9 +9,6 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -123,30 +120,6 @@ int OverlayAdaptor::getMinimumZoneSizePx()
 int OverlayAdaptor::getMinimumZoneDisplaySizePx()
 {
     return m_settings ? m_settings->minimumZoneDisplaySizePx() : Defaults::MinimumZoneDisplaySizePx;
-}
-
-void OverlayAdaptor::switchToLayout(const QString& layoutId)
-{
-    auto uuidOpt = DbusHelpers::parseAndValidateUuid(layoutId, QStringLiteral("switch layout"));
-    if (!uuidOpt) {
-        return;
-    }
-
-    if (!m_layoutManager) {
-        qCWarning(lcDbus) << "Cannot switch layout - no layout manager";
-        return;
-    }
-
-    auto* layout = m_layoutManager->layoutById(*uuidOpt);
-    if (!layout) {
-        qCWarning(lcDbus) << "Layout not found for switching:" << layoutId;
-        return;
-    }
-
-    m_layoutManager->setActiveLayout(layout);
-    m_overlayService->updateLayout(layout);
-    Q_EMIT layoutSwitched(layoutId);
-    qCInfo(lcDbus) << "Switched to layout:" << layout->name();
 }
 
 void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, const QString& screenName,

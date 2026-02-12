@@ -40,7 +40,6 @@ class PLASMAZONES_EXPORT ZoneDetector : public IZoneDetector
     Q_PROPERTY(Layout* layout READ layout WRITE setLayout NOTIFY layoutChanged)
     Q_PROPERTY(
         qreal adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
-    Q_PROPERTY(qreal edgeThreshold READ edgeThreshold WRITE setEdgeThreshold NOTIFY edgeThresholdChanged)
 
 public:
     explicit ZoneDetector(QObject* parent = nullptr);
@@ -59,21 +58,10 @@ public:
     }
     void setAdjacentThreshold(qreal threshold) override;
 
-    qreal edgeThreshold() const override
-    {
-        return m_edgeThreshold;
-    }
-    void setEdgeThreshold(qreal threshold) override;
-
     Q_INVOKABLE ZoneDetectionResult detectZone(const QPointF& cursorPos) const override;
     Q_INVOKABLE ZoneDetectionResult detectMultiZone(const QPointF& cursorPos) const override;
     Q_INVOKABLE Zone* zoneAtPoint(const QPointF& point) const override;
     Q_INVOKABLE Zone* nearestZone(const QPointF& point) const override;
-
-    Q_INVOKABLE QVector<Zone*> zonesNearEdge(const QPointF& point) const override;
-    Q_INVOKABLE bool isNearZoneEdge(const QPointF& point, Zone* zone) const override;
-
-    Q_INVOKABLE QRectF combineZoneGeometries(const QVector<Zone*>& zones) const override;
 
     // Note: Highlighting methods removed - use ZoneHighlighter instead
     // These methods are kept for backward compatibility but delegate to ZoneHighlighter
@@ -81,21 +69,14 @@ public:
     Q_INVOKABLE void highlightZones(const QVector<Zone*>& zones) override;
     Q_INVOKABLE void clearHighlights() override;
 
-    // Access to highlighter for direct use
-    class ZoneHighlighter* highlighter() const
-    {
-        return m_highlighter.get();
-    }
-
 Q_SIGNALS:
     void layoutChanged();
     void adjacentThresholdChanged();
-    void edgeThresholdChanged();
     void zoneHighlighted(Zone* zone);
-    void zonesHighlighted(const QVector<Zone*>& zones);
     void highlightsCleared();
 
 private:
+    QRectF combineZoneGeometries(const QVector<Zone*>& zones) const;
     bool areZonesAdjacent(Zone* zone1, Zone* zone2) const;
     qreal distanceToZoneEdge(const QPointF& point, Zone* zone) const;
 

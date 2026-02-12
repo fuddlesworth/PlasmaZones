@@ -10,8 +10,6 @@ UndoController::UndoController(QObject* parent)
     : QObject(parent)
     , m_undoStack(new QUndoStack(this))
 {
-    m_undoStack->setUndoLimit(m_maxUndoStackDepth);
-
     // Connect to QUndoStack signals to update properties
     connect(m_undoStack, &QUndoStack::indexChanged, this, &UndoController::onIndexChanged);
     connect(m_undoStack, &QUndoStack::cleanChanged, this, &UndoController::onCleanChanged);
@@ -38,25 +36,6 @@ QString UndoController::undoText() const
 QString UndoController::redoText() const
 {
     return m_redoText;
-}
-
-int UndoController::undoStackDepth() const
-{
-    return m_undoStackDepth;
-}
-
-int UndoController::maxUndoStackDepth() const
-{
-    return m_maxUndoStackDepth;
-}
-
-void UndoController::setMaxUndoStackDepth(int depth)
-{
-    if (m_maxUndoStackDepth != depth) {
-        m_maxUndoStackDepth = depth;
-        m_undoStack->setUndoLimit(depth);
-        Q_EMIT maxUndoStackDepthChanged();
-    }
 }
 
 void UndoController::undo()
@@ -136,7 +115,6 @@ void UndoController::updateProperties()
     bool newCanRedo = m_undoStack->canRedo();
     QString newUndoText = m_undoStack->undoText();
     QString newRedoText = m_undoStack->redoText();
-    int newDepth = m_undoStack->count();
 
     // Emit signals only when values change
     if (m_canUndo != newCanUndo) {
@@ -157,11 +135,6 @@ void UndoController::updateProperties()
     if (m_redoText != newRedoText) {
         m_redoText = newRedoText;
         Q_EMIT redoTextChanged();
-    }
-
-    if (m_undoStackDepth != newDepth) {
-        m_undoStackDepth = newDepth;
-        Q_EMIT undoStackDepthChanged();
     }
 }
 

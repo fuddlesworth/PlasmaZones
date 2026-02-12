@@ -49,9 +49,4 @@ void ZoneHighlighter::clearHighlights()
     Q_EMIT highlightsCleared();
 }
 
-bool ZoneHighlighter::isHighlighted(Zone* zone) const
-{
-    return zone && m_highlightedZones.contains(zone);
-}
-
 } // namespace PlasmaZones

@@ -7,7 +7,6 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
-#include <QHash>
 
 namespace PlasmaZones {
 
@@ -15,7 +14,6 @@ class IOverlayService;
 class IZoneDetector;
 class ILayoutManager;
 class ISettings;
-class Zone;
 
 /**
  * @brief D-Bus adaptor for overlay control operations
@@ -54,9 +52,6 @@ public Q_SLOTS:
     int getMinimumZoneSizePx();
     int getMinimumZoneDisplaySizePx();
 
-    // Switch to a specific layout
-    void switchToLayout(const QString& layoutId);
-
     // Shader preview overlay (editor Shader Settings dialog)
     void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
                            const QString& shaderId, const QString& shaderParamsJson, const QString& zonesJson);
@@ -74,7 +69,6 @@ public Q_SLOTS:
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
     void zoneHighlightChanged(const QString& zoneId);
-    void layoutSwitched(const QString& layoutId);
     void snapAssistShown(const QString& screenName, const QString& emptyZonesJson,
                          const QString& candidatesJson);
 

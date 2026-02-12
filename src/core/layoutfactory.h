@@ -54,19 +54,6 @@ public:
      */
     static void registerType(const QString& type, CreatorFunc creator);
 
-    /**
-     * @brief Check if a layout type is registered
-     * @param type Type name to check
-     * @return true if type is known
-     */
-    static bool isTypeRegistered(const QString& type);
-
-    /**
-     * @brief Get list of all registered layout types
-     * @return List of type names
-     */
-    static QStringList registeredTypes();
-
 private:
     static QHash<QString, CreatorFunc>& creators();
     static void ensureDefaults();

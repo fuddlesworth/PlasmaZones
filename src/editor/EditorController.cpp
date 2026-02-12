@@ -715,7 +715,6 @@ void EditorController::createNewLayout()
     Q_EMIT zonesChanged();
     Q_EMIT selectedZoneIdChanged();
     Q_EMIT selectedZoneIdsChanged();
-    Q_EMIT isNewLayoutChanged();
     Q_EMIT hasUnsavedChangesChanged();
     Q_EMIT currentShaderIdChanged();
     Q_EMIT currentShaderParamsChanged();
@@ -904,7 +903,6 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT zonesChanged();
     Q_EMIT selectedZoneIdChanged();
     Q_EMIT selectedZoneIdsChanged();
-    Q_EMIT isNewLayoutChanged();
     Q_EMIT hasUnsavedChangesChanged();
     Q_EMIT currentShaderIdChanged();
     Q_EMIT currentShaderParamsChanged();
@@ -1027,7 +1025,6 @@ void EditorController::saveLayout()
         }
         m_layoutId = newLayoutId;
         m_isNewLayout = false;
-        Q_EMIT isNewLayoutChanged();
     } else {
         bool success = m_layoutService->updateLayout(jsonStr);
         if (!success) {

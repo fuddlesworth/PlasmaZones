@@ -10,7 +10,6 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDBusReply>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>

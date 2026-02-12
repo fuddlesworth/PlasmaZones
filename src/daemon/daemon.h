@@ -93,19 +93,11 @@ public:
     Q_INVOKABLE void hideOverlay();
     Q_INVOKABLE bool isOverlayVisible() const;
 
-    // Zone highlighting
-    Q_INVOKABLE void updateHighlight(const QPointF& cursorPos);
-    Q_INVOKABLE void clearHighlight();
-
     // OSD notifications
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
 
-Q_SIGNALS:
-    void overlayVisibilityChanged(bool visible);
-    void started();
-    void stopped();
-
 private:
+    void clearHighlight();
     void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
     std::unique_ptr<LayoutManager> m_layoutManager;

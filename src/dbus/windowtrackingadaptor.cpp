@@ -89,7 +89,6 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
                                              QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
-    , m_zoneDetector(zoneDetector)
     , m_settings(settings)
     , m_virtualDesktopManager(virtualDesktopManager)
 {

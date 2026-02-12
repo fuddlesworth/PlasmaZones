@@ -161,15 +161,6 @@ PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringLi
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * @brief Convert a Zone to QVariantMap with configurable fields
- *
- * @param zone The zone to convert (returns empty map if null)
- * @param fields Which fields to include (default: Minimal for previews)
- * @return QVariantMap suitable for QML consumption
- */
-PLASMAZONES_EXPORT QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields = ZoneField::Minimal);
-
-/**
  * @brief Convert all zones in a layout to QVariantList
  *
  * @param layout The layout containing zones (returns empty list if null)
@@ -177,21 +168,6 @@ PLASMAZONES_EXPORT QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields = 
  * @return QVariantList of zone maps
  */
 PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal);
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Layout conversion utilities
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * @brief Convert a Layout to QVariantMap for QML
- *
- * Use this when you have a Layout* directly (not a UnifiedLayoutEntry).
- *
- * @param layout The layout to convert (returns empty map if null)
- * @param zoneFields Which zone fields to include
- * @return QVariantMap suitable for QML consumption
- */
-PLASMAZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
 
 } // namespace LayoutUtils
 

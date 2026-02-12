@@ -191,12 +191,6 @@ public:
     static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
     static QString snapAllWindowsShortcut() { return instance().defaultSnapAllWindowsShortcutValue(); }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Update Notifications
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    static QString dismissedUpdateVersion() { return QString(); }  // Default is empty string (matches .kcfg)
-
 private:
     // Lazily-initialized singleton instance
     static PlasmaZonesConfig& instance()

@@ -455,8 +455,6 @@ public Q_SLOTS:
     Q_INVOKABLE void clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
     Q_INVOKABLE QString getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
     Q_INVOKABLE bool hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
-    Q_INVOKABLE QString getAllScreenAssignmentsJson() const;
-
     // Per-monitor disable (no overlay, no zone picker, no snapping on that monitor)
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
     Q_INVOKABLE void setMonitorDisabled(const QString& screenName, bool disabled);
@@ -466,8 +464,6 @@ public Q_SLOTS:
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
-    Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
-
     // Quick layout slots (1-9)
     Q_INVOKABLE QString getQuickLayoutSlot(int slotNumber) const;
     Q_INVOKABLE void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
@@ -479,9 +475,6 @@ public Q_SLOTS:
     Q_INVOKABLE void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
     Q_INVOKABLE QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
     Q_INVOKABLE bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE QString getActivityName(const QString& activityId) const;
-    Q_INVOKABLE QString getActivityIcon(const QString& activityId) const;
-
     // Daemon control
     Q_INVOKABLE void startDaemon();
     Q_INVOKABLE void stopDaemon();
@@ -578,9 +571,7 @@ Q_SIGNALS:
     void releaseUrlChanged();
     void checkingForUpdatesChanged();
     void dismissedUpdateVersionChanged();
-    void quickLayoutSlotsRefreshed(); // Emitted when quick layout slots are reloaded from daemon
     void appRulesRefreshed(); // Emitted when app rules cache is cleared (load/defaults)
-    void perScreenZoneSelectorSettingsChanged();
     void colorImportError(const QString& message); // Emitted when color import fails
     void colorImportSuccess(); // Emitted when color import succeeds
 

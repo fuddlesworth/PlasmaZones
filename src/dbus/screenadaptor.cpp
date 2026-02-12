@@ -82,9 +82,4 @@ QString ScreenAdaptor::getPrimaryScreen()
     return primary ? primary->name() : QString();
 }
 
-int ScreenAdaptor::getScreenCount()
-{
-    return Utils::allScreens().count();
-}
-
 } // namespace PlasmaZones

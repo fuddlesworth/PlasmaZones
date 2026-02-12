@@ -12,6 +12,7 @@
 #include <QAction>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
 #include <QDBusError>
 #include <QFile>
 #include <QThread>
@@ -254,9 +255,6 @@ bool Daemon::init()
     connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
     });
-
-    // Connect overlay visibility to daemon signal
-    connect(m_overlayService.get(), &OverlayService::visibilityChanged, this, &Daemon::overlayVisibilityChanged);
 
     // Initialize domain-specific D-Bus adaptors
     // Each adaptor has its own D-Bus interface
@@ -728,7 +726,6 @@ void Daemon::start()
     connectToKWinScript();
 
     m_running = true;
-    Q_EMIT started();
 
     // Signal that daemon is fully initialized and ready for queries
     Q_EMIT m_layoutAdaptor->daemonReady();
@@ -754,7 +751,6 @@ void Daemon::stop()
     }
 
     m_running = false;
-    Q_EMIT stopped();
 }
 
 void Daemon::showOverlay()
@@ -771,23 +767,6 @@ void Daemon::hideOverlay()
 bool Daemon::isOverlayVisible() const
 {
     return m_overlayService->isVisible();
-}
-
-void Daemon::updateHighlight(const QPointF& cursorPos)
-{
-    if (!m_overlayService->isVisible()) {
-        return;
-    }
-
-    auto result = m_zoneDetector->detectZone(cursorPos);
-    if (result.primaryZone) {
-        m_zoneDetector->highlightZone(result.primaryZone);
-    } else {
-        m_zoneDetector->clearHighlights();
-    }
-
-    // Trigger overlay update to show highlighted zones
-    m_overlayService->updateGeometries();
 }
 
 void Daemon::clearHighlight()

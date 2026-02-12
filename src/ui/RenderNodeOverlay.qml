@@ -66,14 +66,6 @@ Window {
 
     // Custom shader parameters (16 floats in 4 vec4s + 4 colors)
     // These are rebuilt whenever shaderParams changes to ensure reactivity
-    // Compatibility properties
-    property string highlightedZoneId: ""
-    // Note: Using 'var' for highlightedZoneIds because it's a dynamic list from C++
-    property var highlightedZoneIds: []
-
-    signal zoneClicked(int index)
-    signal zoneHovered(int index)
-
     // Zone index under cursor for hover highlight (preview mode). -1 = none.
     // Using index avoids full zones array churn on mouse move, preventing shader restart.
     readonly property int hoveredZoneIndex: {

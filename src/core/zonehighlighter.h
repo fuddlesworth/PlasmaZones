@@ -42,22 +42,6 @@ public:
      */
     Q_INVOKABLE void clearHighlights();
 
-    /**
-     * @brief Get currently highlighted zones
-     * @return Vector of highlighted zones
-     */
-    QVector<Zone*> highlightedZones() const
-    {
-        return m_highlightedZones;
-    }
-
-    /**
-     * @brief Check if a zone is highlighted
-     * @param zone Zone to check
-     * @return true if zone is currently highlighted
-     */
-    bool isHighlighted(Zone* zone) const;
-
 Q_SIGNALS:
     void zoneHighlighted(Zone* zone);
     void zonesHighlighted(const QVector<Zone*>& zones);

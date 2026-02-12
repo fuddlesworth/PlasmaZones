@@ -22,8 +22,6 @@ class UndoController : public QObject
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY canRedoChanged)
     Q_PROPERTY(QString undoText READ undoText NOTIFY undoTextChanged)
     Q_PROPERTY(QString redoText READ redoText NOTIFY redoTextChanged)
-    Q_PROPERTY(int undoStackDepth READ undoStackDepth NOTIFY undoStackDepthChanged)
-    Q_PROPERTY(int maxUndoStackDepth READ maxUndoStackDepth WRITE setMaxUndoStackDepth NOTIFY maxUndoStackDepthChanged)
 
 public:
     explicit UndoController(QObject* parent = nullptr);
@@ -34,11 +32,6 @@ public:
     bool canRedo() const;
     QString undoText() const;
     QString redoText() const;
-    int undoStackDepth() const;
-    int maxUndoStackDepth() const;
-
-    // Property setters
-    void setMaxUndoStackDepth(int depth);
 
 public Q_SLOTS:
     /**
@@ -88,8 +81,6 @@ Q_SIGNALS:
     void canRedoChanged();
     void undoTextChanged();
     void redoTextChanged();
-    void undoStackDepthChanged();
-    void maxUndoStackDepthChanged();
 
 private Q_SLOTS:
     /**
@@ -109,14 +100,12 @@ private:
     void updateProperties();
 
     QUndoStack* m_undoStack = nullptr; // Owned by this (parent-based ownership)
-    int m_maxUndoStackDepth = 50; // Default depth
 
     // Cached property values
     bool m_canUndo = false;
     bool m_canRedo = false;
     QString m_undoText;
     QString m_redoText;
-    int m_undoStackDepth = 0;
 };
 
 } // namespace PlasmaZones

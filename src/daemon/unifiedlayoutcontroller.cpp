@@ -18,7 +18,6 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
     if (m_layoutManager) {
         connect(m_layoutManager, &LayoutManager::layoutsChanged, this, [this]() {
             m_cacheValid = false;
-            Q_EMIT layoutsChanged();
         });
 
         connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
@@ -34,7 +33,6 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
     if (m_settings) {
         connect(m_settings, &Settings::settingsChanged, this, [this]() {
             m_cacheValid = false;
-            Q_EMIT layoutsChanged();
         });
     }
 
@@ -42,18 +40,6 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
 }
 
 UnifiedLayoutController::~UnifiedLayoutController() = default;
-
-std::optional<UnifiedLayoutEntry> UnifiedLayoutController::currentLayout() const
-{
-    // Ensure cache is populated, then search directly in cached member
-    // to avoid returning pointer to temporary
-    layouts();  // Populates m_cachedLayouts if needed
-    int index = LayoutUtils::findLayoutIndex(m_cachedLayouts, m_currentLayoutId);
-    if (index >= 0) {
-        return m_cachedLayouts[index];
-    }
-    return std::nullopt;
-}
 
 QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
 {
@@ -64,11 +50,6 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
         m_cacheValid = true;
     }
     return m_cachedLayouts;
-}
-
-QVariantList UnifiedLayoutController::layoutsAsVariantList() const
-{
-    return LayoutUtils::toVariantList(layouts());
 }
 
 bool UnifiedLayoutController::applyLayoutByNumber(int number)
@@ -213,7 +194,6 @@ void UnifiedLayoutController::setCurrentLayoutId(const QString& layoutId)
     }
 
     m_currentLayoutId = layoutId;
-    Q_EMIT currentLayoutIdChanged(layoutId);
 }
 
 int UnifiedLayoutController::findCurrentIndex() const

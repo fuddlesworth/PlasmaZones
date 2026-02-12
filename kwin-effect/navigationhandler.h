@@ -7,9 +7,6 @@
 #include <QString>
 #include <QRect>
 #include <QSet>
-#include <QHash>
-#include <QDBusInterface>
-#include <memory>
 
 namespace KWin {
 class EffectWindow;
@@ -51,9 +48,6 @@ public:
     void setWindowFloating(const QString& stableId, bool floating);
     void syncFloatingWindowsFromDaemon();
     void syncFloatingStateForWindow(const QString& stableId);
-
-    // Access to floating set for effect
-    const QSet<QString>& floatingWindows() const { return m_floatingWindows; }
 
 private:
     /**

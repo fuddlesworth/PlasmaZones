@@ -7,7 +7,6 @@
 #include <QObject>
 #include <QPointer>
 #include <QString>
-#include <optional>
 
 namespace PlasmaZones {
 
@@ -36,7 +35,7 @@ class Layout;
 class UnifiedLayoutController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString currentLayoutId READ currentLayoutId NOTIFY currentLayoutIdChanged)
+    Q_PROPERTY(QString currentLayoutId READ currentLayoutId)
 
 public:
     explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings, QObject* parent = nullptr);
@@ -52,21 +51,9 @@ public:
     QString currentLayoutId() const { return m_currentLayoutId; }
 
     /**
-     * @brief Get the current layout entry
-     *
-     * @return Entry if found, std::nullopt otherwise
-     */
-    std::optional<UnifiedLayoutEntry> currentLayout() const;
-
-    /**
      * @brief Get the full unified layout list
      */
     QVector<UnifiedLayoutEntry> layouts() const;
-
-    /**
-     * @brief Get unified layouts as QVariantList for QML
-     */
-    QVariantList layoutsAsVariantList() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Layout application
@@ -151,19 +138,9 @@ public:
 
 Q_SIGNALS:
     /**
-     * @brief Emitted when current layout ID changes
-     */
-    void currentLayoutIdChanged(const QString& layoutId);
-
-    /**
      * @brief Emitted when a manual layout is applied (for OSD)
      */
     void layoutApplied(Layout* layout);
-
-    /**
-     * @brief Emitted when layout list changes
-     */
-    void layoutsChanged();
 
 private:
     /**

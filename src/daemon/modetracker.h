@@ -19,7 +19,7 @@ class Settings;
 class ModeTracker : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString lastManualLayoutId READ lastManualLayoutId NOTIFY lastManualLayoutIdChanged)
+    Q_PROPERTY(QString lastManualLayoutId READ lastManualLayoutId)
 
 public:
     explicit ModeTracker(Settings* settings, QObject* parent = nullptr);
@@ -56,9 +56,6 @@ public:
      * @brief Save state to settings
      */
     void save();
-
-Q_SIGNALS:
-    void lastManualLayoutIdChanged(const QString& layoutId);
 
 private:
     QPointer<Settings> m_settings;

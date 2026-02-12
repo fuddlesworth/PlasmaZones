@@ -1511,7 +1511,6 @@ void KCMPlasmaZones::load()
 
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
-    Q_EMIT quickLayoutSlotsRefreshed();
     Q_EMIT appRulesRefreshed();
     setNeedsSave(false);
 }
@@ -2219,8 +2218,6 @@ void KCMPlasmaZones::onQuickLayoutSlotsChanged()
             }
         }
 
-        // Notify QML that quick layout slots have been updated
-        Q_EMIT quickLayoutSlotsRefreshed();
     });
 }
 
@@ -2562,28 +2559,6 @@ void KCMPlasmaZones::onActivitiesChanged()
     refreshActivities();
 }
 
-QString KCMPlasmaZones::getActivityName(const QString& activityId) const
-{
-    for (const QVariant& v : m_activities) {
-        QVariantMap activity = v.toMap();
-        if (activity[QStringLiteral("id")].toString() == activityId) {
-            return activity[QStringLiteral("name")].toString();
-        }
-    }
-    return QString();
-}
-
-QString KCMPlasmaZones::getActivityIcon(const QString& activityId) const
-{
-    for (const QVariant& v : m_activities) {
-        QVariantMap activity = v.toMap();
-        if (activity[QStringLiteral("id")].toString() == activityId) {
-            return activity[QStringLiteral("icon")].toString();
-        }
-    }
-    return QString();
-}
-
 void KCMPlasmaZones::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                    const QString& layoutId)
 {
@@ -2729,7 +2704,6 @@ void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, 
         return;
     }
     m_settings->setPerScreenZoneSelectorSetting(screenName, key, value);
-    Q_EMIT perScreenZoneSelectorSettingsChanged();
     setNeedsSave(true);
 }
 
@@ -2739,18 +2713,12 @@ void KCMPlasmaZones::clearPerScreenZoneSelectorSettings(const QString& screenNam
         return;
     }
     m_settings->clearPerScreenZoneSelectorSettings(screenName);
-    Q_EMIT perScreenZoneSelectorSettingsChanged();
     setNeedsSave(true);
 }
 
 bool KCMPlasmaZones::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
     return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(screenName) : false;
-}
-
-QStringList KCMPlasmaZones::screensWithZoneSelectorOverrides() const
-{
-    return m_settings ? m_settings->screensWithZoneSelectorOverrides() : QStringList();
 }
 
 void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
@@ -2851,18 +2819,6 @@ bool KCMPlasmaZones::hasExplicitAssignmentForScreenDesktop(const QString& screen
     }
 
     return false;
-}
-
-QString KCMPlasmaZones::getAllScreenAssignmentsJson() const
-{
-    // Query daemon for all screen assignments as JSON
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getAllScreenAssignments"));
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toString();
-    }
-
-    return QStringLiteral("{}");
 }
 
 QString KCMPlasmaZones::getQuickLayoutSlot(int slotNumber) const

@@ -252,7 +252,6 @@ void ZoneSelectorController::startDrag()
 
     m_isDragging = true;
     m_proximityCheckTimer.start();
-    Q_EMIT dragStarted();
 
     qCDebug(lcOverlay) << "Drag started";
 }
@@ -262,7 +261,6 @@ void ZoneSelectorController::endDrag()
     m_isDragging = false;
     m_proximityCheckTimer.stop();
     hide();
-    Q_EMIT dragEnded();
 
     qCDebug(lcOverlay) << "Drag ended";
 }
@@ -432,11 +430,6 @@ void ZoneSelectorController::updateProximity()
             hide();
         }
     }
-}
-
-void ZoneSelectorController::checkEdgeProximity()
-{
-    updateProximity();
 }
 
 QString ZoneSelectorController::stateToString(State state)

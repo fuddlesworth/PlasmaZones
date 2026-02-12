@@ -69,16 +69,4 @@ void LayoutFactory::registerType(const QString& type, CreatorFunc creator)
     creators()[type] = std::move(creator);
 }
 
-bool LayoutFactory::isTypeRegistered(const QString& type)
-{
-    ensureDefaults();
-    return creators().contains(type);
-}
-
-QStringList LayoutFactory::registeredTypes()
-{
-    ensureDefaults();
-    return creators().keys();
-}
-
 } // namespace PlasmaZones

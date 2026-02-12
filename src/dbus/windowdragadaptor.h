@@ -7,7 +7,6 @@
 #include <QAction>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
-#include <QDBusInterface>
 #include <QString>
 #include <QRect>
 #include <QUuid>

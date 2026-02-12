@@ -396,11 +396,6 @@ public:
     virtual Zone* zoneAtPoint(const QPointF& point) const = 0;
     virtual Zone* nearestZone(const QPointF& point) const = 0;
 
-    // Edge detection
-    virtual QVector<Zone*> zonesNearEdge(const QPointF& point) const = 0;
-    virtual bool isNearZoneEdge(const QPointF& point, Zone* zone) const = 0;
-    virtual QRectF combineZoneGeometries(const QVector<Zone*>& zones) const = 0;
-
     // Highlight management
     virtual void highlightZone(Zone* zone) = 0;
     virtual void highlightZones(const QVector<Zone*>& zones) = 0;
@@ -409,16 +404,12 @@ public:
     // Detection thresholds
     virtual qreal adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(qreal threshold) = 0;
-    virtual qreal edgeThreshold() const = 0;
-    virtual void setEdgeThreshold(qreal threshold) = 0;
 
 Q_SIGNALS:
     void layoutChanged();
     void zoneHighlighted(Zone* zone);
-    void zonesHighlighted(const QVector<Zone*>& zones);
     void highlightsCleared();
     void adjacentThresholdChanged();
-    void edgeThresholdChanged();
 };
 
 /**

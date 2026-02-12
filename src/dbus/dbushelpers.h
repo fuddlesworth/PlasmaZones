@@ -103,14 +103,6 @@ Layout* getActiveLayoutOrWarn(ILayoutManager* mgr, const QString& operation, Log
 }
 
 /**
- * @brief Overload using default lcDbus category
- */
-inline Layout* getActiveLayoutOrWarn(ILayoutManager* mgr, const QString& operation)
-{
-    return getActiveLayoutOrWarn(mgr, operation, lcDbus);
-}
-
-/**
  * @brief Get a zone by UUID from the active layout
  * @param mgr Layout manager to query
  * @param zoneId Zone UUID string

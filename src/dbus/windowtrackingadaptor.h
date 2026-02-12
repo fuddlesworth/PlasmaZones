@@ -679,7 +679,6 @@ private:
     // Dependencies (kept for signal connections and settings access)
     // ═══════════════════════════════════════════════════════════════════════════════
     LayoutManager* m_layoutManager;
-    IZoneDetector* m_zoneDetector;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
 

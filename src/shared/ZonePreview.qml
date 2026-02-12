@@ -85,8 +85,6 @@ Item {
     property real inactiveOpacity: 0.25
     /// Zone fill opacity when active/hovered
     property real activeOpacity: 0.45
-    /// Border opacity
-    property real borderOpacity: 0.5
     /// Highlight color for selected zones (default: theme highlight)
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     /// Inactive color for non-selected zones (default: theme text)
@@ -103,12 +101,8 @@ Item {
     property bool fontUnderline: false
     property bool fontStrikeout: false
 
-    /// Emitted when a zone is clicked
-    signal zoneClicked(int index)
     /// Emitted when a zone is hovered
     signal zoneHovered(int index)
-    /// Emitted when hover leaves a zone
-    signal zoneUnhovered(int index)
 
     Repeater {
         model: root.zones || []
@@ -225,8 +219,6 @@ Item {
                 hoverEnabled: root.interactive
                 enabled: root.interactive
                 onEntered: root.zoneHovered(index)
-                onExited: root.zoneUnhovered(index)
-                onClicked: root.zoneClicked(index)
             }
 
             // Animations

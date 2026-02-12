@@ -20,7 +20,6 @@ Window {
     property string highlightedZoneId: "" // Use zone ID instead of index for stable selection (single zone)
     property var highlightedZoneIds: [] // Array of zone IDs for multi-zone highlighting (set by C++ via QQmlProperty)
     property bool showNumbers: true
-    property bool enableBlur: true
     // Ricer-friendly appearance properties - using theme colors
     property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
@@ -36,9 +35,6 @@ Window {
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
     property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
-
-    signal zoneClicked(int index)
-    signal zoneHovered(int index)
 
     function flash() {
         flashAnimation.start();
@@ -191,8 +187,6 @@ Window {
                     var useCustom = modelData.useCustomColors === true || modelData.useCustomColors === 1 || (typeof modelData.useCustomColors === "string" && modelData.useCustomColors.toLowerCase() === "true");
                     return (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius;
                 }
-                onClicked: root.zoneClicked(index)
-                onHovered: root.zoneHovered(index)
             }
 
         }

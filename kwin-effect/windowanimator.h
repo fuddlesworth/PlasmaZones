@@ -75,12 +75,6 @@ class WindowAnimator : public QObject
 public:
     explicit WindowAnimator(QObject* parent = nullptr);
 
-    // Configuration
-    void setAnimationsEnabled(bool enabled) { m_enabled = enabled; }
-    bool animationsEnabled() const { return m_enabled; }
-    void setAnimationDuration(qreal duration) { m_duration = duration; }
-    qreal animationDuration() const { return m_duration; }
-
     // Animation management
     bool hasAnimation(KWin::EffectWindow* window) const;
     bool startAnimation(KWin::EffectWindow* window, const QRectF& startGeometry, const QRect& endGeometry);

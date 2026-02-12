@@ -14,7 +14,6 @@
 #include <QTimer>
 #include <QDBusInterface>
 #include <QHash>
-#include <QPoint>
 #include <QPointer>
 #include <QRect>
 
@@ -186,7 +185,6 @@ private:
     KWin::EffectWindow* getActiveWindow() const;
     QString queryAdjacentZone(const QString& currentZoneId, const QString& direction);
     QString queryFirstZoneInDirection(const QString& direction, const QString& screenName = QString());
-    QString queryZoneGeometry(const QString& zoneId);
     QString queryZoneGeometryForScreen(const QString& zoneId, const QString& screenName);
     QString getWindowScreenName(KWin::EffectWindow* w) const;
 
@@ -252,10 +250,6 @@ public Q_SLOTS:
 public:
     // D-Bus interface access for helpers
     QDBusInterface* windowTrackingInterface() const { return m_windowTrackingInterface.get(); }
-
-    // Current keyboard modifiers (for drag tracking)
-    Qt::KeyboardModifiers currentModifiers() const { return m_currentModifiers; }
-    Qt::MouseButtons currentMouseButtons() const { return m_currentMouseButtons; }
 
 private:
     // Friend classes for helpers

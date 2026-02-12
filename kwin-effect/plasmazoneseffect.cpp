@@ -8,8 +8,6 @@
 #include "dbus_constants.h"
 
 #include <window.h>
-#include <effect/effectwindow.h>
-#include <effect/globals.h> // For ElectricBorder enum
 #include <core/output.h> // For Output::name() for multi-monitor support
 
 #include <QDBusConnection>
@@ -1131,11 +1129,6 @@ QString PlasmaZonesEffect::queryFirstZoneInDirection(const QString& direction, c
         return msg.arguments().at(0).toString();
     }
     return QString();
-}
-
-QString PlasmaZonesEffect::queryZoneGeometry(const QString& zoneId)
-{
-    return queryZoneGeometryForScreen(zoneId, QString());
 }
 
 QString PlasmaZonesEffect::queryZoneGeometryForScreen(const QString& zoneId, const QString& screenName)

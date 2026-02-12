@@ -33,14 +33,6 @@ bool isWayland()
     return false;
 }
 
-QString displayServer()
-{
-    if (isWayland()) {
-        return QStringLiteral("wayland");
-    }
-    return QStringLiteral("unknown");
-}
-
 bool isSupported()
 {
     // PlasmaZones requires Wayland - X11 is not supported

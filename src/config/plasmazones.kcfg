@@ -599,25 +599,11 @@
       <label>Enable shader effects for zone overlays</label>
       <default>true</default>
     </entry>
-    <entry name="ShaderQuality" type="Int">
-      <label>Shader quality level (0=Low, 1=Medium, 2=High)</label>
-      <default>1</default>
-      <min>0</min>
-      <max>2</max>
-    </entry>
     <entry name="ShaderFrameRate" type="Int">
       <label>Target frame rate for shader animations</label>
       <default>60</default>
       <min>30</min>
       <max>144</max>
-    </entry>
-    <entry name="DefaultShaderId" type="String">
-      <label>Default shader ID for new layouts</label>
-      <default>none</default>
-    </entry>
-    <entry name="DefaultShaderParams" type="String">
-      <label>Default shader parameters (JSON string)</label>
-      <default>{}</default>
     </entry>
     <entry name="EnableAudioVisualizer" type="Bool">
       <label>Enable CAVA audio visualization for shaders</label>

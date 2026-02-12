@@ -10,9 +10,6 @@
 #include <QJsonObject>
 #include <QColor>
 #include <QDBusVariant>
-#include <QDBusAbstractAdaptor> // Explicit include to ensure proper namespace
-#include <QDBusConnection>
-#include <QDBusMessage>
 
 namespace PlasmaZones {
 

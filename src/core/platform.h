@@ -23,12 +23,6 @@ namespace Platform {
 PLASMAZONES_EXPORT bool isWayland();
 
 /**
- * @brief Get the display server name
- * @return "wayland" or "unknown"
- */
-PLASMAZONES_EXPORT QString displayServer();
-
-/**
  * @brief Check if the platform is supported
  * @return true if running on Wayland (required for PlasmaZones)
  */

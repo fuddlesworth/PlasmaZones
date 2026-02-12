@@ -16,7 +16,6 @@ ZoneDetector::ZoneDetector(QObject* parent)
 {
     // Forward highlighter signals for backward compatibility
     connect(m_highlighter.get(), &ZoneHighlighter::zoneHighlighted, this, &ZoneDetector::zoneHighlighted);
-    connect(m_highlighter.get(), &ZoneHighlighter::zonesHighlighted, this, &ZoneDetector::zonesHighlighted);
     connect(m_highlighter.get(), &ZoneHighlighter::highlightsCleared, this, &ZoneDetector::highlightsCleared);
 }
 
@@ -54,15 +53,6 @@ void ZoneDetector::setAdjacentThreshold(qreal threshold)
     if (!qFuzzyCompare(m_adjacentThreshold, threshold)) {
         m_adjacentThreshold = threshold;
         Q_EMIT adjacentThresholdChanged();
-    }
-}
-
-void ZoneDetector::setEdgeThreshold(qreal threshold)
-{
-    threshold = qMax(0.0, threshold);
-    if (!qFuzzyCompare(m_edgeThreshold, threshold)) {
-        m_edgeThreshold = threshold;
-        Q_EMIT edgeThresholdChanged();
     }
 }
 
@@ -227,38 +217,6 @@ Zone* ZoneDetector::nearestZone(const QPointF& point) const
     }
 
     return m_layout->nearestZone(point);
-}
-
-QVector<Zone*> ZoneDetector::zonesNearEdge(const QPointF& point) const
-{
-    QVector<Zone*> result;
-
-    if (!m_layout) {
-        return result;
-    }
-
-    const auto& zones = m_layout->zones();
-    for (auto* zone : zones) {
-        if (zone->containsPoint(point) || distanceToZoneEdge(point, zone) <= m_adjacentThreshold) {
-            result.append(zone);
-        }
-    }
-
-    // Sort by distance to point
-    std::sort(result.begin(), result.end(), [&point](Zone* a, Zone* b) {
-        return a->distanceToPoint(point) < b->distanceToPoint(point);
-    });
-
-    return result;
-}
-
-bool ZoneDetector::isNearZoneEdge(const QPointF& point, Zone* zone) const
-{
-    if (!zone) {
-        return false;
-    }
-
-    return distanceToZoneEdge(point, zone) <= m_edgeThreshold;
 }
 
 QRectF ZoneDetector::combineZoneGeometries(const QVector<Zone*>& zones) const

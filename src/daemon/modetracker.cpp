@@ -27,7 +27,6 @@ void ModeTracker::recordManualLayout(const QString& layoutId)
 
     if (m_lastManualLayoutId != layoutId) {
         m_lastManualLayoutId = layoutId;
-        Q_EMIT lastManualLayoutIdChanged(layoutId);
     }
 
     save();

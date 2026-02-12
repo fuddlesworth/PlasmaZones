@@ -46,7 +46,6 @@ class EditorController : public QObject
     Q_PROPERTY(int selectionCount READ selectionCount NOTIFY selectedZoneIdsChanged)
     Q_PROPERTY(bool hasMultipleSelection READ hasMultipleSelection NOTIFY selectedZoneIdsChanged)
     Q_PROPERTY(bool hasUnsavedChanges READ hasUnsavedChanges NOTIFY hasUnsavedChangesChanged)
-    Q_PROPERTY(bool isNewLayout READ isNewLayout NOTIFY isNewLayoutChanged)
 
     // Snapping settings
     Q_PROPERTY(bool gridSnappingEnabled READ gridSnappingEnabled WRITE setGridSnappingEnabled NOTIFY
@@ -502,7 +501,6 @@ Q_SIGNALS:
     void selectedZoneIdChanged();
     void selectedZoneIdsChanged();
     void hasUnsavedChangesChanged();
-    void isNewLayoutChanged();
     void gridSnappingEnabledChanged();
     void edgeSnappingEnabledChanged();
     void snapIntervalXChanged();

@@ -4,7 +4,6 @@
 #include "windowanimator.h"
 
 #include <effect/effectwindow.h>
-#include <effect/effecthandler.h>
 #include <QLoggingCategory>
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)

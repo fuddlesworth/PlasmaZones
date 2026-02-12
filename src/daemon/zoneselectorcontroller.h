@@ -74,10 +74,6 @@ public:
 
     // State management
     QString state() const;
-    State stateEnum() const
-    {
-        return m_state;
-    }
     void setState(const QString& state);
     void setState(State state);
 
@@ -207,10 +203,6 @@ Q_SIGNALS:
     void layoutSelected(const QString& layoutId);
     void layoutHovered(const QString& layoutId);
 
-    // Drag state signals
-    void dragStarted();
-    void dragEnded();
-
 private Q_SLOTS:
     void onLayoutsChanged();
     void onCollapseTimerTimeout();
@@ -218,7 +210,6 @@ private Q_SLOTS:
 
 private:
     void updateProximity();
-    void checkEdgeProximity();
     static QString stateToString(State state);
     static State stringToState(const QString& state);
 
