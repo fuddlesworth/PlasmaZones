@@ -364,11 +364,13 @@ void ScreenManager::queryKdePlasmaPanels()
     //   from Qt's QGuiApplication::screens() ordering on multi-monitor setups.
     //   We include the screen geometry in the output so we can match by geometry.
     // p.floating is a boolean indicating if the panel is in floating mode (Plasma 6)
+    // p.hiding indicates auto-hide mode, one of ("none", "autohide", "dodgewindows", "windowsgobelow")
     // screenGeometry(screenIndex) returns the screen's full geometry
     QString script = QStringLiteral(R"(
         panels().forEach(function(p,i){
             var thickness = Math.abs(p.height);
             var floating = p.floating ? 1 : 0;
+            var hiding = p.hiding;
             var sg = screenGeometry(p.screen);
             var loc = p.location;
             var pg = p.geometry;
@@ -389,7 +391,7 @@ void ScreenManager::queryKdePlasmaPanels()
             // Include screen geometry so we can match by geometry instead of index
             // (Plasma and Qt can have different screen orderings)
             var sgStr = sg ? (sg.x + "," + sg.y + "," + sg.width + "," + sg.height) : "";
-            print("PANEL:" + p.screen + ":" + loc + ":" + offset + ":" + floating + ":" + sgStr + "\n");
+            print("PANEL:" + p.screen + ":" + loc + ":" + hiding + ":" + offset + ":" + floating + ":" + sgStr + "\n");
         });
     )");
 
@@ -407,10 +409,10 @@ void ScreenManager::queryKdePlasmaPanels()
             QString output = reply.value();
             qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply= " << output;
 
-            // Parse: PANEL:plasmaIndex:location:offset:floating:x,y,w,h
+            // Parse: PANEL:plasmaIndex:location:hiding:offset:floating:x,y,w,h
             // Match panels to Qt screens by geometry (Plasma and Qt can have different screen orderings)
             static QRegularExpression panelRegex(
-                QStringLiteral("PANEL:(\\d+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
+                QStringLiteral("PANEL:(\\d+):(\\w+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
             QRegularExpressionMatchIterator it = panelRegex.globalMatch(output);
 
             const auto qtScreens = QGuiApplication::screens();
@@ -419,14 +421,15 @@ void ScreenManager::queryKdePlasmaPanels()
                 QRegularExpressionMatch match = it.next();
                 int plasmaIndex = match.captured(1).toInt();
                 QString location = match.captured(2);
-                int totalOffset = match.captured(3).toInt();
-                bool isFloating = !match.captured(4).isEmpty() && match.captured(4).toInt() != 0;
+                QString hiding = match.captured(3);
+                int totalOffset = match.captured(4).toInt();
+                bool isFloating = !match.captured(5).isEmpty() && match.captured(5).toInt() != 0;
 
                 // Find the Qt screen matching this Plasma screen's geometry
                 QString screenName;
-                if (!match.captured(5).isEmpty()) {
-                    QRect plasmaGeom(match.captured(5).toInt(), match.captured(6).toInt(),
-                                     match.captured(7).toInt(), match.captured(8).toInt());
+                if (!match.captured(6).isEmpty()) {
+                    QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
+                                     match.captured(8).toInt(), match.captured(9).toInt());
                     for (auto* qs : qtScreens) {
                         if (qs->geometry() == plasmaGeom) {
                             screenName = qs->name();
@@ -443,7 +446,14 @@ void ScreenManager::queryKdePlasmaPanels()
 
                 qCDebug(lcScreen) << "  Parsed panel screen=" << screenName << "(plasma idx" << plasmaIndex << ")"
                                   << " location=" << location << " offset=" << totalOffset
-                                  << " floating=" << isFloating;
+                                  << " floating=" << isFloating << " hiding=" << hiding;
+
+                bool panelAutoHides = (hiding == QLatin1String("autohide") 
+                    || hiding == QLatin1String("dodgewindows") || hiding == QLatin1String("windowsgobelow"));
+
+                if (!panelAutoHides) {
+                    totalOffset = 0;
+                }
 
                 if (!m_panelOffsets.contains(screenName)) {
                     m_panelOffsets.insert(screenName, ScreenPanelOffsets{});
