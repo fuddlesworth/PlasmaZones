@@ -16,6 +16,7 @@ QQC2.TextField {
     id: root
 
     property string keySequence: ""
+    property string defaultKeySequence: ""
     property bool capturing: false
 
     signal keySequenceModified(string sequence)
@@ -253,6 +254,11 @@ QQC2.TextField {
         cursorShape: Qt.PointingHandCursor
         z: 10
         onClicked: (mouse) => {
+            if (clearButton.visible && mouse.x >= root.width - clearButton.width - Kirigami.Units.smallSpacing * 2) {
+                root.keySequence = root.defaultKeySequence;
+                root.keySequenceModified(root.defaultKeySequence);
+                return;
+            }
             if (!root.capturing) {
                 root.capturing = true;
                 root.focus = true;
@@ -270,13 +276,13 @@ QQC2.TextField {
         anchors.verticalCenter: parent.verticalCenter
         width: height
         height: parent.height - Kirigami.Units.smallSpacing * 2
-        visible: !root.capturing && root.keySequence.length > 0
+        visible: !root.capturing && root.keySequence !== root.defaultKeySequence
         icon.name: "edit-clear"
         flat: true
         z: 1
         onClicked: {
-            root.keySequence = "";
-            root.keySequenceModified("");
+            root.keySequence = root.defaultKeySequence;
+            root.keySequenceModified(root.defaultKeySequence);
         }
     }
 

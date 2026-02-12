@@ -466,6 +466,58 @@ int KCMPlasmaZones::fillOnDropModifier() const
     return editorConfigGroup().readEntry(QLatin1String("FillOnDropModifier"), 0x04000000); // Qt::ControlModifier
 }
 
+// Default value getters (for reset-to-default buttons in UI)
+// Enum values from plasmazones.kcfg: 3=Alt, 5=Ctrl+Alt, 9=Alt+Meta
+int KCMPlasmaZones::defaultDragActivationModifier() const
+{
+    return ModifierUtils::dragModifierToBitmask(3); // DragModifier::Alt
+}
+
+int KCMPlasmaZones::defaultDragActivationMouseButton() const
+{
+    return 0; // None
+}
+
+int KCMPlasmaZones::defaultMultiZoneModifier() const
+{
+    return ModifierUtils::dragModifierToBitmask(5); // DragModifier::CtrlAlt
+}
+
+int KCMPlasmaZones::defaultZoneSpanModifier() const
+{
+    return ModifierUtils::dragModifierToBitmask(9); // DragModifier::AltMeta
+}
+
+int KCMPlasmaZones::defaultEditorSnapOverrideModifier() const
+{
+    return 0x02000000; // Qt::ShiftModifier — matches readEntry default
+}
+
+int KCMPlasmaZones::defaultFillOnDropModifier() const
+{
+    return 0x04000000; // Qt::ControlModifier — matches readEntry default
+}
+
+QString KCMPlasmaZones::defaultEditorDuplicateShortcut() const
+{
+    return QStringLiteral("Ctrl+D");
+}
+
+QString KCMPlasmaZones::defaultEditorSplitHorizontalShortcut() const
+{
+    return QStringLiteral("Ctrl+Shift+H");
+}
+
+QString KCMPlasmaZones::defaultEditorSplitVerticalShortcut() const
+{
+    return QStringLiteral("Ctrl+Alt+V");
+}
+
+QString KCMPlasmaZones::defaultEditorFillShortcut() const
+{
+    return QStringLiteral("Ctrl+Shift+F");
+}
+
 // Layouts getter
 QVariantList KCMPlasmaZones::layouts() const
 {

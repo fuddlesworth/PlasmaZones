@@ -48,6 +48,7 @@ ScrollView {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Duplicate zone:")
                         keySequence: kcm.editorDuplicateShortcut
+                        defaultKeySequence: kcm.defaultEditorDuplicateShortcut
                         onKeySequenceModified: (sequence) => {
                             kcm.editorDuplicateShortcut = sequence
                         }
@@ -60,6 +61,7 @@ ScrollView {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split horizontally:")
                         keySequence: kcm.editorSplitHorizontalShortcut
+                        defaultKeySequence: kcm.defaultEditorSplitHorizontalShortcut
                         onKeySequenceModified: (sequence) => {
                             kcm.editorSplitHorizontalShortcut = sequence
                         }
@@ -72,6 +74,7 @@ ScrollView {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split vertically:")
                         keySequence: kcm.editorSplitVerticalShortcut
+                        defaultKeySequence: kcm.defaultEditorSplitVerticalShortcut
                         onKeySequenceModified: (sequence) => {
                             kcm.editorSplitVerticalShortcut = sequence
                         }
@@ -84,6 +87,7 @@ ScrollView {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Fill space:")
                         keySequence: kcm.editorFillShortcut
+                        defaultKeySequence: kcm.defaultEditorFillShortcut
                         onKeySequenceModified: (sequence) => {
                             kcm.editorFillShortcut = sequence
                         }
@@ -193,6 +197,7 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Override modifier:")
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.editorSnapOverrideModifier
+                        defaultModifierValue: kcm.defaultEditorSnapOverrideModifier
                         tooltipEnabled: true
                         onValueModified: (value) => {
                             kcm.editorSnapOverrideModifier = value
@@ -237,6 +242,7 @@ ScrollView {
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         enabled: fillOnDropEnabledCheck.checked
                         modifierValue: kcm.fillOnDropModifier
+                        defaultModifierValue: kcm.defaultFillOnDropModifier
                         tooltipEnabled: true
                         onValueModified: (value) => {
                             kcm.fillOnDropModifier = value

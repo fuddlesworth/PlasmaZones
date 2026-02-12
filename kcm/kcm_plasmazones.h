@@ -149,6 +149,18 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(
         int zoneSelectorMaxRows READ zoneSelectorMaxRows WRITE setZoneSelectorMaxRows NOTIFY zoneSelectorMaxRowsChanged)
 
+    // Default values for reset-to-default in UI components (CONSTANT — never change at runtime)
+    Q_PROPERTY(int defaultDragActivationModifier READ defaultDragActivationModifier CONSTANT)
+    Q_PROPERTY(int defaultDragActivationMouseButton READ defaultDragActivationMouseButton CONSTANT)
+    Q_PROPERTY(int defaultMultiZoneModifier READ defaultMultiZoneModifier CONSTANT)
+    Q_PROPERTY(int defaultZoneSpanModifier READ defaultZoneSpanModifier CONSTANT)
+    Q_PROPERTY(int defaultEditorSnapOverrideModifier READ defaultEditorSnapOverrideModifier CONSTANT)
+    Q_PROPERTY(int defaultFillOnDropModifier READ defaultFillOnDropModifier CONSTANT)
+    Q_PROPERTY(QString defaultEditorDuplicateShortcut READ defaultEditorDuplicateShortcut CONSTANT)
+    Q_PROPERTY(QString defaultEditorSplitHorizontalShortcut READ defaultEditorSplitHorizontalShortcut CONSTANT)
+    Q_PROPERTY(QString defaultEditorSplitVerticalShortcut READ defaultEditorSplitVerticalShortcut CONSTANT)
+    Q_PROPERTY(QString defaultEditorFillShortcut READ defaultEditorFillShortcut CONSTANT)
+
     // Editor shortcuts (app-specific only - standard shortcuts use Qt StandardKey)
     Q_PROPERTY(QString editorDuplicateShortcut READ editorDuplicateShortcut WRITE setEditorDuplicateShortcut NOTIFY
                    editorDuplicateShortcutChanged)
@@ -280,6 +292,18 @@ public:
     int editorSnapOverrideModifier() const;
     bool fillOnDropEnabled() const;
     int fillOnDropModifier() const;
+
+    // Default value getters (for reset-to-default buttons in UI)
+    int defaultDragActivationModifier() const;
+    int defaultDragActivationMouseButton() const;
+    int defaultMultiZoneModifier() const;
+    int defaultZoneSpanModifier() const;
+    int defaultEditorSnapOverrideModifier() const;
+    int defaultFillOnDropModifier() const;
+    QString defaultEditorDuplicateShortcut() const;
+    QString defaultEditorSplitHorizontalShortcut() const;
+    QString defaultEditorSplitVerticalShortcut() const;
+    QString defaultEditorFillShortcut() const;
     QVariantList layouts() const;
     QString layoutToSelect() const;
     QVariantList screens() const;

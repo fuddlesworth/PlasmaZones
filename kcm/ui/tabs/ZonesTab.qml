@@ -439,6 +439,8 @@ ScrollView {
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeAll
                         modifierValue: kcm.dragActivationModifier
                         mouseButtonValue: kcm.dragActivationMouseButton
+                        defaultModifierValue: kcm.defaultDragActivationModifier
+                        defaultMouseButtonValue: kcm.defaultDragActivationMouseButton
                         tooltipEnabled: root.isCurrentTab
                         customTooltipText: i18n("Hold modifier or use this mouse button to show zones while dragging (e.g. left-click to drag, another button to activate zones)")
                         onValueModified: (value) => {
@@ -477,6 +479,7 @@ ScrollView {
                         visible: !kcm.proximitySnapAlwaysOn
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.multiZoneModifier
+                        defaultModifierValue: kcm.defaultMultiZoneModifier
                         tooltipEnabled: root.isCurrentTab
                         customTooltipText: i18n("Hold this modifier while dragging to snap to adjacent zones detected by edge proximity")
                         onValueModified: (value) => {
@@ -490,6 +493,7 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Paint-to-span modifier:")
                         acceptMode: ModifierAndMouseCheckBoxes.acceptModeMetaOnly
                         modifierValue: kcm.zoneSpanModifier
+                        defaultModifierValue: kcm.defaultZoneSpanModifier
                         tooltipEnabled: root.isCurrentTab
                         customTooltipText: i18n("Hold this modifier while dragging to paint across zones — each zone the cursor enters is added to the selection")
                         onValueModified: (value) => {

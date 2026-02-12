@@ -22,6 +22,8 @@ Item {
 
     property int modifierValue: 0
     property int mouseButtonValue: 0
+    property int defaultModifierValue: 0
+    property int defaultMouseButtonValue: 0
     property int acceptMode: acceptModeAll
     property bool tooltipEnabled: true
     /** When set, overrides the default tooltip for the input field (use instead of ToolTip.text; Item has no ToolTip attached type). */
@@ -74,11 +76,11 @@ Item {
     }
 
     function clearAll() {
-        if (modifierValue !== 0 || mouseButtonValue !== 0) {
-            modifierValue = 0
-            mouseButtonValue = 0
-            valueModified(0)
-            mouseButtonsModified(0)
+        if (modifierValue !== defaultModifierValue || mouseButtonValue !== defaultMouseButtonValue) {
+            modifierValue = defaultModifierValue
+            mouseButtonValue = defaultMouseButtonValue
+            valueModified(defaultModifierValue)
+            mouseButtonsModified(defaultMouseButtonValue)
         }
     }
 
@@ -102,8 +104,10 @@ Item {
             cursorShape: Qt.PointingHandCursor
             z: 10
             onClicked: (mouse) => {
-                if (clearBtn.visible && mouse.x >= field.width - clearBtn.width - Kirigami.Units.smallSpacing * 2)
+                if (clearBtn.visible && mouse.x >= field.width - clearBtn.width - Kirigami.Units.smallSpacing * 2) {
+                    root.clearAll()
                     return
+                }
                 inputCapture.startCapture()
             }
         }
@@ -117,7 +121,7 @@ Item {
 
         QQC2.Button {
             id: clearBtn
-            visible: !inputCapture.capturing && (root.modifierValue !== 0 || root.mouseButtonValue !== 0)
+            visible: !inputCapture.capturing && (root.modifierValue !== root.defaultModifierValue || root.mouseButtonValue !== root.defaultMouseButtonValue)
             anchors.right: parent.right
             anchors.rightMargin: Kirigami.Units.smallSpacing
             anchors.verticalCenter: parent.verticalCenter
@@ -127,10 +131,10 @@ Item {
             icon.name: "edit-clear"
             z: 1
             Accessible.role: Accessible.Button
-            Accessible.name: i18n("Clear")
+            Accessible.name: i18n("Reset to default")
             onClicked: root.clearAll()
             QQC2.ToolTip.visible: hovered && root.tooltipEnabled
-            QQC2.ToolTip.text: i18n("Clear")
+            QQC2.ToolTip.text: i18n("Reset to default")
         }
 
         // ToolTip attached to Control (TextField) - Item has no ToolTip attached type
