@@ -4,7 +4,6 @@
     "description": "Four equal quadrants",
     "type": 3,
     "isBuiltIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {

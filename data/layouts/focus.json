@@ -4,7 +4,6 @@
     "description": "Large main area with stacked side panels",
     "type": 5,
     "isBuiltIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {

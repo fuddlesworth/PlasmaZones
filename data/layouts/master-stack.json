@@ -4,7 +4,6 @@
     "description": "Classic tiling layout with 60% master and 40% stacked",
     "type": 5,
     "builtIn": true,
-    "zonePadding": 8,
     "showZoneNumbers": true,
     "zones": [
         {
