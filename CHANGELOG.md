@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.3] - 2026-02-13
+
+### Fixed
+- CAVA audio visualizer not starting without daemon restart after enabling in KCM ([#150])
+- Shader effects toggle, frame rate, and spectrum bar count changes also required restart — same root cause
+- No default layout selected on fresh install — Columns (2) now gets the star badge out of the box
+- `defaults()` uses `defaultOrder` from layout metadata instead of hardcoded name match
+
 ## [1.10.2] - 2026-02-13
 
 ### Fixed
