@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.5] - 2026-02-13
+
+### Fixed
+- Snap Assist D-Bus calls made fully async to prevent compositor freeze when daemon is busy with overlay teardown ([#158])
+- Zone selector snapping now uses the same geometry pipeline as overlay snapping, so gap handling is consistent
+
 ## [1.10.4] - 2026-02-13
 
 ### Fixed
