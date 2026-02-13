@@ -1505,13 +1505,19 @@ void KCMPlasmaZones::defaults()
     m_settings->reset();
     syncProximitySnapFallbackFromSettings();
 
-    // Find "Columns (2)" layout and set it as the default
+    // Set default layout: pick the layout with the lowest defaultOrder (Columns (2) has 0)
+    int bestOrder = 999;
+    QString bestId;
     for (const QVariant& layoutVar : m_layouts) {
         const QVariantMap layout = layoutVar.toMap();
-        if (layout[QStringLiteral("name")].toString() == QStringLiteral("Columns (2)")) {
-            m_settings->setDefaultLayoutId(layout[QStringLiteral("id")].toString());
-            break;
+        int order = layout.value(QStringLiteral("defaultOrder"), 999).toInt();
+        if (order < bestOrder) {
+            bestOrder = order;
+            bestId = layout.value(QStringLiteral("id")).toString();
         }
+    }
+    if (!bestId.isEmpty()) {
+        m_settings->setDefaultLayoutId(bestId);
     }
 
     // Clear screen assignments
@@ -2138,6 +2144,24 @@ void KCMPlasmaZones::loadLayouts()
     // layout the user actually configured as their default.
     if (!newLayouts.isEmpty()) {
         QString defaultId = defaultLayoutId();
+        if (defaultId.isEmpty()) {
+            // No explicit default set (fresh install / reset) — resolve the implicit
+            // default by defaultOrder (lowest wins, matching daemon's LayoutManager logic).
+            // This ensures the star badge appears on Columns (2) out of the box.
+            int bestOrder = 999;
+            for (const QVariant& v : newLayouts) {
+                const QVariantMap layoutMap = v.toMap();
+                int order = layoutMap.value(QStringLiteral("defaultOrder"), 999).toInt();
+                if (order < bestOrder) {
+                    bestOrder = order;
+                    defaultId = layoutMap.value(QStringLiteral("id")).toString();
+                }
+            }
+            if (!defaultId.isEmpty()) {
+                m_settings->setDefaultLayoutId(defaultId);
+                Q_EMIT defaultLayoutIdChanged();
+            }
+        }
         if (!defaultId.isEmpty()) {
             m_layoutToSelect = defaultId;
         }

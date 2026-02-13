@@ -906,6 +906,7 @@ void Settings::load()
     m_snapAssistEnabled = behavior.readEntry(QLatin1String("SnapAssistEnabled"), ConfigDefaults::snapAssistEnabled());
     // Normalize UUID to default format (with braces) for consistent comparison
     // Handles migration from configs saved with WithoutBraces format
+    const QString oldDefaultLayoutId = m_defaultLayoutId;
     m_defaultLayoutId = normalizeUuidString(behavior.readEntry(QLatin1String("DefaultLayoutId"), QString()));
 
     // Exclusions (defaults from .kcfg via ConfigDefaults)
@@ -980,6 +981,13 @@ void Settings::load()
     }
 
     // Shader Effects (defaults from .kcfg via ConfigDefaults)
+    // Save old values so we can emit specific signals for settings with runtime side-effects
+    // (load() writes directly to members, bypassing the setters that emit signals)
+    const bool oldEnableShaders = m_enableShaderEffects;
+    const int oldShaderFrameRate = m_shaderFrameRate;
+    const bool oldEnableAudioViz = m_enableAudioVisualizer;
+    const int oldBarCount = m_audioSpectrumBarCount;
+
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
     m_enableShaderEffects = shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
     m_shaderFrameRate = qBound(30, shaders.readEntry(QLatin1String("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
@@ -1048,6 +1056,20 @@ void Settings::load()
 
     // Notify listeners so the overlay updates when KCM saves settings.
     Q_EMIT settingsChanged();
+
+    // Emit specific signals for settings with runtime side-effects (e.g. starting/stopping
+    // CAVA, recreating overlay windows). load() bypasses the setters, so these won't fire
+    // unless we emit them explicitly after comparing old vs new values.
+    if (m_enableShaderEffects != oldEnableShaders)
+        Q_EMIT enableShaderEffectsChanged();
+    if (m_shaderFrameRate != oldShaderFrameRate)
+        Q_EMIT shaderFrameRateChanged();
+    if (m_enableAudioVisualizer != oldEnableAudioViz)
+        Q_EMIT enableAudioVisualizerChanged();
+    if (m_audioSpectrumBarCount != oldBarCount)
+        Q_EMIT audioSpectrumBarCountChanged();
+    if (m_defaultLayoutId != oldDefaultLayoutId)
+        Q_EMIT defaultLayoutIdChanged();
 }
 
 void Settings::save()

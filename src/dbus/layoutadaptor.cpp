@@ -231,6 +231,9 @@ QStringList LayoutAdaptor::getLayoutList()
                 json[JsonKeys::IsSystem] = layout->isSystemLayout();
                 json[JsonKeys::Type] = static_cast<int>(layout->type());
                 json[JsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
+                if (layout->defaultOrder() != 999) {
+                    json[JsonKeys::DefaultOrder] = layout->defaultOrder();
+                }
 
                 // Include allow-lists so KCM can show the filter badge
                 LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
