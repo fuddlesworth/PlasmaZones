@@ -261,7 +261,6 @@ Q_SIGNALS:
 
     // Snap All Windows Shortcut
     void snapAllWindowsShortcutChanged();
-
 };
 
 /**
@@ -335,15 +334,17 @@ public:
                                  const QString& activity = QString()) = 0;
     virtual bool hasExplicitAssignment(const QString& screenName, int virtualDesktop = 0,
                                        const QString& activity = QString()) const = 0;
-    virtual void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) = 0;  // Batch set - saves once
-    virtual void setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) = 0;  // Batch per-desktop
-    virtual void setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) = 0;  // Batch per-activity
+    virtual void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) = 0; // Batch set - saves once
+    virtual void
+    setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) = 0; // Batch per-desktop
+    virtual void
+    setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) = 0; // Batch per-activity
 
     // Quick layout switch
     virtual Layout* layoutForShortcut(int number) const = 0;
     virtual void applyQuickLayout(int number, const QString& screenName) = 0;
     virtual void setQuickLayoutSlot(int number, const QUuid& layoutId) = 0;
-    virtual void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) = 0;  // Batch set - saves once
+    virtual void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) = 0; // Batch set - saves once
     virtual QHash<int, QUuid> quickLayoutSlots() const = 0;
 
     // Built-in layouts
@@ -405,15 +406,10 @@ public:
     virtual void highlightZones(const QVector<Zone*>& zones) = 0;
     virtual void clearHighlights() = 0;
 
-    // Detection thresholds
-    virtual qreal adjacentThreshold() const = 0;
-    virtual void setAdjacentThreshold(qreal threshold) = 0;
-
 Q_SIGNALS:
     void layoutChanged();
     void zoneHighlighted(Zone* zone);
     void highlightsCleared();
-    void adjacentThresholdChanged();
 };
 
 /**
@@ -465,10 +461,10 @@ public:
 
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)
     virtual void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
-                                  const QString& shaderId, const QString& shaderParamsJson,
-                                  const QString& zonesJson) = 0;
-    virtual void updateShaderPreview(int x, int y, int width, int height,
-                                     const QString& shaderParamsJson, const QString& zonesJson) = 0;
+                                   const QString& shaderId, const QString& shaderParamsJson,
+                                   const QString& zonesJson) = 0;
+    virtual void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
+                                     const QString& zonesJson) = 0;
     virtual void hideShaderPreview() = 0;
 
     // Snap Assist overlay (window picker after snapping)
@@ -505,8 +501,7 @@ Q_SIGNALS:
     /**
      * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
      */
-    void snapAssistShown(const QString& screenName, const QString& emptyZonesJson,
-                         const QString& candidatesJson);
+    void snapAssistShown(const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson);
 
     /**
      * @brief Emitted when Snap Assist overlay is dismissed (by selection, Escape, or any other means).

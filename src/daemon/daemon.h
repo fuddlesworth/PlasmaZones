@@ -101,8 +101,8 @@ private:
     void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
     std::unique_ptr<LayoutManager> m_layoutManager;
-    std::unique_ptr<ZoneDetector> m_zoneDetector;
     std::unique_ptr<Settings> m_settings;
+    std::unique_ptr<ZoneDetector> m_zoneDetector;
     std::unique_ptr<OverlayService> m_overlayService;
     std::unique_ptr<ScreenManager> m_screenManager;
     std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;

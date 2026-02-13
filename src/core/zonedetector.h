@@ -38,11 +38,9 @@ class PLASMAZONES_EXPORT ZoneDetector : public IZoneDetector
     Q_OBJECT
 
     Q_PROPERTY(Layout* layout READ layout WRITE setLayout NOTIFY layoutChanged)
-    Q_PROPERTY(
-        qreal adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
 public:
-    explicit ZoneDetector(QObject* parent = nullptr);
+    explicit ZoneDetector(ISettings* settings, QObject* parent = nullptr);
     ~ZoneDetector() override; // Defined in .cpp to allow unique_ptr with forward declaration
 
     // IZoneDetector interface implementation
@@ -51,12 +49,6 @@ public:
         return m_layout;
     }
     void setLayout(Layout* layout) override;
-
-    qreal adjacentThreshold() const override
-    {
-        return m_adjacentThreshold;
-    }
-    void setAdjacentThreshold(qreal threshold) override;
 
     Q_INVOKABLE ZoneDetectionResult detectZone(const QPointF& cursorPos) const override;
     Q_INVOKABLE ZoneDetectionResult detectMultiZone(const QPointF& cursorPos) const override;
@@ -78,7 +70,6 @@ public:
 
 Q_SIGNALS:
     void layoutChanged();
-    void adjacentThresholdChanged();
     void zoneHighlighted(Zone* zone);
     void highlightsCleared();
 
@@ -88,8 +79,7 @@ private:
     qreal distanceToZoneEdge(const QPointF& point, Zone* zone) const;
 
     Layout* m_layout = nullptr;
-    qreal m_adjacentThreshold = 20.0; // Pixels from edge for adjacent detection
-    qreal m_edgeThreshold = 10.0; // Pixels for edge detection
+    ISettings* m_settings;
 
     // UI state management
     std::unique_ptr<class ZoneHighlighter> m_highlighter;
