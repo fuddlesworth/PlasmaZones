@@ -125,11 +125,12 @@ private:
      * @brief Build candidate windows for Snap Assist (excluding just-snapped and already-snapped)
      * @param excludeWindowId Window ID to exclude (the one just snapped)
      * @param screenName Screen where snap occurred (filter by same screen)
-     * @param snappedStableIds Set of stable IDs of windows already snapped to zones (excluded)
+     * @param snappedWindowIds Set of full window IDs already snapped to zones (excluded).
+     *        Uses full ID matching with stable ID fallback for single-instance apps.
      * @return JSON array of {windowId, kwinHandle, icon, caption}
      */
     QJsonArray buildSnapAssistCandidates(const QString& excludeWindowId, const QString& screenName,
-                                          const QSet<QString>& snappedStableIds = QSet<QString>()) const;
+                                          const QSet<QString>& snappedWindowIds = QSet<QString>()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods

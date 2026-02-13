@@ -814,7 +814,7 @@ bool PlasmaZonesEffect::ensureOverlayInterface(const char* methodName)
 
 QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWindowId,
                                                         const QString& screenName,
-                                                        const QSet<QString>& snappedStableIds) const
+                                                        const QSet<QString>& snappedWindowIds) const
 {
     // Candidates: unsnapped windows (including floated — user can snap them to fill empty zones)
     QJsonArray candidates;
@@ -827,12 +827,40 @@ QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWi
         }
 
         QString windowId = getWindowId(w);
-        QString stableId = extractStableId(windowId);
-        if (stableId == extractStableId(excludeWindowId)) {
-            continue; // Exclude the just-snapped window
+        if (windowId == excludeWindowId) {
+            continue; // Exclude the just-snapped window (exact match)
         }
-        if (snappedStableIds.contains(stableId)) {
-            continue; // Exclude windows already snapped to zones (candidates must be unsnapped)
+        // Check snapped set by both full ID (exact) and stable ID (for daemon-stored IDs
+        // whose pointer address may differ from the current EffectWindow pointer)
+        if (snappedWindowIds.contains(windowId)) {
+            continue; // Exact match — this window is snapped
+        }
+        QString stableId = extractStableId(windowId);
+        bool snappedByStableId = false;
+        for (const QString& snappedId : snappedWindowIds) {
+            if (extractStableId(snappedId) == stableId) {
+                // Stable ID matches — but only exclude if there's a single window with this
+                // stable ID. If multiple windows share the stable ID (same app), don't exclude
+                // based on stable ID alone since only one of them is actually snapped.
+                snappedByStableId = true;
+                break;
+            }
+        }
+        if (snappedByStableId) {
+            // Count how many live windows share this stable ID
+            int sameStableCount = 0;
+            for (KWin::EffectWindow* other : windows) {
+                if (other && shouldHandleWindow(other)
+                    && extractStableId(getWindowId(other)) == stableId) {
+                    ++sameStableCount;
+                }
+            }
+            // If only one window has this stable ID, the stable ID match is unambiguous
+            if (sameStableCount <= 1) {
+                continue;
+            }
+            // Multiple windows share this stable ID — don't exclude, the full-ID check
+            // above already handled the exact match case
         }
 
         QString winScreenName = getWindowScreenName(w);
@@ -1191,13 +1219,25 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
         return;
     }
 
-    QString stableId = extractStableId(windowId);
-    QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap(true);
+    // Match by exact full window ID (includes pointer address) to distinguish
+    // multiple windows of the same application. Fall back to stable ID only if
+    // the exact match fails (e.g. window was recreated between candidate build
+    // and selection).
     KWin::EffectWindow* targetWindow = nullptr;
-    for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-        if (extractStableId(getWindowId(it.value())) == stableId) {
-            targetWindow = it.value();
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && shouldHandleWindow(w) && getWindowId(w) == windowId) {
+            targetWindow = w;
             break;
+        }
+    }
+    if (!targetWindow) {
+        QString stableId = extractStableId(windowId);
+        for (KWin::EffectWindow* w : windows) {
+            if (w && shouldHandleWindow(w) && extractStableId(getWindowId(w)) == stableId) {
+                targetWindow = w;
+                break;
+            }
         }
     }
 
@@ -1241,16 +1281,16 @@ void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screen
                 if (!ensureOverlayInterface("snap assist continuation")) {
                     return;
                 }
-                QSet<QString> snappedStableIds;
+                QSet<QString> snappedWindowIds;
                 QDBusReply<QStringList> snapReply =
                     m_windowTrackingInterface->call(QStringLiteral("getSnappedWindows"));
                 if (snapReply.isValid()) {
                     for (const QString& id : snapReply.value()) {
-                        snappedStableIds.insert(extractStableId(id));
+                        snappedWindowIds.insert(id);
                     }
                 }
                 QJsonArray candidates =
-                    buildSnapAssistCandidates(QString(), screenName, snappedStableIds);
+                    buildSnapAssistCandidates(QString(), screenName, snappedWindowIds);
                 if (candidates.isEmpty()) {
                     return;
                 }
@@ -1728,15 +1768,15 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
         // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist
         if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenName.isEmpty()
             && ensureOverlayInterface("snap assist") && ensureWindowTrackingReady("snap assist")) {
-            QSet<QString> snappedStableIds;
+            QSet<QString> snappedWindowIds;
             QDBusReply<QStringList> snapReply =
                 m_windowTrackingInterface->call(QStringLiteral("getSnappedWindows"));
             if (snapReply.isValid()) {
                 for (const QString& id : snapReply.value()) {
-                    snappedStableIds.insert(extractStableId(id));
+                    snappedWindowIds.insert(id);
                 }
             }
-            QJsonArray candidates = buildSnapAssistCandidates(windowId, releaseScreenName, snappedStableIds);
+            QJsonArray candidates = buildSnapAssistCandidates(windowId, releaseScreenName, snappedWindowIds);
             if (!candidates.isEmpty()) {
                 QDBusMessage msg = m_overlayInterface->call(QStringLiteral("showSnapAssist"),
                                                             releaseScreenName, emptyZonesJson,
