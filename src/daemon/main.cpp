@@ -3,6 +3,7 @@
 
 #include "daemon.h"
 #include "../core/logging.h"
+#include "../core/version.h"
 #include "rendering/zoneshaderitem.h"
 #include <QGuiApplication>
 #include <QCommandLineParser>
@@ -46,7 +47,7 @@ int main(int argc, char* argv[])
     KLocalizedString::setApplicationDomain("plasmazonesd");
 
     // Set up application metadata
-    KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), QStringLiteral("1.2.0"),
+    KAboutData aboutData(QStringLiteral("plasmazonesd"), i18n("PlasmaZones Daemon"), PlasmaZones::VERSION_STRING,
                          i18n("FancyZones-style window snapping for KDE Plasma"), KAboutLicense::GPL_V3,
                          i18n("© 2026 fuddlesworth"));
     aboutData.addAuthor(i18n("fuddlesworth"));
