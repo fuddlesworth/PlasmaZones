@@ -1523,10 +1523,11 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
     // Update computed properties that depend on layout and settings
     updateZoneSelectorComputedProperties(window, screen, config, m_settings, layout);
 
-    // Force QML to process property updates immediately
+    // Schedule QML polish for next render frame (do NOT call processEvents here —
+    // re-entrant event processing during a Wayland drag can deadlock with the
+    // compositor, causing a hard system freeze; see GitHub discussion #152).
     if (auto* contentRoot = window->contentItem()) {
         contentRoot->polish();
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         const int screenW = screenGeom.width();
@@ -1598,12 +1599,11 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
         contentRoot->setWidth(window->width());
         contentRoot->setHeight(window->height());
 
-        // Force QML to process property updates and layout changes
+        // Schedule polish for next render frame (NO processEvents — see #152)
         contentRoot->polish();
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
 
-    // Force QML items to recalculate layout
+    // Schedule QML items for layout recalculation on the next frame
     if (auto* contentRoot = window->contentItem()) {
         if (auto* gridItem = findQmlItemByName(contentRoot, QStringLiteral("zoneSelectorContentGrid"))) {
             gridItem->polish();
@@ -1613,7 +1613,6 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
             containerItem->polish();
             containerItem->update();
         }
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
     }
 }
 
