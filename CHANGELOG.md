@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.4] - 2026-02-13
+
+### Fixed
+- Session restore places windows on wrong display in multi-monitor setups — active screen and desktop assignments were lost on daemon restart ([#156])
+- Escape during drag now dismisses overlay without cancelling the drag; re-pressing the activation trigger re-shows the overlay
+- Keyboard grab released in effect destructor to prevent input loss if effect unloads mid-drag
+
 ## [1.10.3] - 2026-02-13
 
 ### Fixed
@@ -460,3 +467,4 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#139]: https://github.com/fuddlesworth/PlasmaZones/pull/139
 [#143]: https://github.com/fuddlesworth/PlasmaZones/discussions/143
 [#145]: https://github.com/fuddlesworth/PlasmaZones/issues/145
+[#156]: https://github.com/fuddlesworth/PlasmaZones/discussions/156
