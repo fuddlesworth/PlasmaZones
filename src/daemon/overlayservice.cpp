@@ -874,9 +874,9 @@ void OverlayService::highlightZone(const QString& zoneId)
     // Update the highlightedZoneId property on all overlay windows
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
-            window->setProperty("highlightedZoneId", zoneId);
+            writeQmlProperty(window, QStringLiteral("highlightedZoneId"), zoneId);
             // Clear multi-zone highlighting when using single zone
-            window->setProperty("highlightedZoneIds", QVariantList());
+            writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
         }
     }
 }
@@ -887,7 +887,6 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
     m_zoneDataDirty = true;
 
     // Update the highlightedZoneIds property on all overlay windows
-    // Use QQmlProperty to properly set QML property (setProperty() doesn't always work)
     QVariantList zoneIdList;
     for (const QString& zoneId : zoneIds) {
         zoneIdList.append(zoneId);
@@ -895,13 +894,9 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
 
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
-            // Use QQmlProperty to set QML property directly (works better than setProperty for QML properties)
-            QQmlProperty highlightIdsProp(window, QStringLiteral("highlightedZoneIds"));
-            highlightIdsProp.write(zoneIdList);
-
+            writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), zoneIdList);
             // Clear single zone highlighting when using multi-zone
-            QQmlProperty highlightIdProp(window, QStringLiteral("highlightedZoneId"));
-            highlightIdProp.write(QString());
+            writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
         }
     }
 }
@@ -914,8 +909,8 @@ void OverlayService::clearHighlight()
     // Clear the highlight on all overlay windows
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
-            window->setProperty("highlightedZoneId", QString());
-            window->setProperty("highlightedZoneIds", QVariantList());
+            writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
+            writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
         }
     }
 }
@@ -1728,7 +1723,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     });
 
     if (usingShader) {
-        window->setProperty("zoneDataVersion", m_zoneDataVersion);
+        writeQmlProperty(window, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
     }
 
     m_overlayWindows.insert(screen, window);
@@ -1810,7 +1805,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     // ZoneDataProvider and zone components see the correct state.
     QVariantList zones = buildZonesList(screen);
     QVariantList patched = patchZonesWithHighlight(zones, window);
-    window->setProperty("zones", patched);
+    writeQmlProperty(window, QStringLiteral("zones"), patched);
 
     // Shader overlay: zoneCount, highlightedCount, zoneDataVersion, labelsTexture
     if (windowIsShader && screenUsesShader) {
@@ -1820,14 +1815,14 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
                 ++highlightedCount;
             }
         }
-        window->setProperty("zoneCount", patched.size());
-        window->setProperty("highlightedCount", highlightedCount);
+        writeQmlProperty(window, QStringLiteral("zoneCount"), patched.size());
+        writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
         ++m_zoneDataVersion;
 
         updateLabelsTextureForWindow(window, patched, screen, screenLayout);
         for (auto* w : std::as_const(m_overlayWindows)) {
             if (w) {
-                w->setProperty("zoneDataVersion", m_zoneDataVersion);
+                writeQmlProperty(w, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
             }
         }
     }
@@ -2251,9 +2246,9 @@ void OverlayService::updateZonesForAllWindows()
             }
         }
 
-        window->setProperty("zones", patched);
-        window->setProperty("zoneCount", patched.size());
-        window->setProperty("highlightedCount", highlightedCount);
+        writeQmlProperty(window, QStringLiteral("zones"), patched);
+        writeQmlProperty(window, QStringLiteral("zoneCount"), patched.size());
+        writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
 
         if (useShaderForScreen(screen)) {
             Layout* screenLayout = resolveScreenLayout(screen);
@@ -2264,7 +2259,7 @@ void OverlayService::updateZonesForAllWindows()
     ++m_zoneDataVersion;
     for (auto* w : std::as_const(m_overlayWindows)) {
         if (w) {
-            w->setProperty("zoneDataVersion", m_zoneDataVersion);
+            writeQmlProperty(w, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
         }
     }
 }

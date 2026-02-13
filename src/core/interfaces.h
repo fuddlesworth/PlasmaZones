@@ -396,6 +396,10 @@ public:
     virtual Zone* zoneAtPoint(const QPointF& point) const = 0;
     virtual Zone* nearestZone(const QPointF& point) const = 0;
 
+    // Paint-to-snap: expand painted zones to include all zones intersecting the bounding rect
+    // (same raycasting algorithm as detectMultiZone and the editor)
+    virtual QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>& seedZones) const = 0;
+
     // Highlight management
     virtual void highlightZone(Zone* zone) = 0;
     virtual void highlightZones(const QVector<Zone*>& zones) = 0;

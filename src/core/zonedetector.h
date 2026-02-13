@@ -60,6 +60,13 @@ public:
 
     Q_INVOKABLE ZoneDetectionResult detectZone(const QPointF& cursorPos) const override;
     Q_INVOKABLE ZoneDetectionResult detectMultiZone(const QPointF& cursorPos) const override;
+    /**
+     * @brief Expand painted zones to include all zones that intersect the bounding rect.
+     * Uses the same raycasting/intersection algorithm as detectMultiZone and the editor.
+     * When user paints over zones 1 and 2, this returns zones 1,2,3,4 if 3 and 4 also
+     * intersect the minimal rectangle spanning the painted zones.
+     */
+    Q_INVOKABLE QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>& seedZones) const override;
     Q_INVOKABLE Zone* zoneAtPoint(const QPointF& point) const override;
     Q_INVOKABLE Zone* nearestZone(const QPointF& point) const override;
 

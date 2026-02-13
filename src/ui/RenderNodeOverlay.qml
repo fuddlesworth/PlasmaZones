@@ -27,6 +27,9 @@ Window {
     property var zones: []
     property int zoneCount: 0
     property int highlightedCount: 0
+    // Highlight state for proximity snap / paint-to-snap (set by C++ OverlayService)
+    property string highlightedZoneId: ""
+    property var highlightedZoneIds: []
     // Note: Using 'var' for shaderParams because it's a QVariantMap with dynamic keys
     property var shaderParams: ({})
     property int zoneDataVersion: 0

@@ -90,6 +90,76 @@ ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
     return result;
 }
 
+namespace {
+
+// Shared raycasting algorithm: expand seed zones to include all zones that intersect
+// the bounding rectangle. Same logic used by detectMultiZone and paint-to-snap.
+QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& seedZones)
+{
+    if (!layout || seedZones.isEmpty()) {
+        return seedZones;
+    }
+
+    const auto& allZones = layout->zones();
+
+    // Build initial bounding rect and selected set from seed zones (skip nulls)
+    QRectF boundingRect;
+    QSet<Zone*> selectedZones;
+
+    for (auto* zone : seedZones) {
+        if (!zone) {
+            continue;
+        }
+        if (boundingRect.isEmpty()) {
+            boundingRect = zone->geometry();
+        } else {
+            boundingRect = boundingRect.united(zone->geometry());
+        }
+        selectedZones.insert(zone);
+    }
+
+    if (selectedZones.isEmpty()) {
+        return QVector<Zone*>();
+    }
+
+    // Iteratively expand to include all zones that intersect the bounding rect
+    bool foundNew = true;
+    int iterations = 0;
+    const int maxIterations = 100;
+
+    while (foundNew && iterations < maxIterations) {
+        foundNew = false;
+        iterations++;
+        QRectF currentRect = boundingRect;
+
+        for (auto* zone : allZones) {
+            if (!zone || selectedZones.contains(zone)) {
+                continue;
+            }
+            if (zone->geometry().intersects(currentRect)) {
+                selectedZones.insert(zone);
+                boundingRect = boundingRect.united(zone->geometry());
+                foundNew = true;
+            }
+        }
+    }
+
+    if (iterations >= maxIterations) {
+        qCWarning(lcZone) << "Max iterations reached in zone expansion - possible infinite loop";
+    }
+
+    // Preserve layout order for consistent output
+    QVector<Zone*> result;
+    for (auto* zone : allZones) {
+        if (selectedZones.contains(zone)) {
+            result.append(zone);
+        }
+    }
+    return result;
+}
+
+} // namespace
+
 ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) const
 {
     ZoneDetectionResult result;
@@ -99,7 +169,6 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
     }
 
     // Find all zones near the cursor (within threshold or containing cursor)
-    // These are the zones the user is "between"
     QVector<Zone*> nearbyZones;
     const auto& allZones = m_layout->zones();
 
@@ -107,29 +176,17 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
         if (!zone) {
             continue;
         }
-
-        // Include zone if cursor is inside it or near it (within threshold)
         qreal distance = zone->distanceToPoint(cursorPos);
         if (distance <= m_adjacentThreshold || zone->containsPoint(cursorPos)) {
             nearbyZones.append(zone);
         }
     }
 
-    // If we found 2+ nearby zones, use raycast algorithm to find minimal rectangle
+    // If we found 2+ nearby zones, use raycast algorithm
     if (nearbyZones.size() >= 2) {
-        // Calculate initial bounding rectangle of nearby zones
-        QRectF boundingRect;
         Zone* primaryZone = nullptr;
         qreal minDistance = std::numeric_limits<qreal>::max();
-
         for (auto* zone : nearbyZones) {
-            if (boundingRect.isEmpty()) {
-                boundingRect = zone->geometry();
-            } else {
-                boundingRect = boundingRect.united(zone->geometry());
-            }
-
-            // Find the nearest zone as primary
             qreal distance = zone->distanceToPoint(cursorPos);
             if (distance < minDistance) {
                 minDistance = distance;
@@ -137,56 +194,8 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
             }
         }
 
-        // Iteratively expand the rectangle to include all zones that intersect with it
-        QSet<Zone*> selectedZones;
-        for (auto* zone : nearbyZones) {
-            selectedZones.insert(zone);
-        }
+        QVector<Zone*> zonesInRect = expandZonesByIntersection(m_layout, nearbyZones);
 
-        // Keep expanding until no new zones are found
-        bool foundNew = true;
-        int iterations = 0;
-        const int maxIterations = 100; // Safety limit to prevent infinite loops
-
-        while (foundNew && iterations < maxIterations) {
-            foundNew = false;
-            iterations++;
-            QRectF currentRect = boundingRect;
-
-            // Find all zones that intersect with the current bounding rectangle
-            for (auto* zone : allZones) {
-                if (!zone || selectedZones.contains(zone)) {
-                    continue;
-                }
-
-                const QRectF& zoneGeom = zone->geometry();
-                // Check if zone intersects with the bounding rectangle
-                // Use intersects() to find any overlapping zones
-                if (zoneGeom.intersects(currentRect)) {
-                    selectedZones.insert(zone);
-                    // Expand bounding rectangle to include this zone
-                    boundingRect = boundingRect.united(zoneGeom);
-                    foundNew = true;
-                }
-            }
-        }
-
-        if (iterations >= maxIterations) {
-            qCWarning(lcZone) << "Max iterations reached in detectMultiZone - possible infinite expansion loop";
-        }
-
-        qCDebug(lcZone) << "Multi-zone detection found" << selectedZones.size() << "zones after" << iterations
-                        << "iterations";
-
-        // Convert set to vector (maintain order for consistent output)
-        QVector<Zone*> zonesInRect;
-        for (auto* zone : allZones) {
-            if (selectedZones.contains(zone)) {
-                zonesInRect.append(zone);
-            }
-        }
-
-        // If we found multiple zones, combine them
         if (zonesInRect.size() > 1 && primaryZone) {
             result.primaryZone = primaryZone;
             result.adjacentZones = zonesInRect;
@@ -197,8 +206,12 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
         }
     }
 
-    // No multi-zone detected - fall back to single zone detection
     return detectZone(cursorPos);
+}
+
+QVector<Zone*> ZoneDetector::expandPaintedZonesToRect(const QVector<Zone*>& seedZones) const
+{
+    return expandZonesByIntersection(m_layout, seedZones);
 }
 
 Zone* ZoneDetector::zoneAtPoint(const QPointF& point) const

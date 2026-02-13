@@ -289,7 +289,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
         m_paintedZoneIds.insert(foundZone->id());
     }
 
-    // Build zone list and combined geometry from all painted zones
+    // Build zone list from painted zones, then expand using same raycast algorithm as editor
     if (!m_paintedZoneIds.isEmpty()) {
         QVector<Zone*> paintedZones;
         for (auto* zone : layout->zones()) {
@@ -299,26 +299,34 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
         }
 
         if (!paintedZones.isEmpty()) {
-            QRectF combinedGeom = computeCombinedZoneGeometry(paintedZones, screen, layout);
+            // Use same raycasting/intersection algorithm as detectMultiZone and editor:
+            // expand to include all zones that intersect the bounding rect of painted zones
+            m_zoneDetector->setLayout(layout);
+            QVector<Zone*> zonesToSnap = m_zoneDetector->expandPaintedZonesToRect(paintedZones);
 
-            // Update multi-zone state
+            if (zonesToSnap.isEmpty()) {
+                return;
+            }
+
+            QRectF combinedGeom = computeCombinedZoneGeometry(zonesToSnap, screen, layout);
+
+            // Update multi-zone state from expanded zones (what we actually snap to)
             QVector<QUuid> zoneIds;
-            zoneIds.reserve(paintedZones.size());
-            for (auto* zone : paintedZones) {
+            zoneIds.reserve(zonesToSnap.size());
+            for (auto* zone : zonesToSnap) {
                 zoneIds.append(zone->id());
             }
 
-            m_currentZoneId = paintedZones.first()->id().toString();
+            m_currentZoneId = zonesToSnap.first()->id().toString();
             m_currentAdjacentZoneIds = zoneIds;
-            m_isMultiZoneMode = (paintedZones.size() > 1);
+            m_isMultiZoneMode = (zonesToSnap.size() > 1);
             m_currentMultiZoneGeometry = combinedGeom.toRect();
-            if (paintedZones.size() == 1) {
+            if (zonesToSnap.size() == 1) {
                 m_currentZoneGeometry = combinedGeom.toRect();
             }
 
-            // Highlight all painted zones
-            m_zoneDetector->setLayout(layout);
-            m_zoneDetector->highlightZones(paintedZones);
+            // Highlight expanded zones (raycasted) so user sees what they are actually snapping to
+            m_zoneDetector->highlightZones(zonesToSnap);
             m_overlayService->highlightZones(zoneIdsToStringList(zoneIds));
         }
     }
