@@ -573,7 +573,8 @@ private:
     // Desktop tracking: windowId -> virtual desktop
     QHash<QString, int> m_windowDesktopAssignments;
 
-    // Pre-snap geometries: windowId -> geometry
+    // Pre-snap geometries: full windowId at runtime, stableId for session-restored entries
+    // Converted from windowId to stableId on window close for persistence
     QHash<QString, QRect> m_preSnapGeometries;
 
     // Last used zone tracking
@@ -582,7 +583,8 @@ private:
     QString m_lastUsedZoneClass;
     int m_lastUsedDesktop = 0;
 
-    // Floating windows
+    // Floating windows: full windowId at runtime, stableId for session-restored entries
+    // Converted from windowId to stableId on window close for persistence
     QSet<QString> m_floatingWindows;
 
     // Session persistence
@@ -592,7 +594,9 @@ private:
     QHash<QString, QString> m_pendingZoneLayouts;      // stableId -> layoutId (for layout validation on restore)
     QHash<QString, QList<int>> m_pendingZoneNumbers;  // stableId -> zone numbers (fallback when UUIDs change)
 
-    // Pre-float zone and screen (for unfloat restore to correct monitor)
+    // Pre-float zone and screen (for unfloat restore to correct monitor).
+    // Keyed by full windowId at runtime (to distinguish multiple instances of
+    // the same app). Converted to stableId on window close and session save.
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
 

@@ -161,9 +161,9 @@ KWin::EffectWindow* PlasmaZonesEffect::getValidActiveWindowOrFail(const QString&
     return activeWindow;
 }
 
-bool PlasmaZonesEffect::isWindowFloating(const QString& stableId) const
+bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
 {
-    return m_navigationHandler->isWindowFloating(stableId);
+    return m_navigationHandler->isWindowFloating(windowId);
 }
 
 PlasmaZonesEffect::PlasmaZonesEffect()
@@ -356,9 +356,9 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
     // Sync floating state for this window from daemon
     // This ensures windows that were floating when closed remain floating when reopened
+    // Use full windowId so daemon can do per-instance lookup with stableId fallback
     QString windowId = getWindowId(w);
-    QString stableId = extractStableId(windowId);
-    m_navigationHandler->syncFloatingStateForWindow(stableId);
+    m_navigationHandler->syncFloatingStateForWindow(windowId);
 
     // Check if we should auto-snap new windows to last used zone
     // Use stricter filter - only normal application windows, NOT dialogs/utilities
@@ -1473,13 +1473,14 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
     });
 }
 
-void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& stableId, bool isFloating)
+void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool isFloating)
 {
     // Update local floating cache when daemon notifies us of state changes
     // This keeps the effect's cache in sync with the daemon, preventing
     // inverted toggle behavior when a floating window is drag-snapped.
-    qCInfo(lcEffect) << "Floating state changed for" << stableId << "- isFloating:" << isFloating;
-    m_navigationHandler->setWindowFloating(stableId, isFloating);
+    // Uses full windowId for per-instance tracking (stableId fallback in isWindowFloating).
+    qCInfo(lcEffect) << "Floating state changed for" << windowId << "- isFloating:" << isFloating;
+    m_navigationHandler->setWindowFloating(windowId, isFloating);
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()
