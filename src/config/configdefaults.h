@@ -7,6 +7,7 @@
 
 #include <QColor>
 #include <QString>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -37,8 +38,27 @@ public:
     static bool shiftDrag() { return instance().defaultShiftDragValue(); }
     static int dragActivationModifier() { return instance().defaultDragActivationModifierValue(); }
     static int dragActivationMouseButton() { return instance().defaultDragActivationMouseButtonValue(); }
+    static QVariantList dragActivationTriggers() {
+        // Default: single trigger with Alt modifier, no mouse button
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = dragActivationModifier();
+        trigger[QStringLiteral("mouseButton")] = dragActivationMouseButton();
+        return {trigger};
+    }
     static int multiZoneModifier() { return instance().defaultMultiZoneModifierValue(); }
+    static QVariantList multiZoneTriggers() {
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = multiZoneModifier();
+        trigger[QStringLiteral("mouseButton")] = 0;
+        return {trigger};
+    }
     static int zoneSpanModifier() { return instance().defaultZoneSpanModifierValue(); }
+    static QVariantList zoneSpanTriggers() {
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = zoneSpanModifier();
+        trigger[QStringLiteral("mouseButton")] = 0;
+        return {trigger};
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Display Settings

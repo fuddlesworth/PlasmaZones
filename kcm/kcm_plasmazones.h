@@ -43,21 +43,14 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_OBJECT
 
     // Activation
-    Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
-                   shiftDragToActivateChanged)
-    Q_PROPERTY(int dragActivationModifier READ dragActivationModifier WRITE setDragActivationModifier NOTIFY
-                   dragActivationModifierChanged)
-    Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
-                   dragActivationMouseButtonChanged)
-    Q_PROPERTY(int multiZoneModifier READ multiZoneModifier WRITE setMultiZoneModifier NOTIFY multiZoneModifierChanged)
-    Q_PROPERTY(int multiZoneMouseButton READ multiZoneMouseButton WRITE setMultiZoneMouseButton NOTIFY
-                   multiZoneMouseButtonChanged)
+    Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
+                   dragActivationTriggersChanged)
+    Q_PROPERTY(QVariantList multiZoneTriggers READ multiZoneTriggers WRITE setMultiZoneTriggers NOTIFY
+                   multiZoneTriggersChanged)
     Q_PROPERTY(bool proximitySnapAlwaysOn READ proximitySnapAlwaysOn WRITE setProximitySnapAlwaysOn NOTIFY
                    proximitySnapAlwaysOnChanged)
-    Q_PROPERTY(int zoneSpanModifier READ zoneSpanModifier WRITE setZoneSpanModifier NOTIFY
-                   zoneSpanModifierChanged)
-    Q_PROPERTY(int zoneSpanMouseButton READ zoneSpanMouseButton WRITE setZoneSpanMouseButton NOTIFY
-                   zoneSpanMouseButtonChanged)
+    Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
+                   zoneSpanTriggersChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -154,12 +147,9 @@ class KCMPlasmaZones : public KQuickConfigModule
         int zoneSelectorMaxRows READ zoneSelectorMaxRows WRITE setZoneSelectorMaxRows NOTIFY zoneSelectorMaxRowsChanged)
 
     // Default values for reset-to-default in UI components (CONSTANT — never change at runtime)
-    Q_PROPERTY(int defaultDragActivationModifier READ defaultDragActivationModifier CONSTANT)
-    Q_PROPERTY(int defaultDragActivationMouseButton READ defaultDragActivationMouseButton CONSTANT)
-    Q_PROPERTY(int defaultMultiZoneModifier READ defaultMultiZoneModifier CONSTANT)
-    Q_PROPERTY(int defaultMultiZoneMouseButton READ defaultMultiZoneMouseButton CONSTANT)
-    Q_PROPERTY(int defaultZoneSpanModifier READ defaultZoneSpanModifier CONSTANT)
-    Q_PROPERTY(int defaultZoneSpanMouseButton READ defaultZoneSpanMouseButton CONSTANT)
+    Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
+    Q_PROPERTY(QVariantList defaultMultiZoneTriggers READ defaultMultiZoneTriggers CONSTANT)
+    Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
     Q_PROPERTY(int defaultEditorSnapOverrideModifier READ defaultEditorSnapOverrideModifier CONSTANT)
     Q_PROPERTY(int defaultFillOnDropModifier READ defaultFillOnDropModifier CONSTANT)
     Q_PROPERTY(QString defaultEditorDuplicateShortcut READ defaultEditorDuplicateShortcut CONSTANT)
@@ -228,14 +218,10 @@ public:
     ~KCMPlasmaZones() override;
 
     // Property getters
-    bool shiftDragToActivate() const;
-    int dragActivationModifier() const;
-    int dragActivationMouseButton() const;
-    int multiZoneModifier() const;
-    int multiZoneMouseButton() const;
+    QVariantList dragActivationTriggers() const;
+    QVariantList multiZoneTriggers() const;
     bool proximitySnapAlwaysOn() const;
-    int zoneSpanModifier() const;
-    int zoneSpanMouseButton() const;
+    QVariantList zoneSpanTriggers() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
     bool showZoneNumbers() const;
@@ -302,12 +288,9 @@ public:
     int fillOnDropModifier() const;
 
     // Default value getters (for reset-to-default buttons in UI)
-    int defaultDragActivationModifier() const;
-    int defaultDragActivationMouseButton() const;
-    int defaultMultiZoneModifier() const;
-    int defaultMultiZoneMouseButton() const;
-    int defaultZoneSpanModifier() const;
-    int defaultZoneSpanMouseButton() const;
+    QVariantList defaultDragActivationTriggers() const;
+    QVariantList defaultMultiZoneTriggers() const;
+    QVariantList defaultZoneSpanTriggers() const;
     int defaultEditorSnapOverrideModifier() const;
     int defaultFillOnDropModifier() const;
     QString defaultEditorDuplicateShortcut() const;
@@ -343,14 +326,10 @@ public:
     void setDismissedUpdateVersion(const QString& version);
 
     // Property setters
-    void setShiftDragToActivate(bool enable);
-    void setDragActivationModifier(int modifier);
-    void setDragActivationMouseButton(int button);
-    void setMultiZoneModifier(int modifier);
-    void setMultiZoneMouseButton(int button);
+    void setDragActivationTriggers(const QVariantList& triggers);
+    void setMultiZoneTriggers(const QVariantList& triggers);
     void setProximitySnapAlwaysOn(bool alwaysOn);
-    void setZoneSpanModifier(int modifier);
-    void setZoneSpanMouseButton(int button);
+    void setZoneSpanTriggers(const QVariantList& triggers);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
@@ -496,14 +475,10 @@ public Q_SLOTS:
     Q_INVOKABLE void openReleaseUrl();
 
 Q_SIGNALS:
-    void shiftDragToActivateChanged();
-    void dragActivationModifierChanged();
-    void dragActivationMouseButtonChanged();
-    void multiZoneModifierChanged();
-    void multiZoneMouseButtonChanged();
+    void dragActivationTriggersChanged();
+    void multiZoneTriggersChanged();
     void proximitySnapAlwaysOnChanged();
-    void zoneSpanModifierChanged();
-    void zoneSpanMouseButtonChanged();
+    void zoneSpanTriggersChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
@@ -627,6 +602,10 @@ private:
     static KConfigGroup editorConfigGroup();
 
     void syncProximitySnapFallbackFromSettings();
+
+    // Trigger list conversion helpers (DragModifier enum <-> Qt bitmask)
+    static QVariantList convertTriggersForQml(const QVariantList& triggers);
+    static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings* m_settings = nullptr;
     UpdateChecker* m_updateChecker = nullptr;

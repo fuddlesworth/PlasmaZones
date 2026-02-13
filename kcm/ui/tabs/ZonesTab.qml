@@ -436,18 +436,14 @@ ScrollView {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Zone activation:")
-                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeAll
-                        modifierValue: kcm.dragActivationModifier
-                        mouseButtonValue: kcm.dragActivationMouseButton
-                        defaultModifierValue: kcm.defaultDragActivationModifier
-                        defaultMouseButtonValue: kcm.defaultDragActivationMouseButton
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: kcm.dragActivationTriggers
+                        defaultTriggers: kcm.defaultDragActivationTriggers
                         tooltipEnabled: root.isCurrentTab
-                        customTooltipText: i18n("Hold modifier or use this mouse button to show zones while dragging (e.g. left-click to drag, another button to activate zones)")
-                        onValueModified: (value) => {
-                            kcm.dragActivationModifier = value
-                        }
-                        onMouseButtonsModified: (value) => {
-                            kcm.dragActivationMouseButton = value
+                        customTooltipText: i18n("Hold modifier or use mouse button to show zones while dragging. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            kcm.dragActivationTriggers = triggers
                         }
                     }
 
@@ -477,18 +473,14 @@ ScrollView {
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Proximity snap modifier:")
                         visible: !kcm.proximitySnapAlwaysOn
-                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeAll
-                        modifierValue: kcm.multiZoneModifier
-                        mouseButtonValue: kcm.multiZoneMouseButton
-                        defaultModifierValue: kcm.defaultMultiZoneModifier
-                        defaultMouseButtonValue: kcm.defaultMultiZoneMouseButton
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: kcm.multiZoneTriggers
+                        defaultTriggers: kcm.defaultMultiZoneTriggers
                         tooltipEnabled: root.isCurrentTab
-                        customTooltipText: i18n("Hold this modifier or mouse button while dragging to snap to adjacent zones detected by edge proximity")
-                        onValueModified: (value) => {
-                            kcm.multiZoneModifier = value
-                        }
-                        onMouseButtonsModified: (value) => {
-                            kcm.multiZoneMouseButton = value
+                        customTooltipText: i18n("Hold modifier or use mouse button while dragging to snap to adjacent zones. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            kcm.multiZoneTriggers = triggers
                         }
                     }
 
@@ -496,18 +488,14 @@ ScrollView {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Paint-to-span modifier:")
-                        acceptMode: ModifierAndMouseCheckBoxes.acceptModeAll
-                        modifierValue: kcm.zoneSpanModifier
-                        mouseButtonValue: kcm.zoneSpanMouseButton
-                        defaultModifierValue: kcm.defaultZoneSpanModifier
-                        defaultMouseButtonValue: kcm.defaultZoneSpanMouseButton
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: kcm.zoneSpanTriggers
+                        defaultTriggers: kcm.defaultZoneSpanTriggers
                         tooltipEnabled: root.isCurrentTab
-                        customTooltipText: i18n("Hold this modifier or mouse button while dragging to paint across zones — each zone the cursor enters is added to the selection")
-                        onValueModified: (value) => {
-                            kcm.zoneSpanModifier = value
-                        }
-                        onMouseButtonsModified: (value) => {
-                            kcm.zoneSpanMouseButton = value
+                        customTooltipText: i18n("Hold modifier or use mouse button while dragging to paint across zones. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            kcm.zoneSpanTriggers = triggers
                         }
                     }
 

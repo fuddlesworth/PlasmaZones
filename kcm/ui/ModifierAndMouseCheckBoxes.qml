@@ -12,6 +12,10 @@ import org.kde.kirigami as Kirigami
  * Click in the box to capture; one key/modifier/mouse overwrites the value.
  * X inside the box clears. No pills; single value only.
  * acceptMode: MetaOnly (modifier keys only), MouseOnly (any mouse button: Right, Middle, Back, Forward, Extra 3–5), or All.
+ *
+ * Multi-bind mode (allowMultiple: true):
+ * Shows a list of triggers with Add/Remove buttons. Each trigger is a separate
+ * modifier or mouse button that can independently activate the feature.
  */
 Item {
     id: root
@@ -20,6 +24,9 @@ Item {
     readonly property int acceptModeMetaOnly: 1
     readonly property int acceptModeMouseOnly: 2
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Single-mode properties (used when allowMultiple is false)
+    // ═══════════════════════════════════════════════════════════════════════════
     property int modifierValue: 0
     property int mouseButtonValue: 0
     property int defaultModifierValue: 0
@@ -31,6 +38,18 @@ Item {
 
     signal valueModified(int modifierValue)
     signal mouseButtonsModified(int mouseButtonValue)
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Multi-mode properties (used when allowMultiple is true)
+    // ═══════════════════════════════════════════════════════════════════════════
+    property bool allowMultiple: false
+    property var triggers: []       // [{modifier: bitmask, mouseButton: buttonBit}, ...]
+    property var defaultTriggers: []
+    signal triggersModified(var triggers)
+
+    readonly property int maxTriggers: 4
+    // -1 = adding a new trigger, >= 0 = editing trigger at that index
+    property int editingTriggerIndex: -1
 
     readonly property int shiftFlag: 0x02000000
     readonly property int ctrlFlag: 0x04000000
@@ -55,8 +74,8 @@ Item {
     ]
 
     // Match KeySequenceInput: no fixed width so FormLayout gives same column width as shortcut fields
-    implicitWidth: field.implicitWidth
-    implicitHeight: field.implicitHeight
+    implicitWidth: allowMultiple ? multiContainer.implicitWidth : field.implicitWidth
+    implicitHeight: allowMultiple ? multiContainer.implicitHeight : field.implicitHeight
 
     function displayText() {
         var parts = []
@@ -75,6 +94,24 @@ Item {
         return parts.join(" + ")
     }
 
+    /** Display text for a single trigger (modifier bitmask + mouse button bit) */
+    function triggerDisplayText(modifier, mouseButton) {
+        var parts = []
+        if (acceptMode !== acceptModeMouseOnly) {
+            for (var i = 0; i < modifierChips.length; i++)
+                if ((modifier & modifierChips[i].bit) !== 0)
+                    parts.push(modifierChips[i].label)
+        }
+        if (acceptMode !== acceptModeMetaOnly) {
+            for (var j = 0; j < mouseButtonList.length; j++)
+                if ((mouseButton & mouseButtonList[j].bit) !== 0)
+                    parts.push(mouseButtonList[j].label)
+        }
+        if (parts.length === 0)
+            return i18n("(none)")
+        return parts.join(" + ")
+    }
+
     function clearAll() {
         if (modifierValue !== defaultModifierValue || mouseButtonValue !== defaultMouseButtonValue) {
             modifierValue = defaultModifierValue
@@ -84,8 +121,176 @@ Item {
         }
     }
 
+    /** Compare two trigger arrays for equality */
+    function triggersEqual(a, b) {
+        if (!a || !b || a.length !== b.length) return false
+        for (var i = 0; i < a.length; i++) {
+            if ((a[i].modifier || 0) !== (b[i].modifier || 0)
+                || (a[i].mouseButton || 0) !== (b[i].mouseButton || 0))
+                return false
+        }
+        return true
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Multi-mode: list of triggers with Add/Remove
+    // ═══════════════════════════════════════════════════════════════════════════
+    Rectangle {
+        id: multiContainer
+        visible: root.allowMultiple
+        anchors.fill: parent
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.disabledTextColor
+        border.width: 1
+        radius: Kirigami.Units.smallSpacing
+
+        implicitWidth: multiLayout.implicitWidth + Kirigami.Units.smallSpacing * 2
+        implicitHeight: multiLayout.implicitHeight + Kirigami.Units.smallSpacing * 2
+
+        ColumnLayout {
+            id: multiLayout
+            anchors.fill: parent
+            anchors.margins: Kirigami.Units.smallSpacing
+            spacing: 2
+
+            // Trigger rows
+            Repeater {
+                model: root.allowMultiple ? root.triggers : []
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
+
+                    QQC2.AbstractButton {
+                        Layout.fillWidth: true
+                        implicitHeight: triggerLabel.implicitHeight + Kirigami.Units.smallSpacing
+                        contentItem: QQC2.Label {
+                            id: triggerLabel
+                            text: root.triggerDisplayText(modelData.modifier || 0, modelData.mouseButton || 0)
+                            elide: Text.ElideRight
+                            color: hoverHandler.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
+                        HoverHandler { id: hoverHandler }
+                        onClicked: {
+                            root.editingTriggerIndex = index
+                            multiInputCapture.startCapture()
+                        }
+                        QQC2.ToolTip.visible: hoverHandler.hovered && root.tooltipEnabled
+                        QQC2.ToolTip.text: i18n("Click to change this trigger")
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
+                    }
+
+                    QQC2.ToolButton {
+                        icon.name: "list-remove"
+                        Accessible.name: i18n("Remove trigger")
+                        implicitWidth: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
+                        implicitHeight: implicitWidth
+                        enabled: root.triggers.length > 1
+                        onClicked: {
+                            var newTriggers = []
+                            for (var i = 0; i < root.triggers.length; i++) {
+                                if (i !== index)
+                                    newTriggers.push(root.triggers[i])
+                            }
+                            root.triggersModified(newTriggers)
+                        }
+                        QQC2.ToolTip.visible: hovered && root.tooltipEnabled
+                        QQC2.ToolTip.text: root.triggers.length <= 1
+                            ? i18n("At least one trigger is required")
+                            : i18n("Remove this trigger")
+                    }
+                }
+            }
+
+            // Add and Reset row
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: Kirigami.Units.smallSpacing
+
+                QQC2.ToolButton {
+                    text: i18n("Add…")
+                    icon.name: "list-add"
+                    enabled: root.triggers.length < root.maxTriggers
+                    onClicked: {
+                        root.editingTriggerIndex = -1
+                        multiInputCapture.startCapture()
+                    }
+                    QQC2.ToolTip.visible: hovered && root.tooltipEnabled
+                    QQC2.ToolTip.text: i18n("Add another activation trigger")
+                }
+
+                Item { Layout.fillWidth: true }
+
+                QQC2.ToolButton {
+                    icon.name: "edit-clear"
+                    Accessible.name: i18n("Reset to default")
+                    visible: !triggersEqual(root.triggers, root.defaultTriggers)
+                    onClicked: {
+                        var copy = []
+                        for (var i = 0; i < root.defaultTriggers.length; i++)
+                            copy.push({modifier: root.defaultTriggers[i].modifier || 0,
+                                       mouseButton: root.defaultTriggers[i].mouseButton || 0})
+                        root.triggersModified(copy)
+                    }
+                    QQC2.ToolTip.visible: hovered && root.tooltipEnabled
+                    QQC2.ToolTip.text: i18n("Reset to default")
+                }
+            }
+        }
+    }
+
+    // InputCapture for multi-mode (adds or replaces depending on editingTriggerIndex)
+    InputCapture {
+        id: multiInputCapture
+        visible: false
+        acceptMode: root.acceptMode
+        tooltipEnabled: root.tooltipEnabled
+        onModifierCaptured: (mask) => {
+            if (!root.allowMultiple) return
+            root.applyTriggerCapture(mask, 0)
+        }
+        onMouseCaptured: (bit) => {
+            if (!root.allowMultiple) return
+            if (root.acceptMode === root.acceptModeMetaOnly) return
+            root.applyTriggerCapture(0, bit)
+        }
+    }
+
+    /** Apply a captured trigger: replace at editingTriggerIndex, or append if -1 */
+    function applyTriggerCapture(modifier, mouseButton) {
+        var newTriggers = []
+        for (var i = 0; i < triggers.length; i++)
+            newTriggers.push(triggers[i])
+
+        if (editingTriggerIndex >= 0 && editingTriggerIndex < newTriggers.length) {
+            // Edit mode: replace the trigger at the edited index
+            newTriggers[editingTriggerIndex] = {modifier: modifier, mouseButton: mouseButton}
+        } else {
+            // Add mode: append
+            newTriggers.push({modifier: modifier, mouseButton: mouseButton})
+        }
+
+        // Deduplicate: remove any other entry that matches the new value
+        var deduped = []
+        var seen = {}
+        for (var j = 0; j < newTriggers.length; j++) {
+            var key = (newTriggers[j].modifier || 0) + ":" + (newTriggers[j].mouseButton || 0)
+            if (!seen[key]) {
+                seen[key] = true
+                deduped.push(newTriggers[j])
+            }
+        }
+
+        editingTriggerIndex = -1
+        triggersModified(deduped)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Single-mode: existing TextField input
+    // ═══════════════════════════════════════════════════════════════════════════
     QQC2.TextField {
         id: field
+        visible: !root.allowMultiple
         anchors.fill: parent
         readOnly: true
         text: root.displayText()
