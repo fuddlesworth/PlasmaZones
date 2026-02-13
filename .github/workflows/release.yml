@@ -406,35 +406,17 @@ jobs:
             echo '```'
           } > release_notes.md
 
-      - name: Upload assets to existing release if immutable
-        id: check_existing
+      - name: Delete existing release if present
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="v${{ needs.version.outputs.version }}"
-          # Check if release already exists
-          if gh api "repos/${{ github.repository }}/releases/tags/${VERSION}" --jq '.immutable' 2>/dev/null | grep -q true; then
-            echo "Release $VERSION exists and is immutable — uploading assets directly"
-            echo "exists=true" >> $GITHUB_OUTPUT
-            # Upload each artifact to the existing release
-            RELEASE_ID=$(gh api "repos/${{ github.repository }}/releases/tags/${VERSION}" --jq '.id')
-            for file in artifacts/**/*.*deb artifacts/**/*.rpm artifacts/**/*.pkg.tar.zst; do
-              [ -f "$file" ] || continue
-              BASENAME=$(basename "$file")
-              echo "Uploading $BASENAME..."
-              # Delete existing asset with same name if present
-              ASSET_ID=$(gh api "repos/${{ github.repository }}/releases/${RELEASE_ID}/assets" --jq ".[] | select(.name == \"${BASENAME}\") | .id" 2>/dev/null || true)
-              if [ -n "$ASSET_ID" ]; then
-                gh api -X DELETE "repos/${{ github.repository }}/releases/assets/${ASSET_ID}"
-              fi
-              gh release upload "$VERSION" "$file" --clobber
-            done
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
+          if gh release view "$VERSION" &>/dev/null; then
+            echo "Release $VERSION already exists — deleting so we can recreate with assets"
+            gh release delete "$VERSION" --yes
           fi
 
       - name: Create Release
-        if: steps.check_existing.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
           name: PlasmaZones v${{ needs.version.outputs.version }}
