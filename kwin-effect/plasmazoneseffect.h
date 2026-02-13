@@ -134,6 +134,19 @@ private:
     QJsonArray buildSnapAssistCandidates(const QString& excludeWindowId, const QString& screenName,
                                           const QSet<QString>& snappedWindowIds = QSet<QString>()) const;
 
+    /**
+     * @brief Async D-Bus chain: getSnappedWindows → buildCandidates → showSnapAssist
+     *
+     * Shared by callDragStopped and showSnapAssistContinuationIfNeeded.
+     * All D-Bus calls are async to prevent compositor freeze (see discussion #158).
+     *
+     * @param excludeWindowId Window to exclude from candidates (empty for continuation)
+     * @param screenName Target screen name
+     * @param emptyZonesJson JSON string of empty zones from daemon
+     */
+    void asyncShowSnapAssist(const QString& excludeWindowId, const QString& screenName,
+                             const QString& emptyZonesJson);
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════

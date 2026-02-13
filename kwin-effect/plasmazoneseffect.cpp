@@ -1294,27 +1294,38 @@ void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screen
                     || reply.value() == QLatin1String("[]")) {
                     return;
                 }
-                QString emptyZonesJson = reply.value();
-                if (!ensureOverlayInterface("snap assist continuation")) {
-                    return;
-                }
+                asyncShowSnapAssist(QString(), screenName, reply.value());
+            });
+}
+
+void PlasmaZonesEffect::asyncShowSnapAssist(const QString& excludeWindowId, const QString& screenName,
+                                             const QString& emptyZonesJson)
+{
+    if (!ensureWindowTrackingReady("snap assist snapped windows")) {
+        return;
+    }
+    QDBusPendingCall snapCall =
+        m_windowTrackingInterface->asyncCall(QStringLiteral("getSnappedWindows"));
+    auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
+    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, excludeWindowId, screenName, emptyZonesJson](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QStringList> reply = *w;
                 QSet<QString> snappedWindowIds;
-                QDBusReply<QStringList> snapReply =
-                    m_windowTrackingInterface->call(QStringLiteral("getSnappedWindows"));
-                if (snapReply.isValid()) {
-                    for (const QString& id : snapReply.value()) {
+                if (reply.isValid()) {
+                    for (const QString& id : reply.value()) {
                         snappedWindowIds.insert(id);
                     }
                 }
-                QJsonArray candidates =
-                    buildSnapAssistCandidates(QString(), screenName, snappedWindowIds);
-                if (candidates.isEmpty()) {
+                QJsonArray candidates = buildSnapAssistCandidates(excludeWindowId, screenName, snappedWindowIds);
+                if (candidates.isEmpty() || !ensureOverlayInterface("snap assist show")) {
                     return;
                 }
-                m_overlayInterface->call(QStringLiteral("showSnapAssist"), screenName,
-                                         emptyZonesJson,
-                                         QString::fromUtf8(
-                                             QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
+                m_overlayInterface->asyncCall(QStringLiteral("showSnapAssist"), screenName,
+                                              emptyZonesJson,
+                                              QString::fromUtf8(
+                                                  QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
+                qCInfo(lcEffect) << "Snap Assist shown with" << candidates.size() << "candidates";
             });
 }
 
@@ -1783,27 +1794,11 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                               onSnapSuccess);
         }
 
-        // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist
-        if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenName.isEmpty()
-            && ensureOverlayInterface("snap assist") && ensureWindowTrackingReady("snap assist")) {
-            QSet<QString> snappedWindowIds;
-            QDBusReply<QStringList> snapReply =
-                m_windowTrackingInterface->call(QStringLiteral("getSnappedWindows"));
-            if (snapReply.isValid()) {
-                for (const QString& id : snapReply.value()) {
-                    snappedWindowIds.insert(id);
-                }
-            }
-            QJsonArray candidates = buildSnapAssistCandidates(windowId, releaseScreenName, snappedWindowIds);
-            if (!candidates.isEmpty()) {
-                QDBusMessage msg = m_overlayInterface->call(QStringLiteral("showSnapAssist"),
-                                                            releaseScreenName, emptyZonesJson,
-                                                            QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
-                if (msg.type() == QDBusMessage::ReplyMessage && !msg.arguments().isEmpty()
-                    && msg.arguments().constFirst().toBool()) {
-                    qCInfo(lcEffect) << "Snap Assist shown with" << candidates.size() << "candidates";
-                }
-            }
+        // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist.
+        // All D-Bus calls are async to prevent compositor freeze if daemon is busy with
+        // overlay teardown / layout change (see discussion #158).
+        if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenName.isEmpty()) {
+            asyncShowSnapAssist(windowId, releaseScreenName, emptyZonesJson);
         }
     });
 }

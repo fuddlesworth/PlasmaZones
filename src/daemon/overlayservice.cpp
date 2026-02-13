@@ -2010,36 +2010,33 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
         return QRect();
     }
 
-    // Use actualAvailableGeometry which excludes panels/taskbars (queries PlasmaShell on Wayland)
+    // Use the same geometry pipeline as the overlay snap path
+    // (GeometryUtils::getZoneGeometryWithGaps) so that gap handling,
+    // outer-gap vs inner-gap edge detection, and usable-geometry respect
+    // are identical regardless of whether the user snaps via the overlay
+    // or the zone selector.
+    if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
+        Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
+        if (selectedLayout && m_selectedZoneIndex >= 0
+            && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
+            Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
+            if (zone) {
+                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings);
+                int outerGap = GeometryUtils::getEffectiveOuterGap(selectedLayout, m_settings);
+                QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
+                    zone, screen, zonePadding, outerGap, /*useAvailableGeometry=*/true);
+                return geom.toRect();
+            }
+        }
+    }
+
+    // Fallback: manual calculation when layout/zone lookup fails
     QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
 
     int x = availableGeom.x() + static_cast<int>(m_selectedZoneRelGeo.x() * availableGeom.width());
     int y = availableGeom.y() + static_cast<int>(m_selectedZoneRelGeo.y() * availableGeom.height());
     int width = static_cast<int>(m_selectedZoneRelGeo.width() * availableGeom.width());
     int height = static_cast<int>(m_selectedZoneRelGeo.height() * availableGeom.height());
-
-    // Apply zone padding - layout's zonePadding takes precedence over global settings
-    int padding = 0;
-    if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
-        Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
-        if (selectedLayout) {
-            padding = selectedLayout->zonePadding();
-        } else if (m_settings) {
-            padding = m_settings->zonePadding();
-        }
-    } else if (m_settings) {
-        padding = m_settings->zonePadding();
-    }
-
-    if (padding > 0) {
-        x += padding;
-        y += padding;
-        width -= padding * 2;
-        height -= padding * 2;
-        // Ensure minimum size
-        width = std::max(width, 50);
-        height = std::max(height, 50);
-    }
 
     return QRect(x, y, width, height);
 }
