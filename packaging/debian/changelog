@@ -1,4 +1,4 @@
-plasmazones (1.9.4-1) unstable; urgency=medium
+plasmazones (1.9.5-1) unstable; urgency=medium
 
   * Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
   * Force-end drag on mouse button release for safer drag lifecycle

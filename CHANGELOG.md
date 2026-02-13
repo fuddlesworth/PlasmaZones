@@ -7,7 +7,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.9.4] - 2026-02-13
+## [1.9.5] - 2026-02-13
 
 ### Added
 - Zones can overlap Plasma panels set to autohide/dodge windows ([#148])

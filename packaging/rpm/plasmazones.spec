@@ -8,7 +8,7 @@
 # Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        1.9.4
+Version:        1.9.5
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -169,7 +169,7 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
-* Thu Feb 13 2026 fuddlesworth - 1.9.4-1
+* Thu Feb 13 2026 fuddlesworth - 1.9.5-1
 - Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
 - Force-end drag on mouse button release for safer drag lifecycle
 - Proximity snap always active by default (no modifier required)
