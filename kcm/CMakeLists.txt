@@ -3,10 +3,18 @@
 
 add_definitions(-DTRANSLATION_DOMAIN=\"kcm_plasmazones\")
 
+# KConfigXT symbols can't be exported from plasmazones_core shared lib;
+# add kcfg sources so KCM has its own copy (same pattern as daemon).
+kconfig_add_kcfg_files(kcm_plasmazones_kcfg_SRCS
+    ../src/config/plasmazones.kcfgc
+    GENERATE_MOC
+)
+
 # KCM Sources
 set(kcm_plasmazones_SRCS
     kcm_plasmazones.cpp
     kcm_plasmazones.h
+    ${kcm_plasmazones_kcfg_SRCS}
 )
 
 # Create KCM plugin
