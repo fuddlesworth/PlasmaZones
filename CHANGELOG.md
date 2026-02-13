@@ -7,6 +7,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.4] - 2026-02-13
+
+### Added
+- Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
+- Force-end drag on mouse button release for safer drag lifecycle
+- Proximity snap always active by default (no modifier required)
+
+### Fixed
+- **Compositor freeze**: Remove `processEvents()` calls that deadlock with Wayland compositor during drag ([#152])
+- **Compositor stall on layout change**: Hide overlay/zone selector before layout switch in zone selector drop path, skip heavy QML updates for hidden windows
+- **Snap assist Escape not working**: Keep KGlobalAccel Escape shortcut registered through snap assist phase; add `snapAssistDismissed` signal for proper cleanup
+- **Snap assist not dismissing**: Dismiss snap assist on any window zone change (navigation, snap, unsnap, float toggle)
+- **Snap assist wrong window**: Use full windowId (not stableId) for per-instance floating/geometry tracking
+- Snap assist Escape handling, dismiss on new drag, zone selector layout sync
+- Paint-to-snap raycasting and shader highlight for multi-zone selection
+- Mouse-button zone activation now latches until drag ends (no flicker)
+- Shortcut clear button resets to default instead of empty
+- Inverted panel-hiding check for usable geometry
+- KCM linker errors from missing kcfg sources
+
+### Changed
+- Remove 66 dead code items across 48 files
+- Remove dead multiZoneEnabled code
+
 ## [1.9.3] - 2026-02-12
 
 ### Fixed
