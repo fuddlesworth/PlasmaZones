@@ -83,7 +83,7 @@ private Q_SLOTS:
     void slotSnapAllWindowsRequested(const QString& screenName);
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
-    void slotWindowFloatingChanged(const QString& stableId, bool isFloating);
+    void slotWindowFloatingChanged(const QString& windowId, bool isFloating);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
@@ -173,11 +173,11 @@ private:
     KWin::EffectWindow* getValidActiveWindowOrFail(const QString& action);
 
     /**
-     * @brief Check if a window is floating by its stable ID
-     * @param stableId The stable window identifier (without pointer address)
+     * @brief Check if a window is floating (full windowId with stableId fallback)
+     * @param windowId The window identifier (full or stable)
      * @return true if window is floating
      */
-    bool isWindowFloating(const QString& stableId) const;
+    bool isWindowFloating(const QString& windowId) const;
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);

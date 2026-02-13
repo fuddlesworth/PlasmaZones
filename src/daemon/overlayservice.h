@@ -142,6 +142,10 @@ private Q_SLOTS:
     void onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson);
 
 private:
+    // Refresh zone selector and overlay windows that are currently visible.
+    // Skips hidden windows — showZoneSelector()/show() refresh before showing.
+    void refreshVisibleWindows();
+
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);

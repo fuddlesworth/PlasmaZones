@@ -722,6 +722,17 @@ void Daemon::start()
     // Note: KWin effect reports navigation feedback via reportNavigationFeedback D-Bus method,
     // which emits the Qt navigationFeedback signal. No D-Bus signal connection needed.
 
+    // Dismiss snap assist when any window zone assignment changes (navigation, snap, unsnap,
+    // float toggle, resnap, etc.). Snap assist is only relevant until the user performs another
+    // window operation. The snap assist's own selection path already calls root.close() in QML,
+    // so this is a no-op for that case (isSnapAssistVisible returns false).
+    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
+            [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
+        if (m_overlayService->isSnapAssistVisible()) {
+            m_overlayService->hideSnapAssist();
+        }
+    });
+
     // Connect to KWin script
     connectToKWinScript();
 

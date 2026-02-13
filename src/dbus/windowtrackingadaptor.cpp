@@ -760,8 +760,8 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     // Delegate to service
     m_service->setWindowFloating(windowId, floating);
     qCInfo(lcDbusWindow) << "Window" << windowId << "is now" << (floating ? "floating" : "not floating");
-    // Notify effect so it can update its local cache
-    Q_EMIT windowFloatingChanged(Utils::extractStableId(windowId), floating);
+    // Notify effect so it can update its local cache (use full windowId for per-instance tracking)
+    Q_EMIT windowFloatingChanged(windowId, floating);
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
@@ -1145,15 +1145,16 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("PendingWindowZoneNumbers"),
                         QString::fromUtf8(QJsonDocument(pendingZoneNumbersObj).toJson(QJsonDocument::Compact)));
 
-    // Save pre-snap geometries
+    // Save pre-snap geometries (convert to stableId for cross-restart persistence)
     QJsonObject geometriesObj;
     for (auto it = m_service->preSnapGeometries().constBegin(); it != m_service->preSnapGeometries().constEnd(); ++it) {
+        QString key = Utils::extractStableId(it.key());
         QJsonObject geomObj;
         geomObj[QStringLiteral("x")] = it.value().x();
         geomObj[QStringLiteral("y")] = it.value().y();
         geomObj[QStringLiteral("width")] = it.value().width();
         geomObj[QStringLiteral("height")] = it.value().height();
-        geometriesObj[it.key()] = geomObj;
+        geometriesObj[key] = geomObj;
     }
     tracking.writeEntry(QStringLiteral("PreSnapGeometries"),
                         QString::fromUtf8(QJsonDocument(geometriesObj).toJson(QJsonDocument::Compact)));
@@ -1162,28 +1163,38 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
     // Note: Other last-used fields would need accessors in service
 
-    // Save floating windows (already stored as stableIds in service)
+    // Save floating windows (convert to stableId for cross-restart persistence, deduplicate)
     QJsonArray floatingArray;
-    for (const QString& stableId : m_service->floatingWindows()) {
-        floatingArray.append(stableId);
+    QSet<QString> savedFloatingIds;
+    for (const QString& windowId : m_service->floatingWindows()) {
+        QString stableId = Utils::extractStableId(windowId);
+        if (!stableId.isEmpty() && !savedFloatingIds.contains(stableId)) {
+            floatingArray.append(stableId);
+            savedFloatingIds.insert(stableId);
+        }
     }
     tracking.writeEntry(QStringLiteral("FloatingWindows"),
                         QString::fromUtf8(QJsonDocument(floatingArray).toJson(QJsonDocument::Compact)));
 
-    // Save pre-float zone assignments (for unfloating after session restore)
+    // Save pre-float zone assignments (for unfloating after session restore).
+    // Runtime keys may be full window IDs (with pointer address); convert to
+    // stable IDs for cross-restart compatibility.
     QJsonObject preFloatZonesObj;
     for (auto it = m_service->preFloatZoneAssignments().constBegin();
          it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
-        preFloatZonesObj[it.key()] = toJsonArray(it.value());
+        QString key = Utils::extractStableId(it.key());
+        preFloatZonesObj[key] = toJsonArray(it.value());
     }
     tracking.writeEntry(QStringLiteral("PreFloatZoneAssignments"),
                         QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
-    // Save pre-float screen assignments (for unfloating to correct monitor)
+    // Save pre-float screen assignments (for unfloating to correct monitor).
+    // Same stable ID conversion as above.
     QJsonObject preFloatScreensObj;
     for (auto it = m_service->preFloatScreenAssignments().constBegin();
          it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-        preFloatScreensObj[it.key()] = it.value();
+        QString key = Utils::extractStableId(it.key());
+        preFloatScreensObj[key] = it.value();
     }
     tracking.writeEntry(QStringLiteral("PreFloatScreenAssignments"),
                         QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
@@ -1488,7 +1499,7 @@ void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId)
         qCDebug(lcDbusWindow) << "Window" << windowId << "was floating, clearing floating state for snap";
         m_service->setWindowFloating(windowId, false);
         m_service->clearPreFloatZone(windowId);
-        Q_EMIT windowFloatingChanged(Utils::extractStableId(windowId), false);
+        Q_EMIT windowFloatingChanged(windowId, false);
     }
 }
 

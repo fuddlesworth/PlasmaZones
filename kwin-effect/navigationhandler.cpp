@@ -355,7 +355,6 @@ void NavigationHandler::handleToggleWindowFloat(bool shouldFloat)
     }
 
     QString windowId = m_effect->getWindowId(activeWindow);
-    QString stableId = m_effect->extractStableId(windowId);
     QString screenName = m_effect->getWindowScreenName(activeWindow);
 
     auto* iface = m_effect->windowTrackingInterface();
@@ -363,17 +362,17 @@ void NavigationHandler::handleToggleWindowFloat(bool shouldFloat)
     // Query daemon's floating state async to ensure local cache is in sync.
     // This fixes race conditions where windowFloatingChanged signal hasn't arrived yet
     // (e.g., after drag-snapping a floating window).
+    // Use full windowId so the daemon can distinguish multiple instances of the same app.
     if (iface && iface->isValid()) {
         QPointer<KWin::EffectWindow> safeWindow = activeWindow;
         QString capturedWindowId = windowId;
-        QString capturedStableId = stableId;
         QString capturedScreenName = screenName;
 
-        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("queryWindowFloating"), stableId);
+        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("queryWindowFloating"), windowId);
         auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
         connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                [this, safeWindow, capturedWindowId, capturedStableId, capturedScreenName](QDBusPendingCallWatcher* w) {
+                [this, safeWindow, capturedWindowId, capturedScreenName](QDBusPendingCallWatcher* w) {
             w->deleteLater();
 
             if (!safeWindow) {
@@ -385,39 +384,39 @@ void NavigationHandler::handleToggleWindowFloat(bool shouldFloat)
             bool daemonFloating = false;
             if (reply.isValid()) {
                 daemonFloating = reply.value();
-                // Sync local cache with daemon state
-                if (daemonFloating != m_floatingWindows.contains(capturedStableId)) {
-                    qCDebug(lcEffect) << "Syncing floating state from daemon: stableId=" << capturedStableId
-                                      << "local=" << m_floatingWindows.contains(capturedStableId)
+                // Sync local cache with daemon state (use full windowId for per-instance tracking)
+                if (daemonFloating != isWindowFloating(capturedWindowId)) {
+                    qCDebug(lcEffect) << "Syncing floating state from daemon: windowId=" << capturedWindowId
+                                      << "local=" << isWindowFloating(capturedWindowId)
                                       << "daemon=" << daemonFloating;
-                    setWindowFloating(capturedStableId, daemonFloating);
+                    setWindowFloating(capturedWindowId, daemonFloating);
                 }
             }
 
             // Now perform the toggle with accurate state
             bool newFloatState = !daemonFloating;
-            executeFloatToggle(safeWindow, capturedWindowId, capturedStableId, capturedScreenName, newFloatState);
+            executeFloatToggle(safeWindow, capturedWindowId, capturedScreenName, newFloatState);
         });
         return; // Actual toggle happens in async callback
     }
 
     // Fallback if D-Bus not available - use local cache
-    bool isCurrentlyFloating = isWindowFloating(stableId);
+    bool isCurrentlyFloating = isWindowFloating(windowId);
     bool newFloatState = !isCurrentlyFloating;
 
-    executeFloatToggle(activeWindow, windowId, stableId, screenName, newFloatState);
+    executeFloatToggle(activeWindow, windowId, screenName, newFloatState);
 }
 
 void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
-                                            const QString& stableId, const QString& screenName, bool newFloatState)
+                                            const QString& screenName, bool newFloatState)
 {
     auto* iface = m_effect->windowTrackingInterface();
 
     if (newFloatState) {
         // Floating ON - restore pre-snap geometry (like drag-unsnap does) and mark as floating
-        m_floatingWindows.insert(stableId);
+        m_floatingWindows.insert(windowId);
 
-        qCInfo(lcEffect) << "Floating window:" << windowId << "stableId:" << stableId;
+        qCInfo(lcEffect) << "Floating window:" << windowId;
 
         if (iface && iface->isValid()) {
             // Use QPointer for safe async handling
@@ -469,7 +468,12 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
                                          QString(), QString(), screenName);
     } else {
         // Floating OFF - restore to previous zone if available
-        m_floatingWindows.remove(stableId);
+        m_floatingWindows.remove(windowId);
+        // Also remove stableId entry (session-restored entries)
+        QString stableId = m_effect->extractStableId(windowId);
+        if (stableId != windowId) {
+            m_floatingWindows.remove(stableId);
+        }
 
         if (iface && iface->isValid()) {
             iface->asyncCall(QStringLiteral("setWindowFloating"), windowId, false);
@@ -1049,17 +1053,28 @@ void NavigationHandler::handleCycleWindowsInZone(const QString& directive, const
     });
 }
 
-bool NavigationHandler::isWindowFloating(const QString& stableId) const
+bool NavigationHandler::isWindowFloating(const QString& windowId) const
 {
-    return m_floatingWindows.contains(stableId);
+    // Try full window ID first (runtime - distinguishes multiple instances)
+    if (m_floatingWindows.contains(windowId)) {
+        return true;
+    }
+    // Fall back to stable ID (session restore - pointer addresses change across restarts)
+    QString stableId = m_effect->extractStableId(windowId);
+    return (stableId != windowId && m_floatingWindows.contains(stableId));
 }
 
-void NavigationHandler::setWindowFloating(const QString& stableId, bool floating)
+void NavigationHandler::setWindowFloating(const QString& windowId, bool floating)
 {
     if (floating) {
-        m_floatingWindows.insert(stableId);
+        m_floatingWindows.insert(windowId);
     } else {
-        m_floatingWindows.remove(stableId);
+        m_floatingWindows.remove(windowId);
+        // Also remove stable ID entry (session-restored entries)
+        QString stableId = m_effect->extractStableId(windowId);
+        if (stableId != windowId) {
+            m_floatingWindows.remove(stableId);
+        }
     }
 }
 
@@ -1086,19 +1101,18 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
         QStringList floatingIds = reply.value();
         m_floatingWindows.clear();
 
-        for (const QString& windowId : floatingIds) {
-            // Daemon now stores stableIds directly, but handle both formats for safety
-            QString stableId = m_effect->extractStableId(windowId);
-            m_floatingWindows.insert(stableId);
+        for (const QString& id : floatingIds) {
+            // Store as-is: stableIds from session restore, full windowIds from runtime
+            m_floatingWindows.insert(id);
         }
 
         qCDebug(lcEffect) << "Synced" << m_floatingWindows.size() << "floating windows from daemon";
     });
 }
 
-void NavigationHandler::syncFloatingStateForWindow(const QString& stableId)
+void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
 {
-    if (stableId.isEmpty()) {
+    if (windowId.isEmpty()) {
         return;
     }
 
@@ -1109,18 +1123,19 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& stableId)
 
     // Use ASYNC D-Bus call to avoid blocking the compositor thread
     // Synchronous calls in slotWindowAdded can cause freezes during startup
-    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("queryWindowFloating"), stableId);
+    // Pass full windowId so daemon can do per-instance lookup with stableId fallback
+    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("queryWindowFloating"), windowId);
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, stableId](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
         QDBusPendingReply<bool> reply = *w;
         if (reply.isValid()) {
-            bool isFloating = reply.value();
-            if (isFloating) {
-                m_floatingWindows.insert(stableId);
-                qCDebug(lcEffect) << "Synced floating state for window" << stableId << "- is floating";
+            bool floating = reply.value();
+            if (floating) {
+                m_floatingWindows.insert(windowId);
+                qCDebug(lcEffect) << "Synced floating state for window" << windowId << "- is floating";
             } else {
-                m_floatingWindows.remove(stableId);
+                m_floatingWindows.remove(windowId);
             }
         }
         w->deleteLater();

@@ -8,7 +8,7 @@
 # Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        1.9.1
+Version:        1.9.5
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -169,6 +169,24 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Thu Feb 13 2026 fuddlesworth - 1.9.5-1
+- Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
+- Force-end drag on mouse button release for safer drag lifecycle
+- Proximity snap always active by default (no modifier required)
+- Compositor freeze: remove processEvents calls that deadlock with Wayland compositor during drag ([#152])
+- Compositor stall on layout change: hide overlay/zone selector before layout switch, skip heavy QML updates for hidden windows
+- Snap assist Escape not working: keep KGlobalAccel Escape shortcut registered through snap assist phase
+- Snap assist not dismissing: dismiss on any window zone change (navigation, snap, unsnap, float toggle)
+- Snap assist wrong window: use full windowId for per-instance floating/geometry tracking
+- Snap assist Escape handling, dismiss on new drag, zone selector layout sync
+- Paint-to-snap raycasting and shader highlight for multi-zone selection
+- Mouse-button zone activation latches until drag ends (no flicker)
+- Shortcut clear button resets to default instead of empty
+- Inverted panel-hiding check for usable geometry
+- KCM linker errors from missing kcfg sources
+- Remove 66 dead code items across 48 files
+- Remove dead multiZoneEnabled code
+
 * Thu Feb 12 2026 fuddlesworth - 1.9.1-1
 - Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
 - Snap Assist overlay with window thumbnails, zone-mapped layout, and KCM setting to enable/disable

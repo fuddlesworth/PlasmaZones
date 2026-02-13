@@ -502,6 +502,12 @@ Q_SIGNALS:
      * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
      */
     void snapAssistShown(const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson);
+
+    /**
+     * @brief Emitted when Snap Assist overlay is dismissed (by selection, Escape, or any other means).
+     * WindowDragAdaptor subscribes to unregister the KGlobalAccel Escape shortcut.
+     */
+    void snapAssistDismissed();
 };
 
 } // namespace PlasmaZones

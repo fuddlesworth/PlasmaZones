@@ -43,11 +43,11 @@ public:
     void handleSnapAllWindows(const QString& snapData, const QString& screenName);
     void handleCycleWindowsInZone(const QString& directive, const QString& unused);
 
-    // Floating window tracking
-    bool isWindowFloating(const QString& stableId) const;
-    void setWindowFloating(const QString& stableId, bool floating);
+    // Floating window tracking (uses full windowId, with stableId fallback for session restore)
+    bool isWindowFloating(const QString& windowId) const;
+    void setWindowFloating(const QString& windowId, bool floating);
     void syncFloatingWindowsFromDaemon();
-    void syncFloatingStateForWindow(const QString& stableId);
+    void syncFloatingStateForWindow(const QString& windowId);
 
 private:
     /**
@@ -77,7 +77,7 @@ private:
 
     // Internal helper for float toggle - called after daemon state is synced
     void executeFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
-                            const QString& stableId, const QString& screenName, bool newFloatState);
+                            const QString& screenName, bool newFloatState);
 
     PlasmaZonesEffect* m_effect;
     QSet<QString> m_floatingWindows;
