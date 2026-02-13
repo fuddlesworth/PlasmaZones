@@ -10,6 +10,10 @@
 #ifndef PLASMAZONES_AUDIO_GLSL
 #define PLASMAZONES_AUDIO_GLSL
 
+// Audio spectrum texture (binding 6). 1D: bar index = x, y=0. R = bar value 0-1.
+// Only valid when iAudioSpectrumSize > 0. Include <audio.glsl> for helpers.
+layout(binding = 6) uniform sampler2D uAudioSpectrum;
+
 // Sample bar value (0-1). Returns 0 if audio disabled or index out of range.
 float audioBar(int barIndex) {
     if (iAudioSpectrumSize <= 0 || barIndex < 0 || barIndex >= iAudioSpectrumSize) {

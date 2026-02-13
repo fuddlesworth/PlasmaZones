@@ -34,9 +34,6 @@ layout(std140, binding = 0) uniform ZoneUniforms {
 
 layout(binding = 1) uniform sampler2D uZoneLabels;
 
-// Audio spectrum texture (binding 6). 1D: bar index = x, y=0. R = bar value 0-1.
-// Only valid when iAudioSpectrumSize > 0. Include <audio.glsl> for helpers.
-layout(binding = 6) uniform sampler2D uAudioSpectrum;
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
