@@ -110,7 +110,11 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers,
         const auto map = t.toMap();
         const int mod = map.value(QStringLiteral("modifier"), 0).toInt();
         const int btn = map.value(QStringLiteral("mouseButton"), 0).toInt();
-        if (checkModifier(mod, mods) || (btn != 0 && (mouseButtons & btn) != 0))
+        // AND semantics: both modifier and mouse button must match when both are set.
+        // A zero field means "don't care" (always matches). At least one must be non-zero.
+        const bool modMatch = (mod == 0) || checkModifier(mod, mods);
+        const bool btnMatch = (btn == 0) || (mouseButtons & btn) != 0;
+        if (modMatch && btnMatch && (mod != 0 || btn != 0))
             return true;
     }
     return false;
@@ -545,18 +549,18 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
                 const auto mMap = mt.toMap();
                 if ((aMod != 0 && mMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
                     || (aBtn != 0 && mMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
-                    qCDebug(lcDbusWindow) << "Trigger overlap: activation and multi-zone share trigger"
-                                          << "(mod:" << aMod << "btn:" << aBtn << ");"
-                                          << "multi-zone takes priority when both match";
+                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and multi-zone share trigger"
+                                            << "(mod:" << aMod << "btn:" << aBtn << ");"
+                                            << "multi-zone takes priority when both match";
                 }
             }
             for (const auto& st : zoneSpanTriggers) {
                 const auto sMap = st.toMap();
                 if ((aMod != 0 && sMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
                     || (aBtn != 0 && sMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
-                    qCDebug(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
-                                          << "(mod:" << aMod << "btn:" << aBtn << ");"
-                                          << "zone span takes priority when both match";
+                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
+                                            << "(mod:" << aMod << "btn:" << aBtn << ");"
+                                            << "zone span takes priority when both match";
                 }
             }
         }

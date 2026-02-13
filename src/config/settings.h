@@ -26,6 +26,10 @@ class PLASMAZONES_EXPORT Settings : public ISettings
 {
     Q_OBJECT
 
+public:
+    /** Maximum number of activation triggers per action (drag, multi-zone, zone span) */
+    static constexpr int MaxTriggersPerAction = 4;
+
     // Activation settings
     Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
                    shiftDragToActivateChanged)

@@ -119,6 +119,17 @@ Item {
         }
     }
 
+    /** Compare two trigger arrays for equality */
+    function triggersEqual(a, b) {
+        if (!a || !b || a.length !== b.length) return false
+        for (var i = 0; i < a.length; i++) {
+            if ((a[i].modifier || 0) !== (b[i].modifier || 0)
+                || (a[i].mouseButton || 0) !== (b[i].mouseButton || 0))
+                return false
+        }
+        return true
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Multi-mode: list of triggers with Add/Remove
     // ═══════════════════════════════════════════════════════════════════════════
@@ -159,6 +170,7 @@ Item {
                         Accessible.name: i18n("Remove trigger")
                         implicitWidth: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing * 2
                         implicitHeight: implicitWidth
+                        enabled: root.triggers.length > 1
                         onClicked: {
                             var newTriggers = []
                             for (var i = 0; i < root.triggers.length; i++) {
@@ -168,7 +180,9 @@ Item {
                             root.triggersModified(newTriggers)
                         }
                         QQC2.ToolTip.visible: hovered && root.tooltipEnabled
-                        QQC2.ToolTip.text: i18n("Remove this trigger")
+                        QQC2.ToolTip.text: root.triggers.length <= 1
+                            ? i18n("At least one trigger is required")
+                            : i18n("Remove this trigger")
                     }
                 }
             }
@@ -192,17 +206,7 @@ Item {
                 QQC2.ToolButton {
                     icon.name: "edit-clear"
                     Accessible.name: i18n("Reset to default")
-                    visible: {
-                        // Compare current triggers to defaults
-                        if (root.triggers.length !== root.defaultTriggers.length) return true
-                        for (var i = 0; i < root.triggers.length; i++) {
-                            var a = root.triggers[i]
-                            var b = root.defaultTriggers[i]
-                            if ((a.modifier || 0) !== (b.modifier || 0) || (a.mouseButton || 0) !== (b.mouseButton || 0))
-                                return true
-                        }
-                        return false
-                    }
+                    visible: !triggersEqual(root.triggers, root.defaultTriggers)
                     onClicked: {
                         var copy = []
                         for (var i = 0; i < root.defaultTriggers.length; i++)
