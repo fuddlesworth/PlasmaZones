@@ -57,6 +57,10 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     m_cancelOverlayAction = new QAction(i18n("Cancel zone overlay"), this);
     m_cancelOverlayAction->setObjectName(QStringLiteral("cancel_overlay_during_drag"));
     connect(m_cancelOverlayAction, &QAction::triggered, this, &WindowDragAdaptor::cancelSnap);
+
+    // When snap assist is dismissed (selection, timeout, etc.), unregister the Escape shortcut
+    // that was kept alive during dragStopped() for the snap assist phase
+    connect(overlay, &IOverlayService::snapAssistDismissed, this, &WindowDragAdaptor::onSnapAssistDismissed);
 }
 
 QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
@@ -689,6 +693,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     if (selectedLayout) {
                         Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(screen->name());
                         if (currentLayout != selectedLayout) {
+                            // Hide overlay/selector BEFORE the layout change so signal
+                            // handlers (updateZoneSelectorWindow, updateOverlayWindow) find
+                            // hidden windows and skip heavy QML property updates / LayerShell
+                            // recalculations. All overlay queries are already done above.
+                            hideOverlayAndSelector();
+
                             m_layoutManager->assignLayout(screen->name(),
                                 m_layoutManager->currentVirtualDesktop(),
                                 m_layoutManager->currentActivity(),
@@ -701,7 +711,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         }
     }
 
-    // Hide overlay and zone selector UI
+    // Hide overlay and zone selector UI (idempotent — may already be hidden above)
     hideOverlayAndSelector();
 
     // Fall back to regular zone detection if zone selector wasn't used
@@ -788,8 +798,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         }
     }
 
-    // Reset drag state for next operation
-    resetDragState();
+    // Reset drag state for next operation.
+    // If snap assist will be shown, keep the Escape shortcut registered so
+    // KGlobalAccel can still dismiss it (the snap assist window may not have
+    // Wayland keyboard focus yet when the user presses Escape).
+    resetDragState(/*keepEscapeShortcut=*/snapAssistRequestedOut);
 }
 
 void WindowDragAdaptor::cancelSnap()
@@ -973,9 +986,11 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     }
 }
 
-void WindowDragAdaptor::resetDragState()
+void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
 {
-    unregisterCancelOverlayShortcut();
+    if (!keepEscapeShortcut) {
+        unregisterCancelOverlayShortcut();
+    }
     m_draggedWindowId.clear();
     m_originalGeometry = QRect();
     m_currentZoneId.clear();
@@ -1038,6 +1053,11 @@ void WindowDragAdaptor::onLayoutChanged()
             m_overlayService->clearHighlight();
         }
     }
+}
+
+void WindowDragAdaptor::onSnapAssistDismissed()
+{
+    unregisterCancelOverlayShortcut();
 }
 
 } // namespace PlasmaZones

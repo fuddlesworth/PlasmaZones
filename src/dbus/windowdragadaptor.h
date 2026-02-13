@@ -190,7 +190,7 @@ private:
 
     // dragStopped() helpers
     void hideOverlayAndSelector();
-    void resetDragState();
+    void resetDragState(bool keepEscapeShortcut = false);
 
     // Pre-snap geometry helper (reduces code duplication)
     // Overload with captured values to prevent race conditions in dragStopped()
@@ -203,6 +203,12 @@ private Q_SLOTS:
      * Clears cached zone state to prevent stale geometry being used on snap
      */
     void onLayoutChanged();
+
+    /**
+     * Called when snap assist is dismissed (selection, timeout, click-away, etc.)
+     * Unregisters the KGlobalAccel Escape shortcut that was kept alive for snap assist
+     */
+    void onSnapAssistDismissed();
 };
 
 } // namespace PlasmaZones

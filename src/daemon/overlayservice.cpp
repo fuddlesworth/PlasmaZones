@@ -1060,25 +1060,28 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
     if (m_layoutManager) {
         auto* manager = dynamic_cast<LayoutManager*>(m_layoutManager);
         if (manager) {
-            // Update zone selector and overlay windows when active layout changes (via shortcuts, etc.)
+            // Update visible zone selector and overlay windows when layout changes.
+            // Hidden windows are skipped — showZoneSelector()/show() refresh before showing.
             connect(manager, &LayoutManager::activeLayoutChanged, this, [this](Layout* /*layout*/) {
-                for (QScreen* screen : m_zoneSelectorWindows.keys()) {
-                    updateZoneSelectorWindow(screen);
-                }
-                for (QScreen* screen : m_overlayWindows.keys()) {
-                    updateOverlayWindow(screen);
-                }
+                refreshVisibleWindows();
             });
-
-            // Update zone selector and overlay windows when a layout is assigned to a screen
             connect(manager, &LayoutManager::layoutAssigned, this, [this](const QString& /*screenName*/, Layout* /*layout*/) {
-                for (QScreen* screen : m_zoneSelectorWindows.keys()) {
-                    updateZoneSelectorWindow(screen);
-                }
-                for (QScreen* screen : m_overlayWindows.keys()) {
-                    updateOverlayWindow(screen);
-                }
+                refreshVisibleWindows();
             });
+        }
+    }
+}
+
+void OverlayService::refreshVisibleWindows()
+{
+    if (m_zoneSelectorVisible) {
+        for (QScreen* screen : m_zoneSelectorWindows.keys()) {
+            updateZoneSelectorWindow(screen);
+        }
+    }
+    if (m_visible) {
+        for (QScreen* screen : m_overlayWindows.keys()) {
+            updateOverlayWindow(screen);
         }
     }
 }
@@ -2813,6 +2816,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
 {
     if (emptyZonesJson.isEmpty() || candidatesJson.isEmpty()) {
         qCDebug(lcOverlay) << "showSnapAssist: no empty zones or candidates";
+        Q_EMIT snapAssistDismissed(); // Notify listeners that snap assist won't show
         return;
     }
 
@@ -2825,6 +2829,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     }
     if (!screen) {
         qCWarning(lcOverlay) << "showSnapAssist: no screen available";
+        Q_EMIT snapAssistDismissed();
         return;
     }
 
@@ -2832,6 +2837,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     destroySnapAssistWindow();
     createSnapAssistWindow();
     if (!m_snapAssistWindow) {
+        Q_EMIT snapAssistDismissed();
         return;
     }
 
@@ -2970,8 +2976,12 @@ bool OverlayService::eventFilter(QObject* obj, QEvent* event)
 
 void OverlayService::hideSnapAssist()
 {
+    bool wasVisible = isSnapAssistVisible();
     m_thumbnailCache.clear();
     destroySnapAssistWindow();
+    if (wasVisible) {
+        Q_EMIT snapAssistDismissed();
+    }
 }
 
 bool OverlayService::isSnapAssistVisible() const
@@ -3002,6 +3012,13 @@ void OverlayService::createSnapAssistWindow()
         m_snapAssistScreen = nullptr;
     });
 
+    // Emit snapAssistDismissed when the window is closed by QML (user selection, backdrop click, Escape)
+    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
+        if (!visible) {
+            Q_EMIT snapAssistDismissed();
+        }
+    });
+
     // Connect windowSelected from QML: convert overlay-local geometry to screen
     // coordinates before emitting (KWin effect needs global coordinates for moveResize)
     connect(window, SIGNAL(windowSelected(QString, QString, QString)), this,
@@ -3020,6 +3037,9 @@ void OverlayService::createSnapAssistWindow()
 void OverlayService::destroySnapAssistWindow()
 {
     if (m_snapAssistWindow) {
+        // Disconnect visibleChanged before closing to prevent spurious snapAssistDismissed
+        // when the window is being destroyed and recreated (e.g. showSnapAssist recreate cycle)
+        disconnect(m_snapAssistWindow, &QWindow::visibleChanged, this, nullptr);
         m_snapAssistWindow->close();
         m_snapAssistWindow->deleteLater();
         m_snapAssistWindow = nullptr;
