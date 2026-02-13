@@ -50,10 +50,14 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
                    dragActivationMouseButtonChanged)
     Q_PROPERTY(int multiZoneModifier READ multiZoneModifier WRITE setMultiZoneModifier NOTIFY multiZoneModifierChanged)
+    Q_PROPERTY(int multiZoneMouseButton READ multiZoneMouseButton WRITE setMultiZoneMouseButton NOTIFY
+                   multiZoneMouseButtonChanged)
     Q_PROPERTY(bool proximitySnapAlwaysOn READ proximitySnapAlwaysOn WRITE setProximitySnapAlwaysOn NOTIFY
                    proximitySnapAlwaysOnChanged)
     Q_PROPERTY(int zoneSpanModifier READ zoneSpanModifier WRITE setZoneSpanModifier NOTIFY
                    zoneSpanModifierChanged)
+    Q_PROPERTY(int zoneSpanMouseButton READ zoneSpanMouseButton WRITE setZoneSpanMouseButton NOTIFY
+                   zoneSpanMouseButtonChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -153,7 +157,9 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int defaultDragActivationModifier READ defaultDragActivationModifier CONSTANT)
     Q_PROPERTY(int defaultDragActivationMouseButton READ defaultDragActivationMouseButton CONSTANT)
     Q_PROPERTY(int defaultMultiZoneModifier READ defaultMultiZoneModifier CONSTANT)
+    Q_PROPERTY(int defaultMultiZoneMouseButton READ defaultMultiZoneMouseButton CONSTANT)
     Q_PROPERTY(int defaultZoneSpanModifier READ defaultZoneSpanModifier CONSTANT)
+    Q_PROPERTY(int defaultZoneSpanMouseButton READ defaultZoneSpanMouseButton CONSTANT)
     Q_PROPERTY(int defaultEditorSnapOverrideModifier READ defaultEditorSnapOverrideModifier CONSTANT)
     Q_PROPERTY(int defaultFillOnDropModifier READ defaultFillOnDropModifier CONSTANT)
     Q_PROPERTY(QString defaultEditorDuplicateShortcut READ defaultEditorDuplicateShortcut CONSTANT)
@@ -226,8 +232,10 @@ public:
     int dragActivationModifier() const;
     int dragActivationMouseButton() const;
     int multiZoneModifier() const;
+    int multiZoneMouseButton() const;
     bool proximitySnapAlwaysOn() const;
     int zoneSpanModifier() const;
+    int zoneSpanMouseButton() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
     bool showZoneNumbers() const;
@@ -297,7 +305,9 @@ public:
     int defaultDragActivationModifier() const;
     int defaultDragActivationMouseButton() const;
     int defaultMultiZoneModifier() const;
+    int defaultMultiZoneMouseButton() const;
     int defaultZoneSpanModifier() const;
+    int defaultZoneSpanMouseButton() const;
     int defaultEditorSnapOverrideModifier() const;
     int defaultFillOnDropModifier() const;
     QString defaultEditorDuplicateShortcut() const;
@@ -337,8 +347,10 @@ public:
     void setDragActivationModifier(int modifier);
     void setDragActivationMouseButton(int button);
     void setMultiZoneModifier(int modifier);
+    void setMultiZoneMouseButton(int button);
     void setProximitySnapAlwaysOn(bool alwaysOn);
     void setZoneSpanModifier(int modifier);
+    void setZoneSpanMouseButton(int button);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
@@ -488,8 +500,10 @@ Q_SIGNALS:
     void dragActivationModifierChanged();
     void dragActivationMouseButtonChanged();
     void multiZoneModifierChanged();
+    void multiZoneMouseButtonChanged();
     void proximitySnapAlwaysOnChanged();
     void zoneSpanModifierChanged();
+    void zoneSpanMouseButtonChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();

@@ -157,6 +157,19 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
 
+    // Multi-zone mouse button (alternative to modifier)
+    m_getters[QStringLiteral("multiZoneMouseButton")] = [this]() {
+        return m_settings->multiZoneMouseButton();
+    };
+    m_setters[QStringLiteral("multiZoneMouseButton")] = [this](const QVariant& v) {
+        int button = v.toInt();
+        if (button >= 0 && button <= 128) {
+            m_settings->setMultiZoneMouseButton(button);
+            return true;
+        }
+        return false;
+    };
+
     // Zone span modifier: hold this key for paint-to-span zone selection
     m_getters[QStringLiteral("zoneSpanModifier")] = [this]() {
         return static_cast<int>(m_settings->zoneSpanModifier());
@@ -165,6 +178,19 @@ void SettingsAdaptor::initializeRegistry()
         int mod = v.toInt();
         if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
             m_settings->setZoneSpanModifier(static_cast<DragModifier>(mod));
+            return true;
+        }
+        return false;
+    };
+
+    // Zone span mouse button (alternative to modifier)
+    m_getters[QStringLiteral("zoneSpanMouseButton")] = [this]() {
+        return m_settings->zoneSpanMouseButton();
+    };
+    m_setters[QStringLiteral("zoneSpanMouseButton")] = [this](const QVariant& v) {
+        int button = v.toInt();
+        if (button >= 0 && button <= 128) {
+            m_settings->setZoneSpanMouseButton(button);
             return true;
         }
         return false;

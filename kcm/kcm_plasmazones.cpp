@@ -171,6 +171,10 @@ int KCMPlasmaZones::multiZoneModifier() const
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
     return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->multiZoneModifier()));
 }
+int KCMPlasmaZones::multiZoneMouseButton() const
+{
+    return m_settings->multiZoneMouseButton();
+}
 
 bool KCMPlasmaZones::proximitySnapAlwaysOn() const
 {
@@ -181,6 +185,10 @@ int KCMPlasmaZones::zoneSpanModifier() const
 {
     // Convert DragModifier enum to Qt::KeyboardModifier bitmask for UI
     return ModifierUtils::dragModifierToBitmask(static_cast<int>(m_settings->zoneSpanModifier()));
+}
+int KCMPlasmaZones::zoneSpanMouseButton() const
+{
+    return m_settings->zoneSpanMouseButton();
 }
 
 // Display getters
@@ -481,12 +489,28 @@ int KCMPlasmaZones::defaultDragActivationMouseButton() const
 
 int KCMPlasmaZones::defaultMultiZoneModifier() const
 {
-    return ModifierUtils::dragModifierToBitmask(ConfigDefaults::multiZoneModifier());
+    // Default is AlwaysActive (bitmask 0); when user unchecks "always on",
+    // fall back to Ctrl as a sensible single-key default
+    int def = ConfigDefaults::multiZoneModifier();
+    if (def == static_cast<int>(DragModifier::AlwaysActive)) {
+        def = static_cast<int>(DragModifier::Ctrl);
+    }
+    return ModifierUtils::dragModifierToBitmask(def);
+}
+
+int KCMPlasmaZones::defaultMultiZoneMouseButton() const
+{
+    return 0; // No mouse button by default
 }
 
 int KCMPlasmaZones::defaultZoneSpanModifier() const
 {
-    return ModifierUtils::dragModifierToBitmask(9); // DragModifier::AltMeta
+    return ModifierUtils::dragModifierToBitmask(ConfigDefaults::zoneSpanModifier());
+}
+
+int KCMPlasmaZones::defaultZoneSpanMouseButton() const
+{
+    return 0; // No mouse button by default
 }
 
 int KCMPlasmaZones::defaultEditorSnapOverrideModifier() const
@@ -599,6 +623,10 @@ void KCMPlasmaZones::setMultiZoneModifier(int bitmask)
         if (enumValue != static_cast<int>(DragModifier::AlwaysActive)) {
             m_proximitySnapFallbackModifier = enumValue;
         }
+        if (enumValue != 0 && m_settings->multiZoneMouseButton() != 0) {
+            m_settings->setMultiZoneMouseButton(0);
+            Q_EMIT multiZoneMouseButtonChanged();
+        }
         Q_EMIT multiZoneModifierChanged();
         if (wasAlwaysOn != (enumValue == static_cast<int>(DragModifier::AlwaysActive))) {
             Q_EMIT proximitySnapAlwaysOnChanged();
@@ -621,7 +649,7 @@ void KCMPlasmaZones::setProximitySnapAlwaysOn(bool alwaysOn)
     } else {
         int target = m_proximitySnapFallbackModifier;
         if (target == static_cast<int>(DragModifier::AlwaysActive) || target < 0 || target > 10) {
-            target = static_cast<int>(DragModifier::CtrlAlt);
+            target = static_cast<int>(DragModifier::Ctrl);
         }
         if (current != target) {
             m_settings->setMultiZoneModifier(static_cast<DragModifier>(target));
@@ -632,13 +660,45 @@ void KCMPlasmaZones::setProximitySnapAlwaysOn(bool alwaysOn)
     }
 }
 
+void KCMPlasmaZones::setMultiZoneMouseButton(int button)
+{
+    if (button == 1) button = 0;
+    if (m_settings->multiZoneMouseButton() != button) {
+        m_settings->setMultiZoneMouseButton(button);
+        if (button != 0 && static_cast<int>(m_settings->multiZoneModifier()) != 0) {
+            m_settings->setMultiZoneModifier(DragModifier::Disabled);
+            Q_EMIT multiZoneModifierChanged();
+        }
+        Q_EMIT multiZoneMouseButtonChanged();
+        setNeedsSave(true);
+    }
+}
+
 void KCMPlasmaZones::setZoneSpanModifier(int bitmask)
 {
     // Convert Qt::KeyboardModifier bitmask to DragModifier enum for storage
     int enumValue = ModifierUtils::bitmaskToDragModifier(bitmask);
     if (static_cast<int>(m_settings->zoneSpanModifier()) != enumValue) {
         m_settings->setZoneSpanModifier(static_cast<DragModifier>(enumValue));
+        if (enumValue != 0 && m_settings->zoneSpanMouseButton() != 0) {
+            m_settings->setZoneSpanMouseButton(0);
+            Q_EMIT zoneSpanMouseButtonChanged();
+        }
         Q_EMIT zoneSpanModifierChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setZoneSpanMouseButton(int button)
+{
+    if (button == 1) button = 0;
+    if (m_settings->zoneSpanMouseButton() != button) {
+        m_settings->setZoneSpanMouseButton(button);
+        if (button != 0 && static_cast<int>(m_settings->zoneSpanModifier()) != 0) {
+            m_settings->setZoneSpanModifier(DragModifier::Disabled);
+            Q_EMIT zoneSpanModifierChanged();
+        }
+        Q_EMIT zoneSpanMouseButtonChanged();
         setNeedsSave(true);
     }
 }
@@ -2237,8 +2297,10 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT dragActivationModifierChanged();
         Q_EMIT dragActivationMouseButtonChanged();
         Q_EMIT multiZoneModifierChanged();
+        Q_EMIT multiZoneMouseButtonChanged();
         Q_EMIT proximitySnapAlwaysOnChanged();
         Q_EMIT zoneSpanModifierChanged();
+        Q_EMIT zoneSpanMouseButtonChanged();
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT disabledMonitorsChanged();
         Q_EMIT showZoneNumbersChanged();

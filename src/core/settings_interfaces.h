@@ -77,8 +77,12 @@ public:
     virtual void setDragActivationMouseButton(int button) = 0;
     virtual DragModifier multiZoneModifier() const = 0;
     virtual void setMultiZoneModifier(DragModifier modifier) = 0;
+    virtual int multiZoneMouseButton() const = 0;
+    virtual void setMultiZoneMouseButton(int button) = 0;
     virtual DragModifier zoneSpanModifier() const = 0;
     virtual void setZoneSpanModifier(DragModifier modifier) = 0;
+    virtual int zoneSpanMouseButton() const = 0;
+    virtual void setZoneSpanMouseButton(int button) = 0;
 };
 
 /**

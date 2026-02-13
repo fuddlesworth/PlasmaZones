@@ -146,7 +146,9 @@ Q_SIGNALS:
     void dragActivationModifierChanged();
     void dragActivationMouseButtonChanged();
     void multiZoneModifierChanged();
+    void multiZoneMouseButtonChanged();
     void zoneSpanModifierChanged();
+    void zoneSpanMouseButtonChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();

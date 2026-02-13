@@ -35,8 +35,12 @@ class PLASMAZONES_EXPORT Settings : public ISettings
                    dragActivationMouseButtonChanged)
     Q_PROPERTY(
         int multiZoneModifier READ multiZoneModifierInt WRITE setMultiZoneModifierInt NOTIFY multiZoneModifierChanged)
+    Q_PROPERTY(int multiZoneMouseButton READ multiZoneMouseButton WRITE setMultiZoneMouseButton NOTIFY
+                   multiZoneMouseButtonChanged)
     Q_PROPERTY(
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
+    Q_PROPERTY(int zoneSpanMouseButton READ zoneSpanMouseButton WRITE setZoneSpanMouseButton NOTIFY
+                   zoneSpanMouseButtonChanged)
 
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -279,12 +283,16 @@ public:
         return static_cast<int>(m_multiZoneModifier);
     }
     void setMultiZoneModifierInt(int modifier);
+    int multiZoneMouseButton() const override { return m_multiZoneMouseButton; }
+    void setMultiZoneMouseButton(int button) override;
 
     DragModifier zoneSpanModifier() const override
     {
         return m_zoneSpanModifier;
     }
     void setZoneSpanModifier(DragModifier modifier) override;
+    int zoneSpanMouseButton() const override { return m_zoneSpanMouseButton; }
+    void setZoneSpanMouseButton(int button) override;
     int zoneSpanModifierInt() const
     {
         return static_cast<int>(m_zoneSpanModifier);
@@ -926,7 +934,9 @@ private:
     DragModifier m_dragActivationModifier = DragModifier::Alt; // Default: Alt for zone activation
     int m_dragActivationMouseButton = 0; // 0=None, Qt::MouseButton bits (2=Right, 4=Middle, etc.)
     DragModifier m_multiZoneModifier = DragModifier::AlwaysActive; // Default: always active for proximity snap
-    DragModifier m_zoneSpanModifier = DragModifier::AltMeta;
+    int m_multiZoneMouseButton = 0; // 0=None, Qt::MouseButton bits
+    DragModifier m_zoneSpanModifier = DragModifier::Meta;
+    int m_zoneSpanMouseButton = 0; // 0=None, Qt::MouseButton bits
 
     // Display
     bool m_showZonesOnAllMonitors = false;

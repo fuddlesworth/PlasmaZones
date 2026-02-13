@@ -515,26 +515,43 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse || m_mouseActivationLatched;
     // AlwaysActive should not independently activate the overlay;
     // it only enables proximity snap while the overlay is already open.
-    bool multiZoneModifierHeld = multiZoneAlwaysOn ? false : checkModifier(multiZoneMod, mods);
-    bool zoneSpanModifierHeld = checkModifier(zoneSpanMod, mods);
+    const int multiZoneButton = m_settings->multiZoneMouseButton();
+    const bool multiZoneByMouse = (multiZoneButton != 0 && (mouseButtons & multiZoneButton) != 0);
+    bool multiZoneModifierHeld = multiZoneAlwaysOn ? false : (checkModifier(multiZoneMod, mods) || multiZoneByMouse);
+    const int zoneSpanButton = m_settings->zoneSpanMouseButton();
+    const bool zoneSpanByMouse = (zoneSpanButton != 0 && (mouseButtons & zoneSpanButton) != 0);
+    bool zoneSpanModifierHeld = checkModifier(zoneSpanMod, mods) || zoneSpanByMouse;
 
-    // Warn once per drag about modifier conflicts (zone span shadows other modifiers)
-    if (!m_modifierConflictWarned && zoneSpanMod != 0) {
-        if (zoneSpanMod == multiZoneMod) {
+    // Warn once per drag about modifier/mouse-button conflicts
+    if (!m_modifierConflictWarned) {
+        if (zoneSpanMod != 0 && zoneSpanMod == multiZoneMod) {
             qCWarning(lcDbusWindow) << "zoneSpanModifier and multiZoneModifier are both set to"
                                     << zoneSpanMod << "- multi-zone proximity mode will be unreachable";
             m_modifierConflictWarned = true;
-        } else if (zoneSpanMod == dragActivationMod) {
+        } else if (zoneSpanMod != 0 && zoneSpanMod == dragActivationMod) {
             qCWarning(lcDbusWindow) << "zoneSpanModifier and dragActivationModifier are both set to"
                                     << zoneSpanMod << "- single-zone mode will be unreachable";
+            m_modifierConflictWarned = true;
+        } else if (multiZoneButton != 0 && multiZoneButton == activationButton) {
+            qCWarning(lcDbusWindow) << "multiZoneMouseButton and dragActivationMouseButton are both set to"
+                                    << multiZoneButton << "- proximity snap will always fire with activation";
+            m_modifierConflictWarned = true;
+        } else if (zoneSpanButton != 0 && zoneSpanButton == activationButton) {
+            qCWarning(lcDbusWindow) << "zoneSpanMouseButton and dragActivationMouseButton are both set to"
+                                    << zoneSpanButton << "- paint-to-span will always fire with activation";
+            m_modifierConflictWarned = true;
+        } else if (multiZoneButton != 0 && zoneSpanButton != 0 && multiZoneButton == zoneSpanButton) {
+            qCWarning(lcDbusWindow) << "multiZoneMouseButton and zoneSpanMouseButton are both set to"
+                                    << multiZoneButton << "- proximity snap will be unreachable (zone span takes priority)";
             m_modifierConflictWarned = true;
         }
     }
 
     // Mutual exclusion: overlay (modifier-triggered) and zone selector (edge-triggered)
     // cannot be active simultaneously. Modifier takes priority as an explicit user action.
+    // Secondary modifiers (zone span, proximity snap) only apply while activation is held.
     // Priority: zone span > multi-zone > single zone > none
-    if (zoneSpanModifierHeld || multiZoneModifierHeld || zoneActivationHeld) {
+    if (zoneActivationHeld) {
         // Modifier held: overlay takes priority — dismiss zone selector if open
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;

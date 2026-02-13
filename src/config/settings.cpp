@@ -236,6 +236,18 @@ void Settings::setMultiZoneModifierInt(int modifier)
     }
 }
 
+void Settings::setMultiZoneMouseButton(int button)
+{
+    if (button == 1) {
+        button = 0;
+    }
+    if (m_multiZoneMouseButton != button) {
+        m_multiZoneMouseButton = button;
+        Q_EMIT multiZoneMouseButtonChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
     if (m_zoneSpanModifier != modifier) {
@@ -249,6 +261,18 @@ void Settings::setZoneSpanModifierInt(int modifier)
 {
     if (modifier >= 0 && modifier <= static_cast<int>(DragModifier::CtrlAltMeta)) {
         setZoneSpanModifier(static_cast<DragModifier>(modifier));
+    }
+}
+
+void Settings::setZoneSpanMouseButton(int button)
+{
+    if (button == 1) {
+        button = 0;
+    }
+    if (m_zoneSpanMouseButton != button) {
+        m_zoneSpanMouseButton = button;
+        Q_EMIT zoneSpanMouseButtonChanged();
+        Q_EMIT settingsChanged();
     }
 }
 
@@ -712,6 +736,12 @@ void Settings::load()
     m_multiZoneModifier = static_cast<DragModifier>(multiZoneMod);
     qCDebug(lcConfig) << "Loaded MultiZoneModifier= " << multiZoneMod;
 
+    m_multiZoneMouseButton = activation.readEntry(QLatin1String("MultiZoneMouseButton"), 0);
+    m_multiZoneMouseButton = qBound(0, m_multiZoneMouseButton, 128);
+    if (m_multiZoneMouseButton == 1) {
+        m_multiZoneMouseButton = 0;
+    }
+
     // Zone span modifier: hold this key for paint-to-span zone selection
     // Migration: if old MiddleClickMultiZone key exists but new ZoneSpanModifier doesn't,
     // honour the old disabled state so upgrading users don't get unexpected zone-span activation
@@ -731,6 +761,12 @@ void Settings::load()
     }
     m_zoneSpanModifier = static_cast<DragModifier>(zoneSpanMod);
     qCDebug(lcConfig) << "Loaded ZoneSpanModifier= " << zoneSpanMod;
+
+    m_zoneSpanMouseButton = activation.readEntry(QLatin1String("ZoneSpanMouseButton"), 0);
+    m_zoneSpanMouseButton = qBound(0, m_zoneSpanMouseButton, 128);
+    if (m_zoneSpanMouseButton == 1) {
+        m_zoneSpanMouseButton = 0;
+    }
 
     // Display (defaults from .kcfg via ConfigDefaults)
     m_showZonesOnAllMonitors = display.readEntry(QLatin1String("ShowOnAllMonitors"), ConfigDefaults::showOnAllMonitors());
@@ -960,7 +996,9 @@ void Settings::save()
     activation.writeEntry(QLatin1String("DragActivationModifier"), static_cast<int>(m_dragActivationModifier));
     activation.writeEntry(QLatin1String("DragActivationMouseButton"), m_dragActivationMouseButton);
     activation.writeEntry(QLatin1String("MultiZoneModifier"), static_cast<int>(m_multiZoneModifier));
+    activation.writeEntry(QLatin1String("MultiZoneMouseButton"), m_multiZoneMouseButton);
     activation.writeEntry(QLatin1String("ZoneSpanModifier"), static_cast<int>(m_zoneSpanModifier));
+    activation.writeEntry(QLatin1String("ZoneSpanMouseButton"), m_zoneSpanMouseButton);
 
     // Display
     display.writeEntry(QLatin1String("ShowOnAllMonitors"), m_showZonesOnAllMonitors);
