@@ -48,6 +48,8 @@ Item {
     signal triggersModified(var triggers)
 
     readonly property int maxTriggers: 4
+    // -1 = adding a new trigger, >= 0 = editing trigger at that index
+    property int editingTriggerIndex: -1
 
     readonly property int shiftFlag: 0x02000000
     readonly property int ctrlFlag: 0x04000000
@@ -159,10 +161,23 @@ Item {
                     Layout.fillWidth: true
                     spacing: Kirigami.Units.smallSpacing
 
-                    QQC2.Label {
-                        text: root.triggerDisplayText(modelData.modifier || 0, modelData.mouseButton || 0)
+                    QQC2.AbstractButton {
                         Layout.fillWidth: true
-                        elide: Text.ElideRight
+                        implicitHeight: triggerLabel.implicitHeight + Kirigami.Units.smallSpacing
+                        contentItem: QQC2.Label {
+                            id: triggerLabel
+                            text: root.triggerDisplayText(modelData.modifier || 0, modelData.mouseButton || 0)
+                            elide: Text.ElideRight
+                            color: hoverHandler.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+                        }
+                        HoverHandler { id: hoverHandler }
+                        onClicked: {
+                            root.editingTriggerIndex = index
+                            multiInputCapture.startCapture()
+                        }
+                        QQC2.ToolTip.visible: hoverHandler.hovered && root.tooltipEnabled
+                        QQC2.ToolTip.text: i18n("Click to change this trigger")
+                        QQC2.ToolTip.delay: Kirigami.Units.toolTipDelay
                     }
 
                     QQC2.ToolButton {
@@ -196,7 +211,10 @@ Item {
                     text: i18n("Add…")
                     icon.name: "list-add"
                     enabled: root.triggers.length < root.maxTriggers
-                    onClicked: multiInputCapture.startCapture()
+                    onClicked: {
+                        root.editingTriggerIndex = -1
+                        multiInputCapture.startCapture()
+                    }
                     QQC2.ToolTip.visible: hovered && root.tooltipEnabled
                     QQC2.ToolTip.text: i18n("Add another activation trigger")
                 }
@@ -221,7 +239,7 @@ Item {
         }
     }
 
-    // InputCapture for multi-mode (adds to list instead of replacing)
+    // InputCapture for multi-mode (adds or replaces depending on editingTriggerIndex)
     InputCapture {
         id: multiInputCapture
         visible: false
@@ -229,31 +247,42 @@ Item {
         tooltipEnabled: root.tooltipEnabled
         onModifierCaptured: (mask) => {
             if (!root.allowMultiple) return
-            // Check for duplicate
-            for (var i = 0; i < root.triggers.length; i++) {
-                if ((root.triggers[i].modifier || 0) === mask && (root.triggers[i].mouseButton || 0) === 0)
-                    return
-            }
-            var newTriggers = []
-            for (var j = 0; j < root.triggers.length; j++)
-                newTriggers.push(root.triggers[j])
-            newTriggers.push({modifier: mask, mouseButton: 0})
-            root.triggersModified(newTriggers)
+            root.applyTriggerCapture(mask, 0)
         }
         onMouseCaptured: (bit) => {
             if (!root.allowMultiple) return
             if (root.acceptMode === root.acceptModeMetaOnly) return
-            // Check for duplicate
-            for (var i = 0; i < root.triggers.length; i++) {
-                if ((root.triggers[i].modifier || 0) === 0 && (root.triggers[i].mouseButton || 0) === bit)
-                    return
-            }
-            var newTriggers = []
-            for (var j = 0; j < root.triggers.length; j++)
-                newTriggers.push(root.triggers[j])
-            newTriggers.push({modifier: 0, mouseButton: bit})
-            root.triggersModified(newTriggers)
+            root.applyTriggerCapture(0, bit)
         }
+    }
+
+    /** Apply a captured trigger: replace at editingTriggerIndex, or append if -1 */
+    function applyTriggerCapture(modifier, mouseButton) {
+        var newTriggers = []
+        for (var i = 0; i < triggers.length; i++)
+            newTriggers.push(triggers[i])
+
+        if (editingTriggerIndex >= 0 && editingTriggerIndex < newTriggers.length) {
+            // Edit mode: replace the trigger at the edited index
+            newTriggers[editingTriggerIndex] = {modifier: modifier, mouseButton: mouseButton}
+        } else {
+            // Add mode: append
+            newTriggers.push({modifier: modifier, mouseButton: mouseButton})
+        }
+
+        // Deduplicate: remove any other entry that matches the new value
+        var deduped = []
+        var seen = {}
+        for (var j = 0; j < newTriggers.length; j++) {
+            var key = (newTriggers[j].modifier || 0) + ":" + (newTriggers[j].mouseButton || 0)
+            if (!seen[key]) {
+                seen[key] = true
+                deduped.push(newTriggers[j])
+            }
+        }
+
+        editingTriggerIndex = -1
+        triggersModified(deduped)
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
