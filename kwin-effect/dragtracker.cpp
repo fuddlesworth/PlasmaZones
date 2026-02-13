@@ -56,8 +56,7 @@ void DragTracker::pollWindowMoves()
         // Re-check if window has gone fullscreen during drag
         if (movingWindow->isFullScreen()) {
             qCInfo(lcEffect) << "Window went fullscreen mid-drag, stopping tracking";
-            m_draggedWindow = nullptr;
-            m_draggedWindowId.clear();
+            finishDrag(/*cancelled=*/true);
             return;
         }
         QPointF cursorPos = KWin::effects->cursorPos();
@@ -68,8 +67,12 @@ void DragTracker::pollWindowMoves()
     }
     // Detect end of drag
     else if (!movingWindow && m_draggedWindow) {
-        qCInfo(lcEffect) << "Window move finished (isUserMove went false)";
-        finishDrag();
+        // isUserMove went false without forceEnd — the interactive move was cancelled
+        // externally (e.g. Escape key, or compositor ended it). Treat as cancelled so
+        // the effect calls cancelSnap() instead of dragStopped(), preventing an
+        // unwanted snap to the zone the cursor was hovering over.
+        qCInfo(lcEffect) << "Window move cancelled (isUserMove went false without button release)";
+        finishDrag(/*cancelled=*/true);
     }
 }
 
@@ -84,10 +87,10 @@ void DragTracker::forceEnd(const QPointF& cursorPos)
     m_lastCursorPos = cursorPos;
     m_forceEndedWindow = m_draggedWindow;
 
-    finishDrag();
+    finishDrag(/*cancelled=*/false);
 }
 
-void DragTracker::finishDrag()
+void DragTracker::finishDrag(bool cancelled)
 {
     KWin::EffectWindow* windowToSnap = m_draggedWindow;
     QString windowIdToSnap = m_draggedWindowId;
@@ -96,7 +99,7 @@ void DragTracker::finishDrag()
     m_draggedWindow = nullptr;
     m_draggedWindowId.clear();
 
-    Q_EMIT dragStopped(windowToSnap, windowIdToSnap);
+    Q_EMIT dragStopped(windowToSnap, windowIdToSnap, cancelled);
 }
 
 void DragTracker::handleWindowClosed(KWin::EffectWindow* window)

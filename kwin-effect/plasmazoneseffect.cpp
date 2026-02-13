@@ -25,6 +25,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QKeyEvent>
 #include <QPointer>
 // QGuiApplication::queryKeyboardModifiers() doesn't work in KWin effects on Wayland
 // because the effect runs inside the compositor process. We use mouseChanged instead.
@@ -178,14 +179,32 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
                 callDragStarted(windowId, geometry);
+                // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
+                // Without this, Escape cancels the interactive move AND the overlay.
+                // With the grab, Escape only dismisses the overlay while the drag continues.
+                if (!m_keyboardGrabbed) {
+                    KWin::effects->grabKeyboard(this);
+                    m_keyboardGrabbed = true;
+                }
             });
     connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
             [this](const QString& windowId, const QPointF& cursorPos) {
                 callDragMoved(windowId, cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
             });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
-            [this](KWin::EffectWindow* w, const QString& windowId) {
-                callDragStopped(w, windowId);
+            [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
+                // Release keyboard grab before handling drag end
+                if (m_keyboardGrabbed) {
+                    KWin::effects->ungrabKeyboard();
+                    m_keyboardGrabbed = false;
+                }
+                if (cancelled) {
+                    // Drag was cancelled externally (e.g. window went fullscreen).
+                    // Tell the daemon to cancel rather than snap to the hovered zone.
+                    callCancelSnap();
+                } else {
+                    callDragStopped(w, windowId);
+                }
             });
 
     // Connect to window lifecycle signals
@@ -320,6 +339,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
+    if (m_keyboardGrabbed) {
+        KWin::effects->ungrabKeyboard();
+        m_keyboardGrabbed = false;
+    }
     m_pollTimer.stop();
     m_screenChangeDebounce.stop();
     // We no longer reserve/unreserve edges; the daemon disables KWin snap via config.
@@ -347,6 +370,21 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
 bool PlasmaZonesEffect::isActive() const
 {
     return m_dragTracker->isDragging();
+}
+
+void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
+{
+    if (e->type() == QEvent::KeyPress && e->key() == Qt::Key_Escape
+        && m_dragTracker->isDragging()) {
+        // The keyboard grab ensures this runs before KWin's MoveResizeFilter,
+        // so Escape never reaches the interactive move handler. The daemon
+        // hides the overlay and sets snapCancelled; the drag continues as
+        // a plain window move without zone snapping.
+        qCInfo(lcEffect) << "Escape pressed during drag — dismissing overlay, continuing drag";
+        callCancelSnap();
+    }
+    // All other keys are silently consumed by the grab. Modifier state is
+    // unaffected because mouseChanged reads xkb state directly.
 }
 
 void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
@@ -391,6 +429,12 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 {
+    // Release keyboard grab if the dragged window was closed
+    if (m_keyboardGrabbed && m_dragTracker->draggedWindow() == w) {
+        KWin::effects->ungrabKeyboard();
+        m_keyboardGrabbed = false;
+    }
+
     // Delegate to helpers
     m_dragTracker->handleWindowClosed(w);
 
@@ -1762,6 +1806,17 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
             }
         }
     });
+}
+
+void PlasmaZonesEffect::callCancelSnap()
+{
+    ensureDBusInterface();
+    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
+        return;
+    }
+
+    qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
+    m_dbusInterface->asyncCall(QStringLiteral("cancelSnap"));
 }
 
 void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method,

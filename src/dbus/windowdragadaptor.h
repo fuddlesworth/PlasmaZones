@@ -159,6 +159,7 @@ private:
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
+    bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
     bool m_zoneSelectorShown = false;

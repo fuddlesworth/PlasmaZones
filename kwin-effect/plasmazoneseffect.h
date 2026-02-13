@@ -59,6 +59,7 @@ public:
                      KWin::EffectWindow* w, int mask, QRegion region,
                      KWin::WindowPaintData& data) override;
     void postPaintWindow(KWin::EffectWindow* w) override;
+    void grabbedKeyboardEvent(QKeyEvent* e) override;
 
 private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
@@ -105,6 +106,7 @@ private:
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
+    void callCancelSnap();
     void callSnapToLastZone(KWin::EffectWindow* window);
     void ensureDBusInterface();
     void ensureWindowTrackingInterface();
@@ -270,6 +272,7 @@ private:
     // KWin effect on Wayland (QGuiApplication doesn't work here).
     Qt::KeyboardModifiers m_currentModifiers = Qt::NoModifier;
     Qt::MouseButtons m_currentMouseButtons = Qt::NoButton;
+    bool m_keyboardGrabbed = false;
 
     // D-Bus interfaces (lazy initialization)
     std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface

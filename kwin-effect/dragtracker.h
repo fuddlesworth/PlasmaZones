@@ -58,11 +58,13 @@ public:
 Q_SIGNALS:
     void dragStarted(KWin::EffectWindow* window, const QString& windowId, const QRectF& geometry);
     void dragMoved(const QString& windowId, const QPointF& cursorPos);
-    void dragStopped(KWin::EffectWindow* window, const QString& windowId);
+    void dragStopped(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
 
 private:
     // Clear drag state and emit dragStopped (shared by pollWindowMoves and forceEnd)
-    void finishDrag();
+    // cancelled = true when the drag ended externally (e.g. Escape cancelled interactive move)
+    // cancelled = false when the drag ended normally (mouse button released)
+    void finishDrag(bool cancelled);
 
     PlasmaZonesEffect* m_effect;
     KWin::EffectWindow* m_draggedWindow = nullptr;

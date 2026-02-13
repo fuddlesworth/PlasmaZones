@@ -151,6 +151,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_snapCancelled = false;
+    m_triggerReleasedAfterCancel = false;
     m_overlayShown = false;
     m_overlayScreen = nullptr;
     m_zoneSelectorShown = false;
@@ -497,8 +498,41 @@ void WindowDragAdaptor::handleSingleZoneModifier(int x, int y)
 
 void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
-    if (windowId != m_draggedWindowId || m_snapCancelled) {
+    if (windowId != m_draggedWindowId) {
         return;
+    }
+
+    // Parse modifiers early — needed for both retrigger check and normal processing.
+    // KWin Effect provides modifiers via the mouseChanged signal.
+    Qt::KeyboardModifiers mods;
+    if (modifiers != 0) {
+        mods = static_cast<Qt::KeyboardModifiers>(modifiers);
+    } else {
+        // Fallback: try Qt query (may not work on Wayland without focus)
+        mods = QGuiApplication::queryKeyboardModifiers();
+    }
+
+    if (m_snapCancelled) {
+        // Allow retriggering the overlay after Escape: the user must release the
+        // activation trigger and then press it again (a full release→press cycle).
+        const QVariantList triggers = m_settings->dragActivationTriggers();
+        const bool triggerHeld = anyTriggerHeld(triggers, mods, mouseButtons);
+
+        if (!triggerHeld) {
+            m_triggerReleasedAfterCancel = true;
+        } else if (m_triggerReleasedAfterCancel) {
+            // Trigger released and re-pressed: clear cancel, resume zone snapping
+            m_snapCancelled = false;
+            m_triggerReleasedAfterCancel = false;
+            registerCancelOverlayShortcut();
+            // Fall through to normal processing
+        } else {
+            return; // Trigger still held from before Escape — stay cancelled
+        }
+
+        if (m_snapCancelled) {
+            return; // Trigger released but not yet re-pressed
+        }
     }
 
     m_lastCursorX = cursorX;
@@ -507,15 +541,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Update mouse position for shader effects
     if (m_overlayService && m_overlayShown) {
         m_overlayService->updateMousePosition(cursorX, cursorY);
-    }
-
-    // KWin Effect provides modifiers via the mouseChanged signal.
-    Qt::KeyboardModifiers mods;
-    if (modifiers != 0) {
-        mods = static_cast<Qt::KeyboardModifiers>(modifiers);
-    } else {
-        // Fallback: try Qt query (may not work on Wayland without focus)
-        mods = QGuiApplication::queryKeyboardModifiers();
     }
 
     // Get modifier settings and current activation state (keyboard or mouse)
@@ -844,6 +869,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 void WindowDragAdaptor::cancelSnap()
 {
     m_snapCancelled = true;
+    m_triggerReleasedAfterCancel = false;
     m_currentZoneId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
@@ -905,7 +931,11 @@ void WindowDragAdaptor::registerCancelOverlayShortcut()
 void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 {
     if (m_cancelOverlayAction) {
-        KGlobalAccel::setGlobalShortcut(m_cancelOverlayAction, QKeySequence());
+        // removeAllShortcuts() fully deregisters the action from the kglobalaccel daemon,
+        // releasing the compositor-level key grab. The previous approach of setting an empty
+        // QKeySequence left the action registered with a stale grab on Wayland, causing Escape
+        // to remain intercepted system-wide after every window drag (see discussion #155).
+        KGlobalAccel::self()->removeAllShortcuts(m_cancelOverlayAction);
     }
 }
 
@@ -1035,6 +1065,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
     m_snapCancelled = false;
+    m_triggerReleasedAfterCancel = false;
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
