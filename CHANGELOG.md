@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-02-13
+
+### Fixed
+- RPM spec and Debian changelog no longer manually maintained — CI generates both from CHANGELOG.md via `generate-changelog.sh`
+- RPM spec Version field uses `0.0.0` placeholder (CI replaces from git tag)
+- Avoid literal `%changelog` in spec header comments (broke `sed` in changelog generator)
+
 ## [1.10.0] - 2026-02-13
 
 ### Added
