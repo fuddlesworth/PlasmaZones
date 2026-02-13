@@ -301,10 +301,6 @@ private:
     int m_minimumWindowHeight = 150;
     bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
 
-    // Mouse button configured for zone activation during drag (0=None, Qt::MouseButton bits)
-    // Loaded from daemon via D-Bus so forceEnd can fire on activation-button release.
-    int m_dragActivationMouseButton = 0;
-
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.
     // Reported to daemon via cursorScreenChanged D-Bus call.

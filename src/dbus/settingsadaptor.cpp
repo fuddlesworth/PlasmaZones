@@ -115,22 +115,6 @@ void SettingsAdaptor::initializeRegistry()
         return true;                                                                                                   \
     };
 
-    // Activation settings
-    REGISTER_BOOL_SETTING("shiftDragToActivate", shiftDragToActivate, setShiftDragToActivate) // Deprecated
-
-    // New modifier settings (enum as int)
-    m_getters[QStringLiteral("dragActivationModifier")] = [this]() {
-        return static_cast<int>(m_settings->dragActivationModifier());
-    };
-    m_setters[QStringLiteral("dragActivationModifier")] = [this](const QVariant& v) {
-        int mod = v.toInt();
-        if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
-            m_settings->setDragActivationModifier(static_cast<DragModifier>(mod));
-            return true;
-        }
-        return false;
-    };
-
     // Multi-zone modifier: hold this key to span windows across multiple zones
     m_getters[QStringLiteral("multiZoneModifier")] = [this]() {
         return static_cast<int>(m_settings->multiZoneModifier());
@@ -144,33 +128,25 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
 
-    // Activation by mouse button (0=None, Qt::MouseButton bits)
-    m_getters[QStringLiteral("dragActivationMouseButton")] = [this]() {
-        return m_settings->dragActivationMouseButton();
+    // Multi-zone triggers list (multi-bind)
+    m_getters[QStringLiteral("multiZoneTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->multiZoneTriggers());
     };
-    m_setters[QStringLiteral("dragActivationMouseButton")] = [this](const QVariant& v) {
-        int button = v.toInt();
-        if (button >= 0 && button <= 128) {
-            m_settings->setDragActivationMouseButton(button);
-            return true;
-        }
-        return false;
+    m_setters[QStringLiteral("multiZoneTriggers")] = [this](const QVariant& v) {
+        m_settings->setMultiZoneTriggers(v.toList());
+        return true;
     };
 
-    // Multi-zone mouse button (alternative to modifier)
-    m_getters[QStringLiteral("multiZoneMouseButton")] = [this]() {
-        return m_settings->multiZoneMouseButton();
+    // Drag activation triggers list (multi-bind)
+    m_getters[QStringLiteral("dragActivationTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->dragActivationTriggers());
     };
-    m_setters[QStringLiteral("multiZoneMouseButton")] = [this](const QVariant& v) {
-        int button = v.toInt();
-        if (button >= 0 && button <= 128) {
-            m_settings->setMultiZoneMouseButton(button);
-            return true;
-        }
-        return false;
+    m_setters[QStringLiteral("dragActivationTriggers")] = [this](const QVariant& v) {
+        m_settings->setDragActivationTriggers(v.toList());
+        return true;
     };
 
-    // Zone span modifier: hold this key for paint-to-span zone selection
+    // Zone span modifier (legacy single value)
     m_getters[QStringLiteral("zoneSpanModifier")] = [this]() {
         return static_cast<int>(m_settings->zoneSpanModifier());
     };
@@ -183,17 +159,13 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
 
-    // Zone span mouse button (alternative to modifier)
-    m_getters[QStringLiteral("zoneSpanMouseButton")] = [this]() {
-        return m_settings->zoneSpanMouseButton();
+    // Zone span triggers list (multi-bind)
+    m_getters[QStringLiteral("zoneSpanTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->zoneSpanTriggers());
     };
-    m_setters[QStringLiteral("zoneSpanMouseButton")] = [this](const QVariant& v) {
-        int button = v.toInt();
-        if (button >= 0 && button <= 128) {
-            m_settings->setZoneSpanMouseButton(button);
-            return true;
-        }
-        return false;
+    m_setters[QStringLiteral("zoneSpanTriggers")] = [this](const QVariant& v) {
+        m_settings->setZoneSpanTriggers(v.toList());
+        return true;
     };
 
     // Display settings

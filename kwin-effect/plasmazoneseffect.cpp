@@ -461,19 +461,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     m_currentMouseButtons = buttons;
 
     if (m_dragTracker->isDragging()) {
-        // Check if the configured activation button (e.g. RMB) was released.
-        // When a mouse button is used for zone activation, releasing it should
-        // lock the zone and commit the snap — the same way releasing a keyboard
-        // modifier would. The actual window placement defers (100 ms retry loop
-        // in applySnapGeometry) until isUserMove() clears when all buttons are
-        // released, but the zone decision is captured at this cursor position.
-        const auto activationBtn = Qt::MouseButton(m_dragActivationMouseButton);
-        const bool activationBtnReleased = m_dragActivationMouseButton != 0
-            && (oldbuttons & activationBtn) && !(buttons & activationBtn);
-
-        if (activationBtnReleased) {
-            m_dragTracker->forceEnd(pos);
-        } else if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {
+        if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {
             // Primary button released = drag is over. Force-end regardless of whether
             // other buttons (e.g. right-click for zone activation) are still held.
             //
@@ -486,7 +474,10 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             m_dragTracker->forceEnd(pos);
         } else if (modifiersChanged || buttonsChanged) {
             // Push modifier/button changes to daemon during drag immediately.
-            // Otherwise mouse activation would only update on the next move (e.g. 50 ms poll).
+            // This includes activation button press/release — the daemon shows/hides
+            // the overlay based on whether the activation trigger is currently held,
+            // matching keyboard modifier behavior (hold to show, release to hide,
+            // re-press to show again).
             QPointF cursorPos = KWin::effects->cursorPos();
             callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
         }
@@ -932,10 +923,9 @@ void PlasmaZonesEffect::loadExclusionSettings()
         int completed = 0;
         QDBusInterface* iface = nullptr;
     };
-    // Must match the number of asyncCall+watcher blocks below (currently 5:
-    // excludeTransientWindows, minimumWindowWidth, minimumWindowHeight,
-    // snapAssistEnabled, dragActivationMouseButton)
-    constexpr int settingsLoadTotalExpected = 5;
+    // Must match the number of asyncCall+watcher blocks below (currently 4:
+    // excludeTransientWindows, minimumWindowWidth, minimumWindowHeight, snapAssistEnabled)
+    constexpr int settingsLoadTotalExpected = 4;
     auto* loadState = new SettingsLoadState{0, settingsInterface};
 
     auto onSettingLoaded = [loadState](QDBusPendingCallWatcher* w) {
@@ -1011,23 +1001,6 @@ void PlasmaZonesEffect::loadExclusionSettings()
                 m_snapAssistEnabled = value.toBool();
             }
             qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
-        }
-    });
-
-    // Load dragActivationMouseButton (for activation-button-release snap trigger)
-    QDBusPendingCall mouseButtonCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("dragActivationMouseButton"));
-    auto* mouseButtonWatcher = new QDBusPendingCallWatcher(mouseButtonCall, this);
-    connect(mouseButtonWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
-        onSettingLoaded(w);
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            QVariant value = reply.value();
-            if (value.canConvert<QDBusVariant>()) {
-                m_dragActivationMouseButton = value.value<QDBusVariant>().variant().toInt();
-            } else {
-                m_dragActivationMouseButton = value.toInt();
-            }
-            qCDebug(lcEffect) << "Loaded dragActivationMouseButton:" << m_dragActivationMouseButton;
         }
     });
 

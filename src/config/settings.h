@@ -29,18 +29,16 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     // Activation settings
     Q_PROPERTY(bool shiftDragToActivate READ shiftDragToActivate WRITE setShiftDragToActivate NOTIFY
                    shiftDragToActivateChanged)
-    Q_PROPERTY(int dragActivationModifier READ dragActivationModifierInt WRITE setDragActivationModifierInt NOTIFY
-                   dragActivationModifierChanged)
-    Q_PROPERTY(int dragActivationMouseButton READ dragActivationMouseButton WRITE setDragActivationMouseButton NOTIFY
-                   dragActivationMouseButtonChanged)
+    Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
+                   dragActivationTriggersChanged)
     Q_PROPERTY(
         int multiZoneModifier READ multiZoneModifierInt WRITE setMultiZoneModifierInt NOTIFY multiZoneModifierChanged)
-    Q_PROPERTY(int multiZoneMouseButton READ multiZoneMouseButton WRITE setMultiZoneMouseButton NOTIFY
-                   multiZoneMouseButtonChanged)
+    Q_PROPERTY(QVariantList multiZoneTriggers READ multiZoneTriggers WRITE setMultiZoneTriggers NOTIFY
+                   multiZoneTriggersChanged)
     Q_PROPERTY(
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
-    Q_PROPERTY(int zoneSpanMouseButton READ zoneSpanMouseButton WRITE setZoneSpanMouseButton NOTIFY
-                   zoneSpanMouseButtonChanged)
+    Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
+                   zoneSpanTriggersChanged)
 
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -259,19 +257,8 @@ public:
     }
     void setShiftDragToActivate(bool enable) override;
 
-    DragModifier dragActivationModifier() const override
-    {
-        return m_dragActivationModifier;
-    }
-    void setDragActivationModifier(DragModifier modifier) override;
-    int dragActivationModifierInt() const
-    {
-        return static_cast<int>(m_dragActivationModifier);
-    }
-    void setDragActivationModifierInt(int modifier);
-
-    int dragActivationMouseButton() const override { return m_dragActivationMouseButton; }
-    void setDragActivationMouseButton(int button) override;
+    QVariantList dragActivationTriggers() const override { return m_dragActivationTriggers; }
+    void setDragActivationTriggers(const QVariantList& triggers) override;
 
     DragModifier multiZoneModifier() const override
     {
@@ -283,16 +270,16 @@ public:
         return static_cast<int>(m_multiZoneModifier);
     }
     void setMultiZoneModifierInt(int modifier);
-    int multiZoneMouseButton() const override { return m_multiZoneMouseButton; }
-    void setMultiZoneMouseButton(int button) override;
+    QVariantList multiZoneTriggers() const override { return m_multiZoneTriggers; }
+    void setMultiZoneTriggers(const QVariantList& triggers) override;
 
     DragModifier zoneSpanModifier() const override
     {
         return m_zoneSpanModifier;
     }
     void setZoneSpanModifier(DragModifier modifier) override;
-    int zoneSpanMouseButton() const override { return m_zoneSpanMouseButton; }
-    void setZoneSpanMouseButton(int button) override;
+    QVariantList zoneSpanTriggers() const override { return m_zoneSpanTriggers; }
+    void setZoneSpanTriggers(const QVariantList& triggers) override;
     int zoneSpanModifierInt() const
     {
         return static_cast<int>(m_zoneSpanModifier);
@@ -927,16 +914,33 @@ private:
     void loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern,
                               QString (&shortcuts)[9], const QString (&defaults)[9]);
 
+    /**
+     * @brief Load a trigger list from config JSON, with error handling and cap-at-4
+     * @param group KConfigGroup to read from
+     * @param key Config key for the JSON trigger list
+     * @param legacyModifier Fallback modifier enum value if no JSON exists
+     * @param legacyMouseButton Fallback mouse button if no JSON exists
+     * @return Parsed trigger list (capped at 4 entries)
+     */
+    static QVariantList loadTriggerList(const KConfigGroup& group, const QString& key,
+                                        int legacyModifier, int legacyMouseButton);
+
+    /**
+     * @brief Save a trigger list to config as compact JSON
+     * @param group KConfigGroup to write to
+     * @param key Config key for the JSON trigger list
+     * @param triggers The trigger list to serialize
+     */
+    static void saveTriggerList(KConfigGroup& group, const QString& key,
+                                const QVariantList& triggers);
+
     // Activation
     bool m_shiftDragToActivate = true; // Deprecated - kept for migration
-    // KWin Effect provides modifiers via mouseChanged signal
-    // Default: Alt+Drag to show zones (matches reset() function and common user expectation)
-    DragModifier m_dragActivationModifier = DragModifier::Alt; // Default: Alt for zone activation
-    int m_dragActivationMouseButton = 0; // 0=None, Qt::MouseButton bits (2=Right, 4=Middle, etc.)
+    QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
     DragModifier m_multiZoneModifier = DragModifier::AlwaysActive; // Default: always active for proximity snap
-    int m_multiZoneMouseButton = 0; // 0=None, Qt::MouseButton bits
+    QVariantList m_multiZoneTriggers; // [{modifier: int, mouseButton: int}, ...]
     DragModifier m_zoneSpanModifier = DragModifier::Meta;
-    int m_zoneSpanMouseButton = 0; // 0=None, Qt::MouseButton bits
+    QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
 
     // Display
     bool m_showZonesOnAllMonitors = false;

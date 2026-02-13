@@ -103,6 +103,19 @@ bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers
     }
 }
 
+bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers,
+                                        Qt::KeyboardModifiers mods, int mouseButtons) const
+{
+    for (const auto& t : triggers) {
+        const auto map = t.toMap();
+        const int mod = map.value(QStringLiteral("modifier"), 0).toInt();
+        const int btn = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        if (checkModifier(mod, mods) || (btn != 0 && (mouseButtons & btn) != 0))
+            return true;
+    }
+    return false;
+}
+
 void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y, double width, double height,
                                     const QString& appName, const QString& windowClass, int mouseButtons)
 {
@@ -134,7 +147,6 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_snapCancelled = false;
-    m_mouseActivationLatched = false;
     m_overlayShown = false;
     m_overlayScreen = nullptr;
     m_zoneSelectorShown = false;
@@ -503,47 +515,50 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     }
 
     // Get modifier settings and current activation state (keyboard or mouse)
-    int dragActivationMod = static_cast<int>(m_settings->dragActivationModifier());
-    int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
-    int zoneSpanMod = static_cast<int>(m_settings->zoneSpanModifier());
+    // Check all configured triggers (multi-bind support)
+    const QVariantList triggers = m_settings->dragActivationTriggers();
+    const bool zoneActivationHeld = anyTriggerHeld(triggers, mods, mouseButtons);
+
+    // Check all configured multi-zone triggers (multi-bind support)
+    const QVariantList multiZoneTriggers = m_settings->multiZoneTriggers();
+    const int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
     const bool multiZoneAlwaysOn = (multiZoneMod == static_cast<int>(DragModifier::AlwaysActive));
-    const int activationButton = m_settings->dragActivationMouseButton();
-    const bool activationByMouse = (activationButton != 0 && (mouseButtons & activationButton) != 0);
-    if (activationByMouse) {
-        m_mouseActivationLatched = true;
-    }
-    bool zoneActivationHeld = checkModifier(dragActivationMod, mods) || activationByMouse || m_mouseActivationLatched;
     // AlwaysActive should not independently activate the overlay;
     // it only enables proximity snap while the overlay is already open.
-    const int multiZoneButton = m_settings->multiZoneMouseButton();
-    const bool multiZoneByMouse = (multiZoneButton != 0 && (mouseButtons & multiZoneButton) != 0);
-    bool multiZoneModifierHeld = multiZoneAlwaysOn ? false : (checkModifier(multiZoneMod, mods) || multiZoneByMouse);
-    const int zoneSpanButton = m_settings->zoneSpanMouseButton();
-    const bool zoneSpanByMouse = (zoneSpanButton != 0 && (mouseButtons & zoneSpanButton) != 0);
-    bool zoneSpanModifierHeld = checkModifier(zoneSpanMod, mods) || zoneSpanByMouse;
+    const bool multiZoneModifierHeld = multiZoneAlwaysOn ? false
+        : anyTriggerHeld(multiZoneTriggers, mods, mouseButtons);
 
-    // Warn once per drag about modifier/mouse-button conflicts
+    // Check all configured zone span triggers (multi-bind support)
+    const QVariantList zoneSpanTriggers = m_settings->zoneSpanTriggers();
+    const bool zoneSpanModifierHeld = anyTriggerHeld(zoneSpanTriggers, mods, mouseButtons);
+
+    // Conflict detection: warn once per drag when same trigger appears in multiple lists
     if (!m_modifierConflictWarned) {
-        if (zoneSpanMod != 0 && zoneSpanMod == multiZoneMod) {
-            qCWarning(lcDbusWindow) << "zoneSpanModifier and multiZoneModifier are both set to"
-                                    << zoneSpanMod << "- multi-zone proximity mode will be unreachable";
-            m_modifierConflictWarned = true;
-        } else if (zoneSpanMod != 0 && zoneSpanMod == dragActivationMod) {
-            qCWarning(lcDbusWindow) << "zoneSpanModifier and dragActivationModifier are both set to"
-                                    << zoneSpanMod << "- single-zone mode will be unreachable";
-            m_modifierConflictWarned = true;
-        } else if (multiZoneButton != 0 && multiZoneButton == activationButton) {
-            qCWarning(lcDbusWindow) << "multiZoneMouseButton and dragActivationMouseButton are both set to"
-                                    << multiZoneButton << "- proximity snap will always fire with activation";
-            m_modifierConflictWarned = true;
-        } else if (zoneSpanButton != 0 && zoneSpanButton == activationButton) {
-            qCWarning(lcDbusWindow) << "zoneSpanMouseButton and dragActivationMouseButton are both set to"
-                                    << zoneSpanButton << "- paint-to-span will always fire with activation";
-            m_modifierConflictWarned = true;
-        } else if (multiZoneButton != 0 && zoneSpanButton != 0 && multiZoneButton == zoneSpanButton) {
-            qCWarning(lcDbusWindow) << "multiZoneMouseButton and zoneSpanMouseButton are both set to"
-                                    << multiZoneButton << "- proximity snap will be unreachable (zone span takes priority)";
-            m_modifierConflictWarned = true;
+        m_modifierConflictWarned = true;
+        for (const auto& at : triggers) {
+            const auto aMap = at.toMap();
+            const int aMod = aMap.value(QStringLiteral("modifier"), 0).toInt();
+            const int aBtn = aMap.value(QStringLiteral("mouseButton"), 0).toInt();
+            if (aMod == 0 && aBtn == 0)
+                continue;
+            for (const auto& mt : multiZoneTriggers) {
+                const auto mMap = mt.toMap();
+                if ((aMod != 0 && mMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
+                    || (aBtn != 0 && mMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
+                    qCDebug(lcDbusWindow) << "Trigger overlap: activation and multi-zone share trigger"
+                                          << "(mod:" << aMod << "btn:" << aBtn << ");"
+                                          << "multi-zone takes priority when both match";
+                }
+            }
+            for (const auto& st : zoneSpanTriggers) {
+                const auto sMap = st.toMap();
+                if ((aMod != 0 && sMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
+                    || (aBtn != 0 && sMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
+                    qCDebug(lcDbusWindow) << "Trigger overlap: activation and zone span share trigger"
+                                          << "(mod:" << aMod << "btn:" << aBtn << ");"
+                                          << "zone span takes priority when both match";
+                }
+            }
         }
     }
 
@@ -867,7 +882,6 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_draggedWindowId.clear();
         m_originalGeometry = QRect();
         m_snapCancelled = false;
-        m_mouseActivationLatched = false;
         m_wasSnapped = false;
     }
 
@@ -1017,7 +1031,6 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
     m_snapCancelled = false;
-    m_mouseActivationLatched = false;
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;

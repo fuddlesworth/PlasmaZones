@@ -234,6 +234,10 @@ Control {
             }
         }
 
+        onOpened: {
+            captureOverlay.contentItem.forceActiveFocus()
+        }
+
         onClosed: {
             if (root.capturing) {
                 root.capturing = false

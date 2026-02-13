@@ -38,23 +38,11 @@
       <min>0</min>
       <max>10</max>
     </entry>
-    <entry name="MultiZoneMouseButton" type="Int">
-      <label>Mouse button to activate proximity snap while dragging (0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, 32=Extra1, 64=Extra2, 128=Extra3). Alternative to modifier key.</label>
-      <default>0</default>
-      <min>0</min>
-      <max>128</max>
-    </entry>
     <entry name="ZoneSpanModifier" type="Int">
       <label>Modifier key for paint-to-span zone selection (0=Disabled,1=Shift,2=Ctrl,3=Alt,4=Meta,5=Ctrl+Alt,6=Ctrl+Shift,7=Alt+Shift,8=Always,9=Alt+Meta,10=Ctrl+Alt+Meta)</label>
       <default>4</default>
       <min>0</min>
       <max>10</max>
-    </entry>
-    <entry name="ZoneSpanMouseButton" type="Int">
-      <label>Mouse button for paint-to-span zone selection (0=None, 2=Right, 4=Middle, 8=Back, 16=Forward, 32=Extra1, 64=Extra2, 128=Extra3). Alternative to modifier key.</label>
-      <default>0</default>
-      <min>0</min>
-      <max>128</max>
     </entry>
   </group>
 

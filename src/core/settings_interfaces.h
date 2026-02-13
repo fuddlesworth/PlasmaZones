@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QColor>
+#include <QVariantList>
 
 namespace PlasmaZones {
 
@@ -71,18 +72,16 @@ public:
 
     virtual bool shiftDragToActivate() const = 0;
     virtual void setShiftDragToActivate(bool enable) = 0;
-    virtual DragModifier dragActivationModifier() const = 0;
-    virtual void setDragActivationModifier(DragModifier modifier) = 0;
-    virtual int dragActivationMouseButton() const = 0;
-    virtual void setDragActivationMouseButton(int button) = 0;
+    virtual QVariantList dragActivationTriggers() const = 0;
+    virtual void setDragActivationTriggers(const QVariantList& triggers) = 0;
     virtual DragModifier multiZoneModifier() const = 0;
     virtual void setMultiZoneModifier(DragModifier modifier) = 0;
-    virtual int multiZoneMouseButton() const = 0;
-    virtual void setMultiZoneMouseButton(int button) = 0;
+    virtual QVariantList multiZoneTriggers() const = 0;
+    virtual void setMultiZoneTriggers(const QVariantList& triggers) = 0;
     virtual DragModifier zoneSpanModifier() const = 0;
     virtual void setZoneSpanModifier(DragModifier modifier) = 0;
-    virtual int zoneSpanMouseButton() const = 0;
-    virtual void setZoneSpanMouseButton(int button) = 0;
+    virtual QVariantList zoneSpanTriggers() const = 0;
+    virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
 };
 
 /**

@@ -124,6 +124,8 @@ private:
 
     // Check if modifier matches setting
     bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const;
+    // Check if any trigger in a list matches current modifiers/mouse buttons
+    bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
 
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
@@ -157,7 +159,6 @@ private:
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
-    bool m_mouseActivationLatched = false; // Latches mouse-button activation until drag ends
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
     bool m_zoneSelectorShown = false;

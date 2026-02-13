@@ -143,12 +143,11 @@ public:
 Q_SIGNALS:
     void settingsChanged();
     void shiftDragToActivateChanged(); // Deprecated
-    void dragActivationModifierChanged();
-    void dragActivationMouseButtonChanged();
+    void dragActivationTriggersChanged();
     void multiZoneModifierChanged();
-    void multiZoneMouseButtonChanged();
+    void multiZoneTriggersChanged();
     void zoneSpanModifierChanged();
-    void zoneSpanMouseButtonChanged();
+    void zoneSpanTriggersChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
