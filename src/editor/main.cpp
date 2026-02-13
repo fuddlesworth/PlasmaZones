@@ -5,7 +5,7 @@
 
 #include "EditorController.h"
 #include "../core/logging.h"
-#include "../core/version.h"
+#include "version.h"
 #include "../daemon/rendering/zoneshaderitem.h"
 
 #include <QFile>

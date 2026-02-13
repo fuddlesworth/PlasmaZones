@@ -3,7 +3,7 @@
 
 #include "daemon.h"
 #include "../core/logging.h"
-#include "../core/version.h"
+#include "version.h"
 #include "rendering/zoneshaderitem.h"
 #include <QGuiApplication>
 #include <QCommandLineParser>
