@@ -7,6 +7,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-02-13
+
+### Added
+- **Multiple binds per action**: Configure up to 4 independent triggers for zone activation, proximity snap, and paint-to-span — e.g. Alt key + Right mouse button as separate triggers for different input devices ([#150])
+- Click-to-edit existing triggers in the KCM — click a trigger label to replace it in-place
+- AND semantics for combined modifier+button triggers (both must be held)
+- Conflict detection warns when the same trigger is used across multiple actions
+
+### Fixed
+- Multi-zone threshold setting not applied correctly ([#147])
+- Modifier shortcuts now exclude the activation key to prevent conflicts
+- Legacy config keys cleaned up on save (stale DragActivationModifier, mouse button keys removed)
+- Empty trigger list prevented — at least one trigger is always required per action
+
+### Changed
+- Settings stored as JSON trigger lists (automatic migration from single-value format)
+- KWin effect simplified — daemon handles all trigger matching via `anyTriggerHeld()`
+- D-Bus API: new `dragActivationTriggers`, `multiZoneTriggers`, `zoneSpanTriggers` list properties replace individual modifier/mouse button getters
+
 ## [1.9.5] - 2026-02-13
 
 ### Added

@@ -8,7 +8,7 @@
 # Version is set by CI from the git tag (e.g. v1.3.4 -> 1.3.4). Local builds use the value below.
 
 Name:           plasmazones
-Version:        1.9.5
+Version:        1.10.0
 Release:        1%{?dist}
 Summary:        FancyZones-style window tiling for KDE Plasma
 
@@ -169,6 +169,14 @@ echo ""
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
 
 %changelog
+* Thu Feb 13 2026 fuddlesworth - 1.10.0-1
+- Multiple binds per action: up to 4 independent triggers for zone activation,
+  proximity snap, and paint-to-span ([#150])
+- Click-to-edit existing triggers in-place
+- Backward-compatible migration from single modifier/mouse-button config
+- Modifier shortcuts exclude activation key
+- Multi-zone threshold setting applied correctly ([#147])
+
 * Thu Feb 13 2026 fuddlesworth - 1.9.5-1
 - Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
 - Force-end drag on mouse button release for safer drag lifecycle

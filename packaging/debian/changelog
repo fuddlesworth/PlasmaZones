@@ -1,3 +1,14 @@
+plasmazones (1.10.0-1) unstable; urgency=medium
+
+  * Multiple binds per action: up to 4 independent triggers for zone activation,
+    proximity snap, and paint-to-span ([#150])
+  * Click-to-edit existing triggers in-place (no add-then-delete workflow)
+  * Backward-compatible migration from single modifier/mouse-button config
+  * Modifier shortcuts exclude activation key
+  * Multi-zone threshold setting applied correctly ([#147])
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Thu, 13 Feb 2026 00:00:00 +0000
+
 plasmazones (1.9.5-1) unstable; urgency=medium
 
   * Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
