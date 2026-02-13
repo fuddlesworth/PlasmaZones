@@ -1113,6 +1113,17 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("PendingWindowScreenAssignments"),
                         QString::fromUtf8(QJsonDocument(pendingScreenAssignmentsObj).toJson(QJsonDocument::Compact)));
 
+    // Save active desktop assignments (for cross-restart persistence, same pattern as screens)
+    QJsonObject desktopAssignmentsObj;
+    for (auto it = m_service->desktopAssignments().constBegin(); it != m_service->desktopAssignments().constEnd(); ++it) {
+        if (it.value() > 0) {
+            QString stableId = Utils::extractStableId(it.key());
+            desktopAssignmentsObj[stableId] = it.value();
+        }
+    }
+    tracking.writeEntry(QStringLiteral("WindowDesktopAssignments"),
+                        QString::fromUtf8(QJsonDocument(desktopAssignmentsObj).toJson(QJsonDocument::Compact)));
+
     // Save pending desktop assignments
     QJsonObject pendingDesktopAssignmentsObj;
     for (auto it = m_service->pendingDesktopAssignments().constBegin(); it != m_service->pendingDesktopAssignments().constEnd(); ++it) {
@@ -1150,10 +1161,10 @@ void WindowTrackingAdaptor::saveState()
     for (auto it = m_service->preSnapGeometries().constBegin(); it != m_service->preSnapGeometries().constEnd(); ++it) {
         QString key = Utils::extractStableId(it.key());
         QJsonObject geomObj;
-        geomObj[QStringLiteral("x")] = it.value().x();
-        geomObj[QStringLiteral("y")] = it.value().y();
-        geomObj[QStringLiteral("width")] = it.value().width();
-        geomObj[QStringLiteral("height")] = it.value().height();
+        geomObj[QLatin1String("x")] = it.value().x();
+        geomObj[QLatin1String("y")] = it.value().y();
+        geomObj[QLatin1String("width")] = it.value().width();
+        geomObj[QLatin1String("height")] = it.value().height();
         geometriesObj[key] = geomObj;
     }
     tracking.writeEntry(QStringLiteral("PreSnapGeometries"),
@@ -1222,15 +1233,37 @@ void WindowTrackingAdaptor::loadState()
         tracking.readEntry(QStringLiteral("WindowZoneAssignments"), QString()));
     m_service->setPendingZoneAssignments(pendingZones);
 
-    // Load pending screen assignments
+    // Load screen assignments: merge active (WindowScreenAssignments) into pending
+    // (PendingWindowScreenAssignments) so that windows that were still open when the
+    // daemon last saved state retain their screen assignment after a daemon restart.
+    // Without this merge, the screen falls back to wherever KWin initially places the
+    // window (typically the primary display), causing the "wrong display" restore bug.
+    // This mirrors the zone-assignment merge pattern above.
     QHash<QString, QString> pendingScreens;
+
+    // First: load active screen assignments as a base layer
+    QString activeScreensJson = tracking.readEntry(QStringLiteral("WindowScreenAssignments"), QString());
+    if (!activeScreensJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(activeScreensJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isString() && !it.value().toString().isEmpty()) {
+                    pendingScreens[it.key()] = it.value().toString();
+                }
+            }
+        }
+    }
+
+    // Second: overlay with pending screen assignments (pending takes priority —
+    // these were explicitly saved when the window closed, so they're more recent)
     QString pendingScreensJson = tracking.readEntry(QStringLiteral("PendingWindowScreenAssignments"), QString());
     if (!pendingScreensJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(pendingScreensJson.toUtf8());
         if (doc.isObject()) {
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                if (it.value().isString()) {
+                if (it.value().isString() && !it.value().toString().isEmpty()) {
                     pendingScreens[it.key()] = it.value().toString();
                 }
             }
@@ -1238,15 +1271,33 @@ void WindowTrackingAdaptor::loadState()
     }
     m_service->setPendingScreenAssignments(pendingScreens);
 
-    // Load pending desktop assignments
+    // Load desktop assignments: merge active (WindowDesktopAssignments) into pending
+    // (PendingWindowDesktopAssignments) so that windows still open at daemon shutdown
+    // retain their virtual desktop context. Same merge pattern as screens above.
     QHash<QString, int> pendingDesktops;
+
+    // First: load active desktop assignments as a base layer
+    QString activeDesktopsJson = tracking.readEntry(QStringLiteral("WindowDesktopAssignments"), QString());
+    if (!activeDesktopsJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(activeDesktopsJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isDouble() && it.value().toInt() > 0) {
+                    pendingDesktops[it.key()] = it.value().toInt();
+                }
+            }
+        }
+    }
+
+    // Second: overlay with pending desktop assignments (pending takes priority)
     QString pendingDesktopsJson = tracking.readEntry(QStringLiteral("PendingWindowDesktopAssignments"), QString());
     if (!pendingDesktopsJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(pendingDesktopsJson.toUtf8());
         if (doc.isObject()) {
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                if (it.value().isDouble()) {
+                if (it.value().isDouble() && it.value().toInt() > 0) {
                     pendingDesktops[it.key()] = it.value().toInt();
                 }
             }
@@ -1304,8 +1355,8 @@ void WindowTrackingAdaptor::loadState()
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isObject()) {
                     QJsonObject geomObj = it.value().toObject();
-                    QRect geom(geomObj[QStringLiteral("x")].toInt(), geomObj[QStringLiteral("y")].toInt(),
-                               geomObj[QStringLiteral("width")].toInt(), geomObj[QStringLiteral("height")].toInt());
+                    QRect geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
+                               geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
                     if (geom.width() > 0 && geom.height() > 0) {
                         preSnapGeometries[it.key()] = geom;
                     }
