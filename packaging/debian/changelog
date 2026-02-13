@@ -1,3 +1,24 @@
+plasmazones (1.9.4-1) unstable; urgency=medium
+
+  * Zones can overlap Plasma panels set to autohide/dodge windows ([#148])
+  * Force-end drag on mouse button release for safer drag lifecycle
+  * Proximity snap always active by default (no modifier required)
+  * Compositor freeze: remove processEvents calls that deadlock with Wayland compositor during drag ([#152])
+  * Compositor stall on layout change: hide overlay/zone selector before layout switch, skip heavy QML updates for hidden windows
+  * Snap assist Escape not working: keep KGlobalAccel Escape shortcut registered through snap assist phase
+  * Snap assist not dismissing: dismiss on any window zone change (navigation, snap, unsnap, float toggle)
+  * Snap assist wrong window: use full windowId for per-instance floating/geometry tracking
+  * Snap assist Escape handling, dismiss on new drag, zone selector layout sync
+  * Paint-to-snap raycasting and shader highlight for multi-zone selection
+  * Mouse-button zone activation latches until drag ends (no flicker)
+  * Shortcut clear button resets to default instead of empty
+  * Inverted panel-hiding check for usable geometry
+  * KCM linker errors from missing kcfg sources
+  * Remove 66 dead code items across 48 files
+  * Remove dead multiZoneEnabled code
+
+ -- fuddlesworth <fuddlesworth@users.noreply.github.com>  Thu, 13 Feb 2026 00:00:00 +0000
+
 plasmazones (1.9.1-1) unstable; urgency=medium
 
   * Snap Assist: Aero Snap style window picker after snapping, allowing users to fill empty zones with unsnapped windows ([#95])
