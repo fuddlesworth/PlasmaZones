@@ -32,6 +32,7 @@
 #include <QQmlProperty>
 #include <QQuickWindow>
 #include <QQuickItem>
+#include <QKeyEvent>
 #include <QPointer>
 #include <QTimer>
 #include <QMutexLocker>
@@ -2910,6 +2911,10 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
     assertWindowOnScreen(m_snapAssistWindow, screen);
     m_snapAssistWindow->setGeometry(screen->geometry());
     m_snapAssistWindow->show();
+    // Ensure the window receives keyboard focus for Escape handling on Wayland.
+    // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
+    // but Qt may not set internal focus without an explicit activation request.
+    m_snapAssistWindow->requestActivate();
     qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenName << "zones=" << zonesList.size()
                       << "candidates=" << candidatesList.size();
 
@@ -2951,6 +2956,19 @@ void OverlayService::processNextThumbnailCapture()
     m_thumbnailService->captureWindowAsync(kwinHandle, 256);
 }
 
+bool OverlayService::eventFilter(QObject* obj, QEvent* event)
+{
+    if (obj == m_snapAssistWindow && event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape) {
+            // Defer destruction to avoid deleting the window from within its own event handler
+            QTimer::singleShot(0, this, &OverlayService::hideSnapAssist);
+            return true;
+        }
+    }
+    return QObject::eventFilter(obj, event);
+}
+
 void OverlayService::hideSnapAssist()
 {
     m_thumbnailCache.clear();
@@ -2989,6 +3007,11 @@ void OverlayService::createSnapAssistWindow()
     // coordinates before emitting (KWin effect needs global coordinates for moveResize)
     connect(window, SIGNAL(windowSelected(QString, QString, QString)), this,
             SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+
+    // Install event filter for reliable Escape key handling on Wayland.
+    // The QML Shortcut may not fire if the layer shell keyboard focus
+    // isn't fully reflected in Qt's internal focus model.
+    window->installEventFilter(this);
 
     m_snapAssistWindow = window;
     m_snapAssistScreen = screen;

@@ -127,6 +127,9 @@ public:
     bool isSnapAssistVisible() const override;
     void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
 
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
+
 public Q_SLOTS:
     void hideLayoutOsd();
     void hideNavigationOsd();

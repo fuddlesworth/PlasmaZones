@@ -111,6 +111,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         return;
     }
 
+    // Dismiss any visible snap assist overlay from a previous snap.
+    // The user is starting a new drag, so the previous snap assist is stale.
+    if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+        m_overlayService->hideSnapAssist();
+    }
+
     registerCancelOverlayShortcut();
     m_draggedWindowId = windowId;
     m_originalGeometry = QRect(qRound(x), qRound(y), qRound(width), qRound(height));
@@ -651,11 +657,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // Get the actual zone UUID from layout and zone index so navigation works
                     auto layoutUuidOpt = Utils::parseUuid(selectedLayoutId);
                     QString zoneUuid;
+                    Layout* selectedLayout = nullptr;
                     if (layoutUuidOpt) {
                         QUuid layoutUuid = *layoutUuidOpt;
-                        Layout* layout = m_layoutManager->layoutById(layoutUuid);
-                        if (layout && selectedZoneIndex >= 0 && selectedZoneIndex < layout->zones().size()) {
-                            Zone* zone = layout->zones().at(selectedZoneIndex);
+                        selectedLayout = m_layoutManager->layoutById(layoutUuid);
+                        if (selectedLayout && selectedZoneIndex >= 0 && selectedZoneIndex < selectedLayout->zones().size()) {
+                            Zone* zone = selectedLayout->zones().at(selectedZoneIndex);
                             if (zone) {
                                 zoneUuid = zone->id().toString();
                             }
@@ -672,6 +679,23 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // Record user-initiated snap (not auto-snap)
                     // This prevents auto-snapping windows that were never manually snapped by user
                     m_windowTracking->recordSnapIntent(windowId, true);
+
+                    // During drag, the C++ updateSelectorPosition path updates selection
+                    // state but does NOT emit manualLayoutSelected (only the QML hover
+                    // path does, which doesn't fire during drag). Activate the selected
+                    // layout directly so snap assist uses the correct layout's empty zones.
+                    // We intentionally skip manualLayoutSelected to avoid a layout OSD
+                    // flashing briefly before snap assist appears.
+                    if (selectedLayout) {
+                        Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(screen->name());
+                        if (currentLayout != selectedLayout) {
+                            m_layoutManager->assignLayout(screen->name(),
+                                m_layoutManager->currentVirtualDesktop(),
+                                m_layoutManager->currentActivity(),
+                                selectedLayout);
+                            m_layoutManager->setActiveLayout(selectedLayout);
+                        }
+                    }
                 }
             }
         }
@@ -783,6 +807,12 @@ void WindowDragAdaptor::cancelSnap()
     unregisterCancelOverlayShortcut();
     // Hide overlay and zone selector UI
     hideOverlayAndSelector();
+
+    // Also dismiss snap assist if visible (Escape pressed while snap assist is showing,
+    // e.g. due to KGlobalAccel unregistration race with the snap assist Shortcut)
+    if (m_overlayService && m_overlayService->isSnapAssistVisible()) {
+        m_overlayService->hideSnapAssist();
+    }
 }
 
 void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
