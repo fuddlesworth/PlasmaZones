@@ -171,7 +171,7 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
             Layout* effectiveLayout = nullptr;
             if (m_screen) {
                 effectiveLayout =
-                    m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
+                    m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
             }
             if (!effectiveLayout) {
                 effectiveLayout = layout;
@@ -190,7 +190,7 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
                     // 2. This assignment is for our screen
                     // 3. Layout is valid
                     // This prevents cascading updates during startup
-                    if (m_isDragging && m_screen && m_screen->name() == screenName && layout) {
+                    if (m_isDragging && m_screen && Utils::screenIdentifier(m_screen) == screenName && layout) {
                         setActiveLayoutId(layout->id().toString());
                     }
                 });
@@ -210,7 +210,7 @@ void ZoneSelectorController::setScreen(QScreen* screen)
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
+        Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -227,7 +227,7 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
             Layout* screenLayout =
-                m_layoutManager->layoutForScreen(m_screen->name(), m_currentVirtualDesktop, m_currentActivity);
+                m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }

@@ -5,6 +5,7 @@
 #include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
+#include "utils.h"
 #include "zone.h"
 
 #include <QColor>
@@ -154,6 +155,12 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
         return list;
     }
 
+    // Translate connector name to screen ID for allowedScreens matching
+    QString screenId;
+    if (!screenName.isEmpty()) {
+        screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
+    }
+
     // Track the active layout so we can guarantee it appears in the list
     // (prevents empty selector / broken cycling when active layout is hidden)
     Layout* activeLayout = layoutManager->activeLayout();
@@ -172,8 +179,8 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
         }
 
         // Tier 2: screen filter (unless active)
-        if (!isActive && !screenName.isEmpty() && !layout->allowedScreens().isEmpty()) {
-            if (!layout->allowedScreens().contains(screenName)) {
+        if (!isActive && !screenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
+            if (!layout->allowedScreens().contains(screenId)) {
                 continue;
             }
         }

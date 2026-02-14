@@ -33,6 +33,22 @@ ComboBox {
 
     model: root._buildModel()
 
+    // Allow popup to be wider than the combo box so long screen names aren't truncated
+    popup.width: Math.max(root.width, _longestItemWidth + Kirigami.Units.gridUnit * 3)
+
+    // Measure the widest item text using a hidden TextMetrics
+    readonly property real _longestItemWidth: {
+        let maxW = 0
+        if (root.model) {
+            for (let i = 0; i < root.model.length; ++i) {
+                _metrics.text = root.model[i].text || ""
+                maxW = Math.max(maxW, _metrics.advanceWidth)
+            }
+        }
+        return maxW
+    }
+    TextMetrics { id: _metrics; font: root.font }
+
     // Rebuild model when screens change (hotplug)
     Connections {
         target: root.kcm
@@ -72,6 +88,13 @@ ComboBox {
             for (let i = 0; i < root.kcm.screens.length; ++i) {
                 let s = root.kcm.screens[i]
                 let label = s.name || (i18n("Monitor") + " " + (i + 1))
+                let mfr = s.manufacturer || ""
+                let mdl = s.model || ""
+                let parts = [mfr, mdl].filter(function(s) { return s !== "" })
+                let displayInfo = parts.join(" ")
+                if (displayInfo) {
+                    label += " " + displayInfo
+                }
                 if (s.resolution) {
                     label += " (" + s.resolution + ")"
                 }

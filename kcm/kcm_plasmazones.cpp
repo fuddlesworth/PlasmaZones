@@ -38,6 +38,7 @@
 #include "../src/core/layout.h"
 #include "../src/core/logging.h"
 #include "../src/core/modifierutils.h"
+#include "../src/core/utils.h"
 #include "version.h"
 
 // Import static QML module for shared components
@@ -2116,15 +2117,26 @@ void KCMPlasmaZones::loadLayouts()
 
 void KCMPlasmaZones::onScreenLayoutChanged(const QString& screenName, const QString& layoutId)
 {
-    // When screen layout assignment changes externally, update our local state
+    // When screen layout assignment changes externally, update our local state.
+    // The signal carries a screen ID (EDID-based) from LayoutManager, but our
+    // local m_screenAssignments cache is keyed by connector names. Resolve back.
     if (screenName.isEmpty()) {
         return;
     }
 
-    if (layoutId.isEmpty()) {
-        m_screenAssignments.remove(screenName);
+    QString connectorName;
+    QScreen* screen = Utils::findScreenByIdOrName(screenName);
+    if (screen) {
+        connectorName = screen->name();
     } else {
-        m_screenAssignments[screenName] = layoutId;
+        // Screen not connected — fall back to original value
+        connectorName = screenName;
+    }
+
+    if (layoutId.isEmpty()) {
+        m_screenAssignments.remove(connectorName);
+    } else {
+        m_screenAssignments[connectorName] = layoutId;
     }
 
     Q_EMIT screenAssignmentsChanged();
@@ -2318,6 +2330,21 @@ void KCMPlasmaZones::refreshScreens()
                     screenInfo[QStringLiteral("name")] = screenName;
                     screenInfo[QStringLiteral("isPrimary")] = (screenName == primaryScreenName);
 
+                    // Include stable EDID-based screen ID from daemon
+                    if (jsonObj.contains(QStringLiteral("screenId"))) {
+                        screenInfo[QStringLiteral("screenId")] = jsonObj[QStringLiteral("screenId")].toString();
+                    } else {
+                        screenInfo[QStringLiteral("screenId")] = screenName;
+                    }
+
+                    // Forward manufacturer/model for display
+                    if (jsonObj.contains(QStringLiteral("manufacturer"))) {
+                        screenInfo[QStringLiteral("manufacturer")] = jsonObj[QStringLiteral("manufacturer")].toString();
+                    }
+                    if (jsonObj.contains(QStringLiteral("model"))) {
+                        screenInfo[QStringLiteral("model")] = jsonObj[QStringLiteral("model")].toString();
+                    }
+
                     // Create resolution string from geometry for QML display
                     if (jsonObj.contains(QStringLiteral("geometry"))) {
                         QJsonObject geom = jsonObj[QStringLiteral("geometry")].toObject();
@@ -2354,6 +2381,9 @@ void KCMPlasmaZones::refreshScreens()
             screenInfo[QStringLiteral("resolution")] = QStringLiteral("%1×%2")
                 .arg(screen->geometry().width())
                 .arg(screen->geometry().height());
+            screenInfo[QStringLiteral("manufacturer")] = screen->manufacturer();
+            screenInfo[QStringLiteral("model")] = screen->model();
+            screenInfo[QStringLiteral("screenId")] = screen->name();
             newScreens.append(screenInfo);
         }
     }
@@ -2511,7 +2541,8 @@ void KCMPlasmaZones::assignLayoutToScreenActivity(const QString& screenName, con
         return;
     }
 
-    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    // Use screenId|activity format to match daemon's getAllActivityAssignments() key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
 
     // Track this assignment in pending cache
     if (layoutId.isEmpty()) {
@@ -2536,7 +2567,8 @@ void KCMPlasmaZones::clearScreenActivityAssignment(const QString& screenName, co
 QString KCMPlasmaZones::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     // Check pending cache first (unsaved changes)
-    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    // Use screenId|activity format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
     if (m_pendingActivityAssignments.contains(key)) {
         return m_pendingActivityAssignments.value(key);
     }
@@ -2560,7 +2592,8 @@ QString KCMPlasmaZones::getLayoutForScreenActivity(const QString& screenName, co
 bool KCMPlasmaZones::hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     // Check pending cache first
-    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    // Use screenId|activity format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
     if (m_pendingActivityAssignments.contains(key)) {
         return true;
     }
@@ -2619,16 +2652,23 @@ void KCMPlasmaZones::setMonitorDisabled(const QString& screenName, bool disabled
     if (!m_settings || screenName.isEmpty()) {
         return;
     }
+    // Translate connector name to stable EDID-based screen ID for storage
+    QString id = Utils::screenIdForName(screenName);
     QStringList list = m_settings->disabledMonitors();
     if (disabled) {
-        if (!list.contains(screenName)) {
-            list.append(screenName);
+        if (!list.contains(id)) {
+            list.append(id);
             m_settings->setDisabledMonitors(list);
             Q_EMIT disabledMonitorsChanged();
             setNeedsSave(true);
         }
     } else {
-        if (list.removeAll(screenName) > 0) {
+        // Remove both screen ID and any legacy connector name entries
+        bool changed = list.removeAll(id) > 0;
+        if (id != screenName) {
+            changed |= list.removeAll(screenName) > 0;
+        }
+        if (changed) {
             m_settings->setDisabledMonitors(list);
             Q_EMIT disabledMonitorsChanged();
             setNeedsSave(true);
@@ -2639,7 +2679,7 @@ void KCMPlasmaZones::setMonitorDisabled(const QString& screenName, bool disabled
 // Per-screen zone selector settings
 QVariantMap KCMPlasmaZones::getPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->getPerScreenZoneSelectorSettings(screenName) : QVariantMap();
+    return m_settings ? m_settings->getPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : QVariantMap();
 }
 
 void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
@@ -2647,7 +2687,8 @@ void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, 
     if (!m_settings || screenName.isEmpty()) {
         return;
     }
-    m_settings->setPerScreenZoneSelectorSetting(screenName, key, value);
+    // Translate connector name to stable EDID-based screen ID for storage
+    m_settings->setPerScreenZoneSelectorSetting(Utils::screenIdForName(screenName), key, value);
     setNeedsSave(true);
 }
 
@@ -2656,13 +2697,13 @@ void KCMPlasmaZones::clearPerScreenZoneSelectorSettings(const QString& screenNam
     if (!m_settings || screenName.isEmpty()) {
         return;
     }
-    m_settings->clearPerScreenZoneSelectorSettings(screenName);
+    m_settings->clearPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName));
     setNeedsSave(true);
 }
 
 bool KCMPlasmaZones::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(screenName) : false;
+    return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : false;
 }
 
 void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
@@ -2673,7 +2714,9 @@ void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int 
     }
 
     // Cache the assignment locally - will be sent to daemon on Apply
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's getAllDesktopAssignments() key format
+    QString screenId = Utils::screenIdForName(screenName);
+    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
 
     if (layoutId.isEmpty()) {
         // Empty layoutId means clear - but we handle that in clearScreenDesktopAssignment
@@ -2705,7 +2748,9 @@ void KCMPlasmaZones::clearScreenDesktopAssignment(const QString& screenName, int
     }
 
     // Cache the clear locally - will be sent to daemon on Apply
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's getAllDesktopAssignments() key format
+    QString screenId = Utils::screenIdForName(screenName);
+    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
     m_pendingDesktopAssignments.remove(key);
     m_clearedDesktopAssignments.insert(key);
 
@@ -2721,7 +2766,8 @@ void KCMPlasmaZones::clearScreenDesktopAssignment(const QString& screenName, int
 QString KCMPlasmaZones::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     // Check pending cache first (unsaved changes)
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
     if (m_pendingDesktopAssignments.contains(key)) {
         return m_pendingDesktopAssignments.value(key);
     }
@@ -2744,7 +2790,8 @@ QString KCMPlasmaZones::getLayoutForScreenDesktop(const QString& screenName, int
 bool KCMPlasmaZones::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     // Check pending cache first (unsaved changes)
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
     if (m_pendingDesktopAssignments.contains(key)) {
         return true; // Has pending assignment
     }

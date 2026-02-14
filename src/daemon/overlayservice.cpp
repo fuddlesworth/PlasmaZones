@@ -593,7 +593,7 @@ void OverlayService::show()
             cursorScreen = Utils::primaryScreen();
         }
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(cursorScreen->name())) {
+        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(cursorScreen))) {
             return;
         }
     }
@@ -616,7 +616,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             cursorScreen = Utils::primaryScreen();
         }
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
-        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(cursorScreen->name())) {
+        if (cursorScreen && m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(cursorScreen))) {
             return;
         }
     }
@@ -666,7 +666,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
             continue;
         }
         // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
+        if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
             continue;
         }
 
@@ -715,7 +715,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
             destroyOverlayWindow(screen);
         }
         for (QScreen* screen : screensToRecreate) {
-            if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
+            if (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
                 createOverlayWindow(screen);
                 updateOverlayWindow(screen);
                 if (auto* window = m_overlayWindows.value(screen)) {
@@ -817,14 +817,14 @@ void OverlayService::updateSettings(ISettings* settings)
     // Hide overlay and zone selector on monitors that are now disabled
     if (m_settings) {
         for (auto* screen : m_overlayWindows.keys()) {
-            if (m_settings->isMonitorDisabled(screen->name())) {
+            if (m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
                 if (auto* window = m_overlayWindows.value(screen)) {
                     window->hide();
                 }
             }
         }
         for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings->isMonitorDisabled(screen->name())) {
+            if (m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
                 if (auto* window = m_zoneSelectorWindows.value(screen)) {
                     window->hide();
                 }
@@ -834,7 +834,7 @@ void OverlayService::updateSettings(ISettings* settings)
 
     if (m_visible) {
         for (auto* screen : m_overlayWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
+            if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
                 continue;
             }
             updateOverlayWindow(screen);
@@ -847,7 +847,7 @@ void OverlayService::updateSettings(ISettings* settings)
     // Skip disabled monitors.
     if (!m_zoneSelectorWindows.isEmpty()) {
         for (auto* screen : m_zoneSelectorWindows.keys()) {
-            if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
+            if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
                 continue;
             }
             updateZoneSelectorWindow(screen);
@@ -978,7 +978,7 @@ void OverlayService::setSettings(ISettings* settings)
 
                         // Recreate windows with correct type per-screen
                         for (QScreen* screen : screens) {
-                            if (!m_settings || !m_settings->isMonitorDisabled(screen->name())) {
+                            if (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
                                 createOverlayWindow(screen);
                                 updateOverlayWindow(screen);
                                 if (wasVisible && m_overlayWindows.value(screen)) {
@@ -1091,7 +1091,7 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
     Layout* screenLayout = nullptr;
     if (m_layoutManager && screen) {
         screenLayout =
-            m_layoutManager->layoutForScreen(screen->name(), m_currentVirtualDesktop, m_currentActivity);
+            m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity);
         if (!screenLayout) {
             screenLayout = m_layoutManager->defaultLayout();
         }
@@ -1169,7 +1169,7 @@ void OverlayService::assertWindowOnScreen(QWindow* window, QScreen* screen)
 
 void OverlayService::handleScreenAdded(QScreen* screen)
 {
-    if (m_visible && screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
+    if (m_visible && screen && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
         createOverlayWindow(screen);
         updateOverlayWindow(screen);
         if (auto* window = m_overlayWindows.value(screen)) {
@@ -1208,7 +1208,7 @@ void OverlayService::showZoneSelector(QScreen* targetScreen)
             continue;
         }
         // Skip monitors where PlasmaZones is disabled
-        if (m_settings && m_settings->isMonitorDisabled(screen->name())) {
+        if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
             continue;
         }
         if (!m_zoneSelectorWindows.contains(screen)) {
@@ -1278,7 +1278,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
         const int layoutCount = layouts.size();
         const ZoneSelectorConfig selectorConfig = m_settings
-            ? m_settings->resolvedZoneSelectorConfig(screen->name())
+            ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
             : defaultZoneSelectorConfig();
         const ZoneSelectorLayout layout = computeZoneSelectorLayout(selectorConfig, screen, layoutCount);
 
@@ -1398,7 +1398,7 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
 
     // Build resolved per-screen config
     const ZoneSelectorConfig config = m_settings
-        ? m_settings->resolvedZoneSelectorConfig(screen->name())
+        ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
         : defaultZoneSelectorConfig();
     const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
@@ -1434,7 +1434,7 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     const int layoutCount = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screen->name(), m_currentVirtualDesktop, m_currentActivity).size();
+        m_layoutManager, Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity).size();
     updateZoneSelectorWindowLayout(window, screen, config, m_settings, layoutCount);
 
     window->setVisible(false);
@@ -1474,7 +1474,7 @@ void OverlayService::updateZoneSelectorWindow(QScreen* screen)
 
     // Build resolved per-screen config
     const ZoneSelectorConfig config = m_settings
-        ? m_settings->resolvedZoneSelectorConfig(screen->name())
+        ? m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen))
         : defaultZoneSelectorConfig();
 
     // Update settings-based properties

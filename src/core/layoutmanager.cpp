@@ -4,6 +4,7 @@
 #include "layoutmanager.h"
 #include "constants.h"
 #include "logging.h"
+#include "utils.h"
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -86,10 +87,16 @@ Layout* LayoutManager::defaultLayout() const
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
 // Filters out hidden layouts and respects visibility allow-lists
-Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
+Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
 {
     if (m_layouts.isEmpty()) {
         return nullptr;
+    }
+
+    // Translate connector name to screen ID for allowedScreens matching
+    QString resolvedScreenId;
+    if (!screenId.isEmpty()) {
+        resolvedScreenId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
     }
 
     // Build filtered list of visible layouts for current context
@@ -98,8 +105,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
         if (!l || l->hiddenFromSelector()) {
             continue;
         }
-        if (!screenName.isEmpty() && !l->allowedScreens().isEmpty()) {
-            if (!l->allowedScreens().contains(screenName)) {
+        if (!resolvedScreenId.isEmpty() && !l->allowedScreens().isEmpty()) {
+            if (!l->allowedScreens().contains(resolvedScreenId)) {
                 continue;
             }
         }
@@ -122,8 +129,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
 
     // Use per-screen layout as reference for cycling so each screen cycles independently
     Layout* currentLayout = nullptr;
-    if (!screenName.isEmpty()) {
-        currentLayout = layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
+    if (!resolvedScreenId.isEmpty()) {
+        currentLayout = layoutForScreen(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -149,8 +156,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
     // activeLayoutChanged (needed for resnap buffer population, stale assignment
     // cleanup, OSD, etc.). Per-screen assignments are still respected by
     // resolveLayoutForScreen() since they take priority over the global active.
-    if (!screenName.isEmpty()) {
-        assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, newLayout);
+    if (!resolvedScreenId.isEmpty()) {
+        assignLayout(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity, newLayout);
     }
     setActiveLayout(newLayout);
     return newLayout;
@@ -276,9 +283,9 @@ void LayoutManager::setActiveLayoutById(const QUuid& id)
     setActiveLayout(layoutById(id));
 }
 
-void LayoutManager::assignLayout(const QString& screenName, int virtualDesktop, const QString& activity, Layout* layout)
+void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity, Layout* layout)
 {
-    LayoutAssignmentKey key{screenName, virtualDesktop, activity};
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
 
     if (layout) {
         m_assignments[key] = layout->id();
@@ -286,34 +293,44 @@ void LayoutManager::assignLayout(const QString& screenName, int virtualDesktop, 
         m_assignments.remove(key);
     }
 
-    Q_EMIT layoutAssigned(screenName, layout);
+    Q_EMIT layoutAssigned(screenId, layout);
     saveAssignments();
 }
 
-void LayoutManager::assignLayoutById(const QString& screenName, int virtualDesktop, const QString& activity,
+void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                      const QUuid& layoutId)
 {
-    assignLayout(screenName, virtualDesktop, activity, layoutById(layoutId));
+    assignLayout(screenId, virtualDesktop, activity, layoutById(layoutId));
 }
 
-Layout* LayoutManager::layoutForScreen(const QString& screenName, int virtualDesktop, const QString& activity) const
+Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     // Try exact match first
-    LayoutAssignmentKey exactKey{screenName, virtualDesktop, activity};
+    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
         return layoutById(m_assignments[exactKey]);
     }
 
     // Try screen + desktop (any activity)
-    LayoutAssignmentKey desktopKey{screenName, virtualDesktop, QString()};
+    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
         return layoutById(m_assignments[desktopKey]);
     }
 
     // Try screen only (any desktop, any activity)
-    LayoutAssignmentKey screenKey{screenName, 0, QString()};
+    LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
         return layoutById(m_assignments[screenKey]);
+    }
+
+    // Fallback: if screenId looks like a connector name (no colons), try resolving
+    // to a screen ID and looking up again. This handles callers that haven't been
+    // migrated to pass screen IDs yet.
+    if (Utils::isConnectorName(screenId)) {
+        QString resolved = Utils::screenIdForName(screenId);
+        if (resolved != screenId) {
+            return layoutForScreen(resolved, virtualDesktop, activity);
+        }
     }
 
     // No assignment: use defaultLayoutId from settings when set, else first layout (by defaultOrder)
@@ -325,14 +342,14 @@ Layout* LayoutManager::layoutForScreen(const QString& screenName, int virtualDes
     return m_layouts.isEmpty() ? nullptr : m_layouts.first();
 }
 
-void LayoutManager::clearAssignment(const QString& screenName, int virtualDesktop, const QString& activity)
+void LayoutManager::clearAssignment(const QString& screenId, int virtualDesktop, const QString& activity)
 {
-    assignLayout(screenName, virtualDesktop, activity, nullptr);
+    assignLayout(screenId, virtualDesktop, activity, nullptr);
 }
 
-bool LayoutManager::hasExplicitAssignment(const QString& screenName, int virtualDesktop, const QString& activity) const
+bool LayoutManager::hasExplicitAssignment(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
-    LayoutAssignmentKey key{screenName, virtualDesktop, activity};
+    LayoutAssignmentKey key{screenId, virtualDesktop, activity};
     return m_assignments.contains(key);
 }
 
@@ -344,15 +361,15 @@ Layout* LayoutManager::layoutForShortcut(int number) const
     return nullptr;
 }
 
-void LayoutManager::applyQuickLayout(int number, const QString& screenName)
+void LayoutManager::applyQuickLayout(int number, const QString& screenId)
 {
-    qCInfo(lcLayout) << "applyQuickLayout called: number=" << number << "screen=" << screenName;
+    qCInfo(lcLayout) << "applyQuickLayout called: number=" << number << "screen=" << screenId;
 
     auto layout = layoutForShortcut(number);
     if (layout) {
         qCDebug(lcLayout) << "Found layout for shortcut" << number << ":" << layout->name();
         // Assign to current monitor + current virtual desktop + current activity (not global default)
-        assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
+        assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, layout);
         setActiveLayout(layout);
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
@@ -362,7 +379,7 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenName)
             layout = m_layouts.at(number - 1);
             if (layout) {
                 qCInfo(lcLayout) << "Using fallback layout:" << layout->name();
-                assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
+                assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, layout);
                 setActiveLayout(layout);
             }
         } else {
@@ -447,21 +464,21 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignm
     // Set new assignments
     int count = 0;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenName = it.key();
+        const QString& screenId = it.key();
         const QUuid& layoutId = it.value();
 
-        if (screenName.isEmpty()) {
-            qCWarning(lcLayout) << "Skipping assignment with empty screen name";
+        if (screenId.isEmpty()) {
+            qCWarning(lcLayout) << "Skipping assignment with empty screen ID";
             continue;
         }
-        if (shouldSkipLayoutAssignment(layoutId, QStringLiteral("screen ") + screenName)) {
+        if (shouldSkipLayoutAssignment(layoutId, QStringLiteral("screen ") + screenId)) {
             continue;
         }
 
-        LayoutAssignmentKey key{screenName, 0, QString()};
+        LayoutAssignmentKey key{screenId, 0, QString()};
         m_assignments[key] = layoutId;
         ++count;
-        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenName;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
     }
 
     saveAssignments();
@@ -482,23 +499,23 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QU
     // Set new assignments
     int count = 0;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenName = it.key().first;
+        const QString& screenId = it.key().first;
         int virtualDesktop = it.key().second;
         const QUuid& layoutId = it.value();
 
-        if (screenName.isEmpty() || virtualDesktop < 1) {
-            qCWarning(lcLayout) << "Skipping invalid desktop assignment:" << screenName << virtualDesktop;
+        if (screenId.isEmpty() || virtualDesktop < 1) {
+            qCWarning(lcLayout) << "Skipping invalid desktop assignment:" << screenId << virtualDesktop;
             continue;
         }
-        QString context = QStringLiteral("%1 desktop %2").arg(screenName).arg(virtualDesktop);
+        QString context = QStringLiteral("%1 desktop %2").arg(screenId).arg(virtualDesktop);
         if (shouldSkipLayoutAssignment(layoutId, context)) {
             continue;
         }
 
-        LayoutAssignmentKey key{screenName, virtualDesktop, QString()};
+        LayoutAssignmentKey key{screenId, virtualDesktop, QString()};
         m_assignments[key] = layoutId;
         ++count;
-        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenName << "desktop" << virtualDesktop;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
     }
 
     saveAssignments();
@@ -519,23 +536,23 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
     // Set new assignments
     int count = 0;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        const QString& screenName = it.key().first;
+        const QString& screenId = it.key().first;
         const QString& activityId = it.key().second;
         const QUuid& layoutId = it.value();
 
-        if (screenName.isEmpty() || activityId.isEmpty()) {
-            qCWarning(lcLayout) << "Skipping invalid activity assignment:" << screenName << activityId;
+        if (screenId.isEmpty() || activityId.isEmpty()) {
+            qCWarning(lcLayout) << "Skipping invalid activity assignment:" << screenId << activityId;
             continue;
         }
-        QString context = QStringLiteral("%1 activity %2").arg(screenName, activityId);
+        QString context = QStringLiteral("%1 activity %2").arg(screenId, activityId);
         if (shouldSkipLayoutAssignment(layoutId, context)) {
             continue;
         }
 
-        LayoutAssignmentKey key{screenName, 0, activityId};
+        LayoutAssignmentKey key{screenId, 0, activityId};
         m_assignments[key] = layoutId;
         ++count;
-        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenName << "activity" << activityId;
+        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
     }
 
     saveAssignments();
@@ -550,7 +567,7 @@ QHash<QPair<QString, int>, QUuid> LayoutManager::desktopAssignments() const
         const LayoutAssignmentKey& key = it.key();
         // Per-desktop: virtualDesktop > 0 and activity is empty
         if (key.virtualDesktop > 0 && key.activity.isEmpty()) {
-            result[qMakePair(key.screenName, key.virtualDesktop)] = it.value();
+            result[qMakePair(key.screenId, key.virtualDesktop)] = it.value();
         }
     }
 
@@ -565,21 +582,21 @@ QHash<QPair<QString, QString>, QUuid> LayoutManager::activityAssignments() const
         const LayoutAssignmentKey& key = it.key();
         // Per-activity: activity is non-empty (for any desktop value)
         if (!key.activity.isEmpty()) {
-            result[qMakePair(key.screenName, key.activity)] = it.value();
+            result[qMakePair(key.screenId, key.activity)] = it.value();
         }
     }
 
     return result;
 }
 
-void LayoutManager::cycleToPreviousLayout(const QString& screenName)
+void LayoutManager::cycleToPreviousLayout(const QString& screenId)
 {
-    cycleLayoutImpl(screenName, -1);
+    cycleLayoutImpl(screenId, -1);
 }
 
-void LayoutManager::cycleToNextLayout(const QString& screenName)
+void LayoutManager::cycleToNextLayout(const QString& screenId)
 {
-    cycleLayoutImpl(screenName, +1);
+    cycleLayoutImpl(screenId, +1);
 }
 
 void LayoutManager::createBuiltInLayouts()
@@ -828,7 +845,12 @@ void LayoutManager::loadAssignments()
         }
 
         const auto obj = value.toObject();
-        LayoutAssignmentKey key{obj[JsonKeys::Screen].toString(), obj[JsonKeys::Desktop].toInt(),
+        // Prefer screenId (EDID-based); fall back to screen (connector name) for legacy configs
+        QString sid = obj[JsonKeys::ScreenId].toString();
+        if (sid.isEmpty()) {
+            sid = obj[JsonKeys::Screen].toString();
+        }
+        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(),
                                 obj[JsonKeys::Activity].toString()};
 
         const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
@@ -867,7 +889,7 @@ void LayoutManager::loadAssignments()
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         Layout* layout = layoutById(it.value());
         QString layoutName = layout ? layout->name() : QStringLiteral("(unknown)");
-        qCDebug(lcLayout) << "  Assignment screen= " << it.key().screenName
+        qCDebug(lcLayout) << "  Assignment screenId= " << it.key().screenId
                          << " desktop= " << it.key().virtualDesktop
                          << " activity= " << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
                          << " layout= " << layoutName;
@@ -880,11 +902,14 @@ void LayoutManager::saveAssignments()
 
     QJsonObject root;
 
-    // Save assignments
+    // Save assignments (write both screenId and screen for backward compat)
     QJsonArray assignmentsArray;
     for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
         QJsonObject obj;
-        obj[JsonKeys::Screen] = it.key().screenName;
+        obj[JsonKeys::ScreenId] = it.key().screenId;
+        // Write connector name for backward compat and debugging
+        QString connectorName = Utils::screenNameForId(it.key().screenId);
+        obj[JsonKeys::Screen] = connectorName.isEmpty() ? it.key().screenId : connectorName;
         obj[JsonKeys::Desktop] = it.key().virtualDesktop;
         obj[JsonKeys::Activity] = it.key().activity;
         obj[JsonKeys::LayoutId] = it.value().toString();

@@ -855,7 +855,7 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenName));
     if (!layout) {
         Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_active_layout"), QString(), QString(), QString());
         return;
@@ -1094,20 +1094,20 @@ void WindowTrackingAdaptor::saveState()
     tracking.writeEntry(QStringLiteral("WindowZoneAssignments"),
                         QString::fromUtf8(QJsonDocument(assignmentsObj).toJson(QJsonDocument::Compact)));
 
-    // Save screen assignments
+    // Save screen assignments (translate connector names to stable screen IDs for persistence)
     QJsonObject screenAssignmentsObj;
     for (auto it = m_service->screenAssignments().constBegin(); it != m_service->screenAssignments().constEnd(); ++it) {
         QString stableId = Utils::extractStableId(it.key());
-        screenAssignmentsObj[stableId] = it.value();
+        screenAssignmentsObj[stableId] = Utils::screenIdForName(it.value());
     }
     tracking.writeEntry(QStringLiteral("WindowScreenAssignments"),
                         QString::fromUtf8(QJsonDocument(screenAssignmentsObj).toJson(QJsonDocument::Compact)));
 
-    // Save pending screen assignments
+    // Save pending screen assignments (translate to stable screen IDs)
     QJsonObject pendingScreenAssignmentsObj;
     for (auto it = m_service->pendingScreenAssignments().constBegin(); it != m_service->pendingScreenAssignments().constEnd(); ++it) {
         if (!it.value().isEmpty()) {
-            pendingScreenAssignmentsObj[it.key()] = it.value();
+            pendingScreenAssignmentsObj[it.key()] = Utils::screenIdForName(it.value());
         }
     }
     tracking.writeEntry(QStringLiteral("PendingWindowScreenAssignments"),
@@ -1200,12 +1200,12 @@ void WindowTrackingAdaptor::saveState()
                         QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
     // Save pre-float screen assignments (for unfloating to correct monitor).
-    // Same stable ID conversion as above.
+    // Same stable ID conversion as above, plus translate to screen IDs.
     QJsonObject preFloatScreensObj;
     for (auto it = m_service->preFloatScreenAssignments().constBegin();
          it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
         QString key = Utils::extractStableId(it.key());
-        preFloatScreensObj[key] = it.value();
+        preFloatScreensObj[key] = Utils::screenIdForName(it.value());
     }
     tracking.writeEntry(QStringLiteral("PreFloatScreenAssignments"),
                         QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
@@ -1242,6 +1242,7 @@ void WindowTrackingAdaptor::loadState()
     QHash<QString, QString> pendingScreens;
 
     // First: load active screen assignments as a base layer
+    // Values may be screen IDs (new) or connector names (legacy) — resolve to current connector name
     QString activeScreensJson = tracking.readEntry(QStringLiteral("WindowScreenAssignments"), QString());
     if (!activeScreensJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(activeScreensJson.toUtf8());
@@ -1249,7 +1250,15 @@ void WindowTrackingAdaptor::loadState()
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isString() && !it.value().toString().isEmpty()) {
-                    pendingScreens[it.key()] = it.value().toString();
+                    QString storedScreen = it.value().toString();
+                    // Translate screen ID to connector name; legacy connector names pass through
+                    if (!Utils::isConnectorName(storedScreen)) {
+                        QString connectorName = Utils::screenNameForId(storedScreen);
+                        if (!connectorName.isEmpty()) {
+                            storedScreen = connectorName;
+                        }
+                    }
+                    pendingScreens[it.key()] = storedScreen;
                 }
             }
         }
@@ -1264,7 +1273,14 @@ void WindowTrackingAdaptor::loadState()
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isString() && !it.value().toString().isEmpty()) {
-                    pendingScreens[it.key()] = it.value().toString();
+                    QString storedScreen = it.value().toString();
+                    if (!Utils::isConnectorName(storedScreen)) {
+                        QString connectorName = Utils::screenNameForId(storedScreen);
+                        if (!connectorName.isEmpty()) {
+                            storedScreen = connectorName;
+                        }
+                    }
+                    pendingScreens[it.key()] = storedScreen;
                 }
             }
         }
@@ -1396,6 +1412,7 @@ void WindowTrackingAdaptor::loadState()
     m_service->setPreFloatZoneAssignments(preFloatZones);
 
     // Load pre-float screen assignments (for unfloating to correct monitor)
+    // Values may be screen IDs (new) or connector names (legacy) — resolve to current connector name
     QHash<QString, QString> preFloatScreens;
     QString preFloatScreensJson = tracking.readEntry(QStringLiteral("PreFloatScreenAssignments"), QString());
     if (!preFloatScreensJson.isEmpty()) {
@@ -1404,7 +1421,14 @@ void WindowTrackingAdaptor::loadState()
             QJsonObject obj = doc.object();
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isString()) {
-                    preFloatScreens[it.key()] = it.value().toString();
+                    QString storedScreen = it.value().toString();
+                    if (!Utils::isConnectorName(storedScreen)) {
+                        QString connectorName = Utils::screenNameForId(storedScreen);
+                        if (!connectorName.isEmpty()) {
+                            storedScreen = connectorName;
+                        }
+                    }
+                    preFloatScreens[it.key()] = storedScreen;
                 }
             }
         }
@@ -1500,7 +1524,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
     for (QScreen* screen : Utils::allScreens()) {
-        Layout* layout = m_layoutManager->layoutForScreen(screen->name(), currentDesktop, m_layoutManager->currentActivity());
+        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop, m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
             return screen->name();
         }

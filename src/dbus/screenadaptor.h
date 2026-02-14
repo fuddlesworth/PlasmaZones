@@ -33,6 +33,7 @@ public Q_SLOTS:
     QStringList getScreens();
     QString getScreenInfo(const QString& screenName);
     QString getPrimaryScreen();
+    QString getScreenId(const QString& screenName);
 
 Q_SIGNALS:
     void screenAdded(const QString& screenName);

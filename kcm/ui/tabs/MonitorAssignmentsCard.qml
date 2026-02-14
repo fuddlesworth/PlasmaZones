@@ -78,7 +78,14 @@ Kirigami.Card {
                             spacing: 0
 
                             Label {
-                                text: modelData.name || i18n("Unknown Monitor")
+                                text: {
+                                    let name = modelData.name || i18n("Unknown Monitor")
+                                    let mfr = modelData.manufacturer || ""
+                                    let mdl = modelData.model || ""
+                                    let parts = [mfr, mdl].filter(function(s) { return s !== "" })
+                                    let displayInfo = parts.join(" ")
+                                    return displayInfo ? name + " — " + displayInfo : name
+                                }
                                 font.bold: true
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -158,12 +165,19 @@ Kirigami.Card {
 
                     // Monitor disable option
                     CheckBox {
+                        id: disableCheck
                         Layout.fillWidth: true
                         text: i18n("Disable PlasmaZones on this monitor")
-                        checked: root.kcm.disabledMonitors.indexOf(monitorDelegate.screenName) >= 0
+                        checked: root.kcm.isMonitorDisabled(monitorDelegate.screenName)
                         onToggled: root.kcm.setMonitorDisabled(monitorDelegate.screenName, checked)
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, zones will not appear on this monitor")
+                        Connections {
+                            target: root.kcm
+                            function onDisabledMonitorsChanged() {
+                                disableCheck.checked = root.kcm.isMonitorDisabled(monitorDelegate.screenName)
+                            }
+                        }
                     }
 
                     // Per-desktop section (expandable)

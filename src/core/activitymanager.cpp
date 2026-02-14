@@ -5,6 +5,7 @@
 #include "layoutmanager.h"
 #include "virtualdesktopmanager.h"
 #include "logging.h"
+#include "utils.h"
 #include <QGuiApplication>
 #include <QScreen>
 
@@ -272,7 +273,7 @@ void ActivityManager::updateActiveLayout()
     // 2. Screen + desktop (any activity)
     // 3. Screen only (any desktop, any activity)
     // 4. Active layout (global fallback)
-    auto* layout = m_layoutManager->layoutForScreen(screen->name(), currentDesktop, m_currentActivity);
+    auto* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop, m_currentActivity);
 
     if (layout && layout != m_layoutManager->activeLayout()) {
         qCInfo(lcCore) << "Switching to layout" << layout->name() << "for activity"

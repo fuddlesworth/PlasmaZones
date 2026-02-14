@@ -40,7 +40,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     }
 
     // Use per-screen layout resolution instead of global activeLayout
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
     if (!layout) {
         return QString();
     }
@@ -120,7 +120,7 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
     QStringList zoneIds;
 
     // Use per-screen layout (falls back to activeLayout if no assignment)
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenName));
     if (!layout) {
         return zoneIds;
     }
@@ -152,7 +152,7 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
     if (!layout) {
         qCWarning(lcDbus) << "Cannot detect multi-zone - no layout for screen" << screen->name();
         return zoneIds;
@@ -265,7 +265,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenName));
     if (!layout || layout->zones().isEmpty()) {
         return QString();
     }
@@ -326,7 +326,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
 
 QString ZoneDetectionAdaptor::getZoneByNumber(int zoneNumber, const QString& screenName)
 {
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenName));
     if (!layout) {
         return QString();
     }
@@ -343,7 +343,7 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenName
 {
     QStringList result;
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenName));
     if (!layout) {
         return result;
     }

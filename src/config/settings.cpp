@@ -6,6 +6,7 @@
 #include "configdefaults.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/utils.h"
 #include <KConfig>
 #include <KConfigGroup>
 #include <KSharedConfig>
@@ -310,7 +311,25 @@ SETTINGS_SETTER(const QStringList&, DisabledMonitors, m_disabledMonitors, disabl
 
 bool Settings::isMonitorDisabled(const QString& screenName) const
 {
-    return m_disabledMonitors.contains(screenName);
+    if (m_disabledMonitors.contains(screenName)) {
+        return true;
+    }
+    // Backward compat: if screenName looks like a connector name (no colons),
+    // resolve to stable EDID-based screen ID and check again
+    if (Utils::isConnectorName(screenName)) {
+        QString resolved = Utils::screenIdForName(screenName);
+        if (resolved != screenName && m_disabledMonitors.contains(resolved)) {
+            return true;
+        }
+    } else {
+        // screenName is a screen ID — try reverse lookup to connector name
+        // (covers unmigrated entries from screens disconnected during load)
+        QString connector = Utils::screenNameForId(screenName);
+        if (!connector.isEmpty() && m_disabledMonitors.contains(connector)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 SETTINGS_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
@@ -772,6 +791,16 @@ void Settings::load()
     // Display (defaults from .kcfg via ConfigDefaults)
     m_showZonesOnAllMonitors = display.readEntry(QLatin1String("ShowOnAllMonitors"), ConfigDefaults::showOnAllMonitors());
     m_disabledMonitors = display.readEntry(QLatin1String("DisabledMonitors"), QStringList());
+    // Migrate legacy connector names to stable EDID-based screen IDs
+    for (int i = 0; i < m_disabledMonitors.size(); ++i) {
+        const QString& name = m_disabledMonitors[i];
+        if (Utils::isConnectorName(name)) {
+            QString resolved = Utils::screenIdForName(name);
+            if (resolved != name) {
+                m_disabledMonitors[i] = resolved;
+            }
+        }
+    }
     m_showZoneNumbers = display.readEntry(QLatin1String("ShowNumbers"), ConfigDefaults::showNumbers());
     m_flashZonesOnSwitch = display.readEntry(QLatin1String("FlashOnSwitch"), ConfigDefaults::flashOnSwitch());
     m_showOsdOnLayoutSwitch = display.readEntry(QLatin1String("ShowOsdOnLayoutSwitch"), ConfigDefaults::showOsdOnLayoutSwitch());
@@ -909,6 +938,25 @@ void Settings::load()
                 m_perScreenZoneSelectorSettings[screenName] = overrides;
                 qCDebug(lcConfig) << "Loaded per-screen zone selector overrides for" << screenName << ":" << overrides.keys();
             }
+        }
+    }
+
+    // Migrate legacy connector name keys to stable EDID-based screen IDs
+    {
+        QHash<QString, QVariantMap> migrated;
+        for (auto it = m_perScreenZoneSelectorSettings.begin(); it != m_perScreenZoneSelectorSettings.end(); ) {
+            if (Utils::isConnectorName(it.key())) {
+                QString resolved = Utils::screenIdForName(it.key());
+                if (resolved != it.key()) {
+                    migrated[resolved] = it.value();
+                    it = m_perScreenZoneSelectorSettings.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+        for (auto mit = migrated.constBegin(); mit != migrated.constEnd(); ++mit) {
+            m_perScreenZoneSelectorSettings.insert(mit.key(), mit.value());
         }
     }
 
@@ -1216,6 +1264,13 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
 
     // Apply per-screen overrides if they exist
     auto it = m_perScreenZoneSelectorSettings.constFind(screenName);
+    // Backward compat: if screenName looks like a connector name, try resolving
+    if (it == m_perScreenZoneSelectorSettings.constEnd() && Utils::isConnectorName(screenName)) {
+        QString resolved = Utils::screenIdForName(screenName);
+        if (resolved != screenName) {
+            it = m_perScreenZoneSelectorSettings.constFind(resolved);
+        }
+    }
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
         return config;
     }

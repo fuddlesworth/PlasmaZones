@@ -62,7 +62,7 @@ Kirigami.Dialog {
         // ─── Screens section ─────────────────────────────
         ColumnLayout {
             id: screensSection
-            visible: root.editorController && root.editorController.availableScreenNames.length > 1
+            visible: root.editorController && root.editorController.availableScreenIds.length > 1
             spacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
 
@@ -73,13 +73,13 @@ Kirigami.Dialog {
 
             Repeater {
                 id: screensRepeater
-                model: root.editorController ? root.editorController.availableScreenNames : []
+                model: root.editorController ? root.editorController.availableScreenIds : []
 
                 CheckBox {
                     required property string modelData
                     required property int index
 
-                    text: modelData
+                    text: root.editorController ? root.editorController.screenDisplayName(modelData) : modelData
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     checked: isChecked()
 

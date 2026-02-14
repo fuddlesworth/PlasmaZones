@@ -402,8 +402,8 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
-        // Validate that the target screen exists
-        QScreen* screen = Utils::findScreenByName(effectiveScreen);
+        // Validate that the target screen exists (may be connector name or screen ID)
+        QScreen* screen = Utils::findScreenByIdOrName(effectiveScreen);
         if (!screen) {
             if (!match.targetScreen.isEmpty()) {
                 qCInfo(lcCore) << "App rule targetScreen" << match.targetScreen
@@ -462,12 +462,12 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
     }
 
     for (QScreen* screen : Utils::allScreens()) {
-        QString screenName = screen->name();
-        if (screenName == windowScreenName) {
+        QString screenId = Utils::screenIdentifier(screen);
+        if (screenId == windowScreenName || screen->name() == windowScreenName) {
             continue;
         }
 
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout || checkedLayouts.contains(layout->id())) {
             continue;
         }
@@ -475,7 +475,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
 
         AppRuleMatch match = layout->matchAppRule(windowClass);
         if (match.matched() && !match.targetScreen.isEmpty()) {
-            SnapResult result = buildResult(match, screenName);
+            SnapResult result = buildResult(match, screenId);
             if (result.isValid()) {
                 return result;
             }
@@ -868,7 +868,7 @@ QString WindowTrackingService::getEmptyZonesJson(const QString& screenName) cons
 
     QScreen* screen = screenName.isEmpty()
         ? Utils::primaryScreen()
-        : Utils::findScreenByName(screenName);
+        : Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }
@@ -903,7 +903,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
 
     QScreen* screen = screenName.isEmpty()
         ? Utils::primaryScreen()
-        : Utils::findScreenByName(screenName);
+        : Utils::findScreenByIdOrName(screenName);
 
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -1075,7 +1075,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
     // Group resnap entries by screen so each screen uses its own layout
     QHash<QString, QVector<const ResnapEntry*>> entriesByScreen;
     for (const ResnapEntry& entry : m_resnapBuffer) {
-        entriesByScreen[entry.screenName].append(&entry);
+        entriesByScreen[entry.screenId].append(&entry);
     }
 
     for (auto screenIt = entriesByScreen.constBegin();
@@ -1102,7 +1102,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
                 continue;
             }
 
-            QRect geo = zoneGeometry(targetZone->id().toString(), entry->screenName);
+            QRect geo = zoneGeometry(targetZone->id().toString(), entry->screenId);
             if (!geo.isValid()) {
                 continue;
             }
@@ -1392,7 +1392,7 @@ void WindowTrackingService::onLayoutChanged()
             ResnapEntry entry;
             entry.windowId = stableId; // KWin effect's buildWindowMap keys by stableId
             entry.zonePosition = pos;
-            entry.screenName = screenName;
+            entry.screenId = screenName;
             entry.virtualDesktop = vd;
             newBuffer.append(entry);
         };

@@ -373,6 +373,9 @@ void Daemon::start()
     m_screenManager->init();
     m_screenManager->start();
 
+    // Warn about identical monitors producing duplicate screen IDs
+    Utils::warnDuplicateScreenIds();
+
     // Initialize and start virtual desktop manager
     m_virtualDesktopManager->init();
     m_virtualDesktopManager->start();
@@ -423,10 +426,13 @@ void Daemon::start()
 
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
+        // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
+        // (handles the case where EDID wasn't available during very early startup)
+        Utils::invalidateEdidCache(screen->name());
         m_overlayService->handleScreenAdded(screen);
         // Use per-screen layout (falls back to activeLayout if no assignment)
         Layout* screenLayout = m_layoutManager->layoutForScreen(
-            screen->name(), m_virtualDesktopManager->currentDesktop(),
+            Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
             m_activityManager && ActivityManager::isAvailable()
                 ? m_activityManager->currentActivity() : QString());
         if (screenLayout) {
@@ -437,12 +443,22 @@ void Daemon::start()
     connect(m_screenManager.get(), &ScreenManager::screenRemoved, this, [this](QScreen* screen) {
         m_overlayService->handleScreenRemoved(screen);
 
-        // Clean stale screen name from layout visibility restrictions
+        // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
         const QString removedName = screen->name();
+        const QString removedScreenId = Utils::screenIdentifier(screen);
+
+        // Invalidate cached EDID serial so a different monitor on this connector is detected
+        Utils::invalidateEdidCache(removedName);
+
+        // Clean stale entries from layout visibility restrictions
+        // Check both screen ID (new) and connector name (legacy)
         for (Layout* layout : m_layoutManager->layouts()) {
             QStringList allowed = layout->allowedScreens();
             if (allowed.isEmpty()) continue;
-            if (allowed.removeAll(removedName) > 0) {
+            bool changed = false;
+            changed |= (allowed.removeAll(removedScreenId) > 0);
+            changed |= (allowed.removeAll(removedName) > 0);
+            if (changed) {
                 layout->setAllowedScreens(allowed);
             }
         }
@@ -499,7 +515,7 @@ void Daemon::start()
         }
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
         } else {
             qCDebug(lcDaemon) << "No screen info for quickLayout shortcut — skipping";
             return;
@@ -514,7 +530,7 @@ void Daemon::start()
         }
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
         } else {
             qCDebug(lcDaemon) << "No screen info for previousLayout shortcut — skipping";
             return;
@@ -527,7 +543,7 @@ void Daemon::start()
         }
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
         } else {
             qCDebug(lcDaemon) << "No screen info for nextLayout shortcut — skipping";
             return;
@@ -673,7 +689,8 @@ void Daemon::start()
             return;
         }
         if (!screenName.isEmpty()) {
-            m_layoutManager->assignLayout(screenName, m_virtualDesktopManager->currentDesktop(),
+            QString screenId = Utils::screenIdForName(screenName);
+            m_layoutManager->assignLayout(screenId, m_virtualDesktopManager->currentDesktop(),
                 m_activityManager && ActivityManager::isAvailable()
                     ? m_activityManager->currentActivity() : QString(),
                 layout);
@@ -887,8 +904,9 @@ void Daemon::processPendingGeometryUpdates()
         }
 
         // Update screen-specific layout if different from active
+        QString screenId = Utils::screenIdForName(screenName);
         if (Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenName, currentDesktop, currentActivity)) {
+                m_layoutManager->layoutForScreen(screenId, currentDesktop, currentActivity)) {
             if (screenLayout != m_layoutManager->activeLayout()) {
                 screenLayout->recalculateZoneGeometries(availableGeometry);
             }

@@ -609,12 +609,12 @@ private:
     // Auto-snapped windows (to avoid updating last-used zone)
     QSet<QString> m_autoSnappedWindows;
 
-    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenName, vd)
+    // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
     // for windows that were in the previous layout, so resnapToNewLayout can map them
     struct ResnapEntry {
         QString windowId;
         int zonePosition; // 1-based position in sorted-by-zoneNumber order
-        QString screenName;
+        QString screenId;  // Stable EDID-based screen identifier (or connector name fallback)
         int virtualDesktop = 0;
     };
     QVector<ResnapEntry> m_resnapBuffer;

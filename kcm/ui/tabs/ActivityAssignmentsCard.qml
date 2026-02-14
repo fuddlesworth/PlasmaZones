@@ -110,7 +110,13 @@ Kirigami.Card {
                             kcm: root.kcm
                             iconSource: "video-display"
                             iconOpacity: 0.7
-                            labelText: screenName
+                            labelText: {
+                                let mfr = modelData.manufacturer || ""
+                                let mdl = modelData.model || ""
+                                let parts = [mfr, mdl].filter(function(s) { return s !== "" })
+                                let displayInfo = parts.join(" ")
+                                return displayInfo ? screenName + " — " + displayInfo : screenName
+                            }
                             noneText: i18n("Use default")
                             resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
                             currentLayoutId: {

@@ -6,6 +6,7 @@
 #include "layoututils.h"
 #include "logging.h"
 #include "shaderregistry.h"
+#include "utils.h"
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
@@ -572,6 +573,20 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);
     LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops, layout->m_allowedActivities);
+
+    // Migrate legacy connector names in allowedScreens to screen IDs
+    for (int i = 0; i < layout->m_allowedScreens.size(); ++i) {
+        if (Utils::isConnectorName(layout->m_allowedScreens[i])) {
+            QString resolved = Utils::screenIdForName(layout->m_allowedScreens[i]);
+            if (resolved != layout->m_allowedScreens[i]) {
+                layout->m_allowedScreens[i] = resolved;
+            } else {
+                qCDebug(lcLayout) << "allowedScreens: could not resolve connector name"
+                                  << layout->m_allowedScreens[i]
+                                  << "to screen ID (monitor may be disconnected)";
+            }
+        }
+    }
 
     const auto zonesArray = json[JsonKeys::Zones].toArray();
     for (const auto& zoneValue : zonesArray) {

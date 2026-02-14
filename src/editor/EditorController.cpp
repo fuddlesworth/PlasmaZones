@@ -33,6 +33,7 @@
 #include "../core/constants.h"
 #include "../core/layoututils.h"
 #include "../core/logging.h"
+#include "../core/utils.h"
 #include "../core/shaderregistry.h"
 #include "../core/dbusvariantutils.h"
 #include "helpers/ZoneSerialization.h"
@@ -815,7 +816,7 @@ void EditorController::loadLayout(const QString& layoutId)
 
     // Query available context info from daemon via D-Bus
     // Clear first so stale data is not shown if daemon is unavailable
-    m_availableScreenNames.clear();
+    m_availableScreenIds.clear();
     m_virtualDesktopCount = 1;
     m_virtualDesktopNames.clear();
     m_activitiesAvailable = false;
@@ -824,11 +825,18 @@ void EditorController::loadLayout(const QString& layoutId)
         QDBusInterface iface{QString(DBus::ServiceName), QString(DBus::ObjectPath),
                              QString(DBus::Interface::LayoutManager)};
         if (iface.isValid()) {
-            // Screen names
+            // Screen IDs (stable EDID-based identifiers)
             QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
             if (screensReply.isValid()) {
-                QJsonDocument screensDoc = QJsonDocument::fromJson(screensReply.value().toUtf8());
-                m_availableScreenNames = screensDoc.object().keys();
+                const QJsonObject screensObj = QJsonDocument::fromJson(screensReply.value().toUtf8()).object();
+                for (auto it = screensObj.begin(); it != screensObj.end(); ++it) {
+                    // Prefer the screenId field if present, fall back to connector name key
+                    QString screenId = it.value().toObject().value(QStringLiteral("screenId")).toString();
+                    if (screenId.isEmpty()) {
+                        screenId = it.key();
+                    }
+                    m_availableScreenIds.append(screenId);
+                }
             }
 
             // Virtual desktops
@@ -920,7 +928,7 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT allowedScreensChanged();
     Q_EMIT allowedDesktopsChanged();
     Q_EMIT allowedActivitiesChanged();
-    Q_EMIT availableScreenNamesChanged();
+    Q_EMIT availableScreenIdsChanged();
     Q_EMIT virtualDesktopCountChanged();
     Q_EMIT virtualDesktopNamesChanged();
     Q_EMIT activitiesAvailableChanged();
@@ -1139,7 +1147,7 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
 
     if (screens.isEmpty()) {
         // Currently "all screens" - populate with all except this one
-        for (const QString& s : m_availableScreenNames) {
+        for (const QString& s : m_availableScreenIds) {
             if (s != screenName) {
                 screens.append(s);
             }
@@ -1157,12 +1165,51 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
     } else {
         screens.append(screenName);
         // If all screens are now in the list, clear it (= visible everywhere)
-        if (screens.size() >= m_availableScreenNames.size()) {
+        if (screens.size() >= m_availableScreenIds.size()) {
             screens.clear();
         }
     }
 
     setAllowedScreens(screens);
+}
+
+QString EditorController::screenDisplayName(const QString& screenIdOrName) const
+{
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (Utils::screenIdentifier(screen) == screenIdOrName || screen->name() == screenIdOrName) {
+            QString connectorName = screen->name();
+            QString mfr = screen->manufacturer();
+            QString mdl = screen->model();
+            QString displayInfo;
+            if (!mfr.isEmpty() && !mdl.isEmpty()) {
+                displayInfo = mfr + QLatin1Char(' ') + mdl;
+            } else if (!mfr.isEmpty()) {
+                displayInfo = mfr;
+            } else if (!mdl.isEmpty()) {
+                displayInfo = mdl;
+            }
+            if (!displayInfo.isEmpty()) {
+                return connectorName + QStringLiteral(" — ") + displayInfo;
+            }
+            return connectorName;
+        }
+    }
+    // Screen not currently connected. If the identifier is a screen ID (contains colons),
+    // try to make it more human-readable: "manufacturer:model:serial" → "manufacturer model"
+    if (screenIdOrName.contains(QLatin1Char(':'))) {
+        QStringList parts = screenIdOrName.split(QLatin1Char(':'));
+        QStringList displayParts;
+        // parts[0] = manufacturer, parts[1] = model, parts[2..] = serial etc.
+        for (int i = 0; i < qMin(2, parts.size()); ++i) {
+            if (!parts[i].isEmpty()) {
+                displayParts.append(parts[i]);
+            }
+        }
+        if (!displayParts.isEmpty()) {
+            return displayParts.join(QLatin1Char(' '));
+        }
+    }
+    return screenIdOrName;
 }
 
 void EditorController::toggleDesktopAllowed(int desktop)
