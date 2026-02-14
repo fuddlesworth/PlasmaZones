@@ -18,6 +18,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QProcess>
+#include <QScreen>
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QFile>
@@ -612,8 +613,24 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenName, const QStrin
         return;
     }
 
+    // Warn if screen name is not in the daemon's screen list (e.g. script using wrong name)
+    if (!Utils::findScreenByName(screenName)) {
+        qCWarning(lcDbusLayout)
+            << "assignLayoutToScreen: screen name" << screenName
+            << "not found in daemon's screen list. Use org.plasmazones.Screen.getScreens for valid names.";
+    }
+
     m_layoutManager->assignLayoutById(screenName, 0, QString(), layout->id());
     m_layoutManager->saveAssignments();
+
+    // Update global active layout when assigning to the primary screen so that zone overlay
+    // and drag resolution see the new layout immediately (assignLayoutById only updates
+    // the assignment map; setActiveLayout fires activeLayoutChanged and updates m_activeLayout).
+    QScreen* primary = Utils::primaryScreen();
+    if (primary && primary->name() == screenName) {
+        m_layoutManager->setActiveLayout(layout);
+    }
+
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName;
 }
 
@@ -643,6 +660,17 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     }
 
     m_layoutManager->setAllScreenAssignments(parsedAssignments);
+
+    // Update global active layout for the primary screen so zone overlay/drag see the new layout
+    // immediately (same as assignLayoutToScreen). KCM Save uses this path.
+    QScreen* primary = Utils::primaryScreen();
+    if (primary) {
+        Layout* primaryLayout = m_layoutManager->resolveLayoutForScreen(primary->name());
+        if (primaryLayout) {
+            m_layoutManager->setActiveLayout(primaryLayout);
+        }
+    }
+
     qCInfo(lcDbusLayout) << "Batch set" << parsedAssignments.size() << "screen assignments";
 }
 
