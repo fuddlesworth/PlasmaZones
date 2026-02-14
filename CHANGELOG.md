@@ -7,6 +7,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.6] - 2026-02-14
+
+### Added
+- **Toggle activation mode**: Zone activation modifier can be toggled on/off with a single press instead of requiring hold — useful for trackpad and accessibility users ([#159])
+
+### Changed
+- **Proximity snap always active**: Removed the multi-zone modifier setting entirely — adjacent zone detection now always works during drag with no modifier required
+- **Zone span default changed to Ctrl**: Paint-to-span modifier defaults to Ctrl instead of Meta, avoiding conflict with KDE's Meta shortcut in toggle activation mode
+- CI: Replaced DeterminateSystems/FlakeHub Nix actions with cachix/install-nix-action
+
+### Fixed
+- Nix build: ECM's KDEInstallDirs resolved an absolute systemd unit path outside the Nix store, causing postInstall to fail ([#159])
+
 ## [1.10.5] - 2026-02-13
 
 ### Fixed
