@@ -461,7 +461,7 @@ public Q_SLOTS:
 
     // Visibility filtering toggle methods
     Q_INVOKABLE void toggleScreenAllowed(const QString& screenName);
-    Q_INVOKABLE QString screenDisplayName(const QString& connectorName) const;
+    Q_INVOKABLE QString screenDisplayName(const QString& screenIdOrName) const;
     Q_INVOKABLE void toggleDesktopAllowed(int desktop);
     Q_INVOKABLE void toggleActivityAllowed(const QString& activityId);
 

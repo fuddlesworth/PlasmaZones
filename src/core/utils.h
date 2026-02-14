@@ -233,6 +233,13 @@ inline QString extractWindowClass(const QString& windowId)
 // Screen Identity Utilities (EDID-based stable identification)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Shared cache for EDID header serial lookups (avoids sysfs I/O per call)
+inline QHash<QString, QString>& edidSerialCache()
+{
+    static QHash<QString, QString> s_cache;
+    return s_cache;
+}
+
 /**
  * @brief Read the EDID header serial number from sysfs (cached)
  *
@@ -251,10 +258,9 @@ inline QString extractWindowClass(const QString& windowId)
  */
 inline QString readEdidHeaderSerial(const QString& connectorName)
 {
-    // Cache: avoid sysfs I/O on every call (called during drag events)
-    static QHash<QString, QString> s_cache;
-    auto cacheIt = s_cache.constFind(connectorName);
-    if (cacheIt != s_cache.constEnd()) {
+    auto& cache = edidSerialCache();
+    auto cacheIt = cache.constFind(connectorName);
+    if (cacheIt != cache.constEnd()) {
         return *cacheIt;
     }
 
@@ -283,7 +289,8 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
             }
             // Validate EDID magic header: bytes 0-7 must be 00 FF FF FF FF FF FF 00
             const auto* data = reinterpret_cast<const uint8_t*>(header.constData());
-            if (data[0] != 0x00 || data[1] != 0xFF || data[6] != 0xFF || data[7] != 0x00) {
+            if (data[0] != 0x00 || data[1] != 0xFF || data[2] != 0xFF || data[3] != 0xFF
+                || data[4] != 0xFF || data[5] != 0xFF || data[6] != 0xFF || data[7] != 0x00) {
                 continue; // Not a valid EDID blob
             }
             // Bytes 12-15: serial number (little-endian uint32)
@@ -298,10 +305,26 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
         }
     }
 
-    s_cache.insert(connectorName, result);
+    cache.insert(connectorName, result);
     return result;
 }
 
+/**
+ * @brief Invalidate the EDID header serial cache for a connector
+ *
+ * Call when a screen is removed so that a different monitor later
+ * connected on the same connector gets a fresh sysfs read.
+ *
+ * @param connectorName Connector to invalidate, or empty to clear all
+ */
+inline void invalidateEdidCache(const QString& connectorName = QString())
+{
+    if (connectorName.isEmpty()) {
+        edidSerialCache().clear();
+    } else {
+        edidSerialCache().remove(connectorName);
+    }
+}
 
 /**
  * @brief Stable EDID-based identifier for a physical monitor

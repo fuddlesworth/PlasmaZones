@@ -93,14 +93,20 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
         return nullptr;
     }
 
+    // Translate connector name to screen ID for allowedScreens matching
+    QString screenId;
+    if (!screenName.isEmpty()) {
+        screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
+    }
+
     // Build filtered list of visible layouts for current context
     QVector<Layout*> visible;
     for (Layout* l : m_layouts) {
         if (!l || l->hiddenFromSelector()) {
             continue;
         }
-        if (!screenName.isEmpty() && !l->allowedScreens().isEmpty()) {
-            if (!l->allowedScreens().contains(screenName)) {
+        if (!screenId.isEmpty() && !l->allowedScreens().isEmpty()) {
+            if (!l->allowedScreens().contains(screenId)) {
                 continue;
             }
         }
@@ -123,8 +129,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
 
     // Use per-screen layout as reference for cycling so each screen cycles independently
     Layout* currentLayout = nullptr;
-    if (!screenName.isEmpty()) {
-        currentLayout = layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
+    if (!screenId.isEmpty()) {
+        currentLayout = layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -150,8 +156,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
     // activeLayoutChanged (needed for resnap buffer population, stale assignment
     // cleanup, OSD, etc.). Per-screen assignments are still respected by
     // resolveLayoutForScreen() since they take priority over the global active.
-    if (!screenName.isEmpty()) {
-        assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, newLayout);
+    if (!screenId.isEmpty()) {
+        assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, newLayout);
     }
     setActiveLayout(newLayout);
     return newLayout;

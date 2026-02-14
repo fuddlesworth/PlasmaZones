@@ -321,6 +321,13 @@ bool Settings::isMonitorDisabled(const QString& screenName) const
         if (resolved != screenName && m_disabledMonitors.contains(resolved)) {
             return true;
         }
+    } else {
+        // screenName is a screen ID — try reverse lookup to connector name
+        // (covers unmigrated entries from screens disconnected during load)
+        QString connector = Utils::screenNameForId(screenName);
+        if (!connector.isEmpty() && m_disabledMonitors.contains(connector)) {
+            return true;
+        }
     }
     return false;
 }

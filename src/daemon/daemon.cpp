@@ -437,12 +437,20 @@ void Daemon::start()
     connect(m_screenManager.get(), &ScreenManager::screenRemoved, this, [this](QScreen* screen) {
         m_overlayService->handleScreenRemoved(screen);
 
-        // Clean stale screen name from layout visibility restrictions
+        // Invalidate cached EDID serial so a different monitor on this connector is detected
+        Utils::invalidateEdidCache(screen->name());
+
+        // Clean stale entries from layout visibility restrictions
+        // Check both screen ID (new) and connector name (legacy)
         const QString removedName = screen->name();
+        const QString removedScreenId = Utils::screenIdentifier(screen);
         for (Layout* layout : m_layoutManager->layouts()) {
             QStringList allowed = layout->allowedScreens();
             if (allowed.isEmpty()) continue;
-            if (allowed.removeAll(removedName) > 0) {
+            bool changed = false;
+            changed |= (allowed.removeAll(removedScreenId) > 0);
+            changed |= (allowed.removeAll(removedName) > 0);
+            if (changed) {
                 layout->setAllowedScreens(allowed);
             }
         }
@@ -887,8 +895,9 @@ void Daemon::processPendingGeometryUpdates()
         }
 
         // Update screen-specific layout if different from active
+        QString screenId = Utils::screenIdForName(screenName);
         if (Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenName, currentDesktop, currentActivity)) {
+                m_layoutManager->layoutForScreen(screenId, currentDesktop, currentActivity)) {
             if (screenLayout != m_layoutManager->activeLayout()) {
                 screenLayout->recalculateZoneGeometries(availableGeometry);
             }

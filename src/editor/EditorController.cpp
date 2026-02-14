@@ -33,6 +33,7 @@
 #include "../core/constants.h"
 #include "../core/layoututils.h"
 #include "../core/logging.h"
+#include "../core/utils.h"
 #include "../core/shaderregistry.h"
 #include "../core/dbusvariantutils.h"
 #include "helpers/ZoneSerialization.h"
@@ -824,11 +825,18 @@ void EditorController::loadLayout(const QString& layoutId)
         QDBusInterface iface{QString(DBus::ServiceName), QString(DBus::ObjectPath),
                              QString(DBus::Interface::LayoutManager)};
         if (iface.isValid()) {
-            // Screen names
+            // Screen IDs (stable EDID-based identifiers)
             QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
             if (screensReply.isValid()) {
-                QJsonDocument screensDoc = QJsonDocument::fromJson(screensReply.value().toUtf8());
-                m_availableScreenNames = screensDoc.object().keys();
+                const QJsonObject screensObj = QJsonDocument::fromJson(screensReply.value().toUtf8()).object();
+                for (auto it = screensObj.begin(); it != screensObj.end(); ++it) {
+                    // Prefer the screenId field if present, fall back to connector name key
+                    QString screenId = it.value().toObject().value(QStringLiteral("screenId")).toString();
+                    if (screenId.isEmpty()) {
+                        screenId = it.key();
+                    }
+                    m_availableScreenNames.append(screenId);
+                }
             }
 
             // Virtual desktops
@@ -1165,10 +1173,11 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
     setAllowedScreens(screens);
 }
 
-QString EditorController::screenDisplayName(const QString& connectorName) const
+QString EditorController::screenDisplayName(const QString& screenIdOrName) const
 {
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (screen->name() == connectorName) {
+        if (Utils::screenIdentifier(screen) == screenIdOrName || screen->name() == screenIdOrName) {
+            QString connectorName = screen->name();
             QString mfr = screen->manufacturer();
             QString mdl = screen->model();
             QString displayInfo;
@@ -1182,10 +1191,10 @@ QString EditorController::screenDisplayName(const QString& connectorName) const
             if (!displayInfo.isEmpty()) {
                 return connectorName + QStringLiteral(" — ") + displayInfo;
             }
-            break;
+            return connectorName;
         }
     }
-    return connectorName;
+    return screenIdOrName;
 }
 
 void EditorController::toggleDesktopAllowed(int desktop)

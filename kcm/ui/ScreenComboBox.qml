@@ -101,7 +101,7 @@ ComboBox {
                 if (s.isPrimary) {
                     label += " — " + i18n("Primary")
                 }
-                items.push({text: label, value: s.screenId || s.name})
+                items.push({text: label, value: s.name})
             }
         }
         return items
