@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "zone.h"
 
+#include <algorithm>
+
 #include <QColor>
 #include <QJsonArray>
 #include <QUuid>
@@ -140,6 +142,10 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
         }
     }
 
+    std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
+        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+    });
+
     return list;
 }
 
@@ -201,6 +207,10 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
 
         list.append(entryFromLayout(layout));
     }
+
+    std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
+        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+    });
 
     return list;
 }
