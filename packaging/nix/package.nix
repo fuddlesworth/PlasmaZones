@@ -90,11 +90,18 @@ stdenv.mkDerivation {
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
     "-DBUILD_TESTING=OFF"
-    # ECM's KDEInstallDirs may discover the host's absolute systemd path
-    # (e.g. /usr/lib/systemd/user) which breaks the Nix store layout.
-    # Pin to a relative path so the service lands at $out/lib/systemd/user/.
-    "-DKDE_INSTALL_SYSTEMDUSERUNITDIR=lib/systemd/user"
   ];
+
+  # ECM's KDEInstallDirs sets KDE_INSTALL_SYSTEMDUSERUNITDIR as a normal
+  # variable (shadowing any -D cache override) and may resolve it to an
+  # absolute host path (e.g. /usr/lib/systemd/user) that falls outside $out
+  # in the Nix sandbox.  Force the relative path after KDEInstallDirs runs.
+  preConfigure = ''
+    substituteInPlace CMakeLists.txt \
+      --replace-fail \
+        'if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)' \
+        'if(TRUE)  # Force relative path for Nix — original: if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)'
+  '';
 
   # The upstream systemd unit hardcodes /usr/bin; patch to the store path
   postInstall = ''
