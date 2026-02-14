@@ -16,19 +16,19 @@ namespace PlasmaZones {
  */
 struct LayoutAssignmentKey
 {
-    QString screenName; // Monitor/output name
+    QString screenId; // Stable EDID-based identifier (or connector name fallback)
     int virtualDesktop = 0; // 0 = all desktops
     QString activity; // Empty = all activities
 
     bool operator==(const LayoutAssignmentKey& other) const
     {
-        return screenName == other.screenName && virtualDesktop == other.virtualDesktop && activity == other.activity;
+        return screenId == other.screenId && virtualDesktop == other.virtualDesktop && activity == other.activity;
     }
 };
 
 inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
 {
-    seed = ::qHash(key.screenName, seed);
+    seed = ::qHash(key.screenId, seed);
     seed = ::qHash(key.virtualDesktop, seed);
     seed = ::qHash(key.activity, seed);
     return seed;

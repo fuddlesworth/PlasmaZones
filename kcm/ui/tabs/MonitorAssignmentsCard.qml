@@ -48,7 +48,7 @@ Kirigami.Card {
                 required property int index
 
                 property bool expanded: false
-                property string screenName: modelData.name || ""
+                property string screenName: modelData.screenId || modelData.name || ""
 
                 ColumnLayout {
                     id: monitorContent
@@ -78,7 +78,14 @@ Kirigami.Card {
                             spacing: 0
 
                             Label {
-                                text: modelData.name || i18n("Unknown Monitor")
+                                text: {
+                                    let name = modelData.name || i18n("Unknown Monitor")
+                                    let mfr = modelData.manufacturer || ""
+                                    let mdl = modelData.model || ""
+                                    let parts = [mfr, mdl].filter(function(s) { return s !== "" })
+                                    let displayInfo = parts.join(" ")
+                                    return displayInfo ? name + " — " + displayInfo : name
+                                }
                                 font.bold: true
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true

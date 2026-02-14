@@ -313,26 +313,28 @@ public:
     /**
      * @brief Convenience: resolve layout for screen using current desktop/activity context
      *
-     * Equivalent to layoutForScreen(screenName, currentVirtualDesktop(), currentActivity())
+     * Equivalent to layoutForScreen(screenId, currentVirtualDesktop(), currentActivity())
      * with a fallback to defaultLayout() when no per-screen assignment matches.
      * Use this everywhere a "give me the layout for this screen right now" is needed.
+     *
+     * @param screenId Stable EDID-based screen identifier (or connector name — auto-resolved)
      */
-    Layout* resolveLayoutForScreen(const QString& screenName) const
+    Layout* resolveLayoutForScreen(const QString& screenId) const
     {
-        Layout* layout = layoutForScreen(screenName, currentVirtualDesktop(), currentActivity());
+        Layout* layout = layoutForScreen(screenId, currentVirtualDesktop(), currentActivity());
         return layout ? layout : defaultLayout();
     }
 
-    // Layout assignments
-    virtual Layout* layoutForScreen(const QString& screenName, int virtualDesktop = 0,
+    // Layout assignments (screenId: stable EDID-based identifier or connector name fallback)
+    virtual Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const = 0;
-    virtual void assignLayout(const QString& screenName, int virtualDesktop, const QString& activity,
+    virtual void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
                               Layout* layout) = 0;
-    virtual void assignLayoutById(const QString& screenName, int virtualDesktop, const QString& activity,
+    virtual void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const QUuid& layoutId) = 0;
-    virtual void clearAssignment(const QString& screenName, int virtualDesktop = 0,
+    virtual void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                  const QString& activity = QString()) = 0;
-    virtual bool hasExplicitAssignment(const QString& screenName, int virtualDesktop = 0,
+    virtual bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                        const QString& activity = QString()) const = 0;
     virtual void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) = 0; // Batch set - saves once
     virtual void

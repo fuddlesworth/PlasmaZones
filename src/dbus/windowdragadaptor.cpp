@@ -180,7 +180,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         QScreen* screen = screenAtPoint(m_originalGeometry.center().x(), m_originalGeometry.center().y());
 
         if (screen) {
-            auto* layout = m_layoutManager->resolveLayoutForScreen(screen->name());
+            auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
             if (layout) {
                 layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
@@ -235,7 +235,7 @@ QStringList WindowDragAdaptor::zoneIdsToStringList(const QVector<QUuid>& ids)
 Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen)
 {
     outScreen = screenAtPoint(x, y);
-    if (!outScreen || (m_settings && m_settings->isMonitorDisabled(outScreen->name()))) {
+    if (!outScreen || (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(outScreen)))) {
         return nullptr;
     }
 
@@ -249,7 +249,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
         m_overlayScreen = outScreen;
     }
 
-    auto* layout = m_layoutManager->resolveLayoutForScreen(outScreen->name());
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(outScreen));
     if (!layout) {
         return nullptr;
     }
@@ -606,6 +606,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved
     QScreen* releaseScreen = screenAtPoint(cursorX, cursorY);
     QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
+    QString releaseScreenId = releaseScreen ? Utils::screenIdentifier(releaseScreen) : QString();
     releaseScreenNameOut = releaseScreenName;
     qCDebug(lcDbusWindow) << "dragStopped cursor= (" << cursorX << "," << cursorY << ") releaseScreen= "
                          << releaseScreenName;
@@ -627,7 +628,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
 
     // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
     bool useOverlayZone = true;
-    if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenName)) {
+    if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenId)) {
         useOverlayZone = false;
     }
 
@@ -638,7 +639,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
         QScreen* screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
 
-        if (screen && (!m_settings || !m_settings->isMonitorDisabled(screen->name()))) {
+        if (screen && (!m_settings || !m_settings->isMonitorDisabled(Utils::screenIdentifier(screen)))) {
             QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
@@ -685,7 +686,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // We intentionally skip manualLayoutSelected to avoid a layout OSD
                     // flashing briefly before snap assist appears.
                     if (selectedLayout) {
-                        Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(screen->name());
+                        Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
                         if (currentLayout != selectedLayout) {
                             // Hide overlay/selector BEFORE the layout change so signal
                             // handlers (updateZoneSelectorWindow, updateOverlayWindow) find
@@ -693,7 +694,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                             // recalculations. All overlay queries are already done above.
                             hideOverlayAndSelector();
 
-                            m_layoutManager->assignLayout(screen->name(),
+                            m_layoutManager->assignLayout(Utils::screenIdentifier(screen),
                                 m_layoutManager->currentVirtualDesktop(),
                                 m_layoutManager->currentActivity(),
                                 selectedLayout);
@@ -781,7 +782,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const bool actuallySnapped = shouldApplyGeometry && !restoreSizeOnlyOut;
     if (actuallySnapped && m_settings && m_settings->snapAssistEnabled() && releaseScreen && m_layoutManager
         && m_windowTracking) {
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenName);
+        Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenId);
         if (layout) {
             QString emptyJson = GeometryUtils::buildEmptyZonesJson(layout, releaseScreen, m_settings,
                 [this](const Zone* z) { return m_windowTracking->getWindowsInZone(z->id().toString()).isEmpty(); });
@@ -882,7 +883,7 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 
     QScreen* screen = screenAtPoint(cursorX, cursorY);
-    if (screen && m_settings->isMonitorDisabled(screen->name())) {
+    if (screen && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
             m_overlayService->hideZoneSelector();
@@ -916,7 +917,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     }
 
     // Use per-screen resolved config (per-screen override > global default)
-    const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(screen->name());
+    const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen));
     const int triggerDistance = config.triggerDistance;
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 

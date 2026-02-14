@@ -79,7 +79,7 @@ Kirigami.Dialog {
                     required property string modelData
                     required property int index
 
-                    text: modelData
+                    text: root.editorController ? root.editorController.screenDisplayName(modelData) : modelData
                     Layout.leftMargin: Kirigami.Units.largeSpacing
                     checked: isChecked()
 

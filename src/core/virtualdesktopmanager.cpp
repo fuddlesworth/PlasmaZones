@@ -4,6 +4,7 @@
 #include "virtualdesktopmanager.h"
 #include "layoutmanager.h"
 #include "logging.h"
+#include "utils.h"
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -386,7 +387,7 @@ void VirtualDesktopManager::updateActiveLayout()
     // Find layout for current screen and desktop
     // Note: We use screen name and current desktop, activity is empty (all activities)
     // ActivityManager handles activity-specific layouts separately
-    auto* layout = m_layoutManager->layoutForScreen(screen->name(), m_currentDesktop, QString());
+    auto* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentDesktop, QString());
 
     if (layout && layout != m_layoutManager->activeLayout()) {
         qCInfo(lcCore) << "Switching to layout" << layout->name() << "for desktop" << m_currentDesktop << "on screen"

@@ -1165,6 +1165,29 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
     setAllowedScreens(screens);
 }
 
+QString EditorController::screenDisplayName(const QString& connectorName) const
+{
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() == connectorName) {
+            QString mfr = screen->manufacturer();
+            QString mdl = screen->model();
+            QString displayInfo;
+            if (!mfr.isEmpty() && !mdl.isEmpty()) {
+                displayInfo = mfr + QLatin1Char(' ') + mdl;
+            } else if (!mfr.isEmpty()) {
+                displayInfo = mfr;
+            } else if (!mdl.isEmpty()) {
+                displayInfo = mdl;
+            }
+            if (!displayInfo.isEmpty()) {
+                return connectorName + QStringLiteral(" — ") + displayInfo;
+            }
+            break;
+        }
+    }
+    return connectorName;
+}
+
 void EditorController::toggleDesktopAllowed(int desktop)
 {
     QList<int> desktops = m_allowedDesktopsInt;

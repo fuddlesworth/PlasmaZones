@@ -19,6 +19,15 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen info as JSON."/>
             </arg>
         </method>
+        <method name="getScreenId">
+            <annotation name="org.gtk.GDBus.DocString" value="Return the stable EDID-based screen identifier for a connector name. Format: manufacturer:model:serial (or connector name fallback for virtual displays)."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Connector name (e.g. DP-1)."/>
+            </arg>
+            <arg name="screenId" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Stable EDID-based screen identifier."/>
+            </arg>
+        </method>
         <signal name="screenAdded">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new screen is connected."/>
             <arg name="screenName" type="s">

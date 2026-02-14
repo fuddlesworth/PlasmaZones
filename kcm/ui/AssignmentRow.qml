@@ -24,7 +24,6 @@ RowLayout {
 
     // Optional customization
     property string noneText: i18n("Default")
-    property int labelWidth: Kirigami.Units.gridUnit * 8
     property int comboWidth: Kirigami.Units.gridUnit * 16
     property bool showPreview: true  // Default to true for unified layout model with previews
     property real iconOpacity: 1.0
@@ -51,7 +50,7 @@ RowLayout {
 
     Label {
         text: root.labelText
-        Layout.preferredWidth: root.labelWidth
+        Layout.fillWidth: true
         Layout.alignment: Qt.AlignVCenter
         elide: Text.ElideRight
     }
@@ -85,8 +84,6 @@ RowLayout {
         ToolTip.text: i18n("Clear assignment")
         Accessible.name: i18n("Clear assignment for %1", root.labelText)
     }
-
-    Item { Layout.fillWidth: true }
 
     // Public function to clear selection programmatically
     function clearSelection() {

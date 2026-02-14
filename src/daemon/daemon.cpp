@@ -426,7 +426,7 @@ void Daemon::start()
         m_overlayService->handleScreenAdded(screen);
         // Use per-screen layout (falls back to activeLayout if no assignment)
         Layout* screenLayout = m_layoutManager->layoutForScreen(
-            screen->name(), m_virtualDesktopManager->currentDesktop(),
+            Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
             m_activityManager && ActivityManager::isAvailable()
                 ? m_activityManager->currentActivity() : QString());
         if (screenLayout) {

@@ -49,7 +49,7 @@ ToolBar {
                 model: availableScreens || []
 
                 delegate: Button {
-                    text: modelData ? modelData.name : ""
+                    text: modelData ? (modelData.name || "") : ""
                     highlighted: editorController && modelData && modelData.name === editorController.targetScreen
                     enabled: editorController !== null
                     Accessible.name: modelData ? modelData.name : ""

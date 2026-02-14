@@ -67,6 +67,8 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenName)
             info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
             info[JsonKeys::RefreshRate] = screen->refreshRate();
             info[JsonKeys::Depth] = screen->depth();
+            info[JsonKeys::ScreenId] = Utils::screenIdentifier(screen);
+            info[QStringLiteral("serialNumber")] = screen->serialNumber();
 
             return QString::fromUtf8(QJsonDocument(info).toJson());
         }
@@ -80,6 +82,14 @@ QString ScreenAdaptor::getPrimaryScreen()
 {
     auto* primary = Utils::primaryScreen();
     return primary ? primary->name() : QString();
+}
+
+QString ScreenAdaptor::getScreenId(const QString& screenName)
+{
+    if (screenName.isEmpty()) {
+        return QString();
+    }
+    return Utils::screenIdForName(screenName);
 }
 
 } // namespace PlasmaZones

@@ -855,7 +855,7 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
     }
 
     // Use per-screen layout (falls back to activeLayout via resolveLayoutForScreen)
-    auto* layout = m_layoutManager->resolveLayoutForScreen(screenName);
+    auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenName));
     if (!layout) {
         Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("no_active_layout"), QString(), QString(), QString());
         return;
@@ -1500,7 +1500,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
     for (QScreen* screen : Utils::allScreens()) {
-        Layout* layout = m_layoutManager->layoutForScreen(screen->name(), currentDesktop, m_layoutManager->currentActivity());
+        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop, m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
             return screen->name();
         }

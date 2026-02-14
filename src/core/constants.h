@@ -129,6 +129,7 @@ inline constexpr QLatin1String AllowedActivities{"allowedActivities"};
 
 // Assignment keys
 inline constexpr QLatin1String Assignments{"assignments"};
+inline constexpr QLatin1String ScreenId{"screenId"};
 inline constexpr QLatin1String Screen{"screen"};
 inline constexpr QLatin1String Desktop{"desktop"};
 inline constexpr QLatin1String Activity{"activity"};

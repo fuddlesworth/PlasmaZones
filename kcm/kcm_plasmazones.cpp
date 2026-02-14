@@ -2318,6 +2318,21 @@ void KCMPlasmaZones::refreshScreens()
                     screenInfo[QStringLiteral("name")] = screenName;
                     screenInfo[QStringLiteral("isPrimary")] = (screenName == primaryScreenName);
 
+                    // Include stable EDID-based screen ID from daemon
+                    if (jsonObj.contains(QStringLiteral("screenId"))) {
+                        screenInfo[QStringLiteral("screenId")] = jsonObj[QStringLiteral("screenId")].toString();
+                    } else {
+                        screenInfo[QStringLiteral("screenId")] = screenName;
+                    }
+
+                    // Forward manufacturer/model for display
+                    if (jsonObj.contains(QStringLiteral("manufacturer"))) {
+                        screenInfo[QStringLiteral("manufacturer")] = jsonObj[QStringLiteral("manufacturer")].toString();
+                    }
+                    if (jsonObj.contains(QStringLiteral("model"))) {
+                        screenInfo[QStringLiteral("model")] = jsonObj[QStringLiteral("model")].toString();
+                    }
+
                     // Create resolution string from geometry for QML display
                     if (jsonObj.contains(QStringLiteral("geometry"))) {
                         QJsonObject geom = jsonObj[QStringLiteral("geometry")].toObject();
@@ -2354,6 +2369,9 @@ void KCMPlasmaZones::refreshScreens()
             screenInfo[QStringLiteral("resolution")] = QStringLiteral("%1×%2")
                 .arg(screen->geometry().width())
                 .arg(screen->geometry().height());
+            screenInfo[QStringLiteral("manufacturer")] = screen->manufacturer();
+            screenInfo[QStringLiteral("model")] = screen->model();
+            screenInfo[QStringLiteral("screenId")] = screen->name();
             newScreens.append(screenInfo);
         }
     }

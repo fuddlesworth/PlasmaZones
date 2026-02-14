@@ -227,5 +227,96 @@ inline QString extractWindowClass(const QString& windowId)
     return windowId.left(firstColon);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen Identity Utilities (EDID-based stable identification)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Stable EDID-based identifier for a physical monitor
+ *
+ * Format: "manufacturer:model:serial" when serial is available,
+ * "manufacturer:model" when only those are available,
+ * or connector name (screen->name()) as fallback for virtual displays
+ * and embedded panels that lack EDID data.
+ *
+ * @param screen QScreen to identify
+ * @return Stable identifier string
+ */
+inline QString screenIdentifier(const QScreen* screen)
+{
+    if (!screen) {
+        return QString();
+    }
+
+    const QString serial = screen->serialNumber();
+    const QString manufacturer = screen->manufacturer();
+    const QString model = screen->model();
+
+    if (!serial.isEmpty()) {
+        return manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
+    }
+    if (!manufacturer.isEmpty() || !model.isEmpty()) {
+        return manufacturer + QLatin1Char(':') + model;
+    }
+    // Fallback: connector name (virtual displays, some embedded panels)
+    return screen->name();
+}
+
+/**
+ * @brief Resolve a connector name to a stable screen ID
+ *
+ * Looks up the currently connected QScreen with the given connector name
+ * and returns its EDID-based identifier. Returns the connector name as-is
+ * if no matching screen is found.
+ *
+ * @param connectorName Connector name (e.g., "DP-2")
+ * @return Stable screen ID, or connectorName if not resolvable
+ */
+inline QString screenIdForName(const QString& connectorName)
+{
+    if (connectorName.isEmpty()) {
+        return connectorName;
+    }
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() == connectorName) {
+            return screenIdentifier(screen);
+        }
+    }
+    return connectorName;
+}
+
+/**
+ * @brief Reverse lookup: stable screen ID to current connector name
+ *
+ * Finds the currently connected QScreen whose EDID-based identifier
+ * matches the given screenId and returns its connector name.
+ *
+ * @param screenId Stable EDID-based identifier
+ * @return Current connector name, or empty string if no match
+ */
+inline QString screenNameForId(const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return QString();
+    }
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screenIdentifier(screen) == screenId) {
+            return screen->name();
+        }
+    }
+    return QString();
+}
+
+/**
+ * @brief Check if a string looks like a connector name rather than a screen ID
+ *
+ * Screen IDs (EDID-based) contain colons (e.g., "DEL:DELL U2722D:ABC123").
+ * Connector names never contain colons (e.g., "DP-2", "HDMI-1").
+ */
+inline bool isConnectorName(const QString& identifier)
+{
+    return !identifier.isEmpty() && !identifier.contains(QLatin1Char(':'));
+}
+
 } // namespace Utils
 } // namespace PlasmaZones
