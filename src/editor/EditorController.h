@@ -109,7 +109,7 @@ class EditorController : public QObject
     Q_PROPERTY(QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
 
     // Context info for visibility UI
-    Q_PROPERTY(QStringList availableScreenNames READ availableScreenNames NOTIFY availableScreenNamesChanged)
+    Q_PROPERTY(QStringList availableScreenIds READ availableScreenIds NOTIFY availableScreenIdsChanged)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopCountChanged)
     Q_PROPERTY(QStringList virtualDesktopNames READ virtualDesktopNames NOTIFY virtualDesktopNamesChanged)
     Q_PROPERTY(bool activitiesAvailable READ activitiesAvailable NOTIFY activitiesAvailableChanged)
@@ -169,7 +169,7 @@ public:
     QStringList allowedScreens() const { return m_allowedScreens; }
     QVariantList allowedDesktops() const;
     QStringList allowedActivities() const { return m_allowedActivities; }
-    QStringList availableScreenNames() const { return m_availableScreenNames; }
+    QStringList availableScreenIds() const { return m_availableScreenIds; }
     int virtualDesktopCount() const { return m_virtualDesktopCount; }
     QStringList virtualDesktopNames() const { return m_virtualDesktopNames; }
     bool activitiesAvailable() const { return m_activitiesAvailable; }
@@ -532,7 +532,7 @@ Q_SIGNALS:
     void allowedScreensChanged();
     void allowedDesktopsChanged();
     void allowedActivitiesChanged();
-    void availableScreenNamesChanged();
+    void availableScreenIdsChanged();
     void virtualDesktopCountChanged();
     void virtualDesktopNamesChanged();
     void activitiesAvailableChanged();
@@ -706,7 +706,7 @@ private:
     QStringList m_allowedScreens;
     QList<int> m_allowedDesktopsInt;
     QStringList m_allowedActivities;
-    QStringList m_availableScreenNames;
+    QStringList m_availableScreenIds;
     int m_virtualDesktopCount = 1;
     QStringList m_virtualDesktopNames;
     bool m_activitiesAvailable = false;

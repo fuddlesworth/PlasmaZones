@@ -816,7 +816,7 @@ void EditorController::loadLayout(const QString& layoutId)
 
     // Query available context info from daemon via D-Bus
     // Clear first so stale data is not shown if daemon is unavailable
-    m_availableScreenNames.clear();
+    m_availableScreenIds.clear();
     m_virtualDesktopCount = 1;
     m_virtualDesktopNames.clear();
     m_activitiesAvailable = false;
@@ -835,7 +835,7 @@ void EditorController::loadLayout(const QString& layoutId)
                     if (screenId.isEmpty()) {
                         screenId = it.key();
                     }
-                    m_availableScreenNames.append(screenId);
+                    m_availableScreenIds.append(screenId);
                 }
             }
 
@@ -928,7 +928,7 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT allowedScreensChanged();
     Q_EMIT allowedDesktopsChanged();
     Q_EMIT allowedActivitiesChanged();
-    Q_EMIT availableScreenNamesChanged();
+    Q_EMIT availableScreenIdsChanged();
     Q_EMIT virtualDesktopCountChanged();
     Q_EMIT virtualDesktopNamesChanged();
     Q_EMIT activitiesAvailableChanged();
@@ -1147,7 +1147,7 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
 
     if (screens.isEmpty()) {
         // Currently "all screens" - populate with all except this one
-        for (const QString& s : m_availableScreenNames) {
+        for (const QString& s : m_availableScreenIds) {
             if (s != screenName) {
                 screens.append(s);
             }
@@ -1165,7 +1165,7 @@ void EditorController::toggleScreenAllowed(const QString& screenName)
     } else {
         screens.append(screenName);
         // If all screens are now in the list, clear it (= visible everywhere)
-        if (screens.size() >= m_availableScreenNames.size()) {
+        if (screens.size() >= m_availableScreenIds.size()) {
             screens.clear();
         }
     }

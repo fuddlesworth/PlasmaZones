@@ -1075,7 +1075,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
     // Group resnap entries by screen so each screen uses its own layout
     QHash<QString, QVector<const ResnapEntry*>> entriesByScreen;
     for (const ResnapEntry& entry : m_resnapBuffer) {
-        entriesByScreen[entry.screenName].append(&entry);
+        entriesByScreen[entry.screenId].append(&entry);
     }
 
     for (auto screenIt = entriesByScreen.constBegin();
@@ -1102,7 +1102,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
                 continue;
             }
 
-            QRect geo = zoneGeometry(targetZone->id().toString(), entry->screenName);
+            QRect geo = zoneGeometry(targetZone->id().toString(), entry->screenId);
             if (!geo.isValid()) {
                 continue;
             }
@@ -1392,7 +1392,7 @@ void WindowTrackingService::onLayoutChanged()
             ResnapEntry entry;
             entry.windowId = stableId; // KWin effect's buildWindowMap keys by stableId
             entry.zonePosition = pos;
-            entry.screenName = screenName;
+            entry.screenId = screenName;
             entry.virtualDesktop = vd;
             newBuffer.append(entry);
         };

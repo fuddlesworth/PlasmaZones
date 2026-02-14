@@ -373,6 +373,9 @@ void Daemon::start()
     m_screenManager->init();
     m_screenManager->start();
 
+    // Warn about identical monitors producing duplicate screen IDs
+    Utils::warnDuplicateScreenIds();
+
     // Initialize and start virtual desktop manager
     m_virtualDesktopManager->init();
     m_virtualDesktopManager->start();

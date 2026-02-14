@@ -244,6 +244,15 @@ inline QHash<QString, QString>& edidSerialCache()
     return s_cache;
 }
 
+/// Retry counter for connectors where EDID read returned empty.
+/// After maxRetries attempts, the empty result is cached permanently
+/// to avoid unbounded sysfs I/O for virtual displays / embedded panels.
+inline QHash<QString, int>& edidMissCounter()
+{
+    static QHash<QString, int> s_counter;
+    return s_counter;
+}
+
 /**
  * @brief Read the EDID header serial number from sysfs (cached)
  *
@@ -309,10 +318,20 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
         }
     }
 
-    // Only cache non-empty results. Empty results might be due to a boot-time race
-    // where sysfs EDID data isn't available yet; retrying later may succeed.
     if (!result.isEmpty()) {
         cache.insert(connectorName, result);
+        edidMissCounter().remove(connectorName);
+    } else {
+        // Track failed reads. After 3 misses, cache the empty result permanently
+        // to avoid unbounded sysfs I/O for virtual displays and embedded panels.
+        // Boot-time races resolve within 1-2 retries; anything beyond 3 is genuinely
+        // absent EDID data. invalidateEdidCache() resets both caches on hotplug.
+        constexpr int maxRetries = 3;
+        int& misses = edidMissCounter()[connectorName];
+        ++misses;
+        if (misses >= maxRetries) {
+            cache.insert(connectorName, result); // Cache empty permanently
+        }
     }
     return result;
 }
@@ -329,8 +348,10 @@ inline void invalidateEdidCache(const QString& connectorName = QString())
 {
     if (connectorName.isEmpty()) {
         edidSerialCache().clear();
+        edidMissCounter().clear();
     } else {
         edidSerialCache().remove(connectorName);
+        edidMissCounter().remove(connectorName);
     }
 }
 
@@ -474,6 +495,32 @@ inline QScreen* findScreenByIdOrName(const QString& identifier)
         }
     }
     return nullptr;
+}
+
+/**
+ * @brief Check for duplicate screen identifiers among connected monitors
+ *
+ * Two physically identical monitors with the same EDID data produce the same
+ * screen ID. This is a known limitation (same as KWin). Logs a warning when
+ * duplicates are detected so administrators can investigate.
+ *
+ * Call from daemon startup after screens are initialized.
+ */
+inline void warnDuplicateScreenIds()
+{
+    QHash<QString, QStringList> idToConnectors;
+    for (QScreen* screen : QGuiApplication::screens()) {
+        QString id = screenIdentifier(screen);
+        idToConnectors[id].append(screen->name());
+    }
+    for (auto it = idToConnectors.constBegin(); it != idToConnectors.constEnd(); ++it) {
+        if (it.value().size() > 1) {
+            qWarning("PlasmaZones: duplicate screen ID \"%s\" for connectors: %s. "
+                     "Layout assignments may be shared between these monitors.",
+                     qPrintable(it.key()),
+                     qPrintable(it.value().join(QStringLiteral(", "))));
+        }
+    }
 }
 
 } // namespace Utils

@@ -4,6 +4,7 @@
 #include "screenmanager.h"
 #include "platform.h"
 #include "logging.h"
+#include "utils.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QWindow>
@@ -582,6 +583,11 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     destroyGeometrySensor(screen);
     disconnectScreenSignals(screen);
     m_trackedScreens.removeAll(screen);
+
+    // Invalidate EDID cache so a different monitor on this connector gets a fresh read.
+    // The daemon also does this, but ScreenManager should be self-contained.
+    Utils::invalidateEdidCache(screen->name());
+
     Q_EMIT screenRemoved(screen);
 }
 
