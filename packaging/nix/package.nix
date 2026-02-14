@@ -90,6 +90,10 @@ stdenv.mkDerivation {
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
     "-DBUILD_TESTING=OFF"
+    # ECM's KDEInstallDirs may discover the host's absolute systemd path
+    # (e.g. /usr/lib/systemd/user) which breaks the Nix store layout.
+    # Pin to a relative path so the service lands at $out/lib/systemd/user/.
+    "-DKDE_INSTALL_SYSTEMDUSERUNITDIR=lib/systemd/user"
   ];
 
   # The upstream systemd unit hardcodes /usr/bin; patch to the store path
