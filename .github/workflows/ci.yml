@@ -54,3 +54,33 @@ jobs:
         run: |
           echo "=== Installed files ==="
           find install -type f | head -50
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # Nix Build
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-nix:
+    name: Build (Nix)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build
+        run: |
+          nix-build --expr '
+            let pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz") {};
+            in pkgs.callPackage ./packaging/nix/package.nix { src = ./.; }
+          '
+
+      - name: Verify outputs
+        run: |
+          echo "=== Package outputs ==="
+          ls -la result/bin/
+          result/bin/plasmazonesd --version || true

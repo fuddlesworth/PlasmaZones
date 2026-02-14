@@ -22,6 +22,62 @@ kcmutils_add_qml_kcm(kcm_plasmazones
     SOURCES ${kcm_plasmazones_SRCS}
 )
 
+# Embed all KCM QML files into the plugin's Qt resource bundle.
+#
+# kcmutils_add_qml_kcm only embeds ui/main.qml in the qrc resource.
+# All other QML files (components, tabs) are installed loose on the
+# filesystem and resolved via QML import paths at runtime.  This works
+# on standard installs but breaks on distributions like NixOS where the
+# host application (systemsettings) may not have the package's QML
+# install path on its import path — causing "Cannot assign to
+# non-existent property" errors for signals defined in those files.
+#
+# By embedding everything in the resource, relative imports
+# (import "tabs", import "..") always resolve from qrc:// regardless
+# of filesystem layout.
+#
+# Resource prefix matches the kcmutils convention: /kcm/<target_name>
+set(_kcm_qml_prefix "/kcm/kcm_plasmazones")
+
+qt_add_resources(kcm_plasmazones "kcm_qml_components"
+    PREFIX "${_kcm_qml_prefix}"
+    BASE "ui"
+    FILES
+        ui/AssignmentRow.qml
+        ui/ColorButton.qml
+        ui/FontPickerDialog.qml
+        ui/InputCapture.qml
+        ui/KeySequenceInput.qml
+        ui/LayoutComboBox.qml
+        ui/LayoutThumbnail.qml
+        ui/ModifierAndMouseCheckBoxes.qml
+        ui/ModifierCheckBoxes.qml
+        ui/PositionPicker.qml
+        ui/PreviewSizeControl.qml
+        ui/ScreenComboBox.qml
+)
+
+qt_add_resources(kcm_plasmazones "kcm_qml_tabs"
+    PREFIX "${_kcm_qml_prefix}/tabs"
+    BASE "ui/tabs"
+    FILES
+        ui/tabs/AboutTab.qml
+        ui/tabs/ActivityAssignmentsCard.qml
+        ui/tabs/AppRulesCard.qml
+        ui/tabs/AssignmentsTab.qml
+        ui/tabs/DisplayTab.qml
+        ui/tabs/EditorTab.qml
+        ui/tabs/ExclusionListCard.qml
+        ui/tabs/ExclusionsTab.qml
+        ui/tabs/LayoutGridDelegate.qml
+        ui/tabs/LayoutsTab.qml
+        ui/tabs/LayoutToolbar.qml
+        ui/tabs/MonitorAssignmentsCard.qml
+        ui/tabs/QuickLayoutSlotsCard.qml
+        ui/tabs/WindowPickerDialog.qml
+        ui/tabs/ZonesTab.qml
+)
+
 target_link_libraries(kcm_plasmazones
     PRIVATE
         plasmazones_core

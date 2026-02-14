@@ -338,11 +338,105 @@ jobs:
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════
+  # Verify Nix Build
+  # ═══════════════════════════════════════════════════════════════════════════
+  build-nix:
+    name: Verify Nix Build
+    needs: version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Build
+        run: |
+          nix-build --expr '
+            let pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz") {};
+            in pkgs.callPackage ./packaging/nix/package.nix { src = ./.; }
+          '
+
+      - name: Verify package version
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          echo "Expected version: $VERSION"
+          result/bin/plasmazonesd --version || true
+
+      - name: Generate release package.nix
+        run: |
+          VERSION="${{ needs.version.outputs.version }}"
+          TARBALL="https://github.com/fuddlesworth/PlasmaZones/archive/refs/tags/v${VERSION}.tar.gz"
+          echo "Fetching source hash for $TARBALL"
+          NIX_HASH=$(nix-prefetch-url --unpack "$TARBALL" 2>/dev/null)
+          SRI_HASH=$(nix hash to-sri --type sha256 "$NIX_HASH")
+          echo "SRI hash: $SRI_HASH"
+
+          # Transform packaging/nix/package.nix into a standalone release file
+          # by replacing src parameter with fetchFromGitHub and baking in version/hash
+          awk -v version="$VERSION" -v hash="$SRI_HASH" '
+            # Replace header comments with release usage
+            NR == 1 {
+              print "# PlasmaZones " version " — Nix package"
+              print "# SPDX-License-Identifier: GPL-3.0-or-later"
+              print "#"
+              print "# Usage:"
+              print "#   environment.systemPackages = ["
+              print "#     (pkgs.callPackage ./plasmazones.nix {})"
+              print "#   ];"
+              next
+            }
+            # Skip remaining header comments
+            !started && /^#/ { next }
+            !started && /^$/ { next }
+            # Begin processing at the parameter list
+            /^\{/ { started = 1 }
+            # Replace src parameter with fetchFromGitHub
+            started && /^  src,$/ { print "  fetchFromGitHub,"; next }
+            # Skip the extractVersion let/in block
+            /^let$/ { in_let = 1; next }
+            in_let && /^in$/ { in_let = 0; next }
+            in_let { next }
+            # Replace dynamic version with hardcoded
+            /version = extractVersion src;/ {
+              print "  version = \"" version "\";"
+              next
+            }
+            # Replace inherit src with fetchFromGitHub block
+            /inherit src;/ {
+              print "  src = fetchFromGitHub {"
+              print "    owner = \"fuddlesworth\";"
+              print "    repo = \"PlasmaZones\";"
+              print "    rev = \"v" version "\";"
+              print "    hash = \"" hash "\";"
+              print "  };"
+              next
+            }
+            # Pass through everything else
+            !in_let { print }
+          ' packaging/nix/package.nix > plasmazones.nix
+
+          echo "=== Generated plasmazones.nix ==="
+          cat plasmazones.nix
+
+      - name: Upload Nix package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-package
+          path: plasmazones.nix
+          retention-days: 30
+
+  # ═══════════════════════════════════════════════════════════════════════════
   # Create GitHub Release
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-deb, build-rpm, build-arch, build-generic]
+    needs: [version, build-deb, build-rpm, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
 
     steps:
@@ -398,6 +492,15 @@ jobs:
             echo "./install.sh"
             echo '```'
             echo ""
+            echo "**NixOS:**"
+            echo "Download \`plasmazones.nix\` from the release assets, then:"
+            echo '```nix'
+            echo "# configuration.nix"
+            echo "environment.systemPackages = ["
+            echo "  (pkgs.callPackage ./plasmazones.nix {})"
+            echo "];"
+            echo '```'
+            echo ""
             echo "### Post-Installation"
             echo ""
             echo '```bash'
@@ -428,6 +531,7 @@ jobs:
             artifacts/**/*.rpm
             artifacts/**/*.pkg.tar.zst
             artifacts/**/*linux-x86_64.tar.gz
+            artifacts/**/plasmazones.nix
           generate_release_notes: false
           make_latest: true
 
