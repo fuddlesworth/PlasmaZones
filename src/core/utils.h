@@ -19,8 +19,8 @@ namespace PlasmaZones {
 namespace Utils {
 
 /**
- * @brief Find a screen by its name
- * @param screenName Screen name to find
+ * @brief Find a screen by its connector name
+ * @param screenName Connector name to find (e.g., "DP-2")
  * @return Pointer to QScreen if found, nullptr otherwise
  */
 inline QScreen* findScreenByName(const QString& screenName)
@@ -35,6 +35,9 @@ inline QScreen* findScreenByName(const QString& screenName)
     }
     return nullptr;
 }
+
+// Forward declaration — defined after screenIdentifier() below
+inline QScreen* findScreenByIdOrName(const QString& identifier);
 
 /**
  * @brief Get the primary screen
@@ -439,6 +442,38 @@ inline QString screenNameForId(const QString& screenId)
 inline bool isConnectorName(const QString& identifier)
 {
     return !identifier.isEmpty() && !identifier.contains(QLatin1Char(':'));
+}
+
+/**
+ * @brief Find a screen by either connector name or stable screen ID
+ *
+ * Tries connector name match first (fast path), then falls back to
+ * EDID-based screen identifier matching. Use this when the input
+ * could be either a connector name or a screen ID.
+ *
+ * @param identifier Connector name (e.g., "DP-2") or screen ID (e.g., "DEL:DELL U2722D:115107")
+ * @return Pointer to QScreen if found, nullptr otherwise
+ */
+inline QScreen* findScreenByIdOrName(const QString& identifier)
+{
+    if (identifier.isEmpty()) {
+        return QGuiApplication::primaryScreen();
+    }
+    // Fast path: try connector name match first
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() == identifier) {
+            return screen;
+        }
+    }
+    // Slow path: try screen ID match (only if it looks like a screen ID)
+    if (identifier.contains(QLatin1Char(':'))) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screenIdentifier(screen) == identifier) {
+                return screen;
+            }
+        }
+    }
+    return nullptr;
 }
 
 } // namespace Utils

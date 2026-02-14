@@ -2117,15 +2117,26 @@ void KCMPlasmaZones::loadLayouts()
 
 void KCMPlasmaZones::onScreenLayoutChanged(const QString& screenName, const QString& layoutId)
 {
-    // When screen layout assignment changes externally, update our local state
+    // When screen layout assignment changes externally, update our local state.
+    // The signal carries a screen ID (EDID-based) from LayoutManager, but our
+    // local m_screenAssignments cache is keyed by connector names. Resolve back.
     if (screenName.isEmpty()) {
         return;
     }
 
-    if (layoutId.isEmpty()) {
-        m_screenAssignments.remove(screenName);
+    QString connectorName;
+    QScreen* screen = Utils::findScreenByIdOrName(screenName);
+    if (screen) {
+        connectorName = screen->name();
     } else {
-        m_screenAssignments[screenName] = layoutId;
+        // Screen not connected — fall back to original value
+        connectorName = screenName;
+    }
+
+    if (layoutId.isEmpty()) {
+        m_screenAssignments.remove(connectorName);
+    } else {
+        m_screenAssignments[connectorName] = layoutId;
     }
 
     Q_EMIT screenAssignmentsChanged();
