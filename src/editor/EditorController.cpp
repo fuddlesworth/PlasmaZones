@@ -1194,6 +1194,21 @@ QString EditorController::screenDisplayName(const QString& screenIdOrName) const
             return connectorName;
         }
     }
+    // Screen not currently connected. If the identifier is a screen ID (contains colons),
+    // try to make it more human-readable: "manufacturer:model:serial" → "manufacturer model"
+    if (screenIdOrName.contains(QLatin1Char(':'))) {
+        QStringList parts = screenIdOrName.split(QLatin1Char(':'));
+        QStringList displayParts;
+        // parts[0] = manufacturer, parts[1] = model, parts[2..] = serial etc.
+        for (int i = 0; i < qMin(2, parts.size()); ++i) {
+            if (!parts[i].isEmpty()) {
+                displayParts.append(parts[i]);
+            }
+        }
+        if (!displayParts.isEmpty()) {
+            return displayParts.join(QLatin1Char(' '));
+        }
+    }
     return screenIdOrName;
 }
 

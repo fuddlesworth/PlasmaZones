@@ -306,7 +306,11 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
         }
     }
 
-    cache.insert(connectorName, result);
+    // Only cache non-empty results. Empty results might be due to a boot-time race
+    // where sysfs EDID data isn't available yet; retrying later may succeed.
+    if (!result.isEmpty()) {
+        cache.insert(connectorName, result);
+    }
     return result;
 }
 

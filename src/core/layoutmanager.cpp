@@ -87,16 +87,16 @@ Layout* LayoutManager::defaultLayout() const
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
 // Filters out hidden layouts and respects visibility allow-lists
-Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
+Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
 {
     if (m_layouts.isEmpty()) {
         return nullptr;
     }
 
     // Translate connector name to screen ID for allowedScreens matching
-    QString screenId;
-    if (!screenName.isEmpty()) {
-        screenId = Utils::isConnectorName(screenName) ? Utils::screenIdForName(screenName) : screenName;
+    QString resolvedScreenId;
+    if (!screenId.isEmpty()) {
+        resolvedScreenId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
     }
 
     // Build filtered list of visible layouts for current context
@@ -105,8 +105,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
         if (!l || l->hiddenFromSelector()) {
             continue;
         }
-        if (!screenId.isEmpty() && !l->allowedScreens().isEmpty()) {
-            if (!l->allowedScreens().contains(screenId)) {
+        if (!resolvedScreenId.isEmpty() && !l->allowedScreens().isEmpty()) {
+            if (!l->allowedScreens().contains(resolvedScreenId)) {
                 continue;
             }
         }
@@ -129,8 +129,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
 
     // Use per-screen layout as reference for cycling so each screen cycles independently
     Layout* currentLayout = nullptr;
-    if (!screenId.isEmpty()) {
-        currentLayout = layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
+    if (!resolvedScreenId.isEmpty()) {
+        currentLayout = layoutForScreen(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
     }
     if (!currentLayout) {
         currentLayout = defaultLayout();
@@ -156,8 +156,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenName, int direction)
     // activeLayoutChanged (needed for resnap buffer population, stale assignment
     // cleanup, OSD, etc.). Per-screen assignments are still respected by
     // resolveLayoutForScreen() since they take priority over the global active.
-    if (!screenId.isEmpty()) {
-        assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, newLayout);
+    if (!resolvedScreenId.isEmpty()) {
+        assignLayout(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity, newLayout);
     }
     setActiveLayout(newLayout);
     return newLayout;
@@ -361,15 +361,15 @@ Layout* LayoutManager::layoutForShortcut(int number) const
     return nullptr;
 }
 
-void LayoutManager::applyQuickLayout(int number, const QString& screenName)
+void LayoutManager::applyQuickLayout(int number, const QString& screenId)
 {
-    qCInfo(lcLayout) << "applyQuickLayout called: number=" << number << "screen=" << screenName;
+    qCInfo(lcLayout) << "applyQuickLayout called: number=" << number << "screen=" << screenId;
 
     auto layout = layoutForShortcut(number);
     if (layout) {
         qCDebug(lcLayout) << "Found layout for shortcut" << number << ":" << layout->name();
         // Assign to current monitor + current virtual desktop + current activity (not global default)
-        assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
+        assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, layout);
         setActiveLayout(layout);
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
@@ -379,7 +379,7 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenName)
             layout = m_layouts.at(number - 1);
             if (layout) {
                 qCInfo(lcLayout) << "Using fallback layout:" << layout->name();
-                assignLayout(screenName, m_currentVirtualDesktop, m_currentActivity, layout);
+                assignLayout(screenId, m_currentVirtualDesktop, m_currentActivity, layout);
                 setActiveLayout(layout);
             }
         } else {
@@ -589,14 +589,14 @@ QHash<QPair<QString, QString>, QUuid> LayoutManager::activityAssignments() const
     return result;
 }
 
-void LayoutManager::cycleToPreviousLayout(const QString& screenName)
+void LayoutManager::cycleToPreviousLayout(const QString& screenId)
 {
-    cycleLayoutImpl(screenName, -1);
+    cycleLayoutImpl(screenId, -1);
 }
 
-void LayoutManager::cycleToNextLayout(const QString& screenName)
+void LayoutManager::cycleToNextLayout(const QString& screenId)
 {
-    cycleLayoutImpl(screenName, +1);
+    cycleLayoutImpl(screenId, +1);
 }
 
 void LayoutManager::createBuiltInLayouts()

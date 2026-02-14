@@ -440,13 +440,15 @@ void Daemon::start()
     connect(m_screenManager.get(), &ScreenManager::screenRemoved, this, [this](QScreen* screen) {
         m_overlayService->handleScreenRemoved(screen);
 
+        // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
+        const QString removedName = screen->name();
+        const QString removedScreenId = Utils::screenIdentifier(screen);
+
         // Invalidate cached EDID serial so a different monitor on this connector is detected
-        Utils::invalidateEdidCache(screen->name());
+        Utils::invalidateEdidCache(removedName);
 
         // Clean stale entries from layout visibility restrictions
         // Check both screen ID (new) and connector name (legacy)
-        const QString removedName = screen->name();
-        const QString removedScreenId = Utils::screenIdentifier(screen);
         for (Layout* layout : m_layoutManager->layouts()) {
             QStringList allowed = layout->allowedScreens();
             if (allowed.isEmpty()) continue;

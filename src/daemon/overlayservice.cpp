@@ -1434,7 +1434,7 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     const int layoutCount = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screen->name(), m_currentVirtualDesktop, m_currentActivity).size();
+        m_layoutManager, Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity).size();
     updateZoneSelectorWindowLayout(window, screen, config, m_settings, layoutCount);
 
     window->setVisible(false);

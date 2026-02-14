@@ -773,10 +773,11 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenName, int v
         return;
     }
 
-    m_layoutManager->assignLayoutById(Utils::screenIdForName(screenName), virtualDesktop, QString(), layout->id());
+    QString screenId = Utils::screenIdForName(screenName);
+    m_layoutManager->assignLayoutById(screenId, virtualDesktop, QString(), layout->id());
     m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName
-                          << "(id:" << Utils::screenIdForName(screenName) << ") on desktop" << virtualDesktop;
+                          << "(id:" << screenId << ") on desktop" << virtualDesktop;
 
     if (m_virtualDesktopManager) {
         int currentDesktop = m_virtualDesktopManager->currentDesktop();
@@ -806,8 +807,21 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
         // Split on '|' delimiter (screen IDs contain colons, so ':' is not safe)
         int sep = it.key().lastIndexOf(QLatin1Char('|'));
         if (sep < 0) {
-            // Backward compat: try legacy ':' delimiter for old KCM round-trips
+            // Backward compat: try legacy ':' delimiter for old KCM round-trips.
+            // lastIndexOf is correct here because desktop numbers are always the
+            // last component (e.g., "DP-2:3"), and screen IDs contain colons
+            // (e.g., "DEL:DELL U2722D:115107:3" → last ':' before "3").
             sep = it.key().lastIndexOf(QLatin1Char(':'));
+            // Guard: verify the desktop part is actually a number, not part of a screen ID
+            if (sep > 0) {
+                bool isDesktop = false;
+                it.key().mid(sep + 1).toInt(&isDesktop);
+                if (!isDesktop) {
+                    qCWarning(lcDbusLayout) << "Desktop assignment key has non-numeric desktop part"
+                                            << "with ':' delimiter:" << it.key();
+                    sep = -1;
+                }
+            }
         }
         if (sep < 1) {
             qCWarning(lcDbusLayout) << "Invalid desktop assignment key format:" << it.key();
@@ -1034,18 +1048,12 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         int sep = it.key().indexOf(QLatin1Char('|'));
         if (sep < 0) {
             // Backward compat: try legacy ':' delimiter for old configs.
-            // This fallback is ONLY correct for legacy connector-name keys (no colons).
-            // Activity IDs are UUIDs (contain hyphens, no colons), so first ':' splits correctly
-            // for "DP-2:activity-uuid" but would be WRONG for screen-ID keys with colons.
+            // Use lastIndexOf because activity IDs are UUIDs (contain hyphens, no colons),
+            // so the last ':' correctly separates "DEL:DELL U2722D:115107:activity-uuid"
+            // into screen ID + activity. For connector-name keys ("DP-2:activity-uuid"),
+            // lastIndexOf also works correctly since there's only one ':'.
             // New KCM always sends '|', so this path only triggers for pre-migration data.
-            sep = it.key().indexOf(QLatin1Char(':'));
-            // Guard: if the extracted screen name contains colons, the ':' split is wrong
-            // (it's a screen-ID key, not a connector-name key). Skip rather than mis-parse.
-            if (sep > 0 && it.key().left(sep).contains(QLatin1Char(':'))) {
-                qCWarning(lcDbusLayout) << "Activity assignment key contains screen ID with ':' delimiter"
-                                        << "— expected '|' delimiter:" << it.key();
-                sep = -1;
-            }
+            sep = it.key().lastIndexOf(QLatin1Char(':'));
         }
         if (sep < 1) {
             qCWarning(lcDbusLayout) << "Invalid activity assignment key format:" << it.key();
