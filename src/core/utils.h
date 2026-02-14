@@ -234,32 +234,45 @@ inline QString extractWindowClass(const QString& windowId)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * @brief Read the EDID header serial number from sysfs
+ * @brief Read the EDID header serial number from sysfs (cached)
  *
  * The EDID header contains a 4-byte little-endian serial number at bytes 12-15.
  * This is always present (unlike the optional text serial descriptor that
  * QScreen::serialNumber() returns) and is what KDE Display Settings shows
  * next to each monitor name.
  *
+ * Results are cached per connector name to avoid repeated sysfs I/O
+ * (this function is called frequently during drag operations).
+ * The connector name comes from QScreen::name(), a trusted system source,
+ * so there is no path injection risk in the sysfs lookup.
+ *
  * @param connectorName Connector name (e.g., "DP-2")
  * @return Header serial as string, or empty if not readable
  */
 inline QString readEdidHeaderSerial(const QString& connectorName)
 {
-    // Find the sysfs EDID file: /sys/class/drm/card*-<connector>/edid
-    QDir drmDir(QStringLiteral("/sys/class/drm"));
-    if (!drmDir.exists()) {
-        return QString();
+    // Cache: avoid sysfs I/O on every call (called during drag events)
+    static QHash<QString, QString> s_cache;
+    auto cacheIt = s_cache.constFind(connectorName);
+    if (cacheIt != s_cache.constEnd()) {
+        return *cacheIt;
     }
 
-    const QStringList entries = drmDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-    for (const QString& entry : entries) {
-        // Match entries like "card0-DP-2", "card1-HDMI-A-1"
-        int dashPos = entry.indexOf(QLatin1Char('-'));
-        if (dashPos < 0) {
-            continue;
-        }
-        if (entry.mid(dashPos + 1) == connectorName) {
+    QString result;
+
+    // Find the sysfs EDID file: /sys/class/drm/card*-<connector>/edid
+    QDir drmDir(QStringLiteral("/sys/class/drm"));
+    if (drmDir.exists()) {
+        const QStringList entries = drmDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QString& entry : entries) {
+            // Match entries like "card0-DP-2", "card1-HDMI-A-1"
+            int dashPos = entry.indexOf(QLatin1Char('-'));
+            if (dashPos < 0) {
+                continue;
+            }
+            if (entry.mid(dashPos + 1) != connectorName) {
+                continue;
+            }
             QFile edidFile(drmDir.filePath(entry) + QStringLiteral("/edid"));
             if (!edidFile.open(QIODevice::ReadOnly)) {
                 continue;
@@ -268,20 +281,27 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
             if (header.size() < 16) {
                 continue;
             }
-            // Bytes 12-15: serial number (little-endian uint32)
+            // Validate EDID magic header: bytes 0-7 must be 00 FF FF FF FF FF FF 00
             const auto* data = reinterpret_cast<const uint8_t*>(header.constData());
+            if (data[0] != 0x00 || data[1] != 0xFF || data[6] != 0xFF || data[7] != 0x00) {
+                continue; // Not a valid EDID blob
+            }
+            // Bytes 12-15: serial number (little-endian uint32)
             uint32_t serial = data[12]
                 | (static_cast<uint32_t>(data[13]) << 8)
                 | (static_cast<uint32_t>(data[14]) << 16)
                 | (static_cast<uint32_t>(data[15]) << 24);
             if (serial != 0) {
-                return QString::number(serial);
+                result = QString::number(serial);
+                break; // Found valid EDID with non-zero serial
             }
-            return QString();
         }
     }
-    return QString();
+
+    s_cache.insert(connectorName, result);
+    return result;
 }
+
 
 /**
  * @brief Stable EDID-based identifier for a physical monitor
@@ -297,8 +317,11 @@ inline QString readEdidHeaderSerial(const QString& connectorName)
  * or connector name (screen->name()) as fallback for virtual displays
  * and embedded panels that lack EDID data.
  *
- * When two monitors produce the same identifier (identical EDID data),
- * the connector name is appended as a tiebreaker.
+ * Limitation: Two physically identical monitors with the same EDID data
+ * (including header serial) will produce the same identifier. This is
+ * the same limitation KWin has — the EDID alone cannot distinguish them.
+ * In practice this is rare since manufacturers assign unique header
+ * serials per unit.
  *
  * @param screen QScreen to identify
  * @return Stable identifier string

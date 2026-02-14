@@ -1030,8 +1030,11 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         // Split on '|' delimiter (screen IDs contain colons, so ':' is not safe)
         int sep = it.key().indexOf(QLatin1Char('|'));
         if (sep < 0) {
-            // Backward compat: try legacy ':' delimiter for old KCM round-trips
-            // Activity IDs are UUIDs (contain hyphens, no colons), so first ':' is safe
+            // Backward compat: try legacy ':' delimiter for old configs.
+            // This fallback is ONLY correct for legacy connector-name keys (no colons).
+            // Activity IDs are UUIDs (contain hyphens, no colons), so first ':' splits correctly
+            // for "DP-2:activity-uuid" but would be WRONG for screen-ID keys with colons.
+            // New KCM always sends '|', so this path only triggers for pre-migration data.
             sep = it.key().indexOf(QLatin1Char(':'));
         }
         if (sep < 1) {

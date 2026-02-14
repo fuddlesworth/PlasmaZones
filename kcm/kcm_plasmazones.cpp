@@ -2530,7 +2530,8 @@ void KCMPlasmaZones::assignLayoutToScreenActivity(const QString& screenName, con
         return;
     }
 
-    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    // Use screenId|activity format to match daemon's getAllActivityAssignments() key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
 
     // Track this assignment in pending cache
     if (layoutId.isEmpty()) {
@@ -2555,7 +2556,8 @@ void KCMPlasmaZones::clearScreenActivityAssignment(const QString& screenName, co
 QString KCMPlasmaZones::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     // Check pending cache first (unsaved changes)
-    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    // Use screenId|activity format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
     if (m_pendingActivityAssignments.contains(key)) {
         return m_pendingActivityAssignments.value(key);
     }
@@ -2579,7 +2581,8 @@ QString KCMPlasmaZones::getLayoutForScreenActivity(const QString& screenName, co
 bool KCMPlasmaZones::hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const
 {
     // Check pending cache first
-    QString key = QStringLiteral("%1:%2").arg(screenName, activityId);
+    // Use screenId|activity format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
     if (m_pendingActivityAssignments.contains(key)) {
         return true;
     }
@@ -2700,7 +2703,9 @@ void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int 
     }
 
     // Cache the assignment locally - will be sent to daemon on Apply
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's getAllDesktopAssignments() key format
+    QString screenId = Utils::screenIdForName(screenName);
+    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
 
     if (layoutId.isEmpty()) {
         // Empty layoutId means clear - but we handle that in clearScreenDesktopAssignment
@@ -2732,7 +2737,9 @@ void KCMPlasmaZones::clearScreenDesktopAssignment(const QString& screenName, int
     }
 
     // Cache the clear locally - will be sent to daemon on Apply
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's getAllDesktopAssignments() key format
+    QString screenId = Utils::screenIdForName(screenName);
+    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
     m_pendingDesktopAssignments.remove(key);
     m_clearedDesktopAssignments.insert(key);
 
@@ -2748,7 +2755,8 @@ void KCMPlasmaZones::clearScreenDesktopAssignment(const QString& screenName, int
 QString KCMPlasmaZones::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     // Check pending cache first (unsaved changes)
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
     if (m_pendingDesktopAssignments.contains(key)) {
         return m_pendingDesktopAssignments.value(key);
     }
@@ -2771,7 +2779,8 @@ QString KCMPlasmaZones::getLayoutForScreenDesktop(const QString& screenName, int
 bool KCMPlasmaZones::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     // Check pending cache first (unsaved changes)
-    QString key = QStringLiteral("%1:%2").arg(screenName).arg(virtualDesktop);
+    // Use screenId|desktop format to match daemon's key format
+    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
     if (m_pendingDesktopAssignments.contains(key)) {
         return true; // Has pending assignment
     }
