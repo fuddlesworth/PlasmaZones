@@ -48,7 +48,7 @@ Kirigami.Card {
                 required property int index
 
                 property bool expanded: false
-                property string screenName: modelData.screenId || modelData.name || ""
+                property string screenName: modelData.name || ""
 
                 ColumnLayout {
                     id: monitorContent

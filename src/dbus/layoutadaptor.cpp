@@ -800,17 +800,22 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
     QHash<QPair<QString, int>, QUuid> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        QStringList parts = it.key().split(QLatin1Char(':'));
-        if (parts.size() != 2) {
+        // Split on '|' delimiter (screen IDs contain colons, so ':' is not safe)
+        int sep = it.key().lastIndexOf(QLatin1Char('|'));
+        if (sep < 0) {
+            // Backward compat: try legacy ':' delimiter for old KCM round-trips
+            sep = it.key().lastIndexOf(QLatin1Char(':'));
+        }
+        if (sep < 1) {
             qCWarning(lcDbusLayout) << "Invalid desktop assignment key format:" << it.key();
             continue;
         }
 
-        QString screenName = parts[0];
+        QString screenName = it.key().left(sep);
         bool ok;
-        int virtualDesktop = parts[1].toInt(&ok);
+        int virtualDesktop = it.key().mid(sep + 1).toInt(&ok);
         if (!ok || virtualDesktop < 1) {
-            qCWarning(lcDbusLayout) << "Invalid virtual desktop number:" << parts[1];
+            qCWarning(lcDbusLayout) << "Invalid virtual desktop number:" << it.key().mid(sep + 1);
             continue;
         }
 
@@ -873,6 +878,9 @@ QString LayoutAdaptor::getAllScreenAssignments()
         }
 
         if (!screenObj.isEmpty()) {
+            // Key by connector name for KCM compatibility (D-Bus boundary translates on save)
+            // Include screenId inside the object for consumers that need it
+            screenObj[QStringLiteral("screenId")] = screenId;
             root[screenName] = screenObj;
         }
     }
@@ -886,7 +894,7 @@ QVariantMap LayoutAdaptor::getAllDesktopAssignments()
 
     const auto assignments = m_layoutManager->desktopAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        QString key = QStringLiteral("%1:%2").arg(it.key().first).arg(it.key().second);
+        QString key = QStringLiteral("%1|%2").arg(it.key().first).arg(it.key().second);
         result[key] = it.value().toString();
     }
 
@@ -899,7 +907,7 @@ QVariantMap LayoutAdaptor::getAllActivityAssignments()
 
     const auto assignments = m_layoutManager->activityAssignments();
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        QString key = QStringLiteral("%1:%2").arg(it.key().first, it.key().second);
+        QString key = QStringLiteral("%1|%2").arg(it.key().first, it.key().second);
         result[key] = it.value().toString();
     }
 
@@ -1019,14 +1027,20 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
     QHash<QPair<QString, QString>, QUuid> parsedAssignments;
 
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        QStringList parts = it.key().split(QLatin1Char(':'));
-        if (parts.size() != 2) {
+        // Split on '|' delimiter (screen IDs contain colons, so ':' is not safe)
+        int sep = it.key().indexOf(QLatin1Char('|'));
+        if (sep < 0) {
+            // Backward compat: try legacy ':' delimiter for old KCM round-trips
+            // Activity IDs are UUIDs (contain hyphens, no colons), so first ':' is safe
+            sep = it.key().indexOf(QLatin1Char(':'));
+        }
+        if (sep < 1) {
             qCWarning(lcDbusLayout) << "Invalid activity assignment key format:" << it.key();
             continue;
         }
 
-        QString screenName = parts[0];
-        QString activityId = parts[1];
+        QString screenName = it.key().left(sep);
+        QString activityId = it.key().mid(sep + 1);
         if (screenName.isEmpty() || activityId.isEmpty()) {
             qCWarning(lcDbusLayout) << "Empty screen or activity in assignment key:" << it.key();
             continue;

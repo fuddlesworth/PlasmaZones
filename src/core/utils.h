@@ -239,6 +239,10 @@ inline QString extractWindowClass(const QString& windowId)
  * or connector name (screen->name()) as fallback for virtual displays
  * and embedded panels that lack EDID data.
  *
+ * Note: Two identical monitors (same manufacturer, model, and serial)
+ * produce the same identifier. This is an inherent EDID limitation.
+ * A future improvement could append a connector-name tiebreaker.
+ *
  * @param screen QScreen to identify
  * @return Stable identifier string
  */
