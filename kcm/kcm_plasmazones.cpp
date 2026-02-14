@@ -51,7 +51,6 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     : KQuickConfigModule(parent, data)
 {
     m_settings = new Settings(this);
-    syncProximitySnapFallbackFromSettings();
     loadLayouts();
     refreshScreens();
 
@@ -157,19 +156,14 @@ QVariantList KCMPlasmaZones::dragActivationTriggers() const
 {
     return convertTriggersForQml(m_settings->dragActivationTriggers());
 }
-QVariantList KCMPlasmaZones::multiZoneTriggers() const
-{
-    return convertTriggersForQml(m_settings->multiZoneTriggers());
-}
-
-bool KCMPlasmaZones::proximitySnapAlwaysOn() const
-{
-    return static_cast<int>(m_settings->multiZoneModifier()) == static_cast<int>(DragModifier::AlwaysActive);
-}
-
 QVariantList KCMPlasmaZones::zoneSpanTriggers() const
 {
     return convertTriggersForQml(m_settings->zoneSpanTriggers());
+}
+
+bool KCMPlasmaZones::toggleActivation() const
+{
+    return m_settings->toggleActivation();
 }
 
 // Display getters
@@ -462,20 +456,6 @@ QVariantList KCMPlasmaZones::defaultDragActivationTriggers() const
     return convertTriggersForQml(ConfigDefaults::dragActivationTriggers());
 }
 
-QVariantList KCMPlasmaZones::defaultMultiZoneTriggers() const
-{
-    // Default is AlwaysActive; when user unchecks "always on",
-    // fall back to Ctrl as a sensible single-key default
-    int def = ConfigDefaults::multiZoneModifier();
-    if (def == static_cast<int>(DragModifier::AlwaysActive)) {
-        def = static_cast<int>(DragModifier::Ctrl);
-    }
-    QVariantMap trigger;
-    trigger[QStringLiteral("modifier")] = ModifierUtils::dragModifierToBitmask(def);
-    trigger[QStringLiteral("mouseButton")] = 0;
-    return {trigger};
-}
-
 QVariantList KCMPlasmaZones::defaultZoneSpanTriggers() const
 {
     return convertTriggersForQml(ConfigDefaults::zoneSpanTriggers());
@@ -554,47 +534,21 @@ void KCMPlasmaZones::setDragActivationTriggers(const QVariantList& triggers)
     }
 }
 
-void KCMPlasmaZones::setProximitySnapAlwaysOn(bool alwaysOn)
-{
-    const int current = static_cast<int>(m_settings->multiZoneModifier());
-    if (alwaysOn) {
-        if (current != static_cast<int>(DragModifier::AlwaysActive)) {
-            m_proximitySnapFallbackModifier = current;
-            m_settings->setMultiZoneModifier(DragModifier::AlwaysActive);
-            Q_EMIT multiZoneTriggersChanged();
-            Q_EMIT proximitySnapAlwaysOnChanged();
-            setNeedsSave(true);
-        }
-    } else {
-        int target = m_proximitySnapFallbackModifier;
-        if (target == static_cast<int>(DragModifier::AlwaysActive) || target < 0 || target > 10) {
-            target = static_cast<int>(DragModifier::Ctrl);
-        }
-        if (current != target) {
-            m_settings->setMultiZoneModifier(static_cast<DragModifier>(target));
-            Q_EMIT multiZoneTriggersChanged();
-            Q_EMIT proximitySnapAlwaysOnChanged();
-            setNeedsSave(true);
-        }
-    }
-}
-
-void KCMPlasmaZones::setMultiZoneTriggers(const QVariantList& triggers)
-{
-    const QVariantList converted = convertTriggersForStorage(triggers);
-    if (m_settings->multiZoneTriggers() != converted) {
-        m_settings->setMultiZoneTriggers(converted);
-        Q_EMIT multiZoneTriggersChanged();
-        setNeedsSave(true);
-    }
-}
-
 void KCMPlasmaZones::setZoneSpanTriggers(const QVariantList& triggers)
 {
     const QVariantList converted = convertTriggersForStorage(triggers);
     if (m_settings->zoneSpanTriggers() != converted) {
         m_settings->setZoneSpanTriggers(converted);
         Q_EMIT zoneSpanTriggersChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setToggleActivation(bool enable)
+{
+    if (m_settings->toggleActivation() != enable) {
+        m_settings->setToggleActivation(enable);
+        Q_EMIT toggleActivationChanged();
         setNeedsSave(true);
     }
 }
@@ -1388,16 +1342,6 @@ void KCMPlasmaZones::save()
     m_saveInProgress = false;
 }
 
-void KCMPlasmaZones::syncProximitySnapFallbackFromSettings()
-{
-    const int current = static_cast<int>(m_settings->multiZoneModifier());
-    if (current != static_cast<int>(DragModifier::AlwaysActive)) {
-        m_proximitySnapFallbackModifier = current;
-    } else {
-        m_proximitySnapFallbackModifier = static_cast<int>(DragModifier::CtrlAlt);
-    }
-}
-
 QVariantList KCMPlasmaZones::convertTriggersForQml(const QVariantList& triggers)
 {
     QVariantList result;
@@ -1429,7 +1373,6 @@ QVariantList KCMPlasmaZones::convertTriggersForStorage(const QVariantList& trigg
 void KCMPlasmaZones::load()
 {
     m_settings->load();
-    syncProximitySnapFallbackFromSettings();
     loadLayouts();
     refreshScreens();
 
@@ -1503,7 +1446,6 @@ void KCMPlasmaZones::load()
 void KCMPlasmaZones::defaults()
 {
     m_settings->reset();
-    syncProximitySnapFallbackFromSettings();
 
     // Set default layout: pick the layout with the lowest defaultOrder (Columns (2) has 0)
     int bestOrder = 999;
@@ -1571,9 +1513,8 @@ void KCMPlasmaZones::defaults()
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT dragActivationTriggersChanged();
-    Q_EMIT multiZoneTriggersChanged();
-    Q_EMIT proximitySnapAlwaysOnChanged();
     Q_EMIT zoneSpanTriggersChanged();
+    Q_EMIT toggleActivationChanged();
     Q_EMIT showZonesOnAllMonitorsChanged();
     Q_EMIT disabledMonitorsChanged();
     Q_EMIT showZoneNumbersChanged();
@@ -2234,15 +2175,13 @@ void KCMPlasmaZones::onSettingsChanged()
     // reload settings from the config file
     if (m_settings) {
         m_settings->load();
-        syncProximitySnapFallbackFromSettings();
 
         // Emit signals for all properties that might have changed. Not tracking which
         // ones actually changed since external changes are rare, signal emission is cheap,
         // and QML only updates when values differ.
         Q_EMIT dragActivationTriggersChanged();
-        Q_EMIT multiZoneTriggersChanged();
-        Q_EMIT proximitySnapAlwaysOnChanged();
         Q_EMIT zoneSpanTriggersChanged();
+        Q_EMIT toggleActivationChanged();
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT disabledMonitorsChanged();
         Q_EMIT showZoneNumbersChanged();

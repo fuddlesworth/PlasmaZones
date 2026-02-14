@@ -74,14 +74,12 @@ public:
     virtual void setShiftDragToActivate(bool enable) = 0;
     virtual QVariantList dragActivationTriggers() const = 0;
     virtual void setDragActivationTriggers(const QVariantList& triggers) = 0;
-    virtual DragModifier multiZoneModifier() const = 0;
-    virtual void setMultiZoneModifier(DragModifier modifier) = 0;
-    virtual QVariantList multiZoneTriggers() const = 0;
-    virtual void setMultiZoneTriggers(const QVariantList& triggers) = 0;
     virtual DragModifier zoneSpanModifier() const = 0;
     virtual void setZoneSpanModifier(DragModifier modifier) = 0;
     virtual QVariantList zoneSpanTriggers() const = 0;
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
+    virtual bool toggleActivation() const = 0;
+    virtual void setToggleActivation(bool enable) = 0;
 };
 
 /**

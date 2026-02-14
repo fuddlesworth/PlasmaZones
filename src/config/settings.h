@@ -36,13 +36,10 @@ public:
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
     Q_PROPERTY(
-        int multiZoneModifier READ multiZoneModifierInt WRITE setMultiZoneModifierInt NOTIFY multiZoneModifierChanged)
-    Q_PROPERTY(QVariantList multiZoneTriggers READ multiZoneTriggers WRITE setMultiZoneTriggers NOTIFY
-                   multiZoneTriggersChanged)
-    Q_PROPERTY(
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
+    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY toggleActivationChanged)
 
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -264,19 +261,6 @@ public:
     QVariantList dragActivationTriggers() const override { return m_dragActivationTriggers; }
     void setDragActivationTriggers(const QVariantList& triggers) override;
 
-    DragModifier multiZoneModifier() const override
-    {
-        return m_multiZoneModifier;
-    }
-    void setMultiZoneModifier(DragModifier modifier) override;
-    int multiZoneModifierInt() const
-    {
-        return static_cast<int>(m_multiZoneModifier);
-    }
-    void setMultiZoneModifierInt(int modifier);
-    QVariantList multiZoneTriggers() const override { return m_multiZoneTriggers; }
-    void setMultiZoneTriggers(const QVariantList& triggers) override;
-
     DragModifier zoneSpanModifier() const override
     {
         return m_zoneSpanModifier;
@@ -284,6 +268,11 @@ public:
     void setZoneSpanModifier(DragModifier modifier) override;
     QVariantList zoneSpanTriggers() const override { return m_zoneSpanTriggers; }
     void setZoneSpanTriggers(const QVariantList& triggers) override;
+    bool toggleActivation() const override
+    {
+        return m_toggleActivation;
+    }
+    void setToggleActivation(bool enable) override;
     int zoneSpanModifierInt() const
     {
         return static_cast<int>(m_zoneSpanModifier);
@@ -941,10 +930,9 @@ private:
     // Activation
     bool m_shiftDragToActivate = true; // Deprecated - kept for migration
     QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
-    DragModifier m_multiZoneModifier = DragModifier::AlwaysActive; // Default: always active for proximity snap
-    QVariantList m_multiZoneTriggers; // [{modifier: int, mouseButton: int}, ...]
-    DragModifier m_zoneSpanModifier = DragModifier::Meta;
+    DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
     QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
+    bool m_toggleActivation = false;
 
     // Display
     bool m_showZonesOnAllMonitors = false;

@@ -447,41 +447,19 @@ ScrollView {
                         }
                     }
 
+                    CheckBox {
+                        Layout.fillWidth: true
+                        Kirigami.FormData.label: i18n("Toggle mode:")
+                        text: i18n("Tap trigger to toggle overlay")
+                        checked: kcm.toggleActivation
+                        onToggled: kcm.toggleActivation = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, press the activation trigger once to show the overlay, press again to hide it. When disabled, hold the trigger to show.")
+                    }
+
                     Kirigami.Separator {
                         Kirigami.FormData.isSection: true
-                        Kirigami.FormData.label: i18n("Multi-Zone Selection")
-                    }
-
-                    CheckBox {
-                        id: proximitySnapAlwaysOnCheckBox
-                        Layout.fillWidth: true
-                        Kirigami.FormData.label: i18n("Proximity snap:")
-                        text: i18n("Proximity snap always active")
-                        checked: kcm.proximitySnapAlwaysOn
-                        onCheckedChanged: {
-                            if (checked !== kcm.proximitySnapAlwaysOn) {
-                                kcm.proximitySnapAlwaysOn = checked
-                            }
-                        }
-                        ToolTip.visible: hovered && root.isCurrentTab
-                        ToolTip.text: i18n("Proximity snap is always active during zone selection — no need to hold the modifier key")
-                    }
-
-                    ModifierAndMouseCheckBoxes {
-                        id: multiZoneModifiers
-                        Layout.fillWidth: true
-                        Layout.preferredWidth: root.constants.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Proximity snap modifier:")
-                        visible: !kcm.proximitySnapAlwaysOn
-                        allowMultiple: true
-                        acceptMode: acceptModeAll
-                        triggers: kcm.multiZoneTriggers
-                        defaultTriggers: kcm.defaultMultiZoneTriggers
-                        tooltipEnabled: root.isCurrentTab
-                        customTooltipText: i18n("Hold modifier or use mouse button while dragging to snap to adjacent zones. Add multiple triggers to activate with any of them.")
-                        onTriggersModified: (triggers) => {
-                            kcm.multiZoneTriggers = triggers
-                        }
+                        Kirigami.FormData.label: i18n("Zone Span")
                     }
 
                     ModifierAndMouseCheckBoxes {

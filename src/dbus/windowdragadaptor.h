@@ -143,8 +143,7 @@ private:
 
     // Refactored dragMoved helpers
     void handleZoneSpanModifier(int x, int y);
-    void handleMultiZoneModifier(int x, int y, Qt::KeyboardModifiers mods);
-    void handleSingleZoneModifier(int x, int y);
+    void handleMultiZoneModifier(int x, int y);
     void hideOverlayAndClearZoneState();
 
     IOverlayService* m_overlayService;
@@ -160,6 +159,8 @@ private:
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
     bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape
+    bool m_activationToggled = false;    // Current toggle state (on/off)
+    bool m_prevTriggerHeld = false;      // Previous frame's trigger state for edge detection
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
     bool m_zoneSelectorShown = false;

@@ -45,13 +45,7 @@ public:
         trigger[QStringLiteral("mouseButton")] = dragActivationMouseButton();
         return {trigger};
     }
-    static int multiZoneModifier() { return instance().defaultMultiZoneModifierValue(); }
-    static QVariantList multiZoneTriggers() {
-        QVariantMap trigger;
-        trigger[QStringLiteral("modifier")] = multiZoneModifier();
-        trigger[QStringLiteral("mouseButton")] = 0;
-        return {trigger};
-    }
+    static bool toggleActivation() { return instance().defaultToggleActivationValue(); }
     static int zoneSpanModifier() { return instance().defaultZoneSpanModifierValue(); }
     static QVariantList zoneSpanTriggers() {
         QVariantMap trigger;

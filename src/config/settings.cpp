@@ -252,58 +252,6 @@ void Settings::setDragActivationTriggers(const QVariantList& triggers)
     }
 }
 
-void Settings::setMultiZoneModifier(DragModifier modifier)
-{
-    if (m_multiZoneModifier != modifier) {
-        m_multiZoneModifier = modifier;
-        // Keep triggers in sync: update first trigger's modifier to match
-        if (!m_multiZoneTriggers.isEmpty()) {
-            auto first = m_multiZoneTriggers.first().toMap();
-            first[QStringLiteral("modifier")] = static_cast<int>(modifier);
-            m_multiZoneTriggers[0] = first;
-        } else {
-            QVariantMap trigger;
-            trigger[QStringLiteral("modifier")] = static_cast<int>(modifier);
-            trigger[QStringLiteral("mouseButton")] = 0;
-            m_multiZoneTriggers = {trigger};
-        }
-        Q_EMIT multiZoneModifierChanged();
-        Q_EMIT multiZoneTriggersChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMultiZoneTriggers(const QVariantList& triggers)
-{
-    QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (m_multiZoneTriggers != capped) {
-        m_multiZoneTriggers = capped;
-        // Sync multiZoneModifier from the first trigger that has a non-zero modifier
-        // (needed for AlwaysActive feature flag). Searching for the first modifier-based
-        // trigger avoids losing AlwaysActive state when a mouse-button trigger is first.
-        DragModifier synced = DragModifier::Disabled;
-        for (const auto& t : capped) {
-            int mod = t.toMap().value(QStringLiteral("modifier"), 0).toInt();
-            if (mod != 0) {
-                synced = static_cast<DragModifier>(
-                    qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
-                break;
-            }
-        }
-        m_multiZoneModifier = synced;
-        Q_EMIT multiZoneTriggersChanged();
-        Q_EMIT multiZoneModifierChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setMultiZoneModifierInt(int modifier)
-{
-    if (modifier >= 0 && modifier <= static_cast<int>(DragModifier::CtrlAltMeta)) {
-        setMultiZoneModifier(static_cast<DragModifier>(modifier));
-    }
-}
-
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
     if (m_zoneSpanModifier != modifier) {
@@ -353,6 +301,8 @@ void Settings::setZoneSpanModifierInt(int modifier)
         setZoneSpanModifier(static_cast<DragModifier>(modifier));
     }
 }
+
+SETTINGS_SETTER(bool, ToggleActivation, m_toggleActivation, toggleActivationChanged)
 
 // Simple bool setters
 SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
@@ -793,26 +743,6 @@ void Settings::load()
     m_dragActivationTriggers = loadTriggerList(activation, QLatin1String("DragActivationTriggers"),
                                                legacyDragMod, legacyDragBtn);
 
-    // Multi-zone modifier: hold this to span windows across multiple zones
-    int multiZoneMod = activation.readEntry(QLatin1String("MultiZoneModifier"), ConfigDefaults::multiZoneModifier());
-    if (multiZoneMod < 0 || multiZoneMod > static_cast<int>(DragModifier::CtrlAltMeta)) {
-        qCWarning(lcConfig) << "Invalid MultiZoneModifier value:" << multiZoneMod << "using default";
-        multiZoneMod = ConfigDefaults::multiZoneModifier();
-    }
-    m_multiZoneModifier = static_cast<DragModifier>(multiZoneMod);
-    qCDebug(lcConfig) << "Loaded MultiZoneModifier= " << multiZoneMod;
-
-    // Multi-zone triggers list (multi-bind)
-    m_multiZoneTriggers = loadTriggerList(activation, QLatin1String("MultiZoneTriggers"),
-                                           static_cast<int>(m_multiZoneModifier), 0);
-    // Sync legacy from first trigger
-    if (!m_multiZoneTriggers.isEmpty()) {
-        auto first = m_multiZoneTriggers.first().toMap();
-        m_multiZoneModifier = static_cast<DragModifier>(
-            qBound(0, first.value(QStringLiteral("modifier"), 0).toInt(),
-                   static_cast<int>(DragModifier::CtrlAltMeta)));
-    }
-
     // Zone span modifier: hold this key for paint-to-span zone selection
     // Migration: if old MiddleClickMultiZone key exists but new ZoneSpanModifier doesn't,
     // honour the old disabled state so upgrading users don't get unexpected zone-span activation
@@ -836,6 +766,8 @@ void Settings::load()
     // Zone span triggers list (multi-bind)
     m_zoneSpanTriggers = loadTriggerList(activation, QLatin1String("ZoneSpanTriggers"),
                                           legacySpanMod, 0);
+
+    m_toggleActivation = activation.readEntry(QLatin1String("ToggleActivation"), ConfigDefaults::toggleActivation());
 
     // Display (defaults from .kcfg via ConfigDefaults)
     m_showZonesOnAllMonitors = display.readEntry(QLatin1String("ShowOnAllMonitors"), ConfigDefaults::showOnAllMonitors());
@@ -1088,12 +1020,14 @@ void Settings::save()
     saveTriggerList(activation, QLatin1String("DragActivationTriggers"), m_dragActivationTriggers);
     activation.deleteEntry(QLatin1String("DragActivationModifier"));
     activation.deleteEntry(QLatin1String("DragActivationMouseButton"));
-    activation.writeEntry(QLatin1String("MultiZoneModifier"), static_cast<int>(m_multiZoneModifier));
-    saveTriggerList(activation, QLatin1String("MultiZoneTriggers"), m_multiZoneTriggers);
+    // Clean up removed multi-zone modifier keys (legacy)
+    activation.deleteEntry(QLatin1String("MultiZoneModifier"));
+    activation.deleteEntry(QLatin1String("MultiZoneTriggers"));
     activation.deleteEntry(QLatin1String("MultiZoneMouseButton"));
     activation.writeEntry(QLatin1String("ZoneSpanModifier"), static_cast<int>(m_zoneSpanModifier));
     saveTriggerList(activation, QLatin1String("ZoneSpanTriggers"), m_zoneSpanTriggers);
     activation.deleteEntry(QLatin1String("ZoneSpanMouseButton"));
+    activation.writeEntry(QLatin1String("ToggleActivation"), m_toggleActivation);
 
     // Display
     display.writeEntry(QLatin1String("ShowOnAllMonitors"), m_showZonesOnAllMonitors);
