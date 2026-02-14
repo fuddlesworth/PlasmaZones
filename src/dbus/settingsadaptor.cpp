@@ -192,6 +192,9 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumZoneSizePx", minimumZoneSizePx, setMinimumZoneSizePx)
     REGISTER_INT_SETTING("minimumZoneDisplaySizePx", minimumZoneDisplaySizePx, setMinimumZoneDisplaySizePx)
 
+    // Activation
+    REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+
     // Behavior settings
     REGISTER_BOOL_SETTING("keepWindowsInZonesOnResolutionChange", keepWindowsInZonesOnResolutionChange,
                           setKeepWindowsInZonesOnResolutionChange)
