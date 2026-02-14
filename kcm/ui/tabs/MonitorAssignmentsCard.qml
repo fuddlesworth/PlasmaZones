@@ -165,12 +165,19 @@ Kirigami.Card {
 
                     // Monitor disable option
                     CheckBox {
+                        id: disableCheck
                         Layout.fillWidth: true
                         text: i18n("Disable PlasmaZones on this monitor")
-                        checked: root.kcm.disabledMonitors.indexOf(monitorDelegate.screenName) >= 0
+                        checked: root.kcm.isMonitorDisabled(monitorDelegate.screenName)
                         onToggled: root.kcm.setMonitorDisabled(monitorDelegate.screenName, checked)
                         ToolTip.visible: hovered
                         ToolTip.text: i18n("When enabled, zones will not appear on this monitor")
+                        Connections {
+                            target: root.kcm
+                            function onDisabledMonitorsChanged() {
+                                disableCheck.checked = root.kcm.isMonitorDisabled(monitorDelegate.screenName)
+                            }
+                        }
                     }
 
                     // Per-desktop section (expandable)

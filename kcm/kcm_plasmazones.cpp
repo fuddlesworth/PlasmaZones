@@ -38,6 +38,7 @@
 #include "../src/core/layout.h"
 #include "../src/core/logging.h"
 #include "../src/core/modifierutils.h"
+#include "../src/core/utils.h"
 #include "version.h"
 
 // Import static QML module for shared components
@@ -2637,16 +2638,23 @@ void KCMPlasmaZones::setMonitorDisabled(const QString& screenName, bool disabled
     if (!m_settings || screenName.isEmpty()) {
         return;
     }
+    // Translate connector name to stable EDID-based screen ID for storage
+    QString id = Utils::screenIdForName(screenName);
     QStringList list = m_settings->disabledMonitors();
     if (disabled) {
-        if (!list.contains(screenName)) {
-            list.append(screenName);
+        if (!list.contains(id)) {
+            list.append(id);
             m_settings->setDisabledMonitors(list);
             Q_EMIT disabledMonitorsChanged();
             setNeedsSave(true);
         }
     } else {
-        if (list.removeAll(screenName) > 0) {
+        // Remove both screen ID and any legacy connector name entries
+        bool changed = list.removeAll(id) > 0;
+        if (id != screenName) {
+            changed |= list.removeAll(screenName) > 0;
+        }
+        if (changed) {
             m_settings->setDisabledMonitors(list);
             Q_EMIT disabledMonitorsChanged();
             setNeedsSave(true);
@@ -2657,7 +2665,7 @@ void KCMPlasmaZones::setMonitorDisabled(const QString& screenName, bool disabled
 // Per-screen zone selector settings
 QVariantMap KCMPlasmaZones::getPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->getPerScreenZoneSelectorSettings(screenName) : QVariantMap();
+    return m_settings ? m_settings->getPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : QVariantMap();
 }
 
 void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
@@ -2665,7 +2673,8 @@ void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, 
     if (!m_settings || screenName.isEmpty()) {
         return;
     }
-    m_settings->setPerScreenZoneSelectorSetting(screenName, key, value);
+    // Translate connector name to stable EDID-based screen ID for storage
+    m_settings->setPerScreenZoneSelectorSetting(Utils::screenIdForName(screenName), key, value);
     setNeedsSave(true);
 }
 
@@ -2674,13 +2683,13 @@ void KCMPlasmaZones::clearPerScreenZoneSelectorSettings(const QString& screenNam
     if (!m_settings || screenName.isEmpty()) {
         return;
     }
-    m_settings->clearPerScreenZoneSelectorSettings(screenName);
+    m_settings->clearPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName));
     setNeedsSave(true);
 }
 
 bool KCMPlasmaZones::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(screenName) : false;
+    return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : false;
 }
 
 void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
