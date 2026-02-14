@@ -11,6 +11,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QDir>
+#include <QFile>
 #include <optional>
 
 namespace PlasmaZones {
@@ -232,16 +234,71 @@ inline QString extractWindowClass(const QString& windowId)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
+ * @brief Read the EDID header serial number from sysfs
+ *
+ * The EDID header contains a 4-byte little-endian serial number at bytes 12-15.
+ * This is always present (unlike the optional text serial descriptor that
+ * QScreen::serialNumber() returns) and is what KDE Display Settings shows
+ * next to each monitor name.
+ *
+ * @param connectorName Connector name (e.g., "DP-2")
+ * @return Header serial as string, or empty if not readable
+ */
+inline QString readEdidHeaderSerial(const QString& connectorName)
+{
+    // Find the sysfs EDID file: /sys/class/drm/card*-<connector>/edid
+    QDir drmDir(QStringLiteral("/sys/class/drm"));
+    if (!drmDir.exists()) {
+        return QString();
+    }
+
+    const QStringList entries = drmDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString& entry : entries) {
+        // Match entries like "card0-DP-2", "card1-HDMI-A-1"
+        int dashPos = entry.indexOf(QLatin1Char('-'));
+        if (dashPos < 0) {
+            continue;
+        }
+        if (entry.mid(dashPos + 1) == connectorName) {
+            QFile edidFile(drmDir.filePath(entry) + QStringLiteral("/edid"));
+            if (!edidFile.open(QIODevice::ReadOnly)) {
+                continue;
+            }
+            QByteArray header = edidFile.read(16);
+            if (header.size() < 16) {
+                continue;
+            }
+            // Bytes 12-15: serial number (little-endian uint32)
+            const auto* data = reinterpret_cast<const uint8_t*>(header.constData());
+            uint32_t serial = data[12]
+                | (static_cast<uint32_t>(data[13]) << 8)
+                | (static_cast<uint32_t>(data[14]) << 16)
+                | (static_cast<uint32_t>(data[15]) << 24);
+            if (serial != 0) {
+                return QString::number(serial);
+            }
+            return QString();
+        }
+    }
+    return QString();
+}
+
+/**
  * @brief Stable EDID-based identifier for a physical monitor
  *
- * Format: "manufacturer:model:serial" when serial is available,
+ * Matches KDE's identification approach: uses manufacturer, model, and
+ * EDID header serial number to uniquely identify monitors. The header
+ * serial (uint32 from EDID bytes 12-15) is always present and is what
+ * KDE Display Settings shows (e.g., "115107"), unlike the optional text
+ * serial descriptor that QScreen::serialNumber() returns.
+ *
+ * Format: "manufacturer:model:serial" when any serial is available,
  * "manufacturer:model" when only those are available,
  * or connector name (screen->name()) as fallback for virtual displays
  * and embedded panels that lack EDID data.
  *
- * Note: Two identical monitors (same manufacturer, model, and serial)
- * produce the same identifier. This is an inherent EDID limitation.
- * A future improvement could append a connector-name tiebreaker.
+ * When two monitors produce the same identifier (identical EDID data),
+ * the connector name is appended as a tiebreaker.
  *
  * @param screen QScreen to identify
  * @return Stable identifier string
@@ -252,9 +309,16 @@ inline QString screenIdentifier(const QScreen* screen)
         return QString();
     }
 
-    const QString serial = screen->serialNumber();
     const QString manufacturer = screen->manufacturer();
     const QString model = screen->model();
+
+    // Prefer Qt's text serial descriptor (from EDID descriptor blocks)
+    QString serial = screen->serialNumber();
+
+    // Fallback: read the EDID header serial from sysfs (always present, what KDE shows)
+    if (serial.isEmpty()) {
+        serial = readEdidHeaderSerial(screen->name());
+    }
 
     if (!serial.isEmpty()) {
         return manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
