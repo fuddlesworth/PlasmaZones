@@ -98,48 +98,48 @@ public:
     Q_INVOKABLE void setActiveLayout(Layout* layout) override;
     Q_INVOKABLE void setActiveLayoutById(const QUuid& id) override;
 
-    Q_INVOKABLE void assignLayout(const QString& screenName, int virtualDesktop, const QString& activity,
+    Q_INVOKABLE void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
                                   Layout* layout) override;
-    Q_INVOKABLE void assignLayoutById(const QString& screenName, int virtualDesktop, const QString& activity,
+    Q_INVOKABLE void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                       const QUuid& layoutId) override;
-    Q_INVOKABLE Layout* layoutForScreen(const QString& screenName, int virtualDesktop = 0,
+    Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
-    Q_INVOKABLE void clearAssignment(const QString& screenName, int virtualDesktop = 0,
+    Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString()) override;
 
     /**
      * @brief Check if there's an explicit assignment (no fallback)
-     * @param screenName Monitor name
+     * @param screenId Stable EDID-based screen ID (or connector name fallback)
      * @param virtualDesktop Desktop number (0 = all desktops)
      * @param activity Activity ID (empty = all activities)
      * @return true if explicit assignment exists for this exact key
      */
-    Q_INVOKABLE bool hasExplicitAssignment(const QString& screenName, int virtualDesktop = 0,
+    Q_INVOKABLE bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                            const QString& activity = QString()) const override;
 
     /**
      * @brief Batch set all screen assignments (base assignments, desktop=0, no activity)
-     * @param assignments Map of screenName -> layoutId
+     * @param assignments Map of screenId -> layoutId
      * Clears existing base assignments and sets new ones, saves once at end
      */
     void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) override;
 
     /**
      * @brief Batch set all per-desktop assignments
-     * @param assignments Map of (screenName, virtualDesktop) -> layoutId
+     * @param assignments Map of (screenId, virtualDesktop) -> layoutId
      * Clears existing per-desktop assignments and sets new ones, saves once at end
      */
     void setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) override;
 
     /**
      * @brief Batch set all per-activity assignments
-     * @param assignments Map of (screenName, activityId) -> layoutId
+     * @param assignments Map of (screenId, activityId) -> layoutId
      * Clears existing per-activity assignments and sets new ones, saves once at end
      */
     void setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) override;
 
     Q_INVOKABLE Layout* layoutForShortcut(int number) const override;
-    Q_INVOKABLE void applyQuickLayout(int number, const QString& screenName) override;
+    Q_INVOKABLE void applyQuickLayout(int number, const QString& screenId) override;
     void setQuickLayoutSlot(int number, const QUuid& layoutId) override;
     void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) override;  // Batch set - saves once
     QHash<int, QUuid> quickLayoutSlots() const override
@@ -148,8 +148,8 @@ public:
     }
 
     // Layout cycling
-    Q_INVOKABLE void cycleToPreviousLayout(const QString& screenName);
-    Q_INVOKABLE void cycleToNextLayout(const QString& screenName);
+    Q_INVOKABLE void cycleToPreviousLayout(const QString& screenId);
+    Q_INVOKABLE void cycleToNextLayout(const QString& screenId);
 
     // Context for visibility-filtered cycling and per-screen layout lookups
     int currentVirtualDesktop() const override { return m_currentVirtualDesktop; }
@@ -170,13 +170,13 @@ public:
 
     /**
      * @brief Get all per-desktop assignments (virtualDesktop > 0, no activity)
-     * @return Map of (screenName, virtualDesktop) -> layoutId
+     * @return Map of (screenId, virtualDesktop) -> layoutId
      */
     QHash<QPair<QString, int>, QUuid> desktopAssignments() const;
 
     /**
      * @brief Get all per-activity assignments (activity non-empty, any desktop)
-     * @return Map of (screenName, activityId) -> layoutId
+     * @return Map of (screenId, activityId) -> layoutId
      */
     QHash<QPair<QString, QString>, QUuid> activityAssignments() const;
 
@@ -186,7 +186,7 @@ Q_SIGNALS:
     void layoutAdded(Layout* layout);
     void layoutRemoved(Layout* layout);
     void activeLayoutChanged(Layout* layout);
-    void layoutAssigned(const QString& screenName, Layout* layout);
+    void layoutAssigned(const QString& screenId, Layout* layout);
     void layoutDirectoryChanged();
     void layoutsLoaded();
     void layoutsSaved();
@@ -195,7 +195,7 @@ private:
     void ensureLayoutDirectory();
     void loadLayoutsFromDirectory(const QString& directory);
     QString layoutFilePath(const QUuid& id) const;
-    Layout* cycleLayoutImpl(const QString& screenName, int direction);
+    Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QUuid& layoutId, const QString& context) const;
 
     ISettings* m_settings = nullptr;

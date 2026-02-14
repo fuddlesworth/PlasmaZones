@@ -573,6 +573,8 @@ void LayoutAdaptor::openEditor()
 
 void LayoutAdaptor::openEditorForScreen(const QString& screenName)
 {
+    // Intentionally passes the connector name (not screen ID) — the editor process
+    // uses it for QScreen::name() matching and geometry lookup.
     launchEditor({QStringLiteral("--screen"), screenName}, QStringLiteral("for screen: %1").arg(screenName));
 }
 
@@ -773,7 +775,8 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenName, int v
 
     m_layoutManager->assignLayoutById(Utils::screenIdForName(screenName), virtualDesktop, QString(), layout->id());
     m_layoutManager->saveAssignments();
-    qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName << "on desktop" << virtualDesktop;
+    qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenName
+                          << "(id:" << Utils::screenIdForName(screenName) << ") on desktop" << virtualDesktop;
 
     if (m_virtualDesktopManager) {
         int currentDesktop = m_virtualDesktopManager->currentDesktop();
@@ -1036,6 +1039,13 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
             // for "DP-2:activity-uuid" but would be WRONG for screen-ID keys with colons.
             // New KCM always sends '|', so this path only triggers for pre-migration data.
             sep = it.key().indexOf(QLatin1Char(':'));
+            // Guard: if the extracted screen name contains colons, the ':' split is wrong
+            // (it's a screen-ID key, not a connector-name key). Skip rather than mis-parse.
+            if (sep > 0 && it.key().left(sep).contains(QLatin1Char(':'))) {
+                qCWarning(lcDbusLayout) << "Activity assignment key contains screen ID with ':' delimiter"
+                                        << "— expected '|' delimiter:" << it.key();
+                sep = -1;
+            }
         }
         if (sep < 1) {
             qCWarning(lcDbusLayout) << "Invalid activity assignment key format:" << it.key();

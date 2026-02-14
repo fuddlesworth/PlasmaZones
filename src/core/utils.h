@@ -233,7 +233,8 @@ inline QString extractWindowClass(const QString& windowId)
 // Screen Identity Utilities (EDID-based stable identification)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Shared cache for EDID header serial lookups (avoids sysfs I/O per call)
+/// Shared cache for EDID header serial lookups (avoids sysfs I/O per call).
+/// Must only be called from the main (GUI) thread — no synchronization.
 inline QHash<QString, QString>& edidSerialCache()
 {
     static QHash<QString, QString> s_cache;
@@ -366,6 +367,10 @@ inline QString screenIdentifier(const QScreen* screen)
         serial = readEdidHeaderSerial(screen->name());
     }
 
+    // Note: leading colons (":model:serial") are possible for screens with empty
+    // manufacturer fields (some cheap/generic monitors). This is intentional —
+    // the identifier is still unique and stable, and isConnectorName() correctly
+    // classifies it as a screen ID (contains ':').
     if (!serial.isEmpty()) {
         return manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
     }

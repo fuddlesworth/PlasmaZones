@@ -580,6 +580,10 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
             QString resolved = Utils::screenIdForName(layout->m_allowedScreens[i]);
             if (resolved != layout->m_allowedScreens[i]) {
                 layout->m_allowedScreens[i] = resolved;
+            } else {
+                qCDebug(lcLayout) << "allowedScreens: could not resolve connector name"
+                                  << layout->m_allowedScreens[i]
+                                  << "to screen ID (monitor may be disconnected)";
             }
         }
     }

@@ -423,6 +423,9 @@ void Daemon::start()
 
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
+        // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
+        // (handles the case where EDID wasn't available during very early startup)
+        Utils::invalidateEdidCache(screen->name());
         m_overlayService->handleScreenAdded(screen);
         // Use per-screen layout (falls back to activeLayout if no assignment)
         Layout* screenLayout = m_layoutManager->layoutForScreen(
@@ -507,7 +510,7 @@ void Daemon::start()
         }
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
         } else {
             qCDebug(lcDaemon) << "No screen info for quickLayout shortcut — skipping";
             return;
@@ -522,7 +525,7 @@ void Daemon::start()
         }
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
         } else {
             qCDebug(lcDaemon) << "No screen info for previousLayout shortcut — skipping";
             return;
@@ -535,7 +538,7 @@ void Daemon::start()
         }
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(screen->name());
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
         } else {
             qCDebug(lcDaemon) << "No screen info for nextLayout shortcut — skipping";
             return;
@@ -681,7 +684,8 @@ void Daemon::start()
             return;
         }
         if (!screenName.isEmpty()) {
-            m_layoutManager->assignLayout(screenName, m_virtualDesktopManager->currentDesktop(),
+            QString screenId = Utils::screenIdForName(screenName);
+            m_layoutManager->assignLayout(screenId, m_virtualDesktopManager->currentDesktop(),
                 m_activityManager && ActivityManager::isAvailable()
                     ? m_activityManager->currentActivity() : QString(),
                 layout);

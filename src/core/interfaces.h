@@ -344,7 +344,7 @@ public:
 
     // Quick layout switch
     virtual Layout* layoutForShortcut(int number) const = 0;
-    virtual void applyQuickLayout(int number, const QString& screenName) = 0;
+    virtual void applyQuickLayout(int number, const QString& screenId) = 0;
     virtual void setQuickLayoutSlot(int number, const QUuid& layoutId) = 0;
     virtual void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) = 0; // Batch set - saves once
     virtual QHash<int, QUuid> quickLayoutSlots() const = 0;
