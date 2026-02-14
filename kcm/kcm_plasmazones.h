@@ -45,12 +45,10 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Activation
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
-    Q_PROPERTY(QVariantList multiZoneTriggers READ multiZoneTriggers WRITE setMultiZoneTriggers NOTIFY
-                   multiZoneTriggersChanged)
-    Q_PROPERTY(bool proximitySnapAlwaysOn READ proximitySnapAlwaysOn WRITE setProximitySnapAlwaysOn NOTIFY
-                   proximitySnapAlwaysOnChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
+    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
+                   toggleActivationChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -148,7 +146,6 @@ class KCMPlasmaZones : public KQuickConfigModule
 
     // Default values for reset-to-default in UI components (CONSTANT — never change at runtime)
     Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
-    Q_PROPERTY(QVariantList defaultMultiZoneTriggers READ defaultMultiZoneTriggers CONSTANT)
     Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
     Q_PROPERTY(int defaultEditorSnapOverrideModifier READ defaultEditorSnapOverrideModifier CONSTANT)
     Q_PROPERTY(int defaultFillOnDropModifier READ defaultFillOnDropModifier CONSTANT)
@@ -219,9 +216,8 @@ public:
 
     // Property getters
     QVariantList dragActivationTriggers() const;
-    QVariantList multiZoneTriggers() const;
-    bool proximitySnapAlwaysOn() const;
     QVariantList zoneSpanTriggers() const;
+    bool toggleActivation() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
     bool showZoneNumbers() const;
@@ -289,7 +285,6 @@ public:
 
     // Default value getters (for reset-to-default buttons in UI)
     QVariantList defaultDragActivationTriggers() const;
-    QVariantList defaultMultiZoneTriggers() const;
     QVariantList defaultZoneSpanTriggers() const;
     int defaultEditorSnapOverrideModifier() const;
     int defaultFillOnDropModifier() const;
@@ -327,9 +322,8 @@ public:
 
     // Property setters
     void setDragActivationTriggers(const QVariantList& triggers);
-    void setMultiZoneTriggers(const QVariantList& triggers);
-    void setProximitySnapAlwaysOn(bool alwaysOn);
     void setZoneSpanTriggers(const QVariantList& triggers);
+    void setToggleActivation(bool enable);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
@@ -476,9 +470,8 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void dragActivationTriggersChanged();
-    void multiZoneTriggersChanged();
-    void proximitySnapAlwaysOnChanged();
     void zoneSpanTriggersChanged();
+    void toggleActivationChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
@@ -601,8 +594,6 @@ private:
      */
     static KConfigGroup editorConfigGroup();
 
-    void syncProximitySnapFallbackFromSettings();
-
     // Trigger list conversion helpers (DragModifier enum <-> Qt bitmask)
     static QVariantList convertTriggersForQml(const QVariantList& triggers);
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
@@ -656,9 +647,6 @@ private:
     // Fill on drop settings (stored separately in Editor group)
     bool m_fillOnDropEnabled = true;
     int m_fillOnDropModifier = 0x04000000; // Qt::ControlModifier
-
-    // Last modifier used when proximity snap is not always-on; restored when user unchecks "Always on"
-    int m_proximitySnapFallbackModifier = 5; // DragModifier::CtrlAlt (kcfg default)
 
     // Save guard to prevent re-entry during synchronous D-Bus operations
     bool m_saveInProgress = false;

@@ -115,28 +115,6 @@ void SettingsAdaptor::initializeRegistry()
         return true;                                                                                                   \
     };
 
-    // Multi-zone modifier: hold this key to span windows across multiple zones
-    m_getters[QStringLiteral("multiZoneModifier")] = [this]() {
-        return static_cast<int>(m_settings->multiZoneModifier());
-    };
-    m_setters[QStringLiteral("multiZoneModifier")] = [this](const QVariant& v) {
-        int mod = v.toInt();
-        if (mod >= 0 && mod <= static_cast<int>(DragModifier::CtrlAltMeta)) {
-            m_settings->setMultiZoneModifier(static_cast<DragModifier>(mod));
-            return true;
-        }
-        return false;
-    };
-
-    // Multi-zone triggers list (multi-bind)
-    m_getters[QStringLiteral("multiZoneTriggers")] = [this]() {
-        return QVariant::fromValue(m_settings->multiZoneTriggers());
-    };
-    m_setters[QStringLiteral("multiZoneTriggers")] = [this](const QVariant& v) {
-        m_settings->setMultiZoneTriggers(v.toList());
-        return true;
-    };
-
     // Drag activation triggers list (multi-bind)
     m_getters[QStringLiteral("dragActivationTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->dragActivationTriggers());

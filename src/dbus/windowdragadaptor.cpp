@@ -152,6 +152,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_restoreSizeEmittedDuringDrag = false;
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
+    m_activationToggled = false;
+    m_prevTriggerHeld = false;
     m_overlayShown = false;
     m_overlayScreen = nullptr;
     m_zoneSelectorShown = false;
@@ -359,10 +361,8 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
     }
 }
 
-void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifiers mods)
+void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 {
-    Q_UNUSED(mods);
-
     QScreen* screen = nullptr;
     auto* layout = prepareHandlerContext(x, y, screen);
     if (!layout) {
@@ -440,62 +440,6 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y, Qt::KeyboardModifi
     }
 }
 
-void WindowDragAdaptor::handleSingleZoneModifier(int x, int y)
-{
-    QScreen* screen = nullptr;
-    auto* layout = prepareHandlerContext(x, y, screen);
-    if (!layout) {
-        return;
-    }
-
-    m_zoneDetector->setLayout(layout);
-
-    // Convert cursor position to relative coordinates within available area
-    QRectF availableGeom = ScreenManager::actualAvailableGeometry(screen);
-
-    // Guard against zero-size geometry (disconnected or degenerate screen)
-    if (availableGeom.width() <= 0 || availableGeom.height() <= 0) {
-        return;
-    }
-
-    qreal relX = static_cast<qreal>(x - availableGeom.x()) / availableGeom.width();
-    qreal relY = static_cast<qreal>(y - availableGeom.y()) / availableGeom.height();
-
-    // Find zone at cursor position
-    Zone* foundZone = nullptr;
-    for (auto* zone : layout->zones()) {
-        QRectF relGeom = zone->relativeGeometry();
-        if (relGeom.contains(QPointF(relX, relY))) {
-            foundZone = zone;
-            break;
-        }
-    }
-
-    if (foundZone) {
-        QString zoneId = foundZone->id().toString();
-        if (zoneId != m_currentZoneId) {
-            m_currentZoneId = zoneId;
-            m_zoneDetector->highlightZone(foundZone);
-            m_overlayService->highlightZone(zoneId);
-
-            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-            int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
-            QRectF geom = GeometryUtils::getZoneGeometryWithGaps(foundZone, screen, zonePadding, outerGap, true);
-            m_currentZoneGeometry = geom.toRect();
-        }
-    } else {
-        if (!m_currentZoneId.isEmpty() || m_isMultiZoneMode) {
-            m_currentZoneId.clear();
-            m_currentAdjacentZoneIds.clear();
-            m_isMultiZoneMode = false;
-            m_currentZoneGeometry = QRect();
-            m_currentMultiZoneGeometry = QRect();
-            m_zoneDetector->clearHighlights();
-            m_overlayService->clearHighlight();
-        }
-    }
-}
-
 void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons)
 {
     if (windowId != m_draggedWindowId) {
@@ -548,20 +492,23 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     const QVariantList triggers = m_settings->dragActivationTriggers();
     const bool zoneActivationHeld = anyTriggerHeld(triggers, mods, mouseButtons);
 
-    // Check all configured multi-zone triggers (multi-bind support)
-    const QVariantList multiZoneTriggers = m_settings->multiZoneTriggers();
-    const int multiZoneMod = static_cast<int>(m_settings->multiZoneModifier());
-    const bool multiZoneAlwaysOn = (multiZoneMod == static_cast<int>(DragModifier::AlwaysActive));
-    // AlwaysActive should not independently activate the overlay;
-    // it only enables proximity snap while the overlay is already open.
-    const bool multiZoneModifierHeld = multiZoneAlwaysOn ? false
-        : anyTriggerHeld(multiZoneTriggers, mods, mouseButtons);
+    // Toggle mode: detect rising edge (release→press) to flip overlay state
+    bool activationActive;
+    if (m_settings->toggleActivation()) {
+        if (zoneActivationHeld && !m_prevTriggerHeld) {
+            m_activationToggled = !m_activationToggled;
+        }
+        m_prevTriggerHeld = zoneActivationHeld;
+        activationActive = m_activationToggled;
+    } else {
+        activationActive = zoneActivationHeld;
+    }
 
     // Check all configured zone span triggers (multi-bind support)
     const QVariantList zoneSpanTriggers = m_settings->zoneSpanTriggers();
     const bool zoneSpanModifierHeld = anyTriggerHeld(zoneSpanTriggers, mods, mouseButtons);
 
-    // Conflict detection: warn once per drag when same trigger appears in multiple lists
+    // Conflict detection: warn once per drag when activation and zone span share a trigger
     if (!m_modifierConflictWarned) {
         m_modifierConflictWarned = true;
         for (const auto& at : triggers) {
@@ -570,15 +517,6 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             const int aBtn = aMap.value(QStringLiteral("mouseButton"), 0).toInt();
             if (aMod == 0 && aBtn == 0)
                 continue;
-            for (const auto& mt : multiZoneTriggers) {
-                const auto mMap = mt.toMap();
-                if ((aMod != 0 && mMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
-                    || (aBtn != 0 && mMap.value(QStringLiteral("mouseButton"), 0).toInt() == aBtn)) {
-                    qCWarning(lcDbusWindow) << "Trigger overlap: activation and multi-zone share trigger"
-                                            << "(mod:" << aMod << "btn:" << aBtn << ");"
-                                            << "multi-zone takes priority when both match";
-                }
-            }
             for (const auto& st : zoneSpanTriggers) {
                 const auto sMap = st.toMap();
                 if ((aMod != 0 && sMap.value(QStringLiteral("modifier"), 0).toInt() == aMod)
@@ -593,9 +531,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
     // Mutual exclusion: overlay (modifier-triggered) and zone selector (edge-triggered)
     // cannot be active simultaneously. Modifier takes priority as an explicit user action.
-    // Secondary modifiers (zone span, proximity snap) only apply while activation is held.
-    // Priority: zone span > multi-zone > single zone > none
-    if (zoneActivationHeld) {
+    // Priority: zone span > proximity snap (always active) > none
+    if (activationActive) {
         // Modifier held: overlay takes priority — dismiss zone selector if open
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
@@ -610,11 +547,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             if (!m_paintedZoneIds.isEmpty()) {
                 m_paintedZoneIds.clear();
             }
-            if (multiZoneModifierHeld || multiZoneAlwaysOn) {
-                handleMultiZoneModifier(cursorX, cursorY, mods);
-            } else {
-                handleSingleZoneModifier(cursorX, cursorY);
-            }
+            handleMultiZoneModifier(cursorX, cursorY);
         }
     } else {
         // No modifier: hide overlay, clear painted zones, allow zone selector
@@ -870,6 +803,8 @@ void WindowDragAdaptor::cancelSnap()
 {
     m_snapCancelled = true;
     m_triggerReleasedAfterCancel = false;
+    m_activationToggled = false;
+    m_prevTriggerHeld = false;
     m_currentZoneId.clear();
     m_currentZoneGeometry = QRect();
     m_currentAdjacentZoneIds.clear();
@@ -1066,6 +1001,8 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_paintedZoneIds.clear();
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
+    m_activationToggled = false;
+    m_prevTriggerHeld = false;
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
