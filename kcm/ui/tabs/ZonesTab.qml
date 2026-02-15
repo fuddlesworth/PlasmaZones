@@ -524,7 +524,8 @@ ScrollView {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Hold to enable:")
-                        visible: !kcm.snapAssistEnabled
+                        enabled: !kcm.snapAssistEnabled
+                        opacity: enabled ? 1 : 0.6
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: kcm.snapAssistTriggers
