@@ -63,7 +63,11 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    // Colors subsection
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Colors")
+                    }
+
                     CheckBox {
                         id: useSystemColorsCheck
                         Kirigami.FormData.label: i18n("Color scheme:")
@@ -183,9 +187,9 @@ ScrollView {
 
                     Kirigami.Separator {
                         Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Border")
                     }
 
-                    // Border subsection
                     RowLayout {
                         Kirigami.FormData.label: i18n("Border width:")
                         spacing: Kirigami.Units.smallSpacing
@@ -315,7 +319,11 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    // Visual effects
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Visual Effects")
+                    }
+
                     CheckBox {
                         Kirigami.FormData.label: i18n("Blur:")
                         text: i18n("Enable blur behind zones")
@@ -439,6 +447,11 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Triggers")
+                    }
+
                     ModifierAndMouseCheckBoxes {
                         id: dragActivationInput
                         Layout.fillWidth: true
