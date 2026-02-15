@@ -24,6 +24,29 @@
         }
       );
 
+      checks = forAllSystems (system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          # Build the package as a check — catches C++ compilation errors
+          package = self.packages.${system}.default;
+
+          # Validate Nix file formatting
+          nix-fmt = pkgs.runCommandLocal "check-nix-fmt" {
+            nativeBuildInputs = [ pkgs.nixfmt-rfc-style ];
+            src = self;
+          } ''
+            nixfmt --check "$src"/flake.nix "$src"/packaging/nix/package.nix
+            mkdir "$out"
+          '';
+        }
+      );
+
+      formatter = forAllSystems (system:
+        nixpkgs.legacyPackages.${system}.nixfmt-rfc-style
+      );
+
       # NixOS module for systemd service integration
       nixosModules.default = { config, lib, pkgs, ... }:
         let
@@ -91,6 +114,7 @@
             packages = with pkgs; [
               gdb
               clang-tools
+              nixfmt-rfc-style
             ];
           };
         }

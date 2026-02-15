@@ -1,5 +1,5 @@
 # PlasmaZones CI Pipeline
-# Builds on Arch Linux to verify compilation
+# Builds on Arch Linux and Nix to verify compilation
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: CI
@@ -56,30 +56,46 @@ jobs:
           find install -type f | head -50
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Nix Build
+  # Nix Flake CI (x86_64 + aarch64)
   # ═══════════════════════════════════════════════════════════════════════════
-  build-nix:
-    name: Build (Nix)
-    runs-on: ubuntu-latest
+  nix:
+    name: Nix (${{ matrix.system }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-latest
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v30
+        uses: cachix/install-nix-action@v31
         with:
-          nix_path: nixpkgs=channel:nixos-unstable
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build
-        run: |
-          nix-build --expr '
-            let pkgs = import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz") {};
-            in pkgs.callPackage ./packaging/nix/package.nix { src = ./.; }
-          '
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v8
 
-      - name: Verify outputs
+      - name: Show flake outputs
+        run: nix flake show
+
+      - name: Flake check
+        run: nix flake check -L
+
+      - name: Build default package
+        run: nix build -L .#default
+
+      - name: Verify binary
         run: |
-          echo "=== Package outputs ==="
+          echo "=== Package contents ==="
           ls -la result/bin/
-          result/bin/plasmazonesd --version || true
+          ./result/bin/plasmazonesd --version || true
+
+      - name: Verify devShell
+        run: nix develop -c echo "devShell OK"
