@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-02-15
+
+### Added
+- **EDID-based monitor identification**: Monitors are now identified by manufacturer, model, and serial number instead of connector name (e.g. "DP-2"). Layouts stay assigned to the correct physical monitor regardless of which port it's connected to ([#164])
+- **Nix flake**: Proper `flake.nix` with NixOS module (`programs.plasmazones.enable`), Home Manager module, overlay, and dev shell
+- **Multi-arch Nix CI**: Flake-based CI builds on both x86_64-linux and aarch64-linux with magic-nix-cache
+- Weekly `flake.lock` auto-update workflow
+
+### Fixed
+- **NixOS KCM loading failure**: KCM QML components failed to load in System Settings on NixOS due to missing `qmldir` files and unresolvable QML runtime dependencies (kirigami, qqc2-desktop-style) ([Discussion #160])
+- Zone selector popup layouts are now sorted alphabetically by name
+- D-Bus `toggleActivation` method was not registered in the settings adaptor
+
+### Changed
+- Nix CI uses `nix build`/`nix flake check` instead of legacy `nix-build --expr`
+- Nix install action upgraded from v30 to v31
+- Release notes now include flake-based NixOS installation instructions alongside standalone `plasmazones.nix`
+
 ## [1.10.6] - 2026-02-14
 
 ### Added
