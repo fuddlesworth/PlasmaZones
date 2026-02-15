@@ -1393,6 +1393,7 @@ void KCMPlasmaZones::load()
 {
     m_settings->load();
     // Emit Settings-backed property signals so UI bindings re-evaluate (e.g. after external config change)
+    Q_EMIT snapAssistEnabledChanged();
     Q_EMIT snapAssistTriggersChanged();
     loadLayouts();
     refreshScreens();
@@ -2250,6 +2251,8 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT restoreOriginalSizeOnUnsnapChanged();
         Q_EMIT stickyWindowHandlingChanged();
         Q_EMIT restoreWindowsToZonesOnLoginChanged();
+        Q_EMIT snapAssistEnabledChanged();
+        Q_EMIT snapAssistTriggersChanged();
         Q_EMIT defaultLayoutIdChanged();
         Q_EMIT excludedApplicationsChanged();
         Q_EMIT excludedWindowClassesChanged();

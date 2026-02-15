@@ -11,8 +11,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Snap Assist trigger override** ([#166]): When "Always show" is off, hold a configurable modifier or mouse button when releasing a window to enable Snap Assist for that snap only. Uses the same multi-trigger widget as zone activation and zone span.
 
 ### Changed
-- **Snap Assist UI**: "Always show" checkbox; when off, use ModifierAndMouseCheckBoxes to configure the hold-to-enable trigger.
-- **D-Bus breaking**: `org.plasmazones.WindowDrag.dragStopped` now requires `modifiers` and `mouseButtons` at release (for SnapAssistTriggers). KWin effect and daemon must be from the same PlasmaZones version.
+- **Snap Assist UI**: "Always show" checkbox; when off, configure hold-to-enable trigger via ModifierAndMouseCheckBoxes (shown disabled when always-on).
+- **D-Bus breaking**: `org.plasmazones.WindowDrag.dragStopped` now requires `modifiers` and `mouseButtons` at release (for Snap Assist triggers). KWin effect and daemon must be from the same PlasmaZones version.
 
 ## [1.11.1] - 2026-02-15
 
