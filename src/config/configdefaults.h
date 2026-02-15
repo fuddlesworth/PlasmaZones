@@ -6,7 +6,7 @@
 #include "plasmazones.h"  // Generated from plasmazones.kcfg via KConfigXT
 
 #include <QColor>
-#include <QtCore>
+#include <QtCore/qnamespace.h>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
