@@ -1,0 +1,15 @@
+AboutTab 1.0 AboutTab.qml
+ActivityAssignmentsCard 1.0 ActivityAssignmentsCard.qml
+AppRulesCard 1.0 AppRulesCard.qml
+AssignmentsTab 1.0 AssignmentsTab.qml
+DisplayTab 1.0 DisplayTab.qml
+EditorTab 1.0 EditorTab.qml
+ExclusionListCard 1.0 ExclusionListCard.qml
+ExclusionsTab 1.0 ExclusionsTab.qml
+LayoutGridDelegate 1.0 LayoutGridDelegate.qml
+LayoutsTab 1.0 LayoutsTab.qml
+LayoutToolbar 1.0 LayoutToolbar.qml
+MonitorAssignmentsCard 1.0 MonitorAssignmentsCard.qml
+QuickLayoutSlotsCard 1.0 QuickLayoutSlotsCard.qml
+WindowPickerDialog 1.0 WindowPickerDialog.qml
+ZonesTab 1.0 ZonesTab.qml

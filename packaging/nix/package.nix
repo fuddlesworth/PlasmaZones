@@ -75,6 +75,8 @@ stdenv.mkDerivation {
     kglobalaccel
     knotifications
     kcolorscheme
+    kirigami              # QML runtime: org.kde.kirigami (Dialog, Card, Icon, etc.)
+    qqc2-desktop-style    # QML runtime: org.kde.desktop (Qt Quick Controls 2 styling)
 
     # Wayland overlay support (required)
     layer-shell-qt

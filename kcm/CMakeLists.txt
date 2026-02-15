@@ -43,6 +43,7 @@ qt_add_resources(kcm_plasmazones "kcm_qml_components"
     PREFIX "${_kcm_qml_prefix}"
     BASE "ui"
     FILES
+        ui/qmldir
         ui/AssignmentRow.qml
         ui/ColorButton.qml
         ui/FontPickerDialog.qml
@@ -61,6 +62,7 @@ qt_add_resources(kcm_plasmazones "kcm_qml_tabs"
     PREFIX "${_kcm_qml_prefix}/tabs"
     BASE "ui/tabs"
     FILES
+        ui/tabs/qmldir
         ui/tabs/AboutTab.qml
         ui/tabs/ActivityAssignmentsCard.qml
         ui/tabs/AppRulesCard.qml
@@ -91,8 +93,9 @@ target_link_libraries(kcm_plasmazones
         KF6::GlobalAccel
 )
 
-# Install QML files
+# Install QML files (for non-qrc fallback on standard filesystem installs)
 install(FILES
+    ui/qmldir
     ui/main.qml
     ui/InputCapture.qml
     ui/KeySequenceInput.qml
@@ -111,6 +114,7 @@ install(FILES
 
 # Install tab component files
 install(FILES
+    ui/tabs/qmldir
     ui/tabs/LayoutsTab.qml
     ui/tabs/EditorTab.qml
     ui/tabs/AssignmentsTab.qml
