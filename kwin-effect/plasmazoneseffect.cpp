@@ -2,31 +2,33 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "plasmazoneseffect.h"
-#include "navigationhandler.h"
-#include "windowanimator.h"
-#include "dragtracker.h"
-#include "dbus_constants.h"
+
+#include <QBuffer>
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusReply>
+#include <QDBusServiceWatcher>
+#include <QIcon>
+#include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QKeyEvent>
+#include <QLoggingCategory>
+#include <QPixmap>
+#include <QPointer>
 
 #include <window.h>
 #include <core/output.h> // For Output::name() for multi-monitor support
 
-#include <QDBusConnection>
-#include <QDBusReply>
-#include <QDBusMessage>
-#include <QDBusPendingCall>
-#include <QDBusPendingCallWatcher>
-#include <QDBusServiceWatcher>
-#include <QLoggingCategory>
-#include <QBuffer>
-#include <QIcon>
-#include <QImage>
-#include <QJsonDocument>
-#include <QPixmap>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <QJsonParseError>
-#include <QKeyEvent>
-#include <QPointer>
+#include "navigationhandler.h"
+#include "windowanimator.h"
+#include "dragtracker.h"
+#include "dbus_constants.h"
 // QGuiApplication::queryKeyboardModifiers() doesn't work in KWin effects on Wayland
 // because the effect runs inside the compositor process. We use mouseChanged instead.
 
@@ -48,11 +50,27 @@ Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
  * @param logName Human-readable name for logging
  *
  * Replaces the duplicate ensure*Interface() methods with a single template.
+ *
+ * IMPORTANT: QDBusInterface's constructor performs synchronous D-Bus introspection,
+ * blocking the calling thread until the target service responds. To prevent compositor
+ * hangs during login (when the daemon may be registered but not yet processing messages),
+ * we first check if the service name is registered on the bus. This is a fast call to
+ * the D-Bus daemon itself (always responsive, <1ms). If the service isn't registered,
+ * we skip interface creation entirely, avoiding the blocking introspection.
  */
 template<typename InterfacePtr>
 static void ensureInterface(InterfacePtr& interface, const QString& interfaceName, const char* logName)
 {
     if (interface && interface->isValid()) {
+        return;
+    }
+
+    // Fast pre-check: ask the D-Bus daemon (not the target service) whether the service
+    // name has an owner. This avoids the expensive QDBusInterface introspection call when
+    // the daemon isn't running at all. The D-Bus daemon always responds immediately.
+    auto* busIface = QDBusConnection::sessionBus().interface();
+    if (!busIface || !busIface->isServiceRegistered(DBus::ServiceName).value()) {
+        qCDebug(lcEffect) << "Skipping" << logName << "interface - service not registered";
         return;
     }
 
@@ -290,7 +308,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
     // Setup polling timer for detecting window moves
     // In KWin 6, we poll windows to check isUserMove() state
-    m_pollTimer.setInterval(50); // 20 Hz update rate
+    m_pollTimer.setInterval(16); // ~60 Hz update rate (was 50ms/20Hz — increased for smooth zone detection after removing frame-rate windowFrameGeometryChanged handler, see #167)
     connect(&m_pollTimer, &QTimer::timeout, this, &PlasmaZonesEffect::pollWindowMoves);
 
     // Setup screen geometry change debounce timer
@@ -463,25 +481,13 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         updateWindowStickyState(window);
     });
 
-    // Connect to geometry changes for this window
-    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this,
-            [this](KWin::EffectWindow* window, const QRectF& oldGeometry) {
-                Q_UNUSED(oldGeometry)
-                if (window == m_dragTracker->draggedWindow()) {
-                    // Skip if window has gone fullscreen - don't track fullscreen windows
-                    // This prevents sending drag updates during fullscreen transitions
-                    // which could interfere with games entering fullscreen mode
-                    if (window->isFullScreen()) {
-                        qCInfo(lcEffect) << "Window went fullscreen during drag, stopping tracking";
-                        m_dragTracker->reset();
-                        return;
-                    }
-                    // Window geometry changed during drag - send update
-                    // Use tracked modifiers from mouseChanged signal
-                    QPointF cursorPos = KWin::effects->cursorPos();
-                    callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
-                }
-            });
+    // NOTE: windowFrameGeometryChanged is intentionally NOT connected for drag tracking.
+    // The DragTracker poll timer already sends dragMoved updates at a controlled rate.
+    // Connecting here previously caused frame-rate D-Bus spam (60-144+ calls/sec) because
+    // the signal fires on every pixel of window movement during drag, each triggering a
+    // callDragMoved D-Bus call. This overwhelmed the daemon (which recalculates zone
+    // geometries on every call) and added marshalling overhead on the compositor thread,
+    // causing visible stutter during window drag. See discussion #167.
 }
 
 void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
@@ -949,101 +955,80 @@ void PlasmaZonesEffect::loadExclusionSettings()
     m_excludeTransientWindows = true;
     m_minimumWindowWidth = 200;
     m_minimumWindowHeight = 150;
+    m_snapAssistEnabled = false;
 
-    // Create interface for async calls
-    auto* settingsInterface = new QDBusInterface(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
-                                                  QDBusConnection::sessionBus(), this);
+    // Use QDBusMessage + QDBusConnection::asyncCall instead of QDBusInterface to avoid
+    // synchronous D-Bus introspection that blocks the compositor thread.
+    // QDBusInterface's constructor sends an Introspect call and blocks until the target
+    // service replies. During login, the daemon may have registered its D-Bus name
+    // (via systemd/autostart) but not yet be processing messages, causing the
+    // introspection to block for up to the D-Bus timeout (25s). This hangs KWin,
+    // delaying all autostart applications. QDBusMessage::createMethodCall is purely
+    // local (no D-Bus communication), and asyncCall returns immediately.
+    // If the daemon isn't running, the async calls simply fail and defaults are used.
 
-    if (!settingsInterface->isValid()) {
-        qCDebug(lcEffect) << "Cannot load exclusion settings - daemon not available yet, using defaults";
-        settingsInterface->deleteLater();
-        return;
-    }
-
-    // Load settings asynchronously to avoid blocking KWin startup
-    // Each setting is loaded independently so partial failures don't block others
-    // Shared state: delete interface only when ALL callbacks have completed
-    struct SettingsLoadState {
-        int completed = 0;
-        QDBusInterface* iface = nullptr;
+    // Helper: create a fully-async D-Bus call to getSetting without QDBusInterface
+    auto makeSettingCall = [](const QString& settingName) -> QDBusPendingCall {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+            QStringLiteral("getSetting"));
+        msg << settingName;
+        return QDBusConnection::sessionBus().asyncCall(msg);
     };
-    // Must match the number of asyncCall+watcher blocks below (currently 4:
-    // excludeTransientWindows, minimumWindowWidth, minimumWindowHeight, snapAssistEnabled)
-    constexpr int settingsLoadTotalExpected = 4;
-    auto* loadState = new SettingsLoadState{0, settingsInterface};
 
-    auto onSettingLoaded = [loadState](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        if (++loadState->completed == settingsLoadTotalExpected) {
-            loadState->iface->deleteLater();
-            delete loadState;
+    // Helper: extract setting value from D-Bus reply (handles both QDBusVariant and plain QVariant)
+    auto extractVariant = [](const QDBusPendingReply<QVariant>& reply) -> QVariant {
+        QVariant value = reply.value();
+        if (value.canConvert<QDBusVariant>()) {
+            return value.value<QDBusVariant>().variant();
         }
+        return value;
     };
 
     // Load excludeTransientWindows
-    QDBusPendingCall excludeCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("excludeTransientWindows"));
-    auto* excludeWatcher = new QDBusPendingCallWatcher(excludeCall, this);
-    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
-        onSettingLoaded(w);
+    auto* excludeWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("excludeTransientWindows")), this);
+    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
-            QVariant value = reply.value();
-            if (value.canConvert<QDBusVariant>()) {
-                m_excludeTransientWindows = value.value<QDBusVariant>().variant().toBool();
-            } else {
-                m_excludeTransientWindows = value.toBool();
-            }
+            m_excludeTransientWindows = extractVariant(reply).toBool();
             qCDebug(lcEffect) << "Loaded excludeTransientWindows:" << m_excludeTransientWindows;
         }
     });
 
     // Load minimumWindowWidth
-    QDBusPendingCall widthCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowWidth"));
-    auto* widthWatcher = new QDBusPendingCallWatcher(widthCall, this);
-    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
-        onSettingLoaded(w);
+    auto* widthWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("minimumWindowWidth")), this);
+    connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
-            QVariant value = reply.value();
-            if (value.canConvert<QDBusVariant>()) {
-                m_minimumWindowWidth = value.value<QDBusVariant>().variant().toInt();
-            } else {
-                m_minimumWindowWidth = value.toInt();
-            }
+            m_minimumWindowWidth = extractVariant(reply).toInt();
             qCDebug(lcEffect) << "Loaded minimumWindowWidth:" << m_minimumWindowWidth;
         }
     });
 
     // Load minimumWindowHeight
-    QDBusPendingCall heightCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("minimumWindowHeight"));
-    auto* heightWatcher = new QDBusPendingCallWatcher(heightCall, this);
-    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
-        onSettingLoaded(w);
+    auto* heightWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("minimumWindowHeight")), this);
+    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
-            QVariant value = reply.value();
-            if (value.canConvert<QDBusVariant>()) {
-                m_minimumWindowHeight = value.value<QDBusVariant>().variant().toInt();
-            } else {
-                m_minimumWindowHeight = value.toInt();
-            }
+            m_minimumWindowHeight = extractVariant(reply).toInt();
             qCDebug(lcEffect) << "Loaded minimumWindowHeight:" << m_minimumWindowHeight;
         }
     });
 
     // Load snapAssistEnabled (for Snap Assist continuation gating)
-    QDBusPendingCall snapAssistCall = settingsInterface->asyncCall(QStringLiteral("getSetting"), QStringLiteral("snapAssistEnabled"));
-    auto* snapAssistWatcher = new QDBusPendingCallWatcher(snapAssistCall, this);
-    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this, [this, onSettingLoaded](QDBusPendingCallWatcher* w) {
-        onSettingLoaded(w);
+    auto* snapAssistWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("snapAssistEnabled")), this);
+    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
-            QVariant value = reply.value();
-            if (value.canConvert<QDBusVariant>()) {
-                m_snapAssistEnabled = value.value<QDBusVariant>().variant().toBool();
-            } else {
-                m_snapAssistEnabled = value.toBool();
-            }
+            m_snapAssistEnabled = extractVariant(reply).toBool();
             qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
         }
     });
