@@ -78,6 +78,8 @@ public Q_SLOTS:
      * @param windowId Unique window identifier
      * @param cursorX Cursor X at release (global; used for release screen detection)
      * @param cursorY Cursor Y at release (global)
+     * @param modifiers Qt::KeyboardModifiers at release.
+     * @param mouseButtons Qt::MouseButtons at release. With modifiers, used for SnapAssistTriggers.
      * @param snapX Output: X position for window
      * @param snapY Output: Y position for window
      * @param snapWidth Output: Width for window
@@ -86,9 +88,9 @@ public Q_SLOTS:
      * @param releaseScreenName Output: Screen name where the drag was released, for auto-fill on drop
      * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current position (drag-to-unsnap)
      */
-    void dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY, int& snapWidth,
-                     int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName, bool& restoreSizeOnly,
-                     bool& snapAssistRequested, QString& emptyZonesJson);
+    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX, int& snapY,
+                     int& snapWidth, int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName,
+                     bool& restoreSizeOnly, bool& snapAssistRequested, QString& emptyZonesJson);
 
     /**
      * Cancel current snap operation (Escape key)

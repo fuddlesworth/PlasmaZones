@@ -179,41 +179,46 @@ void Settings::loadIndexedShortcuts(const KConfigGroup& group, const QString& ke
     }
 }
 
+std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
+{
+    if (json.isEmpty()) {
+        return std::nullopt;
+    }
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcConfig) << "Invalid trigger list JSON:" << parseError.errorString() << "- using fallback";
+        return std::nullopt;
+    }
+    QVariantList result;
+    const QJsonArray arr = doc.array();
+    for (const QJsonValue& val : arr) {
+        if (val.isObject()) {
+            QJsonObject obj = val.toObject();
+            QVariantMap trigger;
+            trigger[QStringLiteral("modifier")] = obj.value(QLatin1String("modifier")).toInt(0);
+            trigger[QStringLiteral("mouseButton")] = obj.value(QLatin1String("mouseButton")).toInt(0);
+            result.append(trigger);
+        } else {
+            qCWarning(lcConfig) << "Non-object element in trigger array (index" << result.size() << ") - skipping";
+        }
+    }
+    if (result.size() > MaxTriggersPerAction) {
+        result = result.mid(0, MaxTriggersPerAction);
+    }
+    return result;  // May be empty (valid [] means no triggers)
+}
+
 QVariantList Settings::loadTriggerList(const KConfigGroup& group, const QString& key,
                                         int legacyModifier, int legacyMouseButton)
 {
     QString json = group.readEntry(key, QString());
-    if (!json.isEmpty()) {
-        QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-        if (parseError.error == QJsonParseError::NoError && doc.isArray()) {
-            QVariantList result;
-            const QJsonArray arr = doc.array();
-            for (const QJsonValue& val : arr) {
-                if (val.isObject()) {
-                    QJsonObject obj = val.toObject();
-                    QVariantMap trigger;
-                    trigger[QStringLiteral("modifier")] = obj.value(QLatin1String("modifier")).toInt(0);
-                    trigger[QStringLiteral("mouseButton")] = obj.value(QLatin1String("mouseButton")).toInt(0);
-                    result.append(trigger);
-                } else {
-                    qCWarning(lcConfig) << "Non-object element in" << key << "trigger array (index"
-                                        << result.size() << ") - skipping";
-                }
-            }
-            if (result.size() > MaxTriggersPerAction) {
-                result = result.mid(0, MaxTriggersPerAction);
-            }
-            if (!result.isEmpty()) {
-                qCDebug(lcConfig) << "Loaded" << key << ":" << result.size() << "triggers";
-                return result;
-            }
-        } else {
-            qCWarning(lcConfig) << "Invalid" << key << "JSON:" << parseError.errorString()
-                                << "- falling back to legacy values";
-        }
+    std::optional<QVariantList> parsed = parseTriggerListJson(json);
+    if (parsed.has_value()) {
+        qCDebug(lcConfig) << "Loaded" << key << ":" << parsed->size() << "triggers";
+        return *parsed;
     }
-    // Construct single-element trigger list from legacy values
+    // No valid JSON: construct single-element trigger list from legacy values
     QVariantMap trigger;
     trigger[QStringLiteral("modifier")] = legacyModifier;
     trigger[QStringLiteral("mouseButton")] = legacyMouseButton;
@@ -439,6 +444,16 @@ void Settings::setStickyWindowHandlingInt(int handling)
 // Session and exclusion setters
 SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
 SETTINGS_SETTER(bool, SnapAssistEnabled, m_snapAssistEnabled, snapAssistEnabledChanged)
+
+void Settings::setSnapAssistTriggers(const QVariantList& triggers)
+{
+    QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
+    if (m_snapAssistTriggers != capped) {
+        m_snapAssistTriggers = capped;
+        Q_EMIT snapAssistTriggersChanged();
+        Q_EMIT settingsChanged();
+    }
+}
 
 void Settings::setDefaultLayoutId(const QString& layoutId)
 {
@@ -864,7 +879,16 @@ void Settings::load()
         static_cast<StickyWindowHandling>(qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
                                                  static_cast<int>(StickyWindowHandling::IgnoreAll)));
     m_restoreWindowsToZonesOnLogin = behavior.readEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), ConfigDefaults::restoreWindowsToZonesOnLogin());
-    m_snapAssistEnabled = behavior.readEntry(QLatin1String("SnapAssistEnabled"), ConfigDefaults::snapAssistEnabled());
+    // Snap Assist: Activation group (migration: read Behavior if not in Activation)
+    const QString snapAssistEnabledKey = QLatin1String("SnapAssistEnabled");
+    const QString snapAssistTriggersKey = QLatin1String("SnapAssistTriggers");
+    m_snapAssistEnabled = activation.hasKey(snapAssistEnabledKey)
+        ? activation.readEntry(snapAssistEnabledKey, ConfigDefaults::snapAssistEnabled())
+        : behavior.readEntry(snapAssistEnabledKey, ConfigDefaults::snapAssistEnabled());
+    QString snapAssistTriggersJson = activation.hasKey(snapAssistTriggersKey)
+        ? activation.readEntry(snapAssistTriggersKey, QString())
+        : behavior.readEntry(snapAssistTriggersKey, QString());
+    m_snapAssistTriggers = parseTriggerListJson(snapAssistTriggersJson).value_or(ConfigDefaults::snapAssistTriggers());
     // Normalize UUID to default format (with braces) for consistent comparison
     // Handles migration from configs saved with WithoutBraces format
     const QString oldDefaultLayoutId = m_defaultLayoutId;
@@ -1120,7 +1144,11 @@ void Settings::save()
     behavior.writeEntry(QLatin1String("RestoreSizeOnUnsnap"), m_restoreOriginalSizeOnUnsnap);
     behavior.writeEntry(QLatin1String("StickyWindowHandling"), static_cast<int>(m_stickyWindowHandling));
     behavior.writeEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), m_restoreWindowsToZonesOnLogin);
-    behavior.writeEntry(QLatin1String("SnapAssistEnabled"), m_snapAssistEnabled);
+    // Snap Assist: Activation group (migrate from Behavior on save)
+    activation.writeEntry(QLatin1String("SnapAssistEnabled"), m_snapAssistEnabled);
+    saveTriggerList(activation, QLatin1String("SnapAssistTriggers"), m_snapAssistTriggers);
+    behavior.deleteEntry(QLatin1String("SnapAssistEnabled"));
+    behavior.deleteEntry(QLatin1String("SnapAssistTriggers"));
     behavior.writeEntry(QLatin1String("DefaultLayoutId"), m_defaultLayoutId);
 
     // Exclusions

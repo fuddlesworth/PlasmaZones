@@ -22,6 +22,14 @@ ScrollView {
     // Whether this tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
 
+    // Shared helper for ComboBox currentIndex binding (model must have valueRole "value")
+    function comboIndexForValue(model, value) {
+        for (let i = 0; i < model.length; i++) {
+            if (model[i].value === value) return i
+        }
+        return 0
+    }
+
     // Signals for color dialog interactions (handled by main.qml)
     signal requestHighlightColorDialog()
     signal requestInactiveColorDialog()
@@ -497,6 +505,37 @@ ScrollView {
                             text: i18n("px")
                         }
                     }
+
+                    Kirigami.Separator {
+                        Kirigami.FormData.isSection: true
+                        Kirigami.FormData.label: i18n("Snap Assist")
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Window picker:")
+                        text: i18n("Always show after snapping")
+                        checked: kcm.snapAssistEnabled
+                        onToggled: kcm.snapAssistEnabled = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, after every snap you can pick another window to fill empty zones. When disabled, hold the trigger below at drop to enable for that snap only.")
+                    }
+
+                    ModifierAndMouseCheckBoxes {
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: root.constants.sliderPreferredWidth
+                        Kirigami.FormData.label: i18n("Hold to enable:")
+                        enabled: !kcm.snapAssistEnabled
+                        opacity: enabled ? 1 : 0.6
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: kcm.snapAssistTriggers
+                        defaultTriggers: kcm.defaultSnapAssistTriggers
+                        tooltipEnabled: root.isCurrentTab
+                        customTooltipText: i18n("Hold this modifier or mouse button when releasing a window to show the picker for that snap only. Add multiple triggers to activate with any of them.")
+                        onTriggersModified: (triggers) => {
+                            kcm.snapAssistTriggers = triggers
+                        }
+                    }
                 }
             }
         }
@@ -609,15 +648,6 @@ ScrollView {
                         ToolTip.text: i18n("When enabled, windows return to their previous zones after logging in or restarting the session.")
                     }
 
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Snap Assist:")
-                        text: i18n("Show window picker after snapping to fill empty zones")
-                        checked: kcm.snapAssistEnabled
-                        onToggled: kcm.snapAssistEnabled = checked
-                        ToolTip.visible: hovered && root.isCurrentTab
-                        ToolTip.text: i18n("When enabled, after snapping a window you can pick another window to fill the remaining empty zones.")
-                    }
-
                     ComboBox {
                         id: stickyHandlingCombo
                         Kirigami.FormData.label: i18n("Sticky windows:")
@@ -628,15 +658,8 @@ ScrollView {
                             { text: i18n("Restore only"), value: 1 },
                             { text: i18n("Ignore all"), value: 2 }
                         ]
-                        currentIndex: indexForValue(kcm.stickyWindowHandling)
+                        currentIndex: root.comboIndexForValue(model, kcm.stickyWindowHandling)
                         onActivated: kcm.stickyWindowHandling = currentValue
-
-                        function indexForValue(value) {
-                            for (let i = 0; i < model.length; i++) {
-                                if (model[i].value === value) return i
-                            }
-                            return 0
-                        }
 
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Sticky windows appear on all desktops. Choose how snapping should behave.")

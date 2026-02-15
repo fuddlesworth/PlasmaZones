@@ -1702,11 +1702,17 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
     // Cursor position at release (from last poll during drag) - daemon uses this for release screen
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
+    // Modifiers: m_currentModifiers is updated by slotMouseChanged. When drag ends via forceEnd (LMB
+    // release), modifiers reflect the state at that moment. When drag ends via poll (isUserMove went
+    // false), we use the last slotMouseChanged state; modifier released just before mouse may be stale.
+    // This is acceptable for Snap Assist triggers - best-effort detection.
+
     // Make ASYNC call to get snap geometry - prevents UI freeze if daemon is slow
-    // D-Bus signature: dragStopped(sii) -> (iiiibs)
+    // D-Bus signature: dragStopped(siiii) -> (iiiibs) - modifiers and mouseButtons at release for SnapAssistTriggers
     QDBusPendingCall pendingCall = m_dbusInterface->asyncCall(
         QStringLiteral("dragStopped"), windowId, static_cast<int>(cursorAtRelease.x()),
-        static_cast<int>(cursorAtRelease.y()));
+        static_cast<int>(cursorAtRelease.y()), static_cast<int>(m_currentModifiers),
+        static_cast<int>(m_currentMouseButtons));
 
     // Use QPointer to safely handle window destruction during async call
     QPointer<KWin::EffectWindow> safeWindow = window;

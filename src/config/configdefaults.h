@@ -6,7 +6,9 @@
 #include "plasmazones.h"  // Generated from plasmazones.kcfg via KConfigXT
 
 #include <QColor>
+#include <QtCore/qnamespace.h>
 #include <QString>
+#include <QVariantList>
 #include <QVariantMap>
 
 namespace PlasmaZones {
@@ -114,6 +116,13 @@ public:
     static int stickyWindowHandling() { return instance().defaultStickyWindowHandlingValue(); }
     static bool restoreWindowsToZonesOnLogin() { return instance().defaultRestoreWindowsToZonesOnLoginValue(); }
     static bool snapAssistEnabled() { return instance().defaultSnapAssistEnabledValue(); }
+    static QVariantList snapAssistTriggers() {
+        // Default: Middle mouse — avoids conflict with Alt (zone activation) which would make Snap Assist always-on when using overlay
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = 0;
+        trigger[QStringLiteral("mouseButton")] = static_cast<int>(Qt::MiddleButton);
+        return {trigger};
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Exclusion Settings
