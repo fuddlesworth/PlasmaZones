@@ -102,7 +102,8 @@ ComboBox {
 
     // Custom delegate with optional layout preview and category badge
     delegate: ItemDelegate {
-        width: root.popup.width
+        width: root.popup.availableWidth
+        implicitHeight: Kirigami.Units.gridUnit * 6
         // Highlight on hover OR if this is the currently selected item
         highlighted: root.highlightedIndex === index || root.currentIndex === index
 

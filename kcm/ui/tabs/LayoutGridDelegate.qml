@@ -210,6 +210,7 @@ Item {
                 }
 
                 Label {
+                    Layout.fillWidth: true
                     elide: Text.ElideRight
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
