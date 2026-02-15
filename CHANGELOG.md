@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-02-15
+
+### Fixed
+- **Drag stutter**: Removed redundant `windowFrameGeometryChanged` handler that flooded D-Bus with 60-144+ calls/sec during window drag, causing visible stutter and leaving the daemon in a stale state ([#167])
+- **Login hang**: Replaced synchronous `QDBusInterface` introspection in `loadExclusionSettings()` with async `QDBusMessage` call, preventing the compositor from blocking for up to 25 seconds during login when the daemon is registered but not yet responding ([#167])
+
 ## [1.11.0] - 2026-02-15
 
 ### Added
@@ -505,3 +511,4 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#143]: https://github.com/fuddlesworth/PlasmaZones/discussions/143
 [#145]: https://github.com/fuddlesworth/PlasmaZones/issues/145
 [#156]: https://github.com/fuddlesworth/PlasmaZones/discussions/156
+[#167]: https://github.com/fuddlesworth/PlasmaZones/issues/167
