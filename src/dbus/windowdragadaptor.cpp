@@ -581,8 +581,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     }
 }
 
-void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int& snapX, int& snapY,
-                                    int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
+void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
+                                    int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                                     QString& releaseScreenNameOut, bool& restoreSizeOnlyOut,
                                     bool& snapAssistRequestedOut, QString& emptyZonesJsonOut)
 {
@@ -779,9 +779,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Empty zones are those with no windows AFTER windowSnapped (called above). The zone(s)
     // we just snapped to are now occupied, so they are excluded. Remaining empty zones
     // are offered for the user to fill via the window picker.
+    // Request snap assist when: always enabled OR any SnapAssistTrigger held at drop.
     const bool actuallySnapped = shouldApplyGeometry && !restoreSizeOnlyOut;
-    if (actuallySnapped && m_settings && m_settings->snapAssistEnabled() && releaseScreen && m_layoutManager
-        && m_windowTracking) {
+    const bool snapAssistBySetting = m_settings && m_settings->snapAssistEnabled();
+    const QVariantList snapAssistTriggers = m_settings ? m_settings->snapAssistTriggers() : QVariantList();
+    const bool snapAssistByTrigger = !snapAssistTriggers.isEmpty()
+        && anyTriggerHeld(snapAssistTriggers, static_cast<Qt::KeyboardModifiers>(modifiers), mouseButtons);
+    const bool requestSnapAssist = actuallySnapped && (snapAssistBySetting || snapAssistByTrigger)
+        && releaseScreen && m_layoutManager && m_windowTracking;
+    if (requestSnapAssist) {
         Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenId);
         if (layout) {
             QString emptyJson = GeometryUtils::buildEmptyZonesJson(layout, releaseScreen, m_settings,

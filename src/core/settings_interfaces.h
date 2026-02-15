@@ -272,6 +272,8 @@ public:
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
     virtual bool snapAssistEnabled() const = 0;
     virtual void setSnapAssistEnabled(bool enabled) = 0;
+    virtual QVariantList snapAssistTriggers() const = 0;
+    virtual void setSnapAssistTriggers(const QVariantList& triggers) = 0;
 };
 
 /**

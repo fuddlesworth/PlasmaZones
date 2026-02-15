@@ -6,6 +6,7 @@
 #include "../core/interfaces.h"
 #include "../core/constants.h"
 #include <KConfigGroup>
+#include <optional>
 #include <QFont>
 #include <QHash>
 #include <QVariantMap>
@@ -96,6 +97,7 @@ public:
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
+    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY snapAssistTriggersChanged)
 
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
@@ -493,6 +495,12 @@ public:
         return m_snapAssistEnabled;
     }
     void setSnapAssistEnabled(bool enabled) override;
+
+    QVariantList snapAssistTriggers() const override
+    {
+        return m_snapAssistTriggers;
+    }
+    void setSnapAssistTriggers(const QVariantList& triggers) override;
 
     QString defaultLayoutId() const override
     {
@@ -908,6 +916,13 @@ private:
                               QString (&shortcuts)[9], const QString (&defaults)[9]);
 
     /**
+     * @brief Parse a trigger list from JSON string
+     * @param json JSON array string
+     * @return Parsed list (capped at MaxTriggersPerAction), or std::nullopt if empty/invalid
+     */
+    static std::optional<QVariantList> parseTriggerListJson(const QString& json);
+
+    /**
      * @brief Load a trigger list from config JSON, with error handling and cap-at-4
      * @param group KConfigGroup to read from
      * @param key Config key for the JSON trigger list
@@ -978,6 +993,7 @@ private:
     StickyWindowHandling m_stickyWindowHandling = StickyWindowHandling::TreatAsNormal;
     bool m_restoreWindowsToZonesOnLogin = true;
     bool m_snapAssistEnabled = true;
+    QVariantList m_snapAssistTriggers; // [{modifier: int, mouseButton: int}, ...]
 
     // Default layout (used when no explicit assignment exists)
     QString m_defaultLayoutId;

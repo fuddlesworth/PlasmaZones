@@ -52,7 +52,7 @@
         </method>
 
         <method name="dragStopped">
-            <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap). cursorX/Y are the cursor position at release (for release screen detection)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Called when the drag ends. Returns snap rectangle and whether to apply it (shouldSnap). cursorX/Y are the cursor position at release (for release screen detection). modifiers: Qt::KeyboardModifiers at release — used for Snap Assist triggers (when always-on is off)."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -61,6 +61,12 @@
             </arg>
             <arg name="cursorY" type="i" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Cursor Y at release (global coordinates)."/>
+            </arg>
+            <arg name="modifiers" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers at release."/>
+            </arg>
+            <arg name="mouseButtons" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons at release. With modifiers, used for SnapAssistTriggers: when any trigger held, enables Snap Assist for this drop (when always-enabled is off)."/>
             </arg>
             <arg name="snapX" type="i" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="Snap X position (if shouldSnap)."/>

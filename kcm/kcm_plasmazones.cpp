@@ -310,6 +310,14 @@ bool KCMPlasmaZones::snapAssistEnabled() const
 {
     return m_settings->snapAssistEnabled();
 }
+QVariantList KCMPlasmaZones::snapAssistTriggers() const
+{
+    return convertTriggersForQml(m_settings->snapAssistTriggers());
+}
+QVariantList KCMPlasmaZones::defaultSnapAssistTriggers() const
+{
+    return convertTriggersForQml(ConfigDefaults::snapAssistTriggers());
+}
 QString KCMPlasmaZones::defaultLayoutId() const
 {
     return m_settings->defaultLayoutId();
@@ -881,6 +889,16 @@ void KCMPlasmaZones::setSnapAssistEnabled(bool enabled)
     }
 }
 
+void KCMPlasmaZones::setSnapAssistTriggers(const QVariantList& triggers)
+{
+    QVariantList converted = convertTriggersForStorage(triggers);
+    if (m_settings->snapAssistTriggers() != converted) {
+        m_settings->setSnapAssistTriggers(converted);
+        Q_EMIT snapAssistTriggersChanged();
+        setNeedsSave(true);
+    }
+}
+
 void KCMPlasmaZones::setDefaultLayoutId(const QString& layoutId)
 {
     if (m_settings->defaultLayoutId() != layoutId) {
@@ -1374,6 +1392,8 @@ QVariantList KCMPlasmaZones::convertTriggersForStorage(const QVariantList& trigg
 void KCMPlasmaZones::load()
 {
     m_settings->load();
+    // Emit Settings-backed property signals so UI bindings re-evaluate (e.g. after external config change)
+    Q_EMIT snapAssistTriggersChanged();
     loadLayouts();
     refreshScreens();
 
@@ -1552,6 +1572,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT stickyWindowHandlingChanged();
     Q_EMIT restoreWindowsToZonesOnLoginChanged();
     Q_EMIT snapAssistEnabledChanged();
+    Q_EMIT snapAssistTriggersChanged();
     Q_EMIT defaultLayoutIdChanged();
     Q_EMIT excludedApplicationsChanged();
     Q_EMIT excludedWindowClassesChanged();

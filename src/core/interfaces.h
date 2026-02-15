@@ -182,6 +182,7 @@ Q_SIGNALS:
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
     void snapAssistEnabledChanged();
+    void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();
     void excludedApplicationsChanged();
     void excludedWindowClassesChanged();

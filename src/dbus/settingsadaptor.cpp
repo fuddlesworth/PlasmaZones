@@ -202,6 +202,15 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
 
+    // Snap assist triggers (when always-enabled is off, hold any trigger at drop to enable)
+    m_getters[QStringLiteral("snapAssistTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->snapAssistTriggers());
+    };
+    m_setters[QStringLiteral("snapAssistTriggers")] = [this](const QVariant& v) {
+        m_settings->setSnapAssistTriggers(v.toList());
+        return true;
+    };
+
     // Exclusions
     REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
     REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
