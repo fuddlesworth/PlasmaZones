@@ -75,8 +75,6 @@ stdenv.mkDerivation {
     kglobalaccel
     knotifications
     kcolorscheme
-    kirigami              # QML runtime: org.kde.kirigami (Dialog, Card, Icon, etc.)
-    qqc2-desktop-style    # QML runtime: org.kde.desktop (Qt Quick Controls 2 styling)
 
     # Wayland overlay support (required)
     layer-shell-qt
@@ -88,6 +86,14 @@ stdenv.mkDerivation {
     # plasma-activities is auto-detected by CMake; omit to disable
     plasma-activities
   ]);
+
+  # KCM is a .so plugin loaded by systemsettings — wrapQtAppsHook only wraps
+  # executables, so QML runtime deps must be propagated into the user
+  # environment so systemsettings can resolve them (e.g. org.kde.kirigami).
+  propagatedBuildInputs = with kdePackages; [
+    kirigami              # QML runtime: org.kde.kirigami (Dialog, Card, Icon, etc.)
+    qqc2-desktop-style    # QML runtime: org.kde.desktop (Qt Quick Controls 2 styling)
+  ];
 
   cmakeFlags = [
     "-DCMAKE_BUILD_TYPE=Release"
