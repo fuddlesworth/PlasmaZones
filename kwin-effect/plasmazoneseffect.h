@@ -159,11 +159,11 @@ private:
     QRect parseZoneGeometry(const QString& json) const;
 
     /**
-     * @brief Query zone ID for a window from daemon
+     * @brief Async query zone ID for a window from daemon
      * @param windowId The window identifier
-     * @return Zone ID or empty string if not snapped/error
+     * @param callback Called with zone ID or empty string if not snapped/error
      */
-    QString queryZoneForWindow(const QString& windowId);
+    void queryZoneForWindowAsync(const QString& windowId, std::function<void(const QString&)> callback);
 
     /**
      * @brief Ensure pre-snap geometry is stored for a window before snapping
@@ -171,7 +171,7 @@ private:
      * @param windowId The window identifier
      * @note Checks if geometry exists, stores current geometry if not
      */
-    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId);
+    void ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId, const QRectF& preCapturedGeometry = QRectF());
 
     /**
      * @brief Build a map of stable window IDs to EffectWindow pointers
@@ -199,9 +199,9 @@ private:
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
-    QString queryAdjacentZone(const QString& currentZoneId, const QString& direction);
-    QString queryFirstZoneInDirection(const QString& direction, const QString& screenName = QString());
-    QString queryZoneGeometryForScreen(const QString& zoneId, const QString& screenName);
+    void queryAdjacentZoneAsync(const QString& currentZoneId, const QString& direction, std::function<void(const QString&)> callback);
+    void queryFirstZoneInDirectionAsync(const QString& direction, const QString& screenName, std::function<void(const QString&)> callback);
+    void queryZoneGeometryForScreenAsync(const QString& zoneId, const QString& screenName, std::function<void(const QString&)> callback);
     QString getWindowScreenName(KWin::EffectWindow* w) const;
 
     /**
@@ -231,6 +231,9 @@ private:
                           QPointer<KWin::EffectWindow> window, const QString& windowId,
                           bool storePreSnap, std::function<void()> fallback,
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr);
+
+    // Shared async dispatch: watch a QDBusPendingCall returning QString and invoke callback
+    void dispatchAsyncStringReply(QDBusPendingCall call, std::function<void(const QString&)> callback);
 
     /**
      * If there are empty zones and unsnapped candidates, show Snap Assist.

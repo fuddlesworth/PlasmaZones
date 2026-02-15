@@ -7,15 +7,16 @@
 #include <QBuffer>
 #include <QDataStream>
 #include <QDBusConnection>
-#include <QDBusInterface>
+#include <QDBusConnectionInterface>
+#include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusUnixFileDescriptor>
-#include <QFutureWatcher>
-#include <QVariantMap>
 #include <QFile>
 #include <QFileDevice>
+#include <QFutureWatcher>
+#include <QVariantMap>
 #include <QtConcurrent>
 
 #include <fcntl.h>
@@ -24,6 +25,10 @@
 namespace PlasmaZones {
 
 static constexpr int THUMBNAIL_MAX_SIZE = 256;
+
+static const QString kScreenShot2Service = QStringLiteral("org.kde.KWin.ScreenShot2");
+static const QString kScreenShot2Path    = QStringLiteral("/org/kde/KWin/ScreenShot2");
+static const QString kScreenShot2Iface   = QStringLiteral("org.kde.KWin.ScreenShot2");
 
 // KWin ScreenShot2 protocol: metadata in D-Bus reply; raw QImage bytes in pipe.
 // See: KWin screenshotdbusinterface2.cpp, Spectacle ImagePlatformKWin.cpp
@@ -35,11 +40,9 @@ WindowThumbnailService::WindowThumbnailService(QObject* parent)
 
 bool WindowThumbnailService::isAvailable() const
 {
-    QDBusInterface iface(QStringLiteral("org.kde.KWin.ScreenShot2"),
-                         QStringLiteral("/org/kde/KWin/ScreenShot2"),
-                         QStringLiteral("org.kde.KWin.ScreenShot2"),
-                         QDBusConnection::sessionBus());
-    return iface.isValid();
+    // Lightweight name-owner check — no synchronous introspection
+    auto* iface = QDBusConnection::sessionBus().interface();
+    return iface && iface->isServiceRegistered(kScreenShot2Service);
 }
 
 static QImage readImageFromPipe(int readFd, const QVariantMap& metadata)
@@ -96,28 +99,19 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
     int pipeFds[2];
     if (pipe2(pipeFds, O_CLOEXEC) != 0) {
         qCWarning(lcOverlay) << "captureWindowAsync: pipe creation failed";
-        return;
-    }
-
-    QDBusInterface iface(QStringLiteral("org.kde.KWin.ScreenShot2"),
-                         QStringLiteral("/org/kde/KWin/ScreenShot2"),
-                         QStringLiteral("org.kde.KWin.ScreenShot2"),
-                         QDBusConnection::sessionBus());
-
-    if (!iface.isValid()) {
-        close(pipeFds[0]);
-        close(pipeFds[1]);
-        qCDebug(lcOverlay) << "captureWindowAsync: KWin ScreenShot2 not available";
+        Q_EMIT captureFinished(kwinHandle, QString());
         return;
     }
 
     QDBusUnixFileDescriptor fd(pipeFds[1]);
     close(pipeFds[1]);
 
-    QList<QVariant> args;
-    args << kwinHandle << QVariantMap() << QVariant::fromValue(fd);
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        kScreenShot2Service, kScreenShot2Path, kScreenShot2Iface,
+        QStringLiteral("CaptureWindow"));
+    msg << kwinHandle << QVariantMap() << QVariant::fromValue(fd);
 
-    QDBusPendingCall call = iface.asyncCallWithArgumentList(QStringLiteral("CaptureWindow"), args);
+    QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
 
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     const int readFd = pipeFds[0];

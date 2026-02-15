@@ -2951,7 +2951,7 @@ void OverlayService::updateSnapAssistCandidateThumbnail(const QString& kwinHandl
 
 void OverlayService::processNextThumbnailCapture()
 {
-    if (!m_thumbnailService || !m_thumbnailService->isAvailable() || m_thumbnailCaptureQueue.isEmpty()) {
+    if (!m_thumbnailService || m_thumbnailCaptureQueue.isEmpty()) {
         return;
     }
     const QString kwinHandle = m_thumbnailCaptureQueue.takeFirst();
