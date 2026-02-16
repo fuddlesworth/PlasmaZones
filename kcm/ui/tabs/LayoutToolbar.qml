@@ -52,7 +52,7 @@ RowLayout {
             {
                 text: i18n("Delete"),
                 icon: "edit-delete",
-                enabled: root.currentLayout !== null && !root.currentLayout?.isSystem && root.currentLayout?.isAutotile !== true,
+                enabled: root.currentLayout !== null && !root.currentLayout?.isSystem,
                 action: () => { if (root.currentLayout) root.requestDeleteLayout(root.currentLayout) },
                 tooltip: i18n("Delete the selected layout")
             },

@@ -52,7 +52,7 @@ Item {
 
     Keys.onReturnPressed: root.activated(root.modelData.id)
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem && root.modelData.isAutotile !== true) {
+        if (!root.modelData.isSystem) {
             root.deleteRequested(root.modelData)
         }
     }

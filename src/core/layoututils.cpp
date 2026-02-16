@@ -280,6 +280,7 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     map[AutoAssign] = entry.autoAssign;
     map[QStringLiteral("isAutotile")] = entry.isAutotile;
+    map[IsSystem] = entry.isAutotile; // autotile layouts are engine-managed, treat as system
 
     return map;
 }
@@ -305,7 +306,7 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Name] = entry.name;
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
-    json[IsSystem] = false;
+    json[IsSystem] = entry.isAutotile; // autotile layouts are engine-managed, treat as system
     json[Type] = 0;
     json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     json[QStringLiteral("isAutotile")] = entry.isAutotile;
