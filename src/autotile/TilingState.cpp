@@ -294,6 +294,49 @@ int TilingState::windowPosition(const QString &windowId) const
     return windowIndex(windowId);
 }
 
+int TilingState::tiledWindowIndex(const QString &windowId) const
+{
+    int tiledIdx = 0;
+    for (const auto &id : m_windowOrder) {
+        if (m_floatingWindows.contains(id)) {
+            continue;
+        }
+        if (id == windowId) {
+            return tiledIdx;
+        }
+        ++tiledIdx;
+    }
+    return -1;
+}
+
+bool TilingState::moveToTiledPosition(const QString &windowId, int tiledPosition)
+{
+    // Translate tiledPosition to raw m_windowOrder index
+    int rawTarget = -1;
+    int tiledIdx = 0;
+    for (int i = 0; i < m_windowOrder.size(); ++i) {
+        if (m_floatingWindows.contains(m_windowOrder[i])) {
+            continue;
+        }
+        if (tiledIdx == tiledPosition) {
+            rawTarget = i;
+            break;
+        }
+        ++tiledIdx;
+    }
+
+    // If tiledPosition is past the last tiled window, append at end
+    if (rawTarget < 0) {
+        rawTarget = m_windowOrder.size();
+    }
+
+    const int fromIndex = m_windowOrder.indexOf(windowId);
+    if (fromIndex < 0) {
+        return false;
+    }
+    return moveWindow(fromIndex, rawTarget);
+}
+
 bool TilingState::rotateWindows(bool clockwise)
 {
     // Get only tiled (non-floating) windows for rotation

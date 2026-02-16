@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QScreen>
 
 // KDE headers
@@ -281,6 +282,8 @@ void AutotileEngine::connectToSettings(Settings *settings)
         disconnect(m_settings, nullptr, this, nullptr);
         qCDebug(lcAutotile) << "Disconnected from previous settings";
     }
+    // Also disconnect from the new settings object in case of repeated calls with the same pointer
+    disconnect(settings, nullptr, this, nullptr);
 
     m_settings = settings;
 
@@ -512,6 +515,12 @@ void AutotileEngine::processSettingsRetile()
 
 void AutotileEngine::retile(const QString &screenName)
 {
+    if (m_retiling) {
+        return;
+    }
+    QScopeGuard guard([this] { m_retiling = false; });
+    m_retiling = true;
+
     if (screenName.isEmpty()) {
         // Retile autotile screens only
         for (const QString &key : m_autotileScreens) {
@@ -567,7 +576,7 @@ void AutotileEngine::promoteToMaster(const QString &windowId)
         return;
     }
 
-    const bool promoted = state->moveToFront(windowId);
+    const bool promoted = state->moveToTiledPosition(windowId, 0);
     retileAfterOperation(screenName, promoted);
 }
 
@@ -581,11 +590,11 @@ void AutotileEngine::demoteFromMaster(const QString &windowId)
 
     // Move to position after master area (only if currently in master area)
     const int masterCount = state->masterCount();
-    const int currentPos = state->windowPosition(windowId);
+    const int currentPos = state->tiledWindowIndex(windowId);
 
     bool demoted = false;
     if (currentPos >= 0 && currentPos < masterCount) {
-        demoted = state->moveToPosition(windowId, masterCount);
+        demoted = state->moveToTiledPosition(windowId, masterCount);
     }
 
     retileAfterOperation(screenName, demoted);
@@ -673,6 +682,7 @@ void AutotileEngine::decreaseMasterRatio(qreal delta)
 
 void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 {
+    ratio = std::clamp(ratio, 0.1, 0.9);
     m_config->splitRatio = ratio;
     applyToAllStates([ratio](TilingState *state) {
         state->setSplitRatio(ratio);
@@ -681,6 +691,7 @@ void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 
 void AutotileEngine::setGlobalMasterCount(int count)
 {
+    count = std::max(1, count);
     m_config->masterCount = count;
     applyToAllStates([count](TilingState *state) {
         state->setMasterCount(count);
@@ -828,7 +839,11 @@ void AutotileEngine::onWindowAdded(const QString &windowId)
     if (!isAutotileScreen(screenName) || !shouldTileWindow(windowId)) {
         return;
     }
-    if (screenName.isEmpty()) {
+
+    constexpr int MaxWindowsPerScreen = 50;
+    TilingState *state = stateForScreen(screenName);
+    if (state && state->tiledWindowCount() >= MaxWindowsPerScreen) {
+        qCDebug(lcAutotile) << "Max window limit reached for screen" << screenName;
         return;
     }
 
@@ -865,7 +880,7 @@ void AutotileEngine::onWindowFocused(const QString &windowId)
 
     // In monocle mode with monocleHideOthers, update window visibility
     // when focus changes so the newly focused window is shown
-    if (isAutotileScreen(m_windowToScreen.value(windowId)) && m_algorithmId == QLatin1String("monocle")
+    if (isAutotileScreen(m_windowToScreen.value(windowId)) && m_algorithmId == DBus::AutotileAlgorithm::Monocle
         && m_config->monocleHideOthers) {
         const QStringList windows = state->tiledWindows();
         if (windows.size() > 1) {
@@ -1024,7 +1039,7 @@ void AutotileEngine::applyTiling(const QString &screenName)
     // Monocle visibility management: when algorithm is "monocle" and
     // monocleHideOthers is enabled, minimize all tiled windows except
     // the focused one (or the first window if none focused)
-    if (m_algorithmId == QLatin1String("monocle") && m_config->monocleHideOthers
+    if (m_algorithmId == DBus::AutotileAlgorithm::Monocle && m_config->monocleHideOthers
         && windows.size() > 1) {
         emitMonocleVisibility(state, windows);
     }
@@ -1181,6 +1196,39 @@ TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* ou
         *outScreenName = screenName;
     }
     return stateForScreen(screenName);
+}
+
+void AutotileEngine::setInnerGap(int gap)
+{
+    gap = std::clamp(gap, 0, 50);
+    if (m_config && m_config->innerGap != gap) {
+        m_config->innerGap = gap;
+        retile(QString());
+    }
+}
+
+void AutotileEngine::setOuterGap(int gap)
+{
+    gap = std::clamp(gap, 0, 50);
+    if (m_config && m_config->outerGap != gap) {
+        m_config->outerGap = gap;
+        retile(QString());
+    }
+}
+
+void AutotileEngine::setSmartGaps(bool enabled)
+{
+    if (m_config && m_config->smartGaps != enabled) {
+        m_config->smartGaps = enabled;
+        retile(QString());
+    }
+}
+
+void AutotileEngine::setFocusNewWindows(bool enabled)
+{
+    if (m_config) {
+        m_config->focusNewWindows = enabled;
+    }
 }
 
 void AutotileEngine::emitMonocleVisibility(const TilingState *state, const QStringList &tiledWindows)

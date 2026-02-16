@@ -113,8 +113,12 @@ void BSPAlgorithm::buildTree(int windowCount, qreal defaultRatio) const
     m_leafCount = 1;
 
     // Grow one leaf at a time up to the target count
-    while (m_leafCount < windowCount) {
-        growTree(defaultRatio);
+    int iterations = 0;
+    constexpr int MaxIterations = 1000;
+    while (m_leafCount < windowCount && iterations++ < MaxIterations) {
+        if (!growTree(defaultRatio)) {
+            break;
+        }
     }
 }
 
@@ -224,13 +228,6 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect) const
 
     if (node->isLeaf()) {
         return;
-    }
-
-    // Only set split direction for nodes that don't have valid geometry yet
-    // (first layout pass or newly created nodes). This preserves user-configured
-    // split directions for existing nodes while adapting new splits.
-    if (!node->geometry.isValid()) {
-        node->splitHorizontal = chooseSplitDirection(rect);
     }
 
     const qreal ratio = std::clamp(node->splitRatio, MinSplitRatio, MaxSplitRatio);

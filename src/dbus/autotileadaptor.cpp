@@ -100,7 +100,12 @@ void AutotileAdaptor::setAlgorithm(const QString &algorithmId)
     if (!ensureEngine("setAlgorithm")) {
         return;
     }
+    if (!AlgorithmRegistry::instance()->algorithm(algorithmId)) {
+        qCWarning(lcDbusAutotile) << "setAlgorithm: unknown algorithm ID:" << algorithmId;
+        return;
+    }
     m_engine->setAlgorithm(algorithmId);
+    Q_EMIT configChanged();
 }
 
 double AutotileAdaptor::masterRatio() const
@@ -158,12 +163,8 @@ void AutotileAdaptor::setInnerGap(int gap)
     if (!ensureEngineAndConfig("setInnerGap")) {
         return;
     }
-    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
-    if (m_engine->config()->innerGap != gap) {
-        m_engine->config()->innerGap = gap;
-        Q_EMIT configChanged();
-        m_engine->retile(QString());
-    }
+    m_engine->setInnerGap(gap);
+    Q_EMIT configChanged();
 }
 
 int AutotileAdaptor::outerGap() const
@@ -179,12 +180,8 @@ void AutotileAdaptor::setOuterGap(int gap)
     if (!ensureEngineAndConfig("setOuterGap")) {
         return;
     }
-    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
-    if (m_engine->config()->outerGap != gap) {
-        m_engine->config()->outerGap = gap;
-        Q_EMIT configChanged();
-        m_engine->retile(QString());
-    }
+    m_engine->setOuterGap(gap);
+    Q_EMIT configChanged();
 }
 
 bool AutotileAdaptor::smartGaps() const
@@ -200,11 +197,8 @@ void AutotileAdaptor::setSmartGaps(bool enabled)
     if (!ensureEngineAndConfig("setSmartGaps")) {
         return;
     }
-    if (m_engine->config()->smartGaps != enabled) {
-        m_engine->config()->smartGaps = enabled;
-        Q_EMIT configChanged();
-        m_engine->retile(QString());
-    }
+    m_engine->setSmartGaps(enabled);
+    Q_EMIT configChanged();
 }
 
 bool AutotileAdaptor::focusNewWindows() const
@@ -220,10 +214,8 @@ void AutotileAdaptor::setFocusNewWindows(bool enabled)
     if (!ensureEngineAndConfig("setFocusNewWindows")) {
         return;
     }
-    if (m_engine->config()->focusNewWindows != enabled) {
-        m_engine->config()->focusNewWindows = enabled;
-        Q_EMIT configChanged();
-    }
+    m_engine->setFocusNewWindows(enabled);
+    Q_EMIT configChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -321,6 +313,10 @@ void AutotileAdaptor::windowOpened(const QString &windowId, const QString &scree
     }
     if (windowId.isEmpty()) {
         qCDebug(lcDbusAutotile) << "windowOpened: empty window ID";
+        return;
+    }
+    if (screenName.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "windowOpened: empty screen name for window" << windowId;
         return;
     }
     qCDebug(lcDbusAutotile) << "D-Bus windowOpened:" << windowId << "on screen:" << screenName;

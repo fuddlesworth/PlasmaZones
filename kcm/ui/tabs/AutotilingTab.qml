@@ -347,7 +347,7 @@ ScrollView {
 
                         SpinBox {
                             from: 0
-                            to: 50
+                            to: root.constants.autotileGapMax
                             value: kcm.autotileInnerGap
                             onValueModified: kcm.autotileInnerGap = value
 
@@ -366,7 +366,7 @@ ScrollView {
 
                         SpinBox {
                             from: 0
-                            to: 50
+                            to: root.constants.autotileGapMax
                             value: kcm.autotileOuterGap
                             onValueModified: kcm.autotileOuterGap = value
 

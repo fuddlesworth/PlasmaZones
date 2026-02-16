@@ -203,6 +203,11 @@ public:
     // Manual tiling operations
     // ═══════════════════════════════════════════════════════════════════════════
 
+    void setInnerGap(int gap);
+    void setOuterGap(int gap);
+    void setSmartGaps(bool enabled);
+    void setFocusNewWindows(bool enabled);
+
     /**
      * @brief Force retiling of windows
      *
@@ -572,6 +577,7 @@ private:
     QPointer<Settings> m_settings;  // QPointer for safe access if Settings destroyed
     QTimer m_settingsRetileTimer;   // Debounce timer for settings changes
     bool m_pendingSettingsRetile = false;
+    bool m_retiling = false;
 
     /**
      * @brief Schedule a debounced retile after settings change

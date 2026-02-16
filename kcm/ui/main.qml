@@ -78,8 +78,11 @@ KCM.AbstractKCM {
         // Layout type ratios (matching C++ Defaults)
         readonly property real priorityGridMainRatio: 0.67
         readonly property real priorityGridSecondaryRatio: 0.33
-        readonly property real focusSideRatio: 0.15
-        readonly property real focusMainRatio: 0.70
+        readonly property real focusSideRatio: 0.2
+        readonly property real focusMainRatio: 0.6
+
+        // Autotiling gap limits
+        readonly property int autotileGapMax: 50
 
         // Autotiling algorithm preview dimensions
         readonly property int algorithmPreviewWidth: 280

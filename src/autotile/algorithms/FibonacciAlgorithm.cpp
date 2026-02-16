@@ -80,23 +80,35 @@ QVector<QRect> FibonacciAlgorithm::calculateZones(int windowCount, const QRect &
             const int leftover = windowCount - i - 1;
             if (leftover > 0) {
                 if (remaining.width() >= remaining.height()) {
-                    // Split horizontally into equal columns
-                    QVector<int> widths = distributeEvenly(remaining.width(), leftover + 1);
+                    // Split horizontally into equal columns, capped at MinZoneSizePx
+                    const int maxFit = std::max(1, remaining.width() / MinZoneSizePx);
+                    const int fitCount = std::min(leftover + 1, maxFit);
+                    QVector<int> widths = distributeEvenly(remaining.width(), fitCount);
                     // Replace the zone we just added with the first portion
                     zones.last() = QRect(remaining.x(), remaining.y(), widths[0], remaining.height());
                     int x = remaining.x() + widths[0];
-                    for (int j = 1; j <= leftover; ++j) {
+                    for (int j = 1; j < fitCount; ++j) {
                         zones.append(QRect(x, remaining.y(), widths[j], remaining.height()));
                         x += widths[j];
                     }
+                    // Stack any remaining windows monocle-style on the last zone
+                    for (int j = fitCount; j <= leftover; ++j) {
+                        zones.append(zones.last());
+                    }
                 } else {
-                    // Split vertically into equal rows
-                    QVector<int> heights = distributeEvenly(remaining.height(), leftover + 1);
+                    // Split vertically into equal rows, capped at MinZoneSizePx
+                    const int maxFit = std::max(1, remaining.height() / MinZoneSizePx);
+                    const int fitCount = std::min(leftover + 1, maxFit);
+                    QVector<int> heights = distributeEvenly(remaining.height(), fitCount);
                     zones.last() = QRect(remaining.x(), remaining.y(), remaining.width(), heights[0]);
                     int y = remaining.y() + heights[0];
-                    for (int j = 1; j <= leftover; ++j) {
+                    for (int j = 1; j < fitCount; ++j) {
                         zones.append(QRect(remaining.x(), y, remaining.width(), heights[j]));
                         y += heights[j];
+                    }
+                    // Stack any remaining windows monocle-style on the last zone
+                    for (int j = fitCount; j <= leftover; ++j) {
+                        zones.append(zones.last());
                     }
                 }
             }

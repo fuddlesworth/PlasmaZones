@@ -258,7 +258,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             DBus::Interface::Autotile,
                             QStringLiteral("floatWindow"));
                         msg << windowId;
-                        QDBusConnection::sessionBus().asyncCall(msg);
+                        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+                        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+                        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher *w) {
+                            if (w->isError()) {
+                                qCWarning(lcEffect) << "floatWindow D-Bus call failed:" << w->error().message();
+                            }
+                            w->deleteLater();
+                        });
                         qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
                     }
                     return;
@@ -2275,20 +2282,22 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
     }
     m_notifiedWindows.insert(windowId);
 
-    // Notify autotile daemon asynchronously about the new window
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("windowOpened"));
-    msg << windowId;
-
     // Include the screen name so the daemon knows which monitor layout to use
     QString screenName = getWindowScreenName(w);
-    msg << screenName;
 
-    QDBusConnection::sessionBus().asyncCall(msg);
-    qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenName;
+    // Only notify autotile daemon for windows on autotile screens
+    if (m_autotileScreens.contains(screenName)) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName,
+            DBus::ObjectPath,
+            DBus::Interface::Autotile,
+            QStringLiteral("windowOpened"));
+        msg << windowId;
+        msg << screenName;
+
+        QDBusConnection::sessionBus().asyncCall(msg);
+        qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenName;
+    }
 }
 
 void PlasmaZonesEffect::connectAutotileSignals()

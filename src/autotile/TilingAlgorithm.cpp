@@ -167,6 +167,14 @@ void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeomet
             bottom = std::min(originalZone.bottom(), top + MinZoneSizePx - 1);
         }
 
+        // Final guard: ensure dimensions are never negative
+        if (right < left) {
+            right = left;
+        }
+        if (bottom < top) {
+            bottom = top;
+        }
+
         // Apply adjusted bounds
         zone.setLeft(left);
         zone.setTop(top);

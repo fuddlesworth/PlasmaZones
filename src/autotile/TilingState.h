@@ -199,6 +199,21 @@ public:
     int windowPosition(const QString &windowId) const;
 
     /**
+     * @brief Get the index of a window within the tiled-only list
+     * @param windowId Window to find
+     * @return Index in tiled window list (skipping floating), or -1 if not found
+     */
+    int tiledWindowIndex(const QString &windowId) const;
+
+    /**
+     * @brief Move a window to a specific position in the tiled-only list
+     * @param windowId Window to move
+     * @param tiledPosition Target position in tiled list (skipping floating)
+     * @return true if move was successful
+     */
+    bool moveToTiledPosition(const QString &windowId, int tiledPosition);
+
+    /**
      * @brief Rotate all windows by one position
      *
      * Clockwise: each window moves to the next position, last becomes first

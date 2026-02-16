@@ -56,6 +56,17 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(int windowCount, const QRect
         return zones;
     }
 
+    // Fall back to equal columns if screen is too narrow for three columns
+    if (windowCount >= 3 && screenGeometry.width() < 3 * MinZoneSizePx) {
+        const QVector<int> widths = distributeEvenly(screenGeometry.width(), windowCount);
+        int x = screenGeometry.x();
+        for (int i = 0; i < windowCount; ++i) {
+            zones.append(QRect(x, screenGeometry.y(), widths[i], screenGeometry.height()));
+            x += widths[i];
+        }
+        return zones;
+    }
+
     // Two windows: simple left/right split (master on left at zone index 0).
     // This is a degenerate case — true three-column needs 3+ windows.
     // masterZoneIndex() returns 0, which matches the left/master position here.
