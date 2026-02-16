@@ -142,31 +142,40 @@ KCM.AbstractKCM {
             Layout.fillWidth: true
             visible: kcm.daemonEnabled
 
+            // Force equal tab widths — the desktop style bolds the checked tab,
+            // which changes implicitWidth and causes TabBar to redistribute sizes.
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("Layouts")
                 icon.name: "view-grid-symbolic"
             }
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("Editor")
                 icon.name: "document-edit"
             }
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("Assignments")
                 icon.name: "view-list-details"
             }
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("Zones")
                 icon.name: "view-split-left-right"
             }
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("Display")
                 icon.name: "select-rectangular"
             }
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("Exclusions")
                 icon.name: "dialog-cancel-symbolic"
             }
             TabButton {
+                width: tabBar.availableWidth / tabBar.count
                 text: i18n("About")
                 icon.name: "help-about"
             }
