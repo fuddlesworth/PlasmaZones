@@ -238,6 +238,11 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect) const
         const QRect firstRect(rect.x(), rect.y(), rect.width(), splitPos - rect.y());
         const QRect secondRect(rect.x(), splitPos, rect.width(), rect.bottom() - splitPos + 1);
 
+        // Guard: skip split if either partition is degenerate
+        if (!firstRect.isValid() || !secondRect.isValid()) {
+            return;
+        }
+
         applyGeometry(node->first.get(), firstRect);
         applyGeometry(node->second.get(), secondRect);
     } else {
@@ -245,6 +250,11 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect) const
         const int splitPos = rect.x() + static_cast<int>(rect.width() * ratio);
         const QRect firstRect(rect.x(), rect.y(), splitPos - rect.x(), rect.height());
         const QRect secondRect(splitPos, rect.y(), rect.right() - splitPos + 1, rect.height());
+
+        // Guard: skip split if either partition is degenerate
+        if (!firstRect.isValid() || !secondRect.isValid()) {
+            return;
+        }
 
         applyGeometry(node->first.get(), firstRect);
         applyGeometry(node->second.get(), secondRect);

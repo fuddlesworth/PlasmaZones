@@ -325,9 +325,9 @@ bool TilingState::moveToTiledPosition(const QString &windowId, int tiledPosition
         ++tiledIdx;
     }
 
-    // If tiledPosition is past the last tiled window, append at end
+    // If tiledPosition is past the last tiled window, move to last position
     if (rawTarget < 0) {
-        rawTarget = m_windowOrder.size();
+        rawTarget = qMax(0, m_windowOrder.size() - 1);
     }
 
     const int fromIndex = m_windowOrder.indexOf(windowId);

@@ -104,8 +104,11 @@ void AutotileAdaptor::setAlgorithm(const QString &algorithmId)
         qCWarning(lcDbusAutotile) << "setAlgorithm: unknown algorithm ID:" << algorithmId;
         return;
     }
+    const QString oldAlgorithm = m_engine->algorithm();
     m_engine->setAlgorithm(algorithmId);
-    Q_EMIT configChanged();
+    if (m_engine->algorithm() != oldAlgorithm) {
+        Q_EMIT configChanged();
+    }
 }
 
 double AutotileAdaptor::masterRatio() const
@@ -163,8 +166,11 @@ void AutotileAdaptor::setInnerGap(int gap)
     if (!ensureEngineAndConfig("setInnerGap")) {
         return;
     }
+    const int oldGap = m_engine->config()->innerGap;
     m_engine->setInnerGap(gap);
-    Q_EMIT configChanged();
+    if (m_engine->config()->innerGap != oldGap) {
+        Q_EMIT configChanged();
+    }
 }
 
 int AutotileAdaptor::outerGap() const
@@ -180,8 +186,11 @@ void AutotileAdaptor::setOuterGap(int gap)
     if (!ensureEngineAndConfig("setOuterGap")) {
         return;
     }
+    const int oldGap = m_engine->config()->outerGap;
     m_engine->setOuterGap(gap);
-    Q_EMIT configChanged();
+    if (m_engine->config()->outerGap != oldGap) {
+        Q_EMIT configChanged();
+    }
 }
 
 bool AutotileAdaptor::smartGaps() const
@@ -197,8 +206,11 @@ void AutotileAdaptor::setSmartGaps(bool enabled)
     if (!ensureEngineAndConfig("setSmartGaps")) {
         return;
     }
+    const bool oldSmartGaps = m_engine->config()->smartGaps;
     m_engine->setSmartGaps(enabled);
-    Q_EMIT configChanged();
+    if (m_engine->config()->smartGaps != oldSmartGaps) {
+        Q_EMIT configChanged();
+    }
 }
 
 bool AutotileAdaptor::focusNewWindows() const
@@ -214,8 +226,11 @@ void AutotileAdaptor::setFocusNewWindows(bool enabled)
     if (!ensureEngineAndConfig("setFocusNewWindows")) {
         return;
     }
+    const bool oldFocusNewWindows = m_engine->config()->focusNewWindows;
     m_engine->setFocusNewWindows(enabled);
-    Q_EMIT configChanged();
+    if (m_engine->config()->focusNewWindows != oldFocusNewWindows) {
+        Q_EMIT configChanged();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

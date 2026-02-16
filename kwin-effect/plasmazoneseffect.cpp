@@ -2236,14 +2236,31 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
         return;
     }
 
+    // Extract all window info upfront — the EffectWindow may be partially
+    // destroyed during slotWindowClosed, so read everything before any early return.
+    const QString windowId = getWindowId(w);
+    const QString screenName = getWindowScreenName(w);
+
+    // Remove from autotile tracking set so re-opened windows get re-notified.
+    // This must happen regardless of whether the WindowTracking interface is up.
+    m_notifiedWindows.remove(windowId);
+
+    // Notify autotile daemon (uses its own D-Bus path, independent of WindowTracking)
+    if (m_autotileScreens.contains(screenName)) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName,
+            DBus::ObjectPath,
+            DBus::Interface::Autotile,
+            QStringLiteral("windowClosed"));
+        msg << windowId;
+
+        QDBusConnection::sessionBus().asyncCall(msg);
+        qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenName;
+    }
+
     if (!ensureWindowTrackingReady("notify windowClosed")) {
         return;
     }
-
-    QString windowId = getWindowId(w);
-
-    // Remove from autotile tracking set so re-opened windows get re-notified
-    m_notifiedWindows.remove(windowId);
 
     qCInfo(lcEffect) << "Notifying daemon: windowClosed" << windowId;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowClosed"), windowId);

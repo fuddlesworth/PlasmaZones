@@ -83,7 +83,8 @@ void ModeTracker::load()
     KConfigGroup group = config->group(QStringLiteral("ModeTracking"));
 
     m_lastManualLayoutId = group.readEntry(QStringLiteral("LastManualLayoutId"), QString());
-    m_currentMode = static_cast<TilingMode>(group.readEntry(QStringLiteral("LastTilingMode"), 0));
+    const int rawMode = group.readEntry(QStringLiteral("LastTilingMode"), 0);
+    m_currentMode = (rawMode == 1) ? TilingMode::Autotile : TilingMode::Manual;
     m_lastAutotileAlgorithm = group.readEntry(QStringLiteral("LastAutotileAlgorithm"),
                                                QStringLiteral("master-stack"));
 

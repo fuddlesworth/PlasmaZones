@@ -63,8 +63,11 @@ KCM.AbstractKCM {
         readonly property int opacitySliderMax: 100
         readonly property int borderWidthMax: 10
         readonly property int borderRadiusMax: 50
-        readonly property int paddingMax: 100
+        readonly property int paddingMax: 50
         readonly property int thresholdMax: 200
+        readonly property int zonePaddingMax: 50
+        readonly property int outerGapMax: 50
+        readonly property int adjacentThresholdMax: 100
         readonly property int zoneSelectorTriggerMax: 200
         readonly property int zoneSelectorPreviewWidthMin: 80
         readonly property int zoneSelectorPreviewWidthMax: 400
@@ -76,8 +79,8 @@ KCM.AbstractKCM {
         readonly property int quickLayoutSlotCount: 9
 
         // Layout type ratios (matching C++ Defaults)
-        readonly property real priorityGridMainRatio: 0.67
-        readonly property real priorityGridSecondaryRatio: 0.33
+        readonly property real priorityGridMainRatio: 0.667
+        readonly property real priorityGridSecondaryRatio: 0.333
         readonly property real focusSideRatio: 0.2
         readonly property real focusMainRatio: 0.6
 

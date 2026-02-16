@@ -258,6 +258,12 @@ void AutotileEngine::syncFromSettings(Settings *settings)
         m_algorithmId = AlgorithmRegistry::defaultAlgorithmId();
     }
 
+    // Propagate split ratio and master count to existing per-screen states
+    applyToAllStates([this](TilingState *state) {
+        state->setSplitRatio(m_config->splitRatio);
+        state->setMasterCount(m_config->masterCount);
+    });
+
     // Restore autotile screens and retile once
     // Note: enabled state is derived from layout assignments, not settings.
     // The autotileEnabled setting is a feature gate handled by the daemon.
@@ -682,7 +688,7 @@ void AutotileEngine::decreaseMasterRatio(qreal delta)
 
 void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 {
-    ratio = std::clamp(ratio, 0.1, 0.9);
+    ratio = std::clamp(ratio, AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio);
     m_config->splitRatio = ratio;
     applyToAllStates([ratio](TilingState *state) {
         state->setSplitRatio(ratio);
@@ -691,7 +697,7 @@ void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 
 void AutotileEngine::setGlobalMasterCount(int count)
 {
-    count = std::max(1, count);
+    count = std::clamp(count, 1, AutotileDefaults::MaxMasterCount);
     m_config->masterCount = count;
     applyToAllStates([count](TilingState *state) {
         state->setMasterCount(count);
@@ -849,6 +855,10 @@ void AutotileEngine::onWindowAdded(const QString &windowId)
 
     const bool inserted = insertWindow(windowId, screenName);
     retileAfterOperation(screenName, inserted);
+
+    if (inserted && m_config && m_config->focusNewWindows) {
+        Q_EMIT focusWindowRequested(windowId);
+    }
 }
 
 void AutotileEngine::onWindowRemoved(const QString &windowId)
@@ -1103,8 +1113,13 @@ void AutotileEngine::retileAfterOperation(const QString &screenName, bool operat
     if (!operationSucceeded) {
         return; // No change, no signal
     }
+    if (m_retiling) {
+        return;
+    }
 
     if (isAutotileScreen(screenName)) {
+        QScopeGuard guard([this] { m_retiling = false; });
+        m_retiling = true;
         recalculateLayout(screenName);
         applyTiling(screenName);
         Q_EMIT tilingChanged(screenName);
@@ -1200,7 +1215,7 @@ TilingState* AutotileEngine::stateForWindow(const QString& windowId, QString* ou
 
 void AutotileEngine::setInnerGap(int gap)
 {
-    gap = std::clamp(gap, 0, 50);
+    gap = std::clamp(gap, AutotileDefaults::MinGap, AutotileDefaults::MaxGap);
     if (m_config && m_config->innerGap != gap) {
         m_config->innerGap = gap;
         retile(QString());
@@ -1209,7 +1224,7 @@ void AutotileEngine::setInnerGap(int gap)
 
 void AutotileEngine::setOuterGap(int gap)
 {
-    gap = std::clamp(gap, 0, 50);
+    gap = std::clamp(gap, AutotileDefaults::MinGap, AutotileDefaults::MaxGap);
     if (m_config && m_config->outerGap != gap) {
         m_config->outerGap = gap;
         retile(QString());

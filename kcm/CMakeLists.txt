@@ -65,8 +65,10 @@ qt_add_resources(kcm_plasmazones "kcm_qml_tabs"
         ui/tabs/qmldir
         ui/tabs/AboutTab.qml
         ui/tabs/ActivityAssignmentsCard.qml
+        ui/tabs/AlgorithmPreview.qml
         ui/tabs/AppRulesCard.qml
         ui/tabs/AssignmentsTab.qml
+        ui/tabs/AutotilingTab.qml
         ui/tabs/DisplayTab.qml
         ui/tabs/EditorTab.qml
         ui/tabs/ExclusionListCard.qml
