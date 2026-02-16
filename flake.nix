@@ -37,8 +37,12 @@
         {
           options.programs.plasmazones = {
             enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6";
-            package = lib.mkPackageOption pkgs "plasmazones" {
-              default = self.packages.${pkgs.system}.default;
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+              defaultText = lib.literalExpression
+                "inputs.plasmazones.packages.\${pkgs.stdenv.hostPlatform.system}.default";
+              description = "The PlasmaZones package to use.";
             };
           };
 
@@ -58,8 +62,12 @@
         {
           options.programs.plasmazones = {
             enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6";
-            package = lib.mkPackageOption pkgs "plasmazones" {
-              default = self.packages.${pkgs.system}.default;
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+              defaultText = lib.literalExpression
+                "inputs.plasmazones.packages.\${pkgs.stdenv.hostPlatform.system}.default";
+              description = "The PlasmaZones package to use.";
             };
           };
 
