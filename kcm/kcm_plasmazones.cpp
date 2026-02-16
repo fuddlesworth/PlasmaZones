@@ -11,6 +11,7 @@
 #include <QDBusPendingReply>
 #include <QDBusPendingCallWatcher>
 #include <QDBusReply>
+#include <QDBusServiceWatcher>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -57,11 +58,35 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     loadLayouts();
     refreshScreens();
 
-    // Set up daemon status polling
+    // Set up daemon status polling (fallback for edge cases the watcher might miss)
     m_daemonCheckTimer = new QTimer(this);
     m_daemonCheckTimer->setInterval(KCMConstants::DaemonStatusPollIntervalMs);
     connect(m_daemonCheckTimer, &QTimer::timeout, this, &KCMPlasmaZones::checkDaemonStatus);
     m_daemonCheckTimer->start();
+
+    // Set up D-Bus service watcher for immediate daemon start/stop notification
+    m_daemonWatcher = new QDBusServiceWatcher(
+        QString(DBus::ServiceName),
+        QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration,
+        this);
+
+    connect(m_daemonWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+        if (!m_lastDaemonState) {
+            m_lastDaemonState = true;
+            Q_EMIT daemonRunningChanged();
+            // Refresh data from the newly-started daemon
+            loadLayouts();
+            refreshScreens();
+        }
+    });
+
+    connect(m_daemonWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
+        if (m_lastDaemonState) {
+            m_lastDaemonState = false;
+            Q_EMIT daemonRunningChanged();
+        }
+    });
 
     // Load daemon enabled state from systemd (async)
     m_lastDaemonState = isDaemonRunning();
@@ -1186,8 +1211,10 @@ void KCMPlasmaZones::setAutotileEnabled(bool enabled)
         m_settings->setAutotileEnabled(enabled);
         Q_EMIT autotileEnabledChanged();
         setNeedsSave(true);
-        // Refresh layout list so assignment dropdowns show/hide dynamic layouts
-        loadLayouts();
+        // Re-filter cached layouts to show/hide autotile entries without D-Bus re-fetch.
+        // This avoids a synchronous D-Bus round-trip that blocks the UI thread and
+        // causes scroll position resets in the Assignments tab.
+        applyLayoutFilter();
     }
 }
 
@@ -1983,9 +2010,7 @@ void KCMPlasmaZones::createNewLayout()
             // Don't emit here - wait for loadLayouts() to complete first
         }
     }
-
-    // Reload layouts after a short delay to allow the layout to be fully created
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after creation, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::deleteLayout(const QString& layoutId)
@@ -1995,7 +2020,7 @@ void KCMPlasmaZones::deleteLayout(const QString& layoutId)
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"));
     msg << layoutId;
     watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("deleteLayout"));
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after deletion, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::duplicateLayout(const QString& layoutId)
@@ -2010,9 +2035,7 @@ void KCMPlasmaZones::duplicateLayout(const QString& layoutId)
             // Don't emit here - wait for loadLayouts() to complete first
         }
     }
-
-    // Reload layouts after a short delay to allow the layout to be fully created
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after duplication, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::importLayout(const QString& filePath)
@@ -2027,9 +2050,7 @@ void KCMPlasmaZones::importLayout(const QString& filePath)
             // Don't emit here - wait for loadLayouts() to complete first
         }
     }
-
-    // Reload layouts after a short delay to allow the layout to be fully created
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after import, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::exportLayout(const QString& layoutId, const QString& filePath)
@@ -2428,6 +2449,7 @@ void KCMPlasmaZones::openReleaseUrl()
 
 void KCMPlasmaZones::scheduleLoadLayouts()
 {
+    if (m_saveInProgress) return; // Don't reload layouts while a save is in progress
     // Restart the debounce timer — coalesces rapid signals into one loadLayouts() call
     m_loadLayoutsTimer->start();
 }
@@ -2451,6 +2473,14 @@ void KCMPlasmaZones::loadLayouts()
 
     // No fallback layouts - if daemon isn't running, show empty list
     // The QML UI should handle this gracefully with a message like "Enable daemon to see layouts"
+
+    m_unfilteredLayouts = newLayouts;
+    applyLayoutFilter();
+}
+
+void KCMPlasmaZones::applyLayoutFilter()
+{
+    QVariantList newLayouts = m_unfilteredLayouts;
 
     // Filter out autotile entries when the feature is disabled
     if (!m_settings->autotileEnabled()) {

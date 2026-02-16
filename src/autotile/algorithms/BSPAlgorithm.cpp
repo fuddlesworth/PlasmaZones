@@ -112,10 +112,16 @@ void BSPAlgorithm::buildTree(int windowCount, qreal defaultRatio) const
     m_root = std::make_unique<BSPNode>();
     m_leafCount = 1;
 
+    // Reference rectangle for geometry during build so largestLeaf
+    // can compare areas. Aspect ratio only affects split direction.
+    const QRect refRect(0, 0, 1920, 1080);
+
     // Grow one leaf at a time up to the target count
     int iterations = 0;
     constexpr int MaxIterations = 1000;
     while (m_leafCount < windowCount && iterations++ < MaxIterations) {
+        // Apply geometry so largestLeaf can find the optimal split candidate
+        applyGeometry(m_root.get(), refRect);
         if (!growTree(defaultRatio)) {
             break;
         }
@@ -128,8 +134,8 @@ bool BSPAlgorithm::growTree(qreal defaultRatio) const
         return false;
     }
 
-    // Find the deepest rightmost leaf to split
-    BSPNode *leaf = deepestLeaf(m_root.get());
+    // Find the largest leaf to split (produces balanced layouts)
+    BSPNode *leaf = largestLeaf(m_root.get());
     if (!leaf || !leaf->isLeaf()) {
         return false;
     }
@@ -167,7 +173,7 @@ bool BSPAlgorithm::shrinkTree() const
         return false;
     }
 
-    // Find the deepest rightmost leaf to remove
+    // Find the deepest rightmost leaf to remove (preserves larger early splits)
     BSPNode *leaf = deepestLeaf(m_root.get());
     if (!leaf || !leaf->parent) {
         return false;
@@ -290,6 +296,37 @@ int BSPAlgorithm::countLeaves(const BSPNode *node)
     return countLeaves(node->first.get()) + countLeaves(node->second.get());
 }
 
+BSPAlgorithm::BSPNode *BSPAlgorithm::largestLeaf(BSPNode *node)
+{
+    if (!node) {
+        return nullptr;
+    }
+    if (node->isLeaf()) {
+        return node;
+    }
+
+    BSPNode *left = largestLeaf(node->first.get());
+    BSPNode *right = largestLeaf(node->second.get());
+
+    if (!left) return right;
+    if (!right) return left;
+
+    // Compare areas when geometries are available
+    const qint64 leftArea = left->geometry.isValid()
+        ? static_cast<qint64>(left->geometry.width()) * left->geometry.height()
+        : 0;
+    const qint64 rightArea = right->geometry.isValid()
+        ? static_cast<qint64>(right->geometry.width()) * right->geometry.height()
+        : 0;
+
+    // Fallback to right (deepest) when no geometry is available
+    if (leftArea == 0 && rightArea == 0) {
+        return right;
+    }
+
+    return (leftArea >= rightArea) ? left : right;
+}
+
 BSPAlgorithm::BSPNode *BSPAlgorithm::deepestLeaf(BSPNode *node)
 {
     if (!node) {
@@ -300,7 +337,7 @@ BSPAlgorithm::BSPNode *BSPAlgorithm::deepestLeaf(BSPNode *node)
     }
 
     // Prefer the second (right/bottom) child — this is the most recently added
-    // subtree, so removing/splitting it preserves earlier layout structure
+    // subtree, so removing it preserves earlier layout structure
     BSPNode *right = deepestLeaf(node->second.get());
     if (right) {
         return right;

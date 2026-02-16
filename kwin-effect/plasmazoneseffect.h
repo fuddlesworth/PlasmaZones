@@ -415,8 +415,17 @@ private:
     // Autotile: track windows already notified to daemon to avoid duplicate notifications
     QSet<QString> m_notifiedWindows;
 
+    // Autotile: track windows closed before open was sent (D-Bus ordering race guard)
+    QSet<QString> m_pendingCloses;
+
     // Autotile: set of screens using autotile (gating drag/snap/overlay behavior per-screen)
     QSet<QString> m_autotileScreens;
+
+    // Autotile: true when the current drag was started on an autotile screen
+    // (callDragStarted was skipped). Captured at drag start so the drag end
+    // handler uses the same decision, preventing a race where m_autotileScreens
+    // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
+    bool m_dragBypassedForAutotile = false;
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

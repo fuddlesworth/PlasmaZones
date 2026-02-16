@@ -144,14 +144,14 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * If true, non-focused windows are minimized.
      * If false, they remain visible but behind the focused window.
      */
-    bool monocleHideOthers = false;
+    bool monocleHideOthers = true;
 
     /**
      * @brief Show tab bar in monocle mode
      *
      * Displays a bar showing all windows for easy switching.
      */
-    bool monocleShowTabs = true;
+    bool monocleShowTabs = false;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Smart Features
@@ -170,7 +170,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * When true, windows won't be resized smaller than their minimum.
      * This may cause layout to not fill screen completely.
      */
-    bool respectMinimumSize = false;
+    bool respectMinimumSize = true;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

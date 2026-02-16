@@ -491,6 +491,9 @@ public:
     // Mouse position for shader effects (updated during window drag)
     virtual void updateMousePosition(int cursorX, int cursorY) = 0;
 
+    // Filtered layout count (matches what the zone selector actually displays)
+    virtual int visibleLayoutCount(const QString& screenName) const = 0;
+
     // Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
     virtual QString selectedLayoutId() const = 0;

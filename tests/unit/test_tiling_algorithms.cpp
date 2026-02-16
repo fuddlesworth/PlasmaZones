@@ -491,7 +491,7 @@ private Q_SLOTS:
         QVERIFY(!algo.supportsMasterCount());
         QVERIFY(algo.supportsSplitRatio());
         QCOMPARE(algo.masterZoneIndex(), -1); // No master concept
-        QCOMPARE(algo.defaultSplitRatio(), 0.618); // Golden ratio
+        QCOMPARE(algo.defaultSplitRatio(), 0.5); // Dwindle default
     }
 
     void testFibonacci_zeroWindows()
@@ -517,12 +517,12 @@ private Q_SLOTS:
     {
         FibonacciAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-        state.setSplitRatio(0.618); // Golden ratio
+        state.setSplitRatio(0.618);
 
         auto zones = algo.calculateZones(2, m_screenGeometry, state);
         QCOMPARE(zones.size(), 2);
 
-        // First split is Right direction: window 1 on left (golden ratio portion)
+        // Dwindle: first split is vertical — window 1 on left
         int expectedWidth = static_cast<int>(ScreenWidth * 0.618);
         QCOMPARE(zones[0].x(), 0);
         QCOMPARE(zones[0].width(), expectedWidth);
@@ -546,13 +546,13 @@ private Q_SLOTS:
         auto zones = algo.calculateZones(3, m_screenGeometry, state);
         QCOMPARE(zones.size(), 3);
 
-        // With 0.5 ratio: first split Right (left half), second split Down (top half of right)
+        // With 0.5 ratio: first split vertical (left half), second split horizontal (top of right)
         // Zone 0: left half of screen
         QCOMPARE(zones[0].x(), 0);
         QCOMPARE(zones[0].width(), ScreenWidth / 2);
         QCOMPARE(zones[0].height(), ScreenHeight);
 
-        // Zone 1: top-right quarter (Down split on remaining right half)
+        // Zone 1: top-right quarter (horizontal split on remaining right half)
         QCOMPARE(zones[1].x(), ScreenWidth / 2);
         QCOMPARE(zones[1].height(), ScreenHeight / 2);
 

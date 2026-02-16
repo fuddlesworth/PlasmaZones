@@ -346,10 +346,10 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Defensive: set the active layout directly so the switch happens even if the
-    // signal chain (QML zoneSelected → OverlayService::onZoneSelected →
-    // manualLayoutSelected → daemon handler) is broken. setActiveLayout is
-    // idempotent — the daemon handler becomes a no-op for the same layout.
+    // Apply layout directly as a defensive fallback. The QML signal chain
+    // (zoneSelected → OverlayService::onZoneSelected → manualLayoutSelected → daemon handler)
+    // is the primary path, but selectLayout() may be called from keyboard navigation
+    // or other controller paths where that chain doesn't apply.
     if (m_layoutManager) {
         QUuid uuid = QUuid::fromString(layoutId);
         if (!uuid.isNull()) {

@@ -211,9 +211,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
                 // On autotile screens, don't show manual zone overlay or grab keyboard.
                 // The drag proceeds freely; floatWindow is called on drag end.
+                // Capture this decision so dragStopped uses the same state — prevents
+                // a race where m_autotileScreens changes mid-drag (async D-Bus signal)
+                // and leaves the popup visible with no snap.
                 if (m_autotileScreens.contains(getWindowScreenName(w))) {
+                    m_dragBypassedForAutotile = true;
                     return;
                 }
+                m_dragBypassedForAutotile = false;
                 m_dragActivationDetected = false;
                 m_dragStartedSent = false;
                 m_pendingDragWindowId = windowId;
@@ -225,6 +230,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
                     sendDeferredDragStarted();
                 }
+                // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
+                // Without this, Escape cancels the interactive move AND the overlay.
+                // With the grab, Escape only dismisses the overlay while the drag continues.
                 if (!m_keyboardGrabbed) {
                     KWin::effects->grabKeyboard(this);
                     m_keyboardGrabbed = true;
@@ -249,9 +257,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     KWin::effects->ungrabKeyboard();
                     m_keyboardGrabbed = false;
                 }
-                // On autotile screens, float the window from tiling on drag end
-                // (no manual zone snap, no overlay, no snap assist)
-                if (m_autotileScreens.contains(getWindowScreenName(w))) {
+                // Use the captured autotile state from drag start (not live m_autotileScreens)
+                // to ensure consistent behavior even if autotile screens changed mid-drag.
+                if (m_dragBypassedForAutotile) {
                     if (!cancelled) {
                         QDBusMessage msg = QDBusMessage::createMethodCall(
                             DBus::ServiceName, DBus::ObjectPath,
@@ -368,6 +376,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             syncFloatingWindowsFromDaemon();
             loadCachedSettings();
             loadAutotileSettings();
+
+            // Clear stale window tracking — the new daemon has no knowledge of our windows
+            m_notifiedWindows.clear();
+            m_pendingCloses.clear();
+
+            // Re-announce all existing windows on autotile screens
+            const auto windows = KWin::effects->stackingOrder();
+            for (KWin::EffectWindow* w : windows) {
+                if (w && shouldHandleWindow(w)) {
+                    notifyWindowAdded(w);
+                }
+            }
         });
     });
 
@@ -797,6 +817,12 @@ void PlasmaZonesEffect::applyWindowGeometriesFromJson(const QString& geometriesJ
             window = windowByStableId.value(extractStableId(windowId));
         }
         if (window && shouldHandleWindow(window)) {
+            // Skip windows on autotile screens — they are managed by the autotile engine
+            const QString winScreenName = getWindowScreenName(window);
+            if (m_autotileScreens.contains(winScreenName)) {
+                qCDebug(lcEffect) << "Skipping autotile-managed window" << windowId << "on screen" << winScreenName;
+                continue;
+            }
             QRect newGeometry(x, y, width, height);
             QRectF currentWindowGeometry = window->frameGeometry();
             if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
@@ -1924,9 +1950,9 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons)
 {
-    // Don't send manual zone drag updates on autotile screens
-    if (m_dragTracker && m_dragTracker->draggedWindow()
-        && m_autotileScreens.contains(getWindowScreenName(m_dragTracker->draggedWindow()))) {
+    // Don't send manual zone drag updates when drag was started on an autotile screen.
+    // Use captured flag (not live m_autotileScreens) for consistency with drag start/stop.
+    if (m_dragBypassedForAutotile) {
         return;
     }
 
@@ -2241,6 +2267,12 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     const QString windowId = getWindowId(w);
     const QString screenName = getWindowScreenName(w);
 
+    // If we haven't notified the daemon about this window yet, record the close
+    // so we can suppress the open if it arrives late (D-Bus ordering race)
+    if (!m_notifiedWindows.contains(windowId)) {
+        m_pendingCloses.insert(windowId);
+    }
+
     // Remove from autotile tracking set so re-opened windows get re-notified.
     // This must happen regardless of whether the WindowTracking interface is up.
     m_notifiedWindows.remove(windowId);
@@ -2254,7 +2286,14 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
             QStringLiteral("windowClosed"));
         msg << windowId;
 
-        QDBusConnection::sessionBus().asyncCall(msg);
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
+            w->deleteLater();
+            if (w->isError()) {
+                qCWarning(lcEffect) << "windowClosed D-Bus call failed for" << windowId << ":" << w->error().message();
+            }
+        });
         qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenName;
     }
 
@@ -2281,6 +2320,16 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenName;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowActivated"), windowId, screenName);
+
+    // Notify autotile engine of focus change for focus cycling/swap operations
+    if (m_autotileScreens.contains(screenName)) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath,
+            DBus::Interface::Autotile,
+            QStringLiteral("notifyWindowFocused"));
+        msg << windowId;
+        QDBusConnection::sessionBus().asyncCall(msg);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2289,11 +2338,17 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
 {
-    if (!w || w->isDesktop() || w->isDock() || w->isSpecialWindow()) {
+    if (!w || !shouldHandleWindow(w)) {
         return;
     }
 
     const QString windowId = getWindowId(w);
+
+    // Window was already closed before we could notify open — skip (D-Bus ordering race)
+    if (m_pendingCloses.remove(windowId)) {
+        return;
+    }
+
     if (m_notifiedWindows.contains(windowId)) {
         return;
     }
@@ -2312,7 +2367,15 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
         msg << windowId;
         msg << screenName;
 
-        QDBusConnection::sessionBus().asyncCall(msg);
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher *w) {
+            w->deleteLater();
+            if (w->isError()) {
+                qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
+                m_notifiedWindows.remove(windowId);
+            }
+        });
         qCDebug(lcEffect) << "Notified autotile: windowOpened" << windowId << "on screen" << screenName;
     }
 }
@@ -2381,8 +2444,26 @@ void PlasmaZonesEffect::loadAutotileSettings()
         QDBusPendingReply<QDBusVariant> reply = *w;
         if (reply.isValid()) {
             QStringList screens = reply.value().variant().toStringList();
-            m_autotileScreens = QSet<QString>(screens.begin(), screens.end());
+            // All screens in the initial load are "added" (old set was empty or stale)
+            const QSet<QString> added(screens.begin(), screens.end());
+            m_autotileScreens = added;
             qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
+
+            // When new autotile screens are added, re-notify windows on those screens
+            // (they may have been skipped because m_autotileScreens was empty at startup)
+            if (!added.isEmpty()) {
+                const auto windows = KWin::effects->stackingOrder();
+                for (KWin::EffectWindow* win : windows) {
+                    if (win && shouldHandleWindow(win)) {
+                        const QString screenName = getWindowScreenName(win);
+                        if (added.contains(screenName)) {
+                            const QString windowId = getWindowId(win);
+                            m_notifiedWindows.remove(windowId); // Allow re-notification
+                            notifyWindowAdded(win);
+                        }
+                    }
+                }
+            }
         } else {
             qCDebug(lcEffect) << "Could not query autotile screens - daemon may not be running";
         }
@@ -2414,8 +2495,27 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
         }
     }
 
+    // Compute newly added autotile screens
+    const QSet<QString> added = newScreens - m_autotileScreens;
+
     m_autotileScreens = newScreens;
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
+
+    // When new autotile screens are added, re-notify windows on those screens
+    // (they may have been skipped because m_autotileScreens was empty at startup)
+    if (!added.isEmpty()) {
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : windows) {
+            if (w && shouldHandleWindow(w)) {
+                const QString screenName = getWindowScreenName(w);
+                if (added.contains(screenName)) {
+                    const QString windowId = getWindowId(w);
+                    m_notifiedWindows.remove(windowId); // Allow re-notification
+                    notifyWindowAdded(w);
+                }
+            }
+        }
+    }
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const

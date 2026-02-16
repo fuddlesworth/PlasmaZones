@@ -57,7 +57,7 @@ public:
     bool supportsMasterCount() const noexcept override { return false; }
     bool supportsSplitRatio() const noexcept override { return true; }
     qreal defaultSplitRatio() const noexcept override { return 0.5; }
-    int defaultMaxWindows() const noexcept override { return 8; }
+    int defaultMaxWindows() const noexcept override { return 5; }
 
 private:
     /**
@@ -122,7 +122,20 @@ private:
     static int countLeaves(const BSPNode *node);
 
     /**
+     * @brief Find the leaf with the largest area (best candidate to split)
+     *
+     * Splitting the largest leaf produces the most balanced layouts,
+     * matching how BSP is typically used in tiling window managers.
+     * Falls back to deepest-rightmost when geometries haven't been
+     * assigned yet (first build pass).
+     */
+    static BSPNode *largestLeaf(BSPNode *node);
+
+    /**
      * @brief Find the deepest rightmost leaf (most recently added)
+     *
+     * Used by shrinkTree to remove the last-added leaf, preserving
+     * the larger, earlier subdivisions.
      */
     static BSPNode *deepestLeaf(BSPNode *node);
 

@@ -64,7 +64,7 @@ public:
 
     // Need at least 3 windows for true three-column layout
     int minimumWindows() const noexcept override { return 1; }
-    int defaultMaxWindows() const noexcept override { return 6; }
+    int defaultMaxWindows() const noexcept override { return 5; }
 };
 
 } // namespace PlasmaZones

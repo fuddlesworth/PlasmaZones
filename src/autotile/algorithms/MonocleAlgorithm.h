@@ -57,7 +57,7 @@ public:
     // Monocle doesn't support master count or split ratio - all windows are fullscreen
     bool supportsMasterCount() const noexcept override { return false; }
     bool supportsSplitRatio() const noexcept override { return false; }
-    int defaultMaxWindows() const noexcept override { return 10; }
+    int defaultMaxWindows() const noexcept override { return 4; }
 };
 
 } // namespace PlasmaZones

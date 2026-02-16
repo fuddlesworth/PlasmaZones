@@ -65,6 +65,7 @@ void AutotileEngine::connectSignals()
         // Use windowZoneChanged as a proxy until dedicated signals are added
         connect(m_windowTracker, &WindowTrackingService::windowZoneChanged,
                 this, [this](const QString &windowId, const QString &zoneId) {
+                    if (m_retiling) return;  // Ignore zone changes during retile
                     if (zoneId.isEmpty()) {
                         onWindowRemoved(windowId);
                     } else {
@@ -86,11 +87,14 @@ void AutotileEngine::connectSignals()
                 });
     }
 
-    // Layout changes
-    if (m_layoutManager) {
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged,
-                this, &AutotileEngine::onLayoutChanged);
-    }
+    // Layout changes — intentionally NOT connected.
+    // Autotile screens are managed by per-screen assignments, not the global
+    // active layout. Retile is triggered by setAutotileScreens() and
+    // onScreenGeometryChanged() instead.
+    // if (m_layoutManager) {
+    //     connect(m_layoutManager, &LayoutManager::activeLayoutChanged,
+    //             this, &AutotileEngine::onLayoutChanged);
+    // }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -121,8 +125,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // Retile newly-added screens
     for (const QString& screenName : added) {
         if (m_screenStates.contains(screenName)) {
-            recalculateLayout(screenName);
-            applyTiling(screenName);
+            retileAfterOperation(screenName, true);
         }
     }
 
@@ -215,6 +218,10 @@ void AutotileEngine::syncFromSettings(Settings *settings)
     if (!settings) {
         return;
     }
+
+    // Cancel any pending debounced retile — we are about to do a full resync
+    m_settingsRetileTimer.stop();
+    m_pendingSettingsRetile = false;
 
     m_settings = settings;
 
@@ -333,8 +340,25 @@ void AutotileEngine::connectToSettings(Settings *settings)
     // Settings that require retile (debounced)
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    CONNECT_SETTING_RETILE(autotileSplitRatioChanged, splitRatio, autotileSplitRatio);
-    CONNECT_SETTING_RETILE(autotileMasterCountChanged, masterCount, autotileMasterCount);
+    connect(settings, &Settings::autotileSplitRatioChanged, this, [this]() {
+        if (m_settings) {
+            m_config->splitRatio = m_settings->autotileSplitRatio();
+            applyToAllStates([this](TilingState *state) {
+                state->setSplitRatio(m_config->splitRatio);
+            });
+            // applyToAllStates already calls retile() if enabled
+        }
+    });
+
+    connect(settings, &Settings::autotileMasterCountChanged, this, [this]() {
+        if (m_settings) {
+            m_config->masterCount = m_settings->autotileMasterCount();
+            applyToAllStates([this](TilingState *state) {
+                state->setMasterCount(m_config->masterCount);
+            });
+            // applyToAllStates already calls retile() if enabled
+        }
+    });
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
     CONNECT_SETTING_RETILE(autotileOuterGapChanged, outerGap, autotileOuterGap);
     CONNECT_SETTING_RETILE(autotileSmartGapsChanged, smartGaps, autotileSmartGaps);
@@ -393,7 +417,7 @@ void AutotileEngine::connectToSettings(Settings *settings)
 
 void AutotileEngine::saveState()
 {
-    auto config = KSharedConfig::openConfig();
+    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
 
     // Save global state
@@ -430,7 +454,7 @@ void AutotileEngine::saveState()
 
 void AutotileEngine::loadState()
 {
-    auto config = KSharedConfig::openConfig();
+    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
 
     if (!group.exists()) {
@@ -533,6 +557,7 @@ void AutotileEngine::retile(const QString &screenName)
             if (m_screenStates.contains(key)) {
                 recalculateLayout(key);
                 applyTiling(key);
+                Q_EMIT tilingChanged(key);
             }
         }
     } else {
@@ -541,6 +566,7 @@ void AutotileEngine::retile(const QString &screenName)
         }
         recalculateLayout(screenName);
         applyTiling(screenName);
+        Q_EMIT tilingChanged(screenName);
     }
 }
 
@@ -697,7 +723,7 @@ void AutotileEngine::setGlobalSplitRatio(qreal ratio)
 
 void AutotileEngine::setGlobalMasterCount(int count)
 {
-    count = std::clamp(count, 1, AutotileDefaults::MaxMasterCount);
+    count = std::clamp(count, AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount);
     m_config->masterCount = count;
     applyToAllStates([count](TilingState *state) {
         state->setMasterCount(count);
@@ -911,11 +937,9 @@ void AutotileEngine::onScreenGeometryChanged(const QString &screenName)
 void AutotileEngine::onLayoutChanged(Layout *layout)
 {
     Q_UNUSED(layout)
-
-    // Layout changed, retile autotile screens only
-    if (isEnabled()) {
-        retile();
-    }
+    // Autotile screens are managed by per-screen assignments, not the global
+    // active layout. Retile is triggered by setAutotileScreens() and
+    // onScreenGeometryChanged() instead.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -8,30 +8,30 @@
 namespace PlasmaZones {
 
 /**
- * @brief Fibonacci (Spiral) tiling algorithm
+ * @brief Fibonacci (Dwindle) tiling algorithm
  *
- * Recursively subdivides space with each window taking a portion of the
- * remaining area, creating a spiral pattern inspired by the golden ratio.
- * Each split alternates direction (right, down, left, up) creating a
- * visually pleasing spiral arrangement.
+ * Recursively subdivides space using alternating vertical/horizontal splits.
+ * Each window takes the left/top portion of the remaining area, with the
+ * remainder shifting right/down. This matches the dwindle layout used by
+ * i3, bspwm, and Hyprland, and the built-in manual Fibonacci layout.
  *
- * Layout example (5 windows):
+ * Layout example (5 windows, ratio=0.5):
  * ```
- * +-------------+--------+
- * |             |   2    |
- * |      1      +----+---+
- * |             | 3  | 4 |
- * |             +----+---+
- * |             |   5    |
- * +-------------+--------+
+ * +----------+---------+
+ * |          |    2    |
+ * |    1     +----+----+
+ * |          | 3  | 4  |
+ * |          |    +----+
+ * |          |    | 5  |
+ * +----------+----+----+
  * ```
  *
  * Features:
- * - Spiral subdivision pattern
- * - Configurable split ratio (default: golden ratio 0.618)
+ * - Dwindle subdivision (alternating vertical/horizontal)
+ * - Configurable split ratio (default: 0.5)
  * - First window gets largest area
  * - Works well with any number of windows
- * - Aesthetically pleasing golden-ratio proportions
+ * - Predictable, consistent layout behavior
  */
 class PLASMAZONES_EXPORT FibonacciAlgorithm : public TilingAlgorithm
 {
@@ -52,24 +52,8 @@ public:
     // Fibonacci supports split ratio but not master count
     bool supportsMasterCount() const noexcept override { return false; }
     bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.618; } // Golden ratio
+    qreal defaultSplitRatio() const noexcept override { return 0.5; }
     int defaultMaxWindows() const noexcept override { return 5; }
-
-private:
-    /**
-     * @brief Split direction for Fibonacci spiral
-     */
-    enum class SplitDirection {
-        Right,  ///< Split vertically, new window on right
-        Down,   ///< Split horizontally, new window on bottom
-        Left,   ///< Split vertically, new window on left
-        Up      ///< Split horizontally, new window on top
-    };
-
-    /**
-     * @brief Get next direction in spiral sequence
-     */
-    static SplitDirection nextDirection(SplitDirection current);
 };
 
 } // namespace PlasmaZones

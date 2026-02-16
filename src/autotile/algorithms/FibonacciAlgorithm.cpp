@@ -11,7 +11,7 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Fibonacci provides golden-ratio spiral layout (priority 35)
+// Self-registration: Fibonacci provides dwindle layout (priority 35)
 namespace {
 AlgorithmRegistrar<FibonacciAlgorithm> s_fibonacciRegistrar(DBus::AutotileAlgorithm::Fibonacci, 35);
 }
@@ -28,23 +28,12 @@ QString FibonacciAlgorithm::name() const noexcept
 
 QString FibonacciAlgorithm::description() const
 {
-    return tr("Spiral subdivision inspired by golden ratio");
+    return tr("Dwindle subdivision with alternating splits");
 }
 
 QString FibonacciAlgorithm::icon() const noexcept
 {
     return QStringLiteral("shape-spiral");
-}
-
-FibonacciAlgorithm::SplitDirection FibonacciAlgorithm::nextDirection(SplitDirection current)
-{
-    switch (current) {
-        case SplitDirection::Right: return SplitDirection::Down;
-        case SplitDirection::Down:  return SplitDirection::Left;
-        case SplitDirection::Left:  return SplitDirection::Up;
-        case SplitDirection::Up:    return SplitDirection::Right;
-    }
-    return SplitDirection::Right; // Unreachable, but satisfies compiler
 }
 
 QVector<QRect> FibonacciAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,
@@ -62,41 +51,38 @@ QVector<QRect> FibonacciAlgorithm::calculateZones(int windowCount, const QRect &
         return zones;
     }
 
-    // Get split ratio from state (default to golden ratio)
+    // Get split ratio from state
     const qreal splitRatio = std::clamp(state.splitRatio(), MinSplitRatio, MaxSplitRatio);
 
-    // Start with full screen as the "remaining" area
+    // Dwindle pattern: alternates vertical/horizontal splits.
+    // Current window always takes the left/top portion; remaining area
+    // shifts right/down. This matches i3/bspwm/Hyprland dwindle behavior
+    // and the built-in manual Fibonacci layout.
     QRect remaining = screenGeometry;
-    SplitDirection direction = SplitDirection::Right;
+    bool splitVertical = true; // Start with vertical (left/right) split
 
     for (int i = 0; i < windowCount; ++i) {
-        // If remaining area is too small to split further, assign all of it
+        // Last window or remaining area too small — assign all of it
         if (i == windowCount - 1
             || remaining.width() < MinZoneSizePx || remaining.height() < MinZoneSizePx) {
             zones.append(remaining);
-            // Graceful degradation: when remaining area is too small to split,
-            // distribute remaining windows evenly within it (columns or rows)
-            // rather than stacking them identically (which causes overlapping).
+            // Graceful degradation: distribute remaining windows evenly
             const int leftover = windowCount - i - 1;
             if (leftover > 0) {
                 if (remaining.width() >= remaining.height()) {
-                    // Split horizontally into equal columns, capped at MinZoneSizePx
                     const int maxFit = std::max(1, remaining.width() / MinZoneSizePx);
                     const int fitCount = std::min(leftover + 1, maxFit);
                     QVector<int> widths = distributeEvenly(remaining.width(), fitCount);
-                    // Replace the zone we just added with the first portion
                     zones.last() = QRect(remaining.x(), remaining.y(), widths[0], remaining.height());
                     int x = remaining.x() + widths[0];
                     for (int j = 1; j < fitCount; ++j) {
                         zones.append(QRect(x, remaining.y(), widths[j], remaining.height()));
                         x += widths[j];
                     }
-                    // Stack any remaining windows monocle-style on the last zone
                     for (int j = fitCount; j <= leftover; ++j) {
                         zones.append(zones.last());
                     }
                 } else {
-                    // Split vertically into equal rows, capped at MinZoneSizePx
                     const int maxFit = std::max(1, remaining.height() / MinZoneSizePx);
                     const int fitCount = std::min(leftover + 1, maxFit);
                     QVector<int> heights = distributeEvenly(remaining.height(), fitCount);
@@ -106,7 +92,6 @@ QVector<QRect> FibonacciAlgorithm::calculateZones(int windowCount, const QRect &
                         zones.append(QRect(remaining.x(), y, remaining.width(), heights[j]));
                         y += heights[j];
                     }
-                    // Stack any remaining windows monocle-style on the last zone
                     for (int j = fitCount; j <= leftover; ++j) {
                         zones.append(zones.last());
                     }
@@ -114,50 +99,26 @@ QVector<QRect> FibonacciAlgorithm::calculateZones(int windowCount, const QRect &
             }
             break;
         } else {
-            // Split remaining area and assign portion to current window
             QRect windowZone;
 
-            switch (direction) {
-                case SplitDirection::Right: {
-                    // Split vertically, current window on left
-                    const int splitX = remaining.x() + static_cast<int>(remaining.width() * splitRatio);
-                    windowZone = QRect(remaining.x(), remaining.y(),
-                                       splitX - remaining.x(), remaining.height());
-                    remaining = QRect(splitX, remaining.y(),
-                                      remaining.right() - splitX + 1, remaining.height());
-                    break;
-                }
-                case SplitDirection::Down: {
-                    // Split horizontally, current window on top
-                    const int splitY = remaining.y() + static_cast<int>(remaining.height() * splitRatio);
-                    windowZone = QRect(remaining.x(), remaining.y(),
-                                       remaining.width(), splitY - remaining.y());
-                    remaining = QRect(remaining.x(), splitY,
-                                      remaining.width(), remaining.bottom() - splitY + 1);
-                    break;
-                }
-                case SplitDirection::Left: {
-                    // Split vertically, current window on right
-                    const int splitX = remaining.x() + static_cast<int>(remaining.width() * (1.0 - splitRatio));
-                    windowZone = QRect(splitX, remaining.y(),
-                                       remaining.right() - splitX + 1, remaining.height());
-                    remaining = QRect(remaining.x(), remaining.y(),
-                                      splitX - remaining.x(), remaining.height());
-                    break;
-                }
-                case SplitDirection::Up: {
-                    // Split horizontally, current window on bottom
-                    const int splitY = remaining.y() + static_cast<int>(remaining.height() * (1.0 - splitRatio));
-                    windowZone = QRect(remaining.x(), splitY,
-                                       remaining.width(), remaining.bottom() - splitY + 1);
-                    remaining = QRect(remaining.x(), remaining.y(),
-                                      remaining.width(), splitY - remaining.y());
-                    break;
-                }
+            if (splitVertical) {
+                // Split left/right — window gets left portion
+                const int splitX = remaining.x() + static_cast<int>(remaining.width() * splitRatio);
+                windowZone = QRect(remaining.x(), remaining.y(),
+                                   splitX - remaining.x(), remaining.height());
+                remaining = QRect(splitX, remaining.y(),
+                                  remaining.right() - splitX + 1, remaining.height());
+            } else {
+                // Split top/bottom — window gets top portion
+                const int splitY = remaining.y() + static_cast<int>(remaining.height() * splitRatio);
+                windowZone = QRect(remaining.x(), remaining.y(),
+                                   remaining.width(), splitY - remaining.y());
+                remaining = QRect(remaining.x(), splitY,
+                                  remaining.width(), remaining.bottom() - splitY + 1);
             }
 
             zones.append(windowZone);
-            direction = nextDirection(direction);
+            splitVertical = !splitVertical; // Alternate direction
         }
     }
 

@@ -33,8 +33,22 @@ Item {
     property color windowBorder: Kirigami.Theme.textColor
     property real windowOpacity: 0.7
 
-    // Calculate zones based on algorithm
-    readonly property var zones: calculateZones()
+    // Throttled zone calculation (~60fps cap) to avoid redundant recalcs
+    // when multiple properties change in the same frame
+    property var zones: []
+
+    Timer {
+        id: recalcTimer
+        interval: 16  // ~60fps cap
+        onTriggered: root.zones = root.calculateZones()
+    }
+
+    onAlgorithmIdChanged: recalcTimer.restart()
+    onWindowCountChanged: recalcTimer.restart()
+    onSplitRatioChanged: recalcTimer.restart()
+    onMasterCountChanged: recalcTimer.restart()
+
+    Component.onCompleted: recalcTimer.start()
 
     function calculateZones() {
         const count = Math.max(1, windowCount)
@@ -51,7 +65,7 @@ Item {
             case "rows":
                 return calculateRows(count)
             case "fibonacci":
-                return calculateFibonacci(count)
+                return calculateFibonacci(count, ratio)
             case "monocle":
                 return calculateMonocle(count)
             case "three-column":
@@ -166,55 +180,44 @@ Item {
         return zones
     }
 
-    function calculateFibonacci(count) {
+    function calculateFibonacci(count, ratio) {
         if (count <= 0) return []
         if (count === 1) return [{ x: 0, y: 0, w: 1, h: 1 }]
 
+        // Dwindle pattern: alternates vertical/horizontal splits.
+        // Window always takes left/top portion, remaining shifts right/down.
         let zones = []
         let x = 0, y = 0, w = 1, h = 1
 
         for (let i = 0; i < count; i++) {
             if (i === count - 1) {
                 zones.push({ x, y, w, h })
+            } else if (i % 2 === 0) {
+                // Vertical split — window gets left portion
+                zones.push({ x, y, w: w * ratio, h })
+                x += w * ratio
+                w *= (1 - ratio)
             } else {
-                const direction = i % 4
-                switch (direction) {
-                    case 0: // Right
-                        zones.push({ x, y, w: w * 0.5, h })
-                        x += w * 0.5
-                        w *= 0.5
-                        break
-                    case 1: // Down
-                        zones.push({ x, y, w, h: h * 0.5 })
-                        y += h * 0.5
-                        h *= 0.5
-                        break
-                    case 2: // Left
-                        zones.push({ x: x + w * 0.5, y, w: w * 0.5, h })
-                        w *= 0.5
-                        break
-                    case 3: // Up
-                        zones.push({ x, y: y + h * 0.5, w, h: h * 0.5 })
-                        h *= 0.5
-                        break
-                }
+                // Horizontal split — window gets top portion
+                zones.push({ x, y, w, h: h * ratio })
+                y += h * ratio
+                h *= (1 - ratio)
             }
         }
         return zones
     }
 
     function calculateMonocle(count) {
-        // In monocle, all windows are fullscreen, but we show them slightly offset for preview
+        // In monocle, all windows are fullscreen — show as stacked cards
+        // with slight horizontal offset to indicate depth
         let zones = []
-        // Cap offset so dimensions stay positive (max offset = 0.45 → w/h = 0.1)
-        const maxOffset = 0.45
+        const step = count > 1 ? Math.min(0.04, 0.2 / (count - 1)) : 0
         for (let i = 0; i < count; i++) {
-            const offset = Math.min(i * 0.03, maxOffset)
             zones.push({
-                x: offset,
-                y: offset,
-                w: Math.max(1 - offset * 2, 0.1),
-                h: Math.max(1 - offset * 2, 0.1)
+                x: i * step,
+                y: 0,
+                w: 1 - (count - 1) * step,
+                h: 1
             })
         }
         return zones
@@ -225,30 +228,52 @@ Item {
         if (count === 1) return [{ x: 0, y: 0, w: 1, h: 1 }]
         if (count === 2) {
             return [
-                { x: 0, y: 0, w: 0.5, h: 1 },
-                { x: 0.5, y: 0, w: 0.5, h: 1 }
+                { x: 0, y: 0, w: ratio, h: 1 },
+                { x: ratio, y: 0, w: 1 - ratio, h: 1 }
             ]
         }
 
         let zones = []
         const sideWidth = (1 - ratio) / 2
 
-        // Left column
-        zones.push({ x: 0, y: 0, w: sideWidth, h: 1 })
-
-        // Center (master)
+        // Center (master) — first zone, matches C++ masterZoneIndex() = 0
         zones.push({ x: sideWidth, y: 0, w: ratio, h: 1 })
 
-        // Right column - remaining windows
-        const rightCount = count - 2
-        const rightHeight = 1 / rightCount
-        for (let i = 0; i < rightCount; i++) {
-            zones.push({
-                x: sideWidth + ratio,
-                y: i * rightHeight,
-                w: sideWidth,
-                h: rightHeight
-            })
+        // Distribute stack windows round-robin: left, right, left, right...
+        const stackCount = count - 1
+        const leftCount = Math.ceil(stackCount / 2)
+        const rightCount = stackCount - leftCount
+
+        let leftIdx = 0, rightIdx = 0
+        const leftHeight = leftCount > 0 ? 1 / leftCount : 1
+        const rightHeight = rightCount > 0 ? 1 / rightCount : 1
+
+        for (let i = 0; i < stackCount; i++) {
+            if (i % 2 === 0 && leftIdx < leftCount) {
+                zones.push({
+                    x: 0,
+                    y: leftIdx * leftHeight,
+                    w: sideWidth,
+                    h: leftHeight
+                })
+                leftIdx++
+            } else if (rightIdx < rightCount) {
+                zones.push({
+                    x: sideWidth + ratio,
+                    y: rightIdx * rightHeight,
+                    w: sideWidth,
+                    h: rightHeight
+                })
+                rightIdx++
+            } else if (leftIdx < leftCount) {
+                zones.push({
+                    x: 0,
+                    y: leftIdx * leftHeight,
+                    w: sideWidth,
+                    h: leftHeight
+                })
+                leftIdx++
+            }
         }
 
         return zones

@@ -957,9 +957,9 @@ void Settings::load()
     }
     m_inactiveOpacity = inactiveOpacity;
 
-    // Validate dimensions (non-negative) with INT_MAX as upper bound
-    m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), 0, INT_MAX, "border width");
-    m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, INT_MAX, "border radius");
+    // Validate dimensions with .kcfg-defined bounds
+    m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), 0, 10, "border width");
+    m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, 50, "border radius");
 
     m_enableBlur = appearance.readEntry(QLatin1String("EnableBlur"), ConfigDefaults::enableBlur());
     m_labelFontFamily = appearance.readEntry(QLatin1String("LabelFontFamily"), ConfigDefaults::labelFontFamily());
@@ -971,9 +971,9 @@ void Settings::load()
     m_labelFontStrikeout = appearance.readEntry(QLatin1String("LabelFontStrikeout"), ConfigDefaults::labelFontStrikeout());
 
     // Zones with validation (defaults from .kcfg via ConfigDefaults)
-    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, INT_MAX, "zone padding");
-    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, INT_MAX, "outer gap");
-    m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 0, INT_MAX, "adjacent threshold");
+    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, 50, "zone padding");
+    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, 50, "outer gap");
+    m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 5, 100, "adjacent threshold");
 
     // Performance and behavior settings with validation
     m_pollIntervalMs = readValidatedInt(zones, "PollIntervalMs", ConfigDefaults::pollIntervalMs(), 10, 1000, "poll interval");

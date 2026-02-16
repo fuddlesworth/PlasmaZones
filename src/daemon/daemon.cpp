@@ -265,9 +265,12 @@ bool Daemon::init()
                 // they work with the active layout, not per-screen layouts
             });
 
-    // Connect settings changes to overlay service
+    // Connect settings changes to overlay service and autotile engine
     connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
+        if (m_autotileEngine) {
+            m_autotileEngine->syncFromSettings(m_settings.get());
+        }
     });
 
     // Initialize domain-specific D-Bus adaptors
@@ -727,6 +730,29 @@ void Daemon::start()
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
     m_modeTracker->load();
 
+    // Reconcile persisted mode with actual state: if the mode tracker says
+    // Autotile but no screen has an autotile assignment (or the feature is
+    // disabled), force back to Manual so the popup shows the right layouts.
+    if (m_modeTracker->isAutotileMode()) {
+        bool hasAutotileAssignment = false;
+        if (m_settings->autotileEnabled() && m_layoutManager) {
+            for (QScreen *screen : Utils::allScreens()) {
+                const QString screenId = Utils::screenIdentifier(screen);
+                const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+                const QString activity = (m_activityManager && ActivityManager::isAvailable())
+                                         ? m_activityManager->currentActivity() : QString();
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                if (LayoutId::isAutotile(assignmentId)) {
+                    hasAutotileAssignment = true;
+                    break;
+                }
+            }
+        }
+        if (!hasAutotileAssignment) {
+            m_modeTracker->setCurrentMode(TilingMode::Manual);
+        }
+    }
+
     // Connect autotile engine signals
     if (m_autotileEngine) {
         // Autotile engine signals → OSD (use display name, not algorithm ID)
@@ -838,6 +864,9 @@ void Daemon::start()
     // Set initial layout filter
     updateLayoutFilter();
 
+    // Update layout filter when tiling mode changes at runtime
+    connect(m_modeTracker.get(), &ModeTracker::currentModeChanged, this, &Daemon::updateLayoutFilter);
+
     // Feature gate: when KCM checkbox changes, enforce constraints
     connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
         if (!m_settings) {
@@ -850,6 +879,16 @@ void Daemon::start()
                 m_layoutManager->clearAutotileAssignments();
             }
             updateAutotileScreens();
+            // Restore last manual layout so windows aren't stuck in tiled positions
+            if (m_modeTracker && m_layoutManager) {
+                const QString lastLayoutId = m_modeTracker->lastManualLayoutId();
+                if (!lastLayoutId.isEmpty()) {
+                    Layout* layout = m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
+                    if (layout) {
+                        m_layoutManager->setActiveLayout(layout);
+                    }
+                }
+            }
         }
 
         updateLayoutFilter();
@@ -860,10 +899,21 @@ void Daemon::start()
         updateAutotileScreens();
     });
 
-    // Connect unified layout controller signals for OSD display
+    // Connect unified layout controller signals for OSD display and mode tracking
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
+        if (m_modeTracker) {
+            m_modeTracker->setCurrentMode(TilingMode::Manual);
+        }
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
             showLayoutOsd(layout, m_unifiedLayoutController->currentScreenName());
+        }
+    });
+
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied,
+            this, [this](const QString& algorithmName, int windowCount) {
+        Q_UNUSED(algorithmName) Q_UNUSED(windowCount)
+        if (m_modeTracker) {
+            m_modeTracker->setCurrentMode(TilingMode::Autotile);
         }
     });
 
@@ -979,6 +1029,10 @@ void Daemon::stop()
         return;
     }
 
+    // Stop pending timers to prevent callbacks during shutdown
+    m_geometryUpdateTimer.stop();
+    m_pendingGeometryUpdates.clear();
+
     // Hide overlay
     hideOverlay();
 
@@ -1005,6 +1059,23 @@ void Daemon::stop()
 
 void Daemon::showOverlay()
 {
+    // Don't show overlay when all screens are in autotile mode
+    // (the overlay is for manual zone selection during drag)
+    if (m_autotileEngine && m_screenManager) {
+        const auto& autotileScreens = m_autotileEngine->autotileScreens();
+        if (!autotileScreens.isEmpty()) {
+            bool allAutotile = true;
+            for (QScreen* screen : m_screenManager->screens()) {
+                if (!autotileScreens.contains(screen->name())) {
+                    allAutotile = false;
+                    break;
+                }
+            }
+            if (allAutotile) {
+                return;
+            }
+        }
+    }
     m_overlayService->show();
 }
 
@@ -1150,9 +1221,13 @@ void Daemon::updateLayoutFilter()
         return;
     }
 
-    // Always show manual layouts; show autotile layouts when the feature gate is enabled
-    const bool includeManual = true;
-    const bool includeAutotile = m_settings->autotileEnabled();
+    // Exclusive mode based on runtime tiling mode, gated by the feature toggle.
+    // autotileEnabled is the feature gate (can autotile be used at all?).
+    // ModeTracker tracks what's actually active right now.
+    const bool autotileActive = m_settings->autotileEnabled()
+                                && m_modeTracker && m_modeTracker->isAutotileMode();
+    const bool includeManual = !autotileActive;
+    const bool includeAutotile = autotileActive;
 
     if (m_overlayService) {
         m_overlayService->setLayoutFilter(includeManual, includeAutotile);

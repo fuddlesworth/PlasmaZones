@@ -941,7 +941,11 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
     const QRect screenGeom = screen->geometry();
-    const int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
+    // Use filtered layout count (matches what the zone selector popup actually displays)
+    // so the keep-visible zone matches the real popup dimensions
+    const int layoutCount = m_overlayService
+        ? m_overlayService->visibleLayoutCount(Utils::screenIdentifier(screen))
+        : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
 
     // Use shared layout computation (same code as OverlayService)
     const ZoneSelectorLayout selectorLayout = computeZoneSelectorLayout(config, screen, layoutCount);

@@ -99,6 +99,9 @@ public:
     // Mouse position for shader effects
     void updateMousePosition(int cursorX, int cursorY) override;
 
+    // Filtered layout count for trigger edge computation
+    int visibleLayoutCount(const QString& screenName) const override;
+
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
     QString selectedLayoutId() const override

@@ -58,7 +58,7 @@ qreal MasterStackAlgorithm::defaultSplitRatio() const noexcept
 
 int MasterStackAlgorithm::defaultMaxWindows() const noexcept
 {
-    return 6; // 1 master + 5 stack
+    return 4; // 1 master + 3 stack
 }
 
 QVector<QRect> MasterStackAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,

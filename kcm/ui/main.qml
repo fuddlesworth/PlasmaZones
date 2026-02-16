@@ -64,7 +64,7 @@ KCM.AbstractKCM {
         readonly property int borderWidthMax: 10
         readonly property int borderRadiusMax: 50
         readonly property int paddingMax: 50
-        readonly property int thresholdMax: 200
+        readonly property int thresholdMax: 100
         readonly property int zonePaddingMax: 50
         readonly property int outerGapMax: 50
         readonly property int adjacentThresholdMax: 100

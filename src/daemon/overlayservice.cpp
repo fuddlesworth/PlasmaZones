@@ -2005,6 +2005,14 @@ void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
     refreshVisibleWindows();
 }
 
+int OverlayService::visibleLayoutCount(const QString& screenName) const
+{
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts);
+    return entries.size();
+}
+
 bool OverlayService::hasSelectedZone() const
 {
     return !m_selectedLayoutId.isEmpty() && m_selectedZoneIndex >= 0;

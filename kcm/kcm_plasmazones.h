@@ -11,6 +11,7 @@
 #include <QSet>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
+#include <QDBusServiceWatcher>
 #include <functional>
 
 class QTimer;
@@ -680,6 +681,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void loadLayouts();
+    void applyLayoutFilter(); // Re-filter cached layouts without D-Bus re-fetch
     void scheduleLoadLayouts(); // Coalesces rapid D-Bus signals into a single loadLayouts() call
     void refreshScreens();
     void checkDaemonStatus();
@@ -724,10 +726,12 @@ private:
     UpdateChecker* m_updateChecker = nullptr;
     QString m_dismissedUpdateVersion;  // Cached to avoid repeated config reads
     QTimer* m_daemonCheckTimer = nullptr;
+    QDBusServiceWatcher* m_daemonWatcher = nullptr; // Immediate notification of daemon start/stop
     QTimer* m_loadLayoutsTimer = nullptr; // Debounce timer for coalescing D-Bus layout signals
     bool m_daemonEnabled = true;
     bool m_lastDaemonState = false;
     QVariantList m_layouts;
+    QVariantList m_unfilteredLayouts; // Raw D-Bus layout data before autotile filter
     QString m_layoutToSelect; // Layout ID to select after layouts are reloaded (one-shot)
     bool m_initialLayoutLoadDone = false; // Tracks first successful load for auto-selecting default
 

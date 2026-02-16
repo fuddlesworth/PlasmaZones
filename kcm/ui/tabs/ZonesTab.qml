@@ -519,7 +519,7 @@ ScrollView {
 
                         SpinBox {
                             id: adjacentThresholdSpinBox
-                            from: 0
+                            from: 5
                             to: root.constants.thresholdMax
                             value: kcm.adjacentThreshold
                             onValueModified: kcm.adjacentThreshold = value
@@ -603,7 +603,7 @@ ScrollView {
 
                         SpinBox {
                             from: 0
-                            to: root.constants.thresholdMax
+                            to: root.constants.paddingMax
                             value: kcm.zonePadding
                             onValueModified: kcm.zonePadding = value
                         }
@@ -619,7 +619,7 @@ ScrollView {
 
                         SpinBox {
                             from: 0
-                            to: root.constants.thresholdMax
+                            to: root.constants.paddingMax
                             value: kcm.outerGap
                             onValueModified: kcm.outerGap = value
                         }
