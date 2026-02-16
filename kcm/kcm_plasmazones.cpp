@@ -40,6 +40,7 @@
 #include "../src/core/logging.h"
 #include "../src/autotile/AlgorithmRegistry.h"
 #include "../src/autotile/TilingAlgorithm.h"
+#include "../src/autotile/TilingState.h"
 #include "../src/core/modifierutils.h"
 #include "../src/core/utils.h"
 #include "version.h"
@@ -55,7 +56,7 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     : KQuickConfigModule(parent, data)
 {
     m_settings = new Settings(this);
-    loadLayouts();
+    loadLayoutsSync();
     refreshScreens();
 
     // Set up daemon status polling (fallback for edge cases the watcher might miss)
@@ -75,7 +76,7 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
         if (!m_lastDaemonState) {
             m_lastDaemonState = true;
             Q_EMIT daemonRunningChanged();
-            // Refresh data from the newly-started daemon
+            // Refresh data from the newly-started daemon (async — UI is already visible)
             loadLayouts();
             refreshScreens();
         }
@@ -1204,6 +1205,31 @@ QVariantList KCMPlasmaZones::availableAlgorithms() const
     return algorithms;
 }
 
+QVariantList KCMPlasmaZones::generateAlgorithmPreview(const QString &algorithmId, int windowCount,
+                                                      double splitRatio, int masterCount) const
+{
+    auto *registry = PlasmaZones::AlgorithmRegistry::instance();
+    PlasmaZones::TilingAlgorithm *algo = registry->algorithm(algorithmId);
+    if (!algo) {
+        return {};
+    }
+
+    // Note: calculateZones() is not thread-safe for concurrent calls on the
+    // same algorithm instance, but the KCM runs in a separate process from the
+    // daemon, and QML calls this from the GUI thread only, so this is safe.
+    const int previewSize = 1000;
+    const QRect previewRect(0, 0, previewSize, previewSize);
+
+    PlasmaZones::TilingState state(QStringLiteral("preview"));
+    state.setMasterCount(masterCount);
+    state.setSplitRatio(splitRatio);
+
+    const int count = qMax(1, windowCount);
+    QVector<QRect> zones = algo->calculateZones(count, previewRect, state);
+
+    return PlasmaZones::AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+}
+
 // Autotiling setters
 void KCMPlasmaZones::setAutotileEnabled(bool enabled)
 {
@@ -1749,7 +1775,7 @@ void KCMPlasmaZones::load()
     Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
     Q_EMIT snapAssistTriggersChanged();
-    loadLayouts();
+    loadLayoutsSync();
     refreshScreens();
 
     const QString layoutInterface = QString(DBus::Interface::LayoutManager);
@@ -2097,17 +2123,23 @@ void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
     m_pendingHiddenStates[layoutId] = hidden;
 
     // Update local model so the UI reflects the change immediately
+    bool changed = false;
     for (int i = 0; i < m_layouts.size(); ++i) {
         QVariantMap layout = m_layouts[i].toMap();
         if (layout[QStringLiteral("id")].toString() == layoutId) {
-            layout[QStringLiteral("hiddenFromSelector")] = hidden;
-            m_layouts[i] = layout;
+            if (layout[QStringLiteral("hiddenFromSelector")].toBool() != hidden) {
+                layout[QStringLiteral("hiddenFromSelector")] = hidden;
+                m_layouts[i] = layout;
+                changed = true;
+            }
             break;
         }
     }
-    Q_EMIT layoutsChanged();
 
-    setNeedsSave(true);
+    if (changed) {
+        Q_EMIT layoutsChanged();
+        setNeedsSave(true);
+    }
 }
 
 void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -2116,17 +2148,23 @@ void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     m_pendingAutoAssignStates[layoutId] = enabled;
 
     // Update local model so the UI reflects the change immediately
+    bool changed = false;
     for (int i = 0; i < m_layouts.size(); ++i) {
         QVariantMap layout = m_layouts[i].toMap();
         if (layout[QStringLiteral("id")].toString() == layoutId) {
-            layout[QStringLiteral("autoAssign")] = enabled;
-            m_layouts[i] = layout;
+            if (layout[QStringLiteral("autoAssign")].toBool() != enabled) {
+                layout[QStringLiteral("autoAssign")] = enabled;
+                m_layouts[i] = layout;
+                changed = true;
+            }
             break;
         }
     }
-    Q_EMIT layoutsChanged();
 
-    setNeedsSave(true);
+    if (changed) {
+        Q_EMIT layoutsChanged();
+        setNeedsSave(true);
+    }
 }
 
 void KCMPlasmaZones::addExcludedApp(const QString& app)
@@ -2456,9 +2494,55 @@ void KCMPlasmaZones::scheduleLoadLayouts()
 
 void KCMPlasmaZones::loadLayouts()
 {
-    QVariantList newLayouts;
+    // Async variant — used by the debounce timer so D-Bus round-trips don't
+    // block the UI thread during user interaction (scrolling, popup browsing).
+    // Bump generation so any in-flight response from a previous call is discarded.
+    const int generation = ++m_layoutLoadGeneration;
 
-    // Load from daemon via D-Bus
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath),
+        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
+
+    auto* watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(msg), this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, generation](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+
+            // A newer loadLayouts() was issued while this one was in flight — discard.
+            if (generation != m_layoutLoadGeneration) return;
+
+            QVariantList newLayouts;
+            QDBusPendingReply<QStringList> reply = *w;
+
+            if (!reply.isError()) {
+                const QStringList layoutJsonList = reply.value();
+                for (const QString& layoutJson : layoutJsonList) {
+                    QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
+                    if (!doc.isNull() && doc.isObject()) {
+                        newLayouts.append(doc.object().toVariantMap());
+                    }
+                }
+            } else {
+                qCWarning(lcKcm) << "Failed to load layouts:" << reply.error().message();
+            }
+
+            // No fallback layouts - if daemon isn't running, show empty list.
+            // The QML UI handles this with a "Enable daemon to see layouts" message.
+            m_unfilteredLayouts = newLayouts;
+            applyLayoutFilter();
+        });
+}
+
+void KCMPlasmaZones::loadLayoutsSync()
+{
+    // Synchronous variant — used during init and load() when the KCM is not
+    // yet visible, so blocking is acceptable and layouts must be available
+    // before QML components run their Component.onCompleted handlers.
+    ++m_layoutLoadGeneration; // invalidate any in-flight async calls
+
+    QVariantList newLayouts;
     QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
@@ -2470,9 +2554,6 @@ void KCMPlasmaZones::loadLayouts()
             }
         }
     }
-
-    // No fallback layouts - if daemon isn't running, show empty list
-    // The QML UI should handle this gracefully with a message like "Enable daemon to see layouts"
 
     m_unfilteredLayouts = newLayouts;
     applyLayoutFilter();

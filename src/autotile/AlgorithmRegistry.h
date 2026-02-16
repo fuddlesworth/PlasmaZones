@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QList>
 #include <QObject>
+#include <QRect>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -130,8 +131,25 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Preview utilities for unified layout model (shared by zone selector,
-    // overlay service, and daemon OSD)
+    // overlay service, daemon OSD, and KCM algorithm preview)
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Monocle preview offset per zone (3% diagonal inset per stacked window)
+    static constexpr qreal MonoclePreviewOffset = 0.03;
+
+    /**
+     * @brief Convert pixel zones to relative geometry with monocle offset handling
+     *
+     * Shared utility for both generatePreviewZones() (layout cards/selector)
+     * and KCMPlasmaZones::generateAlgorithmPreview() (live algorithm preview).
+     * Detects monocle-style layouts (all zones identical) and applies centered
+     * diagonal offsets so stacked windows are visually distinguishable.
+     *
+     * @param zones Pixel-coordinate zones from TilingAlgorithm::calculateZones()
+     * @param previewRect The rect used for calculateZones (for normalization)
+     * @return QVariantList of zone maps with zoneNumber and relativeGeometry
+     */
+    static QVariantList zonesToRelativeGeometry(const QVector<QRect> &zones, const QRect &previewRect);
 
     /**
      * @brief Generate preview zones for an algorithm as QVariantList

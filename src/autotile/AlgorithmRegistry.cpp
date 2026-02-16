@@ -181,9 +181,6 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
 }
 
 namespace {
-/// Offset per zone for monocle preview (3% = 0.03)
-constexpr qreal MonoclePreviewOffset = 0.03;
-
 /**
  * @brief Check if all zones have identical geometry (monocle-style)
  *
@@ -207,12 +204,40 @@ bool areAllZonesIdentical(const QVector<QRect> &zones)
 }
 } // namespace
 
+QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect> &zones, const QRect &previewRect)
+{
+    QVariantList result;
+    const bool isMonocle = areAllZonesIdentical(zones);
+
+    for (int i = 0; i < zones.size(); ++i) {
+        QVariantMap zoneMap;
+        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
+
+        QVariantMap relGeo;
+        if (isMonocle) {
+            const qreal offset = i * MonoclePreviewOffset;
+            relGeo[QStringLiteral("x")] = offset;
+            relGeo[QStringLiteral("y")] = offset;
+            relGeo[QStringLiteral("width")] = 1.0 - offset * 2;
+            relGeo[QStringLiteral("height")] = 1.0 - offset * 2;
+        } else {
+            relGeo[QStringLiteral("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
+            relGeo[QStringLiteral("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
+            relGeo[QStringLiteral("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
+            relGeo[QStringLiteral("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
+        }
+        zoneMap[QStringLiteral("relativeGeometry")] = relGeo;
+
+        result.append(zoneMap);
+    }
+
+    return result;
+}
+
 QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
 {
-    QVariantList list;
-
     if (!algorithm) {
-        return list;
+        return {};
     }
 
     // Generate preview zones for a representative window count
@@ -224,40 +249,16 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
 
     QVector<QRect> zones = algorithm->calculateZones(algorithm->defaultMaxWindows(), previewRect, previewState);
 
-    // Detect monocle-style layouts where all zones are identical (would cause
-    // overlapping zone numbers). Apply visual offset for preview purposes.
-    const bool applyMonocleOffset = areAllZonesIdentical(zones);
+    // Convert to relative geometry (handles monocle offset detection internally)
+    QVariantList list = zonesToRelativeGeometry(zones, previewRect);
 
-    for (int i = 0; i < zones.size(); ++i) {
-        const QRect &zone = zones[i];
-        QVariantMap zoneMap;
-
+    // Enrich with extra fields needed by zone selector / layout cards
+    for (int i = 0; i < list.size(); ++i) {
+        QVariantMap zoneMap = list[i].toMap();
         zoneMap[QStringLiteral("id")] = QString::number(i);
         zoneMap[QStringLiteral("name")] = QString();
-        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
-
-        // Convert to relative geometry (0.0 - 1.0)
-        QVariantMap relGeoMap;
-
-        if (applyMonocleOffset) {
-            // For monocle preview: center each window with progressive offset
-            // Matches AlgorithmPreview.qml visualization
-            const qreal offset = i * MonoclePreviewOffset;
-            relGeoMap[QStringLiteral("x")] = offset;
-            relGeoMap[QStringLiteral("y")] = offset;
-            relGeoMap[QStringLiteral("width")] = 1.0 - offset * 2;
-            relGeoMap[QStringLiteral("height")] = 1.0 - offset * 2;
-        } else {
-            relGeoMap[QStringLiteral("x")] = static_cast<qreal>(zone.x()) / previewRect.width();
-            relGeoMap[QStringLiteral("y")] = static_cast<qreal>(zone.y()) / previewRect.height();
-            relGeoMap[QStringLiteral("width")] = static_cast<qreal>(zone.width()) / previewRect.width();
-            relGeoMap[QStringLiteral("height")] = static_cast<qreal>(zone.height()) / previewRect.height();
-        }
-        zoneMap[QStringLiteral("relativeGeometry")] = relGeoMap;
-
         zoneMap[QStringLiteral("useCustomColors")] = false;
-
-        list.append(zoneMap);
+        list[i] = zoneMap;
     }
 
     return list;

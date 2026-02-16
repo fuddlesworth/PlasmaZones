@@ -340,6 +340,8 @@ public:
     bool autotileMonocleHideOthers() const;
     bool autotileMonocleShowTabs() const;
     Q_INVOKABLE QVariantList availableAlgorithms() const;
+    Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString &algorithmId, int windowCount,
+                                                      double splitRatio, int masterCount) const;
 
     QString editorDuplicateShortcut() const;
     QString editorSplitHorizontalShortcut() const;
@@ -680,7 +682,8 @@ Q_SIGNALS:
     void colorImportSuccess(); // Emitted when color import succeeds
 
 private Q_SLOTS:
-    void loadLayouts();
+    void loadLayouts();       // Async — used by debounce timer (non-blocking during interaction)
+    void loadLayoutsSync();   // Synchronous — used by constructor/load() (before QML is visible)
     void applyLayoutFilter(); // Re-filter cached layouts without D-Bus re-fetch
     void scheduleLoadLayouts(); // Coalesces rapid D-Bus signals into a single loadLayouts() call
     void refreshScreens();
@@ -728,6 +731,7 @@ private:
     QTimer* m_daemonCheckTimer = nullptr;
     QDBusServiceWatcher* m_daemonWatcher = nullptr; // Immediate notification of daemon start/stop
     QTimer* m_loadLayoutsTimer = nullptr; // Debounce timer for coalescing D-Bus layout signals
+    int m_layoutLoadGeneration = 0; // Monotonic counter to discard stale async responses
     bool m_daemonEnabled = true;
     bool m_lastDaemonState = false;
     QVariantList m_layouts;

@@ -155,12 +155,13 @@ Item {
                     anchors.margins: Kirigami.Units.smallSpacing / 2
                     spacing: 0
 
-                    // Auto-assign toggle
+                    // Auto-assign toggle (hidden for autotile — the tiling engine manages those)
                     ToolButton {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.isHovered || root.modelData.autoAssign === true
+                        visible: root.modelData.isAutotile !== true
+                            && (root.isHovered || root.modelData.autoAssign === true)
                         icon.name: root.modelData.autoAssign === true ? "window-duplicate" : "window-new"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small

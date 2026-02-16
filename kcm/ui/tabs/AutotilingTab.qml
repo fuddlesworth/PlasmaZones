@@ -95,11 +95,12 @@ ScrollView {
                                 AlgorithmPreview {
                                     anchors.fill: parent
                                     anchors.margins: 8
+                                    kcm: root.kcm
                                     showLabel: false
-                                    algorithmId: kcm.autotileAlgorithm
+                                    algorithmId: root.kcm.autotileAlgorithm
                                     windowCount: previewWindowSlider.value
-                                    splitRatio: kcm.autotileSplitRatio
-                                    masterCount: kcm.autotileMasterCount
+                                    splitRatio: root.kcm.autotileSplitRatio
+                                    masterCount: root.kcm.autotileMasterCount
                                 }
                             }
 

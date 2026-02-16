@@ -4,6 +4,8 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Templates as T
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
 
@@ -35,21 +37,29 @@ ComboBox {
     textRole: "text"
     valueRole: "value"
 
-    // Helper to find layout by ID
+    // Helper to find layout by ID.
+    // Caches kcm.layouts locally to avoid repeated QVariant→JS conversion
+    // (each kcm.layouts access creates fresh JS wrappers for all entries).
     function findLayoutById(layoutId) {
         if (!kcm || !kcm.layouts || !layoutId) return null
-        for (let i = 0; i < kcm.layouts.length; i++) {
-            if (kcm.layouts[i].id === layoutId) {
-                return kcm.layouts[i]
+        let layouts = kcm.layouts
+        for (let i = 0; i < layouts.length; i++) {
+            if (layouts[i].id === layoutId) {
+                return layouts[i]
             }
         }
         return null
     }
 
-    // Helper to get category with default fallback (avoids repeated ternary)
+    // Helper to get category with default fallback.
+    // KCM layout objects use `isAutotile` (bool), while overlay/D-Bus objects
+    // use `category` (int: 0=Manual, 1=Autotile). Check both fields.
     function getCategory(layout, defaultCategory) {
         if (!layout) return defaultCategory
-        return layout.category !== undefined ? layout.category : defaultCategory
+        if (layout.category !== undefined) return layout.category
+        if (layout.isAutotile === true) return 1
+        if (layout.isAutotile === false) return 0
+        return defaultCategory
     }
 
     // Resolve the actual layout that "Default" represents
@@ -75,15 +85,26 @@ ComboBox {
         }]
 
         if (kcm && kcm.layouts) {
-            for (let i = 0; i < kcm.layouts.length; i++) {
-                let layout = kcm.layouts[i]
-                items.push({
+            let layouts = kcm.layouts  // cache locally — avoid repeated QVariant→JS conversion
+            let layoutItems = []
+            for (let i = 0; i < layouts.length; i++) {
+                let layout = layouts[i]
+                layoutItems.push({
                     text: layout.name,
                     value: layout.id,
                     layout: layout,
                     category: getCategory(layout, 0),
                     isDefaultOption: false
                 })
+            }
+            // Sort: manual (category 0) before dynamic (category 1),
+            // alphabetical within each group.
+            layoutItems.sort(function(a, b) {
+                if (a.category !== b.category) return a.category - b.category
+                return a.text.localeCompare(b.text, undefined, {sensitivity: "base"})
+            })
+            for (let i = 0; i < layoutItems.length; i++) {
+                items.push(layoutItems[i])
             }
         }
         return items
@@ -111,12 +132,30 @@ ComboBox {
     // The model will update as soon as the popup closes.
     property bool _rebuildPending: false
 
+    // ── Coalesced rebuild ────────────────────────────────────────────────
+    // Multiple signals (layoutsChanged, resolvedDefaultIdChanged, etc.)
+    // can fire in the same frame.  Qt.callLater batches them into a single
+    // _buildItems() + _modelMatchesItems() pass, cutting work by ~Nx where
+    // N is the number of signals that arrive per frame (typically 2-3).
+    property bool _rebuildScheduled: false
+
     function rebuildModel() {
+        if (!_rebuildScheduled) {
+            _rebuildScheduled = true
+            Qt.callLater(_doRebuild)
+        }
+    }
+
+    function _doRebuild() {
+        _rebuildScheduled = false
         let items = _buildItems()
         if (_modelMatchesItems(items)) {
-            return // No visible change — skip model swap to preserve scroll
+            // Model didn't change visually, but currentLayoutId may have
+            // changed while the rebuild was coalesced — always re-sync.
+            updateSelection()
+            return
         }
-        if (popup.visible) {
+        if (popup && popup.visible) {
             _rebuildPending = true
             return // Defer until popup closes
         }
@@ -124,14 +163,45 @@ ComboBox {
         updateSelection()
     }
 
-    // Flush any deferred model rebuild when the popup closes
-    Connections {
-        target: root.popup
-        function onClosed() {
+    // ── Custom popup ────────────────────────────────────────────────────
+    // Override the default popup to use a plain ListView instead of the
+    // KDE desktop style's Menu-based popup.  The Menu popup has its own
+    // internal ListView (bound to contentModel, not delegateModel) which
+    // causes positionViewAtIndex to target the wrong view — making the
+    // dropdown appear scrolled to the wrong position.
+    popup: T.Popup {
+        y: root.height
+        width: Math.max(root.width, Kirigami.Units.gridUnit * 18)
+        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding,
+                         (root.Window.window ? root.Window.window.height : 600)
+                          - topMargin - bottomMargin)
+        topMargin: Kirigami.Units.smallSpacing
+        bottomMargin: Kirigami.Units.smallSpacing
+        padding: 1
+
+        onClosed: {
             if (root._rebuildPending) {
                 root._rebuildPending = false
                 root.rebuildModel()
             }
+        }
+
+        contentItem: ListView {
+            clip: true
+            implicitHeight: contentHeight
+            model: root.delegateModel
+            currentIndex: root.highlightedIndex
+            highlightMoveDuration: 0
+            ScrollBar.vertical: ScrollBar {}
+        }
+
+        background: Rectangle {
+            color: Kirigami.Theme.backgroundColor
+            border.color: Qt.rgba(Kirigami.Theme.textColor.r,
+                                  Kirigami.Theme.textColor.g,
+                                  Kirigami.Theme.textColor.b, 0.2)
+            border.width: 1
+            radius: Kirigami.Units.smallSpacing
         }
     }
 
@@ -143,7 +213,7 @@ ComboBox {
     onResolvedDefaultIdChanged: rebuildModel()
     onNoneTextChanged: rebuildModel()
 
-    // Update selection when currentLayoutId changes externally
+    // Update selection when currentLayoutId changes externally.
     onCurrentLayoutIdChanged: updateSelection()
 
     function updateSelection() {
@@ -166,17 +236,46 @@ ComboBox {
     delegate: ItemDelegate {
         width: root.popup.availableWidth
         implicitHeight: Kirigami.Units.gridUnit * 6
-        // Highlight on hover OR if this is the currently selected item
-        highlighted: root.highlightedIndex === index || root.currentIndex === index
+        // Only highlight the hovered/keyboard-navigated item (standard ComboBox UX).
+        // The current selection is shown with a checkmark, not a second highlight
+        // band — two simultaneous highlight bands look like a rendering glitch.
+        highlighted: root.highlightedIndex === index
 
         required property var modelData
         required property int index
 
         readonly property bool hasLayout: modelData.layout != null
         readonly property bool isDefaultOption: modelData.isDefaultOption === true
+        readonly property bool isCurrentSelection: root.currentIndex === index
+
+        // Opaque background prevents the ComboBox's closed-state display text
+        // from bleeding through the popup delegate (especially the first item).
+        background: Rectangle {
+            color: highlighted ? Kirigami.Theme.highlightColor :
+                   isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                Kirigami.Theme.highlightColor.g,
+                                                Kirigami.Theme.highlightColor.b, 0.15) :
+                   Kirigami.Theme.backgroundColor
+        }
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
+
+            // Checkmark for the currently selected item
+            Kirigami.Icon {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                Layout.alignment: Qt.AlignVCenter
+                source: "checkmark"
+                visible: isCurrentSelection
+                color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+            }
+            // Spacer when no checkmark — keeps text aligned
+            Item {
+                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                visible: !isCurrentSelection
+            }
 
             // Mini layout preview (only if showPreview is enabled)
             // Uses shared ZonePreview component
@@ -233,7 +332,7 @@ ComboBox {
 
                     Label {
                         text: modelData.text
-                        font.bold: highlighted
+                        font.bold: highlighted || isCurrentSelection
                         color: highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
                         elide: Text.ElideRight
                         Layout.fillWidth: true
@@ -272,5 +371,7 @@ ComboBox {
         }
     }
 
-    Component.onCompleted: rebuildModel()
+    // Initial build runs synchronously so the model is populated before
+    // the first paint frame (Qt.callLater would leave it empty for one frame).
+    Component.onCompleted: _doRebuild()
 }
