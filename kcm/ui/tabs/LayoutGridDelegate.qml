@@ -199,7 +199,6 @@ Item {
 
             // Info row with category badge
             RowLayout {
-                Layout.fillWidth: true
                 Layout.alignment: Qt.AlignHCenter
                 spacing: Kirigami.Units.smallSpacing
 
@@ -210,7 +209,6 @@ Item {
                 }
 
                 Label {
-                    Layout.fillWidth: true
                     elide: Text.ElideRight
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
