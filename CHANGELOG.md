@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.3] - 2026-02-16
+
+### Added
+- **Master toggle for zone span**: New checkbox to fully enable/disable paint-to-span zone selection. Defaults to on; when off, modifier and threshold controls are greyed out.
+- **Master toggle for snap assist**: New checkbox to fully enable/disable the snap assist (window picker) feature. Defaults to on; when off, all snap assist sub-options are greyed out.
+
+### Fixed
+- **Nix flake evaluation error**: `lib.mkPackageOption` received a derivation instead of an attribute path, causing evaluation failures when `package` was not explicitly specified. Users can now use `programs.plasmazones.enable = true` without setting `package`.
+
 ## [1.11.2] - 2026-02-15
 
 ### Added
