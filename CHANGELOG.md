@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.4] - 2026-02-16
+
+### Fixed
+- **Layout grid cards**: Badge and zone count text were left-aligned instead of centered under each card
+
 ## [1.11.3] - 2026-02-16
 
 ### Added
