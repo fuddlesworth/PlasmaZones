@@ -53,17 +53,25 @@ ComboBox {
     }
 
     // Resolve the actual layout that "Default" represents
-    readonly property var resolvedDefaultLayout: findLayoutById(resolvedDefaultId)
+    function _resolveDefaultLayout() {
+        return findLayoutById(resolvedDefaultId)
+    }
 
-    model: {
-        // First item is "Default" - shows what it actually resolves to
-        let defaultLayout = resolvedDefaultLayout
+    // ── Imperative model management ─────────────────────────────────────
+    // Instead of a reactive model binding (which creates a new JS array on
+    // every kcm.layouts change and resets ComboBox popup scroll), we build
+    // the model imperatively and only swap it when visible content changes.
+
+    model: []
+
+    function _buildItems() {
+        let defaultLayout = _resolveDefaultLayout()
         let items = [{
             text: noneText,
             value: "",
-            layout: defaultLayout,  // Show actual resolved layout preview
-            category: getCategory(defaultLayout, -1),  // -1 = no badge for unresolved default
-            isDefaultOption: true   // Flag to indicate this is the "Default" option
+            layout: defaultLayout,
+            category: getCategory(defaultLayout, -1),
+            isDefaultOption: true
         }]
 
         if (kcm && kcm.layouts) {
@@ -73,13 +81,67 @@ ComboBox {
                     text: layout.name,
                     value: layout.id,
                     layout: layout,
-                    category: getCategory(layout, 0),  // 0 = Manual as default
+                    category: getCategory(layout, 0),
                     isDefaultOption: false
                 })
             }
         }
         return items
     }
+
+    // Compare visible fields only — ignore zone preview data which changes
+    // every D-Bus round-trip but doesn't affect what the user sees in the
+    // closed combo or the item text/badges.
+    function _modelMatchesItems(newItems) {
+        if (model.length !== newItems.length) return false
+        for (let i = 0; i < model.length; i++) {
+            let old = model[i]
+            let nw = newItems[i]
+            if (old.value !== nw.value) return false
+            if (old.text !== nw.text) return false
+            if (old.category !== nw.category) return false
+            if ((old.layout?.autoAssign === true) !== (nw.layout?.autoAssign === true)) return false
+            // For "Default" entry, also check which layout it resolves to
+            if (old.isDefaultOption && (old.layout?.id ?? "") !== (nw.layout?.id ?? "")) return false
+        }
+        return true
+    }
+
+    // Defer model swap while the popup is open to prevent scroll resets.
+    // The model will update as soon as the popup closes.
+    property bool _rebuildPending: false
+
+    function rebuildModel() {
+        let items = _buildItems()
+        if (_modelMatchesItems(items)) {
+            return // No visible change — skip model swap to preserve scroll
+        }
+        if (popup.visible) {
+            _rebuildPending = true
+            return // Defer until popup closes
+        }
+        model = items
+        updateSelection()
+    }
+
+    // Flush any deferred model rebuild when the popup closes
+    Connections {
+        target: root.popup
+        function onClosed() {
+            if (root._rebuildPending) {
+                root._rebuildPending = false
+                root.rebuildModel()
+            }
+        }
+    }
+
+    // Trigger rebuild when data sources change
+    Connections {
+        target: root.kcm ?? null
+        function onLayoutsChanged() { root.rebuildModel() }
+    }
+    onResolvedDefaultIdChanged: rebuildModel()
+    onNoneTextChanged: rebuildModel()
 
     // Update selection when currentLayoutId changes externally
     onCurrentLayoutIdChanged: updateSelection()
@@ -210,5 +272,5 @@ ComboBox {
         }
     }
 
-    Component.onCompleted: updateSelection()
+    Component.onCompleted: rebuildModel()
 }

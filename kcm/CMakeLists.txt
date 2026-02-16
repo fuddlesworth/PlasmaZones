@@ -130,5 +130,7 @@ install(FILES
     ui/tabs/LayoutToolbar.qml
     ui/tabs/AppRulesCard.qml
     ui/tabs/LayoutGridDelegate.qml
+    ui/tabs/AutotilingTab.qml
+    ui/tabs/AlgorithmPreview.qml
     DESTINATION ${KDE_INSTALL_QMLDIR}/org/kde/kcms/plasmazones/tabs
 )

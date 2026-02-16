@@ -159,10 +159,35 @@ public:
     static int audioSpectrumBarCount() { return instance().defaultAudioSpectrumBarCountValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile Settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static bool autotileEnabled() { return instance().defaultAutotileEnabledValue(); }
+    static QString autotileAlgorithm() { return instance().defaultAutotileAlgorithmValue(); }
+    static double autotileSplitRatio() { return instance().defaultAutotileSplitRatioValue(); }
+    static int autotileMasterCount() { return instance().defaultAutotileMasterCountValue(); }
+    static int autotileInnerGap() { return instance().defaultAutotileInnerGapValue(); }
+    static int autotileOuterGap() { return instance().defaultAutotileOuterGapValue(); }
+    static bool autotileFocusNewWindows() { return instance().defaultAutotileFocusNewWindowsValue(); }
+    static bool autotileSmartGaps() { return instance().defaultAutotileSmartGapsValue(); }
+    static int autotileInsertPosition() { return instance().defaultAutotileInsertPositionValue(); }
+    static int autotileMaxWindows() { return instance().defaultAutotileMaxWindowsValue(); }
+    static bool autotileAnimationsEnabled() { return instance().defaultAutotileAnimationsEnabledValue(); }
+    static int autotileAnimationDuration() { return instance().defaultAutotileAnimationDurationValue(); }
+    static bool autotileFocusFollowsMouse() { return instance().defaultAutotileFocusFollowsMouseValue(); }
+    static bool autotileRespectMinimumSize() { return instance().defaultAutotileRespectMinimumSizeValue(); }
+    static bool autotileShowActiveBorder() { return instance().defaultAutotileShowActiveBorderValue(); }
+    static int autotileActiveBorderWidth() { return instance().defaultAutotileActiveBorderWidthValue(); }
+    static bool autotileUseSystemBorderColor() { return instance().defaultAutotileUseSystemBorderColorValue(); }
+    static bool autotileMonocleHideOthers() { return instance().defaultAutotileMonocleHideOthersValue(); }
+    static bool autotileMonocleShowTabs() { return instance().defaultAutotileMonocleShowTabsValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Mode Tracking Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // (LastManualLayoutId is read/written directly by ModeTracker, no default getter needed)
+    static int lastTilingMode() { return instance().defaultLastTilingModeValue(); }
+    static QString lastAutotileAlgorithm() { return instance().defaultLastAutotileAlgorithmValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Global Shortcuts
@@ -215,6 +240,19 @@ public:
     static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
     static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
     static QString snapAllWindowsShortcut() { return instance().defaultSnapAllWindowsShortcutValue(); }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString autotileToggleShortcut() { return instance().defaultToggleAutotileShortcutValue(); }
+    static QString autotileFocusMasterShortcut() { return instance().defaultFocusMasterShortcutValue(); }
+    static QString autotileSwapMasterShortcut() { return instance().defaultSwapWithMasterShortcutValue(); }
+    static QString autotileIncMasterRatioShortcut() { return instance().defaultIncreaseMasterRatioShortcutValue(); }
+    static QString autotileDecMasterRatioShortcut() { return instance().defaultDecreaseMasterRatioShortcutValue(); }
+    static QString autotileIncMasterCountShortcut() { return instance().defaultIncreaseMasterCountShortcutValue(); }
+    static QString autotileDecMasterCountShortcut() { return instance().defaultDecreaseMasterCountShortcutValue(); }
+    static QString autotileRetileShortcut() { return instance().defaultRetileShortcutValue(); }
 
 private:
     // Lazily-initialized singleton instance

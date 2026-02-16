@@ -148,6 +148,43 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(
         int zoneSelectorMaxRows READ zoneSelectorMaxRows WRITE setZoneSelectorMaxRows NOTIFY zoneSelectorMaxRowsChanged)
 
+    // Autotiling
+    Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
+    Q_PROPERTY(QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY
+                   autotileAlgorithmChanged)
+    Q_PROPERTY(qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY
+                   autotileSplitRatioChanged)
+    Q_PROPERTY(
+        int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
+    Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
+    Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
+    Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
+                   autotileFocusNewWindowsChanged)
+    Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
+    Q_PROPERTY(int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
+    Q_PROPERTY(int autotileInsertPosition READ autotileInsertPosition WRITE setAutotileInsertPosition NOTIFY
+                   autotileInsertPositionChanged)
+    Q_PROPERTY(bool autotileAnimationsEnabled READ autotileAnimationsEnabled WRITE setAutotileAnimationsEnabled NOTIFY
+                   autotileAnimationsEnabledChanged)
+    Q_PROPERTY(int autotileAnimationDuration READ autotileAnimationDuration WRITE setAutotileAnimationDuration NOTIFY
+                   autotileAnimationDurationChanged)
+    Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
+                   autotileFocusFollowsMouseChanged)
+    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY
+                   autotileRespectMinimumSizeChanged)
+    Q_PROPERTY(bool autotileShowActiveBorder READ autotileShowActiveBorder WRITE setAutotileShowActiveBorder NOTIFY
+                   autotileShowActiveBorderChanged)
+    Q_PROPERTY(int autotileActiveBorderWidth READ autotileActiveBorderWidth WRITE setAutotileActiveBorderWidth NOTIFY
+                   autotileActiveBorderWidthChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColor READ autotileUseSystemBorderColor WRITE setAutotileUseSystemBorderColor
+                   NOTIFY autotileUseSystemBorderColorChanged)
+    Q_PROPERTY(QColor autotileActiveBorderColor READ autotileActiveBorderColor WRITE setAutotileActiveBorderColor NOTIFY
+                   autotileActiveBorderColorChanged)
+    Q_PROPERTY(bool autotileMonocleHideOthers READ autotileMonocleHideOthers WRITE setAutotileMonocleHideOthers NOTIFY
+                   autotileMonocleHideOthersChanged)
+    Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY
+                   autotileMonocleShowTabsChanged)
+
     // Default values for reset-to-default in UI components (CONSTANT — never change at runtime)
     Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
     Q_PROPERTY(QVariantList defaultZoneSpanTriggers READ defaultZoneSpanTriggers CONSTANT)
@@ -279,6 +316,30 @@ public:
     int zoneSelectorGridColumns() const;
     int zoneSelectorSizeMode() const;
     int zoneSelectorMaxRows() const;
+
+    // Autotiling getters
+    bool autotileEnabled() const;
+    QString autotileAlgorithm() const;
+    qreal autotileSplitRatio() const;
+    int autotileMasterCount() const;
+    int autotileInnerGap() const;
+    int autotileOuterGap() const;
+    bool autotileFocusNewWindows() const;
+    bool autotileSmartGaps() const;
+    int autotileMaxWindows() const;
+    int autotileInsertPosition() const;
+    bool autotileAnimationsEnabled() const;
+    int autotileAnimationDuration() const;
+    bool autotileFocusFollowsMouse() const;
+    bool autotileRespectMinimumSize() const;
+    bool autotileShowActiveBorder() const;
+    int autotileActiveBorderWidth() const;
+    bool autotileUseSystemBorderColor() const;
+    QColor autotileActiveBorderColor() const;
+    bool autotileMonocleHideOthers() const;
+    bool autotileMonocleShowTabs() const;
+    Q_INVOKABLE QVariantList availableAlgorithms() const;
+
     QString editorDuplicateShortcut() const;
     QString editorSplitHorizontalShortcut() const;
     QString editorSplitVerticalShortcut() const;
@@ -386,6 +447,29 @@ public:
     void setZoneSelectorGridColumns(int columns);
     void setZoneSelectorSizeMode(int mode);
     void setZoneSelectorMaxRows(int rows);
+
+    // Autotiling setters
+    void setAutotileEnabled(bool enabled);
+    void setAutotileAlgorithm(const QString& algorithm);
+    void setAutotileSplitRatio(qreal ratio);
+    void setAutotileMasterCount(int count);
+    void setAutotileInnerGap(int gap);
+    void setAutotileOuterGap(int gap);
+    void setAutotileFocusNewWindows(bool focus);
+    void setAutotileSmartGaps(bool smart);
+    void setAutotileMaxWindows(int count);
+    void setAutotileInsertPosition(int position);
+    void setAutotileAnimationsEnabled(bool enabled);
+    void setAutotileAnimationDuration(int duration);
+    void setAutotileFocusFollowsMouse(bool focus);
+    void setAutotileRespectMinimumSize(bool respect);
+    void setAutotileShowActiveBorder(bool show);
+    void setAutotileActiveBorderWidth(int width);
+    void setAutotileUseSystemBorderColor(bool use);
+    void setAutotileActiveBorderColor(const QColor &color);
+    void setAutotileMonocleHideOthers(bool hide);
+    void setAutotileMonocleShowTabs(bool show);
+
     void setEditorDuplicateShortcut(const QString& shortcut);
     void setEditorSplitHorizontalShortcut(const QString& shortcut);
     void setEditorSplitVerticalShortcut(const QString& shortcut);
@@ -538,6 +622,29 @@ Q_SIGNALS:
     void zoneSelectorGridColumnsChanged();
     void zoneSelectorSizeModeChanged();
     void zoneSelectorMaxRowsChanged();
+
+    // Autotiling signals
+    void autotileEnabledChanged();
+    void autotileAlgorithmChanged();
+    void autotileSplitRatioChanged();
+    void autotileMasterCountChanged();
+    void autotileInnerGapChanged();
+    void autotileOuterGapChanged();
+    void autotileFocusNewWindowsChanged();
+    void autotileSmartGapsChanged();
+    void autotileMaxWindowsChanged();
+    void autotileInsertPositionChanged();
+    void autotileAnimationsEnabledChanged();
+    void autotileAnimationDurationChanged();
+    void autotileFocusFollowsMouseChanged();
+    void autotileRespectMinimumSizeChanged();
+    void autotileShowActiveBorderChanged();
+    void autotileActiveBorderWidthChanged();
+    void autotileUseSystemBorderColorChanged();
+    void autotileActiveBorderColorChanged();
+    void autotileMonocleHideOthersChanged();
+    void autotileMonocleShowTabsChanged();
+
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
     void editorSplitVerticalShortcutChanged();
@@ -573,6 +680,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void loadLayouts();
+    void scheduleLoadLayouts(); // Coalesces rapid D-Bus signals into a single loadLayouts() call
     void refreshScreens();
     void checkDaemonStatus();
     void refreshVirtualDesktops();
@@ -616,10 +724,12 @@ private:
     UpdateChecker* m_updateChecker = nullptr;
     QString m_dismissedUpdateVersion;  // Cached to avoid repeated config reads
     QTimer* m_daemonCheckTimer = nullptr;
+    QTimer* m_loadLayoutsTimer = nullptr; // Debounce timer for coalescing D-Bus layout signals
     bool m_daemonEnabled = true;
     bool m_lastDaemonState = false;
     QVariantList m_layouts;
-    QString m_layoutToSelect; // Layout ID to select after layouts are reloaded
+    QString m_layoutToSelect; // Layout ID to select after layouts are reloaded (one-shot)
+    bool m_initialLayoutLoadDone = false; // Tracks first successful load for auto-selecting default
 
     // Screens and assignments
     QVariantList m_screens;

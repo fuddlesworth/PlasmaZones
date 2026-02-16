@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "unifiedlayoutcontroller.h"
+#include "../autotile/AutotileEngine.h"
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
@@ -10,10 +11,12 @@
 
 namespace PlasmaZones {
 
-UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings, QObject* parent)
+UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
+                                                   AutotileEngine* autotileEngine, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
+    , m_autotileEngine(autotileEngine)
 {
     if (m_layoutManager) {
         connect(m_layoutManager, &LayoutManager::layoutsChanged, this, [this]() {
@@ -45,8 +48,11 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
+        // and mode-based filtering (manual-only vs autotile-only)
         m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
-            m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity);
+            m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+            m_includeManualLayouts, m_includeAutotileLayouts);
+
         m_cacheValid = true;
     }
     return m_cachedLayouts;
@@ -160,18 +166,46 @@ void UnifiedLayoutController::setCurrentActivity(const QString& activity)
     }
 }
 
+void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAutotile)
+{
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+        return;
+    }
+    m_includeManualLayouts = includeManual;
+    m_includeAutotileLayouts = includeAutotile;
+    m_cacheValid = false;
+}
+
 bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
 {
+    // Handle autotile entries: assign autotile ID to the current screen.
+    // The daemon's layoutAssigned handler calls updateAutotileScreens() which
+    // derives per-screen autotile state from assignments automatically.
+    if (entry.isAutotile) {
+        if (m_autotileEngine && m_layoutManager) {
+            QString algoId = LayoutId::extractAlgorithmId(entry.id);
+            m_autotileEngine->setAlgorithm(algoId);
+            if (!m_currentScreenName.isEmpty()) {
+                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop,
+                                                  m_currentActivity, entry.id);
+            }
+            setCurrentLayoutId(entry.id);
+            qCInfo(lcDaemon) << "Applied autotile algorithm:" << entry.name;
+            Q_EMIT autotileApplied(entry.name, 0);
+            return true;
+        }
+        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << entry.id;
+        return false;
+    }
+
+    // Manual layout: assign the UUID to the current screen.
+    // If the previous assignment was autotile, it gets replaced and
+    // updateAutotileScreens() will remove the screen from autotile set.
     auto uuidOpt = Utils::parseUuid(entry.id);
     if (uuidOpt && m_layoutManager) {
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
-                // Per-screen assignment + update global active layout.
-                // setActiveLayout MUST also be called to update m_previousLayout
-                // and fire activeLayoutChanged (needed by resnap buffer, stale
-                // assignment cleanup, OSD, etc.). Per-screen assignments are still
-                // respected by resolveLayoutForScreen() since they take priority.
                 m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop,
                                               m_currentActivity, layout);
             }

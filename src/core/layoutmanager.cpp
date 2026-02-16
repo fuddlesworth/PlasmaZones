@@ -61,13 +61,15 @@ static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
 
 // Helper for validating layout assignment
 // Returns true if layoutId should be skipped (null or non-existent)
-bool LayoutManager::shouldSkipLayoutAssignment(const QUuid& layoutId, const QString& context) const
+bool LayoutManager::shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const
 {
-    if (layoutId.isNull()) {
-        // Empty/null means clear (handled by caller)
+    if (layoutId.isEmpty()) {
         return true;
     }
-    if (!layoutById(layoutId)) {
+    if (LayoutId::isAutotile(layoutId)) {
+        return false; // Autotile IDs are valid without Layout* lookup
+    }
+    if (!layoutById(QUuid::fromString(layoutId))) {
         qCWarning(lcLayout) << "Skipping non-existent layout for" << context << ":" << layoutId;
         return true;
     }
@@ -206,8 +208,9 @@ void LayoutManager::removeLayout(Layout* layout)
     m_layouts.removeOne(layout);
 
     // Remove any assignments using stored ID (safe - ID is copied)
+    const QString layoutIdStr = layoutId.toString();
     for (auto it = m_assignments.begin(); it != m_assignments.end();) {
-        if (it.value() == layoutId) {
+        if (it.value() == layoutIdStr) {
             it = m_assignments.erase(it);
         } else {
             ++it;
@@ -216,7 +219,7 @@ void LayoutManager::removeLayout(Layout* layout)
 
     // Remove from quick shortcuts using stored ID
     for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-        if (it.value() == layoutId) {
+        if (it.value() == layoutIdStr) {
             it = m_quickLayoutShortcuts.erase(it);
         } else {
             ++it;
@@ -288,7 +291,7 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
 
     if (layout) {
-        m_assignments[key] = layout->id();
+        m_assignments[key] = layout->id().toString();
     } else {
         m_assignments.remove(key);
     }
@@ -298,29 +301,43 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
 }
 
 void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
-                                     const QUuid& layoutId)
+                                     const QString& layoutId)
 {
-    assignLayout(screenId, virtualDesktop, activity, layoutById(layoutId));
+    if (LayoutId::isAutotile(layoutId)) {
+        // Store autotile ID directly — no Layout* exists for autotile algorithms
+        LayoutAssignmentKey key{screenId, virtualDesktop, activity};
+        m_assignments[key] = layoutId;
+        Q_EMIT layoutAssigned(screenId, nullptr);
+        saveAssignments();
+    } else {
+        assignLayout(screenId, virtualDesktop, activity, layoutById(QUuid::fromString(layoutId)));
+    }
 }
 
 Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
+    // Helper: resolve stored assignment string to Layout* (returns nullptr for autotile IDs)
+    auto resolveAssignment = [this](const QString& id) -> Layout* {
+        if (id.isEmpty() || LayoutId::isAutotile(id)) return nullptr;
+        return layoutById(QUuid::fromString(id));
+    };
+
     // Try exact match first
     LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
     if (m_assignments.contains(exactKey)) {
-        return layoutById(m_assignments[exactKey]);
+        return resolveAssignment(m_assignments[exactKey]);
     }
 
     // Try screen + desktop (any activity)
     LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
     if (m_assignments.contains(desktopKey)) {
-        return layoutById(m_assignments[desktopKey]);
+        return resolveAssignment(m_assignments[desktopKey]);
     }
 
     // Try screen only (any desktop, any activity)
     LayoutAssignmentKey screenKey{screenId, 0, QString()};
     if (m_assignments.contains(screenKey)) {
-        return layoutById(m_assignments[screenKey]);
+        return resolveAssignment(m_assignments[screenKey]);
     }
 
     // Fallback: if screenId looks like a connector name (no colons), try resolving
@@ -353,10 +370,75 @@ bool LayoutManager::hasExplicitAssignment(const QString& screenId, int virtualDe
     return m_assignments.contains(key);
 }
 
+QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
+{
+    // Same fallback cascade as layoutForScreen() but returns the raw assignment string
+
+    // Try exact match first
+    LayoutAssignmentKey exactKey{screenId, virtualDesktop, activity};
+    if (m_assignments.contains(exactKey)) {
+        return m_assignments[exactKey];
+    }
+
+    // Try screen + desktop (any activity)
+    LayoutAssignmentKey desktopKey{screenId, virtualDesktop, QString()};
+    if (m_assignments.contains(desktopKey)) {
+        return m_assignments[desktopKey];
+    }
+
+    // Try screen only (any desktop, any activity)
+    LayoutAssignmentKey screenKey{screenId, 0, QString()};
+    if (m_assignments.contains(screenKey)) {
+        return m_assignments[screenKey];
+    }
+
+    // Fallback: if screenId looks like a connector name, try resolving to screen ID
+    if (Utils::isConnectorName(screenId)) {
+        QString resolved = Utils::screenIdForName(screenId);
+        if (resolved != screenId) {
+            return assignmentIdForScreen(resolved, virtualDesktop, activity);
+        }
+    }
+
+    return QString();
+}
+
+void LayoutManager::clearAutotileAssignments()
+{
+    bool changed = false;
+    for (auto it = m_assignments.begin(); it != m_assignments.end();) {
+        if (LayoutId::isAutotile(it.value())) {
+            QString screenId = it.key().screenId;
+            it = m_assignments.erase(it);
+            Q_EMIT layoutAssigned(screenId, nullptr);
+            changed = true;
+        } else {
+            ++it;
+        }
+    }
+
+    // Also clear autotile quick layout slots
+    for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
+        if (LayoutId::isAutotile(it.value())) {
+            it = m_quickLayoutShortcuts.erase(it);
+            changed = true;
+        } else {
+            ++it;
+        }
+    }
+
+    if (changed) {
+        saveAssignments();
+        qCInfo(lcLayout) << "Cleared all autotile assignments";
+    }
+}
+
 Layout* LayoutManager::layoutForShortcut(int number) const
 {
     if (m_quickLayoutShortcuts.contains(number)) {
-        return layoutById(m_quickLayoutShortcuts[number]);
+        const QString& id = m_quickLayoutShortcuts[number];
+        if (LayoutId::isAutotile(id)) return nullptr;
+        return layoutById(QUuid::fromString(id));
     }
     return nullptr;
 }
@@ -389,20 +471,20 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenId)
     }
 }
 
-void LayoutManager::setQuickLayoutSlot(int number, const QUuid& layoutId)
+void LayoutManager::setQuickLayoutSlot(int number, const QString& layoutId)
 {
     if (number < 1 || number > 9) {
         qCWarning(lcLayout) << "Invalid quick layout slot number:" << number << "(must be 1-9)";
         return;
     }
 
-    if (layoutId.isNull()) {
+    if (layoutId.isEmpty()) {
         // Clear the slot
         m_quickLayoutShortcuts.remove(number);
         qCInfo(lcLayout) << "Cleared quick layout slot" << number;
     } else {
-        // Verify layout exists
-        if (!layoutById(layoutId)) {
+        // Verify layout exists (skip for autotile IDs — they don't have Layout*)
+        if (!LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
             qCWarning(lcLayout) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
         }
@@ -414,7 +496,7 @@ void LayoutManager::setQuickLayoutSlot(int number, const QUuid& layoutId)
     saveAssignments();
 }
 
-void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QUuid>& slots)
+void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
 {
     // Clear all existing slots first
     m_quickLayoutShortcuts.clear();
@@ -422,20 +504,20 @@ void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QUuid>& slots)
     // Set new slots (validate each one)
     for (auto it = slots.begin(); it != slots.end(); ++it) {
         int number = it.key();
-        const QUuid& layoutId = it.value();
+        const QString& layoutId = it.value();
 
         if (number < 1 || number > 9) {
             qCWarning(lcLayout) << "Skipping invalid quick layout slot number:" << number;
             continue;
         }
 
-        if (layoutId.isNull()) {
-            // Empty/null means clear this slot (already cleared above)
+        if (layoutId.isEmpty()) {
+            // Empty means clear this slot (already cleared above)
             continue;
         }
 
-        // Verify layout exists
-        if (!layoutById(layoutId)) {
+        // Verify layout exists (skip for autotile IDs)
+        if (!LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
             qCWarning(lcLayout) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
             continue;
         }
@@ -449,7 +531,7 @@ void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QUuid>& slots)
     qCInfo(lcLayout) << "Batch set" << m_quickLayoutShortcuts.size() << "quick layout slots";
 }
 
-void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignments)
+void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assignments)
 {
     // Clear existing base screen assignments (desktop=0, activity=empty)
     // Keep per-desktop and per-activity assignments intact
@@ -465,7 +547,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignm
     int count = 0;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key();
-        const QUuid& layoutId = it.value();
+        const QString& layoutId = it.value();
 
         if (screenId.isEmpty()) {
             qCWarning(lcLayout) << "Skipping assignment with empty screen ID";
@@ -485,7 +567,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QUuid>& assignm
     qCInfo(lcLayout) << "Batch set" << count << "screen assignments";
 }
 
-void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments)
+void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
 {
     // Clear existing per-desktop assignments (desktop > 0, activity empty)
     for (auto it = m_assignments.begin(); it != m_assignments.end();) {
@@ -501,7 +583,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QU
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key().first;
         int virtualDesktop = it.key().second;
-        const QUuid& layoutId = it.value();
+        const QString& layoutId = it.value();
 
         if (screenId.isEmpty() || virtualDesktop < 1) {
             qCWarning(lcLayout) << "Skipping invalid desktop assignment:" << screenId << virtualDesktop;
@@ -522,7 +604,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QU
     qCInfo(lcLayout) << "Batch set" << count << "desktop assignments";
 }
 
-void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments)
+void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
 {
     // Clear existing per-activity assignments (activity non-empty, desktop=0)
     for (auto it = m_assignments.begin(); it != m_assignments.end();) {
@@ -538,7 +620,7 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key().first;
         const QString& activityId = it.key().second;
-        const QUuid& layoutId = it.value();
+        const QString& layoutId = it.value();
 
         if (screenId.isEmpty() || activityId.isEmpty()) {
             qCWarning(lcLayout) << "Skipping invalid activity assignment:" << screenId << activityId;
@@ -559,9 +641,9 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
     qCInfo(lcLayout) << "Batch set" << count << "activity assignments";
 }
 
-QHash<QPair<QString, int>, QUuid> LayoutManager::desktopAssignments() const
+QHash<QPair<QString, int>, QString> LayoutManager::desktopAssignments() const
 {
-    QHash<QPair<QString, int>, QUuid> result;
+    QHash<QPair<QString, int>, QString> result;
 
     for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
         const LayoutAssignmentKey& key = it.key();
@@ -574,9 +656,9 @@ QHash<QPair<QString, int>, QUuid> LayoutManager::desktopAssignments() const
     return result;
 }
 
-QHash<QPair<QString, QString>, QUuid> LayoutManager::activityAssignments() const
+QHash<QPair<QString, QString>, QString> LayoutManager::activityAssignments() const
 {
-    QHash<QPair<QString, QString>, QUuid> result;
+    QHash<QPair<QString, QString>, QString> result;
 
     for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
         const LayoutAssignmentKey& key = it.key();
@@ -799,8 +881,10 @@ void LayoutManager::saveLayouts()
         qCWarning(lcLayout) << "Some layouts failed to save";
     }
 
-    // Emit layoutsChanged so UI refreshes (even if some saves failed)
-    Q_EMIT layoutsChanged();
+    // Note: NOT emitting layoutsChanged() here — saving to disk does not change the
+    // layout list structure. addLayout()/removeLayout()/loadLayouts() emit that signal
+    // when the list actually changes. Emitting here would cause spurious D-Bus round
+    // trips on every layout property edit (name, zones, colors, etc.).
 
     Q_EMIT layoutsSaved();
 }
@@ -854,14 +938,20 @@ void LayoutManager::loadAssignments()
                                 obj[JsonKeys::Activity].toString()};
 
         const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
-        const QUuid layoutId = QUuid::fromString(layoutIdStr);
 
-        if (layoutId.isNull()) {
-            qCWarning(lcLayout) << "Invalid layout ID in assignment:" << layoutIdStr << "skipping";
-            continue;
+        if (LayoutId::isAutotile(layoutIdStr)) {
+            // Autotile IDs are stored as-is
+            m_assignments[key] = layoutIdStr;
+        } else {
+            // Validate UUID format
+            const QUuid uuid = QUuid::fromString(layoutIdStr);
+            if (uuid.isNull()) {
+                qCWarning(lcLayout) << "Invalid layout ID in assignment:" << layoutIdStr << "skipping";
+                continue;
+            }
+            // Normalize to braced UUID format for consistent comparison
+            m_assignments[key] = uuid.toString();
         }
-
-        m_assignments[key] = layoutId;
     }
 
     // Load quick shortcuts with error handling
@@ -875,20 +965,24 @@ void LayoutManager::loadAssignments()
         }
 
         const QString layoutIdStr = it.value().toString();
-        const QUuid layoutId = QUuid::fromString(layoutIdStr);
 
-        if (layoutId.isNull()) {
-            qCWarning(lcLayout) << "Invalid layout ID in shortcut:" << layoutIdStr << "skipping";
-            continue;
+        if (LayoutId::isAutotile(layoutIdStr)) {
+            m_quickLayoutShortcuts[number] = layoutIdStr;
+        } else {
+            const QUuid uuid = QUuid::fromString(layoutIdStr);
+            if (uuid.isNull()) {
+                qCWarning(lcLayout) << "Invalid layout ID in shortcut:" << layoutIdStr << "skipping";
+                continue;
+            }
+            m_quickLayoutShortcuts[number] = uuid.toString();
         }
-
-        m_quickLayoutShortcuts[number] = layoutId;
     }
 
     qCInfo(lcLayout) << "Loaded assignments= " << m_assignments.size() << " quickShortcuts= " << m_quickLayoutShortcuts.size();
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-        Layout* layout = layoutById(it.value());
-        QString layoutName = layout ? layout->name() : QStringLiteral("(unknown)");
+        Layout* layout = LayoutId::isAutotile(it.value()) ? nullptr : layoutById(QUuid::fromString(it.value()));
+        QString layoutName = layout ? layout->name()
+                                    : (LayoutId::isAutotile(it.value()) ? it.value() : QStringLiteral("(unknown)"));
         qCDebug(lcLayout) << "  Assignment screenId= " << it.key().screenId
                          << " desktop= " << it.key().virtualDesktop
                          << " activity= " << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
@@ -912,7 +1006,7 @@ void LayoutManager::saveAssignments()
         obj[JsonKeys::Screen] = connectorName.isEmpty() ? it.key().screenId : connectorName;
         obj[JsonKeys::Desktop] = it.key().virtualDesktop;
         obj[JsonKeys::Activity] = it.key().activity;
-        obj[JsonKeys::LayoutId] = it.value().toString();
+        obj[JsonKeys::LayoutId] = it.value();
         assignmentsArray.append(obj);
     }
     root[JsonKeys::Assignments] = assignmentsArray;
@@ -920,7 +1014,7 @@ void LayoutManager::saveAssignments()
     // Save quick shortcuts
     QJsonObject shortcutsObj;
     for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end(); ++it) {
-        shortcutsObj[QString::number(it.key())] = it.value().toString();
+        shortcutsObj[QString::number(it.key())] = it.value();
     }
     root[JsonKeys::QuickShortcuts] = shortcutsObj;
 

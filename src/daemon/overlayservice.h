@@ -74,6 +74,16 @@ public:
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
+    /**
+     * @brief Set which layout types appear in the zone picker
+     *
+     * When autotile mode is active, show only dynamic layouts.
+     * When manual mode is active, show only manual layouts.
+     * The autotile feature gate (KCM setting) controls whether dynamic layouts
+     * are ever visible.
+     */
+    void setLayoutFilter(bool includeManual, bool includeAutotile);
+
     // Screen management
     void setupForScreen(QScreen* screen);
     void removeScreen(QScreen* screen);
@@ -300,6 +310,10 @@ private:
 
     // Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
+
+    // Layout filter: which types to include in zone picker (set by Daemon)
+    bool m_includeManualLayouts = true;
+    bool m_includeAutotileLayouts = false;
 };
 
 } // namespace PlasmaZones

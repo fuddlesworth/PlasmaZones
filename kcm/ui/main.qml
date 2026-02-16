@@ -81,6 +81,9 @@ KCM.AbstractKCM {
         readonly property real focusSideRatio: 0.15
         readonly property real focusMainRatio: 0.70
 
+        // Autotiling algorithm preview dimensions
+        readonly property int algorithmPreviewWidth: 280
+        readonly property int algorithmPreviewHeight: 160
     }
 
     header: ColumnLayout {
@@ -163,6 +166,11 @@ KCM.AbstractKCM {
                 width: tabBar.availableWidth / tabBar.count
                 text: i18n("Zones")
                 icon.name: "view-split-left-right"
+            }
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Tiling")
+                icon.name: "window-duplicate"
             }
             TabButton {
                 width: tabBar.availableWidth / tabBar.count
@@ -284,21 +292,34 @@ KCM.AbstractKCM {
             }
         }
 
-        // TAB 5: DISPLAY (Zone Selector)
+        // TAB 5: TILING (automatic window tiling)
+        AutotilingTab {
+            id: autotilingTab
+            kcm: root.kcmModule
+            constants: constants
+            isCurrentTab: stackLayout.currentIndex === 4
+
+            onRequestActiveBorderColorDialog: {
+                autotileBorderColorDialog.selectedColor = kcm.autotileActiveBorderColor
+                autotileBorderColorDialog.open()
+            }
+        }
+
+        // TAB 6: DISPLAY (Zone Selector)
         DisplayTab {
             kcm: root.kcmModule
             constants: constants
             screenAspectRatio: root.screenAspectRatio
-            isCurrentTab: stackLayout.currentIndex === 4
+            isCurrentTab: stackLayout.currentIndex === 5
         }
 
-        // TAB 6: EXCLUSIONS
+        // TAB 7: EXCLUSIONS
         ExclusionsTab {
             kcm: root.kcmModule
             constants: constants
         }
 
-        // TAB 7: ABOUT
+        // TAB 8: ABOUT
         AboutTab {
             kcm: root.kcmModule
             constants: constants
@@ -332,6 +353,12 @@ KCM.AbstractKCM {
         id: labelFontColorDialog
         title: i18n("Choose Label Color")
         onAccepted: kcm.labelFontColor = selectedColor
+    }
+
+    ColorDialog {
+        id: autotileBorderColorDialog
+        title: i18n("Choose Autotile Border Color")
+        onAccepted: kcm.autotileActiveBorderColor = selectedColor
     }
 
     // Font dialog

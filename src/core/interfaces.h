@@ -264,6 +264,40 @@ Q_SIGNALS:
 
     // Snap All Windows Shortcut
     void snapAllWindowsShortcutChanged();
+
+    // Autotile settings
+    void autotileEnabledChanged();
+    void autotileAlgorithmChanged();
+    void autotileSplitRatioChanged();
+    void autotileMasterCountChanged();
+    void autotileInnerGapChanged();
+    void autotileOuterGapChanged();
+    void autotileSmartGapsChanged();
+    void autotileMaxWindowsChanged();
+    void autotileFocusNewWindowsChanged();
+    void autotileInsertPositionChanged();
+    void autotileRespectMinimumSizeChanged();
+    void autotileFocusFollowsMouseChanged();
+    void autotileMonocleHideOthersChanged();
+    void autotileMonocleShowTabsChanged();
+    void autotileShowActiveBorderChanged();
+    void autotileActiveBorderWidthChanged();
+    void autotileActiveBorderColorChanged();
+    void autotileUseSystemBorderColorChanged();
+
+    // Autotile animation settings
+    void autotileAnimationsEnabledChanged();
+    void autotileAnimationDurationChanged();
+
+    // Autotile shortcuts
+    void autotileToggleShortcutChanged();
+    void autotileRetileShortcutChanged();
+    void autotileFocusMasterShortcutChanged();
+    void autotileSwapMasterShortcutChanged();
+    void autotileIncMasterCountShortcutChanged();
+    void autotileDecMasterCountShortcutChanged();
+    void autotileIncMasterRatioShortcutChanged();
+    void autotileDecMasterRatioShortcutChanged();
 };
 
 /**
@@ -334,23 +368,23 @@ public:
     virtual void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
                               Layout* layout) = 0;
     virtual void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
-                                  const QUuid& layoutId) = 0;
+                                  const QString& layoutId) = 0;
     virtual void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                  const QString& activity = QString()) = 0;
     virtual bool hasExplicitAssignment(const QString& screenId, int virtualDesktop = 0,
                                        const QString& activity = QString()) const = 0;
-    virtual void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) = 0; // Batch set - saves once
+    virtual void setAllScreenAssignments(const QHash<QString, QString>& assignments) = 0; // Batch set - saves once
     virtual void
-    setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) = 0; // Batch per-desktop
+    setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments) = 0; // Batch per-desktop
     virtual void
-    setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) = 0; // Batch per-activity
+    setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments) = 0; // Batch per-activity
 
     // Quick layout switch
     virtual Layout* layoutForShortcut(int number) const = 0;
     virtual void applyQuickLayout(int number, const QString& screenId) = 0;
-    virtual void setQuickLayoutSlot(int number, const QUuid& layoutId) = 0;
-    virtual void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) = 0; // Batch set - saves once
-    virtual QHash<int, QUuid> quickLayoutSlots() const = 0;
+    virtual void setQuickLayoutSlot(int number, const QString& layoutId) = 0;
+    virtual void setAllQuickLayoutSlots(const QHash<int, QString>& slots) = 0; // Batch set - saves once
+    virtual QHash<int, QString> quickLayoutSlots() const = 0;
 
     // Built-in layouts
     virtual void createBuiltInLayouts() = 0;
@@ -513,6 +547,13 @@ Q_SIGNALS:
      * WindowDragAdaptor subscribes to unregister the KGlobalAccel Escape shortcut.
      */
     void snapAssistDismissed();
+
+    /**
+     * @brief Emitted when an autotile algorithm layout is selected from the zone selector
+     * @param algorithmId The algorithm identifier (e.g. "master-stack")
+     * @param screenName The screen where the selection was made
+     */
+    void autotileLayoutSelected(const QString& algorithmId, const QString& screenName);
 };
 
 } // namespace PlasmaZones

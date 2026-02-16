@@ -79,12 +79,14 @@ void ZoneSelectorController::setEnabled(bool enabled)
 QVariantList ZoneSelectorController::layouts() const
 {
     // Use shared utility to build filtered layout list for current context
+    // and mode-based filtering (manual-only vs autotile-only)
     QString screenName;
     if (m_screen) {
         screenName = m_screen->name();
     }
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity);
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -242,6 +244,16 @@ void ZoneSelectorController::setCurrentActivity(const QString& activity)
         // Refresh layout list when activity changes
         Q_EMIT layoutsChanged();
     }
+}
+
+void ZoneSelectorController::setLayoutFilter(bool includeManual, bool includeAutotile)
+{
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+        return;
+    }
+    m_includeManualLayouts = includeManual;
+    m_includeAutotileLayouts = includeAutotile;
+    Q_EMIT layoutsChanged();
 }
 
 void ZoneSelectorController::startDrag()

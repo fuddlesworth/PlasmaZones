@@ -1434,7 +1434,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     const int layoutCount = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity).size();
+        m_layoutManager, Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts).size();
     updateZoneSelectorWindowLayout(window, screen, config, m_settings, layoutCount);
 
     window->setVisible(false);
@@ -1988,8 +1989,20 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
 {
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity);
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts);
     return LayoutUtils::toVariantList(entries);
+}
+
+void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
+{
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+        return;
+    }
+    m_includeManualLayouts = includeManual;
+    m_includeAutotileLayouts = includeAutotile;
+    // Refresh visible zone selector windows with updated layout list
+    refreshVisibleWindows();
 }
 
 bool OverlayService::hasSelectedZone() const
@@ -2071,8 +2084,15 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
         }
     }
 
-    qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId << "on screen:" << screenName;
-    Q_EMIT manualLayoutSelected(layoutId, screenName);
+    // Route to the correct signal based on whether this is an autotile algorithm or manual layout
+    if (LayoutId::isAutotile(layoutId)) {
+        const QString algoId = LayoutId::extractAlgorithmId(layoutId);
+        qCInfo(lcOverlay) << "Autotile algorithm selected from zone selector:" << algoId << "on screen:" << screenName;
+        Q_EMIT autotileLayoutSelected(algoId, screenName);
+    } else {
+        qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId << "on screen:" << screenName;
+        Q_EMIT manualLayoutSelected(layoutId, screenName);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

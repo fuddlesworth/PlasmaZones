@@ -140,6 +140,19 @@ Q_SIGNALS:
      */
     void snapAllWindowsRequested();
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotile Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void toggleAutotileRequested();
+    void focusMasterRequested();
+    void swapWithMasterRequested();
+    void increaseMasterRatioRequested();
+    void decreaseMasterRatioRequested();
+    void increaseMasterCountRequested();
+    void decreaseMasterCountRequested();
+    void retileRequested();
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -212,6 +225,26 @@ private Q_SLOTS:
     void onSnapAllWindows();
     void updateSnapAllWindowsShortcut();
 
+    // Autotile shortcuts
+    void onToggleAutotile();
+    void onFocusMaster();
+    void onSwapWithMaster();
+    void onIncreaseMasterRatio();
+    void onDecreaseMasterRatio();
+    void onIncreaseMasterCount();
+    void onDecreaseMasterCount();
+    void onRetile();
+
+    // Update autotile shortcuts from settings
+    void updateToggleAutotileShortcut();
+    void updateFocusMasterShortcut();
+    void updateSwapMasterShortcut();
+    void updateIncMasterRatioShortcut();
+    void updateDecMasterRatioShortcut();
+    void updateIncMasterCountShortcut();
+    void updateDecMasterCountShortcut();
+    void updateRetileShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -223,6 +256,7 @@ private:
     void setupCycleWindowsShortcuts();
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
+    void setupAutotileShortcuts();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -267,6 +301,16 @@ private:
 
     // Snap All Windows action
     QAction* m_snapAllWindowsAction = nullptr;
+
+    // Autotile actions
+    QAction* m_toggleAutotileAction = nullptr;
+    QAction* m_focusMasterAction = nullptr;
+    QAction* m_swapMasterAction = nullptr;
+    QAction* m_incMasterRatioAction = nullptr;
+    QAction* m_decMasterRatioAction = nullptr;
+    QAction* m_incMasterCountAction = nullptr;
+    QAction* m_decMasterCountAction = nullptr;
+    QAction* m_retileAction = nullptr;
 };
 
 } // namespace PlasmaZones

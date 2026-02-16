@@ -101,6 +101,13 @@ private Q_SLOTS:
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson);
 
+    // Autotile D-Bus signal handlers
+    void slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height);
+    void slotAutotileFocusWindowRequested(const QString& windowId);
+    void slotMonocleVisibilityChanged(const QString& focusedWindowId, const QStringList& windowsToHide);
+    void slotAutotileEnabledChanged(bool enabled);
+    void slotAutotileScreensChanged(const QStringList& screenNames);
+
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
@@ -206,6 +213,13 @@ private:
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
+
+    // Autotile integration
+    void notifyWindowAdded(KWin::EffectWindow* w);
+    void connectAutotileSignals();
+    void loadAutotileSettings();
+    KWin::EffectWindow* findWindowById(const QString& windowId) const;
+    void applyAutotileGeometry(KWin::EffectWindow* w, const QRect& geometry);
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
@@ -397,6 +411,12 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
+
+    // Autotile: track windows already notified to daemon to avoid duplicate notifications
+    QSet<QString> m_notifiedWindows;
+
+    // Autotile: set of screens using autotile (gating drag/snap/overlay behavior per-screen)
+    QSet<QString> m_autotileScreens;
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

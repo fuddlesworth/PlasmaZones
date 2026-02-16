@@ -32,6 +32,8 @@ class WindowTrackingService;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
+class AutotileAdaptor;
+class AutotileEngine;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -95,10 +97,26 @@ public:
 
     // OSD notifications
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
+    void showAutotileOsd(const QString& algorithmName, const QString& screenName = QString());
 
 private:
     void clearHighlight();
     void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
+
+    /**
+     * @brief Recompute which screens use autotile from layout assignments
+     *
+     * Reads all screen assignments via assignmentIdForScreen(), computes
+     * which screens have autotile IDs, calls setAutotileScreens() on engine.
+     */
+    void updateAutotileScreens();
+
+    /**
+     * @brief Update layout filter on overlay service and unified layout controller
+     *
+     * Shows both manual and autotile layouts when the feature gate is enabled.
+     */
+    void updateLayoutFilter();
 
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<Settings> m_settings;
@@ -127,6 +145,10 @@ private:
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
+
+    // Autotile engine
+    std::unique_ptr<AutotileEngine> m_autotileEngine;
+    AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     bool m_running = false;
 
