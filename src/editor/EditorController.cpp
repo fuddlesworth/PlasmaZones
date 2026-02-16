@@ -151,6 +151,21 @@ EditorController::~EditorController()
     // Services are QObjects with this as parent, so they'll be deleted automatically
 }
 
+// Preview mode
+bool EditorController::previewMode() const
+{
+    return m_previewMode;
+}
+
+void EditorController::setPreviewMode(bool preview)
+{
+    if (m_previewMode == preview) {
+        return;
+    }
+    m_previewMode = preview;
+    Q_EMIT previewModeChanged();
+}
+
 // Property getters
 QString EditorController::layoutId() const
 {

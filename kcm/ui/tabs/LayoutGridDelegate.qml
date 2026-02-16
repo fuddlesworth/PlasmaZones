@@ -35,9 +35,7 @@ Item {
     height: cellHeight
 
     Accessible.name: modelData.name || i18n("Unnamed Layout")
-    Accessible.description: modelData.isSystem
-            ? i18n("System layout with %1 zones", modelData.zoneCount || 0)
-            : i18n("Custom layout with %1 zones", modelData.zoneCount || 0)
+    Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
 
     HoverHandler {
@@ -52,7 +50,7 @@ Item {
 
     Keys.onReturnPressed: root.activated(root.modelData.id)
     Keys.onDeletePressed: {
-        if (!root.modelData.isSystem) {
+        if (!root.modelData.isSystem && !root.modelData.isAutotile) {
             root.deleteRequested(root.modelData)
         }
     }
@@ -214,14 +212,7 @@ Item {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
 
-                    text: {
-                        var zoneCount = root.modelData.zoneCount || 0
-                        if (root.modelData.isSystem) {
-                            return i18n("System • %1", zoneCount)
-                        } else {
-                            return i18n("%1 zones", zoneCount)
-                        }
-                    }
+                    text: i18n("%1 zones", root.modelData.zoneCount || 0)
                 }
             }
         }

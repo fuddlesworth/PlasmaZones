@@ -37,6 +37,7 @@ Item {
     required property string zoneId
     required property bool isSelected
     property bool isPartOfMultiSelection: false // True when zone is selected AND multiple zones are selected
+    required property bool previewMode
     property var controller: null
     property real zoneSpacing: 0  // Gap between adjacent zones (applied as zoneSpacing/2 per side)
     property real edgeGap: 0      // Gap at screen edges
@@ -531,6 +532,7 @@ Item {
     ZoneDragHandler {
         id: hoverArea
 
+        enabled: !root.previewMode
         zoneRoot: root
         controller: root.controller
         snapIndicator: root.snapIndicator
@@ -540,6 +542,7 @@ Item {
     ActionButtons {
         id: hoverButtons
 
+        visible: !root.previewMode
         root: root
     }
 
@@ -547,6 +550,7 @@ Item {
     // RESIZE HANDLES
     // ═══════════════════════════════════════════════════════════════════
     ResizeHandles {
+        visible: !root.previewMode
         root: root
         // z-index must be higher than hoverArea so handles receive mouse events first
         z: 100
@@ -564,6 +568,7 @@ Item {
     ZoneContextMenu {
         id: contextMenu
 
+        enabled: !root.previewMode
         editorController: root.controller
         zoneId: root.zoneId
         onSplitHorizontalRequested: root.splitHorizontalRequested()

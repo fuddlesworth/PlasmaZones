@@ -191,6 +191,10 @@ public:
     Q_INVOKABLE void importLayout(const QString& filePath) override;
     Q_INVOKABLE void exportLayout(Layout* layout, const QString& filePath) override;
 
+    // Autotile layout overrides (per-algorithm gap, visibility, shader settings)
+    void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
+    QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
+
     /**
      * @brief Get all per-desktop assignments (virtualDesktop > 0, no activity)
      * @return Map of (screenId, virtualDesktop) -> layoutId
@@ -220,6 +224,8 @@ private:
     QString layoutFilePath(const QUuid& id) const;
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
+    QJsonObject loadAllAutotileOverrides() const;
+    void saveAllAutotileOverrides(const QJsonObject& all);
 
     ISettings* m_settings = nullptr;
     QString m_layoutDirectory;

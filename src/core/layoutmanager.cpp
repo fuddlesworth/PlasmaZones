@@ -768,8 +768,9 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
     const auto entries = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
 
     for (const auto& entry : entries) {
-        if (entry == QStringLiteral("assignments.json")) {
-            continue; // Skip assignments file
+        if (entry == QStringLiteral("assignments.json")
+            || entry == QStringLiteral("autotile-overrides.json")) {
+            continue; // Skip non-layout files
         }
 
         const QString filePath = dir.absoluteFilePath(entry);
@@ -1140,6 +1141,47 @@ QString LayoutManager::layoutFilePath(const QUuid& id) const
 {
     // Strip braces only for filesystem path (avoid { } in filenames). Everywhere else we use default (with braces).
     return m_layoutDirectory + QStringLiteral("/") + id.toString(QUuid::WithoutBraces) + QStringLiteral(".json");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Autotile layout overrides
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QJsonObject LayoutManager::loadAllAutotileOverrides() const
+{
+    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
+    if (!file.open(QIODevice::ReadOnly)) {
+        return {};
+    }
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    return doc.isObject() ? doc.object() : QJsonObject();
+}
+
+void LayoutManager::saveAllAutotileOverrides(const QJsonObject& all)
+{
+    ensureLayoutDirectory();
+    QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcLayout) << "Failed to save autotile overrides:" << file.errorString();
+        return;
+    }
+    file.write(QJsonDocument(all).toJson());
+}
+
+QJsonObject LayoutManager::loadAutotileOverrides(const QString& algorithmId) const
+{
+    return loadAllAutotileOverrides().value(algorithmId).toObject();
+}
+
+void LayoutManager::saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides)
+{
+    QJsonObject all = loadAllAutotileOverrides();
+    if (overrides.isEmpty()) {
+        all.remove(algorithmId);
+    } else {
+        all[algorithmId] = overrides;
+    }
+    saveAllAutotileOverrides(all);
 }
 
 } // namespace PlasmaZones

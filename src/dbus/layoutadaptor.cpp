@@ -8,6 +8,8 @@
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
+#include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/TilingAlgorithm.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
 #include "../core/layoutmanager.h"
@@ -259,6 +261,32 @@ QStringList LayoutAdaptor::getLayoutList()
 
 QString LayoutAdaptor::getLayout(const QString& id)
 {
+    // Handle autotile algorithm preview layouts
+    if (LayoutId::isAutotile(id)) {
+        QString algoId = LayoutId::extractAlgorithmId(id);
+        auto* registry = AlgorithmRegistry::instance();
+        auto* algo = registry ? registry->algorithm(algoId) : nullptr;
+        if (!algo) {
+            qCWarning(lcDbusLayout) << "Autotile algorithm not found:" << algoId;
+            return QString();
+        }
+        UnifiedLayoutEntry entry;
+        entry.id = id;
+        entry.name = algo->name();
+        entry.description = algo->description();
+        entry.isAutotile = true;
+        entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
+        entry.zones = entry.previewZones;
+        entry.zoneCount = algo->defaultMaxWindows();
+        QJsonObject json = LayoutUtils::toJson(entry);
+        // Apply stored per-algorithm overrides (gaps, visibility, shader)
+        QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
+        for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
+            json[it.key()] = it.value();
+        }
+        return QString::fromUtf8(QJsonDocument(json).toJson());
+    }
+
     auto uuidOpt = parseAndValidateUuid(id, QStringLiteral("get layout"));
     if (!uuidOpt) {
         return QString();
@@ -448,6 +476,31 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     }
     QJsonObject obj = *objOpt;
     QString idStr = obj[JsonKeys::Id].toString();
+
+    // Handle autotile layout settings updates (gaps, visibility, shader only)
+    if (LayoutId::isAutotile(idStr)) {
+        QString algoId = LayoutId::extractAlgorithmId(idStr);
+        QJsonObject overrides;
+        if (obj.contains(JsonKeys::ZonePadding))
+            overrides[JsonKeys::ZonePadding] = obj[JsonKeys::ZonePadding];
+        if (obj.contains(JsonKeys::OuterGap))
+            overrides[JsonKeys::OuterGap] = obj[JsonKeys::OuterGap];
+        if (obj.contains(JsonKeys::AllowedScreens))
+            overrides[JsonKeys::AllowedScreens] = obj[JsonKeys::AllowedScreens];
+        if (obj.contains(JsonKeys::AllowedDesktops))
+            overrides[JsonKeys::AllowedDesktops] = obj[JsonKeys::AllowedDesktops];
+        if (obj.contains(JsonKeys::AllowedActivities))
+            overrides[JsonKeys::AllowedActivities] = obj[JsonKeys::AllowedActivities];
+        if (obj.contains(JsonKeys::ShaderId))
+            overrides[JsonKeys::ShaderId] = obj[JsonKeys::ShaderId];
+        if (obj.contains(JsonKeys::ShaderParams))
+            overrides[JsonKeys::ShaderParams] = obj[JsonKeys::ShaderParams];
+        m_layoutManager->saveAutotileOverrides(algoId, overrides);
+        qCInfo(lcDbusLayout) << "Saved autotile overrides for algorithm:" << algoId;
+        Q_EMIT layoutChanged(layoutJson);
+        Q_EMIT layoutListChanged();
+        return true;
+    }
 
     auto* layout = getValidatedLayout(idStr, QStringLiteral("update layout"));
     if (!layout) {

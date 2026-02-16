@@ -19,6 +19,7 @@ ToolBar {
     required property var editorController
     required property var confirmCloseDialog
     required property var editorWindow
+    required property bool previewMode
     // Expose addZoneButton for access from parent
     property alias addZoneButton: addZoneButtonItem
 
@@ -36,6 +37,7 @@ ToolBar {
         RowLayout {
             id: zoneCreationSection
 
+            visible: !controlBar.previewMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
 
             // Add Zone button (exposed via alias)
@@ -182,6 +184,7 @@ ToolBar {
 
         // Visual separator
         Kirigami.Separator {
+            visible: !controlBar.previewMode
             Layout.fillHeight: true
             Layout.preferredWidth: 1
         }
@@ -192,6 +195,7 @@ ToolBar {
         RowLayout {
             id: snappingSection
 
+            visible: !controlBar.previewMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
 
             // Edge snapping toggle - first in snapping section

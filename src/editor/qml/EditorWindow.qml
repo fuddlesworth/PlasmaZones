@@ -28,6 +28,7 @@ Window {
     property int selectionCount: editorWindow._editorController ? editorWindow._editorController.selectionCount : 0
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection
+    readonly property bool previewMode: editorWindow._editorController ? editorWindow._editorController.previewMode : false
     property bool isDrawingZone: false
     property point drawStart: Qt.point(0, 0)
     property rect drawRect: Qt.rect(0, 0, 0, 0)
@@ -172,8 +173,8 @@ Window {
             var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
             var borderHex = "#" + Math.round(borderColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
             editorWindow._editorController.setDefaultZoneColors(highlightHex, inactiveHex, borderHex);
-            // If no layout loaded, create new
-            if (editorWindow._editorController.layoutId === "")
+            // If no layout loaded and not in preview mode, create new
+            if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
                 editorWindow._editorController.createNewLayout();
 
         }
@@ -211,6 +212,7 @@ Window {
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
         fullscreenMode: editorWindow.fullscreenMode
+        previewMode: editorWindow.previewMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
     }
 
@@ -244,6 +246,7 @@ Window {
         editorWindow: editorWindow
         exportDialog: exportDialog
         fullscreenMode: editorWindow.fullscreenMode
+        previewMode: editorWindow.previewMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
@@ -326,6 +329,7 @@ Window {
                         // Use full drawing area dimensions for calculations
                         canvasWidth: drawingArea.width
                         canvasHeight: drawingArea.height
+                        previewMode: editorWindow.previewMode
                         // Bind directly to modelData - when zones list updates, modelData updates
                         zoneData: modelData
                         zoneId: modelData.id || ""
@@ -435,6 +439,7 @@ Window {
                     zoneSpacing: editorWindow.zoneSpacing
                     drawingArea: drawingArea
                     zonesRepeater: zonesRepeater
+                    previewMode: editorWindow.previewMode
                 }
 
                 // Snap line visualization
@@ -476,6 +481,7 @@ Window {
                     editorWindow: editorWindow
                     editorController: editorWindow._editorController
                     drawingArea: drawingArea
+                    previewMode: editorWindow.previewMode
                 }
 
             }
@@ -488,7 +494,7 @@ Window {
         PropertyPanel {
             id: propertiesPanel
 
-            visible: !editorWindow.fullscreenMode
+            visible: !editorWindow.fullscreenMode && !editorWindow.previewMode
             editorController: editorWindow._editorController
             selectedZoneId: editorWindow.selectedZoneId
             selectedZone: editorWindow.selectedZone
@@ -508,6 +514,7 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         visible: !editorWindow.fullscreenMode
+        previewMode: editorWindow.previewMode
         editorController: editorWindow._editorController
         confirmCloseDialog: confirmCloseDialog
         editorWindow: editorWindow
