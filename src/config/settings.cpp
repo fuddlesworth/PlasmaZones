@@ -308,6 +308,7 @@ void Settings::setZoneSpanModifierInt(int modifier)
     }
 }
 
+SETTINGS_SETTER(bool, ZoneSpanEnabled, m_zoneSpanEnabled, zoneSpanEnabledChanged)
 SETTINGS_SETTER(bool, ToggleActivation, m_toggleActivation, toggleActivationChanged)
 
 // Simple bool setters
@@ -443,6 +444,7 @@ void Settings::setStickyWindowHandlingInt(int handling)
 
 // Session and exclusion setters
 SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
+SETTINGS_SETTER(bool, SnapAssistFeatureEnabled, m_snapAssistFeatureEnabled, snapAssistFeatureEnabledChanged)
 SETTINGS_SETTER(bool, SnapAssistEnabled, m_snapAssistEnabled, snapAssistEnabledChanged)
 
 void Settings::setSnapAssistTriggers(const QVariantList& triggers)
@@ -777,6 +779,8 @@ void Settings::load()
     m_dragActivationTriggers = loadTriggerList(activation, QLatin1String("DragActivationTriggers"),
                                                legacyDragMod, legacyDragBtn);
 
+    m_zoneSpanEnabled = activation.readEntry(QLatin1String("ZoneSpanEnabled"), ConfigDefaults::zoneSpanEnabled());
+
     // Zone span modifier: hold this key for paint-to-span zone selection
     // Migration: if old MiddleClickMultiZone key exists but new ZoneSpanModifier doesn't,
     // honour the old disabled state so upgrading users don't get unexpected zone-span activation
@@ -879,6 +883,7 @@ void Settings::load()
         static_cast<StickyWindowHandling>(qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
                                                  static_cast<int>(StickyWindowHandling::IgnoreAll)));
     m_restoreWindowsToZonesOnLogin = behavior.readEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), ConfigDefaults::restoreWindowsToZonesOnLogin());
+    m_snapAssistFeatureEnabled = activation.readEntry(QLatin1String("SnapAssistFeatureEnabled"), ConfigDefaults::snapAssistFeatureEnabled());
     // Snap Assist: Activation group (migration: read Behavior if not in Activation)
     const QString snapAssistEnabledKey = QLatin1String("SnapAssistEnabled");
     const QString snapAssistTriggersKey = QLatin1String("SnapAssistTriggers");
@@ -1096,6 +1101,7 @@ void Settings::save()
     activation.deleteEntry(QLatin1String("MultiZoneModifier"));
     activation.deleteEntry(QLatin1String("MultiZoneTriggers"));
     activation.deleteEntry(QLatin1String("MultiZoneMouseButton"));
+    activation.writeEntry(QLatin1String("ZoneSpanEnabled"), m_zoneSpanEnabled);
     activation.writeEntry(QLatin1String("ZoneSpanModifier"), static_cast<int>(m_zoneSpanModifier));
     saveTriggerList(activation, QLatin1String("ZoneSpanTriggers"), m_zoneSpanTriggers);
     activation.deleteEntry(QLatin1String("ZoneSpanMouseButton"));
@@ -1144,6 +1150,7 @@ void Settings::save()
     behavior.writeEntry(QLatin1String("RestoreSizeOnUnsnap"), m_restoreOriginalSizeOnUnsnap);
     behavior.writeEntry(QLatin1String("StickyWindowHandling"), static_cast<int>(m_stickyWindowHandling));
     behavior.writeEntry(QLatin1String("RestoreWindowsToZonesOnLogin"), m_restoreWindowsToZonesOnLogin);
+    activation.writeEntry(QLatin1String("SnapAssistFeatureEnabled"), m_snapAssistFeatureEnabled);
     // Snap Assist: Activation group (migrate from Behavior on save)
     activation.writeEntry(QLatin1String("SnapAssistEnabled"), m_snapAssistEnabled);
     saveTriggerList(activation, QLatin1String("SnapAssistTriggers"), m_snapAssistTriggers);

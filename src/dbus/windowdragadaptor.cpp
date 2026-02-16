@@ -540,7 +540,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             m_overlayService->clearSelectedZone();
         }
 
-        if (zoneSpanModifierHeld) {
+        if (zoneSpanModifierHeld && m_settings->zoneSpanEnabled()) {
             handleZoneSpanModifier(cursorX, cursorY);
         } else {
             // Transitioning away from zone span: clear painted zones
@@ -781,11 +781,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // are offered for the user to fill via the window picker.
     // Request snap assist when: always enabled OR any SnapAssistTrigger held at drop.
     const bool actuallySnapped = shouldApplyGeometry && !restoreSizeOnlyOut;
-    const bool snapAssistBySetting = m_settings && m_settings->snapAssistEnabled();
-    const QVariantList snapAssistTriggers = m_settings ? m_settings->snapAssistTriggers() : QVariantList();
+    const bool snapAssistFeatureOn = m_settings && m_settings->snapAssistFeatureEnabled();
+    const bool snapAssistBySetting = snapAssistFeatureOn && m_settings->snapAssistEnabled();
+    const QVariantList snapAssistTriggers = snapAssistFeatureOn
+        ? m_settings->snapAssistTriggers() : QVariantList();
     const bool snapAssistByTrigger = !snapAssistTriggers.isEmpty()
         && anyTriggerHeld(snapAssistTriggers, static_cast<Qt::KeyboardModifiers>(modifiers), mouseButtons);
-    const bool requestSnapAssist = actuallySnapped && (snapAssistBySetting || snapAssistByTrigger)
+    const bool requestSnapAssist = actuallySnapped && snapAssistFeatureOn
+        && (snapAssistBySetting || snapAssistByTrigger)
         && releaseScreen && m_layoutManager && m_windowTracking;
     if (requestSnapAssist) {
         Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenId);

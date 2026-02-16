@@ -143,6 +143,10 @@ void OverlayAdaptor::hideShaderPreview()
 bool OverlayAdaptor::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
                                     const QString& candidatesJson)
 {
+    // Respect master toggle — don't show snap assist when the feature is disabled
+    if (m_settings && !m_settings->snapAssistFeatureEnabled()) {
+        return false;
+    }
     // Return false when we know overlay won't be shown (avoids misleading "success")
     if (emptyZonesJson.isEmpty() || emptyZonesJson == QLatin1String("[]")
         || candidatesJson.isEmpty() || candidatesJson == QLatin1String("[]")) {

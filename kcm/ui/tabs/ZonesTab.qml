@@ -483,10 +483,22 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Zone Span")
                     }
 
+                    CheckBox {
+                        id: zoneSpanEnabledCheck
+                        Kirigami.FormData.label: i18n("Paint-to-span:")
+                        text: i18n("Enable zone spanning")
+                        checked: kcm.zoneSpanEnabled
+                        onToggled: kcm.zoneSpanEnabled = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, you can paint across multiple zones to snap a window to the combined area.")
+                    }
+
                     ModifierAndMouseCheckBoxes {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Paint-to-span modifier:")
+                        Kirigami.FormData.label: i18n("Modifier:")
+                        enabled: zoneSpanEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: kcm.zoneSpanTriggers
@@ -501,6 +513,8 @@ ScrollView {
                     RowLayout {
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Edge threshold:")
+                        enabled: zoneSpanEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         spacing: Kirigami.Units.smallSpacing
 
                         SpinBox {
@@ -525,10 +539,22 @@ ScrollView {
                     }
 
                     CheckBox {
+                        id: snapAssistFeatureEnabledCheck
                         Kirigami.FormData.label: i18n("Window picker:")
+                        text: i18n("Enable snap assist")
+                        checked: kcm.snapAssistFeatureEnabled
+                        onToggled: kcm.snapAssistFeatureEnabled = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("Show a window picker after snapping to fill remaining empty zones")
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Behavior:")
                         text: i18n("Always show after snapping")
                         checked: kcm.snapAssistEnabled
                         onToggled: kcm.snapAssistEnabled = checked
+                        enabled: snapAssistFeatureEnabledCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("When enabled, after every snap you can pick another window to fill empty zones. When disabled, hold the trigger below at drop to enable for that snap only.")
                     }
@@ -537,7 +563,7 @@ ScrollView {
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
                         Kirigami.FormData.label: i18n("Hold to enable:")
-                        enabled: !kcm.snapAssistEnabled
+                        enabled: snapAssistFeatureEnabledCheck.checked && !kcm.snapAssistEnabled
                         opacity: enabled ? 1 : 0.6
                         allowMultiple: true
                         acceptMode: acceptModeAll

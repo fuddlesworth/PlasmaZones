@@ -48,6 +48,7 @@ public:
         return {trigger};
     }
     static bool toggleActivation() { return instance().defaultToggleActivationValue(); }
+    static bool zoneSpanEnabled() { return instance().defaultZoneSpanEnabledValue(); }
     static int zoneSpanModifier() { return instance().defaultZoneSpanModifierValue(); }
     static QVariantList zoneSpanTriggers() {
         QVariantMap trigger;
@@ -115,6 +116,7 @@ public:
     static bool restoreOriginalSizeOnUnsnap() { return instance().defaultRestoreSizeOnUnsnapValue(); }
     static int stickyWindowHandling() { return instance().defaultStickyWindowHandlingValue(); }
     static bool restoreWindowsToZonesOnLogin() { return instance().defaultRestoreWindowsToZonesOnLoginValue(); }
+    static bool snapAssistFeatureEnabled() { return instance().defaultSnapAssistFeatureEnabledValue(); }
     static bool snapAssistEnabled() { return instance().defaultSnapAssistEnabledValue(); }
     static QVariantList snapAssistTriggers() {
         // Default: Middle mouse — avoids conflict with Alt (zone activation) which would make Snap Assist always-on when using overlay

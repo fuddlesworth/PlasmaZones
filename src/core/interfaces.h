@@ -144,6 +144,7 @@ Q_SIGNALS:
     void settingsChanged();
     void shiftDragToActivateChanged(); // Deprecated
     void dragActivationTriggersChanged();
+    void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
     void toggleActivationChanged();
@@ -181,6 +182,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();

@@ -36,6 +36,7 @@ public:
                    shiftDragToActivateChanged)
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
+    Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
@@ -96,6 +97,7 @@ public:
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY snapAssistTriggersChanged)
 
@@ -263,6 +265,11 @@ public:
     QVariantList dragActivationTriggers() const override { return m_dragActivationTriggers; }
     void setDragActivationTriggers(const QVariantList& triggers) override;
 
+    bool zoneSpanEnabled() const override
+    {
+        return m_zoneSpanEnabled;
+    }
+    void setZoneSpanEnabled(bool enabled) override;
     DragModifier zoneSpanModifier() const override
     {
         return m_zoneSpanModifier;
@@ -489,6 +496,12 @@ public:
         return m_restoreWindowsToZonesOnLogin;
     }
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
+
+    bool snapAssistFeatureEnabled() const override
+    {
+        return m_snapAssistFeatureEnabled;
+    }
+    void setSnapAssistFeatureEnabled(bool enabled) override;
 
     bool snapAssistEnabled() const override
     {
@@ -945,6 +958,7 @@ private:
     // Activation
     bool m_shiftDragToActivate = true; // Deprecated - kept for migration
     QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
+    bool m_zoneSpanEnabled = true;
     DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
     QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
     bool m_toggleActivation = false;
@@ -992,6 +1006,7 @@ private:
     bool m_restoreOriginalSizeOnUnsnap = true;
     StickyWindowHandling m_stickyWindowHandling = StickyWindowHandling::TreatAsNormal;
     bool m_restoreWindowsToZonesOnLogin = true;
+    bool m_snapAssistFeatureEnabled = true;
     bool m_snapAssistEnabled = true;
     QVariantList m_snapAssistTriggers; // [{modifier: int, mouseButton: int}, ...]
 

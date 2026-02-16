@@ -74,6 +74,8 @@ public:
     virtual void setShiftDragToActivate(bool enable) = 0;
     virtual QVariantList dragActivationTriggers() const = 0;
     virtual void setDragActivationTriggers(const QVariantList& triggers) = 0;
+    virtual bool zoneSpanEnabled() const = 0;
+    virtual void setZoneSpanEnabled(bool enabled) = 0;
     virtual DragModifier zoneSpanModifier() const = 0;
     virtual void setZoneSpanModifier(DragModifier modifier) = 0;
     virtual QVariantList zoneSpanTriggers() const = 0;
@@ -270,6 +272,8 @@ public:
     virtual void setStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual bool restoreWindowsToZonesOnLogin() const = 0;
     virtual void setRestoreWindowsToZonesOnLogin(bool restore) = 0;
+    virtual bool snapAssistFeatureEnabled() const = 0;
+    virtual void setSnapAssistFeatureEnabled(bool enabled) = 0;
     virtual bool snapAssistEnabled() const = 0;
     virtual void setSnapAssistEnabled(bool enabled) = 0;
     virtual QVariantList snapAssistTriggers() const = 0;

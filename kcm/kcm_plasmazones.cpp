@@ -157,6 +157,10 @@ QVariantList KCMPlasmaZones::dragActivationTriggers() const
 {
     return convertTriggersForQml(m_settings->dragActivationTriggers());
 }
+bool KCMPlasmaZones::zoneSpanEnabled() const
+{
+    return m_settings->zoneSpanEnabled();
+}
 QVariantList KCMPlasmaZones::zoneSpanTriggers() const
 {
     return convertTriggersForQml(m_settings->zoneSpanTriggers());
@@ -305,6 +309,10 @@ int KCMPlasmaZones::stickyWindowHandling() const
 bool KCMPlasmaZones::restoreWindowsToZonesOnLogin() const
 {
     return m_settings->restoreWindowsToZonesOnLogin();
+}
+bool KCMPlasmaZones::snapAssistFeatureEnabled() const
+{
+    return m_settings->snapAssistFeatureEnabled();
 }
 bool KCMPlasmaZones::snapAssistEnabled() const
 {
@@ -539,6 +547,15 @@ void KCMPlasmaZones::setDragActivationTriggers(const QVariantList& triggers)
     if (m_settings->dragActivationTriggers() != converted) {
         m_settings->setDragActivationTriggers(converted);
         Q_EMIT dragActivationTriggersChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setZoneSpanEnabled(bool enabled)
+{
+    if (m_settings->zoneSpanEnabled() != enabled) {
+        m_settings->setZoneSpanEnabled(enabled);
+        Q_EMIT zoneSpanEnabledChanged();
         setNeedsSave(true);
     }
 }
@@ -876,6 +893,15 @@ void KCMPlasmaZones::setRestoreWindowsToZonesOnLogin(bool restore)
     if (m_settings->restoreWindowsToZonesOnLogin() != restore) {
         m_settings->setRestoreWindowsToZonesOnLogin(restore);
         Q_EMIT restoreWindowsToZonesOnLoginChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setSnapAssistFeatureEnabled(bool enabled)
+{
+    if (m_settings->snapAssistFeatureEnabled() != enabled) {
+        m_settings->setSnapAssistFeatureEnabled(enabled);
+        Q_EMIT snapAssistFeatureEnabledChanged();
         setNeedsSave(true);
     }
 }
@@ -1393,6 +1419,8 @@ void KCMPlasmaZones::load()
 {
     m_settings->load();
     // Emit Settings-backed property signals so UI bindings re-evaluate (e.g. after external config change)
+    Q_EMIT zoneSpanEnabledChanged();
+    Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
     Q_EMIT snapAssistTriggersChanged();
     loadLayouts();
@@ -1535,6 +1563,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT dragActivationTriggersChanged();
+    Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT zoneSpanTriggersChanged();
     Q_EMIT toggleActivationChanged();
     Q_EMIT showZonesOnAllMonitorsChanged();
@@ -1572,6 +1601,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT restoreOriginalSizeOnUnsnapChanged();
     Q_EMIT stickyWindowHandlingChanged();
     Q_EMIT restoreWindowsToZonesOnLoginChanged();
+    Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
     Q_EMIT snapAssistTriggersChanged();
     Q_EMIT defaultLayoutIdChanged();
@@ -2214,6 +2244,7 @@ void KCMPlasmaZones::onSettingsChanged()
         // ones actually changed since external changes are rare, signal emission is cheap,
         // and QML only updates when values differ.
         Q_EMIT dragActivationTriggersChanged();
+        Q_EMIT zoneSpanEnabledChanged();
         Q_EMIT zoneSpanTriggersChanged();
         Q_EMIT toggleActivationChanged();
         Q_EMIT showZonesOnAllMonitorsChanged();
@@ -2251,6 +2282,7 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT restoreOriginalSizeOnUnsnapChanged();
         Q_EMIT stickyWindowHandlingChanged();
         Q_EMIT restoreWindowsToZonesOnLoginChanged();
+        Q_EMIT snapAssistFeatureEnabledChanged();
         Q_EMIT snapAssistEnabledChanged();
         Q_EMIT snapAssistTriggersChanged();
         Q_EMIT defaultLayoutIdChanged();

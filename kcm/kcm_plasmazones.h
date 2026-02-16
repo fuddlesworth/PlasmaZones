@@ -45,6 +45,7 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Activation
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
+    Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
     Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
@@ -107,6 +108,7 @@ class KCMPlasmaZones : public KQuickConfigModule
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
+    Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
@@ -218,6 +220,7 @@ public:
 
     // Property getters
     QVariantList dragActivationTriggers() const;
+    bool zoneSpanEnabled() const;
     QVariantList zoneSpanTriggers() const;
     bool toggleActivation() const;
     bool showZonesOnAllMonitors() const;
@@ -256,6 +259,7 @@ public:
     bool restoreOriginalSizeOnUnsnap() const;
     int stickyWindowHandling() const;
     bool restoreWindowsToZonesOnLogin() const;
+    bool snapAssistFeatureEnabled() const;
     bool snapAssistEnabled() const;
     QVariantList snapAssistTriggers() const;
     QVariantList defaultSnapAssistTriggers() const;
@@ -326,6 +330,7 @@ public:
 
     // Property setters
     void setDragActivationTriggers(const QVariantList& triggers);
+    void setZoneSpanEnabled(bool enabled);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setToggleActivation(bool enable);
     void setShowZonesOnAllMonitors(bool show);
@@ -362,6 +367,7 @@ public:
     void setRestoreOriginalSizeOnUnsnap(bool restore);
     void setStickyWindowHandling(int handling);
     void setRestoreWindowsToZonesOnLogin(bool restore);
+    void setSnapAssistFeatureEnabled(bool enabled);
     void setSnapAssistEnabled(bool enabled);
     void setSnapAssistTriggers(const QVariantList& triggers);
     void setDefaultLayoutId(const QString& layoutId);
@@ -475,6 +481,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void dragActivationTriggersChanged();
+    void zoneSpanEnabledChanged();
     void zoneSpanTriggersChanged();
     void toggleActivationChanged();
     void showZonesOnAllMonitorsChanged();
@@ -512,6 +519,7 @@ Q_SIGNALS:
     void restoreOriginalSizeOnUnsnapChanged();
     void stickyWindowHandlingChanged();
     void restoreWindowsToZonesOnLoginChanged();
+    void snapAssistFeatureEnabledChanged();
     void snapAssistEnabledChanged();
     void snapAssistTriggersChanged();
     void defaultLayoutIdChanged();

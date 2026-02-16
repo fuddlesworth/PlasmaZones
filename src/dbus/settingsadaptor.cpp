@@ -124,6 +124,8 @@ void SettingsAdaptor::initializeRegistry()
         return true;
     };
 
+    REGISTER_BOOL_SETTING("zoneSpanEnabled", zoneSpanEnabled, setZoneSpanEnabled)
+
     // Zone span modifier (legacy single value)
     m_getters[QStringLiteral("zoneSpanModifier")] = [this]() {
         return static_cast<int>(m_settings->zoneSpanModifier());
@@ -200,6 +202,7 @@ void SettingsAdaptor::initializeRegistry()
                           setKeepWindowsInZonesOnResolutionChange)
     REGISTER_BOOL_SETTING("moveNewWindowsToLastZone", moveNewWindowsToLastZone, setMoveNewWindowsToLastZone)
     REGISTER_BOOL_SETTING("restoreOriginalSizeOnUnsnap", restoreOriginalSizeOnUnsnap, setRestoreOriginalSizeOnUnsnap)
+    REGISTER_BOOL_SETTING("snapAssistFeatureEnabled", snapAssistFeatureEnabled, setSnapAssistFeatureEnabled)
     REGISTER_BOOL_SETTING("snapAssistEnabled", snapAssistEnabled, setSnapAssistEnabled)
 
     // Snap assist triggers (when always-enabled is off, hold any trigger at drop to enable)
