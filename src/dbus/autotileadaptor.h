@@ -163,11 +163,13 @@ public Q_SLOTS:
      * @brief Notify the daemon that a window has been focused
      *
      * Called by KWin effect when a window gains focus. This allows the
-     * autotile engine to track the focused window for focus cycling.
+     * autotile engine to track the focused window for focus cycling and
+     * updates the window-to-screen mapping for correct per-screen tiling.
      *
      * @param windowId Window ID that gained focus
+     * @param screenName Screen where the window is located
      */
-    void notifyWindowFocused(const QString &windowId);
+    void notifyWindowFocused(const QString &windowId, const QString &screenName);
 
     /**
      * @brief Float a specific window from autotile management

@@ -122,11 +122,12 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 
     m_autotileScreens = screens;
 
-    // Retile newly-added screens
+    // R1 fix: Retile newly-added screens without requiring pre-existing state.
+    // stateForScreen() creates the TilingState lazily, so windows that arrive
+    // shortly after (via KWin effect re-notification) have a state ready.
     for (const QString& screenName : added) {
-        if (m_screenStates.contains(screenName)) {
-            retileAfterOperation(screenName, true);
-        }
+        stateForScreen(screenName);
+        retileAfterOperation(screenName, true);
     }
 
     // Prune screen states for screens no longer in the autotile set
@@ -559,6 +560,11 @@ void AutotileEngine::processSettingsRetile()
 
 void AutotileEngine::retile(const QString &screenName)
 {
+    // R3/R4: m_retiling serves as a re-entrancy guard for both retile() and
+    // retileAfterOperation(). Both methods set it with QScopeGuard and check it
+    // on entry. They are mutually exclusive: retileAfterOperation() returns early
+    // if m_retiling is already true (set by retile()), so the dual QScopeGuard
+    // pattern cannot leave the flag inconsistent.
     if (m_retiling) {
         return;
     }
@@ -836,6 +842,31 @@ void AutotileEngine::floatWindow(const QString &windowId)
 
     qCInfo(lcAutotile) << "Window floated from autotile:" << windowId;
     Q_EMIT windowFloatingChanged(windowId, true);
+}
+
+void AutotileEngine::unfloatWindow(const QString &windowId)
+{
+    if (!warnIfEmptyWindowId(windowId, "unfloatWindow")) {
+        return;
+    }
+
+    TilingState *state = stateForWindow(windowId);
+    if (!state) {
+        qCDebug(lcAutotile) << "unfloatWindow: window not tracked:" << windowId;
+        return;
+    }
+
+    if (!state->isFloating(windowId)) {
+        qCDebug(lcAutotile) << "unfloatWindow: window not floating:" << windowId;
+        return;
+    }
+
+    state->setFloating(windowId, false);
+    QString screenName = m_windowToScreen.value(windowId);
+    retileAfterOperation(screenName, true);
+
+    qCInfo(lcAutotile) << "Window unfloated to autotile:" << windowId;
+    Q_EMIT windowFloatingChanged(windowId, false);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1124,13 +1155,15 @@ QString AutotileEngine::screenForWindow(const QString &windowId) const
         return m_windowToScreen.value(windowId);
     }
 
-    // Fallback to primary screen if screen not known
-    // Note: windowOpened() stores screen name before calling onWindowAdded(),
-    // so this fallback is only for edge cases (e.g., windows added via other paths)
+    // R6 fix: Warn when falling back to primary screen — this may indicate a
+    // missing screen name in windowOpened() or a stale m_windowToScreen entry.
     if (m_screenManager && m_screenManager->primaryScreen()) {
+        qCWarning(lcAutotile) << "screenForWindow: window" << windowId
+                              << "not in m_windowToScreen, falling back to primary screen";
         return m_screenManager->primaryScreen()->name();
     }
 
+    qCWarning(lcAutotile) << "screenForWindow: no screen found for window" << windowId;
     return QString();
 }
 

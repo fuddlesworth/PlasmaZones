@@ -2327,13 +2327,14 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     qCDebug(lcEffect) << "Notifying daemon: windowActivated" << windowId << "on screen" << screenName;
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowActivated"), windowId, screenName);
 
-    // Notify autotile engine of focus change for focus cycling/swap operations
+    // R2 fix: Notify autotile engine of focus change with screen name so
+    // m_windowToScreen is updated (also addresses R5: cross-screen detection)
     if (m_autotileScreens.contains(screenName)) {
         QDBusMessage msg = QDBusMessage::createMethodCall(
             DBus::ServiceName, DBus::ObjectPath,
             DBus::Interface::Autotile,
             QStringLiteral("notifyWindowFocused"));
-        msg << windowId;
+        msg << windowId << screenName;
         QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
         auto *watcher = new QDBusPendingCallWatcher(pending, this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
@@ -2599,7 +2600,9 @@ void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int
 {
     KWin::EffectWindow* w = findWindowById(windowId);
     if (!w) {
-        qCDebug(lcEffect) << "Autotile: window not found for tile request:" << windowId;
+        // R7 fix: Upgrade from debug to warning — a tile request for a missing
+        // window indicates a tracking inconsistency between daemon and effect
+        qCWarning(lcEffect) << "Autotile: window not found for tile request:" << windowId;
         return;
     }
 

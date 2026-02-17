@@ -354,7 +354,7 @@ void AutotileAdaptor::windowClosed(const QString &windowId)
     m_engine->windowClosed(windowId);
 }
 
-void AutotileAdaptor::notifyWindowFocused(const QString &windowId)
+void AutotileAdaptor::notifyWindowFocused(const QString &windowId, const QString &screenName)
 {
     if (!ensureEngine("notifyWindowFocused")) {
         return;
@@ -363,8 +363,11 @@ void AutotileAdaptor::notifyWindowFocused(const QString &windowId)
         qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty window ID (focus cleared)";
         return;
     }
-    qCDebug(lcDbusAutotile) << "D-Bus notifyWindowFocused:" << windowId;
-    m_engine->setFocusedWindow(windowId);
+    qCDebug(lcDbusAutotile) << "D-Bus notifyWindowFocused:" << windowId << "screen:" << screenName;
+    // R2 fix: Pass screen name to engine so m_windowToScreen is updated on focus
+    // change. This also addresses R5 (cross-screen window movement detection) since
+    // focus events carry the current screen, updating stale m_windowToScreen entries.
+    m_engine->windowFocused(windowId, screenName);
 }
 
 void AutotileAdaptor::floatWindow(const QString &windowId)

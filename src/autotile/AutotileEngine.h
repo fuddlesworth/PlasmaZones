@@ -378,6 +378,16 @@ public:
      */
     Q_INVOKABLE void floatWindow(const QString &windowId);
 
+    /**
+     * @brief Unfloat a specific window by its ID
+     *
+     * Removes the floating flag and re-inserts the window into the tiling
+     * layout. Counterpart to floatWindow().
+     *
+     * @param windowId Window identifier from KWin
+     */
+    Q_INVOKABLE void unfloatWindow(const QString &windowId);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Window event handlers (public API for external notification)
     // ═══════════════════════════════════════════════════════════════════════════

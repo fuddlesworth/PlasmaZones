@@ -86,7 +86,12 @@ bool TilingState::removeWindow(const QString &windowId)
     }
 
     m_windowOrder.removeAt(index);
-    m_floatingWindows.remove(windowId);
+    // F7 fix: Emit floatingChanged when removing a floating window so listeners
+    // (e.g., the daemon's windowFloatingChanged handler) can propagate the state change
+    bool wasFloating = m_floatingWindows.remove(windowId);
+    if (wasFloating) {
+        Q_EMIT floatingChanged(windowId, false);
+    }
 
     if (m_focusedWindow == windowId) {
         m_focusedWindow.clear();

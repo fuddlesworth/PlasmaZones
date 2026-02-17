@@ -777,10 +777,21 @@ void Daemon::start()
             }
         });
 
-        // Show text OSD when a window is floated/unfloated via shortcut or drag
+        // Sync autotile float state and show OSD when a window is floated/unfloated
         connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingChanged,
                 this, [this](const QString& windowId, bool floating) {
-            Q_UNUSED(windowId)
+            // F1+F2 fix: Sync floating state to WindowTrackingService and propagate
+            // to KWin effect's NavigationHandler::m_floatingWindows via D-Bus signal.
+            // WTA::setWindowFloating() calls WTS::setWindowFloating() + emits D-Bus signal.
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
+            }
+            // Save pre-float zone assignment for restore on unfloat
+            if (floating && m_windowTrackingService) {
+                m_windowTrackingService->unsnapForFloat(windowId);
+            }
+
+            // Show text OSD
             if (!m_settings || !m_settings->showOsdOnLayoutSwitch()
                 || m_settings->osdStyle() == OsdStyle::None) {
                 return;
