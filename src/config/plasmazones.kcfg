@@ -469,7 +469,13 @@
       <default>Meta+Ctrl+S</default>
     </entry>
 
-    <!-- Autotile shortcuts -->
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Autotile Shortcuts - separate group matching runtime "AutotileShortcuts" group
+       in settings.cpp load/save (not KGlobalAccel)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="AutotileShortcuts">
     <entry name="ToggleAutotileShortcut" type="String">
       <label>Shortcut to toggle auto-tiling on/off</label>
       <default>Meta+Shift+T</default>

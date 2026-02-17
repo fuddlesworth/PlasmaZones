@@ -63,6 +63,27 @@ QVector<QRect> BSPAlgorithm::calculateZones(int windowCount, const QRect &screen
     // Collect leaf geometries
     collectLeaves(m_root.get(), zones);
 
+    // Validate that all zones have positive dimensions.
+    // applyGeometry() returns early on degenerate splits, leaving child leaves
+    // with stale/default geometry from construction.
+    bool hasInvalidZone = false;
+    for (const QRect &zone : zones) {
+        if (!zone.isValid() || zone.width() <= 0 || zone.height() <= 0) {
+            hasInvalidZone = true;
+            break;
+        }
+    }
+    if (hasInvalidZone) {
+        // Fall back to equal columns layout
+        zones.clear();
+        const QVector<int> columnWidths = distributeEvenly(screenGeometry.width(), windowCount);
+        int currentX = screenGeometry.x();
+        for (int i = 0; i < windowCount; ++i) {
+            zones.append(QRect(currentX, screenGeometry.y(), columnWidths[i], screenGeometry.height()));
+            currentX += columnWidths[i];
+        }
+    }
+
     return zones;
 }
 

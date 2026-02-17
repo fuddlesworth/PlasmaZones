@@ -326,6 +326,96 @@ private Q_SLOTS:
         engine.retile();
         engine.retile(QStringLiteral("SomeScreen"));
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Window lifecycle tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testWindowLifecycle()
+    {
+        // Verify windowOpened/windowClosed update TilingState correctly
+        // and tilingChanged signals are emitted.
+        // Note: windowTiled signal requires a real ScreenManager to provide
+        // screen geometry, so it is not emitted with null dependencies.
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screenName = QStringLiteral("TestScreen");
+        const QString windowId = QStringLiteral("win-lifecycle-1");
+
+        // Enable autotile on a screen
+        QSet<QString> screens{screenName};
+        engine.setAutotileScreens(screens);
+        QVERIFY(engine.isEnabled());
+
+        // Spy on tilingChanged signal
+        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+
+        // Open a window
+        engine.windowOpened(windowId, screenName);
+
+        // Verify the window appears in the engine's tiling state
+        TilingState *state = engine.stateForScreen(screenName);
+        QVERIFY(state != nullptr);
+        QVERIFY(state->containsWindow(windowId));
+        QCOMPARE(state->windowCount(), 1);
+
+        // tilingChanged should have been emitted for the screen
+        QVERIFY(tilingSpy.count() >= 1);
+        QCOMPARE(tilingSpy.last().first().toString(), screenName);
+
+        // Close the window
+        tilingSpy.clear();
+        engine.windowClosed(windowId);
+
+        // Verify cleanup
+        QVERIFY(!state->containsWindow(windowId));
+        QCOMPARE(state->windowCount(), 0);
+
+        // tilingChanged should have been emitted for the close as well
+        QVERIFY(tilingSpy.count() >= 1);
+        QCOMPARE(tilingSpy.last().first().toString(), screenName);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Config round-trip tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testConfigRoundTrip()
+    {
+        AutotileConfig original;
+        original.innerGap = 5;
+        original.outerGap = 10;
+        original.splitRatio = 0.65;
+        original.masterCount = 2;
+        original.algorithmId = QStringLiteral("bsp");
+        original.smartGaps = false;
+        original.focusNewWindows = false;
+        original.focusFollowsMouse = true;
+        original.showActiveBorder = false;
+        original.activeBorderWidth = 4;
+        original.monocleHideOthers = false;
+        original.monocleShowTabs = true;
+        original.respectMinimumSize = false;
+        original.insertPosition = AutotileConfig::InsertPosition::AfterFocused;
+
+        QJsonObject json = original.toJson();
+        AutotileConfig restored = AutotileConfig::fromJson(json);
+
+        QCOMPARE(restored.innerGap, original.innerGap);
+        QCOMPARE(restored.outerGap, original.outerGap);
+        QCOMPARE(restored.splitRatio, original.splitRatio);
+        QCOMPARE(restored.masterCount, original.masterCount);
+        QCOMPARE(restored.algorithmId, original.algorithmId);
+        QCOMPARE(restored.smartGaps, original.smartGaps);
+        QCOMPARE(restored.focusNewWindows, original.focusNewWindows);
+        QCOMPARE(restored.focusFollowsMouse, original.focusFollowsMouse);
+        QCOMPARE(restored.showActiveBorder, original.showActiveBorder);
+        QCOMPARE(restored.activeBorderWidth, original.activeBorderWidth);
+        QCOMPARE(restored.monocleHideOthers, original.monocleHideOthers);
+        QCOMPARE(restored.monocleShowTabs, original.monocleShowTabs);
+        QCOMPARE(restored.respectMinimumSize, original.respectMinimumSize);
+        QCOMPARE(restored.insertPosition, original.insertPosition);
+    }
 };
 
 QTEST_MAIN(TestAutotileEngine)

@@ -187,6 +187,9 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     static int lastTilingMode() { return instance().defaultLastTilingModeValue(); }
+    // KConfigXT doesn't generate a public defaultLastManualLayoutIdValue() for
+    // String entries with empty <default></default>, so we hardcode here.
+    static QString lastManualLayoutId() { return QString(); }
     static QString lastAutotileAlgorithm() { return instance().defaultLastAutotileAlgorithmValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════

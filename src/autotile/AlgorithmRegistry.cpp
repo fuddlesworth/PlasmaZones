@@ -206,6 +206,10 @@ bool areAllZonesIdentical(const QVector<QRect> &zones)
 
 QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect> &zones, const QRect &previewRect)
 {
+    if (!previewRect.isValid() || previewRect.width() == 0 || previewRect.height() == 0) {
+        return {};
+    }
+
     QVariantList result;
     const bool isMonocle = areAllZonesIdentical(zones);
 

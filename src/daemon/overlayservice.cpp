@@ -669,6 +669,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
             continue;
         }
+        // Skip autotile-managed screens (overlay is for manual zone selection)
+        if (m_excludedScreens.contains(screen->name())) {
+            continue;
+        }
 
         if (!m_overlayWindows.contains(screen)) {
             createOverlayWindow(screen);
@@ -2003,6 +2007,11 @@ void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
     m_includeAutotileLayouts = includeAutotile;
     // Refresh visible zone selector windows with updated layout list
     refreshVisibleWindows();
+}
+
+void OverlayService::setExcludedScreens(const QSet<QString>& screenNames)
+{
+    m_excludedScreens = screenNames;
 }
 
 int OverlayService::visibleLayoutCount(const QString& screenName) const

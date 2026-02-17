@@ -2275,7 +2275,7 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
 
     // If we haven't notified the daemon about this window yet, record the close
     // so we can suppress the open if it arrives late (D-Bus ordering race)
-    if (!m_notifiedWindows.contains(windowId)) {
+    if (!m_notifiedWindows.contains(windowId) && m_autotileScreens.contains(screenName)) {
         m_pendingCloses.insert(windowId);
     }
 
@@ -2334,7 +2334,14 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
             DBus::Interface::Autotile,
             QStringLiteral("notifyWindowFocused"));
         msg << windowId;
-        QDBusConnection::sessionBus().asyncCall(msg);
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
+            w->deleteLater();
+            if (w->isError()) {
+                qCWarning(lcEffect) << "notifyWindowFocused D-Bus call failed for" << windowId << ":" << w->error().message();
+            }
+        });
     }
 }
 
@@ -2578,7 +2585,7 @@ void PlasmaZonesEffect::slotMonocleVisibilityChanged(const QString& focusedWindo
 {
     // Unminimize the focused window
     KWin::EffectWindow* focusedW = findWindowById(focusedWindowId);
-    if (focusedW) {
+    if (focusedW && shouldHandleWindow(focusedW)) {
         KWin::Window* kw = focusedW->window();
         if (kw && focusedW->isMinimized()) {
             kw->setMinimized(false);
@@ -2589,7 +2596,7 @@ void PlasmaZonesEffect::slotMonocleVisibilityChanged(const QString& focusedWindo
     // Minimize all other tiled windows
     for (const QString& windowId : windowsToHide) {
         KWin::EffectWindow* w = findWindowById(windowId);
-        if (!w) {
+        if (!w || !shouldHandleWindow(w)) {
             continue;
         }
         KWin::Window* kw = w->window();

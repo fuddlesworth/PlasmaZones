@@ -8,6 +8,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <atomic>
 #include <memory>
@@ -83,6 +84,15 @@ public:
      * are ever visible.
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
+
+    /**
+     * @brief Set screens to exclude from overlay display
+     *
+     * Used to suppress the overlay on autotile-managed screens in mixed
+     * multi-monitor mode. The overlay will not be shown or updated on
+     * screens whose names appear in the set.
+     */
+    void setExcludedScreens(const QSet<QString>& screenNames);
 
     // Screen management
     void setupForScreen(QScreen* screen);
@@ -317,6 +327,9 @@ private:
     // Layout filter: which types to include in zone picker (set by Daemon)
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
+
+    // Screens excluded from overlay display (autotile-managed screens)
+    QSet<QString> m_excludedScreens;
 };
 
 } // namespace PlasmaZones

@@ -25,6 +25,7 @@ class ISettings;
 class Layout;
 class Zone;
 class WindowTrackingAdaptor;
+class AutotileEngine;
 
 /**
  * @brief D-Bus adaptor for window drag handling
@@ -46,6 +47,15 @@ public:
     explicit WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* detector, LayoutManager* layoutManager,
                                ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
+
+    /**
+     * @brief Set the autotile engine for per-screen autotile checks
+     *
+     * When set, dragStopped() rejects snaps on autotile screens and
+     * prepareHandlerContext() skips overlay display on them.
+     * Pass nullptr during shutdown to prevent dangling pointer access.
+     */
+    void setAutotileEngine(AutotileEngine* engine) { m_autotileEngine = engine; }
 
 public Q_SLOTS:
     /**
@@ -153,6 +163,7 @@ private:
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
+    AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
 
     // Current drag state
     QString m_draggedWindowId;

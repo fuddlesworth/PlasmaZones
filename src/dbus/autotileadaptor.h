@@ -309,6 +309,17 @@ private:
     bool ensureEngineAndConfig(const char *methodName) const;
 
     AutotileEngine *m_engine = nullptr;
+
+public:
+    /**
+     * @brief Clear the engine pointer during shutdown
+     *
+     * Called by Daemon::stop() before the AutotileEngine unique_ptr is reset,
+     * so that any late D-Bus calls (arriving between engine destruction and
+     * adaptor destruction) hit ensureEngine()'s null check instead of a
+     * dangling pointer.
+     */
+    void clearEngine() { m_engine = nullptr; }
 };
 
 } // namespace PlasmaZones

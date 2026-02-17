@@ -5,6 +5,7 @@
 #include <QRect>
 #include <QVector>
 
+#include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingAlgorithm.h"
 #include "autotile/TilingState.h"
 #include "autotile/algorithms/MasterStackAlgorithm.h"
@@ -479,6 +480,38 @@ private Q_SLOTS:
         QVERIFY(zonesFillScreen(zones, squareScreen));
     }
 
+    void testBSP_persistentTreeStability()
+    {
+        auto *algo = AlgorithmRegistry::instance()->algorithm(QStringLiteral("bsp"));
+        QVERIFY(algo);
+        QRect screen(0, 0, 1920, 1080);
+        TilingState state(QStringLiteral("test"));
+
+        // Calculate zones for 4 windows
+        QVector<QRect> zones4 = algo->calculateZones(4, screen, state);
+        QCOMPARE(zones4.size(), 4);
+
+        // Calculate zones for 5 windows (incremental grow)
+        QVector<QRect> zones5 = algo->calculateZones(5, screen, state);
+        QCOMPARE(zones5.size(), 5);
+
+        // BSP grows by splitting the largest leaf into two children. The
+        // unsplit leaves retain their geometry, but their DFS index may shift.
+        // Check that most 4-window geometries appear somewhere in the 5-window set.
+        int preservedCount = 0;
+        for (const QRect &z4 : zones4) {
+            if (zones5.contains(z4)) {
+                preservedCount++;
+            }
+        }
+        QVERIFY2(preservedCount >= 3,
+                 qPrintable(QStringLiteral("Only %1/4 zone geometries preserved after grow").arg(preservedCount)));
+
+        // Shrink back to 4
+        QVector<QRect> zones4again = algo->calculateZones(4, screen, state);
+        QCOMPARE(zones4again.size(), 4);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // FibonacciAlgorithm tests
     // ═══════════════════════════════════════════════════════════════════════════
@@ -600,6 +633,10 @@ private Q_SLOTS:
             QVERIFY(zone.height() > 0);
         }
 
+        // NOTE: noOverlaps is intentionally NOT checked here. Fibonacci produces overlapping
+        // zones when the remaining area becomes too small to split, duplicating the last zone
+        // for surplus windows (similar to Monocle stacking). This is expected behavior.
+
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 
@@ -620,6 +657,10 @@ private Q_SLOTS:
             QVERIFY(zone.width() > 0);
             QVERIFY(zone.height() > 0);
         }
+
+        // NOTE: noOverlaps is intentionally NOT checked here. Fibonacci produces overlapping
+        // zones when the remaining area becomes too small to split, duplicating the last zone
+        // for surplus windows (similar to Monocle stacking). This is expected behavior.
 
         QVERIFY(allWithinBounds(zones, tinyScreen));
     }

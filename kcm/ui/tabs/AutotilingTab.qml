@@ -49,6 +49,7 @@ ScrollView {
             checked: kcm.autotileEnabled
             onToggled: kcm.autotileEnabled = checked
             font.bold: true
+            Accessible.name: i18n("Enable autotiling")
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -90,11 +91,11 @@ ScrollView {
                                 color: Kirigami.Theme.backgroundColor
                                 border.color: Kirigami.Theme.disabledTextColor
                                 border.width: 1
-                                radius: 4
+                                radius: Kirigami.Units.smallSpacing
 
                                 AlgorithmPreview {
                                     anchors.fill: parent
-                                    anchors.margins: 8
+                                    anchors.margins: Kirigami.Units.smallSpacing
                                     kcm: root.kcm
                                     showLabel: false
                                     algorithmId: root.kcm.autotileAlgorithm
@@ -126,6 +127,7 @@ ScrollView {
                             id: algorithmCombo
                             Layout.alignment: Qt.AlignHCenter
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 15
+                            Accessible.name: i18n("Tiling algorithm")
                             textRole: "name"
                             valueRole: "id"
                             model: kcm.availableAlgorithms()
@@ -186,6 +188,7 @@ ScrollView {
                             Slider {
                                 id: previewWindowSlider
                                 Layout.fillWidth: true
+                                Accessible.name: i18n("Maximum windows preview")
                                 from: 1
                                 to: 12
                                 stepSize: 1

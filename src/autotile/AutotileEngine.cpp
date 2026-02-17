@@ -129,6 +129,16 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         }
     }
 
+    // Prune screen states for screens no longer in the autotile set
+    QMutableHashIterator<QString, TilingState *> it(m_screenStates);
+    while (it.hasNext()) {
+        it.next();
+        if (!m_autotileScreens.contains(it.key())) {
+            it.value()->deleteLater();
+            it.remove();
+        }
+    }
+
     const bool nowEnabled = !m_autotileScreens.isEmpty();
     if (wasEnabled != nowEnabled) {
         Q_EMIT enabledChanged(nowEnabled);

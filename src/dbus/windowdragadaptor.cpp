@@ -20,6 +20,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/constants.h"
+#include "../autotile/AutotileEngine.h"
 
 namespace PlasmaZones {
 
@@ -236,6 +237,11 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
 {
     outScreen = screenAtPoint(x, y);
     if (!outScreen || (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(outScreen)))) {
+        return nullptr;
+    }
+
+    // Skip overlay and zone detection on autotile-managed screens
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(outScreen->name())) {
         return nullptr;
     }
 
@@ -639,6 +645,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
     bool useOverlayZone = true;
     if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenId)) {
+        useOverlayZone = false;
+    }
+
+    // Release on an autotile screen: do not snap to manual overlay zone.
+    // The autotile engine manages window placement on these screens; allowing a
+    // manual drag-snap would conflict with the engine's layout.
+    if (useOverlayZone && releaseScreen && m_autotileEngine
+        && m_autotileEngine->isAutotileScreen(releaseScreenName)) {
         useOverlayZone = false;
     }
 

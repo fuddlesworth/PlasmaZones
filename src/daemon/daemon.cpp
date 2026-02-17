@@ -322,6 +322,10 @@ bool Daemon::init()
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
 
+    // Give the window drag adaptor access to the autotile engine for per-screen
+    // autotile checks (overlay suppression and snap rejection on autotile screens)
+    m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
+
     // Create autotile D-Bus adaptor
     m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
 
@@ -1054,6 +1058,22 @@ void Daemon::stop()
         m_autotileEngine->setAutotileScreens({});
     }
 
+    // Clear the adaptor's raw engine pointer BEFORE destroying the engine.
+    // The adaptor is a Qt child of the daemon (destroyed later); a D-Bus call
+    // arriving between engine destruction and adaptor destruction would otherwise
+    // access freed memory. After clearing, ensureEngine() returns false.
+    if (m_autotileAdaptor) {
+        m_autotileAdaptor->clearEngine();
+    }
+
+    // Null the WindowDragAdaptor's engine pointer for the same reason.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setAutotileEngine(nullptr);
+    }
+
+    // Destroy the engine now (during stop(), before Qt child destruction order).
+    m_autotileEngine.reset();
+
     m_running = false;
 }
 
@@ -1076,6 +1096,8 @@ void Daemon::showOverlay()
             }
         }
     }
+    // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
+    // via m_excludedScreens (set in updateAutotileScreens)
     m_overlayService->show();
 }
 
@@ -1260,6 +1282,12 @@ void Daemon::updateAutotileScreens()
     }
 
     m_autotileEngine->setAutotileScreens(autotileScreens);
+
+    // Propagate to overlay service so initializeOverlay() skips autotile screens
+    if (m_overlayService) {
+        m_overlayService->setExcludedScreens(autotileScreens);
+    }
+
     qCDebug(lcDaemon) << "Updated autotile screens:" << autotileScreens;
 }
 

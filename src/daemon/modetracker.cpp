@@ -27,6 +27,9 @@ void ModeTracker::setCurrentMode(TilingMode mode)
     }
 
     m_currentMode = mode;
+    // Immediate save: mode changes are infrequent (user-initiated) and the data is
+    // critical for correct session restore, so we write synchronously rather than
+    // debouncing. KSharedConfig internally buffers writes.
     save();
     Q_EMIT currentModeChanged(mode);
     qCInfo(lcDaemon) << "Mode changed to:" << (mode == TilingMode::Autotile ? "Autotile" : "Manual");
@@ -48,6 +51,9 @@ void ModeTracker::recordManualLayout(const QString& layoutId)
 
     if (m_lastManualLayoutId != layoutId) {
         m_lastManualLayoutId = layoutId;
+        // Immediate save: mode changes are infrequent (user-initiated) and the data is
+        // critical for correct session restore, so we write synchronously rather than
+        // debouncing. KSharedConfig internally buffers writes.
         save();
         qCInfo(lcDaemon) << "Recorded manual layout:" << layoutId;
     }
@@ -67,6 +73,9 @@ void ModeTracker::recordAutotileAlgorithm(const QString& algorithmId)
     if (m_lastAutotileAlgorithm != algorithmId) {
         m_lastAutotileAlgorithm = algorithmId;
         Q_EMIT lastAutotileAlgorithmChanged(algorithmId);
+        // Immediate save: mode changes are infrequent (user-initiated) and the data is
+        // critical for correct session restore, so we write synchronously rather than
+        // debouncing. KSharedConfig internally buffers writes.
         save();
         qCInfo(lcDaemon) << "Recorded autotile algorithm:" << algorithmId;
     }

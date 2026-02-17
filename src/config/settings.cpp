@@ -18,6 +18,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
+#include "../autotile/AlgorithmRegistry.h"
 #include <climits> // For INT_MAX in readValidatedInt
 
 namespace PlasmaZones {
@@ -516,19 +517,9 @@ SETTINGS_SETTER(bool, AutotileEnabled, m_autotileEnabled, autotileEnabledChanged
 
 void Settings::setAutotileAlgorithm(const QString& algorithm)
 {
-    // Validate algorithm ID against known algorithms
-    static const QStringList validAlgorithms = {
-        DBus::AutotileAlgorithm::MasterStack,
-        DBus::AutotileAlgorithm::BSP,
-        DBus::AutotileAlgorithm::Columns,
-        DBus::AutotileAlgorithm::Rows,
-        DBus::AutotileAlgorithm::Fibonacci,
-        DBus::AutotileAlgorithm::Monocle,
-        DBus::AutotileAlgorithm::ThreeColumn
-    };
-
+    // Validate algorithm ID against the algorithm registry (single source of truth)
     QString validatedAlgorithm = algorithm;
-    if (!validAlgorithms.contains(algorithm)) {
+    if (!AlgorithmRegistry::instance()->algorithm(algorithm)) {
         qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
                             << "- falling back to master-stack";
         validatedAlgorithm = DBus::AutotileAlgorithm::MasterStack;

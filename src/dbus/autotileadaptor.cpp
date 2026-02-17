@@ -119,6 +119,9 @@ double AutotileAdaptor::masterRatio() const
     return m_engine->config()->splitRatio;
 }
 
+// NOTE: D-Bus property changes (masterRatio, masterCount, etc.) update runtime state
+// only. They are NOT written back to KConfig/Settings. Per-screen state (including
+// splitRatio) is persisted separately via TilingState save/load on daemon shutdown.
 void AutotileAdaptor::setMasterRatio(double ratio)
 {
     if (!ensureEngineAndConfig("setMasterRatio")) {
@@ -469,6 +472,11 @@ QString AutotileAdaptor::algorithmInfo(const QString &algorithmId)
 
 void AutotileAdaptor::onWindowTiled(const QString &windowId, const QRect &geometry)
 {
+    if (geometry.width() <= 0 || geometry.height() <= 0) {
+        qCWarning(lcDbusAutotile) << "onWindowTiled: invalid geometry for" << windowId << geometry;
+        return;
+    }
+
     // Convert engine's windowTiled signal to D-Bus windowTileRequested
     // This signal is listened to by the KWin effect to apply the geometry
     qCDebug(lcDbusAutotile) << "Emitting windowTileRequested:" << windowId << geometry;
