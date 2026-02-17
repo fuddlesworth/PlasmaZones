@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.5] - 2026-02-16
+
+### Fixed
+- **KCM tab buttons**: Prevent tab buttons from resizing when switching tabs
+
+### Performance
+- **Deferred D-Bus calls during drag**: Keyboard grab and D-Bus `dragStarted`/`dragMoved` calls are now deferred until an activation trigger is actually detected, eliminating 60Hz D-Bus traffic and keyboard grab/ungrab overhead for non-zone window drags ([#167])
+- **Deduplicated trigger read**: `WindowDragAdaptor::dragMoved()` now reads activation triggers once per call instead of twice
+
 ## [1.11.4] - 2026-02-16
 
 ### Fixed
