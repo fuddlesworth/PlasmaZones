@@ -40,19 +40,20 @@ public:
     QString draggedWindowId() const { return m_draggedWindowId; }
     QPointF lastCursorPos() const { return m_lastCursorPos; }
 
-    // Called by effect's poll timer (start/end detection only)
-    void pollWindowMoves();
+    // Event-driven drag start/end detection via KWin's per-window signals.
+    // Connected in setupWindowConnections() to windowStartUserMovedResized /
+    // windowFinishUserMovedResized, replacing the poll timer entirely.
+    void handleWindowStartMoveResize(KWin::EffectWindow* w);
+    void handleWindowFinishMoveResize(KWin::EffectWindow* w);
 
-    // Event-driven cursor position update during drag. Called from slotMouseChanged
-    // instead of the poll timer, eliminating QTimer jitter from the compositor frame
-    // path. Throttled to ~30Hz internally to avoid D-Bus flooding.
+    // Event-driven cursor position update during drag. Called from slotMouseChanged.
+    // Throttled to ~30Hz internally to avoid D-Bus flooding.
     void updateCursorPosition(const QPointF& cursorPos);
 
     // Force-end drag when a relevant mouse button is released.
     // Called from slotMouseChanged to end the drag immediately at button release,
-    // rather than waiting for the poll timer. Fires on either LMB release or
-    // activation-button release (e.g. RMB), whichever comes first. This is
-    // essential because KWin keeps isUserMove() true until ALL buttons are released.
+    // rather than waiting for windowFinishUserMovedResized. This is essential
+    // because KWin keeps isUserMove() true until ALL buttons are released.
     void forceEnd(const QPointF& cursorPos);
 
     // Called when window is closed during drag
@@ -67,7 +68,7 @@ Q_SIGNALS:
     void dragStopped(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
 
 private:
-    // Clear drag state and emit dragStopped (shared by pollWindowMoves and forceEnd)
+    // Clear drag state and emit dragStopped (shared by forceEnd and handleWindowFinishMoveResize)
     // cancelled = true when the drag ended externally (e.g. Escape cancelled interactive move)
     // cancelled = false when the drag ended normally (mouse button released)
     void finishDrag(bool cancelled);
@@ -76,9 +77,6 @@ private:
     KWin::EffectWindow* m_draggedWindow = nullptr;
     QString m_draggedWindowId;
     QPointF m_lastCursorPos;
-
-    // After forceEnd(), suppress new drag detection for this window until isUserMove() clears
-    KWin::EffectWindow* m_forceEndedWindow = nullptr;
 
     // Throttle event-driven dragMoved signals to ~30Hz (32ms intervals).
     // Without throttling, 1000Hz mouse input would flood D-Bus.

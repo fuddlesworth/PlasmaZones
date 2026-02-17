@@ -242,12 +242,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 }
                 m_dragActivationDetected = false;
 
-                // Return poll timer to idle rate now that the drag is over.
-                // Fast 16ms polling is only needed while LMB is held / drag active.
-                if (m_pollTimer.interval() != 500) {
-                    m_pollTimer.start(500);
-                }
-
                 if (!m_dragStartedSent) {
                     // Drag ended without ever activating zones — no D-Bus state to clean up
                     m_pendingDragWindowId.clear();
@@ -348,17 +342,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Load exclusion settings from daemon
     loadCachedSettings();
 
-    // Setup polling timer for detecting window moves
-    // In KWin 6, we poll windows to check isUserMove() state
-    // Idle rate: 500ms poll just as a safety net for edge-case drag detection.
-    // Switches to 16ms (~60Hz) on LMB press (slotMouseChanged) for responsive
-    // drag tracking, then back to 500ms when the drag ends. This eliminates
-    // the continuous 60Hz stacking-order scan that ran on the compositor thread
-    // even when no drag was happening — a significant source of frame-time
-    // jitter on high-refresh-rate displays (see discussion #167).
-    m_pollTimer.setInterval(500);
-    connect(&m_pollTimer, &QTimer::timeout, this, &PlasmaZonesEffect::pollWindowMoves);
-
     // Setup screen geometry change debounce timer
     // This prevents rapid-fire updates from causing windows to be resnapped unnecessarily
     // when monitors are connected/disconnected or arrangement changes occur
@@ -374,9 +357,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     for (KWin::EffectWindow* w : windows) {
         setupWindowConnections(w);
     }
-
-    // Start polling
-    m_pollTimer.start();
 
     // The daemon disables KWin's Quick Tile via kwriteconfig6. We don't reserve electric borders
     // here because that would turn on the edge effect visually; the daemon's config approach
@@ -409,7 +389,6 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         KWin::effects->ungrabKeyboard();
         m_keyboardGrabbed = false;
     }
-    m_pollTimer.stop();
     m_screenChangeDebounce.stop();
     // We no longer reserve/unreserve edges; the daemon disables KWin snap via config.
 }
@@ -529,13 +508,22 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         updateWindowStickyState(window);
     });
 
-    // NOTE: windowFrameGeometryChanged is intentionally NOT connected for drag tracking.
-    // The DragTracker poll timer already sends dragMoved updates at a controlled rate.
-    // Connecting here previously caused frame-rate D-Bus spam (60-144+ calls/sec) because
-    // the signal fires on every pixel of window movement during drag, each triggering a
-    // callDragMoved D-Bus call. This overwhelmed the daemon (which recalculates zone
-    // geometries on every call) and added marshalling overhead on the compositor thread,
-    // causing visible stutter during window drag. See discussion #167.
+    // Detect drag start/end via KWin's per-window signals instead of polling.
+    // windowStartUserMovedResized fires once when an interactive move (or resize) begins;
+    // windowFinishUserMovedResized fires once when it ends (button release, Escape, etc.).
+    // This eliminates the poll timer that previously scanned the full stacking order at
+    // 32ms intervals during drag — a significant source of compositor-thread overhead.
+    //
+    // NOTE: windowFrameGeometryChanged / windowStepUserMovedResized are intentionally NOT
+    // connected for drag tracking. They fire on every pixel of movement, which would flood
+    // D-Bus. Cursor position updates are handled event-driven via slotMouseChanged →
+    // DragTracker::updateCursorPosition(), throttled to ~30Hz.
+    connect(w, &KWin::EffectWindow::windowStartUserMovedResized, this, [this](KWin::EffectWindow* window) {
+        m_dragTracker->handleWindowStartMoveResize(window);
+    });
+    connect(w, &KWin::EffectWindow::windowFinishUserMovedResized, this, [this](KWin::EffectWindow* window) {
+        m_dragTracker->handleWindowFinishMoveResize(window);
+    });
 }
 
 void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
@@ -558,26 +546,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     }
     m_currentMouseButtons = buttons;
 
-    // LMB just pressed → switch poll timer to active rate (32ms / ~30Hz) so we
-    // detect isUserMove() promptly. Without this, the idle 500ms rate would delay
-    // drag detection by up to half a second. 30Hz is chosen over 60Hz because
-    // zone detection doesn't need sub-33ms updates — the visual highlight latency
-    // is imperceptible — and halving D-Bus traffic significantly reduces compositor
-    // thread contention from message serialization (see discussion #167).
-    if ((buttons & Qt::LeftButton) && !(oldbuttons & Qt::LeftButton)) {
-        if (m_pollTimer.interval() != 32) {
-            m_pollTimer.start(32);
-        }
-    }
-
     if (m_dragTracker->isDragging()) {
         if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {
             // Primary button released = drag is over. Force-end regardless of whether
             // other buttons (e.g. right-click for zone activation) are still held.
             //
-            // KWin keeps isUserMove() true while any button is held, so without
-            // forceEnd the poll timer wouldn't detect drag end until ALL buttons
-            // are released.
+            // KWin keeps isUserMove() true while any button is held, so
+            // windowFinishUserMovedResized wouldn't fire until ALL buttons are
+            // released. forceEnd() gives immediate snap response on LMB release.
             //
             // After forceEnd, applySnapGeometry will defer (retry every 100 ms)
             // until isUserMove() clears when the remaining buttons are released.
@@ -737,12 +713,6 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "Daemon signaled settingsChanged - reloading settings";
     loadCachedSettings();
-}
-
-void PlasmaZonesEffect::pollWindowMoves()
-{
-    // Delegate to DragTracker
-    m_dragTracker->pollWindowMoves();
 }
 
 QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
@@ -1183,8 +1153,6 @@ bool PlasmaZonesEffect::anyLocalTriggerHeld() const
     }
     return false;
 }
-
-
 
 bool PlasmaZonesEffect::detectActivationAndGrab()
 {

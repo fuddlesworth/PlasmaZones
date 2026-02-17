@@ -77,7 +77,6 @@ private Q_SLOTS:
     void slotWindowAdded(KWin::EffectWindow* w);
     void slotWindowClosed(KWin::EffectWindow* w);
     void slotWindowActivated(KWin::EffectWindow* w);
-    void pollWindowMoves();
     void slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
                           Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                           Qt::KeyboardModifiers oldmodifiers);
@@ -309,9 +308,6 @@ private:
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
     std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
     std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
-
-    // Polling timer for detecting window moves
-    QTimer m_pollTimer;
 
     // Screen geometry change debouncing
     // The virtualScreenGeometryChanged signal can fire rapidly (monitor connect/disconnect,
