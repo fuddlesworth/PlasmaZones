@@ -387,6 +387,25 @@ private:
     int m_minimumWindowHeight = 150;
     bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
 
+    // Autotile: track windows already notified to daemon to avoid duplicate notifications
+    QSet<QString> m_notifiedWindows;
+
+    // Autotile: track windows closed before open was sent (D-Bus ordering race guard)
+    QSet<QString> m_pendingCloses;
+
+    // Autotile: set of screens using autotile (gating drag/snap/overlay behavior per-screen)
+    QSet<QString> m_autotileScreens;
+
+    // Autotile: saved pre-autotile window geometries per screen, for restoring
+    // when a screen leaves autotile mode. Key = screen name, value = (windowId → geometry).
+    QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
+
+    // Autotile: true when the current drag was started on an autotile screen
+    // (callDragStarted was skipped). Captured at drag start so the drag end
+    // handler uses the same decision, preventing a race where m_autotileScreens
+    // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
+    bool m_dragBypassedForAutotile = false;
+
     // Cached activation settings (loaded from daemon via D-Bus, updated on settingsChanged)
     // Used for local trigger checking to gate D-Bus calls (see anyLocalTriggerHeld)
     //
@@ -411,21 +430,6 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
-
-    // Autotile: track windows already notified to daemon to avoid duplicate notifications
-    QSet<QString> m_notifiedWindows;
-
-    // Autotile: track windows closed before open was sent (D-Bus ordering race guard)
-    QSet<QString> m_pendingCloses;
-
-    // Autotile: set of screens using autotile (gating drag/snap/overlay behavior per-screen)
-    QSet<QString> m_autotileScreens;
-
-    // Autotile: true when the current drag was started on an autotile screen
-    // (callDragStarted was skipped). Captured at drag start so the drag end
-    // handler uses the same decision, preventing a race where m_autotileScreens
-    // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
-    bool m_dragBypassedForAutotile = false;
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

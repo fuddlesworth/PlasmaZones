@@ -368,6 +368,18 @@ public Q_SLOTS:
     void resnapToNewLayout();
 
     /**
+     * @brief Resnap windows to their current zone assignments
+     *
+     * Used when restoring windows after autotile toggle-off. Autotile bypasses the
+     * normal zone-snap tracking, so the pre-autotile zone assignments are still valid.
+     * This method computes zone geometries from those assignments and emits
+     * resnapToNewLayoutRequested for the KWin effect to reposition windows.
+     *
+     * @param screenFilter When non-empty, only resnap windows on this screen
+     */
+    void resnapCurrentAssignments(const QString& screenFilter = QString());
+
+    /**
      * @brief Calculate snap assignments for all provided windows
      * @param windowIds List of unsnapped window IDs
      * @param screenName Screen for layout/geometry resolution

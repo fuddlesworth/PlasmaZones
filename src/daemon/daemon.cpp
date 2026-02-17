@@ -760,21 +760,37 @@ void Daemon::start()
     // Connect autotile engine signals
     if (m_autotileEngine) {
         // Autotile engine signals → OSD (use display name, not algorithm ID)
-        connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged,
-                this, [this](const QString& screenName) {
-            if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-                auto *algo = AlgorithmRegistry::instance()->algorithm(m_autotileEngine->algorithm());
-                QString displayName = algo ? algo->name() : m_autotileEngine->algorithm();
-                showAutotileOsd(displayName, screenName);
-            }
-        });
-
-        // Track algorithm changes in mode tracker
+        // Show OSD when algorithm changes (not on every retile — tilingChanged
+        // fires for float, swap, window open/close, etc. which is too noisy)
         connect(m_autotileEngine.get(), &AutotileEngine::algorithmChanged,
                 this, [this](const QString& algorithmId) {
             if (m_modeTracker) {
                 m_modeTracker->recordAutotileAlgorithm(algorithmId);
             }
+            // Only show OSD when actually in autotile mode — loadState() emits
+            // algorithmChanged during startup even if we're in manual mode.
+            if (m_modeTracker && m_modeTracker->isAutotileMode()
+                && m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                auto *algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+                QString displayName = algo ? algo->name() : algorithmId;
+                showAutotileOsd(displayName, QString());
+            }
+        });
+
+        // Show text OSD when a window is floated/unfloated via shortcut or drag
+        connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingChanged,
+                this, [this](const QString& windowId, bool floating) {
+            Q_UNUSED(windowId)
+            if (!m_settings || !m_settings->showOsdOnLayoutSwitch()
+                || m_settings->osdStyle() == OsdStyle::None) {
+                return;
+            }
+            QDBusMessage msg = QDBusMessage::createMethodCall(
+                QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+            QString displayText = floating ? i18n("Window Floated") : i18n("Window Tiled");
+            msg << QStringLiteral("plasmazones") << displayText;
+            QDBusConnection::sessionBus().asyncCall(msg);
         });
 
         // ═══════════════════════════════════════════════════════════════════════════
@@ -801,20 +817,47 @@ void Daemon::start()
             QString activity = (m_activityManager && ActivityManager::isAvailable())
                                ? m_activityManager->currentActivity() : QString();
 
+            // Set the screen context so applyEntry knows which screen to assign
+            m_unifiedLayoutController->setCurrentScreenName(screenId);
+
+            // Temporarily include both layout types so applyLayoutById can find the
+            // target across the mode boundary.  The subsequent layoutApplied /
+            // autotileApplied signal will call updateLayoutFilter() and restore the
+            // correct exclusive filter for the new mode.
+            m_unifiedLayoutController->setLayoutFilter(true, true);
+
             QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
 
-            if (LayoutId::isAutotile(currentAssignment)) {
+            bool applied = false;
+            const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
+            if (wasAutotile) {
                 // Currently autotile → switch to last manual layout
                 QString layoutId = m_modeTracker->lastManualLayoutId();
                 if (!layoutId.isEmpty()) {
-                    m_unifiedLayoutController->applyLayoutById(layoutId);
+                    applied = m_unifiedLayoutController->applyLayoutById(layoutId);
                 }
             } else {
                 // Currently manual → switch to last autotile algorithm
                 QString algoId = m_modeTracker->lastAutotileAlgorithm();
                 if (!algoId.isEmpty()) {
-                    m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
+                    applied = m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
                 }
+            }
+
+            // If apply failed (e.g. layout was deleted), restore the correct filter
+            if (!applied) {
+                updateLayoutFilter();
+            }
+
+            // When switching autotile→manual, windows need to be moved back to
+            // their pre-autotile zone positions. Autotile bypasses the normal
+            // windowSnapped tracking, so m_windowZoneAssignments still holds
+            // the zone assignments from before autotile was enabled.
+            // Filter by connector name (screen->name()) to match what KWin
+            // stores in m_windowScreenAssignments — only resnap windows on the
+            // screen that was actually toggled.
+            if (applied && wasAutotile && m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->resnapCurrentAssignments(screen->name());
             }
         });
 
@@ -893,6 +936,10 @@ void Daemon::start()
                     }
                 }
             }
+            // Resnap windows back to their pre-autotile zone positions (all screens)
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->resnapCurrentAssignments();
+            }
         }
 
         updateLayoutFilter();
@@ -915,9 +962,12 @@ void Daemon::start()
 
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied,
             this, [this](const QString& algorithmName, int windowCount) {
-        Q_UNUSED(algorithmName) Q_UNUSED(windowCount)
+        Q_UNUSED(windowCount)
         if (m_modeTracker) {
             m_modeTracker->setCurrentMode(TilingMode::Autotile);
+        }
+        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+            showAutotileOsd(algorithmName, m_unifiedLayoutController->currentScreenName());
         }
     });
 

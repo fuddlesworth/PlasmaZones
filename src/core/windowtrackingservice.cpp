@@ -1120,6 +1120,50 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
     return result;
 }
 
+QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
+{
+    QVector<RotationEntry> result;
+
+    for (auto it = m_windowZoneAssignments.constBegin();
+         it != m_windowZoneAssignments.constEnd(); ++it) {
+        const QString& windowId = it.key();
+        const QStringList& zoneIds = it.value();
+        if (zoneIds.isEmpty()) {
+            continue;
+        }
+        if (isWindowFloating(windowId)) {
+            continue;
+        }
+
+        QString screenName = m_windowScreenAssignments.value(windowId);
+        if (!screenFilter.isEmpty() && screenName != screenFilter) {
+            continue;
+        }
+
+        QString stableId = Utils::extractStableId(windowId);
+        if (stableId.isEmpty()) {
+            continue;
+        }
+
+        QRect geo = (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName)
+                                          : zoneGeometry(zoneIds.first(), screenName);
+        if (!geo.isValid()) {
+            continue;
+        }
+
+        RotationEntry entry;
+        entry.windowId = stableId;
+        entry.sourceZoneId = QString();
+        entry.targetZoneId = zoneIds.first();
+        entry.targetGeometry = geo;
+        result.append(entry);
+    }
+
+    qCInfo(lcCore) << "Resnap from current assignments:" << result.size() << "windows"
+                   << (screenFilter.isEmpty() ? QStringLiteral("(all screens)") : QStringLiteral("(screen: %1)").arg(screenFilter));
+    return result;
+}
+
 QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStringList& windowIds,
                                                                       const QString& screenName) const
 {

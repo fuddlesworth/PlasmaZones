@@ -2462,7 +2462,7 @@ void PlasmaZonesEffect::loadAutotileSettings()
             m_autotileScreens = added;
             qCInfo(lcEffect) << "Loaded autotile screens:" << m_autotileScreens;
 
-            // When new autotile screens are added, re-notify windows on those screens
+            // Save pre-autotile geometries and re-notify windows on added screens
             // (they may have been skipped because m_autotileScreens was empty at startup)
             if (!added.isEmpty()) {
                 const auto windows = KWin::effects->stackingOrder();
@@ -2471,6 +2471,7 @@ void PlasmaZonesEffect::loadAutotileSettings()
                         const QString screenName = getWindowScreenName(win);
                         if (added.contains(screenName)) {
                             const QString windowId = getWindowId(win);
+                            m_preAutotileGeometries[screenName][windowId] = win->frameGeometry();
                             m_notifiedWindows.remove(windowId); // Allow re-notification
                             notifyWindowAdded(win);
                         }
@@ -2493,43 +2494,80 @@ void PlasmaZonesEffect::slotAutotileEnabledChanged(bool enabled)
 void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenNames)
 {
     const QSet<QString> newScreens(screenNames.begin(), screenNames.end());
-
-    // Clear notified windows for screens that left the autotile set so they
-    // get re-notified if the screen is later re-added to autotile.
-    // Single pass over stacking order instead of per-window findWindowById lookups.
     const QSet<QString> removed = m_autotileScreens - newScreens;
+    const QSet<QString> added = newScreens - m_autotileScreens;
+
+    // Single pass: handle both removed and added screens in one stacking order scan
+    const auto windows = KWin::effects->stackingOrder();
+
     if (!removed.isEmpty()) {
+        // Clear notified windows for screens that left autotile so they
+        // get re-notified if the screen is later re-added.
         QSet<QString> windowsOnRemovedScreens;
-        const auto windows = KWin::effects->stackingOrder();
         for (KWin::EffectWindow* w : windows) {
             if (w && removed.contains(getWindowScreenName(w))) {
                 windowsOnRemovedScreens.insert(getWindowId(w));
             }
         }
         m_notifiedWindows -= windowsOnRemovedScreens;
-    }
 
-    // Compute newly added autotile screens
-    const QSet<QString> added = newScreens - m_autotileScreens;
-
-    m_autotileScreens = newScreens;
-    qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
-
-    // When new autotile screens are added, re-notify windows on those screens
-    // (they may have been skipped because m_autotileScreens was empty at startup)
-    if (!added.isEmpty()) {
-        const auto windows = KWin::effects->stackingOrder();
-        for (KWin::EffectWindow* w : windows) {
-            if (w && shouldHandleWindow(w)) {
-                const QString screenName = getWindowScreenName(w);
-                if (added.contains(screenName)) {
-                    const QString windowId = getWindowId(w);
-                    m_notifiedWindows.remove(windowId); // Allow re-notification
-                    notifyWindowAdded(w);
+        // Restore pre-autotile geometries for windows on removed screens.
+        // This covers windows that weren't snapped to zones before autotile
+        // (the daemon's resnapCurrentAssignments handles zone-snapped windows).
+        for (const QString& screenName : removed) {
+            const auto savedIt = m_preAutotileGeometries.constFind(screenName);
+            if (savedIt == m_preAutotileGeometries.constEnd()) {
+                continue;
+            }
+            const QHash<QString, QRectF>& savedGeometries = savedIt.value();
+            for (KWin::EffectWindow* w : windows) {
+                if (!w || !shouldHandleWindow(w) || getWindowScreenName(w) != screenName) {
+                    continue;
+                }
+                const QString windowId = getWindowId(w);
+                const auto geoIt = savedGeometries.constFind(windowId);
+                if (geoIt == savedGeometries.constEnd()) {
+                    continue;
+                }
+                const QRectF& savedGeo = geoIt.value();
+                if (savedGeo.isValid() && QRectF(w->frameGeometry()) != savedGeo) {
+                    qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << windowId
+                                     << "from" << w->frameGeometry() << "to" << savedGeo;
+                    applySnapGeometry(w, savedGeo.toRect());
                 }
             }
+            m_preAutotileGeometries.remove(screenName);
         }
     }
+
+    // Update m_autotileScreens BEFORE the added-screens loop so that
+    // notifyWindowAdded()'s m_autotileScreens.contains() check sees the
+    // new screens. Without this, windows on newly-added autotile screens
+    // would silently skip the windowOpened D-Bus call.
+    m_autotileScreens = newScreens;
+
+    // Save pre-autotile geometries for windows on newly added screens
+    if (!added.isEmpty()) {
+        for (KWin::EffectWindow* w : windows) {
+            if (!w || !shouldHandleWindow(w)) {
+                continue;
+            }
+            const QString screenName = getWindowScreenName(w);
+            if (!added.contains(screenName)) {
+                continue;
+            }
+            const QString windowId = getWindowId(w);
+            m_preAutotileGeometries[screenName][windowId] = w->frameGeometry();
+
+            // Re-notify windows on added screens (they may have been skipped
+            // because m_autotileScreens was empty at startup)
+            m_notifiedWindows.remove(windowId);
+            notifyWindowAdded(w);
+        }
+        qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
+    }
+
+    qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const

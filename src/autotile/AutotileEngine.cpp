@@ -472,12 +472,16 @@ void AutotileEngine::loadState()
         return;
     }
 
-    // Restore global state — algorithm is applied immediately, enabled is deferred
-    // until windows are announced to avoid retiling an empty layout
+    // Restore algorithm silently — do NOT emit algorithmChanged here.
+    // loadState() is called during Daemon::start() before the event loop runs.
+    // Emitting algorithmChanged triggers showAutotileOsd() which creates a
+    // QML/LayerShellQt window. On Wayland, that surface creation can deadlock
+    // with the compositor if it's simultaneously performing synchronous D-Bus
+    // introspection against this daemon (QDBusInterface constructor blocks the
+    // compositor thread). See also: "Don't pre-create overlay windows at startup."
     const QString savedAlgorithm = group.readEntry("algorithm", m_algorithmId);
     if (AlgorithmRegistry::instance()->hasAlgorithm(savedAlgorithm)) {
         m_algorithmId = savedAlgorithm;
-        Q_EMIT algorithmChanged(m_algorithmId);
     }
 
     // Parse per-screen state
@@ -802,6 +806,7 @@ void AutotileEngine::toggleFocusedWindowFloat()
 
     bool isNowFloating = state->isFloating(focused);
     qCInfo(lcAutotile) << "Window" << focused << (isNowFloating ? "now floating" : "now tiled");
+    Q_EMIT windowFloatingChanged(focused, isNowFloating);
 }
 
 void AutotileEngine::floatWindow(const QString &windowId)
@@ -830,6 +835,7 @@ void AutotileEngine::floatWindow(const QString &windowId)
     retileAfterOperation(screenName, true);
 
     qCInfo(lcAutotile) << "Window floated from autotile:" << windowId;
+    Q_EMIT windowFloatingChanged(windowId, true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

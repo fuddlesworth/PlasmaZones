@@ -396,6 +396,19 @@ public:
      */
     QVector<RotationEntry> calculateResnapFromPreviousLayout();
 
+    /**
+     * @brief Calculate resnap data from current zone assignments
+     *
+     * Used when restoring windows after autotile toggle-off: the autotile engine
+     * repositioned windows, but m_windowZoneAssignments still holds the pre-autotile
+     * zone assignments. This method computes zone geometries for those assignments
+     * so windows can be moved back to their zone positions.
+     *
+     * @param screenFilter When non-empty, only include windows on this screen
+     * @return List of rotation entries for KWin to apply
+     */
+    QVector<RotationEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════

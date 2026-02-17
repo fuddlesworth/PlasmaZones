@@ -949,6 +949,22 @@ void WindowTrackingAdaptor::resnapToNewLayout()
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
+void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter)
+{
+    qCDebug(lcDbusWindow) << "resnapCurrentAssignments called (autotile toggle-off restore)"
+                          << "screen:" << (screenFilter.isEmpty() ? QStringLiteral("all") : screenFilter);
+
+    QVector<RotationEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
+    if (entries.isEmpty()) {
+        qCDebug(lcDbusWindow) << "No windows to resnap from current assignments";
+        return;
+    }
+
+    QString resnapData = serializeRotationEntries(entries);
+    qCInfo(lcDbusWindow) << "Resnapping" << entries.size() << "windows to current zone assignments";
+    Q_EMIT resnapToNewLayoutRequested(resnapData);
+}
+
 void WindowTrackingAdaptor::snapAllWindows(const QString& screenName)
 {
     qCDebug(lcDbusWindow) << "snapAllWindows called for screen:" << screenName;

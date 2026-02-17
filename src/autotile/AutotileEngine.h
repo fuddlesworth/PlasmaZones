@@ -440,6 +440,13 @@ Q_SIGNALS:
     void tilingChanged(const QString &screenName);
 
     /**
+     * @brief Emitted when a window's floating state changes
+     * @param windowId Window whose floating state changed
+     * @param floating True if the window is now floating, false if tiled
+     */
+    void windowFloatingChanged(const QString &windowId, bool floating);
+
+    /**
      * @brief Emitted when a window is tiled to a new geometry
      * @param windowId Window that was tiled
      * @param geometry New window geometry
