@@ -680,7 +680,7 @@ ScrollView {
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Reopening:")
-                        text: i18n("Remember each window's last zone")
+                        text: i18n("Restore windows to their previous zone")
                         checked: kcm.restoreWindowsToZonesOnLogin
                         onToggled: kcm.restoreWindowsToZonesOnLogin = checked
                         ToolTip.visible: hovered && root.isCurrentTab
