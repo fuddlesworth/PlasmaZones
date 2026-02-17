@@ -201,21 +201,36 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_dragTracker(std::make_unique<DragTracker>(this))
 {
     // Connect DragTracker signals
+    //
+    // Performance optimization: keyboard grab and D-Bus dragMoved calls are deferred
+    // until an activation trigger is detected. This eliminates 60Hz D-Bus traffic and
+    // keyboard grab/ungrab overhead for non-zone window drags (discussion #167).
     connect(m_dragTracker.get(), &DragTracker::dragStarted, this,
             [this](KWin::EffectWindow* w, const QString& windowId, const QRectF& geometry) {
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
-                callDragStarted(windowId, geometry);
-                // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
-                // Without this, Escape cancels the interactive move AND the overlay.
-                // With the grab, Escape only dismisses the overlay while the drag continues.
-                if (!m_keyboardGrabbed) {
-                    KWin::effects->grabKeyboard(this);
-                    m_keyboardGrabbed = true;
+                m_dragActivationDetected = false;
+                m_dragStartedSent = false;
+                m_pendingDragWindowId = windowId;
+                m_pendingDragGeometry = geometry;
+
+                // Check if zones are needed right now. If so, send dragStarted
+                // immediately and grab keyboard. Otherwise defer until activation
+                // is detected mid-drag (or skip entirely if user never activates).
+                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
+                    sendDeferredDragStarted();
                 }
             });
     connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
             [this](const QString& windowId, const QPointF& cursorPos) {
+                // Gate D-Bus calls: if no activation trigger is held, toggle mode is off,
+                // and zone selector is disabled, skip the D-Bus call entirely. This
+                // eliminates 60Hz D-Bus traffic during non-zone drags.
+                if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled) {
+                    return;
+                }
+                // Ensure dragStarted was sent before any dragMoved
+                sendDeferredDragStarted();
                 callDragMoved(windowId, cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
             });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
@@ -225,6 +240,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     KWin::effects->ungrabKeyboard();
                     m_keyboardGrabbed = false;
                 }
+                m_dragActivationDetected = false;
+
+                if (!m_dragStartedSent) {
+                    // Drag ended without ever activating zones — no D-Bus state to clean up
+                    m_pendingDragWindowId.clear();
+                    m_pendingDragGeometry = QRectF();
+                    return;
+                }
+                m_dragStartedSent = false;
+                m_pendingDragWindowId.clear();
+                m_pendingDragGeometry = QRectF();
+
                 if (cancelled) {
                     // Drag was cancelled externally (e.g. window went fullscreen).
                     // Tell the daemon to cancel rather than snap to the hovered zone.
@@ -305,7 +332,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
             // Re-sync floating state and settings from daemon
             syncFloatingWindowsFromDaemon();
-            loadExclusionSettings();
+            loadCachedSettings();
         });
     });
 
@@ -313,7 +340,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     syncFloatingWindowsFromDaemon();
 
     // Load exclusion settings from daemon
-    loadExclusionSettings();
+    loadCachedSettings();
 
     // Setup polling timer for detecting window moves
     // In KWin 6, we poll windows to check isUserMove() state
@@ -537,8 +564,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // the overlay based on whether the activation trigger is currently held,
             // matching keyboard modifier behavior (hold to show, release to hide,
             // re-press to show again).
-            QPointF cursorPos = KWin::effects->cursorPos();
-            callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+            //
+            // Gating: same logic as poll-based dragMoved — skip if no activation
+            // detected and no reason to send (avoids D-Bus traffic for non-zone drags).
+            if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
+                sendDeferredDragStarted();
+                QPointF cursorPos = KWin::effects->cursorPos();
+                callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+            }
         }
     }
 
@@ -674,7 +707,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
 void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "Daemon signaled settingsChanged - reloading settings";
-    loadExclusionSettings();
+    loadCachedSettings();
 }
 
 void PlasmaZonesEffect::pollWindowMoves()
@@ -957,7 +990,7 @@ void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
     m_navigationHandler->syncFloatingWindowsFromDaemon();
 }
 
-void PlasmaZonesEffect::loadExclusionSettings()
+void PlasmaZonesEffect::loadCachedSettings()
 {
     // Set sensible defaults immediately - don't block compositor startup waiting for daemon
     // These will be updated asynchronously when the daemon responds
@@ -1042,7 +1075,105 @@ void PlasmaZonesEffect::loadExclusionSettings()
         }
     });
 
-    qCDebug(lcEffect) << "Loading exclusion settings asynchronously, using defaults until loaded";
+    // Load dragActivationTriggers (for local trigger gating — avoids 60Hz D-Bus during non-zone drags)
+    auto* triggersWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("dragActivationTriggers")), this);
+    connect(triggersWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            m_cachedDragActivationTriggers = extractVariant(reply).toList();
+            qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_cachedDragActivationTriggers.size() << "triggers";
+        }
+    });
+
+    // Load toggleActivation
+    auto* toggleWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("toggleActivation")), this);
+    connect(toggleWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            m_cachedToggleActivation = extractVariant(reply).toBool();
+            qCDebug(lcEffect) << "Loaded toggleActivation:" << m_cachedToggleActivation;
+        }
+    });
+
+    // Load zoneSelectorEnabled
+    auto* zoneSelectorWatcher = new QDBusPendingCallWatcher(
+        makeSettingCall(QStringLiteral("zoneSelectorEnabled")), this);
+    connect(zoneSelectorWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QVariant> reply = *w;
+        if (reply.isValid()) {
+            m_cachedZoneSelectorEnabled = extractVariant(reply).toBool();
+            qCDebug(lcEffect) << "Loaded zoneSelectorEnabled:" << m_cachedZoneSelectorEnabled;
+        }
+    });
+
+    qCDebug(lcEffect) << "Loading cached settings asynchronously, using defaults until loaded";
+}
+
+bool PlasmaZonesEffect::checkLocalModifier(int modifierSetting, Qt::KeyboardModifiers mods)
+{
+    const bool shiftHeld = mods.testFlag(Qt::ShiftModifier);
+    const bool ctrlHeld = mods.testFlag(Qt::ControlModifier);
+    const bool altHeld = mods.testFlag(Qt::AltModifier);
+    const bool metaHeld = mods.testFlag(Qt::MetaModifier);
+
+    switch (modifierSetting) {
+    case 0:  return false;                    // Disabled
+    case 1:  return shiftHeld;                // Shift
+    case 2:  return ctrlHeld;                 // Ctrl
+    case 3:  return altHeld;                  // Alt
+    case 4:  return metaHeld;                 // Meta
+    case 5:  return ctrlHeld && altHeld;      // CtrlAlt
+    case 6:  return ctrlHeld && shiftHeld;    // CtrlShift
+    case 7:  return altHeld && shiftHeld;     // AltShift
+    case 8:  return true;                     // AlwaysActive
+    case 9:  return altHeld && metaHeld;      // AltMeta
+    case 10: return ctrlHeld && altHeld && metaHeld; // CtrlAltMeta
+    default: return false;
+    }
+}
+
+bool PlasmaZonesEffect::anyLocalTriggerHeld() const
+{
+    for (const auto& t : m_cachedDragActivationTriggers) {
+        const auto map = t.toMap();
+        const int mod = map.value(QStringLiteral("modifier"), 0).toInt();
+        const int btn = map.value(QStringLiteral("mouseButton"), 0).toInt();
+        const bool modMatch = (mod == 0) || checkLocalModifier(mod, m_currentModifiers);
+        const bool btnMatch = (btn == 0) || (static_cast<int>(m_currentMouseButtons) & btn) != 0;
+        if (modMatch && btnMatch && (mod != 0 || btn != 0))
+            return true;
+    }
+    return false;
+}
+
+bool PlasmaZonesEffect::detectActivationAndGrab()
+{
+    if (m_dragActivationDetected) {
+        return true;
+    }
+    if (anyLocalTriggerHeld() || m_cachedToggleActivation) {
+        m_dragActivationDetected = true;
+        if (!m_keyboardGrabbed) {
+            KWin::effects->grabKeyboard(this);
+            m_keyboardGrabbed = true;
+        }
+        return true;
+    }
+    return false;
+}
+
+void PlasmaZonesEffect::sendDeferredDragStarted()
+{
+    if (m_dragStartedSent) {
+        return;
+    }
+    m_dragStartedSent = true;
+    callDragStarted(m_pendingDragWindowId, m_pendingDragGeometry);
 }
 
 void PlasmaZonesEffect::connectNavigationSignals()

@@ -311,14 +311,75 @@ private:
     // Apply debounced screen geometry change
     void applyScreenGeometryChange();
 
-    // Load exclusion settings from daemon
-    void loadExclusionSettings();
+    // Load cached settings from daemon (exclusions, activation triggers, etc.)
+    void loadCachedSettings();
+
+    /**
+     * @brief Check if any activation trigger is currently held locally
+     *
+     * Replicates the daemon's anyTriggerHeld() logic using cached trigger
+     * settings and current modifier/button state from slotMouseChanged().
+     * Used to gate D-Bus dragMoved calls — if no trigger is held, no toggle
+     * mode, and zone selector disabled, we skip the D-Bus call entirely.
+     * This eliminates 60Hz D-Bus traffic during non-zone window drags.
+     */
+    bool anyLocalTriggerHeld() const;
+
+    /**
+     * @brief Map DragModifier enum value to Qt modifier flags
+     *
+     * Must stay in sync with WindowDragAdaptor::checkModifier() in the daemon.
+     * The enum values are defined in src/core/interfaces.h (DragModifier).
+     */
+    static bool checkLocalModifier(int modifierSetting, Qt::KeyboardModifiers mods);
+
+    /**
+     * @brief Detect activation trigger and grab keyboard if needed
+     *
+     * Sets m_dragActivationDetected and grabs keyboard when an activation
+     * trigger is first detected during a drag. Returns true if activation
+     * was detected (either previously or just now).
+     */
+    bool detectActivationAndGrab();
+
+    /**
+     * @brief Send the deferred dragStarted D-Bus call to the daemon
+     *
+     * Called lazily on first activation detection or zone selector need.
+     * Uses stored pending drag info from the DragTracker::dragStarted signal.
+     * No-op if already sent for the current drag.
+     */
+    void sendDeferredDragStarted();
 
     // Cached exclusion settings (loaded from daemon via D-Bus)
     bool m_excludeTransientWindows = true;
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
     bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
+
+    // Cached activation settings (loaded from daemon via D-Bus, updated on settingsChanged)
+    // Used for local trigger checking to gate D-Bus calls (see anyLocalTriggerHeld)
+    //
+    // Defaults are PERMISSIVE (matching old always-send behavior) so that during the
+    // startup window before async loads complete, no D-Bus calls are incorrectly skipped.
+    // Once real settings arrive, they override these conservative defaults.
+    QVariantList m_cachedDragActivationTriggers; // empty → anyLocalTriggerHeld()=false, but zoneSelectorEnabled covers it
+    bool m_cachedToggleActivation = false;
+    bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
+
+    // Per-drag activation tracking: set once any activation trigger is detected
+    // during the current drag. Stays true for the remainder of the drag so
+    // the daemon receives all subsequent cursor updates (needed for hold/release
+    // cycles and overlay hide/show).
+    bool m_dragActivationDetected = false;
+
+    // Deferred dragStarted: D-Bus call is only sent when zones are actually needed.
+    // Pending info is stored from DragTracker::dragStarted signal and sent on first
+    // activation or zone selector trigger. This avoids KGlobalAccel register/unregister
+    // overhead on every non-zone window drag.
+    bool m_dragStartedSent = false;
+    QString m_pendingDragWindowId;
+    QRectF m_pendingDragGeometry;
 
     // Cursor screen tracking (for daemon shortcut screen detection on Wayland)
     // Updated in slotMouseChanged() whenever the cursor crosses to a different monitor.

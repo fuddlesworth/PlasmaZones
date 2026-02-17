@@ -456,12 +456,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         mods = QGuiApplication::queryKeyboardModifiers();
     }
 
+    // Read activation triggers once — used by both the retrigger check and normal processing.
+    // Previously read twice (once in the snapCancelled block, once after), which was wasteful.
+    const QVariantList triggers = m_settings->dragActivationTriggers();
+    const bool triggerHeld = anyTriggerHeld(triggers, mods, mouseButtons);
+
     if (m_snapCancelled) {
         // Allow retriggering the overlay after Escape: the user must release the
         // activation trigger and then press it again (a full release→press cycle).
-        const QVariantList triggers = m_settings->dragActivationTriggers();
-        const bool triggerHeld = anyTriggerHeld(triggers, mods, mouseButtons);
-
         if (!triggerHeld) {
             m_triggerReleasedAfterCancel = true;
         } else if (m_triggerReleasedAfterCancel) {
@@ -487,10 +489,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_overlayService->updateMousePosition(cursorX, cursorY);
     }
 
-    // Get modifier settings and current activation state (keyboard or mouse)
-    // Check all configured triggers (multi-bind support)
-    const QVariantList triggers = m_settings->dragActivationTriggers();
-    const bool zoneActivationHeld = anyTriggerHeld(triggers, mods, mouseButtons);
+    // Activation state: use the trigger check from above (already computed)
+    const bool zoneActivationHeld = triggerHeld;
 
     // Toggle mode: detect rising edge (release→press) to flip overlay state
     bool activationActive;
