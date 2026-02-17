@@ -679,12 +679,12 @@ ScrollView {
                     }
 
                     CheckBox {
-                        Kirigami.FormData.label: i18n("Session:")
-                        text: i18n("Restore windows to their zones after login")
+                        Kirigami.FormData.label: i18n("Reopening:")
+                        text: i18n("Remember each window's last zone")
                         checked: kcm.restoreWindowsToZonesOnLogin
                         onToggled: kcm.restoreWindowsToZonesOnLogin = checked
                         ToolTip.visible: hovered && root.isCurrentTab
-                        ToolTip.text: i18n("When enabled, windows return to their previous zones after logging in or restarting the session.")
+                        ToolTip.text: i18n("When enabled, windows return to their previous zone when reopened, including after login or session restart.")
                     }
 
                     ComboBox {

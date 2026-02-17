@@ -299,7 +299,7 @@
             </arg>
         </method>
         <method name="restoreToPersistedZone">
-            <annotation name="org.gtk.GDBus.DocString" value="Restore window to its zone from the previous session. Returns geometry and shouldRestore."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Restore window to its persisted zone (remembered from last close or previous session). Returns geometry and shouldRestore."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
             </arg>

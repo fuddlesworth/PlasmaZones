@@ -239,7 +239,7 @@
       <max>2</max>
     </entry>
     <entry name="RestoreWindowsToZonesOnLogin" type="Bool">
-      <label>Restore windows to their zones after login/session restart</label>
+      <label>Remember each window's last zone and restore it when reopened</label>
       <default>true</default>
     </entry>
     <entry name="DefaultLayoutId" type="String">
