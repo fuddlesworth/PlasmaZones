@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.6] - 2026-02-16
+
+### Performance
+- **Dynamic poll timer**: Poll rate switches from 500ms (idle) to 32ms (~30Hz) only when LMB is pressed, eliminating continuous 60Hz stacking-order scans on the compositor thread when no drag is active ([#167])
+- **Early-exit idle polls**: `DragTracker::pollWindowMoves()` skips the full stacking-order iteration when no drag is active and no button is held
+- **Reduced D-Bus traffic during drag**: Active-drag poll rate lowered from 16ms (60Hz) to 32ms (30Hz) — zone detection doesn't need sub-33ms updates, and halving D-Bus message serialization on the compositor thread reduces frame-time jitter on high-refresh-rate displays ([#167])
+- **Guard redundant daemon work**: `hideOverlayAndClearZoneState()` now short-circuits when overlay is already hidden and zone state is clear, preventing 30Hz `clearHighlights()`/`clearHighlight()` calls that could congest the daemon event loop and create D-Bus back-pressure ([#167])
+
 ## [1.11.5] - 2026-02-16
 
 ### Fixed
