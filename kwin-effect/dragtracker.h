@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QString>
 #include <QPointF>
@@ -39,8 +40,13 @@ public:
     QString draggedWindowId() const { return m_draggedWindowId; }
     QPointF lastCursorPos() const { return m_lastCursorPos; }
 
-    // Called by effect's poll timer
+    // Called by effect's poll timer (start/end detection only)
     void pollWindowMoves();
+
+    // Event-driven cursor position update during drag. Called from slotMouseChanged
+    // instead of the poll timer, eliminating QTimer jitter from the compositor frame
+    // path. Throttled to ~30Hz internally to avoid D-Bus flooding.
+    void updateCursorPosition(const QPointF& cursorPos);
 
     // Force-end drag when a relevant mouse button is released.
     // Called from slotMouseChanged to end the drag immediately at button release,
@@ -73,6 +79,10 @@ private:
 
     // After forceEnd(), suppress new drag detection for this window until isUserMove() clears
     KWin::EffectWindow* m_forceEndedWindow = nullptr;
+
+    // Throttle event-driven dragMoved signals to ~30Hz (32ms intervals).
+    // Without throttling, 1000Hz mouse input would flood D-Bus.
+    QElapsedTimer m_dragMovedThrottle;
 };
 
 } // namespace PlasmaZones

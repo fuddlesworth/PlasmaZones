@@ -10,6 +10,7 @@
 
 #include <QJsonArray>
 #include <QObject>
+#include <QVector>
 #include <QSet>
 #include <QTimer>
 #include <QDBusInterface>
@@ -25,6 +26,17 @@ namespace PlasmaZones {
 class NavigationHandler;
 class WindowAnimator;
 class DragTracker;
+
+/**
+ * @brief Pre-parsed activation trigger (avoids QVariant unboxing in hot path)
+ *
+ * Each trigger has a modifier (enum value) and optional mouseButton bitmask.
+ * Parsed once in loadCachedSettings() from the QVariantList received via D-Bus.
+ */
+struct ParsedTrigger {
+    int modifier = 0;
+    int mouseButton = 0;
+};
 
 /**
  * @brief KWin C++ Effect for PlasmaZones
@@ -108,7 +120,6 @@ private:
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
     void callCancelSnap();
     void callSnapToLastZone(KWin::EffectWindow* window);
-    void ensureDBusInterface();
     void ensureWindowTrackingInterface();
     void ensureZoneDetectionInterface();
     void connectNavigationSignals();
@@ -291,7 +302,9 @@ private:
     bool m_keyboardGrabbed = false;
 
     // D-Bus interfaces (lazy initialization)
-    std::unique_ptr<QDBusInterface> m_dbusInterface; // WindowDrag interface
+    // Note: WindowDrag interface uses QDBusMessage::createMethodCall directly
+    // (no QDBusInterface) to avoid synchronous D-Bus introspection that could
+    // block the compositor thread during startup. See callDragMoved() etc.
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
     std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
     std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
@@ -363,7 +376,8 @@ private:
     // Defaults are PERMISSIVE (matching old always-send behavior) so that during the
     // startup window before async loads complete, no D-Bus calls are incorrectly skipped.
     // Once real settings arrive, they override these conservative defaults.
-    QVariantList m_cachedDragActivationTriggers; // empty → anyLocalTriggerHeld()=false, but zoneSelectorEnabled covers it
+    QVariantList m_cachedDragActivationTriggers; // raw D-Bus data, kept for reload
+    QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed from QVariantList at load time (avoids QVariant unboxing in hot path)
     bool m_cachedToggleActivation = false;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
 

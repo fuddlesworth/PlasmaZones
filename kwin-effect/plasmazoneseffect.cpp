@@ -308,7 +308,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         qCInfo(lcEffect) << "Daemon service registered — scheduling state re-push";
 
         // Reset stale D-Bus interfaces so ensureInterface recreates them on next use
-        m_dbusInterface.reset();
+        // Note: WindowDrag interface uses QDBusMessage (no QDBusInterface to reset)
         m_windowTrackingInterface.reset();
         m_zoneDetectionInterface.reset();
         m_overlayInterface.reset();
@@ -593,9 +593,14 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // detected and no reason to send (avoids D-Bus traffic for non-zone drags).
             if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
                 sendDeferredDragStarted();
-                QPointF cursorPos = KWin::effects->cursorPos();
-                callDragMoved(m_dragTracker->draggedWindowId(), cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+                callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
             }
+        } else {
+            // Position-only change: drive cursor tracking through DragTracker's
+            // event-driven path. This eliminates QTimer jitter from the compositor
+            // frame path — updates arrive at input-device cadence (throttled to
+            // ~30Hz inside DragTracker to avoid D-Bus flooding).
+            m_dragTracker->updateCursorPosition(pos);
         }
     }
 
@@ -884,11 +889,6 @@ bool PlasmaZonesEffect::hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow
     return false;
 }
 
-void PlasmaZonesEffect::ensureDBusInterface()
-{
-    ensureInterface(m_dbusInterface, DBus::Interface::WindowDrag, "WindowDrag");
-}
-
 void PlasmaZonesEffect::ensureWindowTrackingInterface()
 {
     ensureInterface(m_windowTrackingInterface, DBus::Interface::WindowTracking, "WindowTracking");
@@ -1107,7 +1107,18 @@ void PlasmaZonesEffect::loadCachedSettings()
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
             m_cachedDragActivationTriggers = extractVariant(reply).toList();
-            qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_cachedDragActivationTriggers.size() << "triggers";
+            // Pre-parse to POD structs so anyLocalTriggerHeld() avoids QVariant
+            // unboxing on every call (~30x/sec during drag).
+            m_parsedTriggers.clear();
+            m_parsedTriggers.reserve(m_cachedDragActivationTriggers.size());
+            for (const auto& t : std::as_const(m_cachedDragActivationTriggers)) {
+                const auto map = t.toMap();
+                ParsedTrigger pt;
+                pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
+                pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
+                m_parsedTriggers.append(pt);
+            }
+            qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_parsedTriggers.size() << "triggers";
         }
     });
 
@@ -1163,17 +1174,17 @@ bool PlasmaZonesEffect::checkLocalModifier(int modifierSetting, Qt::KeyboardModi
 
 bool PlasmaZonesEffect::anyLocalTriggerHeld() const
 {
-    for (const auto& t : m_cachedDragActivationTriggers) {
-        const auto map = t.toMap();
-        const int mod = map.value(QStringLiteral("modifier"), 0).toInt();
-        const int btn = map.value(QStringLiteral("mouseButton"), 0).toInt();
-        const bool modMatch = (mod == 0) || checkLocalModifier(mod, m_currentModifiers);
-        const bool btnMatch = (btn == 0) || (static_cast<int>(m_currentMouseButtons) & btn) != 0;
-        if (modMatch && btnMatch && (mod != 0 || btn != 0))
+    // Use pre-parsed triggers to avoid QVariant unboxing (~30x/sec during drag)
+    for (const auto& t : m_parsedTriggers) {
+        const bool modMatch = (t.modifier == 0) || checkLocalModifier(t.modifier, m_currentModifiers);
+        const bool btnMatch = (t.mouseButton == 0) || (static_cast<int>(m_currentMouseButtons) & t.mouseButton) != 0;
+        if (modMatch && btnMatch && (t.modifier != 0 || t.mouseButton != 0))
             return true;
     }
     return false;
 }
+
+
 
 bool PlasmaZonesEffect::detectActivationAndGrab()
 {
@@ -1788,10 +1799,6 @@ void PlasmaZonesEffect::callSnapToLastZone(KWin::EffectWindow* window)
 void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)
 {
     updateWindowStickyState(m_dragTracker->draggedWindow());
-    ensureDBusInterface();
-    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
-        return;
-    }
 
     // Get window class info for exclusion filtering
     QString appName;
@@ -1811,9 +1818,17 @@ void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& g
         }
     }
 
-    // D-Bus interface: sddddssi (windowId, x, y, w, h, appName, windowClass, mouseButtons)
-    m_dbusInterface->asyncCall(QStringLiteral("dragStarted"), windowId, geometry.x(), geometry.y(), geometry.width(),
-                               geometry.height(), appName, windowClass, static_cast<int>(m_currentMouseButtons));
+    // Use QDBusMessage::createMethodCall instead of QDBusInterface to avoid
+    // synchronous D-Bus introspection. QDBusInterface's constructor blocks the
+    // compositor thread (~25s timeout) if the daemon is registered but not yet
+    // processing messages. QDBusMessage is purely local — no D-Bus communication
+    // until asyncCall, which returns immediately.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+        QStringLiteral("dragStarted"));
+    msg << windowId << geometry.x() << geometry.y() << geometry.width()
+        << geometry.height() << appName << windowClass << static_cast<int>(m_currentMouseButtons);
+    QDBusConnection::sessionBus().asyncCall(msg);
 }
 bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 {
@@ -1837,23 +1852,18 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
 
 void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons)
 {
-    ensureDBusInterface();
-    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
-        return;
-    }
-
-    // D-Bus: dragMoved(s, i, i, i, i) - windowId, cursorX, cursorY, modifiers, mouseButtons
-    m_dbusInterface->asyncCall(QStringLiteral("dragMoved"), windowId, static_cast<int>(cursorPos.x()),
-                               static_cast<int>(cursorPos.y()), static_cast<int>(mods), mouseButtons);
+    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
+    // See callDragStarted() comment for rationale.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+        QStringLiteral("dragMoved"));
+    msg << windowId << static_cast<int>(cursorPos.x())
+        << static_cast<int>(cursorPos.y()) << static_cast<int>(mods) << mouseButtons;
+    QDBusConnection::sessionBus().asyncCall(msg);
 }
 
 void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId)
 {
-    ensureDBusInterface();
-    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
-        return;
-    }
-
     // Cursor position at release (from last poll during drag) - daemon uses this for release screen
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
@@ -1862,12 +1872,15 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
     // false), we use the last slotMouseChanged state; modifier released just before mouse may be stale.
     // This is acceptable for Snap Assist triggers - best-effort detection.
 
-    // Make ASYNC call to get snap geometry - prevents UI freeze if daemon is slow
-    // D-Bus signature: dragStopped(siiii) -> (iiiibs) - modifiers and mouseButtons at release for SnapAssistTriggers
-    QDBusPendingCall pendingCall = m_dbusInterface->asyncCall(
-        QStringLiteral("dragStopped"), windowId, static_cast<int>(cursorAtRelease.x()),
-        static_cast<int>(cursorAtRelease.y()), static_cast<int>(m_currentModifiers),
-        static_cast<int>(m_currentMouseButtons));
+    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
+    // See callDragStarted() comment for rationale.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+        QStringLiteral("dragStopped"));
+    msg << windowId << static_cast<int>(cursorAtRelease.x())
+        << static_cast<int>(cursorAtRelease.y()) << static_cast<int>(m_currentModifiers)
+        << static_cast<int>(m_currentMouseButtons);
+    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(msg);
 
     // Use QPointer to safely handle window destruction during async call
     QPointer<KWin::EffectWindow> safeWindow = window;
@@ -1966,13 +1979,12 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
 
 void PlasmaZonesEffect::callCancelSnap()
 {
-    ensureDBusInterface();
-    if (!m_dbusInterface || !m_dbusInterface->isValid()) {
-        return;
-    }
-
     qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
-    m_dbusInterface->asyncCall(QStringLiteral("cancelSnap"));
+    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+        QStringLiteral("cancelSnap"));
+    QDBusConnection::sessionBus().asyncCall(msg);
 }
 
 void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method,

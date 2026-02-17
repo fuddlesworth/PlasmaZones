@@ -56,22 +56,20 @@ void DragTracker::pollWindowMoves()
         m_draggedWindow = movingWindow;
         m_draggedWindowId = m_effect->getWindowId(movingWindow);
         m_lastCursorPos = KWin::effects->cursorPos();
+        m_dragMovedThrottle.start();
 
         qCInfo(lcEffect) << "Window move started -" << movingWindow->windowClass();
         Q_EMIT dragStarted(movingWindow, m_draggedWindowId, movingWindow->frameGeometry());
     }
-    // Detect ongoing drag - send position updates
+    // Detect ongoing drag - check for fullscreen transition only.
+    // Cursor position updates are now event-driven via updateCursorPosition()
+    // (called from slotMouseChanged), which eliminates timer jitter from the
+    // compositor frame path and provides more accurate cursor tracking.
     else if (movingWindow && movingWindow == m_draggedWindow) {
-        // Re-check if window has gone fullscreen during drag
         if (movingWindow->isFullScreen()) {
             qCInfo(lcEffect) << "Window went fullscreen mid-drag, stopping tracking";
             finishDrag(/*cancelled=*/true);
             return;
-        }
-        QPointF cursorPos = KWin::effects->cursorPos();
-        if (cursorPos != m_lastCursorPos) {
-            m_lastCursorPos = cursorPos;
-            Q_EMIT dragMoved(m_draggedWindowId, cursorPos);
         }
     }
     // Detect end of drag
@@ -97,6 +95,24 @@ void DragTracker::forceEnd(const QPointF& cursorPos)
     m_forceEndedWindow = m_draggedWindow;
 
     finishDrag(/*cancelled=*/false);
+}
+
+void DragTracker::updateCursorPosition(const QPointF& cursorPos)
+{
+    if (!m_draggedWindow) {
+        return;
+    }
+    // Always track latest position for forceEnd()/callDragStopped() to use
+    m_lastCursorPos = cursorPos;
+    // Throttle dragMoved signals to ~30Hz. slotMouseChanged fires at input
+    // device rate (often 1000Hz on gaming mice); sending a D-Bus call for
+    // every pixel of movement would add ~10-50μs of message serialization
+    // per event on the compositor thread — far more than needed for zone
+    // detection which has no perceptible benefit above 30fps.
+    if (m_dragMovedThrottle.elapsed() >= 32) {
+        m_dragMovedThrottle.start();
+        Q_EMIT dragMoved(m_draggedWindowId, cursorPos);
+    }
 }
 
 void DragTracker::finishDrag(bool cancelled)
@@ -128,6 +144,7 @@ void DragTracker::reset()
     m_draggedWindowId.clear();
     m_lastCursorPos = QPointF();
     m_forceEndedWindow = nullptr;
+    m_dragMovedThrottle.invalidate();
 }
 
 } // namespace PlasmaZones
