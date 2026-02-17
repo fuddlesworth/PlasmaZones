@@ -624,11 +624,17 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // matching keyboard modifier behavior (hold to show, release to hide,
             // re-press to show again).
             //
-            // Gating: same logic as poll-based dragMoved — skip if no activation
+            // Skip on autotile screens — no zone overlay to update, and calling
+            // detectActivationAndGrab() would wastefully grab the keyboard and
+            // sendDeferredDragStarted() would send a D-Bus call the daemon can't use.
+            //
+            // Gating: same logic as dragMoved lambda — skip if no activation
             // detected and no reason to send (avoids D-Bus traffic for non-zone drags).
-            if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
-                sendDeferredDragStarted();
-                callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+            if (!m_dragBypassedForAutotile) {
+                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
+                    sendDeferredDragStarted();
+                    callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+                }
             }
         } else {
             // Position-only change: drive cursor tracking through DragTracker's
@@ -2482,17 +2488,18 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
     const QSet<QString> newScreens(screenNames.begin(), screenNames.end());
 
     // Clear notified windows for screens that left the autotile set so they
-    // get re-notified if the screen is later re-added to autotile
+    // get re-notified if the screen is later re-added to autotile.
+    // Single pass over stacking order instead of per-window findWindowById lookups.
     const QSet<QString> removed = m_autotileScreens - newScreens;
     if (!removed.isEmpty()) {
-        QMutableSetIterator<QString> it(m_notifiedWindows);
-        while (it.hasNext()) {
-            const QString &windowId = it.next();
-            KWin::EffectWindow *w = findWindowById(windowId);
+        QSet<QString> windowsOnRemovedScreens;
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* w : windows) {
             if (w && removed.contains(getWindowScreenName(w))) {
-                it.remove();
+                windowsOnRemovedScreens.insert(getWindowId(w));
             }
         }
+        m_notifiedWindows -= windowsOnRemovedScreens;
     }
 
     // Compute newly added autotile screens
@@ -2524,28 +2531,23 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
         return nullptr;
     }
 
-    // Window IDs in this codebase use the composite format from getWindowId():
-    //   "windowClass:resourceName:internalId"
-    // Match against each window's getWindowId() result.
+    // Single-pass lookup: check both exact ID and stable ID (minus pointer suffix)
+    // in one scan of the stacking order, avoiding a second O(n) fallback pass.
+    const QString targetStableId = extractStableId(windowId);
+    KWin::EffectWindow* stableMatch = nullptr;
+
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        if (getWindowId(w) == windowId) {
-            return w;
+        const QString wId = getWindowId(w);
+        if (wId == windowId) {
+            return w; // Exact match — return immediately
+        }
+        if (!stableMatch && !targetStableId.isEmpty() && extractStableId(wId) == targetStableId) {
+            stableMatch = w; // Remember first stable match, keep scanning for exact
         }
     }
 
-    // Fallback: try stable ID matching (strips the pointer address suffix)
-    // This handles cases where the daemon cached a stableId
-    QString targetStableId = extractStableId(windowId);
-    if (!targetStableId.isEmpty()) {
-        for (KWin::EffectWindow* w : windows) {
-            if (extractStableId(getWindowId(w)) == targetStableId) {
-                return w;
-            }
-        }
-    }
-
-    return nullptr;
+    return stableMatch;
 }
 
 void PlasmaZonesEffect::slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height)
