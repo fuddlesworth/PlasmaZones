@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.8] - 2026-02-16
+
+### Performance
+- **Signal-driven drag detection**: Replaced the QTimer-based poll loop (32ms stacking-order scans during drag) with KWin's per-window `windowStartUserMovedResized` / `windowFinishUserMovedResized` signals for zero-cost, event-driven drag start/end detection. Eliminates the `m_pollTimer` entirely — no more periodic stacking-order iteration on the compositor thread, even as a safety net ([#167])
+
 ## [1.11.7] - 2026-02-16
 
 ### Performance
