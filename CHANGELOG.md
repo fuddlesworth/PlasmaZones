@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.7] - 2026-02-16
+
+### Performance
+- **Event-driven cursor tracking**: Cursor position updates during drag are now driven by `slotMouseChanged` instead of the poll timer, eliminating QTimer jitter from the compositor frame path and providing more accurate cursor tracking at input-device cadence
+- **Throttled dragMoved signals**: `DragTracker::updateCursorPosition()` throttles `dragMoved` emissions to ~30Hz via `QElapsedTimer`, preventing D-Bus flooding from high-frequency (1000Hz) mouse input
+- **Eliminated QDBusInterface for WindowDrag**: Replaced `QDBusInterface` with `QDBusMessage::createMethodCall` for all WindowDrag D-Bus calls (`dragStarted`, `dragMoved`, `dragStopped`, `cancelSnap`), avoiding synchronous D-Bus introspection that could block the compositor thread with a ~25s timeout if the daemon is registered but slow to respond
+- **Pre-parsed activation triggers**: Activation triggers are now parsed from `QVariantList` to POD structs (`ParsedTrigger`) once at load time, removing per-call `QVariant` unboxing overhead from `anyLocalTriggerHeld()` (~30 calls/sec during drag)
+
 ## [1.11.6] - 2026-02-16
 
 ### Performance
