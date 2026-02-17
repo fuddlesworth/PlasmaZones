@@ -242,6 +242,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 }
                 m_dragActivationDetected = false;
 
+                // Return poll timer to idle rate now that the drag is over.
+                // Fast 16ms polling is only needed while LMB is held / drag active.
+                if (m_pollTimer.interval() != 500) {
+                    m_pollTimer.start(500);
+                }
+
                 if (!m_dragStartedSent) {
                     // Drag ended without ever activating zones — no D-Bus state to clean up
                     m_pendingDragWindowId.clear();
@@ -344,7 +350,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
     // Setup polling timer for detecting window moves
     // In KWin 6, we poll windows to check isUserMove() state
-    m_pollTimer.setInterval(16); // ~60 Hz update rate (was 50ms/20Hz — increased for smooth zone detection after removing frame-rate windowFrameGeometryChanged handler, see #167)
+    // Idle rate: 500ms poll just as a safety net for edge-case drag detection.
+    // Switches to 16ms (~60Hz) on LMB press (slotMouseChanged) for responsive
+    // drag tracking, then back to 500ms when the drag ends. This eliminates
+    // the continuous 60Hz stacking-order scan that ran on the compositor thread
+    // even when no drag was happening — a significant source of frame-time
+    // jitter on high-refresh-rate displays (see discussion #167).
+    m_pollTimer.setInterval(500);
     connect(&m_pollTimer, &QTimer::timeout, this, &PlasmaZonesEffect::pollWindowMoves);
 
     // Setup screen geometry change debounce timer
@@ -545,6 +557,18 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
         qCDebug(lcEffect) << "Modifiers changed to" << static_cast<int>(modifiers);
     }
     m_currentMouseButtons = buttons;
+
+    // LMB just pressed → switch poll timer to active rate (32ms / ~30Hz) so we
+    // detect isUserMove() promptly. Without this, the idle 500ms rate would delay
+    // drag detection by up to half a second. 30Hz is chosen over 60Hz because
+    // zone detection doesn't need sub-33ms updates — the visual highlight latency
+    // is imperceptible — and halving D-Bus traffic significantly reduces compositor
+    // thread contention from message serialization (see discussion #167).
+    if ((buttons & Qt::LeftButton) && !(oldbuttons & Qt::LeftButton)) {
+        if (m_pollTimer.interval() != 32) {
+            m_pollTimer.start(32);
+        }
+    }
 
     if (m_dragTracker->isDragging()) {
         if ((oldbuttons & Qt::LeftButton) && !(buttons & Qt::LeftButton)) {

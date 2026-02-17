@@ -260,6 +260,16 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
 
 void WindowDragAdaptor::hideOverlayAndClearZoneState()
 {
+    // Fast path: if overlay isn't shown and zone state is already clear, skip all work.
+    // dragMoved calls this on every poll tick when no activation trigger is held, so
+    // avoiding redundant clearHighlights()/clearHighlight() calls (which may touch QML
+    // objects) prevents daemon event-loop congestion and D-Bus back-pressure on the
+    // compositor thread (see discussion #167).
+    if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode
+        && m_paintedZoneIds.isEmpty()) {
+        return;
+    }
+
     if (m_overlayShown && m_overlayService) {
         m_overlayService->hide();
         m_overlayShown = false;

@@ -20,6 +20,15 @@ DragTracker::DragTracker(PlasmaZonesEffect* effect, QObject* parent)
 
 void DragTracker::pollWindowMoves()
 {
+    // Fast path: no drag active and no LMB held → nothing to detect.
+    // Avoids iterating the full stacking order on every idle poll tick,
+    // which previously ran 60x/sec on the compositor thread even when
+    // no window was being dragged (see discussion #167).
+    if (!m_draggedWindow && !(m_effect->m_currentMouseButtons & Qt::LeftButton)) {
+        m_forceEndedWindow = nullptr; // Safe to clear — no button means no isUserMove
+        return;
+    }
+
     // Check all windows for user move state
     const auto windows = KWin::effects->stackingOrder();
 
