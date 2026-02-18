@@ -1,8 +1,10 @@
 # PlasmaZones KWin Effect (C++ Plugin)
 # SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Requires KWin from Plasma 6.6+ (prePaintWindow(RenderView*,...), paintWindow(Region), no postPaintWindow).
 
 # Find KWin for effect development
-find_package(KWin REQUIRED)
+find_package(KWin 6.6 REQUIRED)
 
 # Tell AutoMoc about KWin's effect factory macro (suppresses false positive warning)
 list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")

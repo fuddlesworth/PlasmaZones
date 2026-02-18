@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 {
-  description = "FancyZones-style window tiling for KDE Plasma 6";
+  description = "FancyZones-style window tiling for KDE Plasma 6.6+";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -36,7 +36,7 @@
         in
         {
           options.programs.plasmazones = {
-            enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6";
+            enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6.6+";
             package = lib.mkOption {
               type = lib.types.package;
               default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
@@ -61,7 +61,7 @@
         in
         {
           options.programs.plasmazones = {
-            enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6";
+            enable = lib.mkEnableOption "PlasmaZones window tiling for KDE Plasma 6.6+";
             package = lib.mkOption {
               type = lib.types.package;
               default = self.packages.${pkgs.stdenv.hostPlatform.system}.default;

@@ -1,6 +1,10 @@
 # PlasmaZones Nix package
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
+# Use nixpkgs with Plasma 6.6 or later (e.g. nixos-unstable or a branch that has
+# KWin 6.6 effect API and LayerShellQt 6.6 setScreen API).
+#
 # Usage:
 #   plasmazones = pkgs.callPackage ./packaging/nix/package.nix {
 #     src = pkgs.fetchFromGitHub {
@@ -59,12 +63,12 @@ stdenv.mkDerivation {
   ];
 
   buildInputs = [
-    # Qt 6 — explicit deps matching CMakeLists.txt find_package(Qt6 COMPONENTS …)
+    # Qt 6 — explicit deps matching CMakeLists.txt find_package(Qt6 6.6 COMPONENTS …)
     qt6.qtbase           # Core Gui Widgets DBus Concurrent
     qt6.qtdeclarative    # Quick QuickControls2 (QML engine + runtime)
     qt6.qtshadertools    # ShaderTools ShaderToolsPrivate (zone overlay shaders)
   ] ++ (with kdePackages; [
-    # KDE Frameworks 6
+    # KDE Frameworks 6 (6.6+ for Plasma 6.6)
     kconfig
     kconfigwidgets
     kcoreaddons
@@ -76,10 +80,10 @@ stdenv.mkDerivation {
     knotifications
     kcolorscheme
 
-    # Wayland overlay support (required)
+    # Wayland overlay support (required; 6.6+ for setScreen API)
     layer-shell-qt
 
-    # KWin integration (effect plugin)
+    # KWin integration (effect plugin; 6.6+ for prePaintWindow(RenderView)/paintWindow(Region) API)
     kwin
 
     # Optional: activity-based layout switching
@@ -118,7 +122,7 @@ stdenv.mkDerivation {
   '';
 
   meta = {
-    description = "FancyZones-style window tiling for KDE Plasma 6";
+    description = "FancyZones-style window tiling for KDE Plasma 6.6+";
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
     changelog = "https://github.com/fuddlesworth/PlasmaZones/blob/main/CHANGELOG.md";
     license = lib.licenses.gpl3Plus;

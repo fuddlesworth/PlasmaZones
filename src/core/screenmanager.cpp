@@ -147,7 +147,7 @@ void ScreenManager::createGeometrySensor(QScreen* screen)
         return;
     }
 
-    layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+    layerWindow->setScreen(screen);
     layerWindow->setLayer(LayerShellQt::Window::LayerBackground);
     layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
     layerWindow->setAnchors(

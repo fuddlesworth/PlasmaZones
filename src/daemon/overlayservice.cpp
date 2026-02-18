@@ -1404,7 +1404,7 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
 
     // Configure LayerShellQt for zone selector (LayerTop for pointer input)
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
 
@@ -1694,7 +1694,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
 
     // Configure LayerShellQt for full-screen overlay
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         layerWindow->setAnchors(
@@ -2416,7 +2416,7 @@ void OverlayService::createLayoutOsdWindow(QScreen* screen)
 
     // Configure LayerShellQt for Wayland overlay (prevents window from appearing in taskbar)
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         // Anchors will be set dynamically in showLayoutOsd() based on window size
@@ -2588,7 +2588,7 @@ void OverlayService::createNavigationOsdWindow(QScreen* screen)
 
     // Configure LayerShellQt for Wayland overlay
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         layerWindow->setScope(QStringLiteral("plasmazones-navigation-osd-%1").arg(screen->name()));
@@ -2782,7 +2782,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
     window->setProperty("isShaderOverlay", true);
 
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
-        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerOverlay);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityNone);
         layerWindow->setScope(QStringLiteral("plasmazones-shader-preview"));
@@ -2900,7 +2900,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
 
     // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
     if (auto* layerWindow = LayerShellQt::Window::get(m_snapAssistWindow)) {
-        layerWindow->setScreenConfiguration(LayerShellQt::Window::ScreenFromQWindow);
+        layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
         layerWindow->setAnchors(LayerShellQt::Window::Anchors(

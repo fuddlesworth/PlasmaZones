@@ -65,12 +65,11 @@ public:
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
 
-    void prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
+    void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     KWin::EffectWindow* w, int mask, QRegion region,
+                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
-    void postPaintWindow(KWin::EffectWindow* w) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
 private Q_SLOTS:

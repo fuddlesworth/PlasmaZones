@@ -69,9 +69,9 @@ file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qml_autoge
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_autogen/include)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_init_autogen/include)
 
-# KDE/Qt requirements
+# KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6)
 set(QT_MIN_VERSION "6.6.0")
-set(KF_MIN_VERSION "6.0.0")
+set(KF_MIN_VERSION "6.6.0")
 
 find_package(ECM ${KF_MIN_VERSION} REQUIRED NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
@@ -143,10 +143,10 @@ else()
     message(STATUS "PlasmaActivities/KActivities not found - activity support disabled")
 endif()
 
-# LayerShellQt for Wayland overlay support (REQUIRED)
+# LayerShellQt for Wayland overlay support (REQUIRED, 6.6+ for setScreen/wantsToBeOnActiveScreen API)
 # PlasmaZones requires Wayland with LayerShellQt for proper overlay functionality.
 # X11 support has been removed as of v1.2.0 - Plasma 6 is Wayland-first.
-find_package(LayerShellQt REQUIRED)
+find_package(LayerShellQt 6.6 REQUIRED)
 
 # Systemd user unit directory (fallback if not provided by ECM)
 if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)

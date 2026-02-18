@@ -2,6 +2,8 @@
 # FancyZones-style window tiling for KDE Plasma
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
+# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
+#
 # Build: rpmbuild -ba plasmazones.spec
 # Clean build: mock -r fedora-43-x86_64 plasmazones-1.2.0-1.fc43.src.rpm
 #
@@ -24,7 +26,7 @@ ExclusiveArch:  x86_64 aarch64
 # Build tools
 BuildRequires:  cmake >= 3.16
 BuildRequires:  ninja-build
-BuildRequires:  extra-cmake-modules >= 6.0.0
+BuildRequires:  extra-cmake-modules >= 6.6.0
 BuildRequires:  gcc-c++
 BuildRequires:  gettext
 
@@ -35,21 +37,21 @@ BuildRequires:  qt6-qtdeclarative-devel
 BuildRequires:  qt6-qttools-devel
 BuildRequires:  qt6-qtshadertools-devel
 
-# KDE Frameworks 6
-BuildRequires:  kf6-kconfig-devel >= 6.0.0
-BuildRequires:  kf6-kconfigwidgets-devel
-BuildRequires:  kf6-kcoreaddons-devel
-BuildRequires:  kf6-kdbusaddons-devel
-BuildRequires:  kf6-ki18n-devel
-BuildRequires:  kf6-kcmutils-devel
-BuildRequires:  kf6-kwindowsystem-devel
-BuildRequires:  kf6-kglobalaccel-devel
-BuildRequires:  kf6-knotifications-devel
-BuildRequires:  kf6-kcolorscheme-devel
+# KDE Frameworks 6 (6.6+ for Plasma 6.6 API)
+BuildRequires:  kf6-kconfig-devel >= 6.6.0
+BuildRequires:  kf6-kconfigwidgets-devel >= 6.6.0
+BuildRequires:  kf6-kcoreaddons-devel >= 6.6.0
+BuildRequires:  kf6-kdbusaddons-devel >= 6.6.0
+BuildRequires:  kf6-ki18n-devel >= 6.6.0
+BuildRequires:  kf6-kcmutils-devel >= 6.6.0
+BuildRequires:  kf6-kwindowsystem-devel >= 6.6.0
+BuildRequires:  kf6-kglobalaccel-devel >= 6.6.0
+BuildRequires:  kf6-knotifications-devel >= 6.6.0
+BuildRequires:  kf6-kcolorscheme-devel >= 6.6.0
 
-# Plasma/KWin
-BuildRequires:  kwin-devel
-BuildRequires:  layer-shell-qt-devel
+# Plasma 6.6 / KWin 6.6 (effect API), LayerShellQt 6.6 (setScreen API)
+BuildRequires:  kwin-devel >= 6.6.0
+BuildRequires:  layer-shell-qt-devel >= 6.6.0
 
 # Optional
 BuildRequires:  plasma-activities-devel
@@ -58,22 +60,22 @@ BuildRequires:  plasma-activities-devel
 BuildRequires:  systemd-rpm-macros
 %{?systemd_requires}
 
-# Runtime dependencies
+# Runtime dependencies (Plasma 6.6+)
 Requires:       qt6-qtbase >= 6.6.0
 Requires:       qt6-qtdeclarative
 Requires:       qt6-qtshadertools
-Requires:       kf6-kconfig
-Requires:       kf6-kconfigwidgets
-Requires:       kf6-kcoreaddons
-Requires:       kf6-kdbusaddons
-Requires:       kf6-ki18n
-Requires:       kf6-kcmutils
-Requires:       kf6-kwindowsystem
-Requires:       kf6-kglobalaccel
-Requires:       kf6-knotifications
-Requires:       kf6-kcolorscheme
-Requires:       layer-shell-qt
-Requires:       kwin
+Requires:       kf6-kconfig >= 6.6.0
+Requires:       kf6-kconfigwidgets >= 6.6.0
+Requires:       kf6-kcoreaddons >= 6.6.0
+Requires:       kf6-kdbusaddons >= 6.6.0
+Requires:       kf6-ki18n >= 6.6.0
+Requires:       kf6-kcmutils >= 6.6.0
+Requires:       kf6-kwindowsystem >= 6.6.0
+Requires:       kf6-kglobalaccel >= 6.6.0
+Requires:       kf6-knotifications >= 6.6.0
+Requires:       kf6-kcolorscheme >= 6.6.0
+Requires:       layer-shell-qt >= 6.6.0
+Requires:       kwin >= 6.6.0
 Requires:       hicolor-icon-theme
 
 %description

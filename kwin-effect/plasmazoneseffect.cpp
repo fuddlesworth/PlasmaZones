@@ -2152,7 +2152,7 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     m_windowTrackingInterface->asyncCall(QStringLiteral("windowActivated"), windowId, screenName);
 }
 
-void PlasmaZonesEffect::prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
+void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                         std::chrono::milliseconds presentTime)
 {
     if (m_windowAnimator->hasAnimation(w)) {
@@ -2160,29 +2160,10 @@ void PlasmaZonesEffect::prePaintWindow(KWin::EffectWindow* w, KWin::WindowPrePai
         data.setTransformed();
     }
 
-    KWin::effects->prePaintWindow(w, data, presentTime);
-}
+    KWin::effects->prePaintWindow(view, w, data, presentTime);
 
-void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget,
-                                     const KWin::RenderViewport& viewport,
-                                     KWin::EffectWindow* w, int mask, QRegion region,
-                                     KWin::WindowPaintData& data)
-{
-    // Apply animation transform if window is being animated
-    m_windowAnimator->applyTransform(w, data);
-
-    KWin::effects->paintWindow(renderTarget, viewport, w, mask, region, data);
-}
-
-void PlasmaZonesEffect::postPaintWindow(KWin::EffectWindow* w)
-{
-    // Safety check - window could be destroyed during paint cycle
-    if (!w) {
-        KWin::effects->postPaintWindow(w);
-        return;
-    }
-
-    if (m_windowAnimator->hasAnimation(w)) {
+    // Post-paint logic: animation completion and repaint requests (KWin has no postPaintWindow)
+    if (w && m_windowAnimator->hasAnimation(w)) {
         if (m_windowAnimator->isAnimationComplete(w)) {
             // Animation finished - apply final geometry and clean up
             QRect finalGeometry = m_windowAnimator->finalGeometry(w);
@@ -2195,8 +2176,17 @@ void PlasmaZonesEffect::postPaintWindow(KWin::EffectWindow* w)
             w->addRepaintFull();
         }
     }
+}
 
-    KWin::effects->postPaintWindow(w);
+void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget,
+                                     const KWin::RenderViewport& viewport,
+                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                     KWin::WindowPaintData& data)
+{
+    // Apply animation transform if window is being animated
+    m_windowAnimator->applyTransform(w, data);
+
+    KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
 }
 
 } // namespace PlasmaZones
