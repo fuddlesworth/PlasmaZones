@@ -457,6 +457,13 @@ public Q_SLOTS:
      */
     void loadState();
 
+    /**
+     * @brief Emit reapplyWindowGeometriesRequested (called by daemon after geometry settles)
+     *
+     * Not a D-Bus method; used internally so the daemon timer can trigger the signal.
+     */
+    void requestReapplyWindowGeometries();
+
 Q_SIGNALS:
     void windowZoneChanged(const QString& windowId, const QString& zoneId);
 
@@ -488,6 +495,16 @@ Q_SIGNALS:
      * the daemon has fully initialized its layout.
      */
     void pendingRestoresAvailable();
+
+    /**
+     * @brief Request that the KWin effect re-apply window geometries from zone positions
+     *
+     * Emitted after panel geometry has settled (e.g. after closing the KDE panel editor)
+     * so the effect fetches getUpdatedWindowGeometries and moves snapped windows to
+     * match the current zone rects. Fixes windows that were shifted by Plasma or by
+     * an earlier wrong geometry update.
+     */
+    void reapplyWindowGeometriesRequested();
 
     /**
      * @brief Navigation feedback signal for UI/audio feedback

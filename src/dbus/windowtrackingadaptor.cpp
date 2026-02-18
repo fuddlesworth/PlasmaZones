@@ -1222,6 +1222,11 @@ void WindowTrackingAdaptor::saveState()
     qCInfo(lcDbusWindow) << "Saved state to KConfig";
 }
 
+void WindowTrackingAdaptor::requestReapplyWindowGeometries()
+{
+    Q_EMIT reapplyWindowGeometriesRequested();
+}
+
 void WindowTrackingAdaptor::loadState()
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));

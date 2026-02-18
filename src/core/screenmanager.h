@@ -9,6 +9,7 @@
 #include <QVector>
 #include <QHash>
 #include <QMap>
+#include <QTimer>
 
 class QWindow;
 
@@ -106,6 +107,16 @@ public:
      */
     static ScreenManager* instance();
 
+    /**
+     * @brief Schedule a one-shot panel re-query after a delay
+     *
+     * Use after applying geometry updates so we pick up the settled panel state
+     * (e.g. after the KDE panel editor closes). If called again before the timer
+     * fires, the timer is restarted. Only one delayed re-query is pending at a time.
+     * @param delayMs Delay in milliseconds before querying panels again
+     */
+    void scheduleDelayedPanelRequery(int delayMs);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a screen is added
@@ -141,6 +152,14 @@ Q_SIGNALS:
      * should wait for this signal before performing geometry-dependent operations.
      */
     void panelGeometryReady();
+
+    /**
+     * @brief Emitted when the delayed panel requery (e.g. after panel editor close) has completed
+     *
+     * The daemon uses this to trigger reapply of window geometries after a short delay,
+     * so that the geometry debounce and processPendingGeometryUpdates run first.
+     */
+    void delayedPanelRequeryCompleted();
 
 private Q_SLOTS:
     void onScreenAdded(QScreen* screen);
@@ -179,8 +198,9 @@ private:
      * Queries the KDE Plasma shell for panel positions and sizes.
      * Results are cached in m_panelOffsets and used to calculate
      * available geometry per-screen.
+     * @param fromDelayedRequery If true, emit delayedPanelRequeryCompleted() when the async query finishes
      */
-    void queryKdePlasmaPanels();
+    void queryKdePlasmaPanels(bool fromDelayedRequery = false);
 
     /**
      * @brief Schedule a debounced D-Bus panel query
@@ -198,6 +218,9 @@ private:
     // Persistent geometry sensor windows (one per screen)
     // These invisible LayerShellQt windows track available geometry
     QHash<QScreen*, QWindow*> m_geometrySensors;
+
+    // Delayed panel re-query (e.g. after panel editor close) to pick up settled state
+    QTimer m_delayedPanelRequeryTimer;
 };
 
 } // namespace PlasmaZones

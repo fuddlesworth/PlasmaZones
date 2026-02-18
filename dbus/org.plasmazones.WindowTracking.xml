@@ -397,6 +397,9 @@
         <signal name="pendingRestoresAvailable">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the daemon's layout becomes available and there are pending zone restores. The KWin effect should retry restoring untracked windows when receiving this signal."/>
         </signal>
+        <signal name="reapplyWindowGeometriesRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted after panel geometry has settled so the KWin effect should call getUpdatedWindowGeometries and apply those geometries to snapped windows. Fixes shifted windows after closing the KDE panel editor."/>
+        </signal>
         <signal name="windowFloatingChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's floating state changes (e.g., when a floating window is drag-snapped). The KWin effect should listen to this to keep its local floating cache in sync."/>
             <arg name="stableId" type="s">

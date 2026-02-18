@@ -51,6 +51,14 @@
 namespace PlasmaZones {
 
 namespace {
+// Geometry/panel timing (ms) — keep in sync with comments in processPendingGeometryUpdates
+// Debounce: coalesce rapid geometry changes (multi-screen, panel editor) into one update.
+constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
+// After processing geometry we re-query panels once so we pick up settled state (e.g. panel editor close).
+constexpr int DELAYED_PANEL_REQUERY_MS = 400;
+// Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
+constexpr int REAPPLY_DELAY_MS = 0;
+
 // Helper function to convert NavigationDirection to string
 QString navigationDirectionToString(NavigationDirection direction)
 {
@@ -126,9 +134,11 @@ Daemon::Daemon(QObject* parent)
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
 {
     // Configure geometry update debounce timer
-    // This prevents cascading recalculations when multiple geometry changes occur rapidly
+    // This prevents cascading recalculations when multiple geometry changes occur rapidly.
+    // Use a longer debounce so KDE panel edit mode exit and other transient
+    // changes settle before we recalculate zones and overlay.
     m_geometryUpdateTimer.setSingleShot(true);
-    m_geometryUpdateTimer.setInterval(50); // 50ms debounce - fast enough to feel responsive
+    m_geometryUpdateTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
 
 }
@@ -276,6 +286,13 @@ bool Daemon::init()
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
                                                         m_virtualDesktopManager.get(), this);
+
+    // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
+    // When the delayed panel requery completes it emits availableGeometryChanged, which triggers
+    // the same debounce → processPendingGeometryUpdates → reapply path; no separate delay needed.
+    m_reapplyGeometriesTimer.setSingleShot(true);
+    connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
+            &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
     m_screenAdaptor = new ScreenAdaptor(this);
 
@@ -778,6 +795,7 @@ void Daemon::stop()
         m_modeTracker->save();
     }
 
+    m_reapplyGeometriesTimer.stop();
     m_running = false;
 }
 
@@ -917,6 +935,14 @@ void Daemon::processPendingGeometryUpdates()
 
     // Single overlay update after all geometry recalculations
     m_overlayService->updateGeometries();
+
+    // Ask effect to reapply snapped window positions (next event loop when REAPPLY_DELAY_MS is 0).
+    m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+    m_reapplyGeometriesTimer.start();
+
+    // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
+    // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
+    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
 }
 
 } // namespace PlasmaZones

@@ -100,8 +100,8 @@ QRect PlasmaZonesEffect::parseZoneGeometry(const QString& json) const
     }
 
     QJsonObject obj = doc.object();
-    return QRect(obj[QStringLiteral("x")].toInt(), obj[QStringLiteral("y")].toInt(),
-                 obj[QStringLiteral("width")].toInt(), obj[QStringLiteral("height")].toInt());
+    return QRect(obj[QLatin1String("x")].toInt(), obj[QLatin1String("y")].toInt(),
+                 obj[QLatin1String("width")].toInt(), obj[QLatin1String("height")].toInt());
 }
 
 void PlasmaZonesEffect::dispatchAsyncStringReply(QDBusPendingCall call, std::function<void(const QString&)> callback)
@@ -635,78 +635,138 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
                       << "- previous:" << m_lastVirtualScreenGeometry << "- current:" << currentGeometry;
 
     m_pendingScreenChange = false;
-    m_lastVirtualScreenGeometry = currentGeometry;
 
-    // Call daemon to get updated window geometries
-    if (!ensureWindowTrackingReady("get updated window geometries")) {
+    // Only reposition windows when the virtual screen SIZE (resolution / monitor setup) changed.
+    // When only position or internal state changes (e.g. exiting KDE panel edit mode), KWin
+    // may still emit virtualScreenGeometryChanged; we must not move windows then or they jump.
+    const QSize previousSize = m_lastVirtualScreenGeometry.size();
+    const QSize currentSize = currentGeometry.size();
+    if (previousSize == currentSize) {
+        qCDebug(lcEffect) << "Virtual screen size unchanged, skipping window repositioning";
+        m_lastVirtualScreenGeometry = currentGeometry;
         return;
     }
 
-    // Use ASYNC D-Bus call to avoid blocking the compositor thread
+    m_lastVirtualScreenGeometry = currentGeometry;
+    if (m_reapplyInProgress) {
+        m_reapplyPending = true;
+        return;
+    }
+    fetchAndApplyWindowGeometries();
+}
+
+void PlasmaZonesEffect::slotReapplyWindowGeometriesRequested()
+{
+    qCInfo(lcEffect) << "Daemon requested re-apply of window geometries (e.g. after panel editor close)";
+    if (m_reapplyInProgress) {
+        m_reapplyPending = true;
+        return;
+    }
+    fetchAndApplyWindowGeometries();
+}
+
+void PlasmaZonesEffect::fetchAndApplyWindowGeometries()
+{
+    if (!ensureWindowTrackingReady("get updated window geometries")) {
+        return;
+    }
+    m_reapplyInProgress = true;
     QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+    QPointer<PlasmaZonesEffect> self(this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {
         w->deleteLater();
-
+        if (!self) {
+            return;
+        }
+        self->m_reapplyInProgress = false;
         QDBusPendingReply<QString> reply = *w;
         if (!reply.isValid()) {
             qCDebug(lcEffect) << "No window geometries to update";
-            return;
+        } else {
+            self->applyWindowGeometriesFromJson(reply.value());
         }
-
-        QString geometriesJson = reply.value();
-        if (geometriesJson.isEmpty() || geometriesJson == QStringLiteral("[]")) {
-            qCDebug(lcEffect) << "Empty geometries list from daemon";
-            return;
-        }
-
-        // Parse JSON array of window geometries
-        QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
-        if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-            qCWarning(lcEffect) << "Failed to parse window geometries:" << parseError.errorString();
-            return;
-        }
-
-        QJsonArray geometries = doc.array();
-        qCInfo(lcEffect) << "Repositioning" << geometries.size() << "windows after resolution change";
-
-        // Build a map of stableId -> EffectWindow for faster lookup
-        // Using stable IDs ensures windows can be found after session restore
-        // Note: We don't filter handleable here since we want ALL windows for geometry updates
-        QHash<QString, KWin::EffectWindow*> windowMap = buildWindowMap(false);
-
-        // Apply new geometries to windows
-        for (const QJsonValue& value : geometries) {
-            if (!value.isObject()) {
-                continue;
-            }
-
-            QJsonObject obj = value.toObject();
-            QString windowId = obj[QStringLiteral("windowId")].toString();
-            QString stableId = extractStableId(windowId);
-            int x = obj[QStringLiteral("x")].toInt();
-            int y = obj[QStringLiteral("y")].toInt();
-            int width = obj[QStringLiteral("width")].toInt();
-            int height = obj[QStringLiteral("height")].toInt();
-
-            KWin::EffectWindow* window = windowMap.value(stableId);
-            if (window && shouldHandleWindow(window)) {
-                QRect newGeometry(x, y, width, height);
-
-                // Only apply if the geometry actually changed
-                QRectF currentWindowGeometry = window->frameGeometry();
-                if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
-                    qCInfo(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
-                                      << newGeometry;
-                    applySnapGeometry(window, newGeometry);
-                } else {
-                    qCDebug(lcEffect) << "Window" << windowId << "already at target geometry, skipping";
+        if (self->m_reapplyPending) {
+            self->m_reapplyPending = false;
+            QTimer::singleShot(0, self, [self]() {
+                if (self) {
+                    self->fetchAndApplyWindowGeometries();
                 }
-            }
+            });
         }
     });
+}
+
+void PlasmaZonesEffect::applyWindowGeometriesFromJson(const QString& geometriesJson)
+{
+    if (geometriesJson.isEmpty() || geometriesJson == QLatin1String("[]")) {
+        qCDebug(lcEffect) << "Empty geometries list from daemon";
+        return;
+    }
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(geometriesJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcEffect) << "Failed to parse window geometries:" << parseError.errorString();
+        return;
+    }
+    if (!doc.isArray()) {
+        qCWarning(lcEffect) << "Window geometries root is not an array";
+        return;
+    }
+    QJsonArray geometries = doc.array();
+    qCInfo(lcEffect) << "Applying geometries to" << geometries.size() << "windows";
+
+    // Single pass: map by full window ID (so multiple windows in same zone get correct geometry)
+    // and by stableId for fallback (first window per stableId; daemon usually sends full ids).
+    QHash<QString, KWin::EffectWindow*> windowByFullId;
+    QHash<QString, KWin::EffectWindow*> windowByStableId;
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (!w || !shouldHandleWindow(w)) {
+            continue;
+        }
+        QString fullId = getWindowId(w);
+        QString stableId = extractStableId(fullId);
+        windowByFullId.insert(fullId, w);
+        if (!windowByStableId.contains(stableId)) {
+            windowByStableId.insert(stableId, w);
+        }
+    }
+
+    for (const QJsonValue& value : geometries) {
+        if (!value.isObject()) {
+            qCDebug(lcEffect) << "Skipping non-object geometry entry";
+            continue;
+        }
+        QJsonObject obj = value.toObject();
+        QString windowId = obj[QLatin1String("windowId")].toString();
+        if (windowId.isEmpty()) {
+            qCDebug(lcEffect) << "Skipping geometry entry with empty windowId";
+            continue;
+        }
+        int width = obj[QLatin1String("width")].toInt();
+        int height = obj[QLatin1String("height")].toInt();
+        if (width <= 0 || height <= 0) {
+            qCDebug(lcEffect) << "Skipping geometry entry with invalid size for" << windowId;
+            continue;
+        }
+        int x = obj[QLatin1String("x")].toInt();
+        int y = obj[QLatin1String("y")].toInt();
+
+        KWin::EffectWindow* window = windowByFullId.value(windowId);
+        if (!window) {
+            window = windowByStableId.value(extractStableId(windowId));
+        }
+        if (window && shouldHandleWindow(window)) {
+            QRect newGeometry(x, y, width, height);
+            QRectF currentWindowGeometry = window->frameGeometry();
+            if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
+                qCInfo(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
+                                  << newGeometry;
+                applySnapGeometry(window, newGeometry);
+            }
+        }
+    }
 }
 
 void PlasmaZonesEffect::slotSettingsChanged()
@@ -1225,6 +1285,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("pendingRestoresAvailable"), this,
                                           SLOT(slotPendingRestoresAvailable()));
+
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                          QStringLiteral("reapplyWindowGeometriesRequested"), this,
+                                          SLOT(slotReapplyWindowGeometriesRequested()));
 
     // Connect to floating state changes to keep local cache in sync
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,

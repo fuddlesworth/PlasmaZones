@@ -94,6 +94,7 @@ private Q_SLOTS:
     void slotSnapAllWindowsRequested(const QString& screenName);
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
+    void slotReapplyWindowGeometriesRequested();
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
@@ -318,6 +319,13 @@ private:
 
     // Apply debounced screen geometry change
     void applyScreenGeometryChange();
+    // Fetch getUpdatedWindowGeometries from daemon and apply (used by resolution change and reapply request)
+    void fetchAndApplyWindowGeometries();
+    void applyWindowGeometriesFromJson(const QString& geometriesJson);
+
+    // Reapply guard: avoid overlapping async reapply runs; pending request runs once after current finishes
+    bool m_reapplyInProgress = false;
+    bool m_reapplyPending = false;
 
     // Load cached settings from daemon (exclusions, activation triggers, etc.)
     void loadCachedSettings();

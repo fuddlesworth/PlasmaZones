@@ -134,6 +134,9 @@ private:
     QTimer m_geometryUpdateTimer;
     QHash<QString, QRect> m_pendingGeometryUpdates;
     void processPendingGeometryUpdates();
+
+    // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)
+    QTimer m_reapplyGeometriesTimer;
 };
 
 } // namespace PlasmaZones

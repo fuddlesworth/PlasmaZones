@@ -33,6 +33,10 @@ ScreenManager::ScreenManager(QObject* parent)
     : QObject(parent)
 {
     s_instance = this;
+    m_delayedPanelRequeryTimer.setSingleShot(true);
+    connect(&m_delayedPanelRequeryTimer, &QTimer::timeout, this, [this]() {
+        queryKdePlasmaPanels(true); // true = emit delayedPanelRequeryCompleted when done
+    });
 }
 
 ScreenManager::~ScreenManager()
@@ -77,6 +81,7 @@ void ScreenManager::stop()
     }
 
     m_running = false;
+    m_delayedPanelRequeryTimer.stop();
 
     // Destroy all geometry sensors
     for (auto* screen : m_geometrySensors.keys()) {
@@ -216,6 +221,15 @@ void ScreenManager::scheduleDbusQuery()
     });
 }
 
+void ScreenManager::scheduleDelayedPanelRequery(int delayMs)
+{
+    if (delayMs <= 0) {
+        return;
+    }
+    m_delayedPanelRequeryTimer.setInterval(delayMs);
+    m_delayedPanelRequeryTimer.start();
+}
+
 void ScreenManager::calculateAvailableGeometry(QScreen* screen)
 {
     if (!screen) {
@@ -334,7 +348,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     Q_EMIT availableGeometryChanged(screen, availGeom);
 }
 
-void ScreenManager::queryKdePlasmaPanels()
+void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
 {
     // Query KDE Plasma via D-Bus for panel information (ASYNC to avoid blocking)
     QDBusInterface* plasmaShell =
@@ -400,7 +414,7 @@ void ScreenManager::queryKdePlasmaPanels()
     QDBusPendingCall pendingCall = plasmaShell->asyncCall(QStringLiteral("evaluateScript"), script);
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, plasmaShell](QDBusPendingCallWatcher* w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, plasmaShell, fromDelayedRequery](QDBusPendingCallWatcher* w) {
         QDBusPendingReply<QString> reply = *w;
 
         // Clear existing panel offsets before parsing new data
@@ -492,6 +506,10 @@ void ScreenManager::queryKdePlasmaPanels()
             m_panelGeometryReceived = true;
             qCInfo(lcScreen) << "Panel geometry ready - emitting signal";
             Q_EMIT panelGeometryReady();
+        }
+
+        if (fromDelayedRequery) {
+            Q_EMIT delayedPanelRequeryCompleted();
         }
 
         // Cleanup
