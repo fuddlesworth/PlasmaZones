@@ -56,9 +56,10 @@ jobs:
           find install -type f | head -50
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Nix Flake CI (x86_64 + aarch64)
+  # Nix Flake CI (x86_64 + aarch64) — disabled until nixpkgs has Plasma 6.6 stack
   # ═══════════════════════════════════════════════════════════════════════════
   nix:
+    if: false
     name: Nix (${{ matrix.system }})
     strategy:
       fail-fast: false

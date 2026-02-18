@@ -338,9 +338,10 @@ jobs:
           retention-days: 30
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Verify Nix Build
+  # Verify Nix Build — disabled until nixpkgs has Plasma 6.6 stack
   # ═══════════════════════════════════════════════════════════════════════════
   build-nix:
+    if: false
     name: Verify Nix Build
     needs: version
     runs-on: ubuntu-latest
@@ -434,7 +435,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-deb, build-rpm, build-arch, build-generic, build-nix]
+    needs: [version, build-deb, build-rpm, build-arch, build-generic]
     runs-on: ubuntu-latest
 
     steps:
@@ -538,7 +539,6 @@ jobs:
             artifacts/**/*.rpm
             artifacts/**/*.pkg.tar.zst
             artifacts/**/*linux-x86_64.tar.gz
-            artifacts/**/plasmazones.nix
           generate_release_notes: false
           make_latest: true
 
