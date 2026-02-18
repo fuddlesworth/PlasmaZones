@@ -33,9 +33,11 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════════════════════
   # Build Debian Package (Ubuntu 25.10 - has KF6)
+  # Disabled until Plasma/LayerShellQt 6.6 is in Ubuntu repos (e.g. 26.04).
   # ═══════════════════════════════════════════════════════════════════════════
   build-deb:
     name: Build .deb (Ubuntu 25.10)
+    if: false
     needs: version
     runs-on: ubuntu-latest
     container:
@@ -441,7 +443,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-deb, build-rpm, build-arch, build-generic]
+    needs: [version, build-rpm, build-arch, build-generic]
     runs-on: ubuntu-latest
 
     steps:
