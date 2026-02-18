@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-02-18
+
+### Fixed
+- **KCM Editor tab**: Use unique QML type `PlasmaZonesKeySequenceInput` so the Editor tab always loads the bundled shortcut component (with `defaultKeySequence`). Fixes "Type EditorTab unavailable" / "Cannot assign to non-existent property 'defaultKeySequence'" when the KCM runs from system install (e.g. NixOS) where another `KeySequenceInput` could be resolved first.
+- **KWin effect**: Remove explicit `Id` from plugin metadata so the loader uses the filename-derived id and the kf.coreaddons warning is resolved.
+
 ## [1.12.0] - 2026-02-18
 
 ### Added
