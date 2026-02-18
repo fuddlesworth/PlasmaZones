@@ -52,7 +52,7 @@ jobs:
 
       - name: Enable universe (Plasma/KF6)
         run: |
-          # Plasma 6 / KF6 packages are in the community-maintained universe repo
+          # On Ubuntu, Plasma/KF6 packages are in the community-maintained universe repository
           sed -i 's/^deb \(.*\) main$/deb \1 main universe/' /etc/apt/sources.list
           apt-get update
 

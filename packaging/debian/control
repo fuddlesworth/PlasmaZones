@@ -1,4 +1,4 @@
-# Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
+# Requires Plasma 6.4+ (KF6 6.6, Qt 6.6, LayerShellQt 6.4+, KWin 6.6). LayerShellQt >= 6.4 for Ubuntu 25.10.
 Source: plasmazones
 Section: kde
 Priority: optional
@@ -27,7 +27,7 @@ Build-Depends:
  libkf6colorscheme-dev (>= 6.6.0),
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
- liblayershellqtinterface-dev (>= 6.6.0),
+ liblayershellqtinterface-dev (>= 6.4.0),
  libplasmaactivities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones
@@ -41,7 +41,7 @@ Depends:
  ${shlibs:Depends},
  ${misc:Depends},
  kwin-common (>= 4:6.6.0),
- layer-shell-qt (>= 6.6.0),
+ layer-shell-qt (>= 6.4.0),
  libqt6shadertools6 (>= 6.6.0),
 Recommends:
  systemd,
