@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
-# Use nixpkgs with Plasma 6.6 or later (e.g. nixos-unstable or a branch that has
-# KWin 6.6 effect API and LayerShellQt 6.6 setScreen API).
+# You must use nixpkgs that provides the full Plasma 6.6 stack (LayerShellQt 6.6,
+# KWin 6.6). nixos-unstable or a newer channel will have this once KDE 6.6 is
+# merged; until then the build will fail with the assertion below.
 #
 # Usage:
 #   plasmazones = pkgs.callPackage ./packaging/nix/package.nix {
@@ -46,7 +47,19 @@ let
         else null;
     in
     if parsed != null then builtins.head parsed else "0.0.0";
+
+  # PlasmaZones requires LayerShellQt 6.6 (setScreen API). Fail fast with a clear
+  # message instead of a CMake error when the provided nixpkgs has the 6.5 stack.
+  layerShellQtVersion = lib.getVersion kdePackages.layer-shell-qt;
+  hasLayerShellQt66 = lib.versionAtLeast layerShellQtVersion "6.6";
 in
+
+assert hasLayerShellQt66 || throw ''
+  PlasmaZones requires the Plasma 6.6 stack (LayerShellQt 6.6+, KWin 6.6+).
+  Your nixpkgs provides layer-shell-qt ${layerShellQtVersion}.
+  Use a nixpkgs channel or revision that has KDE/Plasma 6.6 (e.g. a recent
+  nixos-unstable after the 6.6 bump, or a NixOS 25.xx channel).
+'';
 
 stdenv.mkDerivation {
   pname = "plasmazones";
