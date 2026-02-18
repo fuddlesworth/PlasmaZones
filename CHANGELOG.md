@@ -7,6 +7,24 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-02-18
+
+### Added
+- **Reapply window geometries after geometry updates**: When zones or panel geometry change (e.g. after closing the KDE panel editor), the daemon requests the KWin effect to reapply snapped window positions so windows stay correctly placed in zones.
+- **D-Bus**: `reapplyWindowGeometriesRequested` signal and `getUpdatedWindowGeometries` method on WindowTracking for the effect to fetch and apply geometries.
+- **ScreenManager**: `delayedPanelRequeryCompleted` signal when the delayed panel requery finishes (used for documentation; reapply path is unified).
+
+### Fixed
+- **Panel editor / geometry**: Zones and snapped windows no longer shift incorrectly after editing the KDE panel and closing the panel editor. Geometry debounce (400ms), delayed panel requery (400ms), and immediate reapply (0ms) after each geometry batch keep overlay and window positions correct.
+- **Multiple windows in same zone**: Reapply now updates every snapped window; previously only one window per zone (same app) was updated due to stableId-only lookup. Effect now maps by full window ID with stableId fallback.
+- **Effect reapply safety**: Reapply-in-progress guard prevents overlapping async reapply runs; QPointer in async callback avoids use-after-free if the effect is unloaded during reapply.
+- **Effect JSON**: Robust validation and skip of invalid geometry entries; QLatin1String for JSON keys (Qt6); single-pass window map.
+
+### Changed
+- **Reapply timing**: Reapply runs after every geometry batch (0ms delay). Removed redundant 1100ms/450ms reapply path; delayed panel requery still triggers the same debounce → processPendingGeometryUpdates → reapply flow.
+- **Daemon**: Reapply timer stopped in `stop()`; named constants for geometry and panel delays.
+- **Nix**: Build asserts LayerShellQt 6.6 and fails with a clear message when nixpkgs provides the 6.5 stack. Nix CI and release Nix build/artifact disabled until nixpkgs has Plasma 6.6.
+
 ## [1.11.8] - 2026-02-16
 
 ### Performance
