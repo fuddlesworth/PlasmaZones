@@ -3,7 +3,6 @@
         "Category": "Window Management",
         "Description": "FancyZones-style window snapping with modifier key detection",
         "EnabledByDefault": true,
-        "Id": "plasmazones",
         "License": "GPL",
         "Name": "PlasmaZones",
         "Authors": [

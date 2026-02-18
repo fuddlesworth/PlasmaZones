@@ -73,7 +73,7 @@ Item {
         { bit: 0x80, label: i18n("Extra 5") }
     ]
 
-    // Match KeySequenceInput: no fixed width so FormLayout gives same column width as shortcut fields
+    // Match PlasmaZonesKeySequenceInput: no fixed width so FormLayout gives same column width as shortcut fields
     implicitWidth: allowMultiple ? multiContainer.implicitWidth : field.implicitWidth
     implicitHeight: allowMultiple ? multiContainer.implicitHeight : field.implicitHeight
 
