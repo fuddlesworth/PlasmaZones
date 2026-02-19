@@ -1,5 +1,4 @@
 # Auto-update flake.lock weekly to keep nixpkgs fresh
-# Disabled until Nix CI/builds are re-enabled (Plasma 6.6 stack in nixpkgs).
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 name: Update flake.lock
@@ -15,7 +14,6 @@ permissions:
 
 jobs:
   update:
-    if: false
     name: Update flake.lock
     runs-on: ubuntu-latest
 
