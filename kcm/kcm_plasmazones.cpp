@@ -814,8 +814,11 @@ void KCMPlasmaZones::setEnableAudioVisualizer(bool enable)
 
 void KCMPlasmaZones::setAudioSpectrumBarCount(int count)
 {
-    if (m_settings->audioSpectrumBarCount() != count) {
-        m_settings->setAudioSpectrumBarCount(count);
+    // CAVA requires even bar count for stereo output
+    const int even = (count % 2 != 0) ? count + 1 : count;
+    const int clamped = qBound(Audio::MinBars, even, Audio::MaxBars);
+    if (m_settings->audioSpectrumBarCount() != clamped) {
+        m_settings->setAudioSpectrumBarCount(clamped);
         Q_EMIT audioSpectrumBarCountChanged();
         setNeedsSave(true);
     }

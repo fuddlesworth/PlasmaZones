@@ -159,6 +159,14 @@ inline constexpr QLatin1String Colors{"colors"};
 }
 
 /**
+ * @brief Audio visualization constants (CAVA)
+ */
+namespace Audio {
+constexpr int MinBars = 16;
+constexpr int MaxBars = 256;
+}
+
+/**
  * @brief D-Bus service constants
  */
 namespace DBus {

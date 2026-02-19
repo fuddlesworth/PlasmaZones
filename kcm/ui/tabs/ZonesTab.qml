@@ -413,9 +413,9 @@ ScrollView {
                         Slider {
                             id: audioBarsSlider
                             Layout.preferredWidth: root.constants.sliderPreferredWidth
-                            from: 16
-                            to: 256
-                            stepSize: 1
+                            from: 16  // Audio::MinBars (src/core/constants.h)
+                            to: 256   // Audio::MaxBars (src/core/constants.h)
+                            stepSize: 2  // CAVA requires even bar count for stereo
                             value: kcm.audioSpectrumBarCount
                             onMoved: kcm.audioSpectrumBarCount = Math.round(value)
                         }
