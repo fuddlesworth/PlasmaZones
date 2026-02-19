@@ -7,6 +7,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.12.2] - 2026-02-19
+
+### Fixed
+- **Audio visualizer**: CAVA process silently failed when bar count was odd (exit code 1, "must have even number of bars with stereo output"). Even bar counts are now enforced at all layers: CavaService, KCM setter, and UI slider (stepSize=2).
+- **Audio shader data**: QML `|| []` fallback on `audioSpectrum` binding forced V4 JavaScript conversion, losing the native `QVector<float>` type needed by `ZoneShaderItem`'s fast path. Replaced with a `Binding` element guarded by `when` to preserve type identity through the binding chain.
+- **CAVA stderr capture**: Switched from `ForwardedErrorChannel` to `SeparateChannels` so CAVA error output is captured in daemon logs instead of lost.
+- **CAVA exit diagnostics**: Moved `exitCode()`/`readAllStandardError()` from `stateChanged` to `finished` signal handler per Qt API contract. Only warns on non-zero exit code (stderr on exit 0 is normal for CAVA).
+
+### Changed
+- **Shared audio constants**: `Audio::MinBars`/`Audio::MaxBars` moved to `src/core/constants.h` with `static_assert` for even values, eliminating magic number duplication across CavaService, KCM, and QML.
+- **Nix**: Re-enabled Nix CI, release builds, flake.lock updater, and `plasmazones.nix` release asset now that nixpkgs-unstable has the Plasma 6.6 stack (NixOS/nixpkgs#479797).
+
 ## [1.12.1] - 2026-02-18
 
 ### Fixed
