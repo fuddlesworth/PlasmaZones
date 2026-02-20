@@ -3065,9 +3065,10 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenName)
 {
-    // Toggle: if already visible, dismiss instead of recreating
-    if (isLayoutPickerVisible()) {
-        hideLayoutPicker();
+    // Guard: if picker window already exists (visible or being set up), do nothing.
+    // Prevents double-trigger when shortcut fires before KeyboardInteractivityExclusive
+    // grabs the keyboard on Wayland, and avoids deleteLater() races with stale grabs.
+    if (m_layoutPickerWindow) {
         return;
     }
 
