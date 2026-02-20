@@ -654,6 +654,30 @@ void Daemon::start()
         m_windowTrackingAdaptor->resnapToNewLayout();
     });
 
+    // Layout picker shortcut (interactive layout browser + resnap)
+    // Capture screen name at open time so it's still valid after the picker closes.
+    connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for layoutPicker shortcut — skipping";
+            return;
+        }
+        const QString screenName = Utils::screenIdentifier(screen);
+        m_unifiedLayoutController->setCurrentScreenName(screenName);
+        m_overlayService->showLayoutPicker(screenName);
+    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        // Screen name was already set when the picker opened.
+        m_unifiedLayoutController->applyLayoutById(layoutId);
+        m_windowTrackingAdaptor->resnapToNewLayout();
+    });
+
     // Snap all windows shortcut
     connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);

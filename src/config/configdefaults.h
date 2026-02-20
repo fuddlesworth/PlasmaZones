@@ -215,6 +215,7 @@ public:
     static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
     static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
     static QString snapAllWindowsShortcut() { return instance().defaultSnapAllWindowsShortcutValue(); }
+    static QString layoutPickerShortcut() { return instance().defaultLayoutPickerShortcutValue(); }
 
 private:
     // Lazily-initialized singleton instance

@@ -468,6 +468,12 @@
       <label>Shortcut to snap all visible windows to zones</label>
       <default>Meta+Ctrl+S</default>
     </entry>
+
+    <!-- Layout Picker (Meta+Alt+Space — browse and switch layouts interactively) -->
+    <entry name="LayoutPickerShortcut" type="String">
+      <label>Shortcut to open layout picker (switch layout and resnap)</label>
+      <default>Meta+Alt+Space</default>
+    </entry>
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════

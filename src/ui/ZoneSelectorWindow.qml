@@ -3,7 +3,6 @@
 
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
@@ -102,6 +101,9 @@ Window {
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
 
+    // Shared fade color for scroll edge indicators
+    readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
+
     // Animation constants - avoid magic numbers per .cursorrules
     QtObject {
         id: animationConstants
@@ -173,25 +175,17 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
 
-    // Shadow effect for the container
-    MultiEffect {
-        source: container
-        anchors.fill: container
-        shadowEnabled: true
-        shadowColor: Qt.rgba(0, 0, 0, 0.38)
-        shadowBlur: 1
-        shadowVerticalOffset: 2
-        shadowHorizontalOffset: 0
-    }
-
     // Main container - uses States for proper anchor management
     // Conditional anchors with undefined don't reliably unset in QML
-    Rectangle {
+    QFZCommon.PopupFrame {
         id: container
 
         objectName: "zoneSelectorContainer"
         width: root.containerWidth
         height: root.containerHeight
+        backgroundColor: root.backgroundColor
+        textColor: root.textColor
+        containerRadius: root.containerRadius
         // State based on selectorPosition (0-8 grid, 4=center is disabled)
         // 0=TopLeft, 1=Top, 2=TopRight, 3=Left, 5=Right, 6=BottomLeft, 7=Bottom, 8=BottomRight
         state: {
@@ -216,10 +210,6 @@ Window {
                 return "top";
             }
         }
-        color: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, 0.95)
-        radius: root.containerRadius
-        border.color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.2)
-        border.width: 1
         states: [
             State {
                 name: "topLeft"
@@ -413,256 +403,65 @@ Window {
                         required property var modelData
                         required property int index
                         property string layoutId: modelData.id || ""
-                        property string layoutName: modelData.name || ("Layout " + (index + 1))
-                        property var layoutZones: modelData.zones || []
-                        property int layoutCategory: modelData.category !== undefined ? modelData.category : 0
                         property bool isActive: layoutId === root.activeLayoutId
                         property bool hasSelectedZone: root.selectedLayoutId === layoutId
 
                         width: root.indicatorWidth
-                        height: root.indicatorHeight + root.labelSpace // Preview height + label space
+                        height: root.indicatorHeight + root.labelSpace
                         Layout.preferredWidth: width
                         Layout.preferredHeight: height
 
-                        // Preview area (the actual layout preview) - contains zone rectangles
-                        Item {
-                            id: previewArea
+                        QFZCommon.LayoutCard {
+                            anchors.fill: parent
+                            layoutData: indicator.modelData
+                            isActive: indicator.isActive
+                            isSelected: indicator.hasSelectedZone
+                            previewWidth: root.indicatorWidth
+                            previewHeight: root.indicatorHeight
 
-                            width: root.indicatorWidth
-                            height: root.indicatorHeight
-                            anchors.top: parent.top
+                            // Zone selector features
+                            showIndicatorBar: true
+                            showCardBackground: false
+                            interactive: true
+                            selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
 
-                            // Background for the indicator - shows active layout and hover states
-                            Rectangle {
-                                // Active layout gets a prominent highlight border
-                                // Hovered layout gets a subtle border
+                            // Zone appearance
+                            zonePadding: 1
+                            edgeGap: 1
+                            minZoneSize: 8
+                            zoneHighlightColor: root.highlightColor
+                            zoneInactiveColor: root.inactiveColor
+                            zoneBorderColor: root.borderColor
+                            inactiveOpacity: root.inactiveOpacity
+                            activeOpacity: root.activeOpacity
+                            hoverScale: 1.05
 
-                                anchors.fill: parent
-                                // P1: Enhanced background tint for active layout
-                                color: {
-                                    if (indicator.isActive)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12);
-                                    else if (indicator.hasSelectedZone)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.08);
-                                    return "transparent";
-                                }
-                                radius: Kirigami.Units.smallSpacing * 1.5
-                                border.color: {
-                                    if (indicator.isActive)
-                                        return highlightColor;
-                                    else if (indicator.hasSelectedZone)
-                                        return Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.3);
-                                    return "transparent";
-                                }
-                                border.width: indicator.isActive ? 2 : 1
+                            // Theme
+                            highlightColor: root.highlightColor
+                            textColor: root.textColor
 
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutCubic
-                                    }
+                            // Font
+                            fontFamily: root.fontFamily
+                            fontSizeScale: root.fontSizeScale
+                            fontWeight: root.fontWeight
+                            fontItalic: root.fontItalic
+                            fontUnderline: root.fontUnderline
+                            fontStrikeout: root.fontStrikeout
 
-                                }
+                            // Animation
+                            animationDuration: animationConstants.normalDuration
+                            shortAnimationDuration: animationConstants.shortDuration
+                            labelTopMargin: root.labelTopMargin
 
-                                Behavior on border.color {
-                                    ColorAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                                Behavior on border.width {
-                                    NumberAnimation {
-                                        duration: animationConstants.shortDuration
-                                    }
-
-                                }
-
+                            onZoneHovered: function(zoneIndex) {
+                                root.selectedLayoutId = indicator.layoutId;
+                                root.selectedZoneIndex = zoneIndex;
+                                var zones = indicator.modelData.zones || [];
+                                var zone = zones[zoneIndex];
+                                var relGeo = zone ? (zone.relativeGeometry || {}) : {};
+                                root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
                             }
-
-                            // P1: Colored left border accent for active layout
-                            Rectangle {
-                                id: activeIndicatorBar
-
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.leftMargin: -Math.round(Kirigami.Units.smallSpacing / 2)
-                                anchors.topMargin: Kirigami.Units.smallSpacing
-                                anchors.bottomMargin: Kirigami.Units.smallSpacing
-                                width: indicator.isActive ? Kirigami.Units.smallSpacing : 0
-                                radius: Math.round(Kirigami.Units.smallSpacing / 2)
-                                color: Kirigami.Theme.highlightColor
-                                opacity: indicator.isActive ? 1 : 0
-
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                            }
-
-                            // P1: Active layout checkmark badge - larger and more prominent
-                            Rectangle {
-                                id: activeBadge
-
-                                readonly property int badgeSize: Math.round(Kirigami.Units.gridUnit * 2.5)
-
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.rightMargin: Kirigami.Units.smallSpacing
-                                anchors.topMargin: Kirigami.Units.smallSpacing
-                                width: indicator.isActive ? badgeSize : 0
-                                height: indicator.isActive ? badgeSize : 0
-                                radius: badgeSize / 2
-                                color: Kirigami.Theme.highlightColor
-                                opacity: indicator.isActive ? 1 : 0
-                                z: 100
-
-                                Label {
-                                    anchors.centerIn: parent
-                                    text: "\u2713" // Checkmark unicode
-                                    font.pixelSize: Math.round(Kirigami.Units.gridUnit * 1.5)
-                                    font.bold: true
-                                    color: Kirigami.Theme.highlightedTextColor
-                                    visible: indicator.isActive
-                                }
-
-                                Behavior on width {
-                                    NumberAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutBack
-                                        easing.overshoot: 1.5
-                                    }
-
-                                }
-
-                                Behavior on height {
-                                    NumberAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutBack
-                                        easing.overshoot: 1.5
-                                    }
-
-                                }
-
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: animationConstants.shortDuration
-                                    }
-
-                                }
-
-                            }
-
-                            // Zone rectangles - use shared ZonePreview for consistent rendering
-                            QFZCommon.ZonePreview {
-                                id: zonePreview
-
-                                anchors.fill: parent
-                                zones: indicator.layoutZones
-                                interactive: true
-                                showZoneNumbers: true
-                                highlightAllZones: false
-                                selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
-                                isHovered: indicator.hasSelectedZone
-                                isActive: indicator.isActive
-                                zonePadding: 1
-                                edgeGap: 1
-                                minZoneSize: 8
-                                highlightColor: root.highlightColor
-                                inactiveColor: root.inactiveColor
-                                borderColor: root.borderColor
-                                inactiveOpacity: root.inactiveOpacity
-                                activeOpacity: root.activeOpacity
-                                hoverScale: 1.05
-                                fontFamily: root.fontFamily
-                                fontSizeScale: root.fontSizeScale
-                                fontWeight: root.fontWeight
-                                fontItalic: root.fontItalic
-                                fontUnderline: root.fontUnderline
-                                fontStrikeout: root.fontStrikeout
-                                animationDuration: animationConstants.normalDuration
-
-                                onZoneHovered: function(index) {
-                                    root.selectedLayoutId = indicator.layoutId;
-                                    root.selectedZoneIndex = index;
-                                    var zone = indicator.layoutZones[index];
-                                    var relGeo = zone ? (zone.relativeGeometry || {}) : {};
-                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
-                                }
-                            }
-
                         }
-
-                        // Layout name label with category badge below preview
-                        Row {
-                            id: nameLabelRow
-
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.top: previewArea.bottom
-                            anchors.topMargin: root.labelTopMargin
-                            spacing: Kirigami.Units.smallSpacing
-
-                            // Category badge (layout type) - inline with name
-                            QFZCommon.CategoryBadge {
-                                id: categoryBadge
-
-                                anchors.verticalCenter: parent.verticalCenter
-                                category: indicator.layoutCategory
-                                autoAssign: indicator.modelData.autoAssign === true
-                            }
-
-                            Label {
-                                id: nameLabel
-
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: indicator.layoutName
-                                font.pixelSize: Kirigami.Theme.smallFont.pixelSize + 1
-                                // P1: More prominent styling for active layout label
-                                font.weight: indicator.isActive ? Font.Bold : Font.Normal
-                                color: {
-                                    if (indicator.isActive)
-                                        return Kirigami.Theme.highlightColor;
-                                    else if (indicator.hasSelectedZone)
-                                        return textColor;
-                                    return Qt.rgba(textColor.r, textColor.g, textColor.b, 0.6);
-                                }
-                                opacity: indicator.hasSelectedZone || indicator.isActive ? 1 : 0.8
-
-                                // P2: Smoother animations with easing
-                                Behavior on color {
-                                    ColorAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: animationConstants.normalDuration
-                                        easing.type: Easing.OutCubic
-                                    }
-
-                                }
-
-                            }
-
-                        }
-
                     }
 
                 }
@@ -672,8 +471,6 @@ Window {
         }
 
         // Scroll fade indicators — show gradient edges when content overflows
-        // Shared fade color matching container background
-        readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
 
         // Top fade: visible when scrolled down (more content above)
         Rectangle {
@@ -684,7 +481,7 @@ Window {
             visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
             z: 10
             gradient: Gradient {
-                GradientStop { position: 0.0; color: container.fadeColor }
+                GradientStop { position: 0.0; color: root.fadeColor }
                 GradientStop { position: 1.0; color: "transparent" }
             }
         }
@@ -699,7 +496,7 @@ Window {
             z: 10
             gradient: Gradient {
                 GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: container.fadeColor }
+                GradientStop { position: 1.0; color: root.fadeColor }
             }
         }
 
@@ -713,7 +510,7 @@ Window {
             z: 10
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: container.fadeColor }
+                GradientStop { position: 0.0; color: root.fadeColor }
                 GradientStop { position: 1.0; color: "transparent" }
             }
         }
@@ -729,7 +526,7 @@ Window {
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: container.fadeColor }
+                GradientStop { position: 1.0; color: root.fadeColor }
             }
         }
 

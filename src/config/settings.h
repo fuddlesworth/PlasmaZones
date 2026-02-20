@@ -249,6 +249,10 @@ public:
     Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut
                    NOTIFY snapAllWindowsShortcutChanged)
 
+    // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
+    Q_PROPERTY(QString layoutPickerShortcut READ layoutPickerShortcut WRITE setLayoutPickerShortcut
+                   NOTIFY layoutPickerShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -879,6 +883,12 @@ public:
     }
     void setSnapAllWindowsShortcut(const QString& shortcut);
 
+    QString layoutPickerShortcut() const
+    {
+        return m_layoutPickerShortcut;
+    }
+    void setLayoutPickerShortcut(const QString& shortcut);
+
     // Persistence
     void load() override;
     void save() override;
@@ -1100,6 +1110,9 @@ private:
 
     // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
     QString m_snapAllWindowsShortcut = QStringLiteral("Meta+Ctrl+S");
+
+    // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
+    QString m_layoutPickerShortcut = QStringLiteral("Meta+Alt+Space");
 
 };
 

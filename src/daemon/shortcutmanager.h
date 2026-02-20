@@ -140,6 +140,13 @@ Q_SIGNALS:
      */
     void snapAllWindowsRequested();
 
+    /**
+     * @brief Emitted when layout picker shortcut is triggered
+     *
+     * Opens the layout picker overlay to browse and switch layouts interactively.
+     */
+    void layoutPickerRequested();
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -212,6 +219,10 @@ private Q_SLOTS:
     void onSnapAllWindows();
     void updateSnapAllWindowsShortcut();
 
+    // Layout Picker
+    void onLayoutPicker();
+    void updateLayoutPickerShortcut();
+
 private:
     void setupEditorShortcut();
     void setupCyclingShortcuts();
@@ -223,6 +234,7 @@ private:
     void setupCycleWindowsShortcuts();
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
+    void setupLayoutPickerShortcut();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -267,6 +279,9 @@ private:
 
     // Snap All Windows action
     QAction* m_snapAllWindowsAction = nullptr;
+
+    // Layout Picker action
+    QAction* m_layoutPickerAction = nullptr;
 };
 
 } // namespace PlasmaZones

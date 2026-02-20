@@ -264,6 +264,9 @@ Q_SIGNALS:
 
     // Snap All Windows Shortcut
     void snapAllWindowsShortcutChanged();
+
+    // Layout Picker Shortcut
+    void layoutPickerShortcutChanged();
 };
 
 /**
@@ -513,6 +516,12 @@ Q_SIGNALS:
      * WindowDragAdaptor subscribes to unregister the KGlobalAccel Escape shortcut.
      */
     void snapAssistDismissed();
+
+    /**
+     * @brief Emitted when a layout is selected from the layout picker overlay
+     * @param layoutId The UUID of the selected layout
+     */
+    void layoutPickerSelected(const QString& layoutId);
 };
 
 } // namespace PlasmaZones
