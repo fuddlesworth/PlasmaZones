@@ -40,9 +40,9 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
 
-    // Current keyboard selection index (-1 = none)
+    // Current keyboard selection index — binding is intentionally broken on first
+    // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
-        // Start with active layout selected
         for (var i = 0; i < layouts.length; i++) {
             if (layouts[i].id === activeLayoutId)
                 return i;
@@ -55,18 +55,30 @@ Window {
     readonly property int gridColumns: Math.min(layoutCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(layoutCount * 1.5)))))
     readonly property int gridRows: gridColumns > 0 ? Math.ceil(layoutCount / gridColumns) : 0
 
-    // Container layout constants — match ZoneSelectorLayout (zoneselectorlayout.h)
+    // Layout constants — match ZoneSelectorLayout (zoneselectorlayout.h)
     QtObject {
         id: metrics
+
+        // Container chrome
         readonly property int containerPadding: 36
         readonly property int paddingSide: 18
         readonly property int containerRadius: 12
         readonly property int indicatorSpacing: 18
         readonly property real backdropAlpha: 0.3
+
+        // Card preview
+        readonly property int previewWidth: 160
+
+        // Show/hide animation
+        readonly property int showDuration: Kirigami.Units.shortDuration
+        readonly property int hideDuration: Math.round(Kirigami.Units.shortDuration * 0.8)
+        readonly property real showScaleFrom: 0.9
+        readonly property real hideScaleTo: 0.95
+        readonly property real showOvershoot: 1.1
     }
 
     // Card dimensions
-    readonly property int previewWidth: 160
+    readonly property int previewWidth: metrics.previewWidth
     readonly property int previewHeight: Math.round(previewWidth / safeAspectRatio)
     readonly property int cardWidth: previewWidth + metrics.paddingSide * 2
     readonly property int cardHeight: previewHeight + metrics.containerPadding + metrics.paddingSide
@@ -86,7 +98,7 @@ Window {
         showAnimation.stop();
         hideAnimation.stop();
         contentWrapper.opacity = 0;
-        container.scale = 0.9;
+        container.scale = metrics.showScaleFrom;
         root.visible = true;
         showAnimation.start();
         root.requestActivate();
@@ -108,16 +120,16 @@ Window {
             target: contentWrapper
             property: "opacity"
             from: 0; to: 1
-            duration: 150
+            duration: metrics.showDuration
             easing.type: Easing.OutCubic
         }
         NumberAnimation {
             target: container
             property: "scale"
-            from: 0.9; to: 1
-            duration: 150
+            from: metrics.showScaleFrom; to: 1
+            duration: metrics.showDuration
             easing.type: Easing.OutBack
-            easing.overshoot: 1.1
+            easing.overshoot: metrics.showOvershoot
         }
     }
 
@@ -130,14 +142,14 @@ Window {
                 target: contentWrapper
                 property: "opacity"
                 to: 0
-                duration: 120
+                duration: metrics.hideDuration
                 easing.type: Easing.InCubic
             }
             NumberAnimation {
                 target: container
                 property: "scale"
-                to: 0.95
-                duration: 120
+                to: metrics.hideScaleTo
+                duration: metrics.hideDuration
                 easing.type: Easing.InCubic
             }
         }
@@ -201,38 +213,35 @@ Window {
 
             anchors.centerIn: parent
             width: gridView.width + metrics.containerPadding
-            height: titleRow.height + gridView.height + metrics.paddingSide * 3
+            // top padding + title + gap below title + grid + bottom padding
+            height: titleLabel.height + gridView.height + metrics.paddingSide * 3
             backgroundColor: root.backgroundColor
             textColor: root.textColor
             containerRadius: metrics.containerRadius
 
-            // Prevent clicks inside container from dismissing
+            // Absorb clicks inside container to prevent backdrop dismiss
             MouseArea {
                 anchors.fill: parent
-                onClicked: {} // absorb
+                onClicked: function(mouse) { mouse.accepted = true; }
             }
 
             // Title
-            Row {
-                id: titleRow
+            Label {
+                id: titleLabel
                 anchors.top: parent.top
                 anchors.topMargin: metrics.paddingSide
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: Kirigami.Units.smallSpacing
-
-                Label {
-                    text: i18n("Choose Layout")
-                    font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.4
-                    font.weight: Font.DemiBold
-                    color: root.textColor
-                }
+                text: i18n("Choose Layout")
+                font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.4
+                font.weight: Font.DemiBold
+                color: root.textColor
             }
 
             // Layout grid
             Grid {
                 id: gridView
 
-                anchors.top: titleRow.bottom
+                anchors.top: titleLabel.bottom
                 anchors.topMargin: metrics.paddingSide
                 anchors.horizontalCenter: parent.horizontalCenter
                 columns: root.gridColumns
@@ -251,6 +260,10 @@ Window {
 
                         width: root.cardWidth
                         height: root.cardHeight
+
+                        Accessible.role: Accessible.Button
+                        Accessible.name: layoutData.name || ""
+                        Accessible.focusable: true
 
                         QFZCommon.LayoutCard {
                             anchors.fill: parent
@@ -295,7 +308,6 @@ Window {
                     }
                 }
             }
-
         }
     }
 }

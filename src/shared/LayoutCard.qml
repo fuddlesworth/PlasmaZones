@@ -17,6 +17,10 @@ import org.kde.kirigami as Kirigami
 Item {
     id: root
 
+    // Accessibility
+    Accessible.role: Accessible.Pane
+    Accessible.name: root.layoutData.name || ""
+
     // Data
     property var layoutData: ({})
     property bool isActive: false

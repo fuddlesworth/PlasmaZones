@@ -3065,6 +3065,12 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 
 void OverlayService::showLayoutPicker(const QString& screenName)
 {
+    // Toggle: if already visible, dismiss instead of recreating
+    if (isLayoutPickerVisible()) {
+        hideLayoutPicker();
+        return;
+    }
+
     // Resolve target screen
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
@@ -3085,7 +3091,6 @@ void OverlayService::showLayoutPicker(const QString& screenName)
         return;
     }
 
-    m_layoutPickerScreen = screen;
     m_layoutPickerWindow->setScreen(screen);
 
     // Build layouts list
@@ -3169,17 +3174,16 @@ void OverlayService::createLayoutPickerWindow(QScreen* screen)
 
     connect(window, &QObject::destroyed, this, [this]() {
         m_layoutPickerWindow = nullptr;
-        m_layoutPickerScreen = nullptr;
     });
 
-    // Connect layoutSelected signal from QML
+    // Connect layoutSelected and dismissed signals from QML
     connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
+    connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutPicker()));
 
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);
 
     m_layoutPickerWindow = window;
-    m_layoutPickerScreen = screen;
     window->setVisible(false);
 }
 
@@ -3191,7 +3195,6 @@ void OverlayService::destroyLayoutPickerWindow()
         m_layoutPickerWindow->deleteLater();
         m_layoutPickerWindow = nullptr;
     }
-    m_layoutPickerScreen = nullptr;
 }
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)

@@ -129,7 +129,6 @@ public:
 
     // Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenName = QString());
-    void hideLayoutPicker();
     bool isLayoutPickerVisible() const;
 
 protected:
@@ -138,6 +137,7 @@ protected:
 public Q_SLOTS:
     void hideLayoutOsd();
     void hideNavigationOsd();
+    void hideLayoutPicker();
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML
@@ -206,7 +206,6 @@ private:
     QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
     // Layout Picker overlay (interactive layout browser)
     QQuickWindow* m_layoutPickerWindow = nullptr;
-    QScreen* m_layoutPickerScreen = nullptr;
 
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
