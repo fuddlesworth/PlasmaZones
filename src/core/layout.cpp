@@ -80,6 +80,7 @@ Layout::Layout(const Layout& other)
     , m_defaultOrder(other.m_defaultOrder)
     , m_appRules(other.m_appRules)
     , m_autoAssign(other.m_autoAssign)
+    , m_useFullScreenGeometry(other.m_useFullScreenGeometry)
     , m_shaderId(other.m_shaderId)
     , m_shaderParams(other.m_shaderParams)
     , m_hiddenFromSelector(other.m_hiddenFromSelector)
@@ -122,6 +123,8 @@ Layout& Layout::operator=(const Layout& other)
         m_appRules = other.m_appRules;
         bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
         m_autoAssign = other.m_autoAssign;
+        bool fullScreenGeomDiff = m_useFullScreenGeometry != other.m_useFullScreenGeometry;
+        m_useFullScreenGeometry = other.m_useFullScreenGeometry;
         m_hiddenFromSelector = other.m_hiddenFromSelector;
         m_allowedScreens = other.m_allowedScreens;
         m_allowedDesktops = other.m_allowedDesktops;
@@ -144,6 +147,7 @@ Layout& Layout::operator=(const Layout& other)
         if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
         if (rulesChanged) Q_EMIT appRulesChanged();
         if (autoAssignDiff) Q_EMIT autoAssignChanged();
+        if (fullScreenGeomDiff) Q_EMIT useFullScreenGeometryChanged();
     }
     return *this;
 }
@@ -161,6 +165,7 @@ LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
 LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
 LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
 LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
+LAYOUT_SETTER(bool, UseFullScreenGeometry, m_useFullScreenGeometry, useFullScreenGeometryChanged)
 
 void Layout::setAllowedScreens(const QStringList& screens)
 {
@@ -522,6 +527,11 @@ QJsonObject Layout::toJson() const
         json[JsonKeys::AutoAssign] = true;
     }
 
+    // Full screen geometry mode - only serialize if true
+    if (m_useFullScreenGeometry) {
+        json[JsonKeys::UseFullScreenGeometry] = true;
+    }
+
     // Visibility filtering - only serialize non-default values
     if (m_hiddenFromSelector) {
         json[JsonKeys::HiddenFromSelector] = true;
@@ -569,6 +579,9 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
 
     // Auto-assign
     layout->m_autoAssign = json[JsonKeys::AutoAssign].toBool(false);
+
+    // Full screen geometry mode
+    layout->m_useFullScreenGeometry = json[JsonKeys::UseFullScreenGeometry].toBool(false);
 
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);

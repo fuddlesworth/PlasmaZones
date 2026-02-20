@@ -916,7 +916,8 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     // Use the zone's own layout for per-layout gap overrides
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
     int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
-    QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
 
     return geoF.toRect();
 }
@@ -1047,8 +1048,9 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
 
             Zone* sourceZone = zones[currentIdx];
             Zone* targetZone = zones[targetIdx];
+            bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-                targetZone, screen, zonePadding, outerGap, true);
+                targetZone, screen, zonePadding, outerGap, useAvail);
             QRect geo = geoF.toRect();
 
             if (geo.isValid()) {
@@ -1170,8 +1172,9 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
             break;
         }
 
+        bool useAvail = !(layout && layout->useFullScreenGeometry());
         QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-            targetZone, screen, zonePadding, outerGap, true);
+            targetZone, screen, zonePadding, outerGap, useAvail);
         QRect geo = geoF.toRect();
 
         if (geo.isValid()) {

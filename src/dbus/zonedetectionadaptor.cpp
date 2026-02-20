@@ -45,18 +45,17 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
         return QString();
     }
 
-    // Use actualAvailableGeometry() which excludes panels/taskbars (queries PlasmaShell on Wayland)
-    // This matches how zones are rendered and snapped
-    QRectF availableGeom = ScreenManager::actualAvailableGeometry(screen);
+    // Use the layout's geometry preference (full screen or available area)
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
 
     // Guard against zero-size geometry (disconnected or degenerate screen)
-    if (availableGeom.width() <= 0 || availableGeom.height() <= 0) {
+    if (refGeom.width() <= 0 || refGeom.height() <= 0) {
         return QString();
     }
 
     // Find which zone contains this point by checking relative coordinates
-    qreal relX = static_cast<qreal>(x - availableGeom.x()) / availableGeom.width();
-    qreal relY = static_cast<qreal>(y - availableGeom.y()) / availableGeom.height();
+    qreal relX = static_cast<qreal>(x - refGeom.x()) / refGeom.width();
+    qreal relY = static_cast<qreal>(y - refGeom.y()) / refGeom.height();
 
     Zone* foundZone = nullptr;
     for (auto* zone : layout->zones()) {
@@ -105,7 +104,8 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     Layout* zoneLayout = qobject_cast<Layout*>(zone->parent());
     int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings);
     int outerGap = GeometryUtils::getEffectiveOuterGap(zoneLayout, m_settings);
-    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+    bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
+    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
 
     // Return as "x,y,width,height"
     return QStringLiteral("%1,%2,%3,%4")
@@ -358,9 +358,10 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenName
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
     int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior)
-        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
         // Format: "zoneId:x,y,width,height"
         QString entry = QStringLiteral("%1:%2,%3,%4,%5")
                             .arg(zone->id().toString())

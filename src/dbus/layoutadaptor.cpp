@@ -461,6 +461,9 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->clearOuterGapOverride();
     }
 
+    // Update full screen geometry mode
+    layout->setUseFullScreenGeometry(obj[JsonKeys::UseFullScreenGeometry].toBool(false));
+
     // Update shader settings
     layout->setShaderId(obj[JsonKeys::ShaderId].toString());
     if (obj.contains(JsonKeys::ShaderParams)) {

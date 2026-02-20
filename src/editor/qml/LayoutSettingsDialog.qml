@@ -53,6 +53,7 @@ Kirigami.Dialog {
         outerGapSpin.value = root.editorController.hasOuterGapOverride
             ? root.editorController.outerGap
             : root.editorController.globalOuterGap
+        fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry
     }
 
     // Sync UI state when values change externally (undo/redo, load layout)
@@ -80,6 +81,9 @@ Kirigami.Dialog {
             if (!root.editorController.hasOuterGapOverride)
                 outerGapSpin.value = root.editorController.globalOuterGap
         }
+        function onUseFullScreenGeometryChanged() {
+            fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry
+        }
     }
 
     ColumnLayout {
@@ -87,7 +91,7 @@ Kirigami.Dialog {
 
         // Description
         Label {
-            text: i18nc("@info", "Override global gap settings for this layout only. Uncheck to use the global defaults from System Settings.")
+            text: i18nc("@info", "Per-layout overrides for this layout only.")
             wrapMode: Text.WordWrap
             opacity: 0.7
             Layout.fillWidth: true
@@ -107,6 +111,15 @@ Kirigami.Dialog {
             SectionHeader {
                 title: i18nc("@title:group", "Spacing")
                 icon: "format-indent-more"
+            }
+
+            Label {
+                text: i18nc("@info", "Override global gap defaults from System Settings.")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.maximumWidth: root.preferredWidth - root.padding * 2 - Kirigami.Units.largeSpacing
             }
 
             GridLayout {
@@ -192,6 +205,41 @@ Kirigami.Dialog {
                         : i18nc("@label showing global default", "px (global)")
                     opacity: outerGapOverrideCheck.checked ? 1.0 : 0.6
                     Layout.preferredWidth: implicitWidth
+                }
+            }
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        // ─── Geometry section ────────────────────────────────
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+            Layout.fillWidth: true
+
+            SectionHeader {
+                title: i18nc("@title:group", "Geometry")
+                icon: "view-fullscreen"
+            }
+
+            Label {
+                text: i18nc("@info", "Control which screen area zones occupy.")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.maximumWidth: root.preferredWidth - root.padding * 2 - Kirigami.Units.largeSpacing
+            }
+
+            CheckBox {
+                id: fullScreenGeomCheck
+                text: i18nc("@option:check", "Include area behind panels and taskbars")
+                checked: root.editorController ? root.editorController.useFullScreenGeometry : false
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                onToggled: {
+                    if (root.editorController)
+                        root.editorController.useFullScreenGeometry = checked
                 }
             }
         }

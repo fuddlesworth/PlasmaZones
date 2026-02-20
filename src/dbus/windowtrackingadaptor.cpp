@@ -1571,9 +1571,9 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     }
     QRectF relGeom = zone->relativeGeometry();
     for (QScreen* screen : Utils::allScreens()) {
-        QRect availGeom = ScreenManager::actualAvailableGeometry(screen);
-        QPoint zoneCenter(availGeom.x() + static_cast<int>(relGeom.center().x() * availGeom.width()),
-                          availGeom.y() + static_cast<int>(relGeom.center().y() * availGeom.height()));
+        QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+        QPoint zoneCenter(refGeom.x() + static_cast<int>(relGeom.center().x() * refGeom.width()),
+                          refGeom.y() + static_cast<int>(relGeom.center().y() * refGeom.height()));
         if (screen->geometry().contains(zoneCenter)) {
             return screen->name();
         }

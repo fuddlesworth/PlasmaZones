@@ -29,6 +29,7 @@
 #include "undo/commands/UpdateShaderIdCommand.h"
 #include "undo/commands/UpdateShaderParamsCommand.h"
 #include "undo/commands/UpdateGapOverrideCommand.h"
+#include "undo/commands/UpdateFullScreenGeometryCommand.h"
 #include "undo/commands/UpdateVisibilityCommand.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
@@ -422,6 +423,28 @@ void EditorController::clearOuterGapOverride()
     setOuterGap(-1);
 }
 
+bool EditorController::useFullScreenGeometry() const
+{
+    return m_useFullScreenGeometry;
+}
+
+void EditorController::setUseFullScreenGeometry(bool enabled)
+{
+    if (m_useFullScreenGeometry != enabled) {
+        auto* cmd = new UpdateFullScreenGeometryCommand(this, m_useFullScreenGeometry, enabled);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setUseFullScreenGeometryDirect(bool enabled)
+{
+    if (m_useFullScreenGeometry != enabled) {
+        m_useFullScreenGeometry = enabled;
+        markUnsaved();
+        Q_EMIT useFullScreenGeometryChanged();
+    }
+}
+
 void EditorController::refreshGlobalZonePadding()
 {
     int newValue = SettingsDbusQueries::queryGlobalZonePadding();
@@ -706,6 +729,7 @@ void EditorController::createNewLayout()
     // Reset per-layout gap overrides (-1 = use global)
     m_zonePadding = -1;
     m_outerGap = -1;
+    m_useFullScreenGeometry = false;
 
     // Refresh available shaders from daemon
     refreshAvailableShaders();
@@ -722,6 +746,7 @@ void EditorController::createNewLayout()
     Q_EMIT currentShaderParametersChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT outerGapChanged();
+    Q_EMIT useFullScreenGeometryChanged();
 }
 
 void EditorController::loadLayout(const QString& layoutId)
@@ -872,12 +897,14 @@ void EditorController::loadLayout(const QString& layoutId)
     // Load per-layout gap overrides (-1 = use global setting)
     int oldZonePadding = m_zonePadding;
     int oldOuterGap = m_outerGap;
+    bool oldUseFullScreen = m_useFullScreenGeometry;
     m_zonePadding = layoutObj.contains(QLatin1String(JsonKeys::ZonePadding))
         ? layoutObj[QLatin1String(JsonKeys::ZonePadding)].toInt(-1)
         : -1;
     m_outerGap = layoutObj.contains(QLatin1String(JsonKeys::OuterGap))
         ? layoutObj[QLatin1String(JsonKeys::OuterGap)].toInt(-1)
         : -1;
+    m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
 
     m_selectedZoneId.clear();
     m_selectedZoneIds.clear();
@@ -922,6 +949,9 @@ void EditorController::loadLayout(const QString& layoutId)
     }
     if (m_outerGap != oldOuterGap) {
         Q_EMIT outerGapChanged();
+    }
+    if (m_useFullScreenGeometry != oldUseFullScreen) {
+        Q_EMIT useFullScreenGeometryChanged();
     }
 
     // Emit visibility filtering signals
@@ -1016,6 +1046,11 @@ void EditorController::saveLayout()
     }
     if (m_outerGap >= 0) {
         layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
+    }
+
+    // Include full screen geometry mode (only if enabled)
+    if (m_useFullScreenGeometry) {
+        layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)] = true;
     }
 
     // Include visibility filtering allow-lists (only if non-empty)

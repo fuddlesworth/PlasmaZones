@@ -33,10 +33,9 @@ QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen
         return geometry;
     }
 
-    // The overlay window covers the full screen (geometry()),
-    // but zones are calculated relative to availableGeometry.
+    // The overlay window covers the full screen (geometry()).
     // The geometry parameter is already in absolute screen coordinates
-    // (calculated from availableGeometry), so we just need to convert
+    // (from available or full-screen geometry), so we just need to convert
     // to overlay-local coordinates by subtracting the full screen origin.
     const QRectF screenGeom = screen->geometry();
     return QRectF(geometry.x() - screenGeom.x(), geometry.y() - screenGeom.y(), geometry.width(), geometry.height());
@@ -120,6 +119,17 @@ int getEffectiveOuterGap(Layout* layout, ISettings* settings)
     return Defaults::OuterGap;
 }
 
+QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen)
+{
+    if (!screen) {
+        return QRectF();
+    }
+    if (layout && layout->useFullScreenGeometry()) {
+        return screen->geometry();
+    }
+    return ScreenManager::actualAvailableGeometry(screen);
+}
+
 QRectF extractZoneGeometry(const QVariantMap& zone)
 {
     return QRectF(zone.value(QLatin1String("x")).toDouble(),
@@ -143,7 +153,8 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         return QStringLiteral("[]");
     }
 
-    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    layout->recalculateZoneGeometries(effectiveScreenGeometry(layout, screen));
 
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {
@@ -152,7 +163,7 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         }
         int zonePadding = getEffectiveZonePadding(layout, settings);
         int outerGap = getEffectiveOuterGap(layout, settings);
-        QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+        QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
         QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, screen);
 
         QJsonObject obj;
