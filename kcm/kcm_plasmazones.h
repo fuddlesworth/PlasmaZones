@@ -173,14 +173,6 @@ class KCMPlasmaZones : public KQuickConfigModule
                    autotileFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY
                    autotileRespectMinimumSizeChanged)
-    Q_PROPERTY(bool autotileShowActiveBorder READ autotileShowActiveBorder WRITE setAutotileShowActiveBorder NOTIFY
-                   autotileShowActiveBorderChanged)
-    Q_PROPERTY(int autotileActiveBorderWidth READ autotileActiveBorderWidth WRITE setAutotileActiveBorderWidth NOTIFY
-                   autotileActiveBorderWidthChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColor READ autotileUseSystemBorderColor WRITE setAutotileUseSystemBorderColor
-                   NOTIFY autotileUseSystemBorderColorChanged)
-    Q_PROPERTY(QColor autotileActiveBorderColor READ autotileActiveBorderColor WRITE setAutotileActiveBorderColor NOTIFY
-                   autotileActiveBorderColorChanged)
     Q_PROPERTY(bool autotileMonocleHideOthers READ autotileMonocleHideOthers WRITE setAutotileMonocleHideOthers NOTIFY
                    autotileMonocleHideOthersChanged)
     Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY
@@ -333,10 +325,6 @@ public:
     int autotileAnimationDuration() const;
     bool autotileFocusFollowsMouse() const;
     bool autotileRespectMinimumSize() const;
-    bool autotileShowActiveBorder() const;
-    int autotileActiveBorderWidth() const;
-    bool autotileUseSystemBorderColor() const;
-    QColor autotileActiveBorderColor() const;
     bool autotileMonocleHideOthers() const;
     bool autotileMonocleShowTabs() const;
     Q_INVOKABLE QVariantList availableAlgorithms() const;
@@ -466,10 +454,6 @@ public:
     void setAutotileAnimationDuration(int duration);
     void setAutotileFocusFollowsMouse(bool focus);
     void setAutotileRespectMinimumSize(bool respect);
-    void setAutotileShowActiveBorder(bool show);
-    void setAutotileActiveBorderWidth(int width);
-    void setAutotileUseSystemBorderColor(bool use);
-    void setAutotileActiveBorderColor(const QColor &color);
     void setAutotileMonocleHideOthers(bool hide);
     void setAutotileMonocleShowTabs(bool show);
 
@@ -641,10 +625,6 @@ Q_SIGNALS:
     void autotileAnimationDurationChanged();
     void autotileFocusFollowsMouseChanged();
     void autotileRespectMinimumSizeChanged();
-    void autotileShowActiveBorderChanged();
-    void autotileActiveBorderWidthChanged();
-    void autotileUseSystemBorderColorChanged();
-    void autotileActiveBorderColorChanged();
     void autotileMonocleHideOthersChanged();
     void autotileMonocleShowTabsChanged();
 

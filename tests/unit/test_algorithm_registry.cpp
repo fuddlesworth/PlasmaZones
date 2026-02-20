@@ -34,17 +34,16 @@ public:
     QString description() const override { return QStringLiteral("Test algorithm for unit tests"); }
     QString icon() const noexcept override { return QStringLiteral("test-icon"); }
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screen,
-                                  const TilingState &state) const override
+    QVector<QRect> calculateZones(const TilingParams &params) const override
     {
-        Q_UNUSED(state)
         QVector<QRect> zones;
-        if (windowCount <= 0) {
+        if (params.windowCount <= 0) {
             return zones;
         }
         // Simple equal columns
-        const int width = screen.width() / windowCount;
-        for (int i = 0; i < windowCount; ++i) {
+        const auto &screen = params.screenGeometry;
+        const int width = screen.width() / params.windowCount;
+        for (int i = 0; i < params.windowCount; ++i) {
             zones.append(QRect(screen.x() + i * width, screen.y(),
                                width, screen.height()));
         }
@@ -443,7 +442,7 @@ private Q_SLOTS:
             auto *algo = registry->algorithm(id);
             QVERIFY(algo != nullptr);
 
-            auto zones = algo->calculateZones(4, screen, state);
+            auto zones = algo->calculateZones({4, screen, &state});
             QCOMPARE(zones.size(), 4);
 
             // All zones should be valid

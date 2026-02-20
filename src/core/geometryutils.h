@@ -8,6 +8,8 @@
 #include <QScreen>
 #include <QVariantMap>
 #include <functional>
+#include <QVector>
+#include <QSize>
 
 namespace PlasmaZones {
 
@@ -47,7 +49,7 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  * (relative position 0 or 1), and innerGap/2 to edges between zones.
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap,
-                                                   bool useAvailableGeometry = true);
+                                                  bool useAvailableGeometry = true);
 
 /**
  * @brief Get effective zone padding for a layout
@@ -74,6 +76,19 @@ PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settin
  * to apply differentiated gaps.
  */
 PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
+
+/**
+ * @brief Convert QRectF to QRect with edge-consistent rounding
+ * @param rf Source floating-point rectangle
+ * @return Integer rectangle with consistent edge rounding
+ *
+ * Unlike QRectF::toRect() which rounds x, y, width, height independently,
+ * this rounds the edges (left, top, right, bottom) and derives width/height
+ * from the rounded edges. This ensures adjacent zones sharing an edge always
+ * produce exactly the configured gap between them, even when fractional
+ * scaling (e.g. 1.2x) produces non-integer zone boundaries.
+ */
+PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
 
 /**
  * @brief Extract geometry as QRectF from a zone QVariantMap
@@ -105,9 +120,38 @@ PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
  * Used by WindowTrackingService::getEmptyZonesJson and WindowDragAdaptor::dragStopped
  * to avoid duplicating the empty-zones JSON building logic.
  */
-PLASMAZONES_EXPORT QString buildEmptyZonesJson(
-    Layout* layout, QScreen* screen, ISettings* settings,
-    const std::function<bool(const Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
+                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+
+/**
+ * @brief Enforce minimum size constraints on zones by borrowing space from neighbors
+ * @param zones List of zone geometries to adjust (in-place)
+ * @param minSizes List of minimum sizes for each zone (same index as zones)
+ * @param gapThreshold Threshold for considering zones effectively adjacent
+ * @param innerGap Desired gap between adjacent zones (preserved during overlap resolution)
+ *
+ * Checks if any zone is smaller than its minimum size. If so, attempts to
+ * expand it by shrinking adjacent neighbors proportionally. When multiple
+ * windows have minimum size, overlaps can occur; a final pass removes them.
+ */
+PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes,
+                                               int gapThreshold, int innerGap = 0);
+
+/**
+ * @brief Remove overlapping zone rectangles so no two zones intersect
+ * @param zones List of zone geometries to adjust (in-place)
+ * @param minSizes Per-zone minimum sizes (optional); when resolving overlaps,
+ *        prefer shrinking the zone with more surplus above its minimum
+ * @param innerGap Desired gap between adjacent zones; when resolving overlaps,
+ *        the boundary is offset so zones maintain this gap instead of being flush
+ *
+ * When multiple zones have minimum size constraints, steal logic can leave
+ * boundaries inconsistent. This fixes horizontal and vertical overlaps by
+ * shifting the shared edge toward the zone with more surplus, respecting
+ * minimum sizes so enforcement is not undone.
+ */
+PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
+                                            int innerGap = 0);
 
 } // namespace GeometryUtils
 

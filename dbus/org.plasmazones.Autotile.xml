@@ -89,9 +89,12 @@
         </method>
 
         <method name="notifyWindowFocused">
-            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates autotile engine focus tracking and window-to-screen mapping."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located (for window-to-screen mapping update)."/>
             </arg>
         </method>
 
@@ -174,22 +177,10 @@
             </arg>
         </signal>
 
-        <signal name="windowTileRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window should be moved to a new geometry."/>
-            <arg name="windowId" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="Window ID to tile."/>
-            </arg>
-            <arg name="x" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="Target X position."/>
-            </arg>
-            <arg name="y" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="Target Y position."/>
-            </arg>
-            <arg name="width" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="Target width."/>
-            </arg>
-            <arg name="height" type="i">
-                <annotation name="org.gtk.GDBus.DocString" value="Target height."/>
+        <signal name="windowsTileRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch). JSON array of {windowId,x,y,width,height}."/>
+            <arg name="tileRequestsJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of tile requests, each with windowId, x, y, width, height."/>
             </arg>
         </signal>
 
@@ -214,6 +205,13 @@
             </arg>
         </signal>
 
+        <signal name="windowsReleasedFromTiling">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from autotile management (e.g., screen removed from autotile). KWin effect should restore these windows to pre-autotile geometry."/>
+            <arg name="windowIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs no longer under autotile control."/>
+            </arg>
+        </signal>
+
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Window Event Notifications (called by KWin effect)
              ═══════════════════════════════════════════════════════════════════════════ -->
@@ -225,6 +223,12 @@
             </arg>
             <arg name="screenName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where the window appeared."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum width in pixels (0 if unconstrained)."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum height in pixels (0 if unconstrained)."/>
             </arg>
         </method>
 

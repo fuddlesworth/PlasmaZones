@@ -280,10 +280,6 @@ Q_SIGNALS:
     void autotileFocusFollowsMouseChanged();
     void autotileMonocleHideOthersChanged();
     void autotileMonocleShowTabsChanged();
-    void autotileShowActiveBorderChanged();
-    void autotileActiveBorderWidthChanged();
-    void autotileActiveBorderColorChanged();
-    void autotileUseSystemBorderColorChanged();
 
     // Autotile animation settings
     void autotileAnimationsEnabledChanged();

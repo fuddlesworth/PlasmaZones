@@ -22,6 +22,8 @@ namespace PlasmaZones {
 
 // Navigation directive prefixes
 static const QString NavigateDirectivePrefix = QStringLiteral("navigate:");
+static const QString PushDirective = QStringLiteral("push");
+static const QString SnapDirectivePrefix = QStringLiteral("snap:");
 static const QString SwapDirectivePrefix = QStringLiteral("swap:");
 static const QString CycleDirectivePrefix = QStringLiteral("cycle:");
 
@@ -47,80 +49,203 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
     // User-initiated snap commands override floating state.
     // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
 
-    // Check if this is a navigation directive
+    // Check if this is a navigation directive - use daemon-driven flow
     if (targetZoneId.startsWith(NavigateDirectivePrefix)) {
         QString direction = targetZoneId.mid(NavigateDirectivePrefix.length());
-        qCDebug(lcEffect) << "Navigation direction:" << direction;
+        qCDebug(lcEffect) << "Navigation direction (daemon-driven):" << direction;
+
+        auto* iface = m_effect->windowTrackingInterface();
+        if (!iface || !iface->isValid()) {
+            m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("dbus_error"),
+                                             QString(), QString(), screenName);
+            return;
+        }
 
         QPointer<KWin::EffectWindow> safeWindow = activeWindow;
         QString capturedWindowId = windowId;
-        QString capturedDirection = direction;
         QString capturedScreenName = screenName;
-        // Capture pre-snap geometry NOW, before async chain, to avoid race with applySnapGeometry
         QRectF capturedPreSnapGeom = activeWindow->frameGeometry();
 
-        // Step 1: Async query current zone for window
-        m_effect->queryZoneForWindowAsync(windowId,
-            [this, safeWindow, capturedWindowId, capturedDirection, capturedScreenName, capturedPreSnapGeom](const QString& currentZoneId) {
+        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getMoveTargetForWindow"),
+                                                        windowId, direction, screenName);
+        auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, safeWindow, capturedWindowId, capturedScreenName, capturedPreSnapGeom](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+
             if (!safeWindow) return;
 
-            // Shared step: async get geometry and apply snap
-            auto applyTargetZone = [this, safeWindow, capturedWindowId, currentZoneId, capturedScreenName](const QString& targetZone) {
-                if (!safeWindow || targetZone.isEmpty()) return;
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isValid()) {
+                m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("dbus_error"),
+                                                 QString(), QString(), capturedScreenName);
+                return;
+            }
 
-                m_effect->queryZoneGeometryForScreenAsync(targetZone, capturedScreenName,
-                    [this, safeWindow, capturedWindowId, currentZoneId, targetZone, capturedScreenName](const QString& geometryJson) {
-                        if (!safeWindow) return;
-                        QRect geometry = m_effect->parseZoneGeometry(geometryJson);
-                        if (!geometry.isValid()) {
-                            qCDebug(lcEffect) << "Could not get valid geometry for zone" << targetZone;
-                            m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("geometry_error"),
-                                                             QString(), QString(), capturedScreenName);
-                            return;
-                        }
-                        m_effect->applySnapGeometry(safeWindow, geometry);
-                        auto* iface = m_effect->windowTrackingInterface();
-                        if (iface && iface->isValid()) {
-                            iface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, targetZone, capturedScreenName);
-                        }
-                        m_effect->emitNavigationFeedback(true, QStringLiteral("move"), QString(), currentZoneId, targetZone, capturedScreenName);
-                    });
-            };
+            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            if (!doc.isObject()) {
+                m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("parse_error"),
+                                                 QString(), QString(), capturedScreenName);
+                return;
+            }
 
-            // Step 2: Async query target zone
-            if (currentZoneId.isEmpty()) {
-                qCDebug(lcEffect) << "Window not snapped, finding first zone in direction" << capturedDirection;
+            QJsonObject obj = doc.object();
+            if (!obj.value(QLatin1String("success")).toBool(false)) {
+                return; // Daemon already emitted navigationFeedback
+            }
+
+            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
+            QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
+            QString sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+
+            QRect geometry = m_effect->parseZoneGeometry(geometryJson);
+            if (!geometry.isValid()) return;
+
+            if (sourceZoneId.isEmpty()) {
                 m_effect->ensurePreSnapGeometryStored(safeWindow, capturedWindowId, capturedPreSnapGeom);
+            }
 
-                m_effect->queryFirstZoneInDirectionAsync(capturedDirection, capturedScreenName,
-                    [this, applyTargetZone, capturedScreenName](const QString& targetZone) {
-                    if (targetZone.isEmpty()) {
-                        qCDebug(lcEffect) << "No zones available for navigation";
-                        m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_zones"),
-                                                         QString(), QString(), capturedScreenName);
-                        return;
-                    }
-                    applyTargetZone(targetZone);
-                });
-            } else {
-                m_effect->queryAdjacentZoneAsync(currentZoneId, capturedDirection,
-                    [this, applyTargetZone, capturedDirection, capturedScreenName](const QString& targetZone) {
-                    if (targetZone.isEmpty()) {
-                        qCDebug(lcEffect) << "No adjacent zone in direction" << capturedDirection;
-                        m_effect->emitNavigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"),
-                                                         QString(), QString(), capturedScreenName);
-                        return;
-                    }
-                    applyTargetZone(targetZone);
-                });
+            m_effect->applySnapGeometry(safeWindow, geometry);
+            auto* snapIface = m_effect->windowTrackingInterface();
+            if (snapIface && snapIface->isValid()) {
+                snapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId, capturedScreenName);
+                snapIface->asyncCall(QStringLiteral("recordSnapIntent"), capturedWindowId, true);
+            }
+        });
+
+    } else if (targetZoneId == PushDirective) {
+        // Push to empty zone - daemon-driven
+        QString pushScreenName = zoneGeometry;
+        if (pushScreenName.isEmpty()) {
+            pushScreenName = screenName;
+        }
+
+        auto* iface = m_effect->windowTrackingInterface();
+        if (!iface || !iface->isValid()) {
+            m_effect->emitNavigationFeedback(false, QStringLiteral("push"), QStringLiteral("dbus_error"),
+                                             QString(), QString(), pushScreenName);
+            return;
+        }
+
+        QPointer<KWin::EffectWindow> safeWindow = activeWindow;
+        QString capturedWindowId = windowId;
+        QString capturedScreenName = pushScreenName;
+        QRectF capturedPreSnapGeom = activeWindow->frameGeometry();
+
+        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getPushTargetForWindow"),
+                                                        windowId, pushScreenName);
+        auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, safeWindow, capturedWindowId, capturedScreenName, capturedPreSnapGeom](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            if (!safeWindow) return;
+
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isValid()) {
+                m_effect->emitNavigationFeedback(false, QStringLiteral("push"), QStringLiteral("dbus_error"),
+                                                 QString(), QString(), capturedScreenName);
+                return;
+            }
+
+            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            if (!doc.isObject()) return;
+
+            QJsonObject obj = doc.object();
+            if (!obj.value(QLatin1String("success")).toBool(false)) return;
+
+            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
+            QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
+            QString sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+
+            QRect geometry = m_effect->parseZoneGeometry(geometryJson);
+            if (!geometry.isValid()) return;
+
+            if (sourceZoneId.isEmpty()) {
+                m_effect->ensurePreSnapGeometryStored(safeWindow, capturedWindowId, capturedPreSnapGeom);
+            }
+
+            m_effect->applySnapGeometry(safeWindow, geometry);
+            auto* snapIface = m_effect->windowTrackingInterface();
+            if (snapIface && snapIface->isValid()) {
+                snapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId, capturedScreenName);
+                snapIface->asyncCall(QStringLiteral("recordSnapIntent"), capturedWindowId, true);
+            }
+        });
+
+    } else if (targetZoneId.startsWith(SnapDirectivePrefix)) {
+        // Snap to zone by number - daemon-driven
+        bool ok = false;
+        int zoneNumber = targetZoneId.mid(SnapDirectivePrefix.length()).toInt(&ok);
+        if (!ok || zoneNumber < 1 || zoneNumber > 9) {
+            m_effect->emitNavigationFeedback(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"),
+                                             QString(), QString(), screenName);
+            return;
+        }
+
+        QString snapScreenName = zoneGeometry;
+        if (snapScreenName.isEmpty()) {
+            snapScreenName = screenName;
+        }
+
+        auto* iface = m_effect->windowTrackingInterface();
+        if (!iface || !iface->isValid()) {
+            m_effect->emitNavigationFeedback(false, QStringLiteral("snap"), QStringLiteral("dbus_error"),
+                                             QString(), QString(), snapScreenName);
+            return;
+        }
+
+        QPointer<KWin::EffectWindow> safeWindow = activeWindow;
+        QString capturedWindowId = windowId;
+        QString capturedScreenName = snapScreenName;
+        QRectF capturedPreSnapGeom = activeWindow->frameGeometry();
+
+        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getSnapToZoneByNumberTarget"),
+                                                        windowId, zoneNumber, snapScreenName);
+        auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, safeWindow, capturedWindowId, capturedScreenName, capturedPreSnapGeom](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            if (!safeWindow) return;
+
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isValid()) {
+                m_effect->emitNavigationFeedback(false, QStringLiteral("snap"), QStringLiteral("dbus_error"),
+                                                 QString(), QString(), capturedScreenName);
+                return;
+            }
+
+            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            if (!doc.isObject()) return;
+
+            QJsonObject obj = doc.object();
+            if (!obj.value(QLatin1String("success")).toBool(false)) return;
+
+            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
+            QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
+            QString sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+
+            QRect geometry = m_effect->parseZoneGeometry(geometryJson);
+            if (!geometry.isValid()) return;
+
+            if (sourceZoneId.isEmpty()) {
+                m_effect->ensurePreSnapGeometryStored(safeWindow, capturedWindowId, capturedPreSnapGeom);
+            }
+
+            m_effect->applySnapGeometry(safeWindow, geometry);
+            auto* snapIface = m_effect->windowTrackingInterface();
+            if (snapIface && snapIface->isValid()) {
+                snapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId, capturedScreenName);
+                snapIface->asyncCall(QStringLiteral("recordSnapIntent"), capturedWindowId, true);
             }
         });
 
     } else if (!targetZoneId.isEmpty()) {
-        // Direct zone ID (e.g., push to empty zone, snap to zone by number)
+        // Direct zone ID (legacy - e.g. from moveSpecificWindowToZoneRequested for snap assist)
         // The daemon provides geometry but it may be for the primary screen, not the window's screen.
-        // We need screen-specific geometry for multi-monitor support.
-        // Use ASYNC D-Bus call to avoid blocking the compositor.
+        // Use ASYNC D-Bus call to get screen-specific geometry.
 
         auto* iface = m_effect->windowTrackingInterface();
         if (!iface || !iface->isValid()) {
@@ -129,22 +254,14 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
             return;
         }
 
-        // Capture data for async callback
-        // Keep provided geometry as fallback in case async call fails or returns empty
         QPointer<KWin::EffectWindow> safeWindow = activeWindow;
         QString capturedWindowId = windowId;
         QString capturedTargetZoneId = targetZoneId;
         QString capturedScreenName = screenName;
         QString capturedFallbackGeometry = zoneGeometry;
-
-        // BUG FIX: Capture pre-snap geometry NOW, before async call, to avoid race condition
-        // Previously, ensurePreSnapGeometryStored was called inside the async callback AFTER
-        // applySnapGeometry, which caused it to store the zone geometry instead of the original.
-        // By storing the geometry synchronously here, we ensure we capture the correct pre-snap state.
         QRectF preSnapGeom = activeWindow->frameGeometry();
         bool hasValidPreSnapGeom = preSnapGeom.width() > 0 && preSnapGeom.height() > 0;
 
-        // Use async D-Bus call to get screen-specific geometry
         QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getZoneGeometryForScreen"), targetZoneId, screenName);
         auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
@@ -153,21 +270,13 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
             w->deleteLater();
 
             if (!safeWindow) {
-                qCDebug(lcEffect) << "Window was destroyed during async call";
                 m_effect->emitNavigationFeedback(false, QStringLiteral("push"), QStringLiteral("window_destroyed"),
                                                  QString(), QString(), capturedScreenName);
                 return;
             }
 
             QDBusPendingReply<QString> reply = *w;
-            QString geometryJson;
-            if (reply.isValid() && !reply.value().isEmpty()) {
-                geometryJson = reply.value();
-            } else if (!capturedFallbackGeometry.isEmpty()) {
-                // Use fallback geometry from daemon if async call failed
-                geometryJson = capturedFallbackGeometry;
-                qCDebug(lcEffect) << "Using fallback geometry from daemon";
-            }
+            QString geometryJson = reply.isValid() && !reply.value().isEmpty() ? reply.value() : capturedFallbackGeometry;
 
             QRect geometry = m_effect->parseZoneGeometry(geometryJson);
             if (!geometry.isValid()) {
@@ -176,22 +285,16 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
                 return;
             }
 
-            // Store pre-snap geometry using the captured value from BEFORE the snap
-            // This uses the synchronously captured geometry to avoid race conditions
             if (hasValidPreSnapGeom) {
-                // Get fresh interface pointer inside callback - don't use captured pointer
                 auto* innerIface = m_effect->windowTrackingInterface();
                 if (innerIface && innerIface->isValid()) {
-                    // Check if geometry already exists first - only store on FIRST snap
                     QDBusPendingCall hasGeomCall = innerIface->asyncCall(QStringLiteral("hasPreSnapGeometry"), capturedWindowId);
                     auto* hasGeomWatcher = new QDBusPendingCallWatcher(hasGeomCall, this);
                     connect(hasGeomWatcher, &QDBusPendingCallWatcher::finished, this,
                             [this, capturedWindowId, preSnapGeom](QDBusPendingCallWatcher* hgw) {
                         hgw->deleteLater();
                         QDBusPendingReply<bool> hasGeomReply = *hgw;
-                        bool hasGeometry = hasGeomReply.isValid() && hasGeomReply.value();
-                        if (!hasGeometry) {
-                            // Get fresh interface pointer - don't rely on captured pointer
+                        if (!hasGeomReply.isValid() || !hasGeomReply.value()) {
                             auto* storeIface = m_effect->windowTrackingInterface();
                             if (storeIface && storeIface->isValid()) {
                                 storeIface->asyncCall(QStringLiteral("storePreSnapGeometry"), capturedWindowId,
@@ -204,8 +307,6 @@ void NavigationHandler::handleMoveWindowToZone(const QString& targetZoneId, cons
             }
 
             m_effect->applySnapGeometry(safeWindow, geometry);
-
-            // Get fresh interface pointer inside callback
             auto* snapIface = m_effect->windowTrackingInterface();
             if (snapIface && snapIface->isValid()) {
                 snapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, capturedTargetZoneId, capturedScreenName);
@@ -273,33 +374,41 @@ void NavigationHandler::handleFocusWindowInZone(const QString& targetZoneId, con
 
     if (targetZoneId.startsWith(NavigateDirectivePrefix)) {
         QString direction = targetZoneId.mid(NavigateDirectivePrefix.length());
-        if (!activeWindow) {
-            return;
-        }
+        if (!activeWindow) return;
 
         QString activeWindowId = m_effect->getWindowId(activeWindow);
         QString capturedScreenName = screenName;
 
-        // Step 1: Async query current zone
-        m_effect->queryZoneForWindowAsync(activeWindowId,
-            [this, capturedScreenName, direction, doFocusInZone](const QString& currentZoneId) {
-            if (currentZoneId.isEmpty()) {
-                qCDebug(lcEffect) << "Focus navigation requires snapped window";
-                m_effect->emitNavigationFeedback(false, QStringLiteral("focus"), QStringLiteral("not_snapped"),
-                                                 QString(), QString(), capturedScreenName);
-                return;
-            }
+        auto* iface = m_effect->windowTrackingInterface();
+        if (!iface || !iface->isValid()) return;
 
-            // Step 2: Async query adjacent zone
-            m_effect->queryAdjacentZoneAsync(currentZoneId, direction,
-                [this, currentZoneId, capturedScreenName, doFocusInZone](const QString& adjacentZone) {
-                if (adjacentZone.isEmpty()) {
-                    m_effect->emitNavigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"),
-                                                     QString(), QString(), capturedScreenName);
+        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getFocusTargetForWindow"),
+                                                        activeWindowId, direction, capturedScreenName);
+        auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, capturedScreenName](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isValid()) return;
+
+            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            if (!doc.isObject()) return;
+
+            QJsonObject obj = doc.object();
+            if (!obj.value(QLatin1String("success")).toBool(false)) return;
+
+            QString windowIdToActivate = obj.value(QLatin1String("windowIdToActivate")).toString();
+            if (windowIdToActivate.isEmpty()) return;
+
+            const auto windows = KWin::effects->stackingOrder();
+            for (KWin::EffectWindow* win : windows) {
+                if (win && m_effect->getWindowId(win) == windowIdToActivate) {
+                    KWin::effects->activateWindow(win);
                     return;
                 }
-                doFocusInZone(currentZoneId, adjacentZone, capturedScreenName);
-            });
+            }
         });
     } else {
         // Direct zone ID - proceed directly to async getWindowsInZone
@@ -309,12 +418,10 @@ void NavigationHandler::handleFocusWindowInZone(const QString& targetZoneId, con
 
 void NavigationHandler::handleRestoreWindow()
 {
-    qCInfo(lcEffect) << "Restore window requested";
+    qCInfo(lcEffect) << "Restore window requested (daemon-driven)";
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("restore"));
-    if (!activeWindow) {
-        return;
-    }
+    if (!activeWindow) return;
 
     QString windowId = m_effect->getWindowId(activeWindow);
     QString screenName = m_effect->getWindowScreenName(activeWindow);
@@ -325,54 +432,42 @@ void NavigationHandler::handleRestoreWindow()
         return;
     }
 
-    // Use QPointer to safely handle window destruction during async call
     QPointer<KWin::EffectWindow> safeWindow = activeWindow;
     QString capturedWindowId = windowId;
     QString capturedScreenName = screenName;
 
-    // Use ASYNC D-Bus call to get validated pre-snap geometry
-    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getValidatedPreSnapGeometry"), windowId);
+    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getRestoreForWindow"), windowId, screenName);
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, safeWindow, capturedWindowId, capturedScreenName](QDBusPendingCallWatcher* w) {
         w->deleteLater();
 
-        QDBusPendingReply<bool, int, int, int, int> reply = *w;
-        if (!reply.isValid() || reply.count() < 5) {
-            m_effect->emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("no_geometry"),
-                                             QString(), QString(), capturedScreenName);
-            return;
-        }
+        if (!safeWindow) return;
 
-        bool found = reply.argumentAt<0>();
-        int x = reply.argumentAt<1>();
-        int y = reply.argumentAt<2>();
-        int width = reply.argumentAt<3>();
-        int height = reply.argumentAt<4>();
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isValid()) return;
 
-        if (!found || width <= 0 || height <= 0) {
-            m_effect->emitNavigationFeedback(false, QStringLiteral("restore"), QStringLiteral("not_snapped"),
-                                             QString(), QString(), capturedScreenName);
-            return;
-        }
+        QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+        if (!doc.isObject()) return;
 
-        if (!safeWindow) {
-            qCDebug(lcEffect) << "Window was destroyed during async call";
-            return;
-        }
+        QJsonObject obj = doc.object();
+        if (!obj.value(QLatin1String("success")).toBool(false)) return;
+
+        int x = obj.value(QLatin1String("x")).toInt();
+        int y = obj.value(QLatin1String("y")).toInt();
+        int width = obj.value(QLatin1String("width")).toInt();
+        int height = obj.value(QLatin1String("height")).toInt();
+        if (width <= 0 || height <= 0) return;
 
         QRect geometry(x, y, width, height);
         m_effect->applySnapGeometry(safeWindow, geometry);
 
-        auto* iface = m_effect->windowTrackingInterface();
-        if (iface && iface->isValid()) {
-            iface->asyncCall(QStringLiteral("windowUnsnapped"), capturedWindowId);
-            iface->asyncCall(QStringLiteral("clearPreSnapGeometry"), capturedWindowId);
+        auto* innerIface = m_effect->windowTrackingInterface();
+        if (innerIface && innerIface->isValid()) {
+            innerIface->asyncCall(QStringLiteral("windowUnsnapped"), capturedWindowId);
+            innerIface->asyncCall(QStringLiteral("clearPreSnapGeometry"), capturedWindowId);
         }
-
-        m_effect->emitNavigationFeedback(true, QStringLiteral("restore"), QString(),
-                                         QString(), QString(), capturedScreenName);
     });
 }
 
@@ -607,19 +702,13 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
 {
     Q_UNUSED(targetWindowId)
     Q_UNUSED(zoneGeometry)
-    qCInfo(lcEffect) << "Swap windows requested -" << targetZoneId;
+    qCInfo(lcEffect) << "Swap windows requested (daemon-driven) -" << targetZoneId;
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("swap"));
-    if (!activeWindow) {
-        return;
-    }
+    if (!activeWindow) return;
 
     QString windowId = m_effect->getWindowId(activeWindow);
-    QString stableId = m_effect->extractStableId(windowId);
     QString screenName = m_effect->getWindowScreenName(activeWindow);
-
-    // User-initiated snap commands override floating state.
-    // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
 
     if (!targetZoneId.startsWith(SwapDirectivePrefix)) {
         m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_directive"),
@@ -629,189 +718,90 @@ void NavigationHandler::handleSwapWindows(const QString& targetZoneId, const QSt
 
     QString direction = targetZoneId.mid(SwapDirectivePrefix.length());
 
+    auto* iface = m_effect->windowTrackingInterface();
+    if (!iface || !iface->isValid()) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"),
+                                         QString(), QString(), screenName);
+        return;
+    }
+
     QPointer<KWin::EffectWindow> safeWindow = activeWindow;
     QString capturedWindowId = windowId;
     QString capturedScreenName = screenName;
 
-    // Step 1: Async query current zone for window
-    m_effect->queryZoneForWindowAsync(windowId,
-        [this, safeWindow, capturedWindowId, capturedScreenName, direction](const QString& currentZoneId) {
+    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getSwapTargetForWindow"),
+                                                    windowId, direction, screenName);
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, safeWindow, capturedWindowId, capturedScreenName](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
         if (!safeWindow) return;
 
-        if (currentZoneId.isEmpty()) {
-            m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("not_snapped"),
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isValid()) {
+            m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"),
                                              QString(), QString(), capturedScreenName);
             return;
         }
 
-        // Step 2: Async query adjacent zone
-        m_effect->queryAdjacentZoneAsync(currentZoneId, direction,
-            [this, safeWindow, capturedWindowId, capturedScreenName, currentZoneId](const QString& targetZone) {
-            if (!safeWindow) return;
+        QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+        if (!doc.isObject()) return;
 
-            if (targetZone.isEmpty()) {
-                m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"),
-                                                 QString(), QString(), capturedScreenName);
+        QJsonObject obj = doc.object();
+        if (!obj.value(QLatin1String("success")).toBool(false)) return;
+
+        int x1 = obj.value(QLatin1String("x1")).toInt();
+        int y1 = obj.value(QLatin1String("y1")).toInt();
+        int w1 = obj.value(QLatin1String("w1")).toInt();
+        int h1 = obj.value(QLatin1String("h1")).toInt();
+        QString zoneId1 = obj.value(QLatin1String("zoneId1")).toString();
+        QString windowId2 = obj.value(QLatin1String("windowId2")).toString();
+        int x2 = obj.value(QLatin1String("x2")).toInt();
+        int y2 = obj.value(QLatin1String("y2")).toInt();
+        int w2 = obj.value(QLatin1String("w2")).toInt();
+        int h2 = obj.value(QLatin1String("h2")).toInt();
+        QString zoneId2 = obj.value(QLatin1String("zoneId2")).toString();
+        QString resultScreenName = obj.value(QLatin1String("screenName")).toString();
+
+        QRect geom1(x1, y1, w1, h1);
+        if (!geom1.isValid()) return;
+
+        auto* swapIface = m_effect->windowTrackingInterface();
+        if (!swapIface || !swapIface->isValid()) return;
+
+        if (windowId2.isEmpty()) {
+            m_effect->applySnapGeometry(safeWindow, geom1);
+            swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId1, resultScreenName);
+        } else {
+            QRect geom2(x2, y2, w2, h2);
+            if (!geom2.isValid()) return;
+
+            KWin::EffectWindow* targetWindow = nullptr;
+            const auto windows = KWin::effects->stackingOrder();
+            for (KWin::EffectWindow* win : windows) {
+                if (win && m_effect->getWindowId(win) == windowId2) {
+                    targetWindow = win;
+                    break;
+                }
+            }
+
+            if (!targetWindow || !m_effect->shouldHandleWindow(targetWindow)) {
+                m_effect->applySnapGeometry(safeWindow, geom1);
+                swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId1, resultScreenName);
                 return;
             }
 
-            auto* iface = m_effect->windowTrackingInterface();
-            if (!iface || !iface->isValid()) {
-                m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"),
-                                                 QString(), QString(), capturedScreenName);
-                return;
-            }
+            m_effect->ensurePreSnapGeometryStored(safeWindow, capturedWindowId);
+            m_effect->ensurePreSnapGeometryStored(targetWindow, windowId2);
 
-            // Alias to match existing async chain variable names
-            QString capturedCurrentZoneId = currentZoneId;
-            QString capturedTargetZone = targetZone;
+            m_effect->applySnapGeometry(safeWindow, geom1);
+            swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, zoneId1, resultScreenName);
 
-            // Step 3: Async fetch target zone geometry
-            QDBusPendingCall targetGeomCall = iface->asyncCall(QStringLiteral("getZoneGeometryForScreen"), targetZone, capturedScreenName);
-            auto* targetGeomWatcher = new QDBusPendingCallWatcher(targetGeomCall, this);
-
-            connect(targetGeomWatcher, &QDBusPendingCallWatcher::finished, this,
-                    [this, safeWindow, capturedWindowId, capturedCurrentZoneId, capturedTargetZone, capturedScreenName](QDBusPendingCallWatcher* tgw) {
-                tgw->deleteLater();
-
-                if (!safeWindow) {
-                    qCDebug(lcEffect) << "Window destroyed during target geometry fetch";
-                    m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("window_destroyed"),
-                                                     QString(), QString(), capturedScreenName);
-                    return;
-                }
-
-                QDBusPendingReply<QString> targetReply = *tgw;
-                if (!targetReply.isValid()) {
-                    m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("geometry_error"),
-                                                     QString(), QString(), capturedScreenName);
-                    return;
-                }
-
-                QRect targetGeom = m_effect->parseZoneGeometry(targetReply.value());
-                if (!targetGeom.isValid()) {
-                    m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("geometry_error"),
-                                                     QString(), QString(), capturedScreenName);
-                    return;
-                }
-
-                // Step 4: Async fetch current zone geometry
-                auto* iface2 = m_effect->windowTrackingInterface();
-                if (!iface2 || !iface2->isValid()) {
-                    m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"),
-                                                     QString(), QString(), capturedScreenName);
-                    return;
-                }
-
-                QDBusPendingCall currentGeomCall = iface2->asyncCall(QStringLiteral("getZoneGeometryForScreen"), capturedCurrentZoneId, capturedScreenName);
-                auto* currentGeomWatcher = new QDBusPendingCallWatcher(currentGeomCall, this);
-
-                connect(currentGeomWatcher, &QDBusPendingCallWatcher::finished, this,
-                        [this, safeWindow, capturedWindowId, capturedCurrentZoneId, capturedTargetZone, capturedScreenName, targetGeom](QDBusPendingCallWatcher* cgw) {
-                    cgw->deleteLater();
-
-                    if (!safeWindow) {
-                        qCDebug(lcEffect) << "Window destroyed during current geometry fetch";
-                        m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("window_destroyed"),
-                                                         QString(), QString(), capturedScreenName);
-                        return;
-                    }
-
-                    QDBusPendingReply<QString> currentReply = *cgw;
-                    if (!currentReply.isValid()) {
-                        m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("geometry_error"),
-                                                         QString(), QString(), capturedScreenName);
-                        return;
-                    }
-
-                    QRect currentGeom = m_effect->parseZoneGeometry(currentReply.value());
-                    if (!currentGeom.isValid()) {
-                        m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("geometry_error"),
-                                                         QString(), QString(), capturedScreenName);
-                        return;
-                    }
-
-                    // Step 5: Async get windows in target zone
-                    auto* iface3 = m_effect->windowTrackingInterface();
-                    if (!iface3 || !iface3->isValid()) {
-                        m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"),
-                                                         QString(), QString(), capturedScreenName);
-                        return;
-                    }
-
-                    QDBusPendingCall windowsCall = iface3->asyncCall(QStringLiteral("getWindowsInZone"), capturedTargetZone);
-                    auto* windowsWatcher = new QDBusPendingCallWatcher(windowsCall, this);
-
-                    connect(windowsWatcher, &QDBusPendingCallWatcher::finished, this,
-                            [this, safeWindow, capturedWindowId, capturedCurrentZoneId, capturedTargetZone, capturedScreenName, targetGeom, currentGeom](QDBusPendingCallWatcher* ww) {
-                        ww->deleteLater();
-
-                        if (!safeWindow) {
-                            qCDebug(lcEffect) << "Window destroyed during windows fetch";
-                            m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("window_destroyed"),
-                                                             QString(), QString(), capturedScreenName);
-                            return;
-                        }
-
-                        QDBusPendingReply<QStringList> reply = *ww;
-                        QStringList windowsInTargetZone;
-                        if (reply.isValid()) {
-                            windowsInTargetZone = reply.value();
-                        }
-
-                        // Get fresh interface pointer - don't use captured pointer from outer scope
-                        auto* swapIface = m_effect->windowTrackingInterface();
-                        if (!swapIface || !swapIface->isValid()) {
-                            m_effect->emitNavigationFeedback(false, QStringLiteral("swap"), QStringLiteral("dbus_error"),
-                                                             QString(), QString(), capturedScreenName);
-                            return;
-                        }
-
-                        if (windowsInTargetZone.isEmpty()) {
-                            m_effect->applySnapGeometry(safeWindow, targetGeom);
-                            swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, capturedTargetZone, capturedScreenName);
-                            m_effect->emitNavigationFeedback(true, QStringLiteral("swap"), QStringLiteral("moved_to_empty"),
-                                                             capturedCurrentZoneId, capturedTargetZone, capturedScreenName);
-                        } else {
-                            QString targetWindowIdToSwap = windowsInTargetZone.first();
-
-                            KWin::EffectWindow* targetWindow = nullptr;
-                            const auto windows = KWin::effects->stackingOrder();
-                            for (KWin::EffectWindow* win : windows) {
-                                if (win && m_effect->getWindowId(win) == targetWindowIdToSwap) {
-                                    targetWindow = win;
-                                    break;
-                                }
-                            }
-
-                            if (!targetWindow || !m_effect->shouldHandleWindow(targetWindow)) {
-                                m_effect->applySnapGeometry(safeWindow, targetGeom);
-                                swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, capturedTargetZone, capturedScreenName);
-                                m_effect->emitNavigationFeedback(true, QStringLiteral("swap"), QStringLiteral("target_not_found"),
-                                                                 capturedCurrentZoneId, capturedTargetZone, capturedScreenName);
-                                return;
-                            }
-
-                            // User-initiated snap commands override floating state.
-                            // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
-
-                            m_effect->ensurePreSnapGeometryStored(safeWindow, capturedWindowId);
-                            m_effect->ensurePreSnapGeometryStored(targetWindow, targetWindowIdToSwap);
-
-                            m_effect->applySnapGeometry(safeWindow, targetGeom);
-                            swapIface->asyncCall(QStringLiteral("windowSnapped"), capturedWindowId, capturedTargetZone, capturedScreenName);
-
-                            m_effect->applySnapGeometry(targetWindow, currentGeom);
-                            swapIface->asyncCall(QStringLiteral("windowSnapped"), targetWindowIdToSwap, capturedCurrentZoneId, capturedScreenName);
-
-                            // For swap, highlight both source and target zones
-                            m_effect->emitNavigationFeedback(true, QStringLiteral("swap"), QString(),
-                                                             capturedCurrentZoneId, capturedTargetZone, capturedScreenName);
-                        }
-                    });
-                });
-            });
-        });
+            m_effect->applySnapGeometry(targetWindow, geom2);
+            swapIface->asyncCall(QStringLiteral("windowSnapped"), windowId2, zoneId2, resultScreenName);
+        }
     });
 }
 
@@ -976,7 +966,7 @@ void NavigationHandler::handleSnapAllWindows(const QString& snapData, const QStr
 void NavigationHandler::handleCycleWindowsInZone(const QString& directive, const QString& unused)
 {
     Q_UNUSED(unused)
-    qCInfo(lcEffect) << "Cycle windows in zone requested -" << directive;
+    qCInfo(lcEffect) << "Cycle windows in zone requested (daemon-driven) -" << directive;
 
     if (!directive.startsWith(CycleDirectivePrefix)) {
         m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("invalid_directive"));
@@ -984,119 +974,52 @@ void NavigationHandler::handleCycleWindowsInZone(const QString& directive, const
     }
 
     QString direction = directive.mid(CycleDirectivePrefix.length());
-    bool forward;
-    if (direction == QStringLiteral("forward")) {
-        forward = true;
-    } else if (direction == QStringLiteral("backward")) {
-        forward = false;
-    } else {
+    bool forward = (direction == QStringLiteral("forward"));
+    if (direction != QStringLiteral("forward") && direction != QStringLiteral("backward")) {
         m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("invalid_direction"));
         return;
     }
 
     KWin::EffectWindow* activeWindow = m_effect->getValidActiveWindowOrFail(QStringLiteral("cycle"));
-    if (!activeWindow) {
-        return;
-    }
+    if (!activeWindow) return;
 
     QString windowId = m_effect->getWindowId(activeWindow);
     QString screenName = m_effect->getWindowScreenName(activeWindow);
 
-    QPointer<KWin::EffectWindow> safeWindow = activeWindow;
-    bool capturedForward = forward;
-    QString capturedScreenName = screenName;
+    auto* iface = m_effect->windowTrackingInterface();
+    if (!iface || !iface->isValid()) {
+        m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("dbus_error"),
+                                         QString(), QString(), screenName);
+        return;
+    }
 
-    // Step 1: Async query current zone for window
-    m_effect->queryZoneForWindowAsync(windowId,
-        [this, safeWindow, capturedForward, capturedScreenName](const QString& currentZoneId) {
-        if (!safeWindow) return;
+    QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getCycleTargetForWindow"),
+                                                    windowId, forward, screenName);
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-        if (currentZoneId.isEmpty()) {
-            m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("not_snapped"),
-                                             QString(), QString(), capturedScreenName);
-            return;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isValid()) return;
+
+        QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+        if (!doc.isObject()) return;
+
+        QJsonObject obj = doc.object();
+        if (!obj.value(QLatin1String("success")).toBool(false)) return;
+
+        QString windowIdToActivate = obj.value(QLatin1String("windowIdToActivate")).toString();
+        if (windowIdToActivate.isEmpty()) return;
+
+        const auto windows = KWin::effects->stackingOrder();
+        for (KWin::EffectWindow* win : windows) {
+            if (win && m_effect->getWindowId(win) == windowIdToActivate) {
+                KWin::effects->activateWindow(win);
+                return;
+            }
         }
-
-        auto* iface = m_effect->windowTrackingInterface();
-        if (!iface || !iface->isValid()) {
-            m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("dbus_error"),
-                                             QString(), QString(), capturedScreenName);
-            return;
-        }
-
-        QString capturedCurrentZoneId = currentZoneId;
-
-        // Step 2: Async get windows in zone
-        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getWindowsInZone"), currentZoneId);
-        auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-
-        connect(watcher, &QDBusPendingCallWatcher::finished, this,
-                [this, safeWindow, capturedForward, capturedCurrentZoneId, capturedScreenName](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-
-            if (!safeWindow) {
-                qCDebug(lcEffect) << "Window was destroyed during async call";
-                return;
-            }
-
-            QDBusPendingReply<QStringList> reply = *w;
-            if (!reply.isValid()) {
-                m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("dbus_error"),
-                                                 QString(), QString(), capturedScreenName);
-                return;
-            }
-
-            QStringList windowIdsInZone = reply.value();
-
-            if (windowIdsInZone.size() < 2) {
-                m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"),
-                                                 QString(), QString(), capturedScreenName);
-                return;
-            }
-
-            QSet<QString> zoneWindowSet(windowIdsInZone.begin(), windowIdsInZone.end());
-            QVector<KWin::EffectWindow*> sortedWindowsInZone;
-
-            const auto stackingOrder = KWin::effects->stackingOrder();
-            for (KWin::EffectWindow* win : stackingOrder) {
-                if (win && zoneWindowSet.contains(m_effect->getWindowId(win))) {
-                    sortedWindowsInZone.append(win);
-                }
-            }
-
-            if (sortedWindowsInZone.size() < 2) {
-                m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"),
-                                                 QString(), QString(), capturedScreenName);
-                return;
-            }
-
-            int currentIndex = -1;
-            for (int i = 0; i < sortedWindowsInZone.size(); ++i) {
-                if (sortedWindowsInZone[i] == safeWindow) {
-                    currentIndex = i;
-                    break;
-                }
-            }
-
-            if (currentIndex < 0) {
-                m_effect->emitNavigationFeedback(false, QStringLiteral("cycle"), QStringLiteral("window_stacking_mismatch"),
-                                                 QString(), QString(), capturedScreenName);
-                return;
-            }
-
-            int nextIndex;
-            if (capturedForward) {
-                nextIndex = (currentIndex + 1) % sortedWindowsInZone.size();
-            } else {
-                nextIndex = (currentIndex - 1 + sortedWindowsInZone.size()) % sortedWindowsInZone.size();
-            }
-
-            KWin::EffectWindow* targetWindow = sortedWindowsInZone.at(nextIndex);
-            KWin::effects->activateWindow(targetWindow);
-            // For cycle, highlight the current zone (same source and target)
-            m_effect->emitNavigationFeedback(true, QStringLiteral("cycle"), QString(),
-                                             capturedCurrentZoneId, capturedCurrentZoneId, capturedScreenName);
-        });
     });
 }
 

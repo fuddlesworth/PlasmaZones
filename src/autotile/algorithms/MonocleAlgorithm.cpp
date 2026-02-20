@@ -5,6 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
+#include <KLocalizedString>
 
 namespace PlasmaZones {
 
@@ -19,14 +20,14 @@ MonocleAlgorithm::MonocleAlgorithm(QObject *parent)
 {
 }
 
-QString MonocleAlgorithm::name() const noexcept
+QString MonocleAlgorithm::name() const
 {
-    return QStringLiteral("Monocle");
+    return i18n("Monocle");
 }
 
 QString MonocleAlgorithm::description() const
 {
-    return tr("Single fullscreen window, others hidden");
+    return i18n("Single fullscreen window, others hidden");
 }
 
 QString MonocleAlgorithm::icon() const noexcept
@@ -34,21 +35,24 @@ QString MonocleAlgorithm::icon() const noexcept
     return QStringLiteral("view-fullscreen");
 }
 
-QVector<QRect> MonocleAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,
-                                                 const TilingState & /*state*/) const
+QVector<QRect> MonocleAlgorithm::calculateZones(const TilingParams &params) const
 {
+    const int windowCount = params.windowCount;
+    const auto &screenGeometry = params.screenGeometry;
+    const int outerGap = params.outerGap;
+
     QVector<QRect> zones;
 
     if (windowCount <= 0 || !screenGeometry.isValid()) {
         return zones;
     }
 
-    // In monocle mode, every window gets the full screen geometry.
-    // The autotiling engine handles which window is visible based on
-    // focus and the monocleHideOthers configuration setting.
+    // In monocle mode, every window gets the gap-inset area.
+    // No inner gaps since windows are stacked, not side-by-side.
+    const QRect area = innerRect(screenGeometry, outerGap);
     zones.reserve(windowCount);
     for (int i = 0; i < windowCount; ++i) {
-        zones.append(screenGeometry);
+        zones.append(area);
     }
 
     return zones;

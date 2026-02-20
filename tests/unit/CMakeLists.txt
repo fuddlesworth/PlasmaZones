@@ -124,3 +124,19 @@ target_link_libraries(test_tiling_state
 
 add_test(NAME TilingState COMMAND test_tiling_state)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Geometry Utils Tests
+# Tests for enforceWindowMinSizes(), removeZoneOverlaps() (chain stealing, gaps)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_geometry_utils
+    test_geometry_utils.cpp
+)
+
+target_link_libraries(test_geometry_utils
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME GeometryUtils COMMAND test_geometry_utils)

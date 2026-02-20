@@ -20,7 +20,7 @@ namespace PlasmaZones {
 // Helper Methods
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool AutotileAdaptor::ensureEngine(const char *methodName) const
+bool AutotileAdaptor::ensureEngine(const char* methodName) const
 {
     if (!m_engine) {
         qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- engine not available";
@@ -29,7 +29,7 @@ bool AutotileAdaptor::ensureEngine(const char *methodName) const
     return true;
 }
 
-bool AutotileAdaptor::ensureEngineAndConfig(const char *methodName) const
+bool AutotileAdaptor::ensureEngineAndConfig(const char* methodName) const
 {
     if (!m_engine) {
         qCWarning(lcDbusAutotile) << "Cannot" << methodName << "- engine not available";
@@ -42,7 +42,7 @@ bool AutotileAdaptor::ensureEngineAndConfig(const char *methodName) const
     return true;
 }
 
-AutotileAdaptor::AutotileAdaptor(AutotileEngine *engine, QObject *parent)
+AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
 {
@@ -59,9 +59,10 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine *engine, QObject *parent)
     connect(m_engine, &AutotileEngine::autotileScreensChanged, this, &AutotileAdaptor::autotileScreensChanged);
     connect(m_engine, &AutotileEngine::algorithmChanged, this, &AutotileAdaptor::algorithmChanged);
     connect(m_engine, &AutotileEngine::tilingChanged, this, &AutotileAdaptor::tilingChanged);
-    connect(m_engine, &AutotileEngine::windowTiled, this, &AutotileAdaptor::onWindowTiled);
+    connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
     connect(m_engine, &AutotileEngine::focusWindowRequested, this, &AutotileAdaptor::focusWindowRequested);
     connect(m_engine, &AutotileEngine::monocleVisibilityChanged, this, &AutotileAdaptor::monocleVisibilityChanged);
+    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this, &AutotileAdaptor::windowsReleasedFromTiling);
 
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }
@@ -95,7 +96,7 @@ QString AutotileAdaptor::algorithm() const
     return m_engine->algorithm();
 }
 
-void AutotileAdaptor::setAlgorithm(const QString &algorithmId)
+void AutotileAdaptor::setAlgorithm(const QString& algorithmId)
 {
     if (!ensureEngine("setAlgorithm")) {
         return;
@@ -240,16 +241,17 @@ void AutotileAdaptor::setFocusNewWindows(bool enabled)
 // Tiling Operations
 // ═══════════════════════════════════════════════════════════════════════════
 
-void AutotileAdaptor::retile(const QString &screenName)
+void AutotileAdaptor::retile(const QString& screenName)
 {
     if (!ensureEngine("retile")) {
         return;
     }
-    qCDebug(lcDbusAutotile) << "D-Bus retile request for screen:" << (screenName.isEmpty() ? QStringLiteral("all") : screenName);
+    qCDebug(lcDbusAutotile) << "D-Bus retile request for screen:"
+                            << (screenName.isEmpty() ? QStringLiteral("all") : screenName);
     m_engine->retile(screenName);
 }
 
-void AutotileAdaptor::swapWindows(const QString &windowId1, const QString &windowId2)
+void AutotileAdaptor::swapWindows(const QString& windowId1, const QString& windowId2)
 {
     if (!ensureEngine("swapWindows")) {
         return;
@@ -267,7 +269,7 @@ void AutotileAdaptor::swapWindows(const QString &windowId1, const QString &windo
     m_engine->swapWindows(windowId1, windowId2);
 }
 
-void AutotileAdaptor::promoteToMaster(const QString &windowId)
+void AutotileAdaptor::promoteToMaster(const QString& windowId)
 {
     if (!ensureEngine("promoteToMaster")) {
         return;
@@ -280,7 +282,7 @@ void AutotileAdaptor::promoteToMaster(const QString &windowId)
     m_engine->promoteToMaster(windowId);
 }
 
-void AutotileAdaptor::demoteFromMaster(const QString &windowId)
+void AutotileAdaptor::demoteFromMaster(const QString& windowId)
 {
     if (!ensureEngine("demoteFromMaster")) {
         return;
@@ -324,7 +326,7 @@ void AutotileAdaptor::focusPrevious()
     m_engine->focusPrevious();
 }
 
-void AutotileAdaptor::windowOpened(const QString &windowId, const QString &screenName)
+void AutotileAdaptor::windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight)
 {
     if (!ensureEngine("windowOpened")) {
         return;
@@ -337,11 +339,12 @@ void AutotileAdaptor::windowOpened(const QString &windowId, const QString &scree
         qCDebug(lcDbusAutotile) << "windowOpened: empty screen name for window" << windowId;
         return;
     }
-    qCDebug(lcDbusAutotile) << "D-Bus windowOpened:" << windowId << "on screen:" << screenName;
-    m_engine->windowOpened(windowId, screenName);
+    qCDebug(lcDbusAutotile) << "D-Bus windowOpened:" << windowId << "on screen:" << screenName << "minSize:" << minWidth
+                            << "x" << minHeight;
+    m_engine->windowOpened(windowId, screenName, minWidth, minHeight);
 }
 
-void AutotileAdaptor::windowClosed(const QString &windowId)
+void AutotileAdaptor::windowClosed(const QString& windowId)
 {
     if (!ensureEngine("windowClosed")) {
         return;
@@ -354,7 +357,7 @@ void AutotileAdaptor::windowClosed(const QString &windowId)
     m_engine->windowClosed(windowId);
 }
 
-void AutotileAdaptor::notifyWindowFocused(const QString &windowId, const QString &screenName)
+void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString& screenName)
 {
     if (!ensureEngine("notifyWindowFocused")) {
         return;
@@ -370,7 +373,7 @@ void AutotileAdaptor::notifyWindowFocused(const QString &windowId, const QString
     m_engine->windowFocused(windowId, screenName);
 }
 
-void AutotileAdaptor::floatWindow(const QString &windowId)
+void AutotileAdaptor::floatWindow(const QString& windowId)
 {
     if (!ensureEngine("floatWindow")) {
         return;
@@ -450,9 +453,9 @@ QStringList AutotileAdaptor::availableAlgorithms()
     return AlgorithmRegistry::instance()->availableAlgorithms();
 }
 
-QString AutotileAdaptor::algorithmInfo(const QString &algorithmId)
+QString AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
-    TilingAlgorithm *algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+    TilingAlgorithm* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDbusAutotile) << "Unknown algorithm:" << algorithmId;
         return QStringLiteral("{}");
@@ -473,17 +476,36 @@ QString AutotileAdaptor::algorithmInfo(const QString &algorithmId)
 // Private Slots
 // ═══════════════════════════════════════════════════════════════════════════
 
-void AutotileAdaptor::onWindowTiled(const QString &windowId, const QRect &geometry)
+void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
 {
-    if (geometry.width() <= 0 || geometry.height() <= 0) {
-        qCWarning(lcDbusAutotile) << "onWindowTiled: invalid geometry for" << windowId << geometry;
+    if (tileRequestsJson.isEmpty()) {
         return;
     }
 
-    // Convert engine's windowTiled signal to D-Bus windowTileRequested
-    // This signal is listened to by the KWin effect to apply the geometry
-    qCDebug(lcDbusAutotile) << "Emitting windowTileRequested:" << windowId << geometry;
-    Q_EMIT windowTileRequested(windowId, geometry.x(), geometry.y(), geometry.width(), geometry.height());
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(tileRequestsJson.toUtf8(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        qCWarning(lcDbusAutotile) << "onWindowsTiled: invalid JSON:" << parseError.errorString();
+        return;
+    }
+
+    QJsonArray outArr;
+    for (const QJsonValue& val : doc.array()) {
+        QJsonObject obj = val.toObject();
+        QString windowId = obj.value(QLatin1String("windowId")).toString();
+        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
+                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+        if (geo.width() <= 0 || geo.height() <= 0) {
+            qCWarning(lcDbusAutotile) << "onWindowsTiled: invalid geometry for" << windowId << geo;
+            continue;
+        }
+        outArr.append(obj);
+    }
+
+    if (!outArr.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "Emitting windowsTileRequested:" << outArr.size() << "windows";
+        Q_EMIT windowsTileRequested(QString::fromUtf8(QJsonDocument(outArr).toJson(QJsonDocument::Compact)));
+    }
 }
 
 } // namespace PlasmaZones

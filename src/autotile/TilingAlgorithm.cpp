@@ -68,119 +68,104 @@ QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
     return sizes;
 }
 
-void TilingAlgorithm::applyGaps(QVector<QRect> &zones, const QRect &screenGeometry, int innerGap, int outerGap)
+QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, int outerGap)
 {
-    if (zones.isEmpty()) {
-        return;
+    outerGap = std::max(0, outerGap);
+    const int w = std::max(1, screenGeometry.width() - 2 * outerGap);
+    const int h = std::max(1, screenGeometry.height() - 2 * outerGap);
+    // When outerGap exceeds half the screen dimension, center the result
+    // to avoid placing the rect off-screen
+    const int x = screenGeometry.left() + (screenGeometry.width() - w) / 2;
+    const int y = screenGeometry.top() + (screenGeometry.height() - h) / 2;
+    return QRect(x, y, w, h);
+}
+
+QVector<int> TilingAlgorithm::distributeWithGaps(int total, int count, int gap)
+{
+    if (count <= 0 || total <= 0) {
+        return {};
+    }
+    if (count == 1) {
+        return {total};
+    }
+    // Deduct space used by gaps between items
+    const int totalGaps = (count - 1) * gap;
+    const int available = std::max(count, total - totalGaps); // at least 1px per item
+    return distributeEvenly(available, count);
+}
+
+QVector<int> TilingAlgorithm::distributeWithMinSizes(int total, int count, int gap,
+                                                     const QVector<int> &minDims)
+{
+    if (count <= 0 || total <= 0) {
+        return {};
+    }
+    if (count == 1) {
+        return {total};
     }
 
-    // Clamp gap values to reasonable bounds
-    innerGap = std::clamp(innerGap, MinGap, MaxGap);
-    outerGap = std::clamp(outerGap, MinGap, MaxGap);
+    // Deduct space used by gaps between items
+    const int totalGaps = (count - 1) * gap;
+    const int available = std::max(count, total - totalGaps); // at least 1px per item
 
-    const int screenLeft = screenGeometry.left();
-    const int screenTop = screenGeometry.top();
-    const int screenRight = screenGeometry.right();
-    const int screenBottom = screenGeometry.bottom();
-
-    // For a single zone, only apply outer gaps
-    if (zones.size() == 1) {
-        QRect &zone = zones[0];
-        zone.setLeft(zone.left() + outerGap);
-        zone.setTop(zone.top() + outerGap);
-        zone.setRight(zone.right() - outerGap);
-        zone.setBottom(zone.bottom() - outerGap);
-
-        // Ensure minimum size while staying within screen bounds
-        if (zone.width() < MinZoneSizePx) {
-            const int center = zone.left() + zone.width() / 2;
-            zone.setLeft(std::max(screenLeft + outerGap, center - MinZoneSizePx / 2));
-            zone.setRight(std::min(screenRight - outerGap, zone.left() + MinZoneSizePx - 1));
-        }
-        if (zone.height() < MinZoneSizePx) {
-            const int center = zone.top() + zone.height() / 2;
-            zone.setTop(std::max(screenTop + outerGap, center - MinZoneSizePx / 2));
-            zone.setBottom(std::min(screenBottom - outerGap, zone.top() + MinZoneSizePx - 1));
-        }
-        return;
+    // If no constraints provided, fall back to even distribution
+    if (minDims.isEmpty()) {
+        return distributeEvenly(available, count);
     }
 
-    // For multiple zones, determine adjacency and apply appropriate gaps
-    // For odd inner gaps, use ceiling for left/top offsets and floor for right/bottom
-    // This ensures adjacent zones always have exactly innerGap between them
-    const int halfInnerFloor = innerGap / 2;
-    const int halfInnerCeil = innerGap - halfInnerFloor; // Gets extra pixel if odd
-
-    for (int i = 0; i < zones.size(); ++i) {
-        QRect &zone = zones[i];
-        const QRect originalZone = zone; // Store original for bounds checking
-
-        int left = zone.left();
-        int top = zone.top();
-        int right = zone.right();
-        int bottom = zone.bottom();
-
-        // Check if zone is at screen edge (outer gap) or interior (inner gap)
-        // Interior edges: left/top get ceiling half, right/bottom get floor half
-        // This ensures: zone[i].right + halfInnerFloor + halfInnerCeil + zone[i+1].left = innerGap
-
-        // Left edge
-        if (std::abs(left - screenLeft) <= GapEdgeThresholdPx) {
-            left = screenLeft + outerGap;
-        } else {
-            left += halfInnerCeil;
-        }
-
-        // Top edge
-        if (std::abs(top - screenTop) <= GapEdgeThresholdPx) {
-            top = screenTop + outerGap;
-        } else {
-            top += halfInnerCeil;
-        }
-
-        // Right edge
-        if (std::abs(right - screenRight) <= GapEdgeThresholdPx) {
-            right = screenRight - outerGap;
-        } else {
-            right -= halfInnerFloor;
-        }
-
-        // Bottom edge
-        if (std::abs(bottom - screenBottom) <= GapEdgeThresholdPx) {
-            bottom = screenBottom - outerGap;
-        } else {
-            bottom -= halfInnerFloor;
-        }
-
-        // Ensure valid bounds while preventing overlap with original zone boundaries
-        // This prevents zones from expanding beyond their allocated space
-        if (right <= left) {
-            // Zone too narrow - center the minimum size within original bounds
-            const int center = originalZone.left() + originalZone.width() / 2;
-            left = std::max(originalZone.left(), center - MinZoneSizePx / 2);
-            right = std::min(originalZone.right(), left + MinZoneSizePx - 1);
-        }
-        if (bottom <= top) {
-            // Zone too short - center the minimum size within original bounds
-            const int center = originalZone.top() + originalZone.height() / 2;
-            top = std::max(originalZone.top(), center - MinZoneSizePx / 2);
-            bottom = std::min(originalZone.bottom(), top + MinZoneSizePx - 1);
-        }
-
-        // Final guard: ensure dimensions are never negative
-        if (right < left) {
-            right = left;
-        }
-        if (bottom < top) {
-            bottom = top;
-        }
-
-        // Apply adjusted bounds
-        zone.setLeft(left);
-        zone.setTop(top);
-        zone.setRight(right);
-        zone.setBottom(bottom);
+    // Build effective minimum per item (at least 1px)
+    QVector<int> mins(count);
+    int totalMin = 0;
+    for (int i = 0; i < count; ++i) {
+        mins[i] = (i < minDims.size() && minDims[i] > 0) ? minDims[i] : 1;
+        totalMin += mins[i];
     }
+
+    QVector<int> sizes(count);
+
+    if (totalMin >= available) {
+        // Unsatisfiable: distribute proportionally by minimum weight
+        int remaining = available;
+        int remainingMin = totalMin;
+        for (int i = 0; i < count; ++i) {
+            int allocated;
+            if (remainingMin > 0) {
+                allocated = static_cast<int>(
+                    static_cast<qint64>(remaining) * mins[i] / remainingMin);
+            } else {
+                allocated = remaining / std::max(1, count - i);
+            }
+            allocated = std::max(1, std::min(allocated, remaining));
+            sizes[i] = allocated;
+            remaining -= allocated;
+            remainingMin -= mins[i];
+        }
+    } else {
+        // Satisfiable: give each its minimum, distribute surplus evenly
+        const int surplus = available - totalMin;
+        const int base = surplus / count;
+        int remainder = surplus % count;
+
+        for (int i = 0; i < count; ++i) {
+            sizes[i] = mins[i] + base;
+            if (remainder > 0) {
+                ++sizes[i];
+                --remainder;
+            }
+        }
+    }
+
+    return sizes;
+}
+
+int TilingAlgorithm::minWidthAt(const QVector<QSize> &minSizes, int index)
+{
+    return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].width()) : 0;
+}
+
+int TilingAlgorithm::minHeightAt(const QVector<QSize> &minSizes, int index)
+{
+    return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].height()) : 0;
 }
 
 } // namespace PlasmaZones

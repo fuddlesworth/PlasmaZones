@@ -21,7 +21,6 @@ namespace Interface {
 inline const QString Settings = QStringLiteral("org.plasmazones.Settings");
 inline const QString WindowDrag = QStringLiteral("org.plasmazones.WindowDrag");
 inline const QString WindowTracking = QStringLiteral("org.plasmazones.WindowTracking");
-inline const QString ZoneDetection = QStringLiteral("org.plasmazones.ZoneDetection");
 inline const QString Overlay = QStringLiteral("org.plasmazones.Overlay");
 inline const QString Autotile = QStringLiteral("org.plasmazones.Autotile");
 }

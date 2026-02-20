@@ -1162,22 +1162,6 @@ bool KCMPlasmaZones::autotileRespectMinimumSize() const
 {
     return m_settings->autotileRespectMinimumSize();
 }
-bool KCMPlasmaZones::autotileShowActiveBorder() const
-{
-    return m_settings->autotileShowActiveBorder();
-}
-int KCMPlasmaZones::autotileActiveBorderWidth() const
-{
-    return m_settings->autotileActiveBorderWidth();
-}
-bool KCMPlasmaZones::autotileUseSystemBorderColor() const
-{
-    return m_settings->autotileUseSystemBorderColor();
-}
-QColor KCMPlasmaZones::autotileActiveBorderColor() const
-{
-    return m_settings->autotileActiveBorderColor();
-}
 bool KCMPlasmaZones::autotileMonocleHideOthers() const
 {
     return m_settings->autotileMonocleHideOthers();
@@ -1225,7 +1209,7 @@ QVariantList KCMPlasmaZones::generateAlgorithmPreview(const QString &algorithmId
     state.setSplitRatio(splitRatio);
 
     const int count = qMax(1, windowCount);
-    QVector<QRect> zones = algo->calculateZones(count, previewRect, state);
+    QVector<QRect> zones = algo->calculateZones({count, previewRect, &state});
 
     return PlasmaZones::AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
 }
@@ -1364,43 +1348,6 @@ void KCMPlasmaZones::setAutotileRespectMinimumSize(bool respect)
     if (m_settings->autotileRespectMinimumSize() != respect) {
         m_settings->setAutotileRespectMinimumSize(respect);
         Q_EMIT autotileRespectMinimumSizeChanged();
-        setNeedsSave(true);
-    }
-}
-
-void KCMPlasmaZones::setAutotileShowActiveBorder(bool show)
-{
-    if (m_settings->autotileShowActiveBorder() != show) {
-        m_settings->setAutotileShowActiveBorder(show);
-        Q_EMIT autotileShowActiveBorderChanged();
-        setNeedsSave(true);
-    }
-}
-
-void KCMPlasmaZones::setAutotileActiveBorderWidth(int width)
-{
-    width = qBound(1, width, 10);
-    if (m_settings->autotileActiveBorderWidth() != width) {
-        m_settings->setAutotileActiveBorderWidth(width);
-        Q_EMIT autotileActiveBorderWidthChanged();
-        setNeedsSave(true);
-    }
-}
-
-void KCMPlasmaZones::setAutotileUseSystemBorderColor(bool use)
-{
-    if (m_settings->autotileUseSystemBorderColor() != use) {
-        m_settings->setAutotileUseSystemBorderColor(use);
-        Q_EMIT autotileUseSystemBorderColorChanged();
-        setNeedsSave(true);
-    }
-}
-
-void KCMPlasmaZones::setAutotileActiveBorderColor(const QColor &color)
-{
-    if (m_settings->autotileActiveBorderColor() != color) {
-        m_settings->setAutotileActiveBorderColor(color);
-        Q_EMIT autotileActiveBorderColorChanged();
         setNeedsSave(true);
     }
 }
@@ -1988,10 +1935,6 @@ void KCMPlasmaZones::defaults()
     Q_EMIT autotileAnimationDurationChanged();
     Q_EMIT autotileFocusFollowsMouseChanged();
     Q_EMIT autotileRespectMinimumSizeChanged();
-    Q_EMIT autotileShowActiveBorderChanged();
-    Q_EMIT autotileActiveBorderWidthChanged();
-    Q_EMIT autotileUseSystemBorderColorChanged();
-    Q_EMIT autotileActiveBorderColorChanged();
     Q_EMIT autotileMonocleHideOthersChanged();
     Q_EMIT autotileMonocleShowTabsChanged();
 
@@ -2800,10 +2743,6 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT autotileAnimationDurationChanged();
         Q_EMIT autotileFocusFollowsMouseChanged();
         Q_EMIT autotileRespectMinimumSizeChanged();
-        Q_EMIT autotileShowActiveBorderChanged();
-        Q_EMIT autotileActiveBorderWidthChanged();
-        Q_EMIT autotileUseSystemBorderColorChanged();
-        Q_EMIT autotileActiveBorderColorChanged();
         Q_EMIT autotileMonocleHideOthersChanged();
         Q_EMIT autotileMonocleShowTabsChanged();
     }

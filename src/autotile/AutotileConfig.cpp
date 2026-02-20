@@ -49,9 +49,6 @@ bool AutotileConfig::operator==(const AutotileConfig &other) const
         && insertPosition == other.insertPosition
         && focusFollowsMouse == other.focusFollowsMouse
         && focusNewWindows == other.focusNewWindows
-        && showActiveBorder == other.showActiveBorder
-        && activeBorderWidth == other.activeBorderWidth
-        && activeBorderColor == other.activeBorderColor
         && monocleHideOthers == other.monocleHideOthers
         && monocleShowTabs == other.monocleShowTabs
         && smartGaps == other.smartGaps
@@ -74,9 +71,6 @@ QJsonObject AutotileConfig::toJson() const
     json[AutotileJsonKeys::InsertPosition] = insertPositionToString(insertPosition);
     json[FocusFollowsMouse] = focusFollowsMouse;
     json[FocusNewWindows] = focusNewWindows;
-    json[ShowActiveBorder] = showActiveBorder;
-    json[ActiveBorderWidth] = activeBorderWidth;
-    json[ActiveBorderColor] = activeBorderColor.name(QColor::HexArgb);
     json[MonocleHideOthers] = monocleHideOthers;
     json[MonocleShowTabs] = monocleShowTabs;
     json[SmartGaps] = smartGaps;
@@ -116,25 +110,6 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
     if (json.contains(FocusNewWindows)) {
         config.focusNewWindows = json[FocusNewWindows].toBool(config.focusNewWindows);
     }
-    if (json.contains(ShowActiveBorder)) {
-        config.showActiveBorder = json[ShowActiveBorder].toBool(config.showActiveBorder);
-    }
-    if (json.contains(ActiveBorderWidth)) {
-        config.activeBorderWidth = json[ActiveBorderWidth].toInt(config.activeBorderWidth);
-        config.activeBorderWidth = std::clamp(config.activeBorderWidth, MinBorderWidth, MaxBorderWidth);
-    }
-    if (json.contains(ActiveBorderColor)) {
-        const QString colorStr = json[ActiveBorderColor].toString();
-        if (!colorStr.isEmpty()) {
-            config.activeBorderColor = QColor(colorStr);
-            if (!config.activeBorderColor.isValid()) {
-                config.activeBorderColor = AutotileConfig::systemHighlightColor();
-            }
-        }
-    } else {
-        // No color specified in JSON, use system default
-        config.activeBorderColor = AutotileConfig::systemHighlightColor();
-    }
     if (json.contains(MonocleHideOthers)) {
         config.monocleHideOthers = json[MonocleHideOthers].toBool(config.monocleHideOthers);
     }
@@ -147,24 +122,12 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
     if (json.contains(RespectMinimumSize)) {
         config.respectMinimumSize = json[RespectMinimumSize].toBool(config.respectMinimumSize);
     }
-
     return config;
 }
 
 AutotileConfig AutotileConfig::defaults()
 {
-    AutotileConfig config;
-    // Set system highlight color (member default is invalid/empty)
-    config.activeBorderColor = systemHighlightColor();
-    return config;
-}
-
-QColor AutotileConfig::systemHighlightColor()
-{
-    // Use KColorScheme to get the system highlight/selection color
-    // This respects user's color scheme (Breeze, Breeze Dark, custom themes)
-    KColorScheme scheme(QPalette::Active, KColorScheme::Selection);
-    return scheme.background(KColorScheme::ActiveBackground).color();
+    return AutotileConfig();
 }
 
 } // namespace PlasmaZones

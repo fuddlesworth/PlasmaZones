@@ -67,7 +67,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *al
     // to prevent double-free issues. Don't delete - it's still owned under the original ID.
     const QString existingId = findAlgorithmId(algorithm);
     if (!existingId.isEmpty() && existingId != id) {
-        qWarning() << "AlgorithmRegistry: algorithm" << algorithm->name()
+        qCWarning(lcAutotile) << "AlgorithmRegistry: algorithm" << algorithm->name()
                    << "is already registered as" << existingId
                    << "- cannot register as" << id;
         // Note: NOT deleting because it's still registered under existingId
@@ -251,7 +251,7 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
     previewState.setMasterCount(1);
     previewState.setSplitRatio(AutotileDefaults::DefaultSplitRatio);
 
-    QVector<QRect> zones = algorithm->calculateZones(algorithm->defaultMaxWindows(), previewRect, previewState);
+    QVector<QRect> zones = algorithm->calculateZones({algorithm->defaultMaxWindows(), previewRect, &previewState});
 
     // Convert to relative geometry (handles monocle offset detection internally)
     QVariantList list = zonesToRelativeGeometry(zones, previewRect);

@@ -5,6 +5,7 @@
 #include "../AlgorithmRegistry.h"
 #include "../TilingState.h"
 #include "core/constants.h"
+#include <KLocalizedString>
 
 namespace PlasmaZones {
 
@@ -18,14 +19,14 @@ ColumnsAlgorithm::ColumnsAlgorithm(QObject *parent)
 {
 }
 
-QString ColumnsAlgorithm::name() const noexcept
+QString ColumnsAlgorithm::name() const
 {
-    return QStringLiteral("Columns");
+    return i18n("Columns");
 }
 
 QString ColumnsAlgorithm::description() const
 {
-    return tr("Equal-width vertical columns");
+    return i18n("Equal-width vertical columns");
 }
 
 QString ColumnsAlgorithm::icon() const noexcept
@@ -33,33 +34,46 @@ QString ColumnsAlgorithm::icon() const noexcept
     return QStringLiteral("view-split-left-right");
 }
 
-QVector<QRect> ColumnsAlgorithm::calculateZones(int windowCount, const QRect &screenGeometry,
-                                                const TilingState & /*state*/) const
+QVector<QRect> ColumnsAlgorithm::calculateZones(const TilingParams &params) const
 {
+    const int windowCount = params.windowCount;
+    const auto &screenGeometry = params.screenGeometry;
+    const int innerGap = params.innerGap;
+    const int outerGap = params.outerGap;
+    const auto &minSizes = params.minSizes;
+
     QVector<QRect> zones;
 
     if (windowCount <= 0 || !screenGeometry.isValid()) {
         return zones;
     }
 
-    const int screenX = screenGeometry.x();
-    const int screenY = screenGeometry.y();
-    const int screenWidth = screenGeometry.width();
-    const int screenHeight = screenGeometry.height();
+    const QRect area = innerRect(screenGeometry, outerGap);
 
-    // Single window takes full screen
+    // Single window takes full available area
     if (windowCount == 1) {
-        zones.append(screenGeometry);
+        zones.append(area);
         return zones;
     }
 
-    // Calculate column widths using helper for pixel-perfect distribution
-    const QVector<int> columnWidths = distributeEvenly(screenWidth, windowCount);
+    // Extract per-window minimum widths
+    QVector<int> minWidths;
+    if (!minSizes.isEmpty()) {
+        minWidths.resize(windowCount);
+        for (int i = 0; i < windowCount; ++i) {
+            minWidths[i] = (i < minSizes.size()) ? minSizes[i].width() : 0;
+        }
+    }
 
-    int currentX = screenX;
+    // Calculate column widths with gaps and minimum sizes
+    const QVector<int> columnWidths = minWidths.isEmpty()
+        ? distributeWithGaps(area.width(), windowCount, innerGap)
+        : distributeWithMinSizes(area.width(), windowCount, innerGap, minWidths);
+
+    int currentX = area.x();
     for (int i = 0; i < windowCount; ++i) {
-        zones.append(QRect(currentX, screenY, columnWidths[i], screenHeight));
-        currentX += columnWidths[i];
+        zones.append(QRect(currentX, area.y(), columnWidths[i], area.height()));
+        currentX += columnWidths[i] + innerGap;
     }
 
     return zones;

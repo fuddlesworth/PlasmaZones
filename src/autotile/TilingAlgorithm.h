@@ -7,11 +7,27 @@
 #include <QObject>
 #include <QRect>
 #include <QString>
+#include <QSize>
 #include <QVector>
 
 namespace PlasmaZones {
 
 class TilingState;
+
+/**
+ * @brief Parameters for zone calculation
+ *
+ * Bundles all inputs to calculateZones() into a single struct so new
+ * parameters can be added without changing the virtual interface.
+ */
+struct TilingParams {
+    int windowCount = 0;                ///< Number of windows to tile
+    QRect screenGeometry;               ///< Available screen area in absolute pixels
+    const TilingState *state = nullptr; ///< Current tiling state (must be non-null)
+    int innerGap = 0;                   ///< Gap between adjacent zones in pixels
+    int outerGap = 0;                   ///< Gap at screen edges in pixels
+    QVector<QSize> minSizes;            ///< Per-window minimum sizes (may be empty)
+};
 
 /**
  * @brief Abstract base class for tiling algorithms
@@ -62,7 +78,7 @@ public:
      * @brief Human-readable name of the algorithm
      * @return Algorithm name (e.g., "Master + Stack", "BSP")
      */
-    virtual QString name() const noexcept = 0;
+    virtual QString name() const = 0;
 
     /**
      * @brief Description of the algorithm behavior
@@ -79,20 +95,17 @@ public:
     /**
      * @brief Calculate zone geometries for N windows
      *
-     * This is the core algorithm method. Given a window count, screen geometry,
-     * and current tiling state, generate zone rectangles for each window.
+     * This is the core algorithm method. Given tiling parameters (window count,
+     * screen geometry, state, gaps, min sizes), generate zone rectangles.
      *
-     * @param windowCount Number of windows to tile (>= 0)
-     * @param screenGeometry Available screen area in absolute pixels
-     * @param state Current tiling state (master count, split ratio, etc.)
+     * @param params Tiling parameters (see TilingParams)
      * @return Vector of zone geometries in absolute pixel coordinates
      *
-     * @note The returned vector should have exactly windowCount elements.
+     * @note The returned vector should have exactly params.windowCount elements.
      *       For windowCount == 0, return an empty vector.
-     *       For windowCount == 1, typically return a single full-screen zone.
+     *       For windowCount == 1, typically return a single zone inset by outerGap.
      */
-    virtual QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                          const TilingState &state) const = 0;
+    virtual QVector<QRect> calculateZones(const TilingParams &params) const = 0;
 
     /**
      * @brief Get the index of the "master" zone (if applicable)
@@ -152,19 +165,6 @@ public:
      */
     virtual int defaultMaxWindows() const noexcept;
 
-    /**
-     * @brief Apply gaps to zone geometries
-     *
-     * Utility method to apply consistent gap spacing to calculated zones.
-     * Called after calculateZones() when gaps are enabled.
-     *
-     * @param zones Zones to modify (in-place), in absolute pixel coordinates
-     * @param screenGeometry Screen bounds for edge detection
-     * @param innerGap Gap between adjacent zones in pixels
-     * @param outerGap Gap at screen edges in pixels
-     */
-    static void applyGaps(QVector<QRect> &zones, const QRect &screenGeometry, int innerGap, int outerGap);
-
 protected:
     /**
      * @brief Distribute a total evenly among N parts with pixel-perfect remainder handling
@@ -179,6 +179,57 @@ protected:
      * @return Vector of sizes, one per part
      */
     static QVector<int> distributeEvenly(int total, int count);
+
+    /**
+     * @brief Compute the usable area after subtracting outer gaps from screen edges
+     *
+     * @param screenGeometry Full screen rectangle
+     * @param outerGap Gap at each edge in pixels
+     * @return Inset rectangle (clamped to at least 1x1)
+     */
+    static QRect innerRect(const QRect &screenGeometry, int outerGap);
+
+    /**
+     * @brief Distribute total space among count items with gaps between them
+     *
+     * Deducts (count-1) * gap from total, then distributes the remainder
+     * evenly with pixel-perfect remainder handling.
+     *
+     * @param total Total pixels available (including space for gaps)
+     * @param count Number of items to distribute among (must be > 0)
+     * @param gap Gap between adjacent items in pixels
+     * @return Vector of item sizes (caller positions them with gap spacing)
+     */
+    static QVector<int> distributeWithGaps(int total, int count, int gap);
+
+    /**
+     * @brief Distribute total space among count items with gaps, respecting per-item minimums
+     *
+     * Like distributeWithGaps(), but each item can have a minimum dimension. The algorithm:
+     * 1. Deducts gap space: available = total - (count-1) * gap
+     * 2. If all minimums fit, gives each item its minimum + an even share of surplus
+     * 3. If minimums exceed available space, distributes proportionally by minimum weight
+     *
+     * @param total Total pixels available (including space for gaps)
+     * @param count Number of items to distribute among (must be > 0)
+     * @param gap Gap between adjacent items in pixels
+     * @param minDims Per-item minimum dimension (items beyond vector size default to 1px)
+     * @return Vector of item sizes (caller positions them with gap spacing)
+     */
+    static QVector<int> distributeWithMinSizes(int total, int count, int gap,
+                                               const QVector<int> &minDims);
+
+    /**
+     * @brief Extract minimum width from minSizes at the given index
+     * @return The minimum width (>= 0), or 0 if index is out of range
+     */
+    static int minWidthAt(const QVector<QSize> &minSizes, int index);
+
+    /**
+     * @brief Extract minimum height from minSizes at the given index
+     * @return The minimum height (>= 0), or 0 if index is out of range
+     */
+    static int minHeightAt(const QVector<QSize> &minSizes, int index);
 
 Q_SIGNALS:
     /**

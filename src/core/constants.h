@@ -68,9 +68,6 @@ constexpr int MaxGap = 50;
 constexpr int DefaultGap = 8;
 constexpr int MinZoneSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
-constexpr int MinBorderWidth = 1;
-constexpr int MaxBorderWidth = 10;
-constexpr int DefaultBorderWidth = 2;
 constexpr bool DefaultSmartGaps = true;
 constexpr bool DefaultFocusNewWindows = true;
 constexpr int MinMaxWindows = 1;
@@ -206,10 +203,6 @@ inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MonocleHideOthers{"monocleHideOthers"};
 inline constexpr QLatin1String MonocleShowTabs{"monocleShowTabs"};
-inline constexpr QLatin1String ShowActiveBorder{"showActiveBorder"};
-inline constexpr QLatin1String ActiveBorderWidth{"activeBorderWidth"};
-inline constexpr QLatin1String ActiveBorderColor{"activeBorderColor"};
-inline constexpr QLatin1String UseSystemBorderColor{"useSystemBorderColor"};
 
 // InsertPosition values
 inline constexpr QLatin1String InsertEnd{"end"};

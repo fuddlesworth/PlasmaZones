@@ -189,7 +189,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 
                 for (auto* zone : layout->zones()) {
                     QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
-                    QRect zoneRect = zoneGeom.toRect();
+                    QRect zoneRect = GeometryUtils::snapToRect(zoneGeom);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -365,9 +365,9 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
             m_currentZoneId = zonesToSnap.first()->id().toString();
             m_currentAdjacentZoneIds = zoneIds;
             m_isMultiZoneMode = (zonesToSnap.size() > 1);
-            m_currentMultiZoneGeometry = combinedGeom.toRect();
+            m_currentMultiZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
             if (zonesToSnap.size() == 1) {
-                m_currentZoneGeometry = combinedGeom.toRect();
+                m_currentZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
             }
 
             // Highlight expanded zones (raycasted) so user sees what they are actually snapping to
@@ -421,7 +421,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
                 }
             }
 
-            m_currentMultiZoneGeometry = computeCombinedZoneGeometry(zonesToHighlight, screen, layout).toRect();
+            m_currentMultiZoneGeometry = GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout));
             m_zoneDetector->highlightZones(zonesToHighlight);
             m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
         }
@@ -439,7 +439,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
             QRectF geom =
                 GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, true);
-            m_currentZoneGeometry = geom.toRect();
+            m_currentZoneGeometry = GeometryUtils::snapToRect(geom);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {

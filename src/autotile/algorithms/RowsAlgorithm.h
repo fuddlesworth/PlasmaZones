@@ -41,12 +41,11 @@ public:
     ~RowsAlgorithm() override = default;
 
     // TilingAlgorithm interface
-    QString name() const noexcept override;
+    QString name() const override;
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                  const TilingState &state) const override;
+    QVector<QRect> calculateZones(const TilingParams &params) const override;
 
     // Rows doesn't support master count or split ratio
     bool supportsMasterCount() const noexcept override { return false; }

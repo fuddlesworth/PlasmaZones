@@ -553,13 +553,23 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen)
 
     // Check cache first (populated by sensor windows)
     if (s_availableGeometryCache.contains(screenKey)) {
-        return s_availableGeometryCache.value(screenKey);
+        QRect cached = s_availableGeometryCache.value(screenKey);
+        qCDebug(lcScreen) << "actualAvailableGeometry: screen=" << screenKey
+                          << "cached=" << cached
+                          << "fullScreen=" << screen->geometry()
+                          << "qtAvail=" << screen->availableGeometry();
+        return cached;
     }
 
     // Fallback: check if Qt's availableGeometry differs from geometry
     // This can work on some Wayland compositors before sensor data is available
     QRect availGeom = screen->availableGeometry();
     QRect screenGeom = screen->geometry();
+
+    qCInfo(lcScreen) << "actualAvailableGeometry: screen=" << screenKey
+                     << "NO CACHE — fallback qtAvail=" << availGeom
+                     << "fullScreen=" << screenGeom
+                     << "using=" << ((availGeom != screenGeom && availGeom.isValid()) ? "qtAvail" : "fullScreen");
 
     if (availGeom != screenGeom && availGeom.isValid()) {
         s_availableGeometryCache.insert(screenKey, availGeom);

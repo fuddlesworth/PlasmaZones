@@ -391,8 +391,6 @@ private Q_SLOTS:
         original.smartGaps = false;
         original.focusNewWindows = false;
         original.focusFollowsMouse = true;
-        original.showActiveBorder = false;
-        original.activeBorderWidth = 4;
         original.monocleHideOthers = false;
         original.monocleShowTabs = true;
         original.respectMinimumSize = false;
@@ -409,8 +407,6 @@ private Q_SLOTS:
         QCOMPARE(restored.smartGaps, original.smartGaps);
         QCOMPARE(restored.focusNewWindows, original.focusNewWindows);
         QCOMPARE(restored.focusFollowsMouse, original.focusFollowsMouse);
-        QCOMPARE(restored.showActiveBorder, original.showActiveBorder);
-        QCOMPARE(restored.activeBorderWidth, original.activeBorderWidth);
         QCOMPARE(restored.monocleHideOthers, original.monocleHideOthers);
         QCOMPARE(restored.monocleShowTabs, original.monocleShowTabs);
         QCOMPARE(restored.respectMinimumSize, original.respectMinimumSize);

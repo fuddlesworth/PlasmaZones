@@ -176,9 +176,6 @@ public:
     static int autotileAnimationDuration() { return instance().defaultAutotileAnimationDurationValue(); }
     static bool autotileFocusFollowsMouse() { return instance().defaultAutotileFocusFollowsMouseValue(); }
     static bool autotileRespectMinimumSize() { return instance().defaultAutotileRespectMinimumSizeValue(); }
-    static bool autotileShowActiveBorder() { return instance().defaultAutotileShowActiveBorderValue(); }
-    static int autotileActiveBorderWidth() { return instance().defaultAutotileActiveBorderWidthValue(); }
-    static bool autotileUseSystemBorderColor() { return instance().defaultAutotileUseSystemBorderColorValue(); }
     static bool autotileMonocleHideOthers() { return instance().defaultAutotileMonocleHideOthersValue(); }
     static bool autotileMonocleShowTabs() { return instance().defaultAutotileMonocleShowTabsValue(); }
 

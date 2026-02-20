@@ -47,12 +47,11 @@ public:
     ~ThreeColumnAlgorithm() override = default;
 
     // TilingAlgorithm interface
-    QString name() const noexcept override;
+    QString name() const override;
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                  const TilingState &state) const override;
+    QVector<QRect> calculateZones(const TilingParams &params) const override;
 
     // Master is in center (index 0 in our output, but conceptually center)
     int masterZoneIndex() const noexcept override { return 0; }

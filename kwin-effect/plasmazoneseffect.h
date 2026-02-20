@@ -87,6 +87,8 @@ private Q_SLOTS:
     void slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId);
     void slotRestoreWindowRequested();
     void slotToggleWindowFloatRequested(bool shouldFloat);
+    void slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson,
+                                    const QString& zoneId, const QString& screenName);
     void slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
                                   const QString& zoneGeometry);
     void slotRotateWindowsRequested(bool clockwise, const QString& rotationData);
@@ -102,12 +104,11 @@ private Q_SLOTS:
                                                 const QString& geometryJson);
 
     // Autotile D-Bus signal handlers
-    void slotAutotileWindowRequested(const QString& windowId, int x, int y, int width, int height);
+    void slotAutotileWindowsTileRequested(const QString& tileRequestsJson);
     void slotAutotileFocusWindowRequested(const QString& windowId);
     void slotMonocleVisibilityChanged(const QString& focusedWindowId, const QStringList& windowsToHide);
     void slotAutotileEnabledChanged(bool enabled);
     void slotAutotileScreensChanged(const QStringList& screenNames);
-
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
@@ -127,7 +128,6 @@ private:
     void callCancelSnap();
     void callSnapToLastZone(KWin::EffectWindow* window);
     void ensureWindowTrackingInterface();
-    void ensureZoneDetectionInterface();
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
 
@@ -176,13 +176,6 @@ private:
     QRect parseZoneGeometry(const QString& json) const;
 
     /**
-     * @brief Async query zone ID for a window from daemon
-     * @param windowId The window identifier
-     * @param callback Called with zone ID or empty string if not snapped/error
-     */
-    void queryZoneForWindowAsync(const QString& windowId, std::function<void(const QString&)> callback);
-
-    /**
      * @brief Ensure pre-snap geometry is stored for a window before snapping
      * @param w The effect window
      * @param windowId The window identifier
@@ -219,13 +212,15 @@ private:
     void connectAutotileSignals();
     void loadAutotileSettings();
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
-    void applyAutotileGeometry(KWin::EffectWindow* w, const QRect& geometry);
+
+    /**
+     * @brief All windows matching windowId (exact or same stableId).
+     * Used by autotile to disambiguate when multiple windows share a stableId (e.g. two Firefox).
+     */
+    QVector<KWin::EffectWindow*> findAllWindowsById(const QString& windowId) const;
 
     // Navigation helpers
     KWin::EffectWindow* getActiveWindow() const;
-    void queryAdjacentZoneAsync(const QString& currentZoneId, const QString& direction, std::function<void(const QString&)> callback);
-    void queryFirstZoneInDirectionAsync(const QString& direction, const QString& screenName, std::function<void(const QString&)> callback);
-    void queryZoneGeometryForScreenAsync(const QString& zoneId, const QString& screenName, std::function<void(const QString&)> callback);
     QString getWindowScreenName(KWin::EffectWindow* w) const;
 
     /**
@@ -256,9 +251,6 @@ private:
                           bool storePreSnap, std::function<void()> fallback,
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr);
 
-    // Shared async dispatch: watch a QDBusPendingCall returning QString and invoke callback
-    void dispatchAsyncStringReply(QDBusPendingCall call, std::function<void(const QString&)> callback);
-
     /**
      * If there are empty zones and unsnapped candidates, show Snap Assist.
      * Used to continue Snap Assist after each snap until all zones filled or no candidates.
@@ -269,6 +261,22 @@ private:
     // Stable ID = windowClass:resourceName (without pointer address)
     // This allows matching windows across KWin restarts
     static QString extractStableId(const QString& windowId);
+
+    /**
+     * @brief Find key in saved geometries map for a window (exact or stable ID match)
+     * @param savedGeometries Map of windowId -> geometry
+     * @param windowId Full window ID to look up
+     * @return Key if exactly one match (exact or unique stable ID), empty string otherwise.
+     *         Returns empty when multiple windows share the same stable ID (ambiguous).
+     */
+    static QString findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries,
+                                        const QString& windowId);
+
+    /**
+     * @brief Check if we already have saved geometry for this window (exact or stable ID)
+     */
+    static bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries,
+                                         const QString& windowId);
 
     /**
      * @brief Derive short name from window class for icon/app display
@@ -319,7 +327,6 @@ private:
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that could
     // block the compositor thread during startup. See callDragMoved() etc.
     std::unique_ptr<QDBusInterface> m_windowTrackingInterface; // WindowTracking interface
-    std::unique_ptr<QDBusInterface> m_zoneDetectionInterface; // ZoneDetection interface
     std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
     std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
 

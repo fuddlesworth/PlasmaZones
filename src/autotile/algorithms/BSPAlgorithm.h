@@ -47,12 +47,11 @@ public:
     ~BSPAlgorithm() override = default;
 
     // TilingAlgorithm interface
-    QString name() const noexcept override;
+    QString name() const override;
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(int windowCount, const QRect &screenGeometry,
-                                  const TilingState &state) const override;
+    QVector<QRect> calculateZones(const TilingParams &params) const override;
 
     bool supportsMasterCount() const noexcept override { return false; }
     bool supportsSplitRatio() const noexcept override { return true; }
@@ -83,13 +82,17 @@ private:
      * Grows or shrinks the tree incrementally to match windowCount.
      * Single-step changes (the common case) only modify one node.
      * Large jumps rebuild the tree from scratch.
+     *
+     * @param refRect Screen geometry for split direction heuristics during build
      */
-    void ensureTreeSize(int windowCount, qreal defaultRatio) const;
+    void ensureTreeSize(int windowCount, qreal defaultRatio, const QRect &refRect) const;
 
     /**
      * @brief Build a balanced tree from scratch for N windows
+     *
+     * @param refRect Screen geometry for split direction heuristics
      */
-    void buildTree(int windowCount, qreal defaultRatio) const;
+    void buildTree(int windowCount, qreal defaultRatio, const QRect &refRect) const;
 
     /**
      * @brief Split the deepest leaf to add one more window slot
@@ -106,10 +109,31 @@ private:
     /**
      * @brief Apply geometry to all nodes top-down from root
      *
-     * Recursively computes child geometries from parent geometry
-     * using each node's split direction and ratio.
+     * Recursively computes child geometries from parent geometry.
+     * Uses stateRatio for ALL nodes (overriding per-node ratios) so
+     * the split ratio slider updates all splits uniformly.
+     * When minSizes is non-empty, clamps the ratio so both subtrees
+     * get at least their minimum dimension.
+     *
+     * @param stateRatio Split ratio from TilingState (user-adjustable)
+     * @param leafStartIdx Index of the first leaf in minSizes for this subtree
      */
-    void applyGeometry(BSPNode *node, const QRect &rect) const;
+    void applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
+                       const QVector<QSize> &minSizes, int leafStartIdx,
+                       qreal stateRatio) const;
+
+    /**
+     * @brief Compute minimum width and height required by a subtree
+     *
+     * Aggregates leaf min sizes along split directions, adding gaps.
+     * For a leaf, returns the min size from minSizes[leafStartIdx].
+     * For an internal node, combines children based on split direction.
+     *
+     * @param[out] leafCount Number of leaves in this subtree
+     * @return Minimum QSize required by the subtree
+     */
+    QSize computeSubtreeMinDims(const BSPNode *node, const QVector<QSize> &minSizes,
+                                int leafStartIdx, int innerGap, int &leafCount) const;
 
     /**
      * @brief Collect leaf geometries in tree order (left-to-right, top-to-bottom)

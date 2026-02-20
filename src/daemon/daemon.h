@@ -10,6 +10,8 @@
 #include <QRect>
 #include <memory>
 
+#include "shortcutmanager.h"
+
 namespace PlasmaZones {
 
 class Layout;
@@ -97,10 +99,39 @@ public:
 
     // OSD notifications
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
-    void showAutotileOsd(const QString& algorithmName, const QString& screenName = QString());
 
 private:
+    /**
+     * @brief Show layout OSD for an autotile algorithm (visual zone preview)
+     *
+     * Uses showOsdOnLayoutSwitch and osdStyle settings, same as manual layout switch.
+     */
+    void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
+                                   const QString& screenName);
     void clearHighlight();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Navigation handlers — single code path per operation (DRY/SOLID)
+    // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
+    // ═══════════════════════════════════════════════════════════════════════════
+    void handleRotate(bool clockwise);
+    void handleFloat();
+    void handleMove(NavigationDirection direction);
+    void handleFocus(NavigationDirection direction);
+    void handlePush();
+    void handleRestore();
+    void handleSwap(NavigationDirection direction);
+    void handleSnap(int zoneNumber);
+    void handleCycle(bool forward);
+    void handleResnap();
+    void handleSnapAll();
+    void handleFocusMaster();
+    void handleSwapWithMaster();
+    void handleIncreaseMasterRatio();
+    void handleDecreaseMasterRatio();
+    void handleIncreaseMasterCount();
+    void handleDecreaseMasterCount();
+    void handleRetile();
     void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
     /**

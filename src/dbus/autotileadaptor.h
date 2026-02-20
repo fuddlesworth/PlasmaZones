@@ -8,6 +8,7 @@
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QRect>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -58,7 +59,7 @@ public:
      * @param engine The AutotileEngine to expose via D-Bus
      * @param parent Parent QObject (typically the daemon)
      */
-    explicit AutotileAdaptor(AutotileEngine *engine, QObject *parent = nullptr);
+    explicit AutotileAdaptor(AutotileEngine* engine, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -69,7 +70,7 @@ public:
     QStringList autotileScreens() const;
 
     QString algorithm() const;
-    void setAlgorithm(const QString &algorithmId);
+    void setAlgorithm(const QString& algorithmId);
 
     double masterRatio() const;
     void setMasterRatio(double ratio);
@@ -98,26 +99,26 @@ public Q_SLOTS:
      * @brief Force retiling of windows
      * @param screenName Screen to retile, or empty for all screens
      */
-    void retile(const QString &screenName);
+    void retile(const QString& screenName);
 
     /**
      * @brief Swap positions of two tiled windows
      * @param windowId1 First window ID
      * @param windowId2 Second window ID
      */
-    void swapWindows(const QString &windowId1, const QString &windowId2);
+    void swapWindows(const QString& windowId1, const QString& windowId2);
 
     /**
      * @brief Promote a window to the master area
      * @param windowId Window ID to promote
      */
-    void promoteToMaster(const QString &windowId);
+    void promoteToMaster(const QString& windowId);
 
     /**
      * @brief Demote a window from master to stack area
      * @param windowId Window ID to demote
      */
-    void demoteFromMaster(const QString &windowId);
+    void demoteFromMaster(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Focus Operations
@@ -146,8 +147,10 @@ public Q_SLOTS:
      *
      * @param windowId Window identifier from KWin
      * @param screenName Screen where the window appeared
+     * @param minWidth Window minimum width in pixels (0 if unconstrained)
+     * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    void windowOpened(const QString &windowId, const QString &screenName);
+    void windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight);
 
     /**
      * @brief Notify the engine that a window was closed
@@ -157,7 +160,7 @@ public Q_SLOTS:
      *
      * @param windowId Window identifier from KWin
      */
-    void windowClosed(const QString &windowId);
+    void windowClosed(const QString& windowId);
 
     /**
      * @brief Notify the daemon that a window has been focused
@@ -169,7 +172,7 @@ public Q_SLOTS:
      * @param windowId Window ID that gained focus
      * @param screenName Screen where the window is located
      */
-    void notifyWindowFocused(const QString &windowId, const QString &screenName);
+    void notifyWindowFocused(const QString& windowId, const QString& screenName);
 
     /**
      * @brief Float a specific window from autotile management
@@ -179,7 +182,7 @@ public Q_SLOTS:
      *
      * @param windowId Window identifier from KWin
      */
-    void floatWindow(const QString &windowId);
+    void floatWindow(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment
@@ -222,7 +225,7 @@ public Q_SLOTS:
      * @param algorithmId Algorithm ID to query
      * @return JSON object with id, name, description, icon
      */
-    QString algorithmInfo(const QString &algorithmId);
+    QString algorithmInfo(const QString& algorithmId);
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -239,33 +242,30 @@ Q_SIGNALS:
      * @brief Emitted when the set of autotile screens changes
      * @param screenNames List of screen names currently using autotile
      */
-    void autotileScreensChanged(const QStringList &screenNames);
+    void autotileScreensChanged(const QStringList& screenNames);
 
     /**
      * @brief Emitted when the tiling algorithm changes
      * @param algorithmId New algorithm ID
      */
-    void algorithmChanged(const QString &algorithmId);
+    void algorithmChanged(const QString& algorithmId);
 
     /**
      * @brief Emitted when tiling layout changes for a screen
      * @param screenName Screen that was retiled
      */
-    void tilingChanged(const QString &screenName);
+    void tilingChanged(const QString& screenName);
 
     /**
-     * @brief Emitted when a window should be moved to a new geometry
+     * @brief Emitted when windows should be moved to new geometries (batch)
      *
-     * The KWin effect listens to this signal and applies the geometry
-     * to the specified window.
+     * The KWin effect listens to this signal and applies geometries to all
+     * windows in a single slot invocation, avoiding race conditions when
+     * many windows are retiled (e.g. rotate).
      *
-     * @param windowId Window ID to tile
-     * @param x Target X position
-     * @param y Target Y position
-     * @param width Target width
-     * @param height Target height
+     * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
-    void windowTileRequested(const QString &windowId, int x, int y, int width, int height);
+    void windowsTileRequested(const QString& tileRequestsJson);
 
     /**
      * @brief Emitted when a window should be focused
@@ -274,7 +274,7 @@ Q_SIGNALS:
      *
      * @param windowId Window ID to focus
      */
-    void focusWindowRequested(const QString &windowId);
+    void focusWindowRequested(const QString& windowId);
 
     /**
      * @brief Emitted when monocle mode visibility changes are needed
@@ -285,7 +285,18 @@ Q_SIGNALS:
      * @param focusedWindowId Window to unminimize/show
      * @param windowsToHide List of window IDs to minimize
      */
-    void monocleVisibilityChanged(const QString &focusedWindowId, const QStringList &windowsToHide);
+    void monocleVisibilityChanged(const QString& focusedWindowId, const QStringList& windowsToHide);
+
+    /**
+     * @brief Emitted when windows are released from autotile management
+     *
+     * Fired when screens are removed from autotile (e.g., switching from
+     * autotile to manual mode). The KWin effect should restore these windows
+     * to their pre-autotile geometry or leave them at their current position.
+     *
+     * @param windowIds Window IDs no longer under autotile control
+     */
+    void windowsReleasedFromTiling(const QStringList& windowIds);
 
     /**
      * @brief Emitted when any configuration property changes
@@ -293,7 +304,7 @@ Q_SIGNALS:
     void configChanged();
 
 private Q_SLOTS:
-    void onWindowTiled(const QString &windowId, const QRect &geometry);
+    void onWindowsTiled(const QString& tileRequestsJson);
 
 private:
     /**
@@ -301,16 +312,16 @@ private:
      * @param methodName Name of the calling method for logging
      * @return true if engine is available
      */
-    bool ensureEngine(const char *methodName) const;
+    bool ensureEngine(const char* methodName) const;
 
     /**
      * @brief Check if engine and config are available, logging warning if not
      * @param methodName Name of the calling method for logging
      * @return true if both engine and config are available
      */
-    bool ensureEngineAndConfig(const char *methodName) const;
+    bool ensureEngineAndConfig(const char* methodName) const;
 
-    AutotileEngine *m_engine = nullptr;
+    AutotileEngine* m_engine = nullptr;
 
 public:
     /**
@@ -321,7 +332,10 @@ public:
      * adaptor destruction) hit ensureEngine()'s null check instead of a
      * dangling pointer.
      */
-    void clearEngine() { m_engine = nullptr; }
+    void clearEngine()
+    {
+        m_engine = nullptr;
+    }
 };
 
 } // namespace PlasmaZones

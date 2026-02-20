@@ -601,11 +601,6 @@ SETTINGS_SETTER(bool, AutotileAnimationsEnabled, m_autotileAnimationsEnabled, au
 SETTINGS_SETTER_CLAMPED(AutotileAnimationDuration, m_autotileAnimationDuration, autotileAnimationDurationChanged, 50, 500)
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
-SETTINGS_SETTER(bool, AutotileShowActiveBorder, m_autotileShowActiveBorder, autotileShowActiveBorderChanged)
-SETTINGS_SETTER_CLAMPED(AutotileActiveBorderWidth, m_autotileActiveBorderWidth, autotileActiveBorderWidthChanged, 1, 10)
-SETTINGS_SETTER(bool, AutotileUseSystemBorderColor, m_autotileUseSystemBorderColor, autotileUseSystemBorderColorChanged)
-
-SETTINGS_SETTER(const QColor&, AutotileActiveBorderColor, m_autotileActiveBorderColor, autotileActiveBorderColorChanged)
 SETTINGS_SETTER(bool, AutotileMonocleHideOthers, m_autotileMonocleHideOthers, autotileMonocleHideOthersChanged)
 SETTINGS_SETTER(bool, AutotileMonocleShowTabs, m_autotileMonocleShowTabs, autotileMonocleShowTabsChanged)
 
@@ -1196,17 +1191,6 @@ void Settings::load()
     // Additional Autotiling Settings
     m_autotileFocusFollowsMouse = autotiling.readEntry(QLatin1String("AutotileFocusFollowsMouse"), ConfigDefaults::autotileFocusFollowsMouse());
     m_autotileRespectMinimumSize = autotiling.readEntry(QLatin1String("AutotileRespectMinimumSize"), ConfigDefaults::autotileRespectMinimumSize());
-    m_autotileShowActiveBorder = autotiling.readEntry(QLatin1String("AutotileShowActiveBorder"), ConfigDefaults::autotileShowActiveBorder());
-    m_autotileActiveBorderWidth = readValidatedInt(autotiling, "AutotileActiveBorderWidth", ConfigDefaults::autotileActiveBorderWidth(), 1, 10, "autotile active border width");
-    m_autotileUseSystemBorderColor = autotiling.readEntry(QLatin1String("AutotileUseSystemBorderColor"), ConfigDefaults::autotileUseSystemBorderColor());
-
-    // Get system highlight color as default for custom border color.
-    // Note: This intentionally uses KColorScheme instead of the .kcfg default (#800078D4)
-    // so the border color adapts to the user's active color scheme.
-    KColorScheme borderScheme(QPalette::Active, KColorScheme::Selection);
-    QColor systemHighlight = borderScheme.background(KColorScheme::ActiveBackground).color();
-    m_autotileActiveBorderColor = readValidatedColor(autotiling, "AutotileActiveBorderColor", systemHighlight, "autotile active border");
-
     m_autotileMonocleHideOthers = autotiling.readEntry(QLatin1String("AutotileMonocleHideOthers"), ConfigDefaults::autotileMonocleHideOthers());
     m_autotileMonocleShowTabs = autotiling.readEntry(QLatin1String("AutotileMonocleShowTabs"), ConfigDefaults::autotileMonocleShowTabs());
 
@@ -1427,10 +1411,6 @@ void Settings::save()
     // Additional settings
     autotiling.writeEntry(QLatin1String("AutotileFocusFollowsMouse"), m_autotileFocusFollowsMouse);
     autotiling.writeEntry(QLatin1String("AutotileRespectMinimumSize"), m_autotileRespectMinimumSize);
-    autotiling.writeEntry(QLatin1String("AutotileShowActiveBorder"), m_autotileShowActiveBorder);
-    autotiling.writeEntry(QLatin1String("AutotileActiveBorderWidth"), m_autotileActiveBorderWidth);
-    autotiling.writeEntry(QLatin1String("AutotileUseSystemBorderColor"), m_autotileUseSystemBorderColor);
-    autotiling.writeEntry(QLatin1String("AutotileActiveBorderColor"), m_autotileActiveBorderColor);
     autotiling.writeEntry(QLatin1String("AutotileMonocleHideOthers"), m_autotileMonocleHideOthers);
     autotiling.writeEntry(QLatin1String("AutotileMonocleShowTabs"), m_autotileMonocleShowTabs);
 

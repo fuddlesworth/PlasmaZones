@@ -9,6 +9,7 @@
 #include <QPointer>
 #include <QRect>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -67,10 +68,8 @@ public:
      * @param screenManager Screen manager for screen geometry
      * @param parent Parent QObject
      */
-    explicit AutotileEngine(LayoutManager *layoutManager,
-                            WindowTrackingService *windowTracker,
-                            ScreenManager *screenManager,
-                            QObject *parent = nullptr);
+    explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+                            ScreenManager* screenManager, QObject* parent = nullptr);
     ~AutotileEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -94,7 +93,10 @@ public:
      * @brief Get the set of screens currently using autotile
      * @return Set of screen names with autotile assignments
      */
-    const QSet<QString>& autotileScreens() const { return m_autotileScreens; }
+    const QSet<QString>& autotileScreens() const
+    {
+        return m_autotileScreens;
+    }
 
     /**
      * @brief Set which screens use autotile (derived from layout assignments)
@@ -123,13 +125,13 @@ public:
      *
      * @param algorithmId Algorithm identifier from AlgorithmRegistry
      */
-    void setAlgorithm(const QString &algorithmId);
+    void setAlgorithm(const QString& algorithmId);
 
     /**
      * @brief Get the current algorithm instance
      * @return Pointer to algorithm, or nullptr if none set
      */
-    TilingAlgorithm *currentAlgorithm() const;
+    TilingAlgorithm* currentAlgorithm() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Tiling state access
@@ -143,13 +145,13 @@ public:
      * @param screenName Screen identifier
      * @return Pointer to TilingState (owned by engine)
      */
-    TilingState *stateForScreen(const QString &screenName);
+    TilingState* stateForScreen(const QString& screenName);
 
     /**
      * @brief Get the autotile configuration
      * @return Pointer to configuration
      */
-    AutotileConfig *config() const noexcept;
+    AutotileConfig* config() const noexcept;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Session Persistence
@@ -186,7 +188,7 @@ public:
      *
      * @param settings Settings object to read from (not owned)
      */
-    void syncFromSettings(Settings *settings);
+    void syncFromSettings(Settings* settings);
 
     /**
      * @brief Connect to Settings change signals for live updates
@@ -197,7 +199,7 @@ public:
      *
      * @param settings Settings object to connect to (not owned, must outlive engine)
      */
-    void connectToSettings(Settings *settings);
+    void connectToSettings(Settings* settings);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Manual tiling operations
@@ -207,7 +209,6 @@ public:
     void setOuterGap(int gap);
     void setSmartGaps(bool enabled);
     void setFocusNewWindows(bool enabled);
-
     /**
      * @brief Force retiling of windows
      *
@@ -216,7 +217,7 @@ public:
      *
      * @param screenName Screen to retile, or empty for all screens
      */
-    Q_INVOKABLE void retile(const QString &screenName = QString());
+    Q_INVOKABLE void retile(const QString& screenName = QString());
 
     /**
      * @brief Swap positions of two tiled windows
@@ -224,7 +225,7 @@ public:
      * @param windowId1 First window ID
      * @param windowId2 Second window ID
      */
-    Q_INVOKABLE void swapWindows(const QString &windowId1, const QString &windowId2);
+    Q_INVOKABLE void swapWindows(const QString& windowId1, const QString& windowId2);
 
     /**
      * @brief Promote a window to the master area
@@ -234,7 +235,7 @@ public:
      *
      * @param windowId Window to promote
      */
-    Q_INVOKABLE void promoteToMaster(const QString &windowId);
+    Q_INVOKABLE void promoteToMaster(const QString& windowId);
 
     /**
      * @brief Demote a window from the master area
@@ -243,7 +244,7 @@ public:
      *
      * @param windowId Window to demote
      */
-    Q_INVOKABLE void demoteFromMaster(const QString &windowId);
+    Q_INVOKABLE void demoteFromMaster(const QString& windowId);
 
     /**
      * @brief Swap the currently focused window with the master window
@@ -286,7 +287,7 @@ public:
      *
      * @param windowId Window ID that gained focus
      */
-    void setFocusedWindow(const QString &windowId);
+    void setFocusedWindow(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Split ratio adjustment
@@ -376,7 +377,7 @@ public:
      *
      * @param windowId Window identifier from KWin
      */
-    Q_INVOKABLE void floatWindow(const QString &windowId);
+    Q_INVOKABLE void floatWindow(const QString& windowId);
 
     /**
      * @brief Unfloat a specific window by its ID
@@ -386,7 +387,7 @@ public:
      *
      * @param windowId Window identifier from KWin
      */
-    Q_INVOKABLE void unfloatWindow(const QString &windowId);
+    Q_INVOKABLE void unfloatWindow(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window event handlers (public API for external notification)
@@ -400,8 +401,10 @@ public:
      *
      * @param windowId Window identifier from KWin
      * @param screenName Screen where the window appeared
+     * @param minWidth Window minimum width in pixels (0 if unconstrained)
+     * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    void windowOpened(const QString &windowId, const QString &screenName);
+    void windowOpened(const QString& windowId, const QString& screenName, int minWidth = 0, int minHeight = 0);
 
     /**
      * @brief Notify the engine that a window was closed
@@ -411,7 +414,7 @@ public:
      *
      * @param windowId Window identifier from KWin
      */
-    void windowClosed(const QString &windowId);
+    void windowClosed(const QString& windowId);
 
     /**
      * @brief Notify the engine that a window was focused
@@ -422,7 +425,7 @@ public:
      * @param windowId Window identifier from KWin
      * @param screenName Screen where the window is located
      */
-    void windowFocused(const QString &windowId, const QString &screenName);
+    void windowFocused(const QString& windowId, const QString& screenName);
 
 Q_SIGNALS:
     /**
@@ -441,27 +444,31 @@ Q_SIGNALS:
      * @brief Emitted when the algorithm changes
      * @param algorithmId New algorithm ID
      */
-    void algorithmChanged(const QString &algorithmId);
+    void algorithmChanged(const QString& algorithmId);
 
     /**
      * @brief Emitted when tiling layout changes for a screen
      * @param screenName Screen that was retiled
      */
-    void tilingChanged(const QString &screenName);
+    void tilingChanged(const QString& screenName);
 
     /**
      * @brief Emitted when a window's floating state changes
      * @param windowId Window whose floating state changed
      * @param floating True if the window is now floating, false if tiled
+     * @param screenName Screen where the window is (for OSD placement)
      */
-    void windowFloatingChanged(const QString &windowId, bool floating);
+    void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenName);
 
     /**
-     * @brief Emitted when a window is tiled to a new geometry
-     * @param windowId Window that was tiled
-     * @param geometry New window geometry
+     * @brief Emitted when windows are tiled to new geometries (batch)
+     *
+     * JSON array of objects with windowId, x, y, width, height.
+     * The adaptor forwards to KWin effect.
+     *
+     * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
-    void windowTiled(const QString &windowId, const QRect &geometry);
+    void windowsTiled(const QString& tileRequestsJson);
 
     /**
      * @brief Emitted when a window should be focused
@@ -470,7 +477,7 @@ Q_SIGNALS:
      *
      * @param windowId Window ID to focus
      */
-    void focusWindowRequested(const QString &windowId);
+    void focusWindowRequested(const QString& windowId);
 
     /**
      * @brief Emitted when monocle mode visibility changes are needed
@@ -483,24 +490,51 @@ Q_SIGNALS:
      * @param focusedWindowId Window to unminimize/show
      * @param windowsToHide List of window IDs to minimize
      */
-    void monocleVisibilityChanged(const QString &focusedWindowId, const QStringList &windowsToHide);
+    void monocleVisibilityChanged(const QString& focusedWindowId, const QStringList& windowsToHide);
+
+    /**
+     * @brief Emitted when an autotile navigation operation completes (for OSD)
+     *
+     * Same signature as WindowTrackingAdaptor::navigationFeedback so the daemon
+     * can use a single handler for both manual (KWin effect) and autotile
+     * (engine) feedback. Ensures consistent OSD display: shortcut → operation → OSD.
+     *
+     * @param success Whether the operation succeeded
+     * @param action Operation type: "rotate", "focus_master", "swap_master", etc.
+     * @param reason Failure reason or success detail (e.g. "clockwise:3")
+     * @param sourceZoneId Source zone (empty for rotate)
+     * @param targetZoneId Target zone (empty for rotate)
+     * @param screenName Screen where operation occurred
+     */
+    void navigationFeedbackRequested(bool success, const QString& action, const QString& reason,
+                                     const QString& sourceZoneId, const QString& targetZoneId,
+                                     const QString& screenName);
+
+    /**
+     * @brief Emitted when windows are released from autotile management
+     *
+     * Fired when screens are removed from autotile.
+     *
+     * @param windowIds Window IDs no longer under autotile control
+     */
+    void windowsReleasedFromTiling(const QStringList& windowIds);
 
 private Q_SLOTS:
-    void onWindowAdded(const QString &windowId);
-    void onWindowRemoved(const QString &windowId);
-    void onWindowFocused(const QString &windowId);
-    void onScreenGeometryChanged(const QString &screenName);
-    void onLayoutChanged(Layout *layout);
+    void onWindowAdded(const QString& windowId);
+    void onWindowRemoved(const QString& windowId);
+    void onWindowFocused(const QString& windowId);
+    void onScreenGeometryChanged(const QString& screenName);
+    void onLayoutChanged(Layout* layout);
 
 private:
     void connectSignals();
-    bool insertWindow(const QString &windowId, const QString &screenName);
-    void removeWindow(const QString &windowId);
-    void recalculateLayout(const QString &screenName);
-    void applyTiling(const QString &screenName);
-    bool shouldTileWindow(const QString &windowId) const;
-    QString screenForWindow(const QString &windowId) const;
-    QRect screenGeometry(const QString &screenName) const;
+    bool insertWindow(const QString& windowId, const QString& screenName);
+    void removeWindow(const QString& windowId);
+    void recalculateLayout(const QString& screenName);
+    void applyTiling(const QString& screenName);
+    bool shouldTileWindow(const QString& windowId) const;
+    QString screenForWindow(const QString& windowId) const;
+    QRect screenGeometry(const QString& screenName) const;
 
     /**
      * @brief Helper to retile a screen after a window operation
@@ -511,7 +545,7 @@ private:
      * @param screenName Screen to retile
      * @param operationSucceeded Whether the triggering operation actually changed something
      */
-    void retileAfterOperation(const QString &screenName, bool operationSucceeded);
+    void retileAfterOperation(const QString& screenName, bool operationSucceeded);
 
     /**
      * @brief Helper to get tiled windows and state for focus operations
@@ -523,7 +557,7 @@ private:
      * @param[out] outState Pointer to the TilingState (may be nullptr)
      * @return List of tiled windows, or empty list if unavailable
      */
-    QStringList tiledWindowsForFocusedScreen(QString &outScreenName, TilingState *&outState);
+    QStringList tiledWindowsForFocusedScreen(QString& outScreenName, TilingState*& outState);
 
     /**
      * @brief Helper to emit focus request for a window at calculated index
@@ -542,7 +576,7 @@ private:
      *
      * @param operation Function to apply to each TilingState
      */
-    void applyToAllStates(const std::function<void(TilingState *)> &operation);
+    void applyToAllStates(const std::function<void(TilingState*)>& operation);
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -566,7 +600,7 @@ private:
      * @param state TilingState for the screen
      * @param tiledWindows List of tiled window IDs
      */
-    void emitMonocleVisibility(const TilingState *state, const QStringList &tiledWindows);
+    void emitMonocleVisibility(const TilingState* state, const QStringList& tiledWindows);
 
     /**
      * @brief Get TilingState for a window by looking up its screen
@@ -579,20 +613,21 @@ private:
      */
     TilingState* stateForWindow(const QString& windowId, QString* outScreenName = nullptr);
 
-    LayoutManager *m_layoutManager = nullptr;
-    WindowTrackingService *m_windowTracker = nullptr;
-    ScreenManager *m_screenManager = nullptr;
+    LayoutManager* m_layoutManager = nullptr;
+    WindowTrackingService* m_windowTracker = nullptr;
+    ScreenManager* m_screenManager = nullptr;
     std::unique_ptr<AutotileConfig> m_config;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;
-    QString m_activeScreen;  // Last-focused screen (updated by onWindowFocused)
-    QHash<QString, TilingState *> m_screenStates; // Owned via Qt parent (this)
-    QHash<QString, QString> m_windowToScreen;     // windowId -> screenName
+    QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
+    QHash<QString, TilingState*> m_screenStates; // Owned via Qt parent (this)
+    QHash<QString, QString> m_windowToScreen; // windowId -> screenName
+    QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
 
     // Settings synchronization
-    QPointer<Settings> m_settings;  // QPointer for safe access if Settings destroyed
-    QTimer m_settingsRetileTimer;   // Debounce timer for settings changes
+    QPointer<Settings> m_settings; // QPointer for safe access if Settings destroyed
+    QTimer m_settingsRetileTimer; // Debounce timer for settings changes
     bool m_pendingSettingsRetile = false;
     bool m_retiling = false;
 

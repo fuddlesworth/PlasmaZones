@@ -22,9 +22,6 @@ ScrollView {
     // Whether this tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
 
-    // Signal for border color dialog (handled by main.qml)
-    signal requestActiveBorderColorDialog()
-
     clip: true
     contentWidth: availableWidth
 
@@ -482,59 +479,6 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    CheckBox {
-                        id: showActiveBorderCheck
-                        Kirigami.FormData.label: i18n("Active border:")
-                        text: i18n("Show border around focused window")
-                        checked: kcm.autotileShowActiveBorder
-                        onToggled: kcm.autotileShowActiveBorder = checked
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Border width:")
-                        enabled: showActiveBorderCheck.checked
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 1
-                            to: 10
-                            value: kcm.autotileActiveBorderWidth
-                            onValueModified: kcm.autotileActiveBorderWidth = value
-
-                            ToolTip.visible: hovered && root.isCurrentTab
-                            ToolTip.text: i18n("Width of the border around the focused window")
-                        }
-
-                        Label {
-                            text: i18n("px")
-                        }
-                    }
-
-                    CheckBox {
-                        id: useSystemBorderColorCheck
-                        Kirigami.FormData.label: i18n("Border color:")
-                        text: i18n("Use system highlight color")
-                        checked: kcm.autotileUseSystemBorderColor
-                        onToggled: kcm.autotileUseSystemBorderColor = checked
-                        enabled: showActiveBorderCheck.checked
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: " "
-                        visible: !useSystemBorderColorCheck.checked && showActiveBorderCheck.checked
-                        spacing: Kirigami.Units.smallSpacing
-
-                        ColorButton {
-                            color: kcm.autotileActiveBorderColor
-                            onClicked: root.requestActiveBorderColorDialog()
-                        }
-
-                        Label {
-                            text: kcm.autotileActiveBorderColor.toString().toUpperCase()
-                            font: Kirigami.Theme.fixedWidthFont
-                        }
-                    }
-
                     Kirigami.Separator {
                         Kirigami.FormData.isSection: true
                         Kirigami.FormData.label: i18n("Animations")
