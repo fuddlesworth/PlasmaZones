@@ -1,5 +1,5 @@
 {
-    "id": "{a1b2c3d4-1111-2222-3333-444455557777}",
+    "id": "{678892d8-b63a-41a9-81b9-78caa95878e7}",
     "name": "Columns (3)",
     "description": "Three equal vertical columns",
     "type": 1,
@@ -7,19 +7,19 @@
     "showZoneNumbers": true,
     "zones": [
         {
-            "id": "{zone-col3-1}",
+            "id": "{2bb43b1d-3506-40b7-8f2b-e0fe59c0e90e}",
             "name": "Left",
             "zoneNumber": 1,
             "relativeGeometry": { "x": 0, "y": 0, "width": 0.333333, "height": 1.0 }
         },
         {
-            "id": "{zone-col3-2}",
+            "id": "{93b382be-8b48-496b-b53c-88bef2c46787}",
             "name": "Center",
             "zoneNumber": 2,
             "relativeGeometry": { "x": 0.333333, "y": 0, "width": 0.333334, "height": 1.0 }
         },
         {
-            "id": "{zone-col3-3}",
+            "id": "{b14ed13c-17cd-4da2-ba0a-8dae3b61dba2}",
             "name": "Right",
             "zoneNumber": 3,
             "relativeGeometry": { "x": 0.666667, "y": 0, "width": 0.333333, "height": 1.0 }

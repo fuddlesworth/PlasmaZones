@@ -127,12 +127,17 @@ public:
     bool isSnapAssistVisible() const override;
     void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
 
+    // Layout Picker overlay (interactive layout browser + resnap)
+    void showLayoutPicker(const QString& screenName = QString());
+    bool isLayoutPickerVisible() const;
+
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 public Q_SLOTS:
     void hideLayoutOsd();
     void hideNavigationOsd();
+    void hideLayoutPicker();
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 
     // Shader error reporting from QML
@@ -140,6 +145,7 @@ public Q_SLOTS:
 
 private Q_SLOTS:
     void onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId, const QString& geometryJson);
+    void onLayoutPickerSelected(const QString& layoutId);
 
 private:
     // Refresh zone selector and overlay windows that are currently visible.
@@ -198,6 +204,9 @@ private:
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
     QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
+    // Layout Picker overlay (interactive layout browser)
+    QQuickWindow* m_layoutPickerWindow = nullptr;
+
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
@@ -218,6 +227,9 @@ private:
 
     void createSnapAssistWindow();
     void destroySnapAssistWindow();
+
+    void createLayoutPickerWindow(QScreen* screen);
+    void destroyLayoutPickerWindow();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
     void updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl);

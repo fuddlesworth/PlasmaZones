@@ -136,6 +136,9 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     // Snap All Windows shortcut
     connect(m_settings, &Settings::snapAllWindowsShortcutChanged, this, &ShortcutManager::updateSnapAllWindowsShortcut);
 
+    // Layout Picker shortcut
+    connect(m_settings, &Settings::layoutPickerShortcutChanged, this, &ShortcutManager::updateLayoutPickerShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -164,6 +167,7 @@ void ShortcutManager::registerShortcuts()
     setupCycleWindowsShortcuts();
     setupResnapToNewLayoutShortcut();
     setupSnapAllWindowsShortcut();
+    setupLayoutPickerShortcut();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -219,6 +223,9 @@ void ShortcutManager::updateShortcuts()
 
     // Snap All Windows shortcut
     updateSnapAllWindowsShortcut();
+
+    // Layout Picker shortcut
+    updateLayoutPickerShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -273,6 +280,9 @@ void ShortcutManager::unregisterShortcuts()
 
     // Snap All Windows action
     DELETE_SHORTCUT(m_snapAllWindowsAction);
+
+    // Layout Picker action
+    DELETE_SHORTCUT(m_layoutPickerAction);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -463,6 +473,15 @@ void ShortcutManager::setupSnapAllWindowsShortcut()
                         << m_settings->snapAllWindowsShortcut() << ")";
 }
 
+void ShortcutManager::setupLayoutPickerShortcut()
+{
+    SETUP_SHORTCUT(m_layoutPickerAction, "Open Layout Picker", "layout_picker",
+                   layoutPickerShortcut, &ShortcutManager::onLayoutPicker);
+
+    qCInfo(lcShortcuts) << "Layout picker shortcut registered ("
+                        << m_settings->layoutPickerShortcut() << ")";
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation Slot Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -615,6 +634,12 @@ void ShortcutManager::onSnapAllWindows()
     Q_EMIT snapAllWindowsRequested();
 }
 
+void ShortcutManager::onLayoutPicker()
+{
+    qCInfo(lcShortcuts) << "Layout picker triggered";
+    Q_EMIT layoutPickerRequested();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Update Shortcut Methods
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -753,6 +778,11 @@ void ShortcutManager::updateResnapToNewLayoutShortcut()
 void ShortcutManager::updateSnapAllWindowsShortcut()
 {
     UPDATE_SHORTCUT(m_snapAllWindowsAction, snapAllWindowsShortcut);
+}
+
+void ShortcutManager::updateLayoutPickerShortcut()
+{
+    UPDATE_SHORTCUT(m_layoutPickerAction, layoutPickerShortcut);
 }
 
 // Undefine macros to keep them local to this file

@@ -1,5 +1,5 @@
 {
-    "id": "{a1b2c3d4-1111-2222-3333-44445555eeee}",
+    "id": "{b8669c74-947a-4551-ba8b-79b6444439e8}",
     "name": "Fibonacci",
     "description": "Spiral subdivision layout inspired by golden ratio",
     "type": 5,
@@ -7,31 +7,31 @@
     "showZoneNumbers": true,
     "zones": [
         {
-            "id": "{zone-fib-1}",
+            "id": "{754ddb14-492d-4b28-b5a0-0ad04eb27880}",
             "name": "Primary",
             "zoneNumber": 1,
             "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 1.0 }
         },
         {
-            "id": "{zone-fib-2}",
+            "id": "{b7ee92ed-c524-4805-b37e-15caf4c85d0e}",
             "name": "Secondary",
             "zoneNumber": 2,
             "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 }
         },
         {
-            "id": "{zone-fib-3}",
+            "id": "{82c10ec2-9a52-4edb-9548-060bb425ff14}",
             "name": "Tertiary",
             "zoneNumber": 3,
             "relativeGeometry": { "x": 0.5, "y": 0.5, "width": 0.25, "height": 0.5 }
         },
         {
-            "id": "{zone-fib-4}",
+            "id": "{ef79631c-b636-4715-ba08-765d25ea2453}",
             "name": "Quaternary",
             "zoneNumber": 4,
             "relativeGeometry": { "x": 0.75, "y": 0.5, "width": 0.25, "height": 0.25 }
         },
         {
-            "id": "{zone-fib-5}",
+            "id": "{5ae2301d-7701-4004-942a-d4a742fa0037}",
             "name": "Quinary",
             "zoneNumber": 5,
             "relativeGeometry": { "x": 0.75, "y": 0.75, "width": 0.25, "height": 0.25 }

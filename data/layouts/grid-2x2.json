@@ -1,5 +1,5 @@
 {
-    "id": "{a1b2c3d4-1111-2222-3333-444455559999}",
+    "id": "{25828c9b-68f7-4256-a81b-9eaf4450a110}",
     "name": "Grid (2x2)",
     "description": "Four equal quadrants",
     "type": 3,
@@ -7,25 +7,25 @@
     "showZoneNumbers": true,
     "zones": [
         {
-            "id": "{zone-grid22-1}",
+            "id": "{d0ff6c2b-1988-4df1-ae53-6a8dbeb909cb}",
             "name": "Top Left",
             "zoneNumber": 1,
             "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 0.5 }
         },
         {
-            "id": "{zone-grid22-2}",
+            "id": "{7876c330-77e4-4d9a-a672-73c4b962e2c4}",
             "name": "Top Right",
             "zoneNumber": 2,
             "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.5 }
         },
         {
-            "id": "{zone-grid22-4}",
+            "id": "{ddef1989-11bd-4447-b877-b9698e8db8ce}",
             "name": "Bottom Right",
             "zoneNumber": 3,
             "relativeGeometry": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 }
         },
         {
-            "id": "{zone-grid22-3}",
+            "id": "{68cb1ad4-b820-4354-bb89-daef086d5ec8}",
             "name": "Bottom Left",
             "zoneNumber": 4,
             "relativeGeometry": { "x": 0, "y": 0.5, "width": 0.5, "height": 0.5 }
