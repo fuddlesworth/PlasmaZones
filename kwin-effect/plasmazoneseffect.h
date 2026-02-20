@@ -381,6 +381,7 @@ private:
     // Once real settings arrive, they override these conservative defaults.
     QVariantList m_cachedDragActivationTriggers; // raw D-Bus data, kept for reload
     QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed from QVariantList at load time (avoids QVariant unboxing in hot path)
+    bool m_triggersLoaded = false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
 
