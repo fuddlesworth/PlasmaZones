@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-02-20
+
+### Added
+- **Layout Picker Overlay**: Full-screen interactive layout browser triggered via configurable keyboard shortcut. Browse all available layouts in a centered card grid with keyboard navigation (arrow keys + Enter) and mouse support. Selecting a layout switches to it and resnaps all windows. ([#176])
+- **Shared LayoutCard component**: Extracted reusable `LayoutCard.qml` and `PopupFrame.qml` into `org.plasmazones.common` QML module, shared between the Zone Selector and Layout Picker overlays.
+- **Snap Assist after resnap**: Snap Assist now triggers after resnapping windows when switching layouts via the layout picker, offering to fill any empty zones.
+
+### Fixed
+- **Zone activation broken when Zone Selector disabled** ([#175]): Disabling the Zone Selector popup caused the zone activation hotkey (e.g. Alt+drag) to stop working entirely. Root cause: D-Bus deserialization of trigger settings could silently fail (Qt delivering `QDBusArgument` instead of native `QVariantList<QVariantMap>`), but this was masked when `zoneSelectorEnabled=true` because a bypass gate let all drag events through regardless. Added robust `QDBusArgument` unwrapping, a permissive `m_triggersLoaded` flag that allows drags through until triggers are confirmed loaded, and diagnostic logging for trigger load failures.
+- **Layout Picker double-trigger**: Rapidly pressing the layout picker shortcut could create multiple overlay windows with competing `KeyboardInteractivityExclusive` keyboard grabs on Wayland, causing shortcuts to stop working. Replaced toggle guard with a simple existence guard that prevents re-triggering while any picker window exists.
+
 ## [1.12.2] - 2026-02-19
 
 ### Fixed
