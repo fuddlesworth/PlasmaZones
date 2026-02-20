@@ -102,6 +102,9 @@ class PLASMAZONES_EXPORT Layout : public QObject
     // Auto-assign: new windows fill first empty zone
     Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
 
+    // Geometry mode: use full screen or available (panel-excluded) geometry
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
+
     // Visibility filtering
     Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
     Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
@@ -224,6 +227,10 @@ public:
     bool autoAssign() const { return m_autoAssign; }
     void setAutoAssign(bool enabled);
 
+    // Geometry mode: when true, zones span the full screen including panel/taskbar areas
+    bool useFullScreenGeometry() const { return m_useFullScreenGeometry; }
+    void setUseFullScreenGeometry(bool enabled);
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -286,6 +293,7 @@ Q_SIGNALS:
     void allowedActivitiesChanged();
     void appRulesChanged();
     void autoAssignChanged();
+    void useFullScreenGeometryChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
@@ -308,6 +316,9 @@ private:
 
     // Auto-assign: new windows fill first empty zone
     bool m_autoAssign = false;
+
+    // Geometry mode: zones use full screen (true) or available area excluding panels (false)
+    bool m_useFullScreenGeometry = false;
 
     // Shader support
     QString m_shaderId; // Shader effect ID (empty = no shader)

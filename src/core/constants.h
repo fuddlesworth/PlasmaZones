@@ -154,6 +154,9 @@ inline constexpr QLatin1String TargetScreen{"targetScreen"};
 // Auto-assign keys
 inline constexpr QLatin1String AutoAssign{"autoAssign"};
 
+// Geometry mode keys
+inline constexpr QLatin1String UseFullScreenGeometry{"useFullScreenGeometry"};
+
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 }

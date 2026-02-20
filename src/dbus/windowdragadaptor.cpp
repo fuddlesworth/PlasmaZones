@@ -182,12 +182,13 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         if (screen) {
             auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
             if (layout) {
-                layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
+                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
                 int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+                bool useAvail = !(layout && layout->useFullScreenGeometry());
 
                 for (auto* zone : layout->zones()) {
-                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
                     QRect zoneRect = zoneGeom.toRect();
 
                     // Use class constants for tolerances
@@ -215,9 +216,10 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
     }
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
     int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
-    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGap, true);
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGap, useAvail);
     for (int i = 1; i < zones.size(); ++i) {
-        combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGap, true));
+        combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGap, useAvail));
     }
     return combined;
 }
@@ -254,7 +256,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
         return nullptr;
     }
 
-    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(outScreen));
+    layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, outScreen));
     return layout;
 }
 
@@ -304,14 +306,14 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
         m_currentMultiZoneGeometry = QRect();
     }
 
-    // Convert cursor position to relative coordinates within available area
-    QRectF availableGeom = ScreenManager::actualAvailableGeometry(screen);
-    if (availableGeom.width() <= 0 || availableGeom.height() <= 0) {
+    // Convert cursor position to relative coordinates within the layout's geometry
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+    if (refGeom.width() <= 0 || refGeom.height() <= 0) {
         return;
     }
 
-    qreal relX = static_cast<qreal>(x - availableGeom.x()) / availableGeom.width();
-    qreal relY = static_cast<qreal>(y - availableGeom.y()) / availableGeom.height();
+    qreal relX = static_cast<qreal>(x - refGeom.x()) / refGeom.width();
+    qreal relY = static_cast<qreal>(y - refGeom.y()) / refGeom.height();
 
     // Find zone at cursor position
     Zone* foundZone = nullptr;
@@ -431,8 +433,9 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 
             int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
             int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+            bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geom =
-                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, true);
+                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, useAvail);
             m_currentZoneGeometry = geom.toRect();
             m_currentMultiZoneGeometry = QRect();
         }

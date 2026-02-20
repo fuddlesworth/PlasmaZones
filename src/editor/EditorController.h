@@ -86,6 +86,9 @@ class EditorController : public QObject
     Q_PROPERTY(int globalZonePadding READ globalZonePadding NOTIFY globalZonePaddingChanged)
     Q_PROPERTY(int globalOuterGap READ globalOuterGap NOTIFY globalOuterGapChanged)
 
+    // Full screen geometry mode
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
+
     // Label font settings (read-only from global Appearance config)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
     Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
@@ -154,6 +157,7 @@ public:
     bool hasOuterGapOverride() const;
     int globalZonePadding() const;
     int globalOuterGap() const;
+    bool useFullScreenGeometry() const;
     bool canPaste() const;
     UndoController* undoController() const;
 
@@ -228,6 +232,7 @@ public:
     Q_INVOKABLE void clearOuterGapOverride();
     Q_INVOKABLE void refreshGlobalZonePadding();
     Q_INVOKABLE void refreshGlobalOuterGap();
+    void setUseFullScreenGeometry(bool enabled);
 
     // Shader setters (create undo commands)
     void setCurrentShaderId(const QString& id);
@@ -236,6 +241,7 @@ public:
     // Gap override setters - Direct (for undo/redo, bypass command creation)
     void setZonePaddingDirect(int padding);
     void setOuterGapDirect(int gap);
+    void setUseFullScreenGeometryDirect(bool enabled);
 
     // Shader setters - Direct (for undo/redo, bypass command creation)
     void setCurrentShaderIdDirect(const QString& id);
@@ -520,6 +526,7 @@ Q_SIGNALS:
     void outerGapChanged();
     void globalZonePaddingChanged();
     void globalOuterGapChanged();
+    void useFullScreenGeometryChanged();
 
     // Shader signals
     void currentShaderIdChanged();
@@ -684,6 +691,7 @@ private:
     // Zone settings (per-layout override, -1 = use global)
     int m_zonePadding = -1;
     int m_outerGap = -1;
+    bool m_useFullScreenGeometry = false;
     int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
 

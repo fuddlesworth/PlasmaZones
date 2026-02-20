@@ -76,6 +76,17 @@ PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settin
 PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
 
 /**
+ * @brief Get the effective screen geometry for a layout
+ * @param layout Layout to check (may use full screen geometry)
+ * @param screen Screen to get geometry for
+ * @return Full screen geometry if layout->useFullScreenGeometry(), otherwise available geometry
+ *
+ * Centralizes the decision of whether to use full screen or available (panel-excluded)
+ * geometry based on the layout's useFullScreenGeometry setting.
+ */
+PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen);
+
+/**
  * @brief Extract geometry as QRectF from a zone QVariantMap
  * @param zone Zone data map containing x, y, width, height keys
  * @return QRectF with the zone's geometry
