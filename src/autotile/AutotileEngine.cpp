@@ -364,20 +364,24 @@ void AutotileEngine::connectToSettings(Settings* settings)
     connect(settings, &Settings::autotileSplitRatioChanged, this, [this]() {
         if (m_settings) {
             m_config->splitRatio = m_settings->autotileSplitRatio();
-            applyToAllStates([this](TilingState* state) {
-                state->setSplitRatio(m_config->splitRatio);
-            });
-            // applyToAllStates already calls retile() if enabled
+            for (TilingState* state : m_screenStates) {
+                if (state) {
+                    state->setSplitRatio(m_config->splitRatio);
+                }
+            }
+            scheduleSettingsRetile();
         }
     });
 
     connect(settings, &Settings::autotileMasterCountChanged, this, [this]() {
         if (m_settings) {
             m_config->masterCount = m_settings->autotileMasterCount();
-            applyToAllStates([this](TilingState* state) {
-                state->setMasterCount(m_config->masterCount);
-            });
-            // applyToAllStates already calls retile() if enabled
+            for (TilingState* state : m_screenStates) {
+                if (state) {
+                    state->setMasterCount(m_config->masterCount);
+                }
+            }
+            scheduleSettingsRetile();
         }
     });
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);

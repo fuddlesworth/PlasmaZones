@@ -163,7 +163,7 @@ private Q_SLOTS:
         QVERIFY(algo->supportsSplitRatio());
     }
 
-    void testBuiltIn_allThreeRegistered()
+    void testBuiltIn_allSevenRegistered()
     {
         auto *registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();

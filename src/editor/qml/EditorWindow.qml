@@ -608,7 +608,7 @@ Window {
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (editorWindow._editorController) {
-                var filePath = selectedFile.toString().replace("file://", "");
+                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
                 editorWindow._editorController.importLayout(filePath);
             }
         }
@@ -623,7 +623,7 @@ Window {
         defaultSuffix: "json"
         onAccepted: {
             if (editorWindow._editorController) {
-                var filePath = selectedFile.toString().replace("file://", "");
+                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
                 editorWindow._editorController.exportLayout(filePath);
             }
         }

@@ -120,7 +120,7 @@ ToolBar {
                 readonly property int currentLength: text ? text.length : 0
                 readonly property bool showCounter: currentLength > maxLength * 0.8 || currentLength > maxLength
 
-                Layout.preferredWidth: 200
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 readOnly: topBar.previewMode
                 enabled: editorController !== null && editorController !== undefined
                 Accessible.name: i18nc("@label", "Layout name")

@@ -23,7 +23,7 @@ ToolBar {
     // Expose addZoneButton for access from parent
     property alias addZoneButton: addZoneButtonItem
 
-    height: Kirigami.Units.gridUnit * 5 // Use theme spacing (40px - better visual balance)
+    height: Kirigami.Units.gridUnit * 5
     z: 100
 
     RowLayout {
@@ -130,7 +130,7 @@ ToolBar {
                     "group": i18nc("@title:group", "Special Layouts")
                 }]
 
-                Layout.preferredWidth: 200
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 Accessible.name: i18nc("@label", "Layout templates")
                 Accessible.description: i18nc("@info", "Apply a predefined layout template")
                 model: templateModel

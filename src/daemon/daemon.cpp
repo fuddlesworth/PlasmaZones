@@ -312,14 +312,9 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Window tracking service - business logic for zone assignments
-    m_windowTrackingService = std::make_unique<WindowTrackingService>(
-        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-        m_virtualDesktopManager.get(), this);
-
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(
-        m_layoutManager.get(), m_windowTrackingService.get(), m_screenManager.get(), this);
+        m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(), this);
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
 
@@ -674,8 +669,8 @@ void Daemon::start()
                 m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
             }
             // Save pre-float zone assignment for restore on unfloat
-            if (floating && m_windowTrackingService) {
-                m_windowTrackingService->unsnapForFloat(windowId);
+            if (floating && m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->service()->unsnapForFloat(windowId);
             }
 
             // When floating: restore pre-autotile geometry (KWin syncs it via recordPreAutotileGeometry)
@@ -1024,6 +1019,9 @@ void Daemon::stop()
 
     // Destroy the engine now (during stop(), before Qt child destruction order).
     m_autotileEngine.reset();
+
+    // Unregister D-Bus service to prevent late calls during shutdown
+    QDBusConnection::sessionBus().unregisterService(QString(DBus::ServiceName));
 
     m_running = false;
 }

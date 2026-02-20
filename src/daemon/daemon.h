@@ -30,7 +30,6 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class ScreenAdaptor;
 class WindowDragAdaptor;
-class WindowTrackingService;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
@@ -168,8 +167,6 @@ private:
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
-
-    std::unique_ptr<WindowTrackingService> m_windowTrackingService;
 
     // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;

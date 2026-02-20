@@ -1446,7 +1446,8 @@ void Settings::reset()
         QStringLiteral("Shaders"),
         QStringLiteral("GlobalShortcuts"),
         QStringLiteral("Autotiling"),
-        QStringLiteral("AutotileShortcuts")
+        QStringLiteral("AutotileShortcuts"),
+        QStringLiteral("ModeTracking")
     };
 
     for (const QString& groupName : groups) {

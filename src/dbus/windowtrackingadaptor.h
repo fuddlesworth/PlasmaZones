@@ -63,6 +63,14 @@ public:
      */
     void setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor) { m_zoneDetectionAdaptor = adaptor; }
 
+    /**
+     * @brief Access the underlying WindowTrackingService
+     *
+     * Used by the daemon to share the single WTS instance with other components
+     * (e.g., AutotileEngine) instead of creating duplicate services.
+     */
+    WindowTrackingService* service() const { return m_service; }
+
 public Q_SLOTS:
     // Window snapping notifications (from KWin script)
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenName);

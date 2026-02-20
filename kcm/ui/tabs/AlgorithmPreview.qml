@@ -72,11 +72,11 @@ Item {
             required property int index
 
             visible: root.algorithmId === "master-stack" && index < root.masterCount
-            x: (modelData.relativeGeometry?.x || 0) * root.width + 4
-            y: (modelData.relativeGeometry?.y || 0) * root.height + 4
-            width: 8
-            height: 8
-            radius: 4
+            x: (modelData.relativeGeometry?.x || 0) * root.width + Kirigami.Units.smallSpacing
+            y: (modelData.relativeGeometry?.y || 0) * root.height + Kirigami.Units.smallSpacing
+            width: Kirigami.Units.smallSpacing * 2
+            height: Kirigami.Units.smallSpacing * 2
+            radius: Kirigami.Units.smallSpacing
             color: Kirigami.Theme.positiveTextColor
         }
     }
