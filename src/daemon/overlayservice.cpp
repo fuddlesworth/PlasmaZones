@@ -3175,13 +3175,6 @@ void OverlayService::createLayoutPickerWindow(QScreen* screen)
     // Connect layoutSelected signal from QML
     connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
 
-    // Connect dismissed signal from QML
-    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
-        if (!visible) {
-            // Clean up when dismissed without selection
-        }
-    });
-
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);
 

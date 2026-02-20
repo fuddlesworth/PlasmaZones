@@ -81,8 +81,6 @@ Item {
         // Unified state-based border alphas
         readonly property real borderActive: 0.5
         readonly property real borderSelected: 0.4
-        readonly property real borderSubtle: 0.3
-
         // Border widths
         readonly property int borderWide: 2
         readonly property int borderNarrow: 1

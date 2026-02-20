@@ -53,14 +53,24 @@ Window {
     // Grid dimensions
     readonly property int layoutCount: layouts.length
     readonly property int gridColumns: Math.min(layoutCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(layoutCount * 1.5)))))
-    readonly property int gridRows: Math.ceil(layoutCount / gridColumns)
+    readonly property int gridRows: gridColumns > 0 ? Math.ceil(layoutCount / gridColumns) : 0
+
+    // Container layout constants — match ZoneSelectorLayout (zoneselectorlayout.h)
+    QtObject {
+        id: metrics
+        readonly property int containerPadding: 36
+        readonly property int paddingSide: 18
+        readonly property int containerRadius: 12
+        readonly property int indicatorSpacing: 18
+        readonly property real backdropAlpha: 0.3
+    }
 
     // Card dimensions
     readonly property int previewWidth: 160
     readonly property int previewHeight: Math.round(previewWidth / safeAspectRatio)
-    readonly property int cardWidth: previewWidth + Kirigami.Units.gridUnit * 2
-    readonly property int cardHeight: previewHeight + Kirigami.Units.gridUnit * 4.5
-    readonly property int cardSpacing: 18
+    readonly property int cardWidth: previewWidth + metrics.paddingSide * 2
+    readonly property int cardHeight: previewHeight + metrics.containerPadding + metrics.paddingSide
+    readonly property int cardSpacing: metrics.indicatorSpacing
 
     // Signals
     signal layoutSelected(string layoutId)
@@ -139,8 +149,7 @@ Window {
         }
     }
 
-    // Keyboard handling
-    Shortcut { sequence: "Escape"; onActivated: root.hide() }
+    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support)
     Shortcut { sequence: "Return"; onActivated: confirmSelection() }
     Shortcut { sequence: "Enter"; onActivated: confirmSelection() }
     Shortcut { sequence: "Left"; onActivated: moveSelection(-1, 0) }
@@ -156,8 +165,9 @@ Window {
         row = (row + dy + gridRows) % gridRows;
         var newIndex = row * gridColumns + col;
         if (newIndex >= layoutCount) {
-            // Wrap to last item in row if beyond count
-            newIndex = Math.min(layoutCount - 1, row * gridColumns + (layoutCount - 1) % gridColumns);
+            // Clamp to last valid item in the target row
+            var lastColInRow = Math.min(gridColumns, layoutCount - row * gridColumns) - 1;
+            newIndex = row * gridColumns + Math.min(col, lastColInRow);
         }
         selectedIndex = Math.max(0, Math.min(layoutCount - 1, newIndex));
     }
@@ -178,7 +188,7 @@ Window {
         // Backdrop - semi-transparent dim, click outside to close
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.3)
+            color: Qt.rgba(0, 0, 0, metrics.backdropAlpha)
             MouseArea {
                 anchors.fill: parent
                 onClicked: root.hide()
@@ -190,11 +200,11 @@ Window {
             id: container
 
             anchors.centerIn: parent
-            width: gridView.width + 36
-            height: titleRow.height + gridView.height + 54
+            width: gridView.width + metrics.containerPadding
+            height: titleRow.height + gridView.height + metrics.paddingSide * 3
             backgroundColor: root.backgroundColor
             textColor: root.textColor
-            containerRadius: 12
+            containerRadius: metrics.containerRadius
 
             // Prevent clicks inside container from dismissing
             MouseArea {
@@ -206,12 +216,12 @@ Window {
             Row {
                 id: titleRow
                 anchors.top: parent.top
-                anchors.topMargin: 18
+                anchors.topMargin: metrics.paddingSide
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Kirigami.Units.smallSpacing
 
                 Label {
-                    text: qsTr("Choose Layout")
+                    text: i18n("Choose Layout")
                     font.pixelSize: Kirigami.Theme.defaultFont.pixelSize * 1.4
                     font.weight: Font.DemiBold
                     color: root.textColor
@@ -223,7 +233,7 @@ Window {
                 id: gridView
 
                 anchors.top: titleRow.bottom
-                anchors.topMargin: 18
+                anchors.topMargin: metrics.paddingSide
                 anchors.horizontalCenter: parent.horizontalCenter
                 columns: root.gridColumns
                 spacing: root.cardSpacing
