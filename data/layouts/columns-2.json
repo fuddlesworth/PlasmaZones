@@ -1,5 +1,5 @@
 {
-    "id": "{a1b2c3d4-1111-2222-3333-444455556666}",
+    "id": "{2bd3c71a-1609-4641-bbe2-b9c1284fcdc1}",
     "name": "Columns (2)",
     "description": "Two equal vertical columns",
     "type": 1,
@@ -8,13 +8,13 @@
     "showZoneNumbers": true,
     "zones": [
         {
-            "id": "{zone-col2-1}",
+            "id": "{0a83c933-0470-4bd9-b956-82a3eae8b965}",
             "name": "Left",
             "zoneNumber": 1,
             "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 1.0 }
         },
         {
-            "id": "{zone-col2-2}",
+            "id": "{05b9766b-d2a1-49ab-94fa-35d3e31f33f9}",
             "name": "Right",
             "zoneNumber": 2,
             "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 1.0 }

@@ -1,5 +1,5 @@
 {
-    "id": "{a1b2c3d4-1111-2222-3333-44445555bbbb}",
+    "id": "{fd7429e9-5916-48af-a354-0eb0b949992b}",
     "name": "Focus",
     "description": "Large main area with stacked side panels",
     "type": 5,
@@ -7,19 +7,19 @@
     "showZoneNumbers": true,
     "zones": [
         {
-            "id": "{zone-focus-1}",
+            "id": "{d31f7222-7e4d-409a-ae77-8474f2728f3f}",
             "name": "Main",
             "zoneNumber": 1,
             "relativeGeometry": { "x": 0, "y": 0, "width": 0.7, "height": 1.0 }
         },
         {
-            "id": "{zone-focus-2}",
+            "id": "{548537e5-1af8-49f3-af49-4947ec51219f}",
             "name": "Top Right",
             "zoneNumber": 2,
             "relativeGeometry": { "x": 0.7, "y": 0, "width": 0.3, "height": 0.5 }
         },
         {
-            "id": "{zone-focus-3}",
+            "id": "{5097eb05-6499-48c7-8744-96b8749d9228}",
             "name": "Bottom Right",
             "zoneNumber": 3,
             "relativeGeometry": { "x": 0.7, "y": 0.5, "width": 0.3, "height": 0.5 }

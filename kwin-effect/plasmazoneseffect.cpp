@@ -333,6 +333,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // Re-sync floating state and settings from daemon
             syncFloatingWindowsFromDaemon();
             loadCachedSettings();
+
+            // Reconnect D-Bus signal subscriptions — Qt may cache the old daemon's
+            // unique bus name in match rules, causing signals from the restarted daemon
+            // to not be delivered. Re-calling connect() refreshes the match rules.
+            connectNavigationSignals();
         });
     });
 
@@ -1450,9 +1455,18 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
 
 void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screenName)
 {
-    if (screenName.isEmpty() || !m_snapAssistEnabled || !ensureWindowTrackingReady("snap assist continuation")) {
+    if (screenName.isEmpty()) {
+        qCInfo(lcEffect) << "Snap assist continuation skipped: empty screen name";
         return;
     }
+    if (!m_snapAssistEnabled) {
+        qCInfo(lcEffect) << "Snap assist continuation skipped: snapAssistEnabled is false";
+        return;
+    }
+    if (!ensureWindowTrackingReady("snap assist continuation")) {
+        return;
+    }
+    qCInfo(lcEffect) << "Snap assist continuation: querying empty zones for screen" << screenName;
     QDBusPendingCall emptyCall =
         m_windowTrackingInterface->asyncCall(QStringLiteral("getEmptyZonesJson"), screenName);
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
@@ -1462,6 +1476,8 @@ void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screen
                 QDBusPendingReply<QString> reply = *w;
                 if (!reply.isValid() || reply.value().isEmpty()
                     || reply.value() == QLatin1String("[]")) {
+                    qCInfo(lcEffect) << "Snap assist continuation: no empty zones"
+                                     << (reply.isValid() ? reply.value() : QStringLiteral("(invalid reply)"));
                     return;
                 }
                 asyncShowSnapAssist(QString(), screenName, reply.value());
@@ -1488,7 +1504,11 @@ void PlasmaZonesEffect::asyncShowSnapAssist(const QString& excludeWindowId, cons
                     }
                 }
                 QJsonArray candidates = buildSnapAssistCandidates(excludeWindowId, screenName, snappedWindowIds);
-                if (candidates.isEmpty() || !ensureOverlayInterface("snap assist show")) {
+                if (candidates.isEmpty()) {
+                    qCInfo(lcEffect) << "Snap assist skipped: no unsnapped candidate windows on" << screenName;
+                    return;
+                }
+                if (!ensureOverlayInterface("snap assist show")) {
                     return;
                 }
                 m_overlayInterface->asyncCall(QStringLiteral("showSnapAssist"), screenName,

@@ -675,6 +675,8 @@ void Daemon::start()
         }
         // Screen name was already set when the picker opened.
         m_unifiedLayoutController->applyLayoutById(layoutId);
+        // Suppress resnap OSD — the layout switch OSD already provides feedback
+        m_suppressResnapOsd = true;
         m_windowTrackingAdaptor->resnapToNewLayout();
     });
 
@@ -771,6 +773,11 @@ void Daemon::start()
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
             [this](bool success, const QString& action, const QString& reason,
                    const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName) {
+                // Suppress resnap OSD when triggered from layout picker (layout switch OSD is sufficient)
+                if (m_suppressResnapOsd && action == QStringLiteral("resnap")) {
+                    m_suppressResnapOsd = false;
+                    return;
+                }
                 // Only show OSD if setting is enabled
                 if (m_settings && m_settings->showNavigationOsd()) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);

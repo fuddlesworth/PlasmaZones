@@ -1,5 +1,5 @@
 {
-    "id": "{a1b2c3d4-1111-2222-3333-44445555ffff}",
+    "id": "{1c85ee9a-25f6-4109-a074-b0bc7072418c}",
     "name": "BSP",
     "description": "Binary space partitioning - recursive split layout",
     "type": 5,
@@ -7,25 +7,25 @@
     "showZoneNumbers": true,
     "zones": [
         {
-            "id": "{zone-bsp-1}",
+            "id": "{f8c77e53-3189-492e-bb6b-d8086f28f4bc}",
             "name": "Top Left",
             "zoneNumber": 1,
             "relativeGeometry": { "x": 0, "y": 0, "width": 0.5, "height": 0.6 }
         },
         {
-            "id": "{zone-bsp-2}",
+            "id": "{4913de3a-42c9-4ad8-be7a-fff32e2ec5ca}",
             "name": "Top Right",
             "zoneNumber": 2,
             "relativeGeometry": { "x": 0.5, "y": 0, "width": 0.5, "height": 0.4 }
         },
         {
-            "id": "{zone-bsp-4}",
+            "id": "{05950b84-ede6-4b5f-84aa-b868d6d514c3}",
             "name": "Bottom Right",
             "zoneNumber": 3,
             "relativeGeometry": { "x": 0.5, "y": 0.4, "width": 0.5, "height": 0.6 }
         },
         {
-            "id": "{zone-bsp-3}",
+            "id": "{d72b094d-e3ff-412f-9ba7-f660853f19bc}",
             "name": "Bottom Left",
             "zoneNumber": 4,
             "relativeGeometry": { "x": 0, "y": 0.6, "width": 0.5, "height": 0.4 }

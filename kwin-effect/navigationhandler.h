@@ -59,6 +59,7 @@ private:
         int successCount = 0;
         QString firstSourceZoneId;
         QString firstTargetZoneId;
+        QString firstScreenName;
     };
 
     /**

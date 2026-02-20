@@ -884,6 +884,7 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
         if (result.successCount == 1) {
             result.firstSourceZoneId = moveObj[QLatin1String("sourceZoneId")].toString();
             result.firstTargetZoneId = targetZoneId;
+            result.firstScreenName = windowScreen;
         }
     }
 
@@ -942,6 +943,9 @@ void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
         QString reason = QStringLiteral("resnap:%1").arg(result.successCount);
         m_effect->emitNavigationFeedback(true, QStringLiteral("resnap"), reason,
                                          QString(), result.firstTargetZoneId, screenName);
+        // Show snap assist for remaining empty zones (if enabled).
+        // Use screen from actual snapped windows — active window may be null after picker closes.
+        m_effect->showSnapAssistContinuationIfNeeded(result.firstScreenName);
     } else {
         m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_resnaps"),
                                          QString(), QString(), screenName);
