@@ -190,6 +190,34 @@
       <min>0</min>
       <max>50</max>
     </entry>
+    <entry name="UsePerSideOuterGap" type="Bool">
+      <label>Use separate edge gap values for each side</label>
+      <default>false</default>
+    </entry>
+    <entry name="OuterGapTop" type="Int">
+      <label>Gap at top screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="OuterGapBottom" type="Int">
+      <label>Gap at bottom screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="OuterGapLeft" type="Int">
+      <label>Gap at left screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="OuterGapRight" type="Int">
+      <label>Gap at right screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
     <entry name="AdjacentThreshold" type="Int">
       <label>Threshold for detecting adjacent zones</label>
       <default>20</default>

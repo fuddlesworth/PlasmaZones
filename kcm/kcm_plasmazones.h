@@ -97,6 +97,11 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Zones
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Behavior
@@ -256,6 +261,11 @@ public:
     int audioSpectrumBarCount() const;
     int zonePadding() const;
     int outerGap() const;
+    bool usePerSideOuterGap() const;
+    int outerGapTop() const;
+    int outerGapBottom() const;
+    int outerGapLeft() const;
+    int outerGapRight() const;
     int adjacentThreshold() const;
     bool keepWindowsInZonesOnResolutionChange() const;
     bool moveNewWindowsToLastZone() const;
@@ -365,6 +375,11 @@ public:
     void setAudioSpectrumBarCount(int count);
     void setZonePadding(int padding);
     void setOuterGap(int gap);
+    void setUsePerSideOuterGap(bool enabled);
+    void setOuterGapTop(int gap);
+    void setOuterGapBottom(int gap);
+    void setOuterGapLeft(int gap);
+    void setOuterGapRight(int gap);
     void setAdjacentThreshold(int threshold);
     void setKeepWindowsInZonesOnResolutionChange(bool keep);
     void setMoveNewWindowsToLastZone(bool move);
@@ -518,6 +533,11 @@ Q_SIGNALS:
     void audioSpectrumBarCountChanged();
     void zonePaddingChanged();
     void outerGapChanged();
+    void usePerSideOuterGapChanged();
+    void outerGapTopChanged();
+    void outerGapBottomChanged();
+    void outerGapLeftChanged();
+    void outerGapRightChanged();
     void adjacentThresholdChanged();
     void keepWindowsInZonesOnResolutionChangeChanged();
     void moveNewWindowsToLastZoneChanged();

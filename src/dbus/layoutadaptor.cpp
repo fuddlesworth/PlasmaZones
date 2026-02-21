@@ -458,11 +458,14 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     } else {
         layout->clearZonePaddingOverride();
     }
-    if (obj.contains(JsonKeys::OuterGap)) {
-        layout->setOuterGap(obj[JsonKeys::OuterGap].toInt(-1));
-    } else {
-        layout->clearOuterGapOverride();
-    }
+    // Set each gap field explicitly — avoid clearOuterGapOverride() which clobbers
+    // per-side state before per-side keys are processed
+    layout->setOuterGap(obj.contains(JsonKeys::OuterGap) ? obj[JsonKeys::OuterGap].toInt(-1) : -1);
+    layout->setUsePerSideOuterGap(obj[JsonKeys::UsePerSideOuterGap].toBool(false));
+    layout->setOuterGapTop(obj.contains(JsonKeys::OuterGapTop) ? obj[JsonKeys::OuterGapTop].toInt(-1) : -1);
+    layout->setOuterGapBottom(obj.contains(JsonKeys::OuterGapBottom) ? obj[JsonKeys::OuterGapBottom].toInt(-1) : -1);
+    layout->setOuterGapLeft(obj.contains(JsonKeys::OuterGapLeft) ? obj[JsonKeys::OuterGapLeft].toInt(-1) : -1);
+    layout->setOuterGapRight(obj.contains(JsonKeys::OuterGapRight) ? obj[JsonKeys::OuterGapRight].toInt(-1) : -1);
 
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[JsonKeys::UseFullScreenGeometry].toBool(false));

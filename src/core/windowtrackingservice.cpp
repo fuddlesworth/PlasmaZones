@@ -915,9 +915,9 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
 
     // Use the zone's own layout for per-layout gap overrides
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
-    QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
+    QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
 
     return geoF.toRect();
 }
@@ -1037,7 +1037,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
         }
 
         int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-        int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+        EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
 
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {
@@ -1050,7 +1050,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
             Zone* targetZone = zones[targetIdx];
             bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-                targetZone, screen, zonePadding, outerGap, useAvail);
+                targetZone, screen, zonePadding, outerGaps, useAvail);
             QRect geo = geoF.toRect();
 
             if (geo.isValid()) {
@@ -1152,7 +1152,7 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
     }
 
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
 
     // Track zones we're assigning in this batch (to avoid double-assigning)
     QSet<QUuid> batchOccupied = occupiedZoneIds;
@@ -1174,7 +1174,7 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
 
         bool useAvail = !(layout && layout->useFullScreenGeometry());
         QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-            targetZone, screen, zonePadding, outerGap, useAvail);
+            targetZone, screen, zonePadding, outerGaps, useAvail);
         QRect geo = geoF.toRect();
 
         if (geo.isValid()) {

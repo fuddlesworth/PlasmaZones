@@ -184,11 +184,11 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
             if (layout) {
                 layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-                int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
                 bool useAvail = !(layout && layout->useFullScreenGeometry());
 
                 for (auto* zone : layout->zones()) {
-                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
+                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
                     QRect zoneRect = zoneGeom.toRect();
 
                     // Use class constants for tolerances
@@ -215,11 +215,11 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
         return QRectF();
     }
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
-    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGap, useAvail);
+    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
     for (int i = 1; i < zones.size(); ++i) {
-        combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGap, useAvail));
+        combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
     }
     return combined;
 }
@@ -432,10 +432,10 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_overlayService->highlightZone(zoneId);
 
             int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-            int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+            EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
             bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geom =
-                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGap, useAvail);
+                GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps, useAvail);
             m_currentZoneGeometry = geom.toRect();
             m_currentMultiZoneGeometry = QRect();
         }

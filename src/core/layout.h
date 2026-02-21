@@ -89,6 +89,12 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
     Q_PROPERTY(bool hasOuterGapOverride READ hasOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasPerSideOuterGapOverride READ hasPerSideOuterGapOverride NOTIFY outerGapChanged)
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zonesChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
@@ -164,6 +170,46 @@ public:
         return m_outerGap >= 0;
     }
     void clearOuterGapOverride();
+
+    // Per-side outer gap overrides (-1 = use global setting)
+    bool usePerSideOuterGap() const
+    {
+        return m_usePerSideOuterGap;
+    }
+    void setUsePerSideOuterGap(bool enabled);
+    int outerGapTop() const
+    {
+        return m_outerGapTop;
+    }
+    void setOuterGapTop(int gap);
+    int outerGapBottom() const
+    {
+        return m_outerGapBottom;
+    }
+    void setOuterGapBottom(int gap);
+    int outerGapLeft() const
+    {
+        return m_outerGapLeft;
+    }
+    void setOuterGapLeft(int gap);
+    int outerGapRight() const
+    {
+        return m_outerGapRight;
+    }
+    void setOuterGapRight(int gap);
+    bool hasPerSideOuterGapOverride() const
+    {
+        return m_usePerSideOuterGap && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+    }
+    /**
+     * @brief Raw per-side gap overrides. Values may be -1 (use global).
+     * Callers should use GeometryUtils::getEffectiveOuterGaps() instead
+     * for resolved pixel values.
+     */
+    EdgeGaps rawOuterGaps() const
+    {
+        return {m_outerGapTop, m_outerGapBottom, m_outerGapLeft, m_outerGapRight};
+    }
 
     bool showZoneNumbers() const
     {
@@ -316,6 +362,11 @@ private:
     QString m_description;
     int m_zonePadding = -1;  // -1 = use global setting
     int m_outerGap = -1;     // -1 = use global setting
+    bool m_usePerSideOuterGap = false;
+    int m_outerGapTop = -1;    // -1 = use global setting
+    int m_outerGapBottom = -1;
+    int m_outerGapLeft = -1;
+    int m_outerGapRight = -1;
     bool m_showZoneNumbers = true;
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)

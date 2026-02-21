@@ -295,6 +295,26 @@ int KCMPlasmaZones::outerGap() const
 {
     return m_settings->outerGap();
 }
+bool KCMPlasmaZones::usePerSideOuterGap() const
+{
+    return m_settings->usePerSideOuterGap();
+}
+int KCMPlasmaZones::outerGapTop() const
+{
+    return m_settings->outerGapTop();
+}
+int KCMPlasmaZones::outerGapBottom() const
+{
+    return m_settings->outerGapBottom();
+}
+int KCMPlasmaZones::outerGapLeft() const
+{
+    return m_settings->outerGapLeft();
+}
+int KCMPlasmaZones::outerGapRight() const
+{
+    return m_settings->outerGapRight();
+}
 int KCMPlasmaZones::adjacentThreshold() const
 {
     return m_settings->adjacentThreshold();
@@ -874,6 +894,51 @@ void KCMPlasmaZones::setOuterGap(int gap)
     if (m_settings->outerGap() != gap) {
         m_settings->setOuterGap(gap);
         Q_EMIT outerGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_settings->usePerSideOuterGap() != enabled) {
+        m_settings->setUsePerSideOuterGap(enabled);
+        Q_EMIT usePerSideOuterGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapTop(int gap)
+{
+    if (m_settings->outerGapTop() != gap) {
+        m_settings->setOuterGapTop(gap);
+        Q_EMIT outerGapTopChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapBottom(int gap)
+{
+    if (m_settings->outerGapBottom() != gap) {
+        m_settings->setOuterGapBottom(gap);
+        Q_EMIT outerGapBottomChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapLeft(int gap)
+{
+    if (m_settings->outerGapLeft() != gap) {
+        m_settings->setOuterGapLeft(gap);
+        Q_EMIT outerGapLeftChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapRight(int gap)
+{
+    if (m_settings->outerGapRight() != gap) {
+        m_settings->setOuterGapRight(gap);
+        Q_EMIT outerGapRightChanged();
         setNeedsSave(true);
     }
 }
@@ -1635,6 +1700,11 @@ void KCMPlasmaZones::defaults()
     Q_EMIT audioSpectrumBarCountChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT outerGapChanged();
+    Q_EMIT usePerSideOuterGapChanged();
+    Q_EMIT outerGapTopChanged();
+    Q_EMIT outerGapBottomChanged();
+    Q_EMIT outerGapLeftChanged();
+    Q_EMIT outerGapRightChanged();
     Q_EMIT adjacentThresholdChanged();
     Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
     Q_EMIT moveNewWindowsToLastZoneChanged();
@@ -2318,6 +2388,11 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT audioSpectrumBarCountChanged();
         Q_EMIT zonePaddingChanged();
         Q_EMIT outerGapChanged();
+        Q_EMIT usePerSideOuterGapChanged();
+        Q_EMIT outerGapTopChanged();
+        Q_EMIT outerGapBottomChanged();
+        Q_EMIT outerGapLeftChanged();
+        Q_EMIT outerGapRightChanged();
         Q_EMIT adjacentThresholdChanged();
         Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
         Q_EMIT moveNewWindowsToLastZoneChanged();

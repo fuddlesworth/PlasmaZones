@@ -75,6 +75,11 @@ Layout::Layout(const Layout& other)
     , m_description(other.m_description)
     , m_zonePadding(other.m_zonePadding)
     , m_outerGap(other.m_outerGap)
+    , m_usePerSideOuterGap(other.m_usePerSideOuterGap)
+    , m_outerGapTop(other.m_outerGapTop)
+    , m_outerGapBottom(other.m_outerGapBottom)
+    , m_outerGapLeft(other.m_outerGapLeft)
+    , m_outerGapRight(other.m_outerGapRight)
     , m_showZoneNumbers(other.m_showZoneNumbers)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_defaultOrder(other.m_defaultOrder)
@@ -116,6 +121,11 @@ Layout& Layout::operator=(const Layout& other)
         m_description = other.m_description;
         m_zonePadding = other.m_zonePadding;
         m_outerGap = other.m_outerGap;
+        m_usePerSideOuterGap = other.m_usePerSideOuterGap;
+        m_outerGapTop = other.m_outerGapTop;
+        m_outerGapBottom = other.m_outerGapBottom;
+        m_outerGapLeft = other.m_outerGapLeft;
+        m_outerGapRight = other.m_outerGapRight;
         m_showZoneNumbers = other.m_showZoneNumbers;
         m_defaultOrder = other.m_defaultOrder;
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
@@ -202,6 +212,19 @@ void Layout::setAllowedActivities(const QStringList& activities)
 // Gap setters (allow -1 for "use global" or non-negative values)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(ZonePadding, m_zonePadding, zonePaddingChanged)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGap, m_outerGap, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapTop, m_outerGapTop, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapBottom, m_outerGapBottom, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapLeft, m_outerGapLeft, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapRight, m_outerGapRight, outerGapChanged)
+
+void Layout::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        m_usePerSideOuterGap = enabled;
+        Q_EMIT outerGapChanged();
+        emitModifiedIfNotBatched();
+    }
+}
 
 // Source path setter (no layoutModified - internal tracking property)
 LAYOUT_SETTER_NO_MODIFIED(const QString&, SourcePath, m_sourcePath, sourcePathChanged)
@@ -301,6 +324,11 @@ void Layout::clearZonePaddingOverride()
 void Layout::clearOuterGapOverride()
 {
     setOuterGap(-1);
+    setUsePerSideOuterGap(false);
+    setOuterGapTop(-1);
+    setOuterGapBottom(-1);
+    setOuterGapLeft(-1);
+    setOuterGapRight(-1);
 }
 
 bool Layout::isSystemLayout() const
@@ -517,6 +545,14 @@ QJsonObject Layout::toJson() const
     if (m_outerGap >= 0) {
         json[JsonKeys::OuterGap] = m_outerGap;
     }
+    // Per-side outer gap overrides — serialize toggle whenever enabled so user intent is preserved
+    if (m_usePerSideOuterGap) {
+        json[JsonKeys::UsePerSideOuterGap] = true;
+        if (m_outerGapTop >= 0) json[JsonKeys::OuterGapTop] = m_outerGapTop;
+        if (m_outerGapBottom >= 0) json[JsonKeys::OuterGapBottom] = m_outerGapBottom;
+        if (m_outerGapLeft >= 0) json[JsonKeys::OuterGapLeft] = m_outerGapLeft;
+        if (m_outerGapRight >= 0) json[JsonKeys::OuterGapRight] = m_outerGapRight;
+    }
     json[JsonKeys::ShowZoneNumbers] = m_showZoneNumbers;
     if (m_defaultOrder != 999) {
         json[JsonKeys::DefaultOrder] = m_defaultOrder;
@@ -590,6 +626,12 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     // Gap overrides: -1 means use global setting (key absent = no override)
     layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;
     layout->m_outerGap = json.contains(JsonKeys::OuterGap) ? json[JsonKeys::OuterGap].toInt(-1) : -1;
+    // Per-side outer gap overrides
+    layout->m_usePerSideOuterGap = json[JsonKeys::UsePerSideOuterGap].toBool(false);
+    layout->m_outerGapTop = json.contains(JsonKeys::OuterGapTop) ? json[JsonKeys::OuterGapTop].toInt(-1) : -1;
+    layout->m_outerGapBottom = json.contains(JsonKeys::OuterGapBottom) ? json[JsonKeys::OuterGapBottom].toInt(-1) : -1;
+    layout->m_outerGapLeft = json.contains(JsonKeys::OuterGapLeft) ? json[JsonKeys::OuterGapLeft].toInt(-1) : -1;
+    layout->m_outerGapRight = json.contains(JsonKeys::OuterGapRight) ? json[JsonKeys::OuterGapRight].toInt(-1) : -1;
     layout->m_showZoneNumbers = json[JsonKeys::ShowZoneNumbers].toBool(true);
     layout->m_defaultOrder = json[JsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON

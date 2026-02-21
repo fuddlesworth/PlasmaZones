@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "constants.h"
 #include "plasmazones_export.h"
 #include <QRectF>
 #include <QScreen>
@@ -50,6 +51,18 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, i
                                                    bool useAvailableGeometry = true);
 
 /**
+ * @brief Get zone geometry with per-side outer gaps
+ * @param zone Zone to get geometry for
+ * @param screen Screen to calculate relative to
+ * @param innerGap Gap between adjacent zones (zonePadding)
+ * @param outerGaps Per-side edge gaps
+ * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
+ * @return Geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
+                                                   bool useAvailableGeometry = true);
+
+/**
  * @brief Get effective zone padding for a layout
  * @param layout Layout to get padding for (may have per-layout override)
  * @param settings Global settings (used if layout has no override)
@@ -74,6 +87,16 @@ PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settin
  * to apply differentiated gaps.
  */
 PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
+
+/**
+ * @brief Get effective per-side outer gaps for a layout
+ * @param layout Layout to get gaps for (may have per-layout overrides)
+ * @param settings Global settings (used if layout has no override)
+ * @return Effective per-side edge gaps
+ *
+ * Resolution cascade: layout per-side → layout uniform → global per-side → global uniform → default
+ */
+PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings);
 
 /**
  * @brief Get the effective screen geometry for a layout

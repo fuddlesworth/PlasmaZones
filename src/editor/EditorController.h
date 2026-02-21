@@ -87,6 +87,19 @@ class EditorController : public QObject
     Q_PROPERTY(int globalZonePadding READ globalZonePadding NOTIFY globalZonePaddingChanged)
     Q_PROPERTY(int globalOuterGap READ globalOuterGap NOTIFY globalOuterGapChanged)
 
+    // Per-side outer gap overrides
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasPerSideOuterGapOverride READ hasPerSideOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(bool globalUsePerSideOuterGap READ globalUsePerSideOuterGap NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapTop READ globalOuterGapTop NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapBottom READ globalOuterGapBottom NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapLeft READ globalOuterGapLeft NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapRight READ globalOuterGapRight NOTIFY globalOuterGapChanged)
+
     // Full screen geometry mode
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
 
@@ -161,6 +174,17 @@ public:
     bool hasOuterGapOverride() const;
     int globalZonePadding() const;
     int globalOuterGap() const;
+    bool usePerSideOuterGap() const;
+    int outerGapTop() const;
+    int outerGapBottom() const;
+    int outerGapLeft() const;
+    int outerGapRight() const;
+    bool hasPerSideOuterGapOverride() const;
+    bool globalUsePerSideOuterGap() const;
+    int globalOuterGapTop() const;
+    int globalOuterGapBottom() const;
+    int globalOuterGapLeft() const;
+    int globalOuterGapRight() const;
     bool useFullScreenGeometry() const;
     QSize targetScreenSize() const;
     bool canPaste() const;
@@ -233,6 +257,11 @@ public:
     void setTargetScreenDirect(const QString& screenName); // Sets screen without loading layout (for initialization)
     void setZonePadding(int padding);
     void setOuterGap(int gap);
+    void setUsePerSideOuterGap(bool enabled);
+    void setOuterGapTop(int gap);
+    void setOuterGapBottom(int gap);
+    void setOuterGapLeft(int gap);
+    void setOuterGapRight(int gap);
     Q_INVOKABLE void clearZonePaddingOverride();
     Q_INVOKABLE void clearOuterGapOverride();
     Q_INVOKABLE void refreshGlobalZonePadding();
@@ -246,6 +275,11 @@ public:
     // Gap override setters - Direct (for undo/redo, bypass command creation)
     void setZonePaddingDirect(int padding);
     void setOuterGapDirect(int gap);
+    void setUsePerSideOuterGapDirect(bool enabled);
+    void setOuterGapTopDirect(int gap);
+    void setOuterGapBottomDirect(int gap);
+    void setOuterGapLeftDirect(int gap);
+    void setOuterGapRightDirect(int gap);
     void setUseFullScreenGeometryDirect(bool enabled);
 
     // Shader setters - Direct (for undo/redo, bypass command creation)
@@ -723,9 +757,19 @@ private:
     // Zone settings (per-layout override, -1 = use global)
     int m_zonePadding = -1;
     int m_outerGap = -1;
+    bool m_usePerSideOuterGap = false;
+    int m_outerGapTop = -1;
+    int m_outerGapBottom = -1;
+    int m_outerGapLeft = -1;
+    int m_outerGapRight = -1;
     bool m_useFullScreenGeometry = false;
     int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
+    bool m_cachedGlobalUsePerSideOuterGap = false;
+    int m_cachedGlobalOuterGapTop = PlasmaZones::Defaults::OuterGap;
+    int m_cachedGlobalOuterGapBottom = PlasmaZones::Defaults::OuterGap;
+    int m_cachedGlobalOuterGapLeft = PlasmaZones::Defaults::OuterGap;
+    int m_cachedGlobalOuterGapRight = PlasmaZones::Defaults::OuterGap;
 
     // Clipboard state
     bool m_canPaste = false;
