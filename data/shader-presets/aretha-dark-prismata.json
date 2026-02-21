@@ -1,0 +1,23 @@
+{
+  "name": "Aretha Dark (Prismata)",
+  "shaderId": "{a734c55b-32be-53ea-827a-76b2c5dd8b73}",
+  "shaderParams": {
+    "cellScale": 12,
+    "animSpeed": 0.6,
+    "facetSharpness": 0.7,
+    "zoneTintBlend": 0.4,
+    "fillOpacity": 0.88,
+    "causticStrength": 0.5,
+    "chromaticStrength": 0.4,
+    "resonanceStrength": 0.6,
+    "audioReactivity": 1.2,
+    "idlePulse": 0.8,
+    "accentColor": "#00c1e4",
+    "highlightTint": "#3daee9",
+    "crystalColor1": "#162239",
+    "crystalColor2": "#192742",
+    "crystalColor3": "#478ed5",
+    "crystalColor4": "#88b8e8",
+    "edgeColor": "#00c1e4"
+  }
+}

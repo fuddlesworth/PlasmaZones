@@ -1,0 +1,18 @@
+{
+  "id": "spectrum-bloom",
+  "name": "Spectrum Bloom",
+  "description": "Polar spectrum contour — the zone boundary morphs with the full frequency spectrum. Bass to treble maps around the circle; every bar defines the shape. Best with 256 spectrum bars. Enable CAVA audio visualization in settings.",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "fragmentShader": "effect.frag",
+  "vertexShader": "zone.vert",
+  "parameters": [
+    {"id": "reactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 0, "default": 1.5, "min": 0.5, "max": 3},
+    {"id": "contourScale", "name": "Contour Scale", "group": "Audio", "type": "float", "slot": 1, "default": 0.4, "min": 0.2, "max": 0.6},
+    {"id": "baseRadius", "name": "Base Radius", "group": "Appearance", "type": "float", "slot": 2, "default": 0.12, "min": 0.05, "max": 0.3},
+    {"id": "glowWidth", "name": "Glow Width", "group": "Appearance", "type": "float", "slot": 3, "default": 0.04, "min": 0.02, "max": 0.1},
+    {"id": "idleAnimation", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 4, "default": 1, "min": 0, "max": 2},
+    {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#00e6ff"},
+    {"id": "accentColor", "name": "Accent Color", "group": "Colors", "type": "color", "slot": 1, "default": "#ff3399"}
+  ]
+}

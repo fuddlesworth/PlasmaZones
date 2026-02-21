@@ -1,0 +1,13 @@
+{
+  "name": "Aretha Dark (Spectrum Bloom)",
+  "shaderId": "{55554866-4934-55dd-9c50-a9b2239f409c}",
+  "shaderParams": {
+    "reactivity": 1.5,
+    "contourScale": 0.42,
+    "baseRadius": 0.1,
+    "glowWidth": 0.045,
+    "idleAnimation": 1.0,
+    "primaryColor": "#00c1e4",
+    "accentColor": "#1d99f3"
+  }
+}

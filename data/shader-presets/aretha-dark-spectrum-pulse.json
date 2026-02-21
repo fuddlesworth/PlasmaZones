@@ -1,0 +1,16 @@
+{
+  "name": "Aretha Dark (Spectrum Pulse)",
+  "shaderId": "{5367e52c-7043-5b20-b88b-1b6f2ffd2871}",
+  "shaderParams": {
+    "glowIntensity": 2.5,
+    "reactivity": 1.5,
+    "waveHeight": 0.15,
+    "bassExpand": 1.5,
+    "flowSpeed": 2.0,
+    "plasmaDetail": 0.8,
+    "colorMix": 0.5,
+    "idleAnimation": 1.0,
+    "primaryColor": "#00c1e4",
+    "accentColor": "#1d99f3"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Aretha Dark (Sonic Ripple)",
+  "shaderId": "{6ed8099c-574e-5593-b861-b041142a9fab}",
+  "shaderParams": {
+    "reactivity": 1.5,
+    "ringCount": 24,
+    "bassShockwave": 1.5,
+    "ringSpeed": 1.0,
+    "rotationSpeed": 0.15,
+    "idleAnimation": 1.0,
+    "glowIntensity": 2.0,
+    "fillOpacity": 0.88,
+    "primaryColor": "#00c1e4",
+    "accentColor": "#1d99f3",
+    "bassColor": "#3daee9"
+  }
+}
