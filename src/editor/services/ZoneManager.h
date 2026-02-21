@@ -8,6 +8,7 @@
 #include <QRectF>
 #include <QSet>
 #include <QSize>
+#include <QSizeF>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -99,11 +100,23 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Extract geometry from a zone map as QRectF
+     * @brief Extract relative geometry from a zone map as QRectF
      * @param zone The zone QVariantMap
-     * @return QRectF with x, y, width, height
+     * @return QRectF with x, y, width, height (0-1 normalized)
      */
     QRectF extractZoneGeometry(const QVariantMap& zone) const;
+
+    /**
+     * @brief Extract fixed pixel geometry from a zone map as QRectF
+     * @param zone The zone QVariantMap
+     * @return QRectF with fixedX, fixedY, fixedWidth, fixedHeight (pixels)
+     */
+    QRectF extractFixedGeometry(const QVariantMap& zone) const;
+
+    /**
+     * @brief Check if a zone QVariantMap is in Fixed geometry mode
+     */
+    static bool isFixedMode(const QVariantMap& zone);
 
     /**
      * @brief Get validated zone by ID with logging on failure
@@ -134,6 +147,11 @@ public:
     // Screen reference for fixed geometry relative fallback computation
     void setReferenceScreenSize(const QSize& size) { m_referenceScreenSize = size; }
     QSize referenceScreenSize() const { return m_referenceScreenSize; }
+
+    /**
+     * @brief Get effective screen size as QSizeF (clamped to >= 1.0 per dimension)
+     */
+    QSizeF effectiveScreenSizeF() const;
 
     /**
      * @brief Sync fixed pixel geometry from relative coords using m_referenceScreenSize
@@ -248,6 +266,12 @@ private:
      * @return ValidatedFixedGeometry with clamped values and isValid flag
      */
     ValidatedFixedGeometry validateAndClampFixedGeometry(qreal x, qreal y, qreal width, qreal height) const;
+
+    /**
+     * @brief Apply geometry update to a zone map, branching on geometry mode
+     * @return true if geometry was applied, false on invalid input
+     */
+    bool applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qreal width, qreal height) const;
 
     /**
      * @brief Signal types for deferred emission

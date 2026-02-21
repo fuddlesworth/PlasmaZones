@@ -395,7 +395,7 @@ Rectangle {
                     id: fixedXSpin
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "X:")
-                    from: 0; to: 99999
+                    from: 0; to: editorController ? editorController.targetScreenSize.width : 99999
                     value: selectedZone ? (selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0) : 0
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "X position in pixels")
@@ -409,7 +409,7 @@ Rectangle {
                     id: fixedYSpin
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Y:")
-                    from: 0; to: 99999
+                    from: 0; to: editorController ? editorController.targetScreenSize.height : 99999
                     value: selectedZone ? (selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0) : 0
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Y position in pixels")
@@ -423,7 +423,7 @@ Rectangle {
                     id: fixedWidthSpin
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Width:")
-                    from: 50; to: 99999
+                    from: 50; to: editorController ? editorController.targetScreenSize.width : 99999
                     value: selectedZone ? (selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50) : 50
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Width in pixels")
@@ -437,7 +437,7 @@ Rectangle {
                     id: fixedHeightSpin
                     visible: panelMode === "single" && fixedGeometryCheck.checked
                     Kirigami.FormData.label: i18nc("@label", "Height:")
-                    from: 50; to: 99999
+                    from: 50; to: editorController ? editorController.targetScreenSize.height : 99999
                     value: selectedZone ? (selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50) : 50
                     enabled: Boolean(selectedZone) && Boolean(editorController)
                     Accessible.name: i18nc("@label", "Height in pixels")

@@ -6,6 +6,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
+#include <QSizeF>
 #include <QtMath>
 #include <algorithm>
 
@@ -21,12 +22,9 @@ void ZoneAutoFiller::applyRelativeGeometry(const QString& zoneId, qreal rx, qrea
 {
     QVariantMap z = m_manager->getZoneById(zoneId);
     if (z.isEmpty()) return;
-    int mode = z.value(QLatin1String("geometryMode"), 0).toInt();
-    if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
-        QSize ss = m_manager->referenceScreenSize();
-        qreal sw = qMax(1.0, static_cast<qreal>(ss.width()));
-        qreal sh = qMax(1.0, static_cast<qreal>(ss.height()));
-        m_manager->updateZoneGeometry(zoneId, rx * sw, ry * sh, rw * sw, rh * sh);
+    if (ZoneManager::isFixedMode(z)) {
+        QSizeF ss = m_manager->effectiveScreenSizeF();
+        m_manager->updateZoneGeometry(zoneId, rx * ss.width(), ry * ss.height(), rw * ss.width(), rh * ss.height());
     } else {
         m_manager->updateZoneGeometry(zoneId, rx, ry, rw, rh);
     }

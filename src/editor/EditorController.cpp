@@ -484,20 +484,12 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
     qreal sw = screenSize.width();
     qreal sh = screenSize.height();
 
-    // Current relative geometry (always present)
-    qreal relX = zone[JsonKeys::X].toDouble();
-    qreal relY = zone[JsonKeys::Y].toDouble();
-    qreal relW = zone[JsonKeys::Width].toDouble();
-    qreal relH = zone[JsonKeys::Height].toDouble();
-    QRectF oldRelGeo(relX, relY, relW, relH);
+    QRectF oldRelGeo = m_zoneManager->extractZoneGeometry(zone);
 
     // Current fixed geometry (may not exist)
     QRectF oldFixedGeo;
     if (zone.contains(JsonKeys::FixedX)) {
-        oldFixedGeo = QRectF(zone[JsonKeys::FixedX].toDouble(),
-                             zone[JsonKeys::FixedY].toDouble(),
-                             zone[JsonKeys::FixedWidth].toDouble(),
-                             zone[JsonKeys::FixedHeight].toDouble());
+        oldFixedGeo = m_zoneManager->extractFixedGeometry(zone);
     }
 
     QRectF newRelGeo = oldRelGeo;
@@ -505,7 +497,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
 
     if (newMode == 1) {
         // Switching to Fixed: convert relative -> pixel
-        newFixedGeo = QRectF(relX * sw, relY * sh, relW * sw, relH * sh);
+        newFixedGeo = QRectF(oldRelGeo.x() * sw, oldRelGeo.y() * sh, oldRelGeo.width() * sw, oldRelGeo.height() * sh);
     } else {
         // Switching to Relative: convert pixel -> relative (keep relativeGeometry as-is since it's maintained)
         if (oldFixedGeo.isValid() && sw > 0 && sh > 0) {
@@ -538,20 +530,13 @@ void EditorController::updateZoneFixedGeometry(const QString& zoneId, qreal x, q
     }
 
     // Capture old state for undo
-    QRectF oldFixed(zone.value(JsonKeys::FixedX, 0.0).toDouble(),
-                    zone.value(JsonKeys::FixedY, 0.0).toDouble(),
-                    zone.value(JsonKeys::FixedWidth, 0.0).toDouble(),
-                    zone.value(JsonKeys::FixedHeight, 0.0).toDouble());
-    QRectF oldRelative(zone[JsonKeys::X].toDouble(), zone[JsonKeys::Y].toDouble(),
-                       zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble());
-
+    QRectF oldFixed = m_zoneManager->extractFixedGeometry(zone);
+    QRectF oldRelative = m_zoneManager->extractZoneGeometry(zone);
     QRectF newFixed(x, y, w, h);
 
     // Compute new relative fallback
-    QSize screenSize = targetScreenSize();
-    qreal sw = qMax(1.0, static_cast<qreal>(screenSize.width()));
-    qreal sh = qMax(1.0, static_cast<qreal>(screenSize.height()));
-    QRectF newRelative(x / sw, y / sh, w / sw, h / sh);
+    QSizeF ss = m_zoneManager->effectiveScreenSizeF();
+    QRectF newRelative(x / ss.width(), y / ss.height(), w / ss.width(), h / ss.height());
 
     // Skip if nothing changed
     const qreal tolerance = 0.5; // Sub-pixel tolerance for fixed coords
@@ -601,13 +586,11 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
             zone[JsonKeys::FixedHeight] = fixedGeo.height();
         } else {
             // Compute from relative + screen size
-            QSize ss = m_zoneManager->referenceScreenSize();
-            qreal sw = qMax(1.0, static_cast<qreal>(ss.width()));
-            qreal sh = qMax(1.0, static_cast<qreal>(ss.height()));
-            zone[JsonKeys::FixedX] = relativeGeo.x() * sw;
-            zone[JsonKeys::FixedY] = relativeGeo.y() * sh;
-            zone[JsonKeys::FixedWidth] = relativeGeo.width() * sw;
-            zone[JsonKeys::FixedHeight] = relativeGeo.height() * sh;
+            QSizeF ss = m_zoneManager->effectiveScreenSizeF();
+            zone[JsonKeys::FixedX] = relativeGeo.x() * ss.width();
+            zone[JsonKeys::FixedY] = relativeGeo.y() * ss.height();
+            zone[JsonKeys::FixedWidth] = relativeGeo.width() * ss.width();
+            zone[JsonKeys::FixedHeight] = relativeGeo.height() * ss.height();
         }
     } else {
         // Switching to Relative: remove stale fixed keys
@@ -2345,28 +2328,21 @@ bool EditorController::moveSelectedZone(int direction, qreal step)
         return false;
     }
 
-    int geoMode = selectedZone.value(JsonKeys::GeometryMode, 0).toInt();
-    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
-
-    if (isFixed) {
-        // Fixed mode: move in pixel space
-        qreal fx = selectedZone.value(JsonKeys::FixedX, 0.0).toDouble();
-        qreal fy = selectedZone.value(JsonKeys::FixedY, 0.0).toDouble();
-        qreal fw = selectedZone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-        qreal fh = selectedZone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+    if (ZoneManager::isFixedMode(selectedZone)) {
+        // Fixed mode: move in pixel space with screen bounds
+        QRectF fg = m_zoneManager->extractFixedGeometry(selectedZone);
         qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+        QSize ss = targetScreenSize();
 
         switch (direction) {
-        case 0: fx = qMax(0.0, fx - pxStep); break;
-        case 1: fx += pxStep; break;
-        case 2: fy = qMax(0.0, fy - pxStep); break;
-        case 3: fy += pxStep; break;
+        case 0: fg.moveLeft(qMax(0.0, fg.x() - pxStep)); break;
+        case 1: fg.moveLeft(qMin(static_cast<qreal>(ss.width()) - fg.width(), fg.x() + pxStep)); break;
+        case 2: fg.moveTop(qMax(0.0, fg.y() - pxStep)); break;
+        case 3: fg.moveTop(qMin(static_cast<qreal>(ss.height()) - fg.height(), fg.y() + pxStep)); break;
         default: return false;
         }
-        fx = qMax(0.0, fx);
-        fy = qMax(0.0, fy);
 
-        updateZoneGeometry(m_selectedZoneId, fx, fy, fw, fh, true);
+        updateZoneGeometry(m_selectedZoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
         return true;
     }
 
@@ -2408,29 +2384,24 @@ bool EditorController::resizeSelectedZone(int direction, qreal step)
         return false;
     }
 
-    int geoMode = selectedZone.value(JsonKeys::GeometryMode, 0).toInt();
-    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
-
-    if (isFixed) {
-        // Fixed mode: resize in pixel space
-        qreal fx = selectedZone.value(JsonKeys::FixedX, 0.0).toDouble();
-        qreal fy = selectedZone.value(JsonKeys::FixedY, 0.0).toDouble();
-        qreal fw = selectedZone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-        qreal fh = selectedZone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+    if (ZoneManager::isFixedMode(selectedZone)) {
+        // Fixed mode: resize in pixel space with screen bounds
+        QRectF fg = m_zoneManager->extractFixedGeometry(selectedZone);
         qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
         qreal minFixed = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
+        QSize ss = targetScreenSize();
 
         switch (direction) {
-        case 0: fw = qMax(minFixed, fw - pxStep); break;
-        case 1: fw += pxStep; break;
-        case 2: fh = qMax(minFixed, fh - pxStep); break;
-        case 3: fh += pxStep; break;
+        case 0: fg.setWidth(qMax(minFixed, fg.width() - pxStep)); break;
+        case 1: fg.setWidth(qMin(static_cast<qreal>(ss.width()) - fg.x(), fg.width() + pxStep)); break;
+        case 2: fg.setHeight(qMax(minFixed, fg.height() - pxStep)); break;
+        case 3: fg.setHeight(qMin(static_cast<qreal>(ss.height()) - fg.y(), fg.height() + pxStep)); break;
         default: return false;
         }
-        fw = qMax(minFixed, fw);
-        fh = qMax(minFixed, fh);
+        fg.setWidth(qMax(minFixed, fg.width()));
+        fg.setHeight(qMax(minFixed, fg.height()));
 
-        updateZoneGeometry(m_selectedZoneId, fx, fy, fw, fh, true);
+        updateZoneGeometry(m_selectedZoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
         return true;
     }
 
@@ -2748,26 +2719,19 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         for (const auto& pair : zonesToMove) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
-            int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
-            bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
-
-            if (isFixed) {
-                qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble();
-                qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble();
-                qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-                qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+            if (ZoneManager::isFixedMode(zone)) {
+                QRectF fg = m_zoneManager->extractFixedGeometry(zone);
                 qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+                QSize ss = targetScreenSize();
 
                 switch (direction) {
-                case 0: fx = qMax(0.0, fx - pxStep); break;
-                case 1: fx += pxStep; break;
-                case 2: fy = qMax(0.0, fy - pxStep); break;
-                case 3: fy += pxStep; break;
+                case 0: fg.moveLeft(qMax(0.0, fg.x() - pxStep)); break;
+                case 1: fg.moveLeft(qMin(static_cast<qreal>(ss.width()) - fg.width(), fg.x() + pxStep)); break;
+                case 2: fg.moveTop(qMax(0.0, fg.y() - pxStep)); break;
+                case 3: fg.moveTop(qMin(static_cast<qreal>(ss.height()) - fg.height(), fg.y() + pxStep)); break;
                 default: continue;
                 }
-                fx = qMax(0.0, fx);
-                fy = qMax(0.0, fy);
-                updateZoneGeometry(zoneId, fx, fy, fw, fh, true);
+                updateZoneGeometry(zoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
             } else {
                 // Relative mode: compute delta, clamp, and apply
                 qreal dx = 0.0, dy = 0.0;
@@ -2818,27 +2782,22 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
         for (const auto& pair : zonesToResize) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
-            int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
-            bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
-
-            if (isFixed) {
-                qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble();
-                qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble();
-                qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-                qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+            if (ZoneManager::isFixedMode(zone)) {
+                QRectF fg = m_zoneManager->extractFixedGeometry(zone);
                 qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
                 qreal minFixed = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
+                QSize ss = targetScreenSize();
 
                 switch (direction) {
-                case 0: fw = qMax(minFixed, fw - pxStep); break;
-                case 1: fw += pxStep; break;
-                case 2: fh = qMax(minFixed, fh - pxStep); break;
-                case 3: fh += pxStep; break;
+                case 0: fg.setWidth(qMax(minFixed, fg.width() - pxStep)); break;
+                case 1: fg.setWidth(qMin(static_cast<qreal>(ss.width()) - fg.x(), fg.width() + pxStep)); break;
+                case 2: fg.setHeight(qMax(minFixed, fg.height() - pxStep)); break;
+                case 3: fg.setHeight(qMin(static_cast<qreal>(ss.height()) - fg.y(), fg.height() + pxStep)); break;
                 default: continue;
                 }
-                fw = qMax(minFixed, fw);
-                fh = qMax(minFixed, fh);
-                updateZoneGeometry(zoneId, fx, fy, fw, fh, true);
+                fg.setWidth(qMax(minFixed, fg.width()));
+                fg.setHeight(qMax(minFixed, fg.height()));
+                updateZoneGeometry(zoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
             } else {
                 // Relative mode
                 const qreal minSize = 0.05;
@@ -3728,35 +3687,25 @@ QStringList EditorController::pasteZones(bool withOffset)
         QString newId = QUuid::createUuid().toString();
         zone[JsonKeys::Id] = newId;
 
-        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
-        bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
-
-        if (isFixed && withOffset) {
+        if (ZoneManager::isFixedMode(zone) && withOffset) {
             // Fixed mode: offset fixed pixel coords, skip 0-1 clamping for fixed keys
-            qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble() + EditorConstants::DuplicateOffsetPixels;
-            qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble() + EditorConstants::DuplicateOffsetPixels;
-            qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-            qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+            QRectF fg = m_zoneManager->extractFixedGeometry(zone);
+            fg.moveLeft(qMax(0.0, fg.x() + EditorConstants::DuplicateOffsetPixels));
+            fg.moveTop(qMax(0.0, fg.y() + EditorConstants::DuplicateOffsetPixels));
+            fg.setWidth(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.width()));
+            fg.setHeight(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.height()));
 
-            // Validate fixed values
-            fx = qMax(0.0, fx);
-            fy = qMax(0.0, fy);
-            fw = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fw);
-            fh = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fh);
-
-            zone[JsonKeys::FixedX] = fx;
-            zone[JsonKeys::FixedY] = fy;
-            zone[JsonKeys::FixedWidth] = fw;
-            zone[JsonKeys::FixedHeight] = fh;
+            zone[JsonKeys::FixedX] = fg.x();
+            zone[JsonKeys::FixedY] = fg.y();
+            zone[JsonKeys::FixedWidth] = fg.width();
+            zone[JsonKeys::FixedHeight] = fg.height();
 
             // Update relative fallback from fixed coords
-            QSize ss = m_zoneManager->referenceScreenSize();
-            qreal sw = qMax(1.0, static_cast<qreal>(ss.width()));
-            qreal sh = qMax(1.0, static_cast<qreal>(ss.height()));
-            zone[JsonKeys::X] = fx / sw;
-            zone[JsonKeys::Y] = fy / sh;
-            zone[JsonKeys::Width] = fw / sw;
-            zone[JsonKeys::Height] = fh / sh;
+            QSizeF ss = m_zoneManager->effectiveScreenSizeF();
+            zone[JsonKeys::X] = fg.x() / ss.width();
+            zone[JsonKeys::Y] = fg.y() / ss.height();
+            zone[JsonKeys::Width] = fg.width() / ss.width();
+            zone[JsonKeys::Height] = fg.height() / ss.height();
         } else {
             // Relative mode (or fixed without offset): apply relative offset and clamp
             qreal x = zone[JsonKeys::X].toDouble() + offsetX;

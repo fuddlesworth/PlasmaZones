@@ -26,6 +26,25 @@ QRectF ZoneManager::extractZoneGeometry(const QVariantMap& zone) const
                   zone[JsonKeys::Height].toDouble());
 }
 
+QRectF ZoneManager::extractFixedGeometry(const QVariantMap& zone) const
+{
+    return QRectF(zone.value(JsonKeys::FixedX, 0.0).toDouble(),
+                  zone.value(JsonKeys::FixedY, 0.0).toDouble(),
+                  zone.value(JsonKeys::FixedWidth, 0.0).toDouble(),
+                  zone.value(JsonKeys::FixedHeight, 0.0).toDouble());
+}
+
+bool ZoneManager::isFixedMode(const QVariantMap& zone)
+{
+    return zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed);
+}
+
+QSizeF ZoneManager::effectiveScreenSizeF() const
+{
+    return QSizeF(qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width())),
+                  qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height())));
+}
+
 std::optional<QVariantMap> ZoneManager::getValidatedZone(const QString& zoneId) const
 {
     if (zoneId.isEmpty()) {
@@ -84,22 +103,50 @@ ZoneManager::ValidatedFixedGeometry ZoneManager::validateAndClampFixedGeometry(q
 
 void ZoneManager::syncFixedFromRelative(QVariantMap& zone) const
 {
-    qreal sw = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width()));
-    qreal sh = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height()));
-    zone[JsonKeys::FixedX] = zone[JsonKeys::X].toDouble() * sw;
-    zone[JsonKeys::FixedY] = zone[JsonKeys::Y].toDouble() * sh;
-    zone[JsonKeys::FixedWidth] = zone[JsonKeys::Width].toDouble() * sw;
-    zone[JsonKeys::FixedHeight] = zone[JsonKeys::Height].toDouble() * sh;
+    QSizeF ss = effectiveScreenSizeF();
+    zone[JsonKeys::FixedX] = zone[JsonKeys::X].toDouble() * ss.width();
+    zone[JsonKeys::FixedY] = zone[JsonKeys::Y].toDouble() * ss.height();
+    zone[JsonKeys::FixedWidth] = zone[JsonKeys::Width].toDouble() * ss.width();
+    zone[JsonKeys::FixedHeight] = zone[JsonKeys::Height].toDouble() * ss.height();
 }
 
 void ZoneManager::syncRelativeFromFixed(QVariantMap& zone) const
 {
-    qreal sw = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width()));
-    qreal sh = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height()));
-    zone[JsonKeys::X] = zone[JsonKeys::FixedX].toDouble() / sw;
-    zone[JsonKeys::Y] = zone[JsonKeys::FixedY].toDouble() / sh;
-    zone[JsonKeys::Width] = zone[JsonKeys::FixedWidth].toDouble() / sw;
-    zone[JsonKeys::Height] = zone[JsonKeys::FixedHeight].toDouble() / sh;
+    QSizeF ss = effectiveScreenSizeF();
+    zone[JsonKeys::X] = zone[JsonKeys::FixedX].toDouble() / ss.width();
+    zone[JsonKeys::Y] = zone[JsonKeys::FixedY].toDouble() / ss.height();
+    zone[JsonKeys::Width] = zone[JsonKeys::FixedWidth].toDouble() / ss.width();
+    zone[JsonKeys::Height] = zone[JsonKeys::FixedHeight].toDouble() / ss.height();
+}
+
+bool ZoneManager::applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qreal width, qreal height) const
+{
+    if (isFixedMode(zone)) {
+        ValidatedFixedGeometry geom = validateAndClampFixedGeometry(x, y, width, height);
+        if (!geom.isValid) {
+            return false;
+        }
+        zone[JsonKeys::FixedX] = geom.x;
+        zone[JsonKeys::FixedY] = geom.y;
+        zone[JsonKeys::FixedWidth] = geom.width;
+        zone[JsonKeys::FixedHeight] = geom.height;
+        // Update relative fallback so previews render correctly
+        QSizeF ss = effectiveScreenSizeF();
+        zone[JsonKeys::X] = geom.x / ss.width();
+        zone[JsonKeys::Y] = geom.y / ss.height();
+        zone[JsonKeys::Width] = geom.width / ss.width();
+        zone[JsonKeys::Height] = geom.height / ss.height();
+    } else {
+        ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
+        if (!geom.isValid) {
+            return false;
+        }
+        zone[JsonKeys::X] = geom.x;
+        zone[JsonKeys::Y] = geom.y;
+        zone[JsonKeys::Width] = geom.width;
+        zone[JsonKeys::Height] = geom.height;
+    }
+    return true;
 }
 
 void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool includeModified)
@@ -244,37 +291,10 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
     }
 
     QVariantMap zone = m_zones[index].toMap();
-    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
 
-    if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
-        // Fixed mode: pixel values — use fixed validation
-        ValidatedFixedGeometry geom = validateAndClampFixedGeometry(x, y, width, height);
-        if (!geom.isValid) {
-            qCWarning(lcEditorZone) << "Invalid fixed zone geometry:" << x << y << width << height;
-            return;
-        }
-        zone[JsonKeys::FixedX] = geom.x;
-        zone[JsonKeys::FixedY] = geom.y;
-        zone[JsonKeys::FixedWidth] = geom.width;
-        zone[JsonKeys::FixedHeight] = geom.height;
-        // Update relative fallback so previews render correctly
-        qreal sw = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width()));
-        qreal sh = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height()));
-        zone[JsonKeys::X] = geom.x / sw;
-        zone[JsonKeys::Y] = geom.y / sh;
-        zone[JsonKeys::Width] = geom.width / sw;
-        zone[JsonKeys::Height] = geom.height / sh;
-    } else {
-        // Relative mode: 0-1 normalized — use existing validation
-        ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
-        if (!geom.isValid) {
-            qCWarning(lcEditorZone) << "Invalid zone geometry:" << x << y << width << height;
-            return;
-        }
-        zone[JsonKeys::X] = geom.x;
-        zone[JsonKeys::Y] = geom.y;
-        zone[JsonKeys::Width] = geom.width;
-        zone[JsonKeys::Height] = geom.height;
+    if (!applyGeometryToZoneMap(zone, x, y, width, height)) {
+        qCWarning(lcEditorZone) << "Invalid zone geometry:" << x << y << width << height;
+        return;
     }
 
     m_zones[index] = zone;
@@ -294,33 +314,9 @@ void ZoneManager::updateZoneGeometryDirect(const QString& zoneId, qreal x, qreal
     }
 
     QVariantMap zone = m_zones[index].toMap();
-    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
 
-    if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
-        ValidatedFixedGeometry geom = validateAndClampFixedGeometry(x, y, width, height);
-        if (!geom.isValid) {
-            return;
-        }
-        zone[JsonKeys::FixedX] = geom.x;
-        zone[JsonKeys::FixedY] = geom.y;
-        zone[JsonKeys::FixedWidth] = geom.width;
-        zone[JsonKeys::FixedHeight] = geom.height;
-        // Update relative fallback so previews render correctly
-        qreal sw = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width()));
-        qreal sh = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height()));
-        zone[JsonKeys::X] = geom.x / sw;
-        zone[JsonKeys::Y] = geom.y / sh;
-        zone[JsonKeys::Width] = geom.width / sw;
-        zone[JsonKeys::Height] = geom.height / sh;
-    } else {
-        ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
-        if (!geom.isValid) {
-            return;
-        }
-        zone[JsonKeys::X] = geom.x;
-        zone[JsonKeys::Y] = geom.y;
-        zone[JsonKeys::Width] = geom.width;
-        zone[JsonKeys::Height] = geom.height;
+    if (!applyGeometryToZoneMap(zone, x, y, width, height)) {
+        return;
     }
 
     m_zones[index] = zone;
@@ -457,35 +453,22 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
     }
 
     const QVariantMap& srcZone = *zoneOpt;
-    int geoMode = srcZone.value(JsonKeys::GeometryMode, 0).toInt();
     QString originalName = srcZone[JsonKeys::Name].toString();
     int zoneNumber = m_zones.size() + 1;
     QString copyName = originalName + QStringLiteral(" (Copy)");
 
-    if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+    if (isFixedMode(srcZone)) {
         // Fixed mode: duplicate in pixel space
-        qreal fx = srcZone.value(JsonKeys::FixedX, 0.0).toDouble();
-        qreal fy = srcZone.value(JsonKeys::FixedY, 0.0).toDouble();
-        qreal fw = srcZone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-        qreal fh = srcZone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+        QRectF fixedGeo = extractFixedGeometry(srcZone);
+        qreal fx = qMax(0.0, fixedGeo.x() + EditorConstants::DuplicateOffsetPixels);
+        qreal fy = qMax(0.0, fixedGeo.y() + EditorConstants::DuplicateOffsetPixels);
 
-        // Offset by DuplicateOffsetPixels
-        fx += EditorConstants::DuplicateOffsetPixels;
-        fy += EditorConstants::DuplicateOffsetPixels;
-        fx = qMax(0.0, fx);
-        fy = qMax(0.0, fy);
-
-        // Create zone with relative fallback from source
-        QRectF relGeo = extractZoneGeometry(srcZone);
-        qreal newRelX = qMin(relGeo.x() + EditorConstants::DuplicateOffset, 1.0 - relGeo.width());
-        qreal newRelY = qMin(relGeo.y() + EditorConstants::DuplicateOffset, 1.0 - relGeo.height());
-
-        QVariantMap duplicate = createZone(copyName, zoneNumber, newRelX, newRelY, relGeo.width(), relGeo.height());
-        duplicate[JsonKeys::GeometryMode] = geoMode;
+        QVariantMap duplicate = createZone(copyName, zoneNumber, 0, 0, 0.25, 0.25);
+        duplicate[JsonKeys::GeometryMode] = static_cast<int>(ZoneGeometryMode::Fixed);
         duplicate[JsonKeys::FixedX] = fx;
         duplicate[JsonKeys::FixedY] = fy;
-        duplicate[JsonKeys::FixedWidth] = fw;
-        duplicate[JsonKeys::FixedHeight] = fh;
+        duplicate[JsonKeys::FixedWidth] = fixedGeo.width();
+        duplicate[JsonKeys::FixedHeight] = fixedGeo.height();
         syncRelativeFromFixed(duplicate);
 
         QString newZoneId = duplicate[JsonKeys::Id].toString();
@@ -518,76 +501,53 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 
     int index = findZoneIndex(zoneId);
     QVariantMap original = *zoneOpt;
-    int geoMode = original.value(JsonKeys::GeometryMode, 0).toInt();
-    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
 
-    if (isFixed) {
+    if (isFixedMode(original)) {
         // Fixed mode: split in pixel space
-        qreal fx = original.value(JsonKeys::FixedX, 0.0).toDouble();
-        qreal fy = original.value(JsonKeys::FixedY, 0.0).toDouble();
-        qreal fw = original.value(JsonKeys::FixedWidth, 0.0).toDouble();
-        qreal fh = original.value(JsonKeys::FixedHeight, 0.0).toDouble();
+        QRectF fixedGeo = extractFixedGeometry(original);
         const qreal minFixedSize = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
 
-        if (horizontal) {
-            qreal newFH = fh / 2.0;
-            if (newFH < minFixedSize) {
-                qCWarning(lcEditorZone) << "Cannot split fixed zone horizontally - resulting zones too small"
-                                        << "(current height:" << fh << "px, min:" << minFixedSize << "px)";
-                return QString();
-            }
-            // Shrink original
-            original[JsonKeys::FixedHeight] = newFH;
-            syncRelativeFromFixed(original);
-            m_zones[index] = original;
-            emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-
-            // Create new zone in pixel space
-            int zoneNumber = m_zones.size() + 1;
-            QRectF relGeo = extractZoneGeometry(original);
-            QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber,
-                                             relGeo.x(), relGeo.y() + relGeo.height(), relGeo.width(), relGeo.height());
-            newZone[JsonKeys::GeometryMode] = geoMode;
-            newZone[JsonKeys::FixedX] = fx;
-            newZone[JsonKeys::FixedY] = fy + newFH;
-            newZone[JsonKeys::FixedWidth] = fw;
-            newZone[JsonKeys::FixedHeight] = newFH;
-            syncRelativeFromFixed(newZone);
-
-            QString newZoneId = newZone[JsonKeys::Id].toString();
-            m_zones.append(newZone);
-            emitZoneSignal(SignalType::ZoneAdded, newZoneId);
-            return newZoneId;
-        } else {
-            qreal newFW = fw / 2.0;
-            if (newFW < minFixedSize) {
-                qCWarning(lcEditorZone) << "Cannot split fixed zone vertically - resulting zones too small"
-                                        << "(current width:" << fw << "px, min:" << minFixedSize << "px)";
-                return QString();
-            }
-            // Shrink original
-            original[JsonKeys::FixedWidth] = newFW;
-            syncRelativeFromFixed(original);
-            m_zones[index] = original;
-            emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-
-            // Create new zone in pixel space
-            int zoneNumber = m_zones.size() + 1;
-            QRectF relGeo = extractZoneGeometry(original);
-            QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber,
-                                             relGeo.x() + relGeo.width(), relGeo.y(), relGeo.width(), relGeo.height());
-            newZone[JsonKeys::GeometryMode] = geoMode;
-            newZone[JsonKeys::FixedX] = fx + newFW;
-            newZone[JsonKeys::FixedY] = fy;
-            newZone[JsonKeys::FixedWidth] = newFW;
-            newZone[JsonKeys::FixedHeight] = fh;
-            syncRelativeFromFixed(newZone);
-
-            QString newZoneId = newZone[JsonKeys::Id].toString();
-            m_zones.append(newZone);
-            emitZoneSignal(SignalType::ZoneAdded, newZoneId);
-            return newZoneId;
+        // Use qRound to avoid float imprecision rejecting valid splits (e.g. 100/2 = 49.999...)
+        qreal splitDim = horizontal ? qRound(fixedGeo.height() / 2.0) : qRound(fixedGeo.width() / 2.0);
+        qreal remainDim = horizontal ? (fixedGeo.height() - splitDim) : (fixedGeo.width() - splitDim);
+        if (splitDim < minFixedSize || remainDim < minFixedSize) {
+            qCWarning(lcEditorZone) << "Cannot split fixed zone - resulting zones too small"
+                                    << "(dimension:" << (horizontal ? fixedGeo.height() : fixedGeo.width())
+                                    << "px, min:" << minFixedSize << "px)";
+            return QString();
         }
+
+        // Shrink original
+        if (horizontal) {
+            original[JsonKeys::FixedHeight] = splitDim;
+        } else {
+            original[JsonKeys::FixedWidth] = splitDim;
+        }
+        syncRelativeFromFixed(original);
+        m_zones[index] = original;
+        emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
+
+        // Create new zone in pixel space
+        int zoneNumber = m_zones.size() + 1;
+        QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
+        newZone[JsonKeys::GeometryMode] = static_cast<int>(ZoneGeometryMode::Fixed);
+        if (horizontal) {
+            newZone[JsonKeys::FixedX] = fixedGeo.x();
+            newZone[JsonKeys::FixedY] = fixedGeo.y() + splitDim;
+            newZone[JsonKeys::FixedWidth] = fixedGeo.width();
+            newZone[JsonKeys::FixedHeight] = remainDim;
+        } else {
+            newZone[JsonKeys::FixedX] = fixedGeo.x() + splitDim;
+            newZone[JsonKeys::FixedY] = fixedGeo.y();
+            newZone[JsonKeys::FixedWidth] = remainDim;
+            newZone[JsonKeys::FixedHeight] = fixedGeo.height();
+        }
+        syncRelativeFromFixed(newZone);
+
+        QString newZoneId = newZone[JsonKeys::Id].toString();
+        m_zones.append(newZone);
+        emitZoneSignal(SignalType::ZoneAdded, newZoneId);
+        return newZoneId;
     }
 
     // Relative mode: original behavior
@@ -919,7 +879,7 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
             }
 
             zone[JsonKeys::Width] = newWidth;
-            if (zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
             m_zones[idx] = zone;
@@ -947,7 +907,7 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
             zone[JsonKeys::X] = newX;
             zone[JsonKeys::Width] = newWidth;
-            if (zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
             m_zones[idx] = zone;
@@ -1039,7 +999,7 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
             }
 
             zone[JsonKeys::Height] = newHeight;
-            if (zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
             m_zones[idx] = zone;
@@ -1067,7 +1027,7 @@ void ZoneManager::resizeZonesAtDivider(const QString& zoneId1, const QString& zo
 
             zone[JsonKeys::Y] = newY;
             zone[JsonKeys::Height] = newHeight;
-            if (zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            if (isFixedMode(zone)) {
                 syncFixedFromRelative(zone);
             }
             m_zones[idx] = zone;
@@ -1299,22 +1259,18 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
     }
 
     // Validate geometry based on geometry mode
-    int geoMode = zoneData.value(JsonKeys::GeometryMode, 0).toInt();
     qreal x = zoneData[JsonKeys::X].toDouble();
     qreal y = zoneData[JsonKeys::Y].toDouble();
     qreal width = zoneData[JsonKeys::Width].toDouble();
     qreal height = zoneData[JsonKeys::Height].toDouble();
 
-    if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+    if (isFixedMode(zoneData)) {
         // Fixed mode: validate fixed pixel coords
-        qreal fx = zoneData.value(JsonKeys::FixedX, 0.0).toDouble();
-        qreal fy = zoneData.value(JsonKeys::FixedY, 0.0).toDouble();
-        qreal fw = zoneData.value(JsonKeys::FixedWidth, 0.0).toDouble();
-        qreal fh = zoneData.value(JsonKeys::FixedHeight, 0.0).toDouble();
-
-        if (fx < 0.0 || fy < 0.0 || fw < static_cast<qreal>(EditorConstants::MinFixedZoneSize)
-            || fh < static_cast<qreal>(EditorConstants::MinFixedZoneSize)) {
-            qCWarning(lcEditorZone) << "Invalid fixed zone geometry for addZoneFromMap:" << fx << fy << fw << fh;
+        QRectF fixedGeo = extractFixedGeometry(zoneData);
+        if (fixedGeo.x() < 0.0 || fixedGeo.y() < 0.0
+            || fixedGeo.width() < static_cast<qreal>(EditorConstants::MinFixedZoneSize)
+            || fixedGeo.height() < static_cast<qreal>(EditorConstants::MinFixedZoneSize)) {
+            qCWarning(lcEditorZone) << "Invalid fixed zone geometry for addZoneFromMap:" << fixedGeo;
             return QString();
         }
     } else {
@@ -1396,8 +1352,7 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         zone[JsonKeys::FixedHeight] = zoneData[JsonKeys::FixedHeight].toDouble();
     }
     // For fixed zones, ensure relative fallback is in sync with fixed coords
-    if (zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed)
-        && zone.contains(JsonKeys::FixedX)) {
+    if (isFixedMode(zone) && zone.contains(JsonKeys::FixedX)) {
         syncRelativeFromFixed(zone);
     }
 
@@ -1501,24 +1456,22 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         }
 
         // Validate geometry based on geometry mode
-        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
         qreal x = zone[JsonKeys::X].toDouble();
         qreal y = zone[JsonKeys::Y].toDouble();
         qreal width = zone[JsonKeys::Width].toDouble();
         qreal height = zone[JsonKeys::Height].toDouble();
 
-        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        if (isFixedMode(zone)) {
             // Fixed mode: validate relative fallback is present and fixed pixel data is sane
             if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
                 qCWarning(lcEditorZone) << "Invalid relative fallback in fixed zone restoreZones:" << x << y << width << height;
                 return;
             }
-            qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble();
-            qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble();
-            qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
-            qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
-            if (!qIsFinite(fx) || !qIsFinite(fy) || !qIsFinite(fw) || !qIsFinite(fh) || fw <= 0.0 || fh <= 0.0) {
-                qCWarning(lcEditorZone) << "Invalid fixed zone geometry in restoreZones:" << fx << fy << fw << fh;
+            QRectF fixedGeo = extractFixedGeometry(zone);
+            if (!qIsFinite(fixedGeo.x()) || !qIsFinite(fixedGeo.y())
+                || !qIsFinite(fixedGeo.width()) || !qIsFinite(fixedGeo.height())
+                || fixedGeo.width() <= 0.0 || fixedGeo.height() <= 0.0) {
+                qCWarning(lcEditorZone) << "Invalid fixed zone geometry in restoreZones:" << fixedGeo;
                 return;
             }
         } else {
