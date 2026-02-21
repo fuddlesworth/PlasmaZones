@@ -14,12 +14,25 @@ namespace PlasmaZones {
 class Settings;
 
 /**
- * @brief Tracks the last-used manual layout and persists it to settings.
+ * @brief Tiling mode: manual zone layouts or automatic tiling algorithms
+ */
+enum class TilingMode {
+    Manual = 0,    ///< Traditional zone-based layout
+    Autotile = 1   ///< Dynamic auto-tiling algorithm
+};
+
+/**
+ * @brief Tracks the last-used manual layout, tiling mode, and autotile algorithm.
+ *
+ * Provides smart toggle between manual and autotile modes, persisting state
+ * across sessions via KConfig.
  */
 class ModeTracker : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(QString lastManualLayoutId READ lastManualLayoutId)
+    Q_PROPERTY(TilingMode currentMode READ currentMode NOTIFY currentModeChanged)
+    Q_PROPERTY(QString lastAutotileAlgorithm READ lastAutotileAlgorithm NOTIFY lastAutotileAlgorithmChanged)
 
 public:
     explicit ModeTracker(Settings* settings, QObject* parent = nullptr);
@@ -29,37 +42,46 @@ public:
     // Current mode
     // ═══════════════════════════════════════════════════════════════════════════
 
+    TilingMode currentMode() const { return m_currentMode; }
+    void setCurrentMode(TilingMode mode);
+
+    bool isAutotileMode() const { return m_currentMode == TilingMode::Autotile; }
+    bool isManualMode() const { return m_currentMode == TilingMode::Manual; }
+
     /**
-     * @brief Get the UUID of the last manually selected layout
+     * @brief Toggle between Manual and Autotile modes
+     * @return The new mode after toggling
      */
+    TilingMode toggleMode();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Layout tracking
+    // ═══════════════════════════════════════════════════════════════════════════
+
     QString lastManualLayoutId() const { return m_lastManualLayoutId; }
-
-    /**
-     * @brief Record a manual layout selection
-     *
-     * @param layoutId UUID of the selected layout
-     */
     void recordManualLayout(const QString& layoutId);
-
     void recordManualLayout(const QUuid& layoutId);
+
+    QString lastAutotileAlgorithm() const { return m_lastAutotileAlgorithm; }
+    void recordAutotileAlgorithm(const QString& algorithmId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Persistence
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /**
-     * @brief Load state from settings
-     */
     void load();
-
-    /**
-     * @brief Save state to settings
-     */
     void save();
+
+Q_SIGNALS:
+    void currentModeChanged(TilingMode mode);
+    void lastAutotileAlgorithmChanged(const QString& algorithmId);
+    void modeToggled(TilingMode newMode);
 
 private:
     QPointer<Settings> m_settings;
+    TilingMode m_currentMode = TilingMode::Manual;
     QString m_lastManualLayoutId;
+    QString m_lastAutotileAlgorithm = QStringLiteral("master-stack");
 };
 
 } // namespace PlasmaZones

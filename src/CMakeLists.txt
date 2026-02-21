@@ -83,6 +83,32 @@ set(plasmazones_core_SRCS
     dbus/screenadaptor.h
     dbus/windowdragadaptor.cpp
     dbus/windowdragadaptor.h
+    dbus/autotileadaptor.cpp
+    dbus/autotileadaptor.h
+    autotile/TilingAlgorithm.cpp
+    autotile/TilingAlgorithm.h
+    autotile/TilingState.cpp
+    autotile/TilingState.h
+    autotile/AlgorithmRegistry.cpp
+    autotile/AlgorithmRegistry.h
+    autotile/AutotileConfig.cpp
+    autotile/AutotileConfig.h
+    autotile/AutotileEngine.cpp
+    autotile/AutotileEngine.h
+    autotile/algorithms/MasterStackAlgorithm.cpp
+    autotile/algorithms/MasterStackAlgorithm.h
+    autotile/algorithms/ColumnsAlgorithm.cpp
+    autotile/algorithms/ColumnsAlgorithm.h
+    autotile/algorithms/RowsAlgorithm.cpp
+    autotile/algorithms/RowsAlgorithm.h
+    autotile/algorithms/BSPAlgorithm.cpp
+    autotile/algorithms/BSPAlgorithm.h
+    autotile/algorithms/FibonacciAlgorithm.cpp
+    autotile/algorithms/FibonacciAlgorithm.h
+    autotile/algorithms/ThreeColumnAlgorithm.cpp
+    autotile/algorithms/ThreeColumnAlgorithm.h
+    autotile/algorithms/MonocleAlgorithm.cpp
+    autotile/algorithms/MonocleAlgorithm.h
     ${plasmazones_settings_SRCS}
 )
 

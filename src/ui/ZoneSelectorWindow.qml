@@ -104,7 +104,7 @@ Window {
     // Shared fade color for scroll edge indicators
     readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
 
-    // Animation constants - avoid magic numbers per .cursorrules
+    // Animation constants
     QtObject {
         id: animationConstants
         readonly property int shortDuration: 150

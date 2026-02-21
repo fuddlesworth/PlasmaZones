@@ -1,0 +1,249 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!-- Autotiling Interface for automatic window tiling -->
+    <interface name="org.plasmazones.Autotile">
+        <annotation name="org.gtk.GDBus.DocString" value="Autotiling control: enable/disable, algorithm selection, window operations, and focus management."/>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Properties
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <property name="enabled" type="b" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="Whether autotiling is active on any screen (read-only, derived from assignments)."/>
+        </property>
+        <property name="autotileScreens" type="as" access="read">
+            <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
+        </property>
+        <property name="algorithm" type="s" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Current tiling algorithm ID (e.g., master-stack, bsp, columns)."/>
+        </property>
+        <property name="masterRatio" type="d" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Ratio of screen width for master area (0.1 to 0.9)."/>
+        </property>
+        <property name="masterCount" type="i" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Number of windows in master area (1 to 5)."/>
+        </property>
+        <property name="innerGap" type="i" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Gap between tiled windows in pixels (0 to 50)."/>
+        </property>
+        <property name="outerGap" type="i" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Gap from screen edges in pixels (0 to 50)."/>
+        </property>
+        <property name="smartGaps" type="b" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Hide gaps when only one window is tiled."/>
+        </property>
+        <property name="focusNewWindows" type="b" access="readwrite">
+            <annotation name="org.gtk.GDBus.DocString" value="Automatically focus newly opened windows."/>
+        </property>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Tiling Operations
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="retile">
+            <annotation name="org.gtk.GDBus.DocString" value="Force retiling of windows on a screen, or all screens if empty."/>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen to retile, or empty for all screens."/>
+            </arg>
+        </method>
+
+        <method name="swapWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Swap positions of two tiled windows."/>
+            <arg name="windowId1" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="First window ID."/>
+            </arg>
+            <arg name="windowId2" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Second window ID."/>
+            </arg>
+        </method>
+
+        <method name="promoteToMaster">
+            <annotation name="org.gtk.GDBus.DocString" value="Promote a window to the master area."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to promote."/>
+            </arg>
+        </method>
+
+        <method name="demoteFromMaster">
+            <annotation name="org.gtk.GDBus.DocString" value="Demote a window from master to stack area."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to demote."/>
+            </arg>
+        </method>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Focus Operations
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="focusMaster">
+            <annotation name="org.gtk.GDBus.DocString" value="Focus the master window on the current screen."/>
+        </method>
+
+        <method name="focusNext">
+            <annotation name="org.gtk.GDBus.DocString" value="Cycle focus to the next tiled window."/>
+        </method>
+
+        <method name="focusPrevious">
+            <annotation name="org.gtk.GDBus.DocString" value="Cycle focus to the previous tiled window."/>
+        </method>
+
+        <method name="notifyWindowFocused">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window has been focused (called from KWin effect). Updates autotile engine focus tracking and window-to-screen mapping."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID that gained focus."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located (for window-to-screen mapping update)."/>
+            </arg>
+        </method>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Ratio/Count Adjustment
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="increaseMasterRatio">
+            <annotation name="org.gtk.GDBus.DocString" value="Increase the master area ratio by delta (default 5%)."/>
+            <arg name="delta" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Amount to increase (e.g., 0.05 for 5%)."/>
+            </arg>
+        </method>
+
+        <method name="decreaseMasterRatio">
+            <annotation name="org.gtk.GDBus.DocString" value="Decrease the master area ratio by delta (default 5%)."/>
+            <arg name="delta" type="d" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Amount to decrease (e.g., 0.05 for 5%)."/>
+            </arg>
+        </method>
+
+        <method name="increaseMasterCount">
+            <annotation name="org.gtk.GDBus.DocString" value="Increase the number of master windows by one."/>
+        </method>
+
+        <method name="decreaseMasterCount">
+            <annotation name="org.gtk.GDBus.DocString" value="Decrease the number of master windows by one."/>
+        </method>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Algorithm Query
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="availableAlgorithms">
+            <annotation name="org.gtk.GDBus.DocString" value="Get list of available tiling algorithm IDs."/>
+            <arg name="algorithms" type="as" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="List of algorithm IDs (e.g., master-stack, bsp, columns)."/>
+            </arg>
+        </method>
+
+        <method name="algorithmInfo">
+            <annotation name="org.gtk.GDBus.DocString" value="Get information about a specific algorithm."/>
+            <arg name="algorithmId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Algorithm ID to query."/>
+            </arg>
+            <arg name="info" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object with id, name, description, icon."/>
+            </arg>
+        </method>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Signals
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <signal name="enabledChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when autotiling enabled state changes (any screen active/inactive)."/>
+            <arg name="enabled" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="New enabled state."/>
+            </arg>
+        </signal>
+
+        <signal name="autotileScreensChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the set of screens using autotile changes."/>
+            <arg name="screenNames" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="List of screen names currently using autotile."/>
+            </arg>
+        </signal>
+
+        <signal name="algorithmChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the tiling algorithm changes."/>
+            <arg name="algorithmId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="New algorithm ID."/>
+            </arg>
+        </signal>
+
+        <signal name="tilingChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when tiling layout changes for a screen."/>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen that was retiled."/>
+            </arg>
+        </signal>
+
+        <signal name="windowsTileRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch). JSON array of {windowId,x,y,width,height}."/>
+            <arg name="tileRequestsJson" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of tile requests, each with windowId, x, y, width, height."/>
+            </arg>
+        </signal>
+
+        <signal name="focusWindowRequested">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window should be focused by the KWin effect."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to focus."/>
+            </arg>
+        </signal>
+
+        <signal name="configChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when any autotile configuration property changes."/>
+        </signal>
+
+        <signal name="monocleVisibilityChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when monocle mode needs to show/hide windows."/>
+            <arg name="focusedWindowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to show (unminimize)."/>
+            </arg>
+            <arg name="windowsToHide" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs to hide (minimize)."/>
+            </arg>
+        </signal>
+
+        <signal name="windowsReleasedFromTiling">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows are released from autotile management (e.g., screen removed from autotile). KWin effect should restore these windows to pre-autotile geometry."/>
+            <arg name="windowIds" type="as">
+                <annotation name="org.gtk.GDBus.DocString" value="Window IDs no longer under autotile control."/>
+            </arg>
+        </signal>
+
+        <!-- ═══════════════════════════════════════════════════════════════════════════
+             Window Event Notifications (called by KWin effect)
+             ═══════════════════════════════════════════════════════════════════════════ -->
+
+        <method name="windowOpened">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was opened (called from KWin effect)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window appeared."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum width in pixels (0 if unconstrained)."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window minimum height in pixels (0 if unconstrained)."/>
+            </arg>
+        </method>
+
+        <method name="windowClosed">
+            <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was closed (called from KWin effect)."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+        </method>
+
+        <method name="floatWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Float a window from autotile management (drag-to-float). Marks the window as floating and retiles remaining windows."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to float from autotiling."/>
+            </arg>
+        </method>
+    </interface>
+</node>

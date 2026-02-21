@@ -139,6 +139,16 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     // Layout Picker shortcut
     connect(m_settings, &Settings::layoutPickerShortcutChanged, this, &ShortcutManager::updateLayoutPickerShortcut);
 
+    // Autotile shortcut settings connections
+    connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
+    connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this, &ShortcutManager::updateFocusMasterShortcut);
+    connect(m_settings, &Settings::autotileSwapMasterShortcutChanged, this, &ShortcutManager::updateSwapMasterShortcut);
+    connect(m_settings, &Settings::autotileIncMasterRatioShortcutChanged, this, &ShortcutManager::updateIncMasterRatioShortcut);
+    connect(m_settings, &Settings::autotileDecMasterRatioShortcutChanged, this, &ShortcutManager::updateDecMasterRatioShortcut);
+    connect(m_settings, &Settings::autotileIncMasterCountShortcutChanged, this, &ShortcutManager::updateIncMasterCountShortcut);
+    connect(m_settings, &Settings::autotileDecMasterCountShortcutChanged, this, &ShortcutManager::updateDecMasterCountShortcut);
+    connect(m_settings, &Settings::autotileRetileShortcutChanged, this, &ShortcutManager::updateRetileShortcut);
+
     // Connect to general settingsChanged signal to handle KCM reload
     // This is necessary because Settings::load() only emits settingsChanged(),
     // not individual shortcut signals. When KCM saves and calls reloadSettings(),
@@ -168,6 +178,7 @@ void ShortcutManager::registerShortcuts()
     setupResnapToNewLayoutShortcut();
     setupSnapAllWindowsShortcut();
     setupLayoutPickerShortcut();
+    setupAutotileShortcuts();
 }
 
 void ShortcutManager::updateShortcuts()
@@ -226,6 +237,16 @@ void ShortcutManager::updateShortcuts()
 
     // Layout Picker shortcut
     updateLayoutPickerShortcut();
+
+    // Autotile shortcuts
+    updateToggleAutotileShortcut();
+    updateFocusMasterShortcut();
+    updateSwapMasterShortcut();
+    updateIncMasterRatioShortcut();
+    updateDecMasterRatioShortcut();
+    updateIncMasterCountShortcut();
+    updateDecMasterCountShortcut();
+    updateRetileShortcut();
 }
 
 void ShortcutManager::unregisterShortcuts()
@@ -283,6 +304,16 @@ void ShortcutManager::unregisterShortcuts()
 
     // Layout Picker action
     DELETE_SHORTCUT(m_layoutPickerAction);
+
+    // Autotile actions
+    DELETE_SHORTCUT(m_toggleAutotileAction);
+    DELETE_SHORTCUT(m_focusMasterAction);
+    DELETE_SHORTCUT(m_swapMasterAction);
+    DELETE_SHORTCUT(m_incMasterRatioAction);
+    DELETE_SHORTCUT(m_decMasterRatioAction);
+    DELETE_SHORTCUT(m_incMasterCountAction);
+    DELETE_SHORTCUT(m_decMasterCountAction);
+    DELETE_SHORTCUT(m_retileAction);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -784,6 +815,58 @@ void ShortcutManager::updateLayoutPickerShortcut()
 {
     UPDATE_SHORTCUT(m_layoutPickerAction, layoutPickerShortcut);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Autotile Shortcut Setup
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void ShortcutManager::setupAutotileShortcuts()
+{
+    SETUP_SHORTCUT(m_toggleAutotileAction, "Toggle Autotile", "PlasmaZones Toggle Autotile",
+                   autotileToggleShortcut, &ShortcutManager::onToggleAutotile);
+    SETUP_SHORTCUT(m_focusMasterAction, "Focus Master Window", "PlasmaZones Focus Master",
+                   autotileFocusMasterShortcut, &ShortcutManager::onFocusMaster);
+    SETUP_SHORTCUT(m_swapMasterAction, "Swap with Master", "PlasmaZones Swap Master",
+                   autotileSwapMasterShortcut, &ShortcutManager::onSwapWithMaster);
+    SETUP_SHORTCUT(m_incMasterRatioAction, "Increase Master Ratio", "PlasmaZones Inc Master Ratio",
+                   autotileIncMasterRatioShortcut, &ShortcutManager::onIncreaseMasterRatio);
+    SETUP_SHORTCUT(m_decMasterRatioAction, "Decrease Master Ratio", "PlasmaZones Dec Master Ratio",
+                   autotileDecMasterRatioShortcut, &ShortcutManager::onDecreaseMasterRatio);
+    SETUP_SHORTCUT(m_incMasterCountAction, "Increase Master Count", "PlasmaZones Inc Master Count",
+                   autotileIncMasterCountShortcut, &ShortcutManager::onIncreaseMasterCount);
+    SETUP_SHORTCUT(m_decMasterCountAction, "Decrease Master Count", "PlasmaZones Dec Master Count",
+                   autotileDecMasterCountShortcut, &ShortcutManager::onDecreaseMasterCount);
+    SETUP_SHORTCUT(m_retileAction, "Retile Windows", "PlasmaZones Retile",
+                   autotileRetileShortcut, &ShortcutManager::onRetile);
+
+    qCInfo(lcShortcuts) << "Autotile shortcuts registered";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Autotile Slot Handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void ShortcutManager::onToggleAutotile() { Q_EMIT toggleAutotileRequested(); }
+void ShortcutManager::onFocusMaster() { Q_EMIT focusMasterRequested(); }
+void ShortcutManager::onSwapWithMaster() { Q_EMIT swapWithMasterRequested(); }
+void ShortcutManager::onIncreaseMasterRatio() { Q_EMIT increaseMasterRatioRequested(); }
+void ShortcutManager::onDecreaseMasterRatio() { Q_EMIT decreaseMasterRatioRequested(); }
+void ShortcutManager::onIncreaseMasterCount() { Q_EMIT increaseMasterCountRequested(); }
+void ShortcutManager::onDecreaseMasterCount() { Q_EMIT decreaseMasterCountRequested(); }
+void ShortcutManager::onRetile() { Q_EMIT retileRequested(); }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Autotile Update Shortcut Methods
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void ShortcutManager::updateToggleAutotileShortcut() { UPDATE_SHORTCUT(m_toggleAutotileAction, autotileToggleShortcut); }
+void ShortcutManager::updateFocusMasterShortcut() { UPDATE_SHORTCUT(m_focusMasterAction, autotileFocusMasterShortcut); }
+void ShortcutManager::updateSwapMasterShortcut() { UPDATE_SHORTCUT(m_swapMasterAction, autotileSwapMasterShortcut); }
+void ShortcutManager::updateIncMasterRatioShortcut() { UPDATE_SHORTCUT(m_incMasterRatioAction, autotileIncMasterRatioShortcut); }
+void ShortcutManager::updateDecMasterRatioShortcut() { UPDATE_SHORTCUT(m_decMasterRatioAction, autotileDecMasterRatioShortcut); }
+void ShortcutManager::updateIncMasterCountShortcut() { UPDATE_SHORTCUT(m_incMasterCountAction, autotileIncMasterCountShortcut); }
+void ShortcutManager::updateDecMasterCountShortcut() { UPDATE_SHORTCUT(m_decMasterCountAction, autotileDecMasterCountShortcut); }
+void ShortcutManager::updateRetileShortcut() { UPDATE_SHORTCUT(m_retileAction, autotileRetileShortcut); }
 
 // Undefine macros to keep them local to this file
 #undef SETUP_SHORTCUT

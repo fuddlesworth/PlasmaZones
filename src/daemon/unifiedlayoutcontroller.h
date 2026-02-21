@@ -10,6 +10,7 @@
 
 namespace PlasmaZones {
 
+class AutotileEngine;
 class LayoutManager;
 class Settings;
 class Layout;
@@ -38,7 +39,8 @@ class UnifiedLayoutController : public QObject
     Q_PROPERTY(QString currentLayoutId READ currentLayoutId)
 
 public:
-    explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings, QObject* parent = nullptr);
+    explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
+                                     AutotileEngine* autotileEngine = nullptr, QObject* parent = nullptr);
     ~UnifiedLayoutController() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -136,11 +138,26 @@ public:
      */
     void setCurrentActivity(const QString& activity);
 
+    /**
+     * @brief Set which layout types to include in cycling/shortcuts
+     *
+     * In manual mode: only manual layouts. In autotile mode: only dynamic layouts.
+     * The autotile feature gate controls whether dynamic layouts are ever visible.
+     */
+    void setLayoutFilter(bool includeManual, bool includeAutotile);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is applied (for OSD)
      */
     void layoutApplied(Layout* layout);
+
+    /**
+     * @brief Emitted when an autotile algorithm is applied
+     * @param algorithmName Display name of the algorithm
+     * @param windowCount Number of currently tiled windows (0 if unknown)
+     */
+    void autotileApplied(const QString& algorithmName, int windowCount);
 
 private:
     /**
@@ -160,11 +177,14 @@ private:
 
     QPointer<LayoutManager> m_layoutManager;
     QPointer<Settings> m_settings;
+    QPointer<AutotileEngine> m_autotileEngine;
 
     QString m_currentLayoutId;
     QString m_currentScreenName;
     int m_currentVirtualDesktop = 1;
     QString m_currentActivity;
+    bool m_includeManualLayouts = true;
+    bool m_includeAutotileLayouts = false;
     mutable QVector<UnifiedLayoutEntry> m_cachedLayouts;
     mutable bool m_cacheValid = false;
 };

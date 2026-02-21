@@ -135,6 +135,9 @@ class EditorController : public QObject
     Q_PROPERTY(bool activitiesAvailable READ activitiesAvailable NOTIFY activitiesAvailableChanged)
     Q_PROPERTY(QVariantList availableActivities READ availableActivities NOTIFY availableActivitiesChanged)
 
+    // Preview mode (read-only view for autotile layouts)
+    Q_PROPERTY(bool previewMode READ previewMode NOTIFY previewModeChanged)
+
     // Clipboard operations
     Q_PROPERTY(bool canPaste READ canPaste NOTIFY canPasteChanged)
     Q_PROPERTY(UndoController* undoController READ undoController CONSTANT)
@@ -142,6 +145,10 @@ class EditorController : public QObject
 public:
     explicit EditorController(QObject* parent = nullptr);
     ~EditorController() override;
+
+    // Preview mode
+    bool previewMode() const;
+    void setPreviewMode(bool preview);
 
     // Property getters
     QString layoutId() const;
@@ -630,6 +637,9 @@ Q_SIGNALS:
     void zoneNameValidationError(const QString& zoneId, const QString& error);
     void zoneNumberValidationError(const QString& zoneId, const QString& error);
 
+    // Preview mode signal
+    void previewModeChanged();
+
     // Clipboard signals
     void canPasteChanged();
     void clipboardOperationFailed(const QString& error);
@@ -723,6 +733,7 @@ private:
     QStringList m_selectedZoneIds; // Multi-selection: list of selected zone IDs
     bool m_hasUnsavedChanges = false;
     bool m_isNewLayout = false;
+    bool m_previewMode = false;
 
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;

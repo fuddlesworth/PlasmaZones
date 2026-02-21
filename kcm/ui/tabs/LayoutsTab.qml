@@ -48,11 +48,56 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumHeight: root.constants.layoutListMinHeight
-        model: kcm.layouts
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         focus: true
         keyNavigationEnabled: true
+
+        // ── Imperative model management ─────────────────────────────────
+        // Reactive `model: kcm.layouts` bindings cause scroll resets because
+        // every layoutsChanged() creates a new QVariantList, which Qt treats
+        // as a completely new model — destroying all delegates and resetting
+        // contentY to 0. Instead we compare IDs before swapping.
+        model: []
+
+        function _extractIds(list) {
+            let ids = []
+            for (let i = 0; i < list.length; i++) {
+                ids.push(String(list[i].id ?? ""))
+            }
+            return ids
+        }
+
+        function rebuildModel() {
+            let newLayouts = kcm?.layouts ?? []
+
+            // Compare by ID list — skip swap if order hasn't changed
+            let oldIds = _extractIds(model)
+            let newIds = _extractIds(newLayouts)
+            if (oldIds.length === newIds.length) {
+                let same = true
+                for (let i = 0; i < oldIds.length; i++) {
+                    if (oldIds[i] !== newIds[i]) { same = false; break }
+                }
+                if (same) {
+                    // IDs unchanged — update individual entries in-place so
+                    // delegates refresh zone previews without scroll reset.
+                    // JS array assignment to model[i] does NOT reset scroll.
+                    for (let i = 0; i < newLayouts.length; i++) {
+                        model[i] = newLayouts[i]
+                    }
+                    return
+                }
+            }
+
+            // ID list actually changed (add/remove/reorder) — full swap
+            model = newLayouts
+        }
+
+        Connections {
+            target: root.kcm ?? null
+            function onLayoutsChanged() { layoutGrid.rebuildModel() }
+        }
 
         // Responsive cell sizing - aim for 2-4 columns
         readonly property real minCellWidth: Kirigami.Units.gridUnit * 14
@@ -74,10 +119,10 @@ ColumnLayout {
 
         // Selection by ID helper
         function selectLayoutById(layoutId) {
-            if (!layoutId || !kcm.layouts) return false
+            if (!layoutId || !model) return false
 
-            for (let i = 0; i < kcm.layouts.length; i++) {
-                if (kcm.layouts[i] && String(kcm.layouts[i].id) === String(layoutId)) {
+            for (let i = 0; i < model.length; i++) {
+                if (model[i] && String(model[i].id) === String(layoutId)) {
                     currentIndex = i
                     positionViewAtIndex(i, GridView.Contain)
                     return true
@@ -86,26 +131,24 @@ ColumnLayout {
             return false
         }
 
-        // Sync with kcm.layoutToSelect
         Connections {
             target: kcm
             function onLayoutToSelectChanged() {
-                if (kcm.layoutToSelect) {
-                    Qt.callLater(() => layoutGrid.selectLayoutById(kcm.layoutToSelect))
+                // Capture value immediately — C++ clears it after emission
+                let layoutId = kcm.layoutToSelect
+                if (layoutId) {
+                    Qt.callLater(() => layoutGrid.selectLayoutById(layoutId))
                 }
             }
         }
 
-        onCountChanged: {
-            if (kcm.layoutToSelect && count > 0) {
-                selectLayoutById(kcm.layoutToSelect)
-            }
-        }
-
         Component.onCompleted: {
+            rebuildModel()
+            // Capture value — may be cleared by the time Qt.callLater runs
+            let layoutId = kcm.layoutToSelect
             Qt.callLater(() => {
-                if (kcm.layoutToSelect && count > 0) {
-                    selectLayoutById(kcm.layoutToSelect)
+                if (layoutId && count > 0) {
+                    selectLayoutById(layoutId)
                 }
             })
         }

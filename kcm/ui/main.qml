@@ -63,8 +63,11 @@ KCM.AbstractKCM {
         readonly property int opacitySliderMax: 100
         readonly property int borderWidthMax: 10
         readonly property int borderRadiusMax: 50
-        readonly property int paddingMax: 100
-        readonly property int thresholdMax: 200
+        readonly property int paddingMax: 50
+        readonly property int thresholdMax: 100
+        readonly property int zonePaddingMax: 50
+        readonly property int outerGapMax: 50
+        readonly property int adjacentThresholdMax: 100
         readonly property int zoneSelectorTriggerMax: 200
         readonly property int zoneSelectorPreviewWidthMin: 80
         readonly property int zoneSelectorPreviewWidthMax: 400
@@ -76,11 +79,17 @@ KCM.AbstractKCM {
         readonly property int quickLayoutSlotCount: 9
 
         // Layout type ratios (matching C++ Defaults)
-        readonly property real priorityGridMainRatio: 0.67
-        readonly property real priorityGridSecondaryRatio: 0.33
-        readonly property real focusSideRatio: 0.15
-        readonly property real focusMainRatio: 0.70
+        readonly property real priorityGridMainRatio: 0.667
+        readonly property real priorityGridSecondaryRatio: 0.333
+        readonly property real focusSideRatio: 0.2
+        readonly property real focusMainRatio: 0.6
 
+        // Autotiling gap limits
+        readonly property int autotileGapMax: 50
+
+        // Autotiling algorithm preview dimensions
+        readonly property int algorithmPreviewWidth: 280
+        readonly property int algorithmPreviewHeight: 160
     }
 
     header: ColumnLayout {
@@ -163,6 +172,11 @@ KCM.AbstractKCM {
                 width: tabBar.availableWidth / tabBar.count
                 text: i18n("Zones")
                 icon.name: "view-split-left-right"
+            }
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("Tiling")
+                icon.name: "window-duplicate"
             }
             TabButton {
                 width: tabBar.availableWidth / tabBar.count
@@ -284,21 +298,29 @@ KCM.AbstractKCM {
             }
         }
 
-        // TAB 5: DISPLAY (Zone Selector)
+        // TAB 5: TILING (automatic window tiling)
+        AutotilingTab {
+            id: autotilingTab
+            kcm: root.kcmModule
+            constants: constants
+            isCurrentTab: stackLayout.currentIndex === 4
+        }
+
+        // TAB 6: DISPLAY (Zone Selector)
         DisplayTab {
             kcm: root.kcmModule
             constants: constants
             screenAspectRatio: root.screenAspectRatio
-            isCurrentTab: stackLayout.currentIndex === 4
+            isCurrentTab: stackLayout.currentIndex === 5
         }
 
-        // TAB 6: EXCLUSIONS
+        // TAB 7: EXCLUSIONS
         ExclusionsTab {
             kcm: root.kcmModule
             constants: constants
         }
 
-        // TAB 7: ABOUT
+        // TAB 8: ABOUT
         AboutTab {
             kcm: root.kcmModule
             constants: constants

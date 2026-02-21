@@ -56,3 +56,98 @@ target_link_libraries(test_session_persistence
 
 add_test(NAME SessionPersistence COMMAND test_session_persistence)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tiling Algorithm Tests
+# Tests for all autotile algorithms (MasterStack, Columns, BSP, gaps, edge cases)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_tiling_algorithms
+    test_tiling_algorithms.cpp
+)
+
+target_link_libraries(test_tiling_algorithms
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME TilingAlgorithms COMMAND test_tiling_algorithms)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Algorithm Registry Tests
+# Tests for singleton registry, built-in registration, signals
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_algorithm_registry
+    test_algorithm_registry.cpp
+)
+
+target_link_libraries(test_algorithm_registry
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME AlgorithmRegistry COMMAND test_algorithm_registry)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Autotile Engine Tests
+# Tests for enable/disable, algorithm selection, state, master count
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_autotile_engine
+    test_autotile_engine.cpp
+)
+
+target_link_libraries(test_autotile_engine
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME AutotileEngine COMMAND test_autotile_engine)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tiling State Tests
+# Tests for TilingState window management, serialization, floating, focus
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_tiling_state
+    test_tiling_state.cpp
+)
+
+target_link_libraries(test_tiling_state
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME TilingState COMMAND test_tiling_state)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Geometry Utils Tests
+# Tests for enforceWindowMinSizes(), removeZoneOverlaps() (chain stealing, gaps)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_geometry_utils
+    test_geometry_utils.cpp
+)
+
+target_link_libraries(test_geometry_utils
+    PRIVATE
+        Qt6::Test
+        Qt6::Core
+        plasmazones_core
+)
+
+add_test(NAME GeometryUtils COMMAND test_geometry_utils)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Headless environment support
+# Set QT_QPA_PLATFORM=offscreen so tests run in CI containers without a display
+# ═══════════════════════════════════════════════════════════════════════════════
+set_tests_properties(
+    WindowIdentity WindowTracking SessionPersistence
+    TilingAlgorithms AlgorithmRegistry AutotileEngine
+    TilingState GeometryUtils
+    PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)

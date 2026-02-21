@@ -322,6 +322,7 @@ endif()
 
 # Install D-Bus interface XMLs (one per interface)
 install(FILES
+    dbus/org.plasmazones.Autotile.xml
     dbus/org.plasmazones.LayoutManager.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml

@@ -8,6 +8,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <atomic>
 #include <memory>
@@ -74,6 +75,25 @@ public:
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
+    /**
+     * @brief Set which layout types appear in the zone picker
+     *
+     * When autotile mode is active, show only dynamic layouts.
+     * When manual mode is active, show only manual layouts.
+     * The autotile feature gate (KCM setting) controls whether dynamic layouts
+     * are ever visible.
+     */
+    void setLayoutFilter(bool includeManual, bool includeAutotile);
+
+    /**
+     * @brief Set screens to exclude from overlay display
+     *
+     * Used to suppress the overlay on autotile-managed screens in mixed
+     * multi-monitor mode. The overlay will not be shown or updated on
+     * screens whose names appear in the set.
+     */
+    void setExcludedScreens(const QSet<QString>& screenNames);
+
     // Screen management
     void setupForScreen(QScreen* screen);
     void removeScreen(QScreen* screen);
@@ -88,6 +108,9 @@ public:
 
     // Mouse position for shader effects
     void updateMousePosition(int cursorX, int cursorY) override;
+
+    // Filtered layout count for trigger edge computation
+    int visibleLayoutCount(const QString& screenName) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -213,6 +236,8 @@ private:
     QString m_lastNavigationAction;
     QString m_lastNavigationReason;
     QElapsedTimer m_lastNavigationTime;
+    // When layout OSD was last shown (suppress resnap OSD when toggling autotile→zones)
+    QElapsedTimer m_lastLayoutOsdTime;
 
     void createZoneSelectorWindow(QScreen* screen);
     void destroyZoneSelectorWindow(QScreen* screen);
@@ -312,6 +337,13 @@ private:
 
     // Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
+
+    // Layout filter: which types to include in zone picker (set by Daemon)
+    bool m_includeManualLayouts = true;
+    bool m_includeAutotileLayouts = false;
+
+    // Screens excluded from overlay display (autotile-managed screens)
+    QSet<QString> m_excludedScreens;
 };
 
 } // namespace PlasmaZones

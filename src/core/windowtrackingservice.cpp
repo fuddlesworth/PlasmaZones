@@ -250,6 +250,59 @@ std::optional<QRect> WindowTrackingService::validatedPreSnapGeometry(const QStri
     return adjustGeometryToScreen(rect);
 }
 
+void WindowTrackingService::storePreAutotileGeometry(const QString& windowId, const QRect& geometry)
+{
+    if (windowId.isEmpty() || !geometry.isValid()) {
+        return;
+    }
+    m_preAutotileGeometries[windowId] = geometry;
+    QString stableId = Utils::extractStableId(windowId);
+    if (stableId != windowId) {
+        m_preAutotileGeometries[stableId] = geometry;
+    }
+}
+
+void WindowTrackingService::clearPreAutotileGeometry(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_preAutotileGeometries.remove(windowId);
+    QString stableId = Utils::extractStableId(windowId);
+    if (stableId != windowId) {
+        m_preAutotileGeometries.remove(stableId);
+    }
+}
+
+std::optional<QRect> WindowTrackingService::validatedPreSnapOrAutotileGeometry(const QString& windowId) const
+{
+    auto geo = validatedPreSnapGeometry(windowId);
+    if (geo) {
+        return geo;
+    }
+    if (windowId.isEmpty()) {
+        return std::nullopt;
+    }
+    QRect rect;
+    if (m_preAutotileGeometries.contains(windowId)) {
+        rect = m_preAutotileGeometries.value(windowId);
+    } else {
+        QString stableId = Utils::extractStableId(windowId);
+        if (stableId != windowId && m_preAutotileGeometries.contains(stableId)) {
+            rect = m_preAutotileGeometries.value(stableId);
+        } else {
+            return std::nullopt;
+        }
+    }
+    if (!rect.isValid() || rect.width() <= 0 || rect.height() <= 0) {
+        return std::nullopt;
+    }
+    if (isGeometryOnScreen(rect)) {
+        return rect;
+    }
+    return adjustGeometryToScreen(rect);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Floating Window State
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -919,7 +972,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
 
-    return geoF.toRect();
+    return GeometryUtils::snapToRect(geoF);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenName) const
@@ -1051,7 +1104,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
             bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
                 targetZone, screen, zonePadding, outerGaps, useAvail);
-            QRect geo = geoF.toRect();
+            QRect geo = GeometryUtils::snapToRect(geoF);
 
             if (geo.isValid()) {
                 RotationEntry entry;
@@ -1122,6 +1175,50 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
     return result;
 }
 
+QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& screenFilter) const
+{
+    QVector<RotationEntry> result;
+
+    for (auto it = m_windowZoneAssignments.constBegin();
+         it != m_windowZoneAssignments.constEnd(); ++it) {
+        const QString& windowId = it.key();
+        const QStringList& zoneIds = it.value();
+        if (zoneIds.isEmpty()) {
+            continue;
+        }
+        if (isWindowFloating(windowId)) {
+            continue;
+        }
+
+        QString screenName = m_windowScreenAssignments.value(windowId);
+        if (!screenFilter.isEmpty() && screenName != screenFilter) {
+            continue;
+        }
+
+        QString stableId = Utils::extractStableId(windowId);
+        if (stableId.isEmpty()) {
+            continue;
+        }
+
+        QRect geo = (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName)
+                                          : zoneGeometry(zoneIds.first(), screenName);
+        if (!geo.isValid()) {
+            continue;
+        }
+
+        RotationEntry entry;
+        entry.windowId = stableId;
+        entry.sourceZoneId = QString();
+        entry.targetZoneId = zoneIds.first();
+        entry.targetGeometry = geo;
+        result.append(entry);
+    }
+
+    qCInfo(lcCore) << "Resnap from current assignments:" << result.size() << "windows"
+                   << (screenFilter.isEmpty() ? QStringLiteral("(all screens)") : QStringLiteral("(screen: %1)").arg(screenFilter));
+    return result;
+}
+
 QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStringList& windowIds,
                                                                       const QString& screenName) const
 {
@@ -1175,7 +1272,7 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
         bool useAvail = !(layout && layout->useFullScreenGeometry());
         QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
             targetZone, screen, zonePadding, outerGaps, useAvail);
-        QRect geo = geoF.toRect();
+        QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
             RotationEntry entry;

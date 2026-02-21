@@ -505,6 +505,45 @@
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Autotile Shortcuts - separate group matching runtime "AutotileShortcuts" group
+       in settings.cpp load/save (not KGlobalAccel)
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="AutotileShortcuts">
+    <entry name="ToggleAutotileShortcut" type="String">
+      <label>Shortcut to toggle auto-tiling on/off</label>
+      <default>Meta+Shift+T</default>
+    </entry>
+    <entry name="RetileShortcut" type="String">
+      <label>Shortcut to retile all windows</label>
+      <default>Meta+Shift+R</default>
+    </entry>
+    <entry name="FocusMasterShortcut" type="String">
+      <label>Shortcut to focus master window</label>
+      <default>Meta+Shift+M</default>
+    </entry>
+    <entry name="SwapWithMasterShortcut" type="String">
+      <label>Shortcut to swap focused window with master</label>
+      <default>Meta+Shift+Return</default>
+    </entry>
+    <entry name="IncreaseMasterCountShortcut" type="String">
+      <label>Shortcut to increase master count</label>
+      <default>Meta+Shift+]</default>
+    </entry>
+    <entry name="DecreaseMasterCountShortcut" type="String">
+      <label>Shortcut to decrease master count</label>
+      <default>Meta+Shift+[</default>
+    </entry>
+    <entry name="IncreaseMasterRatioShortcut" type="String">
+      <label>Shortcut to increase master area ratio</label>
+      <default>Meta+Shift+L</default>
+    </entry>
+    <entry name="DecreaseMasterRatioShortcut" type="String">
+      <label>Shortcut to decrease master area ratio</label>
+      <default>Meta+Shift+H</default>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
        Editor Settings (local shortcuts - not KGlobalAccel)
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="Editor">
@@ -658,12 +697,106 @@
   </group>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════════
-       Mode Tracking (last-used manual layout)
+       Autotiling Settings
+       ═══════════════════════════════════════════════════════════════════════════════ -->
+  <group name="Autotiling">
+    <entry name="AutotileEnabled" type="Bool">
+      <label>Enable automatic window tiling</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileAlgorithm" type="String">
+      <label>Active tiling algorithm (master-stack, bsp, columns, rows, fibonacci, monocle, three-column)</label>
+      <default>master-stack</default>
+    </entry>
+    <entry name="AutotileSplitRatio" type="Double">
+      <label>Master/stack split ratio (0.1-0.9)</label>
+      <default>0.6</default>
+      <min>0.1</min>
+      <max>0.9</max>
+    </entry>
+    <entry name="AutotileMasterCount" type="Int">
+      <label>Number of windows in master area (1-5)</label>
+      <default>1</default>
+      <min>1</min>
+      <max>5</max>
+    </entry>
+    <entry name="AutotileInnerGap" type="Int">
+      <label>Gap between tiled windows in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="AutotileOuterGap" type="Int">
+      <label>Gap at screen edges in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="AutotileSmartGaps" type="Bool">
+      <label>Remove gaps when only one window is tiled</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileFocusNewWindows" type="Bool">
+      <label>Automatically focus newly opened windows</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileInsertPosition" type="Int">
+      <label>Where to insert new windows (0=End, 1=AfterFocused, 2=AsMaster)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>2</max>
+    </entry>
+    <entry name="AutotileRespectMinimumSize" type="Bool">
+      <label>Respect minimum window size when tiling</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileFocusFollowsMouse" type="Bool">
+      <label>Focus follows mouse in tiled mode</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileMonocleHideOthers" type="Bool">
+      <label>Hide other windows in monocle mode</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileMonocleShowTabs" type="Bool">
+      <label>Show tab bar in monocle mode</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileMaxWindows" type="Int">
+      <label>Maximum windows for autotiling algorithm (also controls preview and zone count)</label>
+      <default>6</default>
+      <min>1</min>
+      <max>12</max>
+    </entry>
+    <entry name="AutotileAnimationsEnabled" type="Bool">
+      <label>Enable smooth animations when tiling windows</label>
+      <default>true</default>
+    </entry>
+    <entry name="AutotileAnimationDuration" type="Int">
+      <label>Duration of tiling animations in milliseconds</label>
+      <default>150</default>
+      <min>50</min>
+      <max>500</max>
+    </entry>
+  </group>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════════
+       Mode Tracking (for smart toggle between manual and autotile modes)
        ═══════════════════════════════════════════════════════════════════════════════ -->
   <group name="ModeTracking">
     <entry name="LastManualLayoutId" type="String">
       <label>UUID of the last manually selected layout</label>
       <default></default>
+    </entry>
+    <entry name="LastTilingMode" type="Int">
+      <label>Last active tiling mode (0=Manual, 1=Autotile)</label>
+      <default>0</default>
+      <min>0</min>
+      <max>1</max>
+    </entry>
+    <entry name="LastAutotileAlgorithm" type="String">
+      <label>Last used autotile algorithm ID</label>
+      <default>master-stack</default>
     </entry>
   </group>
 

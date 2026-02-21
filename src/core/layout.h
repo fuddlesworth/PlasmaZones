@@ -62,12 +62,13 @@ enum class LayoutType {
 };
 
 /**
- * @brief Category for layout type (manual zone-based layouts only)
+ * @brief Category for layout type
  *
- * QML Note: Passed as int to QML. Value: 0 = Manual
+ * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
  */
 enum class LayoutCategory {
-    Manual = 0   ///< Traditional zone-based layout
+    Manual = 0,    ///< Traditional zone-based layout
+    Autotile = 1   ///< Dynamic auto-tiling algorithm
 };
 
 /**

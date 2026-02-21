@@ -19,10 +19,11 @@ ToolBar {
     required property var editorController
     required property var confirmCloseDialog
     required property var editorWindow
+    required property bool previewMode
     // Expose addZoneButton for access from parent
     property alias addZoneButton: addZoneButtonItem
 
-    height: Kirigami.Units.gridUnit * 5 // Use theme spacing (40px - better visual balance)
+    height: Kirigami.Units.gridUnit * 5
     z: 100
 
     RowLayout {
@@ -36,6 +37,7 @@ ToolBar {
         RowLayout {
             id: zoneCreationSection
 
+            visible: !controlBar.previewMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
 
             // Add Zone button (exposed via alias)
@@ -128,7 +130,7 @@ ToolBar {
                     "group": i18nc("@title:group", "Special Layouts")
                 }]
 
-                Layout.preferredWidth: 200
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
                 Accessible.name: i18nc("@label", "Layout templates")
                 Accessible.description: i18nc("@info", "Apply a predefined layout template")
                 model: templateModel
@@ -182,6 +184,7 @@ ToolBar {
 
         // Visual separator
         Kirigami.Separator {
+            visible: !controlBar.previewMode
             Layout.fillHeight: true
             Layout.preferredWidth: 1
         }
@@ -192,6 +195,7 @@ ToolBar {
         RowLayout {
             id: snappingSection
 
+            visible: !controlBar.previewMode
             spacing: Kirigami.Units.gridUnit // Use theme spacing (8px - within section)
 
             // Edge snapping toggle - first in snapping section

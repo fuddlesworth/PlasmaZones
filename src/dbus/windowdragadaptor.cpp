@@ -20,6 +20,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/constants.h"
+#include "../autotile/AutotileEngine.h"
 
 namespace PlasmaZones {
 
@@ -189,7 +190,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
 
                 for (auto* zone : layout->zones()) {
                     QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
-                    QRect zoneRect = zoneGeom.toRect();
+                    QRect zoneRect = GeometryUtils::snapToRect(zoneGeom);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -238,6 +239,11 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
 {
     outScreen = screenAtPoint(x, y);
     if (!outScreen || (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(outScreen)))) {
+        return nullptr;
+    }
+
+    // Skip overlay and zone detection on autotile-managed screens
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(outScreen->name())) {
         return nullptr;
     }
 
@@ -361,9 +367,9 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
             m_currentZoneId = zonesToSnap.first()->id().toString();
             m_currentAdjacentZoneIds = zoneIds;
             m_isMultiZoneMode = (zonesToSnap.size() > 1);
-            m_currentMultiZoneGeometry = combinedGeom.toRect();
+            m_currentMultiZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
             if (zonesToSnap.size() == 1) {
-                m_currentZoneGeometry = combinedGeom.toRect();
+                m_currentZoneGeometry = GeometryUtils::snapToRect(combinedGeom);
             }
 
             // Highlight expanded zones (raycasted) so user sees what they are actually snapping to
@@ -417,7 +423,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
                 }
             }
 
-            m_currentMultiZoneGeometry = computeCombinedZoneGeometry(zonesToHighlight, screen, layout).toRect();
+            m_currentMultiZoneGeometry = GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout));
             m_zoneDetector->highlightZones(zonesToHighlight);
             m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
         }
@@ -436,7 +442,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geom =
                 GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps, useAvail);
-            m_currentZoneGeometry = geom.toRect();
+            m_currentZoneGeometry = GeometryUtils::snapToRect(geom);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {
@@ -572,7 +578,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     }
 
     // Emit zone geometry during drag (effect applies only on release; overlay uses for highlight)
-    // Only emit when geometry actually changes (per .cursorrules)
+    // Only emit when geometry actually changes
     QRect geom = m_isMultiZoneMode ? m_currentMultiZoneGeometry : m_currentZoneGeometry;
     if (geom.isValid()) {
         if (geom != m_lastEmittedZoneGeometry) {
@@ -642,6 +648,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // Release on a disabled monitor: do not snap to overlay zone (avoids snapping to a zone on another screen)
     bool useOverlayZone = true;
     if (releaseScreen && m_settings && m_settings->isMonitorDisabled(releaseScreenId)) {
+        useOverlayZone = false;
+    }
+
+    // Release on an autotile screen: do not snap to manual overlay zone.
+    // The autotile engine manages window placement on these screens; allowing a
+    // manual drag-snap would conflict with the engine's layout.
+    if (useOverlayZone && releaseScreen && m_autotileEngine
+        && m_autotileEngine->isAutotileScreen(releaseScreenName)) {
         useOverlayZone = false;
     }
 
@@ -944,7 +958,11 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
     const QRect screenGeom = screen->geometry();
-    const int layoutCount = m_layoutManager ? m_layoutManager->layouts().size() : 0;
+    // Use filtered layout count (matches what the zone selector popup actually displays)
+    // so the keep-visible zone matches the real popup dimensions
+    const int layoutCount = m_overlayService
+        ? m_overlayService->visibleLayoutCount(Utils::screenIdentifier(screen))
+        : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
 
     // Use shared layout computation (same code as OverlayService)
     const ZoneSelectorLayout selectorLayout = computeZoneSelectorLayout(config, screen, layoutCount);

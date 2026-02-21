@@ -72,7 +72,7 @@ Item {
     // Signals
     signal zoneHovered(int zoneIndex)
 
-    // Visual constants — grouped per .cursorrules
+    // Visual constants
     QtObject {
         id: style
 

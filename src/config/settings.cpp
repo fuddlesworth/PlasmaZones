@@ -18,6 +18,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
+#include "../autotile/AlgorithmRegistry.h"
 #include <climits> // For INT_MAX in readValidatedInt
 
 namespace PlasmaZones {
@@ -398,8 +399,8 @@ void Settings::setInactiveOpacity(qreal opacity)
 }
 
 // Border setters (clamped with min 0)
-SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, 0, INT_MAX)
-SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, 0, 10)
+SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, 0, 50)
 
 SETTINGS_SETTER(bool, EnableBlur, m_enableBlur, enableBlurChanged)
 SETTINGS_SETTER(const QString&, LabelFontFamily, m_labelFontFamily, labelFontFamilyChanged)
@@ -421,14 +422,14 @@ void Settings::setLabelFontSizeScale(qreal scale)
     }
 }
 
-SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, INT_MAX)
-SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, 50)
 SETTINGS_SETTER(bool, UsePerSideOuterGap, m_usePerSideOuterGap, usePerSideOuterGapChanged)
-SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, INT_MAX)
-SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, INT_MAX)
-SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, INT_MAX)
-SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, INT_MAX)
-SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 5, 100)
 SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, 10, 1000)
 SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
 SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, minimumZoneDisplaySizePxChanged, 1, 50)
@@ -476,8 +477,8 @@ void Settings::setDefaultLayoutId(const QString& layoutId)
 SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
 SETTINGS_SETTER(const QStringList&, ExcludedWindowClasses, m_excludedWindowClasses, excludedWindowClassesChanged)
 SETTINGS_SETTER(bool, ExcludeTransientWindows, m_excludeTransientWindows, excludeTransientWindowsChanged)
-SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged, 0, 1000)
-SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged, 0, 1000)
+SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged, 0, 2000)
+SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged, 0, 2000)
 
 // Zone Selector setters
 SETTINGS_SETTER(bool, ZoneSelectorEnabled, m_zoneSelectorEnabled, zoneSelectorEnabledChanged)
@@ -515,6 +516,98 @@ void Settings::setZoneSelectorSizeModeInt(int mode)
 }
 
 SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged, 1, 10)
+
+// Autotiling setters
+SETTINGS_SETTER(bool, AutotileEnabled, m_autotileEnabled, autotileEnabledChanged)
+
+void Settings::setAutotileAlgorithm(const QString& algorithm)
+{
+    // Validate algorithm ID against the algorithm registry (single source of truth)
+    QString validatedAlgorithm = algorithm;
+    if (!AlgorithmRegistry::instance()->algorithm(algorithm)) {
+        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
+                            << "- falling back to master-stack";
+        validatedAlgorithm = DBus::AutotileAlgorithm::MasterStack;
+    }
+
+    if (m_autotileAlgorithm != validatedAlgorithm) {
+        m_autotileAlgorithm = validatedAlgorithm;
+        Q_EMIT autotileAlgorithmChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileSplitRatio(qreal ratio)
+{
+    ratio = qBound(AutotileDefaults::MinSplitRatio, ratio, AutotileDefaults::MaxSplitRatio);
+    // Use 1.0+x trick since qFuzzyCompare fails near zero
+    if (!qFuzzyCompare(1.0 + m_autotileSplitRatio, 1.0 + ratio)) {
+        m_autotileSplitRatio = ratio;
+        Q_EMIT autotileSplitRatioChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileMasterCount(int count)
+{
+    count = qBound(AutotileDefaults::MinMasterCount, count, AutotileDefaults::MaxMasterCount);
+    if (m_autotileMasterCount != count) {
+        m_autotileMasterCount = count;
+        Q_EMIT autotileMasterCountChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileInnerGap(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileInnerGap != gap) {
+        m_autotileInnerGap = gap;
+        Q_EMIT autotileInnerGapChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileOuterGap(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileOuterGap != gap) {
+        m_autotileOuterGap = gap;
+        Q_EMIT autotileOuterGapChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+// Autotile bool setters
+SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
+SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
+SETTINGS_SETTER_CLAMPED(AutotileMaxWindows, m_autotileMaxWindows, autotileMaxWindowsChanged, AutotileDefaults::MinMaxWindows, AutotileDefaults::MaxMaxWindows)
+SETTINGS_SETTER(AutotileInsertPosition, AutotileInsertPosition, m_autotileInsertPosition, autotileInsertPositionChanged)
+
+void Settings::setAutotileInsertPositionInt(int position)
+{
+    if (position >= 0 && position <= 2) {
+        setAutotileInsertPosition(static_cast<AutotileInsertPosition>(position));
+    }
+}
+
+// Autotile shortcut setters
+SETTINGS_SETTER(const QString&, AutotileToggleShortcut, m_autotileToggleShortcut, autotileToggleShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut, autotileFocusMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileSwapMasterShortcut, m_autotileSwapMasterShortcut, autotileSwapMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileIncMasterRatioShortcut, m_autotileIncMasterRatioShortcut, autotileIncMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileDecMasterRatioShortcut, m_autotileDecMasterRatioShortcut, autotileDecMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileIncMasterCountShortcut, m_autotileIncMasterCountShortcut, autotileIncMasterCountShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileDecMasterCountShortcut, m_autotileDecMasterCountShortcut, autotileDecMasterCountShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut, autotileRetileShortcutChanged)
+
+// Autotile animation and visual setters
+SETTINGS_SETTER(bool, AutotileAnimationsEnabled, m_autotileAnimationsEnabled, autotileAnimationsEnabledChanged)
+SETTINGS_SETTER_CLAMPED(AutotileAnimationDuration, m_autotileAnimationDuration, autotileAnimationDurationChanged, 50, 500)
+SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
+SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
+SETTINGS_SETTER(bool, AutotileMonocleHideOthers, m_autotileMonocleHideOthers, autotileMonocleHideOthersChanged)
+SETTINGS_SETTER(bool, AutotileMonocleShowTabs, m_autotileMonocleShowTabs, autotileMonocleShowTabsChanged)
 
 // Shader Effects implementations
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
@@ -856,9 +949,9 @@ void Settings::load()
     }
     m_inactiveOpacity = inactiveOpacity;
 
-    // Validate dimensions (non-negative) with INT_MAX as upper bound
-    m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), 0, INT_MAX, "border width");
-    m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, INT_MAX, "border radius");
+    // Validate dimensions with .kcfg-defined bounds
+    m_borderWidth = readValidatedInt(appearance, "BorderWidth", ConfigDefaults::borderWidth(), 0, 10, "border width");
+    m_borderRadius = readValidatedInt(appearance, "BorderRadius", ConfigDefaults::borderRadius(), 0, 50, "border radius");
 
     m_enableBlur = appearance.readEntry(QLatin1String("EnableBlur"), ConfigDefaults::enableBlur());
     m_labelFontFamily = appearance.readEntry(QLatin1String("LabelFontFamily"), ConfigDefaults::labelFontFamily());
@@ -870,14 +963,14 @@ void Settings::load()
     m_labelFontStrikeout = appearance.readEntry(QLatin1String("LabelFontStrikeout"), ConfigDefaults::labelFontStrikeout());
 
     // Zones with validation (defaults from .kcfg via ConfigDefaults)
-    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, INT_MAX, "zone padding");
-    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, INT_MAX, "outer gap");
+    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, 50, "zone padding");
+    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, 50, "outer gap");
     m_usePerSideOuterGap = zones.readEntry(QLatin1String("UsePerSideOuterGap"), ConfigDefaults::usePerSideOuterGap());
-    m_outerGapTop = readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), 0, INT_MAX, "outer gap top");
-    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), 0, INT_MAX, "outer gap bottom");
-    m_outerGapLeft = readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), 0, INT_MAX, "outer gap left");
-    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), 0, INT_MAX, "outer gap right");
-    m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 0, INT_MAX, "adjacent threshold");
+    m_outerGapTop = readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), 0, 50, "outer gap top");
+    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), 0, 50, "outer gap bottom");
+    m_outerGapLeft = readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), 0, 50, "outer gap left");
+    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), 0, 50, "outer gap right");
+    m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 5, 100, "adjacent threshold");
 
     // Performance and behavior settings with validation
     m_pollIntervalMs = readValidatedInt(zones, "PollIntervalMs", ConfigDefaults::pollIntervalMs(), 10, 1000, "poll interval");
@@ -1069,6 +1162,65 @@ void Settings::load()
     m_layoutPickerShortcut =
         globalShortcuts.readEntry(QLatin1String("LayoutPickerShortcut"), ConfigDefaults::layoutPickerShortcut());
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Autotiling Settings (defaults from .kcfg via ConfigDefaults)
+    // Note: AutotileDefaults in constants.h still used for min/max bounds
+    // ═══════════════════════════════════════════════════════════════════════════
+    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
+
+    const bool oldAutotileEnabled = m_autotileEnabled;
+    m_autotileEnabled = autotiling.readEntry(QLatin1String("AutotileEnabled"), ConfigDefaults::autotileEnabled());
+    m_autotileAlgorithm = autotiling.readEntry(QLatin1String("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
+
+    qreal splitRatio = autotiling.readEntry(QLatin1String("AutotileSplitRatio"), ConfigDefaults::autotileSplitRatio());
+    if (splitRatio < AutotileDefaults::MinSplitRatio || splitRatio > AutotileDefaults::MaxSplitRatio) {
+        qCWarning(lcConfig) << "Invalid autotile split ratio:" << splitRatio << "clamping to valid range";
+        splitRatio = qBound(AutotileDefaults::MinSplitRatio, splitRatio, AutotileDefaults::MaxSplitRatio);
+    }
+    m_autotileSplitRatio = splitRatio;
+
+    int masterCount = autotiling.readEntry(QLatin1String("AutotileMasterCount"), ConfigDefaults::autotileMasterCount());
+    if (masterCount < AutotileDefaults::MinMasterCount || masterCount > AutotileDefaults::MaxMasterCount) {
+        qCWarning(lcConfig) << "Invalid autotile master count:" << masterCount << "clamping to valid range";
+        masterCount = qBound(AutotileDefaults::MinMasterCount, masterCount, AutotileDefaults::MaxMasterCount);
+    }
+    m_autotileMasterCount = masterCount;
+
+    m_autotileInnerGap = readValidatedInt(autotiling, "AutotileInnerGap", ConfigDefaults::autotileInnerGap(),
+                                          AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile inner gap");
+    m_autotileOuterGap = readValidatedInt(autotiling, "AutotileOuterGap", ConfigDefaults::autotileOuterGap(),
+                                          AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap");
+    m_autotileFocusNewWindows = autotiling.readEntry(QLatin1String("AutotileFocusNewWindows"), ConfigDefaults::autotileFocusNewWindows());
+    m_autotileSmartGaps = autotiling.readEntry(QLatin1String("AutotileSmartGaps"), ConfigDefaults::autotileSmartGaps());
+    m_autotileMaxWindows = readValidatedInt(autotiling, "AutotileMaxWindows", ConfigDefaults::autotileMaxWindows(),
+                                            AutotileDefaults::MinMaxWindows, AutotileDefaults::MaxMaxWindows, "autotile max windows");
+    m_autotileInsertPosition = static_cast<AutotileInsertPosition>(
+        readValidatedInt(autotiling, "AutotileInsertPosition", ConfigDefaults::autotileInsertPosition(), 0, 2, "autotile insert position"));
+
+    // Autotile Animation Settings
+    m_autotileAnimationsEnabled = autotiling.readEntry(QLatin1String("AutotileAnimationsEnabled"), ConfigDefaults::autotileAnimationsEnabled());
+    m_autotileAnimationDuration = readValidatedInt(autotiling, "AutotileAnimationDuration", ConfigDefaults::autotileAnimationDuration(), 50, 500, "autotile animation duration");
+
+    // Additional Autotiling Settings
+    m_autotileFocusFollowsMouse = autotiling.readEntry(QLatin1String("AutotileFocusFollowsMouse"), ConfigDefaults::autotileFocusFollowsMouse());
+    m_autotileRespectMinimumSize = autotiling.readEntry(QLatin1String("AutotileRespectMinimumSize"), ConfigDefaults::autotileRespectMinimumSize());
+    m_autotileMonocleHideOthers = autotiling.readEntry(QLatin1String("AutotileMonocleHideOthers"), ConfigDefaults::autotileMonocleHideOthers());
+    m_autotileMonocleShowTabs = autotiling.readEntry(QLatin1String("AutotileMonocleShowTabs"), ConfigDefaults::autotileMonocleShowTabs());
+
+    // Autotiling Shortcuts
+    // Note: These are stored in a separate "AutotileShortcuts" config group
+    // (not the .kcfg "GlobalShortcuts" group) for organizational clarity.
+    // Key names differ from .kcfg entry names; defaults come from ConfigDefaults.
+    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
+    m_autotileToggleShortcut = autotileShortcuts.readEntry(QLatin1String("ToggleShortcut"), ConfigDefaults::autotileToggleShortcut());
+    m_autotileFocusMasterShortcut = autotileShortcuts.readEntry(QLatin1String("FocusMasterShortcut"), ConfigDefaults::autotileFocusMasterShortcut());
+    m_autotileSwapMasterShortcut = autotileShortcuts.readEntry(QLatin1String("SwapMasterShortcut"), ConfigDefaults::autotileSwapMasterShortcut());
+    m_autotileIncMasterRatioShortcut = autotileShortcuts.readEntry(QLatin1String("IncMasterRatioShortcut"), ConfigDefaults::autotileIncMasterRatioShortcut());
+    m_autotileDecMasterRatioShortcut = autotileShortcuts.readEntry(QLatin1String("DecMasterRatioShortcut"), ConfigDefaults::autotileDecMasterRatioShortcut());
+    m_autotileIncMasterCountShortcut = autotileShortcuts.readEntry(QLatin1String("IncMasterCountShortcut"), ConfigDefaults::autotileIncMasterCountShortcut());
+    m_autotileDecMasterCountShortcut = autotileShortcuts.readEntry(QLatin1String("DecMasterCountShortcut"), ConfigDefaults::autotileDecMasterCountShortcut());
+    m_autotileRetileShortcut = autotileShortcuts.readEntry(QLatin1String("RetileShortcut"), ConfigDefaults::autotileRetileShortcut());
+
     // Apply system colors if enabled
     if (m_useSystemColors) {
         applySystemColorScheme();
@@ -1092,6 +1244,8 @@ void Settings::load()
         Q_EMIT audioSpectrumBarCountChanged();
     if (m_defaultLayoutId != oldDefaultLayoutId)
         Q_EMIT defaultLayoutIdChanged();
+    if (m_autotileEnabled != oldAutotileEnabled)
+        Q_EMIT autotileEnabledChanged();
 }
 
 void Settings::save()
@@ -1256,6 +1410,40 @@ void Settings::save()
     globalShortcuts.writeEntry(QLatin1String("SnapAllWindowsShortcut"), m_snapAllWindowsShortcut);
     globalShortcuts.writeEntry(QLatin1String("LayoutPickerShortcut"), m_layoutPickerShortcut);
 
+    // Autotiling Settings
+    KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
+    autotiling.writeEntry(QLatin1String("AutotileEnabled"), m_autotileEnabled);
+    autotiling.writeEntry(QLatin1String("AutotileAlgorithm"), m_autotileAlgorithm);
+    autotiling.writeEntry(QLatin1String("AutotileSplitRatio"), m_autotileSplitRatio);
+    autotiling.writeEntry(QLatin1String("AutotileMasterCount"), m_autotileMasterCount);
+    autotiling.writeEntry(QLatin1String("AutotileInnerGap"), m_autotileInnerGap);
+    autotiling.writeEntry(QLatin1String("AutotileOuterGap"), m_autotileOuterGap);
+    autotiling.writeEntry(QLatin1String("AutotileFocusNewWindows"), m_autotileFocusNewWindows);
+    autotiling.writeEntry(QLatin1String("AutotileSmartGaps"), m_autotileSmartGaps);
+    autotiling.writeEntry(QLatin1String("AutotileMaxWindows"), m_autotileMaxWindows);
+    autotiling.writeEntry(QLatin1String("AutotileInsertPosition"), static_cast<int>(m_autotileInsertPosition));
+
+    // Animation settings
+    autotiling.writeEntry(QLatin1String("AutotileAnimationsEnabled"), m_autotileAnimationsEnabled);
+    autotiling.writeEntry(QLatin1String("AutotileAnimationDuration"), m_autotileAnimationDuration);
+
+    // Additional settings
+    autotiling.writeEntry(QLatin1String("AutotileFocusFollowsMouse"), m_autotileFocusFollowsMouse);
+    autotiling.writeEntry(QLatin1String("AutotileRespectMinimumSize"), m_autotileRespectMinimumSize);
+    autotiling.writeEntry(QLatin1String("AutotileMonocleHideOthers"), m_autotileMonocleHideOthers);
+    autotiling.writeEntry(QLatin1String("AutotileMonocleShowTabs"), m_autotileMonocleShowTabs);
+
+    // Autotile Shortcuts
+    KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));
+    autotileShortcuts.writeEntry(QLatin1String("ToggleShortcut"), m_autotileToggleShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("FocusMasterShortcut"), m_autotileFocusMasterShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("SwapMasterShortcut"), m_autotileSwapMasterShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("IncMasterRatioShortcut"), m_autotileIncMasterRatioShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("DecMasterRatioShortcut"), m_autotileDecMasterRatioShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("IncMasterCountShortcut"), m_autotileIncMasterCountShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("DecMasterCountShortcut"), m_autotileDecMasterCountShortcut);
+    autotileShortcuts.writeEntry(QLatin1String("RetileShortcut"), m_autotileRetileShortcut);
+
     config->sync();
 }
 
@@ -1275,7 +1463,10 @@ void Settings::reset()
         QStringLiteral("Exclusions"),
         QStringLiteral("ZoneSelector"),
         QStringLiteral("Shaders"),
-        QStringLiteral("GlobalShortcuts")
+        QStringLiteral("GlobalShortcuts"),
+        QStringLiteral("Autotiling"),
+        QStringLiteral("AutotileShortcuts"),
+        QStringLiteral("ModeTracking")
     };
 
     for (const QString& groupName : groups) {

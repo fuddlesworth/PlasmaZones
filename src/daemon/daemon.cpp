@@ -48,6 +48,10 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
+#include "../dbus/autotileadaptor.h"
+#include "../autotile/AutotileEngine.h"
+#include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/TilingAlgorithm.h"
 
 namespace PlasmaZones {
 
@@ -271,9 +275,12 @@ bool Daemon::init()
                 // they work with the active layout, not per-screen layouts
             });
 
-    // Connect settings changes to overlay service
+    // Connect settings changes to overlay service and autotile engine
     connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
+        if (m_autotileEngine) {
+            m_autotileEngine->syncFromSettings(m_settings.get());
+        }
     });
 
     // Initialize domain-specific D-Bus adaptors
@@ -296,6 +303,7 @@ bool Daemon::init()
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
                                                         m_virtualDesktopManager.get(), this);
+    m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers
@@ -314,10 +322,18 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Window tracking service - business logic for zone assignments
-    m_windowTrackingService = std::make_unique<WindowTrackingService>(
-        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-        m_virtualDesktopManager.get(), this);
+    // Initialize autotile engine
+    m_autotileEngine = std::make_unique<AutotileEngine>(
+        m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(), this);
+    m_autotileEngine->syncFromSettings(m_settings.get());
+    m_autotileEngine->connectToSettings(m_settings.get());
+
+    // Give the window drag adaptor access to the autotile engine for per-screen
+    // autotile checks (overlay suppression and snap rejection on autotile screens)
+    m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
+
+    // Create autotile D-Bus adaptor
+    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
@@ -417,6 +433,8 @@ void Daemon::start()
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
         }
+        // Per-desktop assignments may differ — recompute autotile screens
+        updateAutotileScreens();
         if (m_overlayService->isVisible()) {
             m_overlayService->updateGeometries();
         }
@@ -445,6 +463,8 @@ void Daemon::start()
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
                     }
+                    // Per-activity assignments may differ — recompute autotile screens
+                    updateAutotileScreens();
                     if (m_overlayService->isVisible()) {
                         m_overlayService->updateGeometries();
                     }
@@ -583,87 +603,18 @@ void Daemon::start()
     // Keyboard Navigation Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // Move window to adjacent zone shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this,
-            [this](NavigationDirection direction) {
-                QString dirStr = navigationDirectionToString(direction);
-                if (dirStr.isEmpty()) {
-                    qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
-                    return;
-                }
-                m_windowTrackingAdaptor->moveWindowToAdjacentZone(dirStr);
-            });
-
-    // Focus navigation to adjacent zone shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection direction) {
-        QString dirStr = navigationDirectionToString(direction);
-        if (dirStr.isEmpty()) {
-            qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
-            return;
-        }
-        m_windowTrackingAdaptor->focusAdjacentZone(dirStr);
-    });
-
-    // Push to empty zone shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for pushToEmptyZone shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->pushToEmptyZone(screen->name());
-    });
-
-    // Restore window size shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() {
-        m_windowTrackingAdaptor->restoreWindowSize();
-    });
-
-    // Toggle window float shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
-        m_windowTrackingAdaptor->toggleWindowFloat();
-    });
-
-    // Swap window with adjacent zone shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this,
-            [this](NavigationDirection direction) {
-                QString dirStr = navigationDirectionToString(direction);
-                if (dirStr.isEmpty()) {
-                    qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
-                    return;
-                }
-                m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
-            });
-
-    // Rotate windows in layout shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool clockwise) {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for rotateWindows shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screen->name());
-    });
-
-    // Snap to zone by number shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for snapToZone shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen->name());
-    });
-
-    // Cycle windows within zone shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool forward) {
-        m_windowTrackingAdaptor->cycleWindowsInZone(forward);
-    });
-
-    // Resnap to new layout shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
-        m_windowTrackingAdaptor->resnapToNewLayout();
-    });
+    // Navigation shortcuts — single code path per operation (handleXxx)
+    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) { handleMove(d); });
+    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) { handleFocus(d); });
+    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() { handlePush(); });
+    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() { handleRestore(); });
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() { handleFloat(); });
+    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this, [this](NavigationDirection d) { handleSwap(d); });
+    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) { handleRotate(cw); });
+    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) { handleSnap(n); });
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) { handleCycle(fwd); });
+    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() { handleResnap(); });
+    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() { handleSnapAll(); });
 
     // Layout picker shortcut (interactive layout browser + resnap)
     // Capture screen name at open time so it's still valid after the picker closes.
@@ -691,23 +642,178 @@ void Daemon::start()
         m_windowTrackingAdaptor->resnapToNewLayout();
     });
 
-    // Snap all windows shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for snapAllWindows shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->snapAllWindows(screen->name());
-    });
-
     // Initialize mode tracker for last-used layout
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
     m_modeTracker->load();
 
+    // Reconcile persisted mode with actual state: if the mode tracker says
+    // Autotile but no screen has an autotile assignment (or the feature is
+    // disabled), force back to Manual so the popup shows the right layouts.
+    if (m_modeTracker->isAutotileMode()) {
+        bool hasAutotileAssignment = false;
+        if (m_settings->autotileEnabled() && m_layoutManager) {
+            for (QScreen *screen : Utils::allScreens()) {
+                const QString screenId = Utils::screenIdentifier(screen);
+                const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+                const QString activity = (m_activityManager && ActivityManager::isAvailable())
+                                         ? m_activityManager->currentActivity() : QString();
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                if (LayoutId::isAutotile(assignmentId)) {
+                    hasAutotileAssignment = true;
+                    break;
+                }
+            }
+        }
+        if (!hasAutotileAssignment) {
+            m_modeTracker->setCurrentMode(TilingMode::Manual);
+        }
+    }
+
+    // Connect autotile engine signals
+    if (m_autotileEngine) {
+        // Autotile engine signals → OSD (use display name, not algorithm ID)
+        // Show OSD when algorithm changes (not on every retile — tilingChanged
+        // fires for float, swap, window open/close, etc. which is too noisy)
+        connect(m_autotileEngine.get(), &AutotileEngine::algorithmChanged,
+                this, [this](const QString& algorithmId) {
+            if (m_modeTracker) {
+                m_modeTracker->recordAutotileAlgorithm(algorithmId);
+            }
+            // Only show OSD when actually in autotile mode — loadState() emits
+            // algorithmChanged during startup even if we're in manual mode.
+            // Use layout OSD (visual zone preview) when changing algorithm, same as manual layout switch.
+            if (m_modeTracker && m_modeTracker->isAutotileMode()
+                && m_settings && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
+                auto *algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+                QString displayName = algo ? algo->name() : algorithmId;
+                QString screenName = m_unifiedLayoutController ? m_unifiedLayoutController->currentScreenName() : QString();
+                if (screenName.isEmpty() && m_windowTrackingAdaptor) {
+                    if (QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor)) {
+                        screenName = Utils::screenIdentifier(screen);
+                    }
+                }
+                showLayoutOsdForAlgorithm(algorithmId, displayName, screenName);
+            }
+        });
+
+        // Sync autotile float state and show OSD when a window is floated/unfloated
+        connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingChanged,
+                this, [this](const QString& windowId, bool floating, const QString& screenName) {
+            // F1+F2 fix: Sync floating state to WindowTrackingService and propagate
+            // to KWin effect's NavigationHandler::m_floatingWindows via D-Bus signal.
+            // WTA::setWindowFloating() calls WTS::setWindowFloating() + emits D-Bus signal.
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
+            }
+            // Save pre-float zone assignment for restore on unfloat
+            if (floating && m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->service()->unsnapForFloat(windowId);
+            }
+
+            // When floating: restore pre-autotile geometry (KWin syncs it via recordPreAutotileGeometry)
+            if (floating && m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
+            }
+
+            // Use "Floating" and "Tiled" labels for autotile (not "Snapped" for unfloat)
+            if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+                QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
+                m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason,
+                                                    QString(), QString(), screenName);
+            }
+        });
+
+        // When windows are released from autotile (screens removed from autotile
+        // via assignment change, not just toggle shortcut), resnap them back to
+        // their pre-autotile zone positions so they don't remain stuck at tiled geometry.
+        connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling,
+                this, [this](const QStringList& windowIds) {
+            Q_UNUSED(windowIds)
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->resnapCurrentAssignments();
+            }
+        });
+
+        // ═══════════════════════════════════════════════════════════════════════════
+        // Autotile Shortcut Signals
+        // ═══════════════════════════════════════════════════════════════════════════
+
+        connect(m_shortcutManager.get(), &ShortcutManager::toggleAutotileRequested,
+                this, [this]() {
+            // Feature gate: toggle only works when autotile is enabled in KCM
+            if (!m_settings || !m_settings->autotileEnabled()) {
+                return;
+            }
+            if (!m_modeTracker || !m_unifiedLayoutController || !m_layoutManager) {
+                return;
+            }
+
+            // Resolve focused screen
+            QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+            if (!screen) {
+                return;
+            }
+            QString screenId = Utils::screenIdentifier(screen);
+            int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+            QString activity = (m_activityManager && ActivityManager::isAvailable())
+                               ? m_activityManager->currentActivity() : QString();
+
+            // Set the screen context so applyEntry knows which screen to assign
+            m_unifiedLayoutController->setCurrentScreenName(screenId);
+
+            // Temporarily include both layout types so applyLayoutById can find the
+            // target across the mode boundary.  The subsequent layoutApplied /
+            // autotileApplied signal will call updateLayoutFilter() and restore the
+            // correct exclusive filter for the new mode.
+            m_unifiedLayoutController->setLayoutFilter(true, true);
+
+            QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+
+            bool applied = false;
+            const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
+            if (wasAutotile) {
+                // Currently autotile → switch to last manual layout
+                QString layoutId = m_modeTracker->lastManualLayoutId();
+                if (!layoutId.isEmpty()) {
+                    applied = m_unifiedLayoutController->applyLayoutById(layoutId);
+                }
+            } else {
+                // Currently manual → switch to last autotile algorithm
+                QString algoId = m_modeTracker->lastAutotileAlgorithm();
+                if (!algoId.isEmpty()) {
+                    applied = m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
+                }
+            }
+
+            // If apply failed (e.g. layout was deleted), restore the correct filter
+            if (!applied) {
+                updateLayoutFilter();
+            }
+
+            // When switching autotile→manual, windows need to be moved back to
+            // their pre-autotile zone positions. Autotile bypasses the normal
+            // windowSnapped tracking, so m_windowZoneAssignments still holds
+            // the zone assignments from before autotile was enabled.
+            // Filter by connector name (screen->name()) to match what KWin
+            // stores in m_windowScreenAssignments — only resnap windows on the
+            // screen that was actually toggled.
+            if (applied && wasAutotile && m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->resnapCurrentAssignments(screen->name());
+            }
+        });
+
+        connect(m_shortcutManager.get(), &ShortcutManager::focusMasterRequested, this, [this]() { handleFocusMaster(); });
+        connect(m_shortcutManager.get(), &ShortcutManager::swapWithMasterRequested, this, [this]() { handleSwapWithMaster(); });
+        connect(m_shortcutManager.get(), &ShortcutManager::increaseMasterRatioRequested, this, [this]() { handleIncreaseMasterRatio(); });
+        connect(m_shortcutManager.get(), &ShortcutManager::decreaseMasterRatioRequested, this, [this]() { handleDecreaseMasterRatio(); });
+        connect(m_shortcutManager.get(), &ShortcutManager::increaseMasterCountRequested, this, [this]() { handleIncreaseMasterCount(); });
+        connect(m_shortcutManager.get(), &ShortcutManager::decreaseMasterCountRequested, this, [this]() { handleDecreaseMasterCount(); });
+        connect(m_shortcutManager.get(), &ShortcutManager::retileRequested, this, [this]() { handleRetile(); });
+    }
+
     // Initialize unified layout controller (manual layouts only)
     m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
-        m_layoutManager.get(), m_settings.get(), this);
+        m_layoutManager.get(), m_settings.get(), m_autotileEngine.get(), this);
 
     // Set initial desktop/activity context for visibility-filtered cycling
     m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
@@ -717,19 +823,81 @@ void Daemon::start()
         m_unifiedLayoutController->setCurrentActivity(m_activityManager->currentActivity());
     }
 
-    // Connect unified layout controller signals for OSD display
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Mode-based layout filtering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Derive initial per-screen autotile state from assignments
+    updateAutotileScreens();
+
+    // Set initial layout filter
+    updateLayoutFilter();
+
+    // Update layout filter when tiling mode changes at runtime
+    connect(m_modeTracker.get(), &ModeTracker::currentModeChanged, this, &Daemon::updateLayoutFilter);
+
+    // Feature gate: when KCM checkbox changes, enforce constraints
+    connect(m_settings.get(), &Settings::autotileEnabledChanged, this, [this]() {
+        if (!m_settings) {
+            return;
+        }
+
+        if (!m_settings->autotileEnabled()) {
+            // Feature disabled: clear all autotile assignments
+            if (m_layoutManager) {
+                m_layoutManager->clearAutotileAssignments();
+            }
+            updateAutotileScreens();
+            // Restore last manual layout so windows aren't stuck in tiled positions
+            if (m_modeTracker && m_layoutManager) {
+                const QString lastLayoutId = m_modeTracker->lastManualLayoutId();
+                if (!lastLayoutId.isEmpty()) {
+                    Layout* layout = m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
+                    if (layout) {
+                        m_layoutManager->setActiveLayout(layout);
+                    }
+                }
+            }
+            // Resnap windows back to their pre-autotile zone positions (all screens)
+            if (m_windowTrackingAdaptor) {
+                m_windowTrackingAdaptor->resnapCurrentAssignments();
+            }
+        }
+
+        updateLayoutFilter();
+    });
+
+    // Re-derive autotile screens when assignments change
+    connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this, [this]() {
+        updateAutotileScreens();
+    });
+
+    // Connect unified layout controller signals for OSD display and mode tracking
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
+        if (m_modeTracker) {
+            m_modeTracker->setCurrentMode(TilingMode::Manual);
+        }
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
             showLayoutOsd(layout, m_unifiedLayoutController->currentScreenName());
         }
     });
 
-    // Connect layout manager changes to mode tracker for recording last manual layout
-    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
-        if (layout && m_modeTracker) {
-            m_modeTracker->recordManualLayout(layout->id());
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied,
+            this, [this](const QString& algorithmName, int windowCount) {
+        Q_UNUSED(windowCount)
+        if (m_modeTracker) {
+            m_modeTracker->setCurrentMode(TilingMode::Autotile);
+        }
+        // Use layout OSD (visual zone preview) when applying autotile, same as manual layout switch.
+        if (m_settings && m_settings->showOsdOnLayoutSwitch() && m_autotileEngine && m_overlayService) {
+            QString algorithmId = m_autotileEngine->algorithm();
+            QString screenName = m_unifiedLayoutController->currentScreenName();
+            showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenName);
         }
     });
+
+    // Record manual layout only when user explicitly selects one via zone selector
+    // or unified layout controller — NOT on every internal layout change.
 
     // Connect zone selector manual layout selection (drop on zone)
     // Screen name comes directly from the zone selector window
@@ -760,15 +928,30 @@ void Daemon::start()
         }
     });
 
+    // Connect zone selector autotile layout selection — route through UnifiedLayoutController
+    // to avoid duplicate activation logic (the controller handles enable + algorithm + OSD)
+    connect(m_overlayService.get(), &IOverlayService::autotileLayoutSelected, this,
+            [this](const QString& algorithmId, const QString& screenName) {
+        Q_UNUSED(screenName)
+        if (m_unifiedLayoutController) {
+            m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algorithmId));
+        }
+    });
+
     // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
     // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
     connect(m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this,
             [this](const QString& windowId, const QString& zoneId, const QString& geometryJson,
                    const QString& screenName) {
+                // Resolve screen name first (needed for per-screen autotile check)
                 QString geometryToUse = geometryJson;
                 QString effectiveScreen = screenName;
                 if (effectiveScreen.isEmpty() && QGuiApplication::primaryScreen()) {
                     effectiveScreen = QGuiApplication::primaryScreen()->name();
+                }
+                // Snap assist is a manual-mode concept; ignore if this screen uses autotile
+                if (m_autotileEngine && m_autotileEngine->isAutotileScreen(effectiveScreen)) {
+                    return;
                 }
                 if (!effectiveScreen.isEmpty()) {
                     QString authGeometry =
@@ -780,7 +963,7 @@ void Daemon::start()
                 m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometryToUse);
             });
 
-    // Connect navigation feedback signal to show OSD (Qt signal from WindowTrackingAdaptor)
+    // Connect navigation feedback signal to show OSD (manual mode: from WindowTrackingAdaptor via KWin effect)
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
             [this](bool success, const QString& action, const QString& reason,
                    const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName) {
@@ -789,7 +972,15 @@ void Daemon::start()
                     m_suppressResnapOsd = false;
                     return;
                 }
-                // Only show OSD if setting is enabled
+                if (m_settings && m_settings->showNavigationOsd()) {
+                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
+                }
+            });
+
+    // Connect autotile navigation feedback (same OSD path: shortcut → operation → OSD)
+    connect(m_autotileEngine.get(), &AutotileEngine::navigationFeedbackRequested, this,
+            [this](bool success, const QString& action, const QString& reason,
+                   const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName) {
                 if (m_settings && m_settings->showNavigationOsd()) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
                 }
@@ -812,6 +1003,12 @@ void Daemon::start()
     // Connect to KWin script
     connectToKWinScript();
 
+    // Restore autotile state from previous session (window order, algorithm, split ratio)
+    // Defers actual retiling until windows are announced by KWin effect
+    if (m_autotileEngine) {
+        m_autotileEngine->loadState();
+    }
+
     m_running = true;
 
     // Signal that daemon is fully initialized and ready for queries
@@ -823,6 +1020,10 @@ void Daemon::stop()
     if (!m_running) {
         return;
     }
+
+    // Stop pending timers to prevent callbacks during shutdown
+    m_geometryUpdateTimer.stop();
+    m_pendingGeometryUpdates.clear();
 
     // Hide overlay
     hideOverlay();
@@ -838,11 +1039,56 @@ void Daemon::stop()
     }
 
     m_reapplyGeometriesTimer.stop();
+
+    // Save autotile state and clear active screens
+    if (m_autotileEngine) {
+        m_autotileEngine->saveState();
+        m_autotileEngine->setAutotileScreens({});
+    }
+
+    // Clear the adaptor's raw engine pointer BEFORE destroying the engine.
+    // The adaptor is a Qt child of the daemon (destroyed later); a D-Bus call
+    // arriving between engine destruction and adaptor destruction would otherwise
+    // access freed memory. After clearing, ensureEngine() returns false.
+    if (m_autotileAdaptor) {
+        m_autotileAdaptor->clearEngine();
+    }
+
+    // Null the WindowDragAdaptor's engine pointer for the same reason.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setAutotileEngine(nullptr);
+    }
+
+    // Destroy the engine now (during stop(), before Qt child destruction order).
+    m_autotileEngine.reset();
+
+    // Unregister D-Bus service to prevent late calls during shutdown
+    QDBusConnection::sessionBus().unregisterService(QString(DBus::ServiceName));
+
     m_running = false;
 }
 
 void Daemon::showOverlay()
 {
+    // Don't show overlay when all screens are in autotile mode
+    // (the overlay is for manual zone selection during drag)
+    if (m_autotileEngine && m_screenManager) {
+        const auto& autotileScreens = m_autotileEngine->autotileScreens();
+        if (!autotileScreens.isEmpty()) {
+            bool allAutotile = true;
+            for (QScreen* screen : m_screenManager->screens()) {
+                if (!autotileScreens.contains(screen->name())) {
+                    allAutotile = false;
+                    break;
+                }
+            }
+            if (allAutotile) {
+                return;
+            }
+        }
+    }
+    // Per-screen autotile exclusion is handled by OverlayService::initializeOverlay()
+    // via m_excludedScreens (set in updateAutotileScreens)
     m_overlayService->show();
 }
 
@@ -906,6 +1152,258 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
     }
 }
 
+void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
+                                       const QString& screenName)
+{
+    auto *algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+    if (!algo) {
+        qCWarning(lcDaemon) << "Algorithm not found for OSD:" << algorithmId;
+        return;
+    }
+
+    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
+
+    switch (style) {
+    case OsdStyle::None:
+        qCInfo(lcDaemon) << "OSD disabled, skipping for algorithm:" << displayName;
+        return;
+
+    case OsdStyle::Text:
+        {
+            QDBusMessage msg = QDBusMessage::createMethodCall(
+                QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+
+            QString displayText = i18n("Zone Layout: %1", displayName);
+            msg << QStringLiteral("plasmazones") << displayText;
+
+            QDBusConnection::sessionBus().asyncCall(msg);
+            qCInfo(lcDaemon) << "Showing text OSD for algorithm:" << displayName;
+        }
+        break;
+
+    case OsdStyle::Preview:
+        if (m_overlayService) {
+            QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo);
+            QString layoutId = LayoutId::makeAutotileId(algorithmId);
+            m_overlayService->showLayoutOsd(layoutId, displayName, zones,
+                                            static_cast<int>(LayoutCategory::Autotile),
+                                            false, screenName);
+            qCInfo(lcDaemon) << "Showing preview OSD for algorithm:" << displayName << "on screen:" << screenName;
+        } else {
+            qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
+        }
+        break;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Navigation handlers — single code path per operation (DRY/SOLID)
+// Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void Daemon::handleRotate(bool clockwise)
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen) {
+        qCDebug(lcDaemon) << "No screen info for rotate shortcut — skipping";
+        return;
+    }
+    // Use connector name: m_autotileScreens and m_windowScreenAssignments both use screen->name()
+    QString screenName = screen->name();
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenName)) {
+        m_autotileEngine->rotateWindowOrder(clockwise);
+    } else {
+        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screenName);
+    }
+}
+
+void Daemon::handleFloat()
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen) {
+        return;
+    }
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
+        m_autotileEngine->toggleFocusedWindowFloat();
+    } else {
+        m_windowTrackingAdaptor->toggleWindowFloat();
+    }
+}
+
+void Daemon::handleMove(NavigationDirection direction)
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen || (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name()))) {
+        return;
+    }
+    QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
+        return;
+    }
+    m_windowTrackingAdaptor->moveWindowToAdjacentZone(dirStr);
+}
+
+void Daemon::handleFocus(NavigationDirection direction)
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen || (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name()))) {
+        return;
+    }
+    QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
+        return;
+    }
+    m_windowTrackingAdaptor->focusAdjacentZone(dirStr);
+}
+
+void Daemon::handlePush()
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen) {
+        qCDebug(lcDaemon) << "No screen info for pushToEmptyZone shortcut — skipping";
+        return;
+    }
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
+        return;
+    }
+    m_windowTrackingAdaptor->pushToEmptyZone(screen->name());
+}
+
+void Daemon::handleRestore()
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen || (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name()))) {
+        return;
+    }
+    m_windowTrackingAdaptor->restoreWindowSize();
+}
+
+void Daemon::handleSwap(NavigationDirection direction)
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen || (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name()))) {
+        return;
+    }
+    QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
+        return;
+    }
+    m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
+}
+
+void Daemon::handleSnap(int zoneNumber)
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen) {
+        qCDebug(lcDaemon) << "No screen info for snapToZone shortcut — skipping";
+        return;
+    }
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
+        return;
+    }
+    m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen->name());
+}
+
+void Daemon::handleCycle(bool forward)
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen || (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name()))) {
+        return;
+    }
+    m_windowTrackingAdaptor->cycleWindowsInZone(forward);
+}
+
+void Daemon::handleResnap()
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen || (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name()))) {
+        return;
+    }
+    m_windowTrackingAdaptor->resnapToNewLayout();
+}
+
+void Daemon::handleSnapAll()
+{
+    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+    if (!screen) {
+        qCDebug(lcDaemon) << "No screen info for snapAllWindows shortcut — skipping";
+        return;
+    }
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
+        return;
+    }
+    m_windowTrackingAdaptor->snapAllWindows(screen->name());
+}
+
+void Daemon::handleFocusMaster()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->focusMaster();
+}
+
+void Daemon::handleSwapWithMaster()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->swapFocusedWithMaster();
+}
+
+void Daemon::handleIncreaseMasterRatio()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->increaseMasterRatio();
+}
+
+void Daemon::handleDecreaseMasterRatio()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->decreaseMasterRatio();
+}
+
+void Daemon::handleIncreaseMasterCount()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->increaseMasterCount();
+}
+
+void Daemon::handleDecreaseMasterCount()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->decreaseMasterCount();
+}
+
+void Daemon::handleRetile()
+{
+    if (!m_autotileEngine || !m_autotileEngine->isEnabled()) {
+        return;
+    }
+    m_autotileEngine->retile();
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        QString screenName = screen ? screen->name() : QString();
+        if (screenName.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
+            screenName = *m_autotileEngine->autotileScreens().begin();
+        }
+        m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"),
+                                           QString(), QString(), screenName);
+    }
+}
+
 // Unified layout management now handled by UnifiedLayoutController
 // Screen management now handled by ScreenManager
 // Shortcut management now handled by ShortcutManager
@@ -920,6 +1418,60 @@ void Daemon::connectToKWinScript()
 
     // Monitor for KWin script connection
     // The script will call getActiveLayout() on startup
+}
+
+void Daemon::updateLayoutFilter()
+{
+    if (!m_settings) {
+        return;
+    }
+
+    // Exclusive mode based on runtime tiling mode, gated by the feature toggle.
+    // autotileEnabled is the feature gate (can autotile be used at all?).
+    // ModeTracker tracks what's actually active right now.
+    const bool autotileActive = m_settings->autotileEnabled()
+                                && m_modeTracker && m_modeTracker->isAutotileMode();
+    const bool includeManual = !autotileActive;
+    const bool includeAutotile = autotileActive;
+
+    if (m_overlayService) {
+        m_overlayService->setLayoutFilter(includeManual, includeAutotile);
+    }
+    if (m_unifiedLayoutController) {
+        m_unifiedLayoutController->setLayoutFilter(includeManual, includeAutotile);
+    }
+
+    qCDebug(lcDaemon) << "Layout filter updated: manual=" << includeManual
+                       << "autotile=" << includeAutotile;
+}
+
+void Daemon::updateAutotileScreens()
+{
+    if (!m_autotileEngine || !m_layoutManager || !m_screenManager) {
+        return;
+    }
+
+    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString activity = (m_activityManager && ActivityManager::isAvailable())
+                             ? m_activityManager->currentActivity() : QString();
+
+    QSet<QString> autotileScreens;
+    for (QScreen* screen : m_screenManager->screens()) {
+        QString screenId = Utils::screenIdentifier(screen);
+        QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        if (LayoutId::isAutotile(assignmentId)) {
+            autotileScreens.insert(screen->name());
+        }
+    }
+
+    m_autotileEngine->setAutotileScreens(autotileScreens);
+
+    // Propagate to overlay service so initializeOverlay() skips autotile screens
+    if (m_overlayService) {
+        m_overlayService->setExcludedScreens(autotileScreens);
+    }
+
+    qCDebug(lcDaemon) << "Updated autotile screens:" << autotileScreens;
 }
 
 void Daemon::processPendingGeometryUpdates()
@@ -951,6 +1503,12 @@ void Daemon::processPendingGeometryUpdates()
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
     m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
+
+    // Retile autotile windows to adapt to new screen geometry
+    // (panels added/removed, resolution changes, etc.)
+    if (m_autotileEngine && m_autotileEngine->isEnabled()) {
+        m_autotileEngine->retile();
+    }
 }
 
 } // namespace PlasmaZones

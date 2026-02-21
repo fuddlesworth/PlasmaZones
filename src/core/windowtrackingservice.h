@@ -146,11 +146,28 @@ public:
     void clearPreSnapGeometry(const QString& windowId);
 
     /**
+     * @brief Store pre-autotile geometry (from KWin when tiling autotile windows)
+     * Used to restore window position when floating from autotile mode.
+     */
+    void storePreAutotileGeometry(const QString& windowId, const QRect& geometry);
+
+    /**
+     * @brief Clear stored pre-autotile geometry (after restore)
+     */
+    void clearPreAutotileGeometry(const QString& windowId);
+
+    /**
      * @brief Get validated pre-snap geometry within screen bounds
      * @param windowId Full window ID
      * @return Adjusted geometry within visible screens, nullopt if not found
      */
     std::optional<QRect> validatedPreSnapGeometry(const QString& windowId) const;
+
+    /**
+     * @brief Get validated pre-snap or pre-autotile geometry (for float restore)
+     * Checks pre-snap first (manual zones), then pre-autotile (autotile mode).
+     */
+    std::optional<QRect> validatedPreSnapOrAutotileGeometry(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -396,6 +413,19 @@ public:
      */
     QVector<RotationEntry> calculateResnapFromPreviousLayout();
 
+    /**
+     * @brief Calculate resnap data from current zone assignments
+     *
+     * Used when restoring windows after autotile toggle-off: the autotile engine
+     * repositioned windows, but m_windowZoneAssignments still holds the pre-autotile
+     * zone assignments. This method computes zone geometries for those assignments
+     * so windows can be moved back to their zone positions.
+     *
+     * @param screenFilter When non-empty, only include windows on this screen
+     * @return List of rotation entries for KWin to apply
+     */
+    QVector<RotationEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════
@@ -576,6 +606,7 @@ private:
     // Pre-snap geometries: full windowId at runtime, stableId for session-restored entries
     // Converted from windowId to stableId on window close for persistence
     QHash<QString, QRect> m_preSnapGeometries;
+    QHash<QString, QRect> m_preAutotileGeometries;
 
     // Last used zone tracking
     QString m_lastUsedZoneId;

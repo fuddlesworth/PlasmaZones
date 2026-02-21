@@ -10,6 +10,8 @@
 #include <QRect>
 #include <memory>
 
+#include "shortcutmanager.h"
+
 namespace PlasmaZones {
 
 class Layout;
@@ -28,10 +30,11 @@ class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
 class ScreenAdaptor;
 class WindowDragAdaptor;
-class WindowTrackingService;
 class ModeTracker;
 class ZoneSelectorController;
 class UnifiedLayoutController;
+class AutotileAdaptor;
+class AutotileEngine;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -97,8 +100,53 @@ public:
     void showLayoutOsd(Layout* layout, const QString& screenName = QString());
 
 private:
+    /**
+     * @brief Show layout OSD for an autotile algorithm (visual zone preview)
+     *
+     * Uses showOsdOnLayoutSwitch and osdStyle settings, same as manual layout switch.
+     */
+    void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
+                                   const QString& screenName);
     void clearHighlight();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Navigation handlers — single code path per operation (DRY/SOLID)
+    // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
+    // ═══════════════════════════════════════════════════════════════════════════
+    void handleRotate(bool clockwise);
+    void handleFloat();
+    void handleMove(NavigationDirection direction);
+    void handleFocus(NavigationDirection direction);
+    void handlePush();
+    void handleRestore();
+    void handleSwap(NavigationDirection direction);
+    void handleSnap(int zoneNumber);
+    void handleCycle(bool forward);
+    void handleResnap();
+    void handleSnapAll();
+    void handleFocusMaster();
+    void handleSwapWithMaster();
+    void handleIncreaseMasterRatio();
+    void handleDecreaseMasterRatio();
+    void handleIncreaseMasterCount();
+    void handleDecreaseMasterCount();
+    void handleRetile();
     void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
+
+    /**
+     * @brief Recompute which screens use autotile from layout assignments
+     *
+     * Reads all screen assignments via assignmentIdForScreen(), computes
+     * which screens have autotile IDs, calls setAutotileScreens() on engine.
+     */
+    void updateAutotileScreens();
+
+    /**
+     * @brief Update layout filter on overlay service and unified layout controller
+     *
+     * Shows both manual and autotile layouts when the feature gate is enabled.
+     */
+    void updateLayoutFilter();
 
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<Settings> m_settings;
@@ -120,13 +168,15 @@ private:
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
 
-    std::unique_ptr<WindowTrackingService> m_windowTrackingService;
-
     // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
+
+    // Autotile engine
+    std::unique_ptr<AutotileEngine> m_autotileEngine;
+    AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     bool m_running = false;
     bool m_suppressResnapOsd = false;

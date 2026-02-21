@@ -20,6 +20,7 @@ Item {
     required property var confirmCloseDialog
     required property var helpDialog
     required property bool fullscreenMode
+    required property bool previewMode
     // Helper property to safely access undoController
     property var undoController: editorController ? editorController.undoController : null
     property bool canUndo: undoController ? undoController.canUndo : false
@@ -85,7 +86,7 @@ Item {
         id: deleteShortcut
 
         sequences: [StandardKey.Delete]
-        enabled: editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.deleteSelectedZones();
@@ -98,7 +99,7 @@ Item {
         id: selectAllShortcut
 
         sequences: [StandardKey.SelectAll]
-        enabled: editorController !== null
+        enabled: !shortcuts.previewMode && editorController !== null
         onActivated: {
             if (editorController)
                 editorController.selectAll();
@@ -111,7 +112,7 @@ Item {
         id: duplicateShortcut
 
         sequence: editorController ? editorController.editorDuplicateShortcut : "Ctrl+D"
-        enabled: editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.duplicateSelectedZones();
@@ -125,7 +126,7 @@ Item {
 
         sequences: [StandardKey.Copy]
         context: Qt.ApplicationShortcut
-        enabled: editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.copyZones(editorController.selectedZoneIds);
@@ -139,7 +140,7 @@ Item {
 
         sequences: [StandardKey.Cut]
         context: Qt.ApplicationShortcut
-        enabled: editorController && editorController.selectionCount > 0
+        enabled: !shortcuts.previewMode && editorController && editorController.selectionCount > 0
         onActivated: {
             if (editorController)
                 editorController.cutZones(editorController.selectedZoneIds);
@@ -153,7 +154,7 @@ Item {
 
         sequences: [StandardKey.Paste]
         context: Qt.ApplicationShortcut
-        enabled: editorController && editorController.canPaste
+        enabled: !shortcuts.previewMode && editorController && editorController.canPaste
         onActivated: {
             if (editorController)
                 editorController.pasteZones(false);
@@ -167,7 +168,7 @@ Item {
 
         sequences: ["Ctrl+Shift+V", "Shift+Insert"]
         context: Qt.ApplicationShortcut
-        enabled: editorController && editorController.canPaste
+        enabled: !shortcuts.previewMode && editorController && editorController.canPaste
         onActivated: {
             if (editorController)
                 editorController.pasteZones(true);
@@ -180,7 +181,7 @@ Item {
         id: splitHorizontalShortcut
 
         sequence: editorController ? editorController.editorSplitHorizontalShortcut : "Ctrl+Shift+H"
-        enabled: editorWindow.selectedZoneId !== "" && editorController !== null
+        enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
                 editorController.splitZone(editorWindow.selectedZoneId, true);
@@ -194,7 +195,7 @@ Item {
         id: splitVerticalShortcut
 
         sequence: editorController ? editorController.editorSplitVerticalShortcut : "Ctrl+Alt+V"
-        enabled: editorWindow.selectedZoneId !== "" && editorController !== null
+        enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             if (editorController && editorWindow.selectedZoneId)
                 editorController.splitZone(editorWindow.selectedZoneId, false);
@@ -207,7 +208,7 @@ Item {
         id: fillShortcut
 
         sequence: editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F"
-        enabled: editorWindow.selectedZoneId !== "" && editorController !== null
+        enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
             // Fallback if zone not found in repeater
 

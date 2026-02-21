@@ -11,6 +11,7 @@
 #include <QDBusPendingReply>
 #include <QDBusPendingCallWatcher>
 #include <QDBusReply>
+#include <QDBusServiceWatcher>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -37,6 +38,9 @@
 #include "../src/core/interfaces.h"
 #include "../src/core/layout.h"
 #include "../src/core/logging.h"
+#include "../src/autotile/AlgorithmRegistry.h"
+#include "../src/autotile/TilingAlgorithm.h"
+#include "../src/autotile/TilingState.h"
 #include "../src/core/modifierutils.h"
 #include "../src/core/utils.h"
 #include "version.h"
@@ -52,14 +56,38 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     : KQuickConfigModule(parent, data)
 {
     m_settings = new Settings(this);
-    loadLayouts();
+    loadLayoutsSync();
     refreshScreens();
 
-    // Set up daemon status polling
+    // Set up daemon status polling (fallback for edge cases the watcher might miss)
     m_daemonCheckTimer = new QTimer(this);
     m_daemonCheckTimer->setInterval(KCMConstants::DaemonStatusPollIntervalMs);
     connect(m_daemonCheckTimer, &QTimer::timeout, this, &KCMPlasmaZones::checkDaemonStatus);
     m_daemonCheckTimer->start();
+
+    // Set up D-Bus service watcher for immediate daemon start/stop notification
+    m_daemonWatcher = new QDBusServiceWatcher(
+        QString(DBus::ServiceName),
+        QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration,
+        this);
+
+    connect(m_daemonWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+        if (!m_lastDaemonState) {
+            m_lastDaemonState = true;
+            Q_EMIT daemonRunningChanged();
+            // Refresh data from the newly-started daemon (async — UI is already visible)
+            loadLayouts();
+            refreshScreens();
+        }
+    });
+
+    connect(m_daemonWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
+        if (m_lastDaemonState) {
+            m_lastDaemonState = false;
+            Q_EMIT daemonRunningChanged();
+        }
+    });
 
     // Load daemon enabled state from systemd (async)
     m_lastDaemonState = isDaemonRunning();
@@ -81,22 +109,28 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     // Check for updates when KCM loads
     m_updateChecker->checkForUpdates();
 
-    // Listen for layout changes from the daemon
-    // When layouts are edited and saved, the daemon emits layoutListChanged
-    // which triggers a refresh of the layout list in the settings panel
+    // Debounce timer for coalescing rapid D-Bus layout signals into a single loadLayouts() call.
+    // Without this, editing a layout (name, zones, etc.) can trigger multiple D-Bus signals
+    // (layoutChanged, layoutListChanged) that each cause a full D-Bus round trip.
+    m_loadLayoutsTimer = new QTimer(this);
+    m_loadLayoutsTimer->setSingleShot(true);
+    m_loadLayoutsTimer->setInterval(50); // 50ms coalescing window
+    connect(m_loadLayoutsTimer, &QTimer::timeout, this, &KCMPlasmaZones::loadLayouts);
+
+    // Listen for layout changes from the daemon — all routed through debounce timer
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
-                                          this, SLOT(loadLayouts()));
+                                          this, SLOT(scheduleLoadLayouts()));
 
     // Also listen for individual layout changes (when a specific layout is updated)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
-                                          this, SLOT(loadLayouts()));
+                                          this, SLOT(scheduleLoadLayouts()));
 
     // Listen for daemon ready signal (emitted when daemon finishes initialization)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("daemonReady"), this,
-                                          SLOT(loadLayouts()));
+                                          SLOT(scheduleLoadLayouts()));
 
     // Listen for screen changes from the daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
@@ -1174,6 +1208,271 @@ void KCMPlasmaZones::setZoneSelectorMaxRows(int rows)
     }
 }
 
+// Autotiling getters
+bool KCMPlasmaZones::autotileEnabled() const
+{
+    return m_settings->autotileEnabled();
+}
+QString KCMPlasmaZones::autotileAlgorithm() const
+{
+    return m_settings->autotileAlgorithm();
+}
+qreal KCMPlasmaZones::autotileSplitRatio() const
+{
+    return m_settings->autotileSplitRatio();
+}
+int KCMPlasmaZones::autotileMasterCount() const
+{
+    return m_settings->autotileMasterCount();
+}
+int KCMPlasmaZones::autotileInnerGap() const
+{
+    return m_settings->autotileInnerGap();
+}
+int KCMPlasmaZones::autotileOuterGap() const
+{
+    return m_settings->autotileOuterGap();
+}
+bool KCMPlasmaZones::autotileFocusNewWindows() const
+{
+    return m_settings->autotileFocusNewWindows();
+}
+bool KCMPlasmaZones::autotileSmartGaps() const
+{
+    return m_settings->autotileSmartGaps();
+}
+int KCMPlasmaZones::autotileMaxWindows() const
+{
+    return m_settings->autotileMaxWindows();
+}
+int KCMPlasmaZones::autotileInsertPosition() const
+{
+    return m_settings->autotileInsertPositionInt();
+}
+bool KCMPlasmaZones::autotileAnimationsEnabled() const
+{
+    return m_settings->autotileAnimationsEnabled();
+}
+int KCMPlasmaZones::autotileAnimationDuration() const
+{
+    return m_settings->autotileAnimationDuration();
+}
+bool KCMPlasmaZones::autotileFocusFollowsMouse() const
+{
+    return m_settings->autotileFocusFollowsMouse();
+}
+bool KCMPlasmaZones::autotileRespectMinimumSize() const
+{
+    return m_settings->autotileRespectMinimumSize();
+}
+bool KCMPlasmaZones::autotileMonocleHideOthers() const
+{
+    return m_settings->autotileMonocleHideOthers();
+}
+bool KCMPlasmaZones::autotileMonocleShowTabs() const
+{
+    return m_settings->autotileMonocleShowTabs();
+}
+
+QVariantList KCMPlasmaZones::availableAlgorithms() const
+{
+    QVariantList algorithms;
+    auto *registry = PlasmaZones::AlgorithmRegistry::instance();
+    for (const QString &id : registry->availableAlgorithms()) {
+        PlasmaZones::TilingAlgorithm *algo = registry->algorithm(id);
+        if (algo) {
+            QVariantMap algoMap;
+            algoMap[QStringLiteral("id")] = id;
+            algoMap[QStringLiteral("name")] = algo->name();
+            algoMap[QStringLiteral("description")] = algo->description();
+            algoMap[QStringLiteral("defaultMaxWindows")] = algo->defaultMaxWindows();
+            algorithms.append(algoMap);
+        }
+    }
+    return algorithms;
+}
+
+QVariantList KCMPlasmaZones::generateAlgorithmPreview(const QString &algorithmId, int windowCount,
+                                                      double splitRatio, int masterCount) const
+{
+    auto *registry = PlasmaZones::AlgorithmRegistry::instance();
+    PlasmaZones::TilingAlgorithm *algo = registry->algorithm(algorithmId);
+    if (!algo) {
+        return {};
+    }
+
+    // Note: calculateZones() is not thread-safe for concurrent calls on the
+    // same algorithm instance, but the KCM runs in a separate process from the
+    // daemon, and QML calls this from the GUI thread only, so this is safe.
+    const int previewSize = 1000;
+    const QRect previewRect(0, 0, previewSize, previewSize);
+
+    PlasmaZones::TilingState state(QStringLiteral("preview"));
+    state.setMasterCount(masterCount);
+    state.setSplitRatio(splitRatio);
+
+    const int count = qMax(1, windowCount);
+    QVector<QRect> zones = algo->calculateZones({count, previewRect, &state});
+
+    return PlasmaZones::AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+}
+
+// Autotiling setters
+void KCMPlasmaZones::setAutotileEnabled(bool enabled)
+{
+    if (m_settings->autotileEnabled() != enabled) {
+        m_settings->setAutotileEnabled(enabled);
+        Q_EMIT autotileEnabledChanged();
+        setNeedsSave(true);
+        // Re-filter cached layouts to show/hide autotile entries without D-Bus re-fetch.
+        // This avoids a synchronous D-Bus round-trip that blocks the UI thread and
+        // causes scroll position resets in the Assignments tab.
+        applyLayoutFilter();
+    }
+}
+
+void KCMPlasmaZones::setAutotileAlgorithm(const QString& algorithm)
+{
+    if (m_settings->autotileAlgorithm() != algorithm) {
+        m_settings->setAutotileAlgorithm(algorithm);
+        Q_EMIT autotileAlgorithmChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileSplitRatio(qreal ratio)
+{
+    ratio = qBound(0.1, ratio, 0.9);
+    if (!qFuzzyCompare(m_settings->autotileSplitRatio(), ratio)) {
+        m_settings->setAutotileSplitRatio(ratio);
+        Q_EMIT autotileSplitRatioChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMasterCount(int count)
+{
+    count = qBound(1, count, 5);
+    if (m_settings->autotileMasterCount() != count) {
+        m_settings->setAutotileMasterCount(count);
+        Q_EMIT autotileMasterCountChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileInnerGap(int gap)
+{
+    gap = qBound(0, gap, 50);
+    if (m_settings->autotileInnerGap() != gap) {
+        m_settings->setAutotileInnerGap(gap);
+        Q_EMIT autotileInnerGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileOuterGap(int gap)
+{
+    gap = qBound(0, gap, 50);
+    if (m_settings->autotileOuterGap() != gap) {
+        m_settings->setAutotileOuterGap(gap);
+        Q_EMIT autotileOuterGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileFocusNewWindows(bool focus)
+{
+    if (m_settings->autotileFocusNewWindows() != focus) {
+        m_settings->setAutotileFocusNewWindows(focus);
+        Q_EMIT autotileFocusNewWindowsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileSmartGaps(bool smart)
+{
+    if (m_settings->autotileSmartGaps() != smart) {
+        m_settings->setAutotileSmartGaps(smart);
+        Q_EMIT autotileSmartGapsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMaxWindows(int count)
+{
+    count = qBound(1, count, 12);
+    if (m_settings->autotileMaxWindows() != count) {
+        m_settings->setAutotileMaxWindows(count);
+        Q_EMIT autotileMaxWindowsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileInsertPosition(int position)
+{
+    position = qBound(0, position, 2);
+    if (m_settings->autotileInsertPositionInt() != position) {
+        m_settings->setAutotileInsertPositionInt(position);
+        Q_EMIT autotileInsertPositionChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileAnimationsEnabled(bool enabled)
+{
+    if (m_settings->autotileAnimationsEnabled() != enabled) {
+        m_settings->setAutotileAnimationsEnabled(enabled);
+        Q_EMIT autotileAnimationsEnabledChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileAnimationDuration(int duration)
+{
+    duration = qBound(50, duration, 500);
+    if (m_settings->autotileAnimationDuration() != duration) {
+        m_settings->setAutotileAnimationDuration(duration);
+        Q_EMIT autotileAnimationDurationChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileFocusFollowsMouse(bool focus)
+{
+    if (m_settings->autotileFocusFollowsMouse() != focus) {
+        m_settings->setAutotileFocusFollowsMouse(focus);
+        Q_EMIT autotileFocusFollowsMouseChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileRespectMinimumSize(bool respect)
+{
+    if (m_settings->autotileRespectMinimumSize() != respect) {
+        m_settings->setAutotileRespectMinimumSize(respect);
+        Q_EMIT autotileRespectMinimumSizeChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMonocleHideOthers(bool hide)
+{
+    if (m_settings->autotileMonocleHideOthers() != hide) {
+        m_settings->setAutotileMonocleHideOthers(hide);
+        Q_EMIT autotileMonocleHideOthersChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileMonocleShowTabs(bool show)
+{
+    if (m_settings->autotileMonocleShowTabs() != show) {
+        m_settings->setAutotileMonocleShowTabs(show);
+        Q_EMIT autotileMonocleShowTabsChanged();
+        setNeedsSave(true);
+    }
+}
+
 // Editor shortcuts setters (write directly to KConfig Editor group)
 // Note: Save, Delete, Close shortcuts now use Qt StandardKey (system shortcuts)
 void KCMPlasmaZones::setEditorDuplicateShortcut(const QString& shortcut)
@@ -1527,7 +1826,7 @@ void KCMPlasmaZones::load()
     Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
     Q_EMIT snapAssistTriggersChanged();
-    loadLayouts();
+    loadLayoutsSync();
     refreshScreens();
 
     const QString layoutInterface = QString(DBus::Interface::LayoutManager);
@@ -1731,6 +2030,24 @@ void KCMPlasmaZones::defaults()
     Q_EMIT zoneSelectorSizeModeChanged();
     Q_EMIT zoneSelectorMaxRowsChanged();
 
+    // Autotiling
+    Q_EMIT autotileEnabledChanged();
+    Q_EMIT autotileAlgorithmChanged();
+    Q_EMIT autotileSplitRatioChanged();
+    Q_EMIT autotileMasterCountChanged();
+    Q_EMIT autotileInnerGapChanged();
+    Q_EMIT autotileOuterGapChanged();
+    Q_EMIT autotileFocusNewWindowsChanged();
+    Q_EMIT autotileSmartGapsChanged();
+    Q_EMIT autotileMaxWindowsChanged();
+    Q_EMIT autotileInsertPositionChanged();
+    Q_EMIT autotileAnimationsEnabledChanged();
+    Q_EMIT autotileAnimationDurationChanged();
+    Q_EMIT autotileFocusFollowsMouseChanged();
+    Q_EMIT autotileRespectMinimumSizeChanged();
+    Q_EMIT autotileMonocleHideOthersChanged();
+    Q_EMIT autotileMonocleShowTabsChanged();
+
     // Reset editor shortcuts to defaults
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
@@ -1773,9 +2090,7 @@ void KCMPlasmaZones::createNewLayout()
             editLayout(newLayoutId);
         }
     }
-
-    // Reload layouts after a short delay to allow the layout to be fully created
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after creation, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::deleteLayout(const QString& layoutId)
@@ -1785,7 +2100,7 @@ void KCMPlasmaZones::deleteLayout(const QString& layoutId)
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"));
     msg << layoutId;
     watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("deleteLayout"));
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after deletion, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::duplicateLayout(const QString& layoutId)
@@ -1800,9 +2115,7 @@ void KCMPlasmaZones::duplicateLayout(const QString& layoutId)
             // Don't emit here - wait for loadLayouts() to complete first
         }
     }
-
-    // Reload layouts after a short delay to allow the layout to be fully created
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after duplication, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::importLayout(const QString& filePath)
@@ -1817,9 +2130,7 @@ void KCMPlasmaZones::importLayout(const QString& filePath)
             // Don't emit here - wait for loadLayouts() to complete first
         }
     }
-
-    // Reload layouts after a short delay to allow the layout to be fully created
-    QTimer::singleShot(100, this, &KCMPlasmaZones::loadLayouts);
+    // The daemon emits layoutListChanged after import, which triggers scheduleLoadLayouts()
 }
 
 void KCMPlasmaZones::exportLayout(const QString& layoutId, const QString& filePath)
@@ -1866,17 +2177,23 @@ void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
     m_pendingHiddenStates[layoutId] = hidden;
 
     // Update local model so the UI reflects the change immediately
+    bool changed = false;
     for (int i = 0; i < m_layouts.size(); ++i) {
         QVariantMap layout = m_layouts[i].toMap();
         if (layout[QStringLiteral("id")].toString() == layoutId) {
-            layout[QStringLiteral("hiddenFromSelector")] = hidden;
-            m_layouts[i] = layout;
+            if (layout[QStringLiteral("hiddenFromSelector")].toBool() != hidden) {
+                layout[QStringLiteral("hiddenFromSelector")] = hidden;
+                m_layouts[i] = layout;
+                changed = true;
+            }
             break;
         }
     }
-    Q_EMIT layoutsChanged();
 
-    setNeedsSave(true);
+    if (changed) {
+        Q_EMIT layoutsChanged();
+        setNeedsSave(true);
+    }
 }
 
 void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -1885,17 +2202,23 @@ void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     m_pendingAutoAssignStates[layoutId] = enabled;
 
     // Update local model so the UI reflects the change immediately
+    bool changed = false;
     for (int i = 0; i < m_layouts.size(); ++i) {
         QVariantMap layout = m_layouts[i].toMap();
         if (layout[QStringLiteral("id")].toString() == layoutId) {
-            layout[QStringLiteral("autoAssign")] = enabled;
-            m_layouts[i] = layout;
+            if (layout[QStringLiteral("autoAssign")].toBool() != enabled) {
+                layout[QStringLiteral("autoAssign")] = enabled;
+                m_layouts[i] = layout;
+                changed = true;
+            }
             break;
         }
     }
-    Q_EMIT layoutsChanged();
 
-    setNeedsSave(true);
+    if (changed) {
+        Q_EMIT layoutsChanged();
+        setNeedsSave(true);
+    }
 }
 
 void KCMPlasmaZones::addExcludedApp(const QString& app)
@@ -2216,11 +2539,64 @@ void KCMPlasmaZones::openReleaseUrl()
     }
 }
 
+void KCMPlasmaZones::scheduleLoadLayouts()
+{
+    if (m_saveInProgress) return; // Don't reload layouts while a save is in progress
+    // Restart the debounce timer — coalesces rapid signals into one loadLayouts() call
+    m_loadLayoutsTimer->start();
+}
+
 void KCMPlasmaZones::loadLayouts()
 {
-    QVariantList newLayouts;
+    // Async variant — used by the debounce timer so D-Bus round-trips don't
+    // block the UI thread during user interaction (scrolling, popup browsing).
+    // Bump generation so any in-flight response from a previous call is discarded.
+    const int generation = ++m_layoutLoadGeneration;
 
-    // Load from daemon via D-Bus
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath),
+        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
+
+    auto* watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(msg), this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, generation](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+
+            // A newer loadLayouts() was issued while this one was in flight — discard.
+            if (generation != m_layoutLoadGeneration) return;
+
+            QVariantList newLayouts;
+            QDBusPendingReply<QStringList> reply = *w;
+
+            if (!reply.isError()) {
+                const QStringList layoutJsonList = reply.value();
+                for (const QString& layoutJson : layoutJsonList) {
+                    QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
+                    if (!doc.isNull() && doc.isObject()) {
+                        newLayouts.append(doc.object().toVariantMap());
+                    }
+                }
+            } else {
+                qCWarning(lcKcm) << "Failed to load layouts:" << reply.error().message();
+            }
+
+            // No fallback layouts - if daemon isn't running, show empty list.
+            // The QML UI handles this with a "Enable daemon to see layouts" message.
+            m_unfilteredLayouts = newLayouts;
+            applyLayoutFilter();
+        });
+}
+
+void KCMPlasmaZones::loadLayoutsSync()
+{
+    // Synchronous variant — used during init and load() when the KCM is not
+    // yet visible, so blocking is acceptable and layouts must be available
+    // before QML components run their Component.onCompleted handlers.
+    ++m_layoutLoadGeneration; // invalidate any in-flight async calls
+
+    QVariantList newLayouts;
     QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
@@ -2233,21 +2609,64 @@ void KCMPlasmaZones::loadLayouts()
         }
     }
 
-    // No fallback layouts - if daemon isn't running, show empty list
-    // The QML UI should handle this gracefully with a message like "Enable daemon to see layouts"
+    m_unfilteredLayouts = newLayouts;
+    applyLayoutFilter();
+}
 
+void KCMPlasmaZones::applyLayoutFilter()
+{
+    QVariantList newLayouts = m_unfilteredLayouts;
+
+    // Filter out autotile entries when the feature is disabled
+    if (!m_settings->autotileEnabled()) {
+        newLayouts.erase(
+            std::remove_if(newLayouts.begin(), newLayouts.end(), [](const QVariant& v) {
+                return v.toMap().value(QStringLiteral("isAutotile")).toBool();
+            }),
+            newLayouts.end());
+    }
+
+    // Sort: manual layouts first (alphabetical), then autotile (alphabetical)
+    // Matches the zone selector popup ordering
     std::sort(newLayouts.begin(), newLayouts.end(), [](const QVariant& a, const QVariant& b) {
-        return a.toMap().value(QStringLiteral("name")).toString().toLower()
-             < b.toMap().value(QStringLiteral("name")).toString().toLower();
+        const QVariantMap mapA = a.toMap();
+        const QVariantMap mapB = b.toMap();
+        const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
+        const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
+        if (aIsAutotile != bIsAutotile) {
+            return !aIsAutotile; // manual before autotile
+        }
+        return mapA.value(QStringLiteral("name")).toString().toLower()
+             < mapB.value(QStringLiteral("name")).toString().toLower();
     });
+
+    // Only update if the list actually changed (prevents scroll position reset).
+    // Compare by ID list — QVariantMap equality is unreliable across D-Bus round-trips
+    // due to type coercion differences (int vs double, etc.).
+    auto extractIds = [](const QVariantList& list) {
+        QStringList ids;
+        ids.reserve(list.size());
+        for (const auto& v : list) {
+            ids.append(v.toMap().value(QStringLiteral("id")).toString());
+        }
+        return ids;
+    };
+    if (extractIds(m_layouts) == extractIds(newLayouts)) {
+        return;
+    }
+
+    // Track whether layoutToSelect was set externally (create/import/duplicate)
+    // before we emit layoutsChanged, so we know to emit layoutToSelectChanged later.
+    const bool hasExternalSelect = !m_layoutToSelect.isEmpty();
 
     m_layouts = newLayouts;
     Q_EMIT layoutsChanged();
 
-    // Select the default layout (settings-based fallback) rather than
-    // the transient internal active layout, so the KCM highlights the
-    // layout the user actually configured as their default.
-    if (!newLayouts.isEmpty()) {
+    // Only auto-select the default layout on the very first successful load.
+    // On refreshes (D-Bus signals, autotile toggle), preserve the user's scroll position.
+    if (!m_initialLayoutLoadDone && !newLayouts.isEmpty()) {
+        m_initialLayoutLoadDone = true;
+
         QString defaultId = defaultLayoutId();
         if (defaultId.isEmpty()) {
             // No explicit default set (fresh install / reset) — resolve the implicit
@@ -2272,9 +2691,16 @@ void KCMPlasmaZones::loadLayouts()
         }
     }
 
-    // Emit layoutToSelectChanged after layoutsChanged so the model is updated first
-    if (!m_layoutToSelect.isEmpty()) {
-        Q_EMIT layoutToSelectChanged();
+    // Emit layoutToSelectChanged for initial load or externally-triggered selection
+    // (create/import/duplicate set m_layoutToSelect before calling loadLayouts).
+    // For plain refreshes neither branch is true, so scroll position is preserved.
+    if (hasExternalSelect || !m_layoutToSelect.isEmpty()) {
+        if (!m_layoutToSelect.isEmpty()) {
+            Q_EMIT layoutToSelectChanged();
+            // Clear after emission — one-shot value. QML signal handlers capture
+            // the value synchronously before any deferred Qt.callLater callbacks.
+            m_layoutToSelect.clear();
+        }
     }
 }
 
@@ -2418,6 +2844,24 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT zoneSelectorGridColumnsChanged();
         Q_EMIT zoneSelectorSizeModeChanged();
         Q_EMIT zoneSelectorMaxRowsChanged();
+
+        // Autotiling
+        Q_EMIT autotileEnabledChanged();
+        Q_EMIT autotileAlgorithmChanged();
+        Q_EMIT autotileSplitRatioChanged();
+        Q_EMIT autotileMasterCountChanged();
+        Q_EMIT autotileInnerGapChanged();
+        Q_EMIT autotileOuterGapChanged();
+        Q_EMIT autotileFocusNewWindowsChanged();
+        Q_EMIT autotileSmartGapsChanged();
+        Q_EMIT autotileMaxWindowsChanged();
+        Q_EMIT autotileInsertPositionChanged();
+        Q_EMIT autotileAnimationsEnabledChanged();
+        Q_EMIT autotileAnimationDurationChanged();
+        Q_EMIT autotileFocusFollowsMouseChanged();
+        Q_EMIT autotileRespectMinimumSizeChanged();
+        Q_EMIT autotileMonocleHideOthersChanged();
+        Q_EMIT autotileMonocleShowTabsChanged();
     }
 }
 

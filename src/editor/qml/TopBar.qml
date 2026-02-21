@@ -26,6 +26,7 @@ ToolBar {
     required property var exportDialog
     required property var editorWindow
     required property bool fullscreenMode
+    required property bool previewMode
 
     signal fullscreenToggled()
 
@@ -94,6 +95,23 @@ ToolBar {
                 color: Kirigami.Theme.disabledTextColor
             }
 
+            // Preview mode badge
+            Rectangle {
+                visible: topBar.previewMode
+                color: Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, 0.15)
+                radius: height / 2
+                implicitWidth: previewLabel.implicitWidth + Kirigami.Units.largeSpacing * 2
+                implicitHeight: previewLabel.implicitHeight + Kirigami.Units.smallSpacing
+
+                Label {
+                    id: previewLabel
+                    anchors.centerIn: parent
+                    text: i18nc("@info", "Preview")
+                    color: Kirigami.Theme.neutralTextColor
+                    font.weight: Font.Medium
+                }
+            }
+
             // Layout name field with integrated character counter
             TextField {
                 id: layoutNameField
@@ -102,7 +120,8 @@ ToolBar {
                 readonly property int currentLength: text ? text.length : 0
                 readonly property bool showCounter: currentLength > maxLength * 0.8 || currentLength > maxLength
 
-                Layout.preferredWidth: 200
+                Layout.preferredWidth: Kirigami.Units.gridUnit * 12
+                readOnly: topBar.previewMode
                 enabled: editorController !== null && editorController !== undefined
                 Accessible.name: i18nc("@label", "Layout name")
                 Accessible.description: i18nc("@info", "Enter name for the layout")
@@ -234,7 +253,7 @@ ToolBar {
                 Accessible.role: Accessible.Button
             }
 
-            // Visual separator
+            // Visual separator after undo/redo
             Kirigami.Separator {
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -257,10 +276,11 @@ ToolBar {
             Accessible.description: i18nc("@info", "Configure per-layout gap overrides")
         }
 
-        // Visual separator
+        // Visual separator (hide when layout settings is hidden to avoid orphan)
         Kirigami.Separator {
             Layout.fillHeight: true
             Layout.preferredWidth: 1
+            visible: layoutSettingsButton.visible
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -292,7 +312,7 @@ ToolBar {
 
             icon.name: "adjustlevels"
             enabled: editorController !== null && editorController.shadersEnabled
-            visible: editorController !== null && editorController.shadersEnabled
+            visible: !topBar.previewMode && editorController !== null && editorController.shadersEnabled
             onClicked: topBar.shaderDialog.open()
             ToolTip.text: i18nc("@tooltip", "Shader effect settings")
             ToolTip.visible: hovered
@@ -317,6 +337,7 @@ ToolBar {
 
             // Import button
             ToolButton {
+                visible: !topBar.previewMode
                 icon.name: "document-import"
                 enabled: editorController !== null && editorController !== undefined
                 onClicked: importDialog.open()
@@ -328,6 +349,7 @@ ToolBar {
 
             // Export button
             ToolButton {
+                visible: !topBar.previewMode
                 icon.name: "document-export"
                 enabled: editorController !== null && editorController !== undefined && editorController.layoutId !== ""
                 onClicked: exportDialog.open()
@@ -337,8 +359,9 @@ ToolBar {
                 Accessible.description: i18nc("@info", "Export the current layout to a JSON file")
             }
 
-            // Visual separator
+            // Visual separator (hide when import/export are hidden to avoid orphan)
             Kirigami.Separator {
+                visible: !topBar.previewMode
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
             }

@@ -22,6 +22,7 @@ Item {
     required property var editorWindow
     required property var editorController
     required property Item drawingArea
+    required property bool previewMode
     // Rectangle selection state (shared between both mouse areas)
     property bool isSelecting: false
     property point selectionStart: Qt.point(0, 0)
@@ -238,6 +239,8 @@ Item {
             canvasHandler.selectionRect = Qt.rect(0, 0, 0, 0);
         }
         onDoubleClicked: function(mouse) {
+            if (canvasHandler.previewMode)
+                return ;
             if (!canvasHandler.editorController || !canvasHandler.drawingArea)
                 return ;
 

@@ -13,3 +13,5 @@ MonitorAssignmentsCard 1.0 MonitorAssignmentsCard.qml
 QuickLayoutSlotsCard 1.0 QuickLayoutSlotsCard.qml
 WindowPickerDialog 1.0 WindowPickerDialog.qml
 ZonesTab 1.0 ZonesTab.qml
+AlgorithmPreview 1.0 AlgorithmPreview.qml
+AutotilingTab 1.0 AutotilingTab.qml

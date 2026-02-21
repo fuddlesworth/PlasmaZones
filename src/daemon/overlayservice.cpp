@@ -669,6 +669,10 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         if (m_settings && m_settings->isMonitorDisabled(Utils::screenIdentifier(screen))) {
             continue;
         }
+        // Skip autotile-managed screens (overlay is for manual zone selection)
+        if (m_excludedScreens.contains(screen->name())) {
+            continue;
+        }
 
         if (!m_overlayWindows.contains(screen)) {
             createOverlayWindow(screen);
@@ -1434,7 +1438,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
     const int layoutCount = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity).size();
+        m_layoutManager, Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts).size();
     updateZoneSelectorWindowLayout(window, screen, config, m_settings, layoutCount);
 
     window->setVisible(false);
@@ -1989,8 +1994,33 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
 QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
 {
     const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity);
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts);
     return LayoutUtils::toVariantList(entries);
+}
+
+void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
+{
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+        return;
+    }
+    m_includeManualLayouts = includeManual;
+    m_includeAutotileLayouts = includeAutotile;
+    // Refresh visible zone selector windows with updated layout list
+    refreshVisibleWindows();
+}
+
+void OverlayService::setExcludedScreens(const QSet<QString>& screenNames)
+{
+    m_excludedScreens = screenNames;
+}
+
+int OverlayService::visibleLayoutCount(const QString& screenName) const
+{
+    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts);
+    return entries.size();
 }
 
 bool OverlayService::hasSelectedZone() const
@@ -2027,20 +2057,20 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
                 bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
                 QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
                     zone, screen, zonePadding, outerGaps, useAvail);
-                return geom.toRect();
+                return GeometryUtils::snapToRect(geom);
             }
         }
     }
 
     // Fallback: manual calculation when layout/zone lookup fails
+    // Use snapToRect for edge-consistent rounding (matches primary path)
     QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-
-    int x = availableGeom.x() + static_cast<int>(m_selectedZoneRelGeo.x() * availableGeom.width());
-    int y = availableGeom.y() + static_cast<int>(m_selectedZoneRelGeo.y() * availableGeom.height());
-    int width = static_cast<int>(m_selectedZoneRelGeo.width() * availableGeom.width());
-    int height = static_cast<int>(m_selectedZoneRelGeo.height() * availableGeom.height());
-
-    return QRect(x, y, width, height);
+    QRectF geom(
+        availableGeom.x() + m_selectedZoneRelGeo.x() * availableGeom.width(),
+        availableGeom.y() + m_selectedZoneRelGeo.y() * availableGeom.height(),
+        m_selectedZoneRelGeo.width() * availableGeom.width(),
+        m_selectedZoneRelGeo.height() * availableGeom.height());
+    return GeometryUtils::snapToRect(geom);
 }
 
 void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry)
@@ -2073,8 +2103,15 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
         }
     }
 
-    qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId << "on screen:" << screenName;
-    Q_EMIT manualLayoutSelected(layoutId, screenName);
+    // Route to the correct signal based on whether this is an autotile algorithm or manual layout
+    if (LayoutId::isAutotile(layoutId)) {
+        const QString algoId = LayoutId::extractAlgorithmId(layoutId);
+        qCInfo(lcOverlay) << "Autotile algorithm selected from zone selector:" << algoId << "on screen:" << screenName;
+        Q_EMIT autotileLayoutSelected(algoId, screenName);
+    } else {
+        qCInfo(lcOverlay) << "Layout selected from zone selector:" << layoutId << "on screen:" << screenName;
+        Q_EMIT manualLayoutSelected(layoutId, screenName);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2292,12 +2329,13 @@ void OverlayService::onShaderError(const QString& errorLog)
 bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
                                             const QString& screenName)
 {
-    // Resolve target screen: explicit name > primary
+    // Resolve target screen: explicit name/ID > primary
     // Note: QCursor::pos() is NOT used here — it returns stale data for background
     // daemons on Wayland. Callers should always pass screenName from KWin effect data.
+    // Accepts both connector name (e.g. "DP-2") and EDID-based screen ID (e.g. from currentScreenName).
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -2360,6 +2398,7 @@ void OverlayService::showLayoutOsd(Layout* layout, const QString& screenName)
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
+    m_lastLayoutOsdTime.restart();
 
     qCInfo(lcOverlay) << "Showing layout OSD for:" << layout->name() << "on screen:" << screenName;
 }
@@ -2392,6 +2431,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
     sizeAndCenterOsd(window, screenGeom, aspectRatio);
     QMetaObject::invokeMethod(window, "show");
+    m_lastLayoutOsdTime.restart();
 
     qCInfo(lcOverlay) << "Showing layout OSD for:" << name << "category:" << category << "on screen:" << screenName;
 }
@@ -2455,6 +2495,13 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         return;
     }
 
+    // Suppress resnap OSD when it follows layout OSD (autotile→zones toggle shows both otherwise)
+    if (action == QStringLiteral("resnap") && m_lastLayoutOsdTime.isValid()
+        && m_lastLayoutOsdTime.elapsed() < 600) {
+        qCDebug(lcOverlay) << "Skipping resnap OSD (recently showed layout OSD)";
+        return;
+    }
+
     // Deduplicate: Skip if same action+reason within 200ms (prevents duplicate from Qt signal + D-Bus signal)
     QString actionKey = action + QLatin1String(":") + reason;
     if (actionKey == m_lastNavigationAction + QLatin1String(":") + m_lastNavigationReason
@@ -2467,7 +2514,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationTime.restart();
 
     // Show on the screen where the navigation occurred, fallback to primary
-    QScreen* screen = Utils::findScreenByName(screenName);
+    // Accepts both connector name and EDID-based screen ID for flexibility
+    QScreen* screen = Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }
@@ -2477,11 +2525,18 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
+    // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
+    static const QStringList noLayoutActions{QStringLiteral("float"), QStringLiteral("algorithm"),
+                                             QStringLiteral("rotate"), QStringLiteral("focus_master"),
+                                             QStringLiteral("swap_master"), QStringLiteral("master_ratio"),
+                                             QStringLiteral("master_count"), QStringLiteral("retile")};
+    const bool needsLayout = !noLayoutActions.contains(action);
     Layout* screenLayout = resolveScreenLayout(screen);
-    if (!screenLayout || screenLayout->zones().isEmpty()) {
+    if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << screen->name()
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
-                           << "zones=" << (screenLayout ? screenLayout->zones().size() : 0);
+                           << "zones=" << (screenLayout ? screenLayout->zones().size() : 0)
+                           << "action=" << action;
         return;
     }
 
@@ -2631,7 +2686,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);
@@ -2821,7 +2876,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
 
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::primaryScreen();

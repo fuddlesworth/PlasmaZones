@@ -19,7 +19,7 @@ Window {
 
     // Navigation feedback data
     property bool success: true
-    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle"
+    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
 
     // Zone data
@@ -89,6 +89,10 @@ Window {
                 return i18n("Nothing to rotate")
             } else if (action === "swap") {
                 return i18n("Nothing to swap")
+            } else if (action === "focus_master") {
+                return i18n("No windows to focus")
+            } else if (action === "swap_master") {
+                return reason === "already_master" ? i18n("Already master") : i18n("Nothing to swap")
             } else {
                 return i18n("Failed")
             }
@@ -126,6 +130,9 @@ Window {
             return i18n("Restored");
         } else if (action === "float") {
             // Show different message based on float state from reason field
+            if (reason === "tiled") {
+                return i18n("Tiled");
+            }
             if (reason === "unfloated") {
                 return i18n("Snapped");
             }
@@ -137,11 +144,23 @@ Window {
             return i18n("Snapped");
         } else if (action === "cycle") {
             return i18n("Next window");
+        } else if (action === "focus_master") {
+            return i18n("Focus master");
+        } else if (action === "swap_master") {
+            return i18n("Swapped with master");
+        } else if (action === "master_ratio") {
+            return reason === "increased" ? i18n("Master ratio increased") : i18n("Master ratio decreased");
+        } else if (action === "master_count") {
+            return reason === "increased" ? i18n("Master count increased") : i18n("Master count decreased");
+        } else if (action === "retile") {
+            return i18n("Retiled");
         } else if (action === "resnap") {
             if (windowCount > 1) {
                 return i18np("Resnapped %1 window", "Resnapped %1 windows", windowCount);
             }
             return i18n("Resnapped");
+        } else if (action === "algorithm") {
+            return i18n("Autotile: %1", reason || "");
         } else {
             return i18n("Done");
         }

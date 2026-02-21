@@ -101,7 +101,7 @@ public:
     Q_INVOKABLE void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
                                   Layout* layout) override;
     Q_INVOKABLE void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
-                                      const QUuid& layoutId) override;
+                                      const QString& layoutId) override;
     Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                         const QString& activity = QString()) const override;
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
@@ -118,31 +118,54 @@ public:
                                            const QString& activity = QString()) const override;
 
     /**
+     * @brief Get the raw assignment ID for a screen (may be UUID or autotile ID)
+     *
+     * Same fallback cascade as layoutForScreen() but returns the raw assignment
+     * string instead of resolving it to a Layout*. Use this when you need to
+     * distinguish autotile assignments from manual ones.
+     *
+     * @param screenId Stable EDID-based screen ID (or connector name fallback)
+     * @param virtualDesktop Desktop number (0 = all desktops)
+     * @param activity Activity ID (empty = all activities)
+     * @return Raw assignment string (UUID or "autotile:*"), or empty if no assignment
+     */
+    QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
+                                  const QString& activity = QString()) const;
+
+    /**
+     * @brief Clear all autotile assignments (when feature gate is disabled)
+     *
+     * Removes all assignments whose value starts with "autotile:" prefix.
+     * Emits layoutAssigned for each affected screen and saves once at end.
+     */
+    void clearAutotileAssignments();
+
+    /**
      * @brief Batch set all screen assignments (base assignments, desktop=0, no activity)
      * @param assignments Map of screenId -> layoutId
      * Clears existing base assignments and sets new ones, saves once at end
      */
-    void setAllScreenAssignments(const QHash<QString, QUuid>& assignments) override;
+    void setAllScreenAssignments(const QHash<QString, QString>& assignments) override;
 
     /**
      * @brief Batch set all per-desktop assignments
      * @param assignments Map of (screenId, virtualDesktop) -> layoutId
      * Clears existing per-desktop assignments and sets new ones, saves once at end
      */
-    void setAllDesktopAssignments(const QHash<QPair<QString, int>, QUuid>& assignments) override;
+    void setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments) override;
 
     /**
      * @brief Batch set all per-activity assignments
      * @param assignments Map of (screenId, activityId) -> layoutId
      * Clears existing per-activity assignments and sets new ones, saves once at end
      */
-    void setAllActivityAssignments(const QHash<QPair<QString, QString>, QUuid>& assignments) override;
+    void setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments) override;
 
     Q_INVOKABLE Layout* layoutForShortcut(int number) const override;
     Q_INVOKABLE void applyQuickLayout(int number, const QString& screenId) override;
-    void setQuickLayoutSlot(int number, const QUuid& layoutId) override;
-    void setAllQuickLayoutSlots(const QHash<int, QUuid>& slots) override;  // Batch set - saves once
-    QHash<int, QUuid> quickLayoutSlots() const override
+    void setQuickLayoutSlot(int number, const QString& layoutId) override;
+    void setAllQuickLayoutSlots(const QHash<int, QString>& slots) override;  // Batch set - saves once
+    QHash<int, QString> quickLayoutSlots() const override
     {
         return m_quickLayoutShortcuts;
     }
@@ -169,17 +192,21 @@ public:
     Q_INVOKABLE void importLayout(const QString& filePath) override;
     Q_INVOKABLE void exportLayout(Layout* layout, const QString& filePath) override;
 
+    // Autotile layout overrides (per-algorithm gap, visibility, shader settings)
+    void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
+    QJsonObject loadAutotileOverrides(const QString& algorithmId) const;
+
     /**
      * @brief Get all per-desktop assignments (virtualDesktop > 0, no activity)
      * @return Map of (screenId, virtualDesktop) -> layoutId
      */
-    QHash<QPair<QString, int>, QUuid> desktopAssignments() const;
+    QHash<QPair<QString, int>, QString> desktopAssignments() const;
 
     /**
      * @brief Get all per-activity assignments (activity non-empty, any desktop)
      * @return Map of (screenId, activityId) -> layoutId
      */
-    QHash<QPair<QString, QString>, QUuid> activityAssignments() const;
+    QHash<QPair<QString, QString>, QString> activityAssignments() const;
 
 Q_SIGNALS:
     // Signals declared here only (ILayoutManager is a pure interface without signals)
@@ -197,15 +224,17 @@ private:
     void loadLayoutsFromDirectory(const QString& directory);
     QString layoutFilePath(const QUuid& id) const;
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
-    bool shouldSkipLayoutAssignment(const QUuid& layoutId, const QString& context) const;
+    bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
+    QJsonObject loadAllAutotileOverrides() const;
+    void saveAllAutotileOverrides(const QJsonObject& all);
 
     ISettings* m_settings = nullptr;
     QString m_layoutDirectory;
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;
     Layout* m_previousLayout = nullptr; ///< Layout active before last setActiveLayout (for resnap)
-    QHash<LayoutAssignmentKey, QUuid> m_assignments;
-    QHash<int, QUuid> m_quickLayoutShortcuts; // number -> layout ID
+    QHash<LayoutAssignmentKey, QString> m_assignments;
+    QHash<int, QString> m_quickLayoutShortcuts; // number -> layout ID
     int m_currentVirtualDesktop = 1;
     QString m_currentActivity;
 };

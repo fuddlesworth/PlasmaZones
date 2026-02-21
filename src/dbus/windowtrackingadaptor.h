@@ -22,6 +22,7 @@ class Zone;
 class IZoneDetector;
 class ISettings;
 class VirtualDesktopManager;
+class ZoneDetectionAdaptor;
 
 /**
  * @brief D-Bus adaptor for window-zone tracking
@@ -55,6 +56,20 @@ public:
      * since QCursor::pos() is unreliable for background daemons.
      */
     QString lastCursorScreenName() const { return m_lastCursorScreenName; }
+
+    /**
+     * @brief Set ZoneDetectionAdaptor for daemon-driven navigation (getAdjacentZone, getFirstZoneInDirection)
+     * @param adaptor ZoneDetectionAdaptor instance (must outlive this adaptor)
+     */
+    void setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor) { m_zoneDetectionAdaptor = adaptor; }
+
+    /**
+     * @brief Access the underlying WindowTrackingService
+     *
+     * Used by the daemon to share the single WTS instance with other components
+     * (e.g., AutotileEngine) instead of creating duplicate services.
+     */
+    WindowTrackingService* service() const { return m_service; }
 
 public Q_SLOTS:
     // Window snapping notifications (from KWin script)
@@ -137,6 +152,13 @@ public Q_SLOTS:
      * @param windowId Window ID
      */
     void clearPreSnapGeometry(const QString& windowId);
+
+    /**
+     * Store pre-autotile geometry from KWin (for float restore in autotile mode)
+     * Called when KWin saves geometry before tiling an autotile window.
+     */
+    void recordPreAutotileGeometry(const QString& windowId, const QString& screenName,
+                                   int x, int y, int width, int height);
 
     /**
      * Clean up all tracking data for a closed window
@@ -368,6 +390,18 @@ public Q_SLOTS:
     void resnapToNewLayout();
 
     /**
+     * @brief Resnap windows to their current zone assignments
+     *
+     * Used when restoring windows after autotile toggle-off. Autotile bypasses the
+     * normal zone-snap tracking, so the pre-autotile zone assignments are still valid.
+     * This method computes zone geometries from those assignments and emits
+     * resnapToNewLayoutRequested for the KWin effect to reposition windows.
+     *
+     * @param screenFilter When non-empty, only resnap windows on this screen
+     */
+    void resnapCurrentAssignments(const QString& screenFilter = QString());
+
+    /**
      * @brief Calculate snap assignments for all provided windows
      * @param windowIds List of unsnapped window IDs
      * @param screenName Screen for layout/geometry resolution
@@ -375,6 +409,68 @@ public Q_SLOTS:
      * @note Called by KWin effect after collecting unsnapped windows
      */
     QString calculateSnapAllWindows(const QStringList& windowIds, const QString& screenName);
+
+    // Daemon-driven navigation: KWin calls with windowId, daemon returns result JSON
+    /**
+     * @brief Get move target for a window (zone + geometry)
+     * @param windowId Window to move
+     * @param direction Direction ("left", "right", "up", "down")
+     * @param screenName Screen for geometry
+     * @return JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}
+     */
+    QString getMoveTargetForWindow(const QString& windowId, const QString& direction, const QString& screenName);
+
+    /**
+     * @brief Get focus target (window to activate) in adjacent zone
+     * @param windowId Current focused window
+     * @param direction Direction to look
+     * @param screenName Screen for zone resolution
+     * @return JSON: {success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName}
+     */
+    QString getFocusTargetForWindow(const QString& windowId, const QString& direction, const QString& screenName);
+
+    /**
+     * @brief Get restore geometry for a snapped window
+     * @param windowId Window to restore
+     * @param screenName Screen for validation
+     * @return JSON: {success, found, x, y, width, height}
+     */
+    QString getRestoreForWindow(const QString& windowId, const QString& screenName);
+
+    /**
+     * @brief Get cycle target (next/prev window in same zone)
+     * @param windowId Current focused window
+     * @param forward true for next, false for previous
+     * @param screenName Screen for zone resolution
+     * @return JSON: {success, reason, windowIdToActivate, zoneId, screenName}
+     */
+    QString getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenName);
+
+    /**
+     * @brief Get swap target data (both windows' geometries and zone IDs)
+     * @param windowId Window to swap
+     * @param direction Direction to swap
+     * @param screenName Screen for geometry
+     * @return JSON: {success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2, zoneId2, screenName, sourceZoneId, targetZoneId}
+     */
+    QString getSwapTargetForWindow(const QString& windowId, const QString& direction, const QString& screenName);
+
+    /**
+     * @brief Get push-to-empty-zone target (zone + geometry)
+     * @param windowId Window to push
+     * @param screenName Screen for layout/geometry
+     * @return JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}
+     */
+    QString getPushTargetForWindow(const QString& windowId, const QString& screenName);
+
+    /**
+     * @brief Get snap-to-zone-by-number target (zone + geometry)
+     * @param windowId Window to snap
+     * @param zoneNumber Zone number (1-9)
+     * @param screenName Screen for layout/geometry
+     * @return JSON: {success, reason, zoneId, geometryJson, sourceZoneId, screenName}
+     */
+    QString getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber, const QString& screenName);
 
     /**
      * @brief Trigger snap-all-windows from daemon shortcut
@@ -590,7 +686,29 @@ Q_SIGNALS:
     void moveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
                                           const QString& geometryJson);
 
+    /**
+     * @brief Daemon requests KWin to apply geometry (daemon-driven flow)
+     * @param windowId Window to apply geometry to
+     * @param geometryJson JSON {x, y, width, height}
+     * @param zoneId Zone to snap to (empty for float restore - do not call windowSnapped)
+     * @param screenName Screen for OSD placement
+     */
+    void applyGeometryRequested(const QString& windowId, const QString& geometryJson,
+                               const QString& zoneId, const QString& screenName);
+
 public Q_SLOTS:
+    /**
+     * @brief Daemon-driven float toggle. KWin calls with active window; daemon does logic and emits applyGeometryRequested.
+     */
+    void toggleFloatForWindow(const QString& windowId, const QString& screenName);
+
+    /**
+     * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats)
+     * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
+     * @return true if geometry was applied, false if none stored
+     */
+    bool applyGeometryForFloat(const QString& windowId, const QString& screenName);
+
     /**
      * @brief Emit moveSpecificWindowToZoneRequested - called when user selects from Snap Assist
      */
@@ -695,6 +813,7 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)
     // ═══════════════════════════════════════════════════════════════════════════════
+    ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
     LayoutManager* m_layoutManager;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;

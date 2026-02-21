@@ -60,6 +60,12 @@ PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcCore) PLASMAZONES_EXPORT
     Q_DECLARE_LOGGING_CATEGORY(lcEditorZone) PLASMAZONES_EXPORT
     Q_DECLARE_LOGGING_CATEGORY(lcEditorUndo) PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcSnapping)
 
+    // Autotile module - tiling algorithms, engine, registry
+    PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcAutotile)
+
+    // Autotile D-Bus adaptor
+    PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcDbusAutotile)
+
     // KWin effect module - snap visualization, navigation
     PLASMAZONES_EXPORT Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 

@@ -24,6 +24,7 @@ Item {
     required property real zoneSpacing
     required property Item drawingArea // Parent drawing area for dimensions (passed as reference)
     required property Repeater zonesRepeater // Zones repeater for accessing zone items (passed as reference)
+    required property bool previewMode
     // Track the most recent divider positions that were actively resized.
     // Preserves exact positions after resize, preventing snapping to rounded edges.
     property var recentDividerPositions: ({
@@ -393,7 +394,10 @@ Item {
             zonesRepeater: dividerManager.zonesRepeater
 
             // Hide other dividers while one is being dragged to avoid phantom appearance
+            // Also hide all dividers in preview mode
             visible: {
+                if (dividerManager.previewMode)
+                    return false;
                 if (!dividerInfo || dividerInfo === null || dividerInfo === undefined)
                     return false;
                 if (width <= 0 || height <= 0)

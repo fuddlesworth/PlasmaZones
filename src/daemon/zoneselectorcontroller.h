@@ -156,6 +156,9 @@ public:
         return m_currentActivity;
     }
 
+    // Layout type filter (set by Daemon based on tiling mode + feature gate)
+    void setLayoutFilter(bool includeManual, bool includeAutotile);
+
     // Drag state management
     Q_INVOKABLE void startDrag();
     Q_INVOKABLE void endDrag();
@@ -241,6 +244,8 @@ private:
     QPointer<QQuickItem> m_qmlItem;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
+    bool m_includeManualLayouts = true;
+    bool m_includeAutotileLayouts = false;
 
     // Timers
     QTimer m_collapseTimer; // Delay before collapsing from expanded

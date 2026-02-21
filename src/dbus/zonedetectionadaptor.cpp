@@ -106,13 +106,14 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings);
     bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
     QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+    QRect snapped = GeometryUtils::snapToRect(geom);
 
     // Return as "x,y,width,height"
     return QStringLiteral("%1,%2,%3,%4")
-        .arg(static_cast<int>(geom.x()))
-        .arg(static_cast<int>(geom.y()))
-        .arg(static_cast<int>(geom.width()))
-        .arg(static_cast<int>(geom.height()));
+        .arg(snapped.x())
+        .arg(snapped.y())
+        .arg(snapped.width())
+        .arg(snapped.height());
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
@@ -379,13 +380,14 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenName
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior)
         QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+        QRect snapped = GeometryUtils::snapToRect(geom);
         // Format: "zoneId:x,y,width,height"
         QString entry = QStringLiteral("%1:%2,%3,%4,%5")
                             .arg(zone->id().toString())
-                            .arg(static_cast<int>(geom.x()))
-                            .arg(static_cast<int>(geom.y()))
-                            .arg(static_cast<int>(geom.width()))
-                            .arg(static_cast<int>(geom.height()));
+                            .arg(snapped.x())
+                            .arg(snapped.y())
+                            .arg(snapped.width())
+                            .arg(snapped.height());
         result.append(entry);
     }
 
