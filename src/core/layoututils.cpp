@@ -22,7 +22,7 @@ namespace LayoutUtils {
 // Zone conversion
 // ═══════════════════════════════════════════════════════════════════════════
 
-QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
+QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& referenceGeometry = QRectF())
 {
     using namespace JsonKeys;
     QVariantMap map;
@@ -36,7 +36,8 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
     map[ZoneNumber] = zone->zoneNumber();
 
     // Relative geometry (0.0-1.0) for resolution-independent rendering
-    QRectF relGeo = zone->relativeGeometry();
+    // Use normalizedGeometry() to compute correct 0-1 coords for any geometry mode
+    QRectF relGeo = zone->normalizedGeometry(referenceGeometry);
     QVariantMap relGeoMap;
     relGeoMap[X] = relGeo.x();
     relGeoMap[Y] = relGeo.y();
@@ -80,7 +81,7 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
     return map;
 }
 
-QVariantList zonesToVariantList(Layout* layout, ZoneFields fields)
+QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF& referenceGeometry)
 {
     QVariantList list;
 
@@ -93,7 +94,7 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields)
         if (!zone) {
             continue;
         }
-        list.append(zoneToVariantMap(zone, fields));
+        list.append(zoneToVariantMap(zone, fields, referenceGeometry));
     }
 
     return list;

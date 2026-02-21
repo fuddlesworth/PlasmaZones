@@ -81,6 +81,10 @@ constexpr qreal DefaultSnapInterval = 0.1; // 10% default grid snap interval
 
 // Zone duplication offset
 constexpr qreal DuplicateOffset = 0.02; // 2% offset when duplicating zones
+constexpr int DuplicateOffsetPixels = 20; // 20px offset when duplicating fixed zones
+
+// Keyboard step for fixed geometry zones
+constexpr int KeyboardStepPixels = 10; // 10px step for keyboard move/resize of fixed zones
 
 // Default zone colors (hex strings for QML compatibility)
 inline constexpr const char* DefaultHighlightColor = "#800078D4";

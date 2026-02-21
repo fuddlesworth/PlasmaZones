@@ -10,8 +10,6 @@
 
 namespace PlasmaZones {
 
-class EditorController;
-
 /**
  * @brief Command for updating fixed pixel geometry via spinboxes
  *

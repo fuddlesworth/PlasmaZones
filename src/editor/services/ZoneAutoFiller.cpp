@@ -17,6 +17,21 @@ ZoneAutoFiller::ZoneAutoFiller(ZoneManager* manager, QObject* parent)
 {
 }
 
+void ZoneAutoFiller::applyRelativeGeometry(const QString& zoneId, qreal rx, qreal ry, qreal rw, qreal rh)
+{
+    QVariantMap z = m_manager->getZoneById(zoneId);
+    if (z.isEmpty()) return;
+    int mode = z.value(QLatin1String("geometryMode"), 0).toInt();
+    if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        QSize ss = m_manager->referenceScreenSize();
+        qreal sw = qMax(1.0, static_cast<qreal>(ss.width()));
+        qreal sh = qMax(1.0, static_cast<qreal>(ss.height()));
+        m_manager->updateZoneGeometry(zoneId, rx * sw, ry * sh, rw * sw, rh * sh);
+    } else {
+        m_manager->updateZoneGeometry(zoneId, rx, ry, rw, rh);
+    }
+}
+
 bool ZoneAutoFiller::isRectangleEmpty(const QRectF& rect, const QString& excludeZoneId) const
 {
     const qreal threshold = 0.002; // Small epsilon for floating point comparison
@@ -328,7 +343,7 @@ bool ZoneAutoFiller::expandToFillSpace(const QString& zoneId, qreal mouseX, qrea
         w = qMin(w, 1.0 - x);
         h = qMin(h, 1.0 - y);
 
-        m_manager->updateZoneGeometry(zoneId, x, y, w, h);
+        applyRelativeGeometry(zoneId, x, y, w, h);
     }
 
     return changed;
@@ -359,8 +374,8 @@ bool ZoneAutoFiller::smartFillZone(const QString& zoneId, qreal mouseX, qreal mo
         return false;
     }
 
-    m_manager->updateZoneGeometry(zoneId, bestRegion.x(), bestRegion.y(),
-                                   bestRegion.width(), bestRegion.height());
+    applyRelativeGeometry(zoneId, bestRegion.x(), bestRegion.y(),
+                          bestRegion.width(), bestRegion.height());
     return true;
 }
 
@@ -407,8 +422,8 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
             && rightRect.bottom() <= deletedGeom.bottom() + threshold) {
             qreal expansion = rightRect.x() - deletedGeom.x();
             if (expansion > 0) {
-                m_manager->updateZoneGeometry(rightZoneId, deletedGeom.x(), rightRect.y(),
-                                              rightRect.width() + expansion, rightRect.height());
+                applyRelativeGeometry(rightZoneId, deletedGeom.x(), rightRect.y(),
+                                      rightRect.width() + expansion, rightRect.height());
             }
         }
     }
@@ -427,8 +442,8 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
             qreal expansion = newRight - leftRect.right();
             QRectF testRect(leftRect.right(), leftRect.y(), expansion, leftRect.height());
             if (expansion > 0 && isRectangleEmpty(testRect, leftZoneId)) {
-                m_manager->updateZoneGeometry(leftZoneId, leftRect.x(), leftRect.y(),
-                                              leftRect.width() + expansion, leftRect.height());
+                applyRelativeGeometry(leftZoneId, leftRect.x(), leftRect.y(),
+                                      leftRect.width() + expansion, leftRect.height());
             }
         }
     }
@@ -446,8 +461,8 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
             qreal expansion = bottomRect.y() - deletedGeom.y();
             QRectF testRect(bottomRect.x(), deletedGeom.y(), bottomRect.width(), expansion);
             if (expansion > 0 && isRectangleEmpty(testRect, bottomZoneId)) {
-                m_manager->updateZoneGeometry(bottomZoneId, bottomRect.x(), deletedGeom.y(),
-                                              bottomRect.width(), bottomRect.height() + expansion);
+                applyRelativeGeometry(bottomZoneId, bottomRect.x(), deletedGeom.y(),
+                                      bottomRect.width(), bottomRect.height() + expansion);
             }
         }
     }
@@ -466,8 +481,8 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
             qreal expansion = newBottom - topRect.bottom();
             QRectF testRect(topRect.x(), topRect.bottom(), topRect.width(), expansion);
             if (expansion > 0 && isRectangleEmpty(testRect, topZoneId)) {
-                m_manager->updateZoneGeometry(topZoneId, topRect.x(), topRect.y(),
-                                              topRect.width(), topRect.height() + expansion);
+                applyRelativeGeometry(topZoneId, topRect.x(), topRect.y(),
+                                      topRect.width(), topRect.height() + expansion);
             }
         }
     }

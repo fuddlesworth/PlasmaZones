@@ -128,6 +128,8 @@ void Zone::setGeometryMode(ZoneGeometryMode mode)
 
 void Zone::setGeometryModeInt(int mode)
 {
+    if (mode < 0 || mode > static_cast<int>(ZoneGeometryMode::Fixed))
+        return;
     setGeometryMode(static_cast<ZoneGeometryMode>(mode));
 }
 

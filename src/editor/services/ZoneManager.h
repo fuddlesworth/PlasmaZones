@@ -135,6 +135,18 @@ public:
     void setReferenceScreenSize(const QSize& size) { m_referenceScreenSize = size; }
     QSize referenceScreenSize() const { return m_referenceScreenSize; }
 
+    /**
+     * @brief Sync fixed pixel geometry from relative coords using m_referenceScreenSize
+     * @param zone Zone QVariantMap to update (modified in place)
+     */
+    void syncFixedFromRelative(QVariantMap& zone) const;
+
+    /**
+     * @brief Sync relative fallback from fixed pixel coords using m_referenceScreenSize
+     * @param zone Zone QVariantMap to update (modified in place)
+     */
+    void syncRelativeFromFixed(QVariantMap& zone) const;
+
     // Helpers
     int findZoneIndex(const QString& zoneId) const;
     int zoneCount() const

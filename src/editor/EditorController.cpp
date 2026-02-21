@@ -592,12 +592,29 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     zone[JsonKeys::Width] = relativeGeo.width();
     zone[JsonKeys::Height] = relativeGeo.height();
 
-    // Update fixed geometry
-    if (mode == 1 && fixedGeo.isValid()) {
-        zone[JsonKeys::FixedX] = fixedGeo.x();
-        zone[JsonKeys::FixedY] = fixedGeo.y();
-        zone[JsonKeys::FixedWidth] = fixedGeo.width();
-        zone[JsonKeys::FixedHeight] = fixedGeo.height();
+    if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        // Switching to Fixed: compute and set fixed pixel coords
+        if (fixedGeo.isValid()) {
+            zone[JsonKeys::FixedX] = fixedGeo.x();
+            zone[JsonKeys::FixedY] = fixedGeo.y();
+            zone[JsonKeys::FixedWidth] = fixedGeo.width();
+            zone[JsonKeys::FixedHeight] = fixedGeo.height();
+        } else {
+            // Compute from relative + screen size
+            QSize ss = m_zoneManager->referenceScreenSize();
+            qreal sw = qMax(1.0, static_cast<qreal>(ss.width()));
+            qreal sh = qMax(1.0, static_cast<qreal>(ss.height()));
+            zone[JsonKeys::FixedX] = relativeGeo.x() * sw;
+            zone[JsonKeys::FixedY] = relativeGeo.y() * sh;
+            zone[JsonKeys::FixedWidth] = relativeGeo.width() * sw;
+            zone[JsonKeys::FixedHeight] = relativeGeo.height() * sh;
+        }
+    } else {
+        // Switching to Relative: remove stale fixed keys
+        zone.remove(QString::fromLatin1(JsonKeys::FixedX));
+        zone.remove(QString::fromLatin1(JsonKeys::FixedY));
+        zone.remove(QString::fromLatin1(JsonKeys::FixedWidth));
+        zone.remove(QString::fromLatin1(JsonKeys::FixedHeight));
     }
 
     m_zoneManager->setZoneData(zoneId, zone);
@@ -2323,48 +2340,53 @@ bool EditorController::moveSelectedZone(int direction, qreal step)
         return false;
     }
 
-    QVariantList zones = m_zoneManager->zones();
-    QVariantMap selectedZone;
-    for (const QVariant& zoneVar : zones) {
-        QVariantMap zone = zoneVar.toMap();
-        if (zone[JsonKeys::Id].toString() == m_selectedZoneId) {
-            selectedZone = zone;
-            break;
-        }
-    }
-
+    QVariantMap selectedZone = m_zoneManager->getZoneById(m_selectedZoneId);
     if (selectedZone.isEmpty()) {
         return false;
     }
 
+    int geoMode = selectedZone.value(JsonKeys::GeometryMode, 0).toInt();
+    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
+
+    if (isFixed) {
+        // Fixed mode: move in pixel space
+        qreal fx = selectedZone.value(JsonKeys::FixedX, 0.0).toDouble();
+        qreal fy = selectedZone.value(JsonKeys::FixedY, 0.0).toDouble();
+        qreal fw = selectedZone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+        qreal fh = selectedZone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+        qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+
+        switch (direction) {
+        case 0: fx = qMax(0.0, fx - pxStep); break;
+        case 1: fx += pxStep; break;
+        case 2: fy = qMax(0.0, fy - pxStep); break;
+        case 3: fy += pxStep; break;
+        default: return false;
+        }
+        fx = qMax(0.0, fx);
+        fy = qMax(0.0, fy);
+
+        updateZoneGeometry(m_selectedZoneId, fx, fy, fw, fh, true);
+        return true;
+    }
+
+    // Relative mode: original behavior
     qreal x = selectedZone[JsonKeys::X].toDouble();
     qreal y = selectedZone[JsonKeys::Y].toDouble();
     qreal width = selectedZone[JsonKeys::Width].toDouble();
     qreal height = selectedZone[JsonKeys::Height].toDouble();
 
-    // Apply movement based on direction
     switch (direction) {
-    case 0: // Left
-        x = qMax(0.0, x - step);
-        break;
-    case 1: // Right
-        x = qMin(1.0 - width, x + step);
-        break;
-    case 2: // Up
-        y = qMax(0.0, y - step);
-        break;
-    case 3: // Down
-        y = qMin(1.0 - height, y + step);
-        break;
-    default:
-        return false;
+    case 0: x = qMax(0.0, x - step); break;
+    case 1: x = qMin(1.0 - width, x + step); break;
+    case 2: y = qMax(0.0, y - step); break;
+    case 3: y = qMin(1.0 - height, y + step); break;
+    default: return false;
     }
 
-    // Clamp to valid bounds
     x = qBound(0.0, x, 1.0 - width);
     y = qBound(0.0, y, 1.0 - height);
 
-    // Update zone geometry (skip snapping for keyboard movements)
     updateZoneGeometry(m_selectedZoneId, x, y, width, height, true);
     return true;
 }
@@ -2381,69 +2403,65 @@ bool EditorController::resizeSelectedZone(int direction, qreal step)
         return false;
     }
 
-    QVariantList zones = m_zoneManager->zones();
-    QVariantMap selectedZone;
-    for (const QVariant& zoneVar : zones) {
-        QVariantMap zone = zoneVar.toMap();
-        if (zone[JsonKeys::Id].toString() == m_selectedZoneId) {
-            selectedZone = zone;
-            break;
-        }
-    }
-
+    QVariantMap selectedZone = m_zoneManager->getZoneById(m_selectedZoneId);
     if (selectedZone.isEmpty()) {
         return false;
     }
 
+    int geoMode = selectedZone.value(JsonKeys::GeometryMode, 0).toInt();
+    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
+
+    if (isFixed) {
+        // Fixed mode: resize in pixel space
+        qreal fx = selectedZone.value(JsonKeys::FixedX, 0.0).toDouble();
+        qreal fy = selectedZone.value(JsonKeys::FixedY, 0.0).toDouble();
+        qreal fw = selectedZone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+        qreal fh = selectedZone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+        qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+        qreal minFixed = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
+
+        switch (direction) {
+        case 0: fw = qMax(minFixed, fw - pxStep); break;
+        case 1: fw += pxStep; break;
+        case 2: fh = qMax(minFixed, fh - pxStep); break;
+        case 3: fh += pxStep; break;
+        default: return false;
+        }
+        fw = qMax(minFixed, fw);
+        fh = qMax(minFixed, fh);
+
+        updateZoneGeometry(m_selectedZoneId, fx, fy, fw, fh, true);
+        return true;
+    }
+
+    // Relative mode: original behavior
     qreal x = selectedZone[JsonKeys::X].toDouble();
     qreal y = selectedZone[JsonKeys::Y].toDouble();
     qreal width = selectedZone[JsonKeys::Width].toDouble();
     qreal height = selectedZone[JsonKeys::Height].toDouble();
 
-    const qreal minSize = 0.05; // Minimum 5% size
+    const qreal minSize = 0.05;
 
-    // Apply resize based on direction
-    // Left/Up = shrink, Right/Down = grow (intuitive behavior)
     switch (direction) {
-    case 0: // Left (shrink width)
-        width = qMax(minSize, width - step);
-        break;
-    case 1: // Right (grow width)
-        width = qMin(1.0 - x, width + step);
-        break;
-    case 2: // Up (shrink height)
-        height = qMax(minSize, height - step);
-        break;
-    case 3: // Down (grow height)
-        height = qMin(1.0 - y, height + step);
-        break;
-    default:
-        return false;
+    case 0: width = qMax(minSize, width - step); break;
+    case 1: width = qMin(1.0 - x, width + step); break;
+    case 2: height = qMax(minSize, height - step); break;
+    case 3: height = qMin(1.0 - y, height + step); break;
+    default: return false;
     }
 
-    // Ensure minimum size
-    if (width < minSize)
-        width = minSize;
-    if (height < minSize)
-        height = minSize;
+    if (width < minSize) width = minSize;
+    if (height < minSize) height = minSize;
 
-    // Clamp to valid bounds
     if (x + width > 1.0) {
         width = 1.0 - x;
-        if (width < minSize) {
-            width = minSize;
-            x = 1.0 - minSize;
-        }
+        if (width < minSize) { width = minSize; x = 1.0 - minSize; }
     }
     if (y + height > 1.0) {
         height = 1.0 - y;
-        if (height < minSize) {
-            height = minSize;
-            y = 1.0 - minSize;
-        }
+        if (height < minSize) { height = minSize; y = 1.0 - minSize; }
     }
 
-    // Update zone geometry (skip snapping for keyboard resizes)
     updateZoneGeometry(m_selectedZoneId, x, y, width, height, true);
     return true;
 }
@@ -2723,46 +2741,6 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         return false;
     }
 
-    // Calculate movement deltas based on direction
-    qreal dx = 0.0, dy = 0.0;
-    switch (direction) {
-    case 0:
-        dx = -step;
-        break; // Left
-    case 1:
-        dx = step;
-        break; // Right
-    case 2:
-        dy = -step;
-        break; // Up
-    case 3:
-        dy = step;
-        break; // Down
-    default:
-        return false;
-    }
-
-    // Check if movement is valid for all zones (no zone goes out of bounds)
-    for (const auto& pair : zonesToMove) {
-        const QVariantMap& zone = pair.second;
-        qreal x = zone[JsonKeys::X].toDouble() + dx;
-        qreal y = zone[JsonKeys::Y].toDouble() + dy;
-        qreal w = zone[JsonKeys::Width].toDouble();
-        qreal h = zone[JsonKeys::Height].toDouble();
-
-        if (x < 0 || y < 0 || x + w > 1.0 || y + h > 1.0) {
-            // Adjust to boundary
-            if (dx < 0 && x < 0)
-                dx = -zone[JsonKeys::X].toDouble();
-            if (dx > 0 && x + w > 1.0)
-                dx = 1.0 - w - zone[JsonKeys::X].toDouble();
-            if (dy < 0 && y < 0)
-                dy = -zone[JsonKeys::Y].toDouble();
-            if (dy > 0 && y + h > 1.0)
-                dy = 1.0 - h - zone[JsonKeys::Y].toDouble();
-        }
-    }
-
     // Apply movement using RAII scope for undo macro and batch update
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
@@ -2770,10 +2748,41 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         for (const auto& pair : zonesToMove) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
-            qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
-            qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
-            updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
-                               true); // Skip snapping for keyboard
+            int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+            bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
+
+            if (isFixed) {
+                qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble();
+                qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble();
+                qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+                qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+                qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+
+                switch (direction) {
+                case 0: fx = qMax(0.0, fx - pxStep); break;
+                case 1: fx += pxStep; break;
+                case 2: fy = qMax(0.0, fy - pxStep); break;
+                case 3: fy += pxStep; break;
+                default: continue;
+                }
+                fx = qMax(0.0, fx);
+                fy = qMax(0.0, fy);
+                updateZoneGeometry(zoneId, fx, fy, fw, fh, true);
+            } else {
+                // Relative mode: compute delta, clamp, and apply
+                qreal dx = 0.0, dy = 0.0;
+                switch (direction) {
+                case 0: dx = -step; break;
+                case 1: dx = step; break;
+                case 2: dy = -step; break;
+                case 3: dy = step; break;
+                default: continue;
+                }
+                qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
+                qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
+                updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
+                                   true);
+            }
         }
     }
     return true;
@@ -2803,61 +2812,63 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
         return false;
     }
 
-    const qreal minSize = 0.05; // Minimum 5% size
-
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
                                   i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
         for (const auto& pair : zonesToResize) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
-            qreal width = zone[JsonKeys::Width].toDouble();
-            qreal height = zone[JsonKeys::Height].toDouble();
+            int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+            bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
 
-            // Apply resize based on direction (same logic as resizeSelectedZone)
-            // Left/Up = shrink, Right/Down = grow (intuitive behavior)
-            switch (direction) {
-            case 0: // Left (shrink width)
-                width = qMax(minSize, width - step);
-                break;
-            case 1: // Right (grow width)
-                width = qMin(1.0 - x, width + step);
-                break;
-            case 2: // Up (shrink height)
-                height = qMax(minSize, height - step);
-                break;
-            case 3: // Down (grow height)
-                height = qMin(1.0 - y, height + step);
-                break;
-            default:
-                continue;
-            }
+            if (isFixed) {
+                qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble();
+                qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble();
+                qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+                qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+                qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+                qreal minFixed = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
 
-            // Ensure minimum size
-            if (width < minSize)
-                width = minSize;
-            if (height < minSize)
-                height = minSize;
-
-            // Clamp to valid bounds
-            if (x + width > 1.0) {
-                width = 1.0 - x;
-                if (width < minSize) {
-                    width = minSize;
-                    x = 1.0 - minSize;
+                switch (direction) {
+                case 0: fw = qMax(minFixed, fw - pxStep); break;
+                case 1: fw += pxStep; break;
+                case 2: fh = qMax(minFixed, fh - pxStep); break;
+                case 3: fh += pxStep; break;
+                default: continue;
                 }
-            }
-            if (y + height > 1.0) {
-                height = 1.0 - y;
-                if (height < minSize) {
-                    height = minSize;
-                    y = 1.0 - minSize;
-                }
-            }
+                fw = qMax(minFixed, fw);
+                fh = qMax(minFixed, fh);
+                updateZoneGeometry(zoneId, fx, fy, fw, fh, true);
+            } else {
+                // Relative mode
+                const qreal minSize = 0.05;
+                qreal x = zone[JsonKeys::X].toDouble();
+                qreal y = zone[JsonKeys::Y].toDouble();
+                qreal width = zone[JsonKeys::Width].toDouble();
+                qreal height = zone[JsonKeys::Height].toDouble();
 
-            updateZoneGeometry(zoneId, x, y, width, height, true); // Skip snapping for keyboard
+                switch (direction) {
+                case 0: width = qMax(minSize, width - step); break;
+                case 1: width = qMin(1.0 - x, width + step); break;
+                case 2: height = qMax(minSize, height - step); break;
+                case 3: height = qMin(1.0 - y, height + step); break;
+                default: continue;
+                }
+
+                if (width < minSize) width = minSize;
+                if (height < minSize) height = minSize;
+
+                if (x + width > 1.0) {
+                    width = 1.0 - x;
+                    if (width < minSize) { width = minSize; x = 1.0 - minSize; }
+                }
+                if (y + height > 1.0) {
+                    height = 1.0 - y;
+                    if (height < minSize) { height = minSize; y = 1.0 - minSize; }
+                }
+
+                updateZoneGeometry(zoneId, x, y, width, height, true);
+            }
         }
     }
     return true;
@@ -3717,18 +3728,49 @@ QStringList EditorController::pasteZones(bool withOffset)
         QString newId = QUuid::createUuid().toString();
         zone[JsonKeys::Id] = newId;
 
-        // Adjust position if offset requested
-        qreal x = zone[JsonKeys::X].toDouble() + offsetX;
-        qreal y = zone[JsonKeys::Y].toDouble() + offsetY;
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
+        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+        bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
 
-        // Clamp to bounds
-        x = qBound(0.0, x, 1.0 - width);
-        y = qBound(0.0, y, 1.0 - height);
+        if (isFixed && withOffset) {
+            // Fixed mode: offset fixed pixel coords, skip 0-1 clamping for fixed keys
+            qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble() + EditorConstants::DuplicateOffsetPixels;
+            qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble() + EditorConstants::DuplicateOffsetPixels;
+            qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+            qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
 
-        zone[JsonKeys::X] = x;
-        zone[JsonKeys::Y] = y;
+            // Validate fixed values
+            fx = qMax(0.0, fx);
+            fy = qMax(0.0, fy);
+            fw = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fw);
+            fh = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fh);
+
+            zone[JsonKeys::FixedX] = fx;
+            zone[JsonKeys::FixedY] = fy;
+            zone[JsonKeys::FixedWidth] = fw;
+            zone[JsonKeys::FixedHeight] = fh;
+
+            // Update relative fallback from fixed coords
+            QSize ss = m_zoneManager->referenceScreenSize();
+            qreal sw = qMax(1.0, static_cast<qreal>(ss.width()));
+            qreal sh = qMax(1.0, static_cast<qreal>(ss.height()));
+            zone[JsonKeys::X] = fx / sw;
+            zone[JsonKeys::Y] = fy / sh;
+            zone[JsonKeys::Width] = fw / sw;
+            zone[JsonKeys::Height] = fh / sh;
+        } else {
+            // Relative mode (or fixed without offset): apply relative offset and clamp
+            qreal x = zone[JsonKeys::X].toDouble() + offsetX;
+            qreal y = zone[JsonKeys::Y].toDouble() + offsetY;
+            qreal width = zone[JsonKeys::Width].toDouble();
+            qreal height = zone[JsonKeys::Height].toDouble();
+
+            x = qBound(0.0, x, 1.0 - width);
+            y = qBound(0.0, y, 1.0 - height);
+
+            zone[JsonKeys::X] = x;
+            zone[JsonKeys::Y] = y;
+        }
+
         zone[JsonKeys::ZoneNumber] = newZoneNumber++;
 
         newZoneIds.append(newId);
