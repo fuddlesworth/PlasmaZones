@@ -269,7 +269,7 @@ Kirigami.Dialog {
             }
 
             GridLayout {
-                columns: 4
+                columns: 6
                 columnSpacing: Kirigami.Units.smallSpacing
                 rowSpacing: Kirigami.Units.smallSpacing
                 visible: perSideOverrideCheck.checked && outerGapOverrideCheck.checked
@@ -279,7 +279,11 @@ Kirigami.Dialog {
                 SpinBox {
                     id: perSideTopSpin
                     from: 0; to: 100
-                    value: 8
+                    value: root.editorController
+                        ? (root.editorController.outerGapTop >= 0
+                            ? root.editorController.outerGapTop
+                            : root.editorController.globalOuterGapTop)
+                        : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Top edge gap override")
                     onValueModified: {
@@ -287,11 +291,16 @@ Kirigami.Dialog {
                             root.editorController.outerGapTop = value
                     }
                 }
+                Label { text: i18nc("@label", "px") }
                 Label { text: i18nc("@label edge gap direction", "Bottom") }
                 SpinBox {
                     id: perSideBottomSpin
                     from: 0; to: 100
-                    value: 8
+                    value: root.editorController
+                        ? (root.editorController.outerGapBottom >= 0
+                            ? root.editorController.outerGapBottom
+                            : root.editorController.globalOuterGapBottom)
+                        : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Bottom edge gap override")
                     onValueModified: {
@@ -299,11 +308,16 @@ Kirigami.Dialog {
                             root.editorController.outerGapBottom = value
                     }
                 }
+                Label { text: i18nc("@label", "px") }
                 Label { text: i18nc("@label edge gap direction", "Left") }
                 SpinBox {
                     id: perSideLeftSpin
                     from: 0; to: 100
-                    value: 8
+                    value: root.editorController
+                        ? (root.editorController.outerGapLeft >= 0
+                            ? root.editorController.outerGapLeft
+                            : root.editorController.globalOuterGapLeft)
+                        : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Left edge gap override")
                     onValueModified: {
@@ -311,11 +325,16 @@ Kirigami.Dialog {
                             root.editorController.outerGapLeft = value
                     }
                 }
+                Label { text: i18nc("@label", "px") }
                 Label { text: i18nc("@label edge gap direction", "Right") }
                 SpinBox {
                     id: perSideRightSpin
                     from: 0; to: 100
-                    value: 8
+                    value: root.editorController
+                        ? (root.editorController.outerGapRight >= 0
+                            ? root.editorController.outerGapRight
+                            : root.editorController.globalOuterGapRight)
+                        : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Right edge gap override")
                     onValueModified: {
@@ -323,6 +342,7 @@ Kirigami.Dialog {
                             root.editorController.outerGapRight = value
                     }
                 }
+                Label { text: i18nc("@label", "px") }
             }
         }
 

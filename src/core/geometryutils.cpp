@@ -158,14 +158,14 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings)
     // Check for layout-specific per-side override first
     if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
         EdgeGaps gaps = layout->rawOuterGaps();
-        // Fill in -1 values from global per-side or uniform
-        int fallback = getEffectiveOuterGap(nullptr, settings); // global uniform fallback
+        // Fill in -1 sentinel values from global per-side or uniform fallback
         if (settings && settings->usePerSideOuterGap()) {
             if (gaps.top < 0) gaps.top = settings->outerGapTop();
             if (gaps.bottom < 0) gaps.bottom = settings->outerGapBottom();
             if (gaps.left < 0) gaps.left = settings->outerGapLeft();
             if (gaps.right < 0) gaps.right = settings->outerGapRight();
         } else {
+            int fallback = settings ? settings->outerGap() : Defaults::OuterGap;
             if (gaps.top < 0) gaps.top = fallback;
             if (gaps.bottom < 0) gaps.bottom = fallback;
             if (gaps.left < 0) gaps.left = fallback;

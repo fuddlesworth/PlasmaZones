@@ -221,11 +221,16 @@ inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
 }
 
 /**
- * @brief Per-side edge gap values
+ * @brief Per-side edge gap values (resolved, non-negative pixel values)
  *
  * Used when usePerSideOuterGap is enabled to apply different gaps
  * to each screen edge. When disabled, the single outerGap value
  * is used uniformly via EdgeGaps::uniform().
+ *
+ * Default member values (8px) represent the application default.
+ * Note: Layout::rawOuterGaps() returns an EdgeGaps with -1 sentinels
+ * (meaning "use global setting") — those must be resolved via
+ * getEffectiveOuterGaps() before use in geometry calculations.
  */
 struct EdgeGaps {
     int top = 8;

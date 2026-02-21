@@ -579,13 +579,42 @@ void EditorController::clearZonePaddingOverride()
 
 void EditorController::clearOuterGapOverride()
 {
-    // Reset uniform and per-side state via direct setters (compound operation)
-    setOuterGapDirect(-1);
-    setUsePerSideOuterGapDirect(false);
-    setOuterGapTopDirect(-1);
-    setOuterGapBottomDirect(-1);
-    setOuterGapLeftDirect(-1);
-    setOuterGapRightDirect(-1);
+    // Early return if nothing to clear — avoids empty macro on undo stack
+    bool hasAnyOverride = m_outerGap != -1 || m_usePerSideOuterGap
+        || m_outerGapTop != -1 || m_outerGapBottom != -1
+        || m_outerGapLeft != -1 || m_outerGapRight != -1;
+    if (!hasAnyOverride) {
+        return;
+    }
+
+    // Snapshot current state for undo, then push a macro command that resets all gap overrides.
+    // Uses beginMacro/endMacro so the entire clear is one undo step.
+    m_undoController->beginMacro(i18nc("@action", "Clear Edge Gap Override"));
+    if (m_outerGap != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap,
+                                                             m_outerGap, -1));
+    }
+    if (m_usePerSideOuterGap) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap,
+                                                             1, 0));
+    }
+    if (m_outerGapTop != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop,
+                                                             m_outerGapTop, -1));
+    }
+    if (m_outerGapBottom != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
+                                                             m_outerGapBottom, -1));
+    }
+    if (m_outerGapLeft != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft,
+                                                             m_outerGapLeft, -1));
+    }
+    if (m_outerGapRight != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight,
+                                                             m_outerGapRight, -1));
+    }
+    m_undoController->endMacro();
 }
 
 bool EditorController::useFullScreenGeometry() const
@@ -1313,11 +1342,13 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
 
-    // Emit gap change signals — always emit outerGapChanged since per-side
-    // values may differ between layouts even when uniform outerGap is the same
+    // Emit gap change signals
     if (m_zonePadding != oldZonePadding) {
         Q_EMIT zonePaddingChanged();
     }
+    // Intentional policy exception to signal-on-change rule:
+    // always emit outerGapChanged here because per-side gap values (top/bottom/left/right)
+    // can differ between layouts even when m_outerGap is numerically unchanged.
     Q_EMIT outerGapChanged();
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
@@ -1428,10 +1459,8 @@ void EditorController::saveLayout()
     if (m_outerGap >= 0) {
         layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
     }
-    // Normalize: don't save per-side toggle if no per-side values are overridden
-    bool hasAnySideOverride = (m_outerGapTop >= 0 || m_outerGapBottom >= 0
-                               || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
-    if (m_usePerSideOuterGap && hasAnySideOverride) {
+    // Serialize per-side toggle whenever enabled so user intent is preserved across save/load
+    if (m_usePerSideOuterGap) {
         layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)] = true;
         if (m_outerGapTop >= 0)
             layoutObj[QLatin1String(JsonKeys::OuterGapTop)] = m_outerGapTop;

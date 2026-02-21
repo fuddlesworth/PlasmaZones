@@ -162,6 +162,10 @@ public:
  * @brief Settings related to zone geometry (padding, gaps, thresholds)
  *
  * Used by: KWin Effect, KCM, Zone Detector
+ *
+ * Per-side gap semantics differ by implementer:
+ * - Settings: values are clamped to [0, INT_MAX]; -1 is not valid (global config always has a value)
+ * - Layout: -1 sentinel means "use global setting"; >= 0 is a per-layout override
  */
 class PLASMAZONES_EXPORT IZoneGeometrySettings
 {

@@ -545,10 +545,8 @@ QJsonObject Layout::toJson() const
     if (m_outerGap >= 0) {
         json[JsonKeys::OuterGap] = m_outerGap;
     }
-    // Per-side outer gap overrides — only serialize if toggled on AND at least one side is set
-    bool hasAnySide = (m_outerGapTop >= 0 || m_outerGapBottom >= 0
-                       || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
-    if (m_usePerSideOuterGap && hasAnySide) {
+    // Per-side outer gap overrides — serialize toggle whenever enabled so user intent is preserved
+    if (m_usePerSideOuterGap) {
         json[JsonKeys::UsePerSideOuterGap] = true;
         if (m_outerGapTop >= 0) json[JsonKeys::OuterGapTop] = m_outerGapTop;
         if (m_outerGapBottom >= 0) json[JsonKeys::OuterGapBottom] = m_outerGapBottom;

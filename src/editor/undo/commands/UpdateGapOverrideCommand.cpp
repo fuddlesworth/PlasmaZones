@@ -81,10 +81,10 @@ bool UpdateGapOverrideCommand::mergeWith(const QUndoCommand* other)
         return false;
     }
 
-    // Merge: keep old value, update new value.
-    // QUndoStack does not call redo() on the merged command, so we must apply
-    // the new value to the model so it matches the merged state.
+    // Merge: keep our old value (for undo), adopt the other command's new value.
+    // Qt6 calls redo() on the incoming command before mergeWith() in both the
+    // normal push path and inside beginMacro/endMacro blocks, so the model
+    // already reflects cmd->m_newValue. We only need to update our stored value.
     m_newValue = cmd->m_newValue;
-    applyValue(m_newValue);
     return true;
 }

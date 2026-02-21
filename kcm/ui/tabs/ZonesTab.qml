@@ -656,7 +656,7 @@ ScrollView {
                     GridLayout {
                         Kirigami.FormData.label: i18n("Per-side gaps:")
                         visible: perSideCheck.checked
-                        columns: 4
+                        columns: 6
                         columnSpacing: Kirigami.Units.smallSpacing
                         rowSpacing: Kirigami.Units.smallSpacing
 
@@ -668,6 +668,7 @@ ScrollView {
                             onValueModified: kcm.outerGapTop = value
                             Accessible.name: i18nc("@label", "Top edge gap")
                         }
+                        Label { text: i18nc("@label", "px") }
                         Label { text: i18n("Bottom:") }
                         SpinBox {
                             from: 0
@@ -676,6 +677,7 @@ ScrollView {
                             onValueModified: kcm.outerGapBottom = value
                             Accessible.name: i18nc("@label", "Bottom edge gap")
                         }
+                        Label { text: i18nc("@label", "px") }
                         Label { text: i18n("Left:") }
                         SpinBox {
                             from: 0
@@ -684,6 +686,7 @@ ScrollView {
                             onValueModified: kcm.outerGapLeft = value
                             Accessible.name: i18nc("@label", "Left edge gap")
                         }
+                        Label { text: i18nc("@label", "px") }
                         Label { text: i18n("Right:") }
                         SpinBox {
                             from: 0
@@ -692,6 +695,7 @@ ScrollView {
                             onValueModified: kcm.outerGapRight = value
                             Accessible.name: i18nc("@label", "Right edge gap")
                         }
+                        Label { text: i18nc("@label", "px") }
                     }
 
                     CheckBox {
