@@ -25,7 +25,7 @@ namespace PlasmaZones {
         if (member != value) { \
             member = value; \
             Q_EMIT signal(); \
-            Q_EMIT layoutModified(); \
+            emitModifiedIfNotBatched(); \
         } \
     }
 
@@ -49,7 +49,7 @@ namespace PlasmaZones {
         if (member != value) { \
             member = value; \
             Q_EMIT signal(); \
-            Q_EMIT layoutModified(); \
+            emitModifiedIfNotBatched(); \
         } \
     }
 
@@ -103,6 +103,8 @@ Layout::~Layout()
 Layout& Layout::operator=(const Layout& other)
 {
     if (this != &other) {
+        beginBatchModify();
+
         // Track visibility changes for signal emission
         bool hiddenChanged = m_hiddenFromSelector != other.m_hiddenFromSelector;
         bool screensChanged = m_allowedScreens != other.m_allowedScreens;
@@ -148,6 +150,9 @@ Layout& Layout::operator=(const Layout& other)
         if (rulesChanged) Q_EMIT appRulesChanged();
         if (autoAssignDiff) Q_EMIT autoAssignChanged();
         if (fullScreenGeomDiff) Q_EMIT useFullScreenGeometryChanged();
+
+        m_dirty = true;
+        endBatchModify();
     }
     return *this;
 }
@@ -172,7 +177,7 @@ void Layout::setAllowedScreens(const QStringList& screens)
     if (m_allowedScreens != screens) {
         m_allowedScreens = screens;
         Q_EMIT allowedScreensChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -181,7 +186,7 @@ void Layout::setAllowedDesktops(const QList<int>& desktops)
     if (m_allowedDesktops != desktops) {
         m_allowedDesktops = desktops;
         Q_EMIT allowedDesktopsChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -190,7 +195,7 @@ void Layout::setAllowedActivities(const QStringList& activities)
     if (m_allowedActivities != activities) {
         m_allowedActivities = activities;
         Q_EMIT allowedActivitiesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -207,7 +212,7 @@ void Layout::setAppRules(const QVector<AppRule>& rules)
     if (m_appRules != rules) {
         m_appRules = rules;
         Q_EMIT appRulesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -345,7 +350,7 @@ void Layout::addZone(Zone* zone)
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zoneAdded(zone);
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -357,7 +362,7 @@ void Layout::removeZone(Zone* zone)
         zone->deleteLater();
         renumberZones();
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -370,7 +375,7 @@ void Layout::removeZoneAt(int index)
         zone->deleteLater();
         renumberZones();
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -384,7 +389,7 @@ void Layout::clearZones()
         m_zones.clear();
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -395,6 +400,29 @@ void Layout::moveZone(int fromIndex, int toIndex)
         m_zones.move(fromIndex, toIndex);
         renumberZones();
         Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::emitModifiedIfNotBatched()
+{
+    m_dirty = true;
+    if (m_batchModifyDepth == 0) {
+        Q_EMIT layoutModified();
+    }
+}
+
+void Layout::beginBatchModify()
+{
+    ++m_batchModifyDepth;
+}
+
+void Layout::endBatchModify()
+{
+    if (m_batchModifyDepth > 0) {
+        --m_batchModifyDepth;
+    }
+    if (m_batchModifyDepth == 0 && m_dirty) {
         Q_EMIT layoutModified();
     }
 }

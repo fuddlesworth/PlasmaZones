@@ -163,6 +163,7 @@ public:
     Q_INVOKABLE void loadLayouts() override;
     void setSettings(ISettings* settings);
     Q_INVOKABLE void saveLayouts() override;
+    void saveLayout(Layout* layout) override;
     Q_INVOKABLE void loadAssignments() override;
     Q_INVOKABLE void saveAssignments() override;
     Q_INVOKABLE void importLayout(const QString& filePath) override;

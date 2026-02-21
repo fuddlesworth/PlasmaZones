@@ -22,6 +22,7 @@
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QFile>
+#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -338,7 +339,6 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 
     layout->setName(name);
     m_layoutManager->addLayout(layout);
-    m_layoutManager->saveLayouts();
 
     qCInfo(lcDbusLayout) << "Created layout" << name << "of type" << type;
     return layout->id().toString();
@@ -446,6 +446,9 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     }
     QUuid layoutId = layout->id();
 
+    layout->beginBatchModify();
+    auto batchGuard = qScopeGuard([layout]() { layout->endBatchModify(); });
+
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
 
@@ -537,7 +540,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->addZone(zone);
     }
 
-    m_layoutManager->saveLayouts();
+    // endBatchModify() is called by batchGuard (RAII) when the function returns
 
     m_cachedLayoutJson.remove(layoutId);
     if (m_cachedActiveLayoutId == layoutId) {
@@ -567,7 +570,6 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     }
 
     m_layoutManager->addLayout(layout);
-    m_layoutManager->saveLayouts();
 
     qCInfo(lcDbusLayout) << "Created layout from JSON:" << layout->id();
     return layout->id().toString();

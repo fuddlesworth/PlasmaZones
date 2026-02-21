@@ -362,6 +362,7 @@ public:
     // Persistence
     virtual void loadLayouts() = 0;
     virtual void saveLayouts() = 0;
+    virtual void saveLayout(Layout* layout) = 0;
     virtual void loadAssignments() = 0;
     virtual void saveAssignments() = 0;
     virtual void importLayout(const QString& filePath) = 0;

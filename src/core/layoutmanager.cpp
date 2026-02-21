@@ -183,8 +183,12 @@ void LayoutManager::addLayout(Layout* layout)
         layout->setParent(this);
         m_layouts.append(layout);
 
-        // Connect to save on modification
-        connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
+        // Connect to save on modification (per-layout copy-on-write)
+        connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
+
+        // New layouts need immediate persistence
+        layout->markDirty();
+        saveLayout(layout);
 
         Q_EMIT layoutAdded(layout);
         Q_EMIT layoutsChanged();
@@ -263,7 +267,6 @@ Layout* LayoutManager::duplicateLayout(Layout* source)
     newLayout->setAllowedActivities({});
 
     addLayout(newLayout);
-    saveLayouts();
 
     return newLayout;
 }
@@ -733,7 +736,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
             if (!existing) {
                 // No duplicate - add the layout
                 m_layouts.append(layout);
-                connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
+                connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
                 qCInfo(lcLayout) << "  Loaded layout name= " << layout->name() << " zones= " << layout->zoneCount()
                                   << " source= " << (layout->isSystemLayout() ? "system" : "user") << " from= " << filePath;
             } else {
@@ -743,9 +746,9 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                 if (!layout->isSystemLayout() && existing->isSystemLayout()) {
                     // User layout overrides system layout - replace the existing one
                     int index = m_layouts.indexOf(existing);
-                    disconnect(existing, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
+                    disconnect(existing, &Layout::layoutModified, this, nullptr);
                     m_layouts.replace(index, layout);
-                    connect(layout, &Layout::layoutModified, this, &LayoutManager::saveLayouts);
+                    connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
                     delete existing;
                     qCInfo(lcLayout) << "  User layout overrides system layout name= " << layout->name() << " from= " << filePath;
                 } else {
@@ -761,47 +764,48 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
     }
 }
 
-void LayoutManager::saveLayouts()
+void LayoutManager::saveLayout(Layout* layout)
 {
+    if (!layout || !layout->isDirty()) {
+        return;
+    }
+
     ensureLayoutDirectory();
 
-    bool allSucceeded = true;
+    const QString filePath = layoutFilePath(layout->id());
+    QFile file(filePath);
+
+    if (!file.open(QIODevice::WriteOnly)) {
+        qCWarning(lcLayout) << "Failed to open layout file for writing:" << filePath
+                            << "Error:" << file.errorString();
+        return;
+    }
+
+    QJsonDocument doc(layout->toJson());
+    const QByteArray data = doc.toJson(QJsonDocument::Indented);
+
+    if (file.write(data) != data.size()) {
+        qCWarning(lcLayout) << "Failed to write layout file:" << filePath << "Error:" << file.errorString();
+        return;
+    }
+
+    if (!file.flush()) {
+        qCWarning(lcLayout) << "Failed to flush layout file:" << filePath << "Error:" << file.errorString();
+        return;
+    }
+
+    // Update sourcePath so isSystemLayout() returns correctly after saving
+    layout->setSourcePath(filePath);
+    layout->clearDirty();
+}
+
+void LayoutManager::saveLayouts()
+{
     for (auto* layout : m_layouts) {
-        const QString filePath = layoutFilePath(layout->id());
-        QFile file(filePath);
-
-        if (!file.open(QIODevice::WriteOnly)) {
-            qCWarning(lcLayout) << "Failed to open layout file for writing:" << filePath
-                                << "Error:" << file.errorString();
-            allSucceeded = false;
-            continue;
-        }
-
-        QJsonDocument doc(layout->toJson());
-        const QByteArray data = doc.toJson(QJsonDocument::Indented);
-
-        if (file.write(data) != data.size()) {
-            qCWarning(lcLayout) << "Failed to write layout file:" << filePath << "Error:" << file.errorString();
-            allSucceeded = false;
-            continue;
-        }
-
-        if (!file.flush()) {
-            qCWarning(lcLayout) << "Failed to flush layout file:" << filePath << "Error:" << file.errorString();
-            allSucceeded = false;
-        } else {
-            // Update sourcePath so isSystemLayout() returns correctly after saving
-            layout->setSourcePath(filePath);
-        }
+        saveLayout(layout);
     }
 
-    if (!allSucceeded) {
-        qCWarning(lcLayout) << "Some layouts failed to save";
-    }
-
-    // Emit layoutsChanged so UI refreshes (even if some saves failed)
     Q_EMIT layoutsChanged();
-
     Q_EMIT layoutsSaved();
 }
 
@@ -996,7 +1000,6 @@ void LayoutManager::importLayout(const QString& filePath)
     layout->setAllowedActivities({});
 
     addLayout(layout);
-    saveLayouts();
 
     qCInfo(lcLayout) << "Successfully imported layout:" << layout->name() << "from" << filePath;
 }

@@ -278,6 +278,13 @@ public:
     static Layout* createPriorityGridLayout(QObject* parent = nullptr);
     static Layout* createFocusLayout(QObject* parent = nullptr);
 
+    // Dirty tracking for copy-on-write saving
+    bool isDirty() const { return m_dirty; }
+    void markDirty() { m_dirty = true; }
+    void clearDirty() { m_dirty = false; }
+    void beginBatchModify();
+    void endBatchModify();
+
 Q_SIGNALS:
     void nameChanged();
     void typeChanged();
@@ -301,6 +308,8 @@ Q_SIGNALS:
     void layoutModified();
 
 private:
+    void emitModifiedIfNotBatched();
+
     QUuid m_id;
     QString m_name;
     LayoutType m_type = LayoutType::Custom;
@@ -333,6 +342,10 @@ private:
 
     // Cache last geometry used for recalculation to avoid redundant work
     mutable QRectF m_lastRecalcGeometry;
+
+    // Dirty tracking for copy-on-write saving
+    bool m_dirty = false;
+    int m_batchModifyDepth = 0;
 };
 
 } // namespace PlasmaZones
