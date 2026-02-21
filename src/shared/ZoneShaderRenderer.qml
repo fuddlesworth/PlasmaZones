@@ -44,13 +44,21 @@ Item {
         iResolution: root.safeConfig.iResolution || Qt.size(width, height)
         iMouse: root.safeConfig.iMouse || Qt.point(0, 0)
 
-        audioSpectrum: root.safeConfig.audioSpectrum || []
-
         onStatusChanged: {
             if (status === ZoneShaderItem.Error) {
                 root.shaderError(errorLog)
             }
         }
+    }
+
+    // Use Binding with `when` guard to avoid passing undefined to the C++ setter
+    // when config is null. Without this, undefined hits the slow QVariantList path
+    // in setAudioSpectrumVariant instead of preserving QVector<float> type identity.
+    Binding {
+        target: zoneShaderItem
+        property: "audioSpectrum"
+        value: root.safeConfig.audioSpectrum
+        when: root.safeConfig.audioSpectrum !== undefined
     }
 
     Binding {

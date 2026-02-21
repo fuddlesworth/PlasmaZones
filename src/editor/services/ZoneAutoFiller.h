@@ -78,6 +78,13 @@ public:
 
 private:
     /**
+     * @brief Apply relative geometry to a zone, converting to pixel space if the zone is in Fixed mode
+     * @param zoneId Target zone ID
+     * @param rx, ry, rw, rh Relative 0-1 coordinates
+     */
+    void applyRelativeGeometry(const QString& zoneId, qreal rx, qreal ry, qreal rw, qreal rh);
+
+    /**
      * @brief Smart fill: find the empty region at the target position and resize to fill it
      * @param zoneId The zone to fill
      * @param mouseX Normalized mouse X position (0-1), or -1 to use zone center

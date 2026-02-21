@@ -2,7 +2,7 @@ AssignmentRow 1.0 AssignmentRow.qml
 ColorButton 1.0 ColorButton.qml
 FontPickerDialog 1.0 FontPickerDialog.qml
 InputCapture 1.0 InputCapture.qml
-KeySequenceInput 1.0 KeySequenceInput.qml
+PlasmaZonesKeySequenceInput 1.0 KeySequenceInput.qml
 LayoutComboBox 1.0 LayoutComboBox.qml
 LayoutThumbnail 1.0 LayoutThumbnail.qml
 ModifierAndMouseCheckBoxes 1.0 ModifierAndMouseCheckBoxes.qml

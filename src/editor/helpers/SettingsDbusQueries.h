@@ -42,6 +42,29 @@ int queryGlobalZonePadding();
  */
 int queryGlobalOuterGap();
 
+/**
+ * @brief Query a boolean setting from the daemon via D-Bus
+ * @param settingKey The setting key to query
+ * @param defaultValue Value to return if query fails
+ * @return The setting value, or defaultValue if unavailable
+ */
+bool queryBoolSetting(const QString& settingKey, bool defaultValue);
+
+/**
+ * @brief Query the global per-side outer gap toggle
+ * @return Whether per-side outer gaps are enabled globally
+ */
+bool queryGlobalUsePerSideOuterGap();
+
+/**
+ * @brief Query the global outer gap for a specific edge
+ * @return Gap in pixels, or default if unavailable
+ */
+int queryGlobalOuterGapTop();
+int queryGlobalOuterGapBottom();
+int queryGlobalOuterGapLeft();
+int queryGlobalOuterGapRight();
+
 } // namespace SettingsDbusQueries
 
 } // namespace PlasmaZones

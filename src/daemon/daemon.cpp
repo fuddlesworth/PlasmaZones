@@ -35,6 +35,7 @@
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
+#include "../core/geometryutils.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/windowtrackingservice.h"
@@ -210,6 +211,15 @@ bool Daemon::init()
     m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();
 
+    // Recalculate zone geometries for ALL layouts so that fixed-mode zones
+    // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
+    if (QScreen* primary = Utils::primaryScreen()) {
+        for (Layout* layout : m_layoutManager->layouts()) {
+            layout->recalculateZoneGeometries(
+                GeometryUtils::effectiveScreenGeometry(layout, primary));
+        }
+    }
+
     // Configure overlay service with settings, layout manager, and default layout
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
@@ -234,7 +244,7 @@ bool Daemon::init()
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
                 layout->recalculateZoneGeometries(
-                    ScreenManager::actualAvailableGeometry(primary));
+                    GeometryUtils::effectiveScreenGeometry(layout, primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -258,8 +268,8 @@ bool Daemon::init()
                 // Only recalculate for the specific screen
                 QScreen* screen = m_screenManager->screenByName(screenName);
                 if (screen) {
-                    QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-                    layout->recalculateZoneGeometries(availableGeom);
+                    layout->recalculateZoneGeometries(
+                        GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts
@@ -473,7 +483,8 @@ void Daemon::start()
             m_activityManager && ActivityManager::isAvailable()
                 ? m_activityManager->currentActivity() : QString());
         if (screenLayout) {
-            screenLayout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
+            screenLayout->recalculateZoneGeometries(
+                GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
         }
     });
 
@@ -604,6 +615,32 @@ void Daemon::start()
     connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) { handleCycle(fwd); });
     connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() { handleResnap(); });
     connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() { handleSnapAll(); });
+
+    // Layout picker shortcut (interactive layout browser + resnap)
+    // Capture screen name at open time so it's still valid after the picker closes.
+    connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for layoutPicker shortcut — skipping";
+            return;
+        }
+        const QString screenName = Utils::screenIdentifier(screen);
+        m_unifiedLayoutController->setCurrentScreenName(screenName);
+        m_overlayService->showLayoutPicker(screenName);
+    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        // Screen name was already set when the picker opened.
+        m_unifiedLayoutController->applyLayoutById(layoutId);
+        // Suppress resnap OSD — the layout switch OSD already provides feedback
+        m_suppressResnapOsd = true;
+        m_windowTrackingAdaptor->resnapToNewLayout();
+    });
 
     // Initialize mode tracker for last-used layout
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
@@ -930,6 +967,11 @@ void Daemon::start()
     connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
             [this](bool success, const QString& action, const QString& reason,
                    const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName) {
+                // Suppress resnap OSD when triggered from layout picker (layout switch OSD is sufficient)
+                if (m_suppressResnapOsd && action == QStringLiteral("resnap")) {
+                    m_suppressResnapOsd = false;
+                    return;
+                }
                 if (m_settings && m_settings->showNavigationOsd()) {
                     m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
                 }
@@ -1438,48 +1480,14 @@ void Daemon::processPendingGeometryUpdates()
         return;
     }
 
-    // Use current desktop and activity so per-desktop/per-activity assignments are respected
-    const int currentDesktop = m_virtualDesktopManager->currentDesktop();
-    const QString currentActivity = m_activityManager && ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
-
-    // Choose geometry for active layout recalc: prefer primary screen when in batch, else first
-    const QString primaryName = [this]() {
-        QScreen* p = Utils::primaryScreen();
-        return p ? p->name() : QString();
-    }();
-    QRect activeLayoutGeometry;
-    if (!primaryName.isEmpty() && m_pendingGeometryUpdates.contains(primaryName)) {
-        activeLayoutGeometry = m_pendingGeometryUpdates.value(primaryName);
-    } else {
-        activeLayoutGeometry = m_pendingGeometryUpdates.constBegin().value();
-    }
-
-    // Process all pending geometry updates in a single batch
-    // This prevents N×M work when multiple screens change simultaneously
-    bool activeLayoutRecalcDone = false;
-    for (auto it = m_pendingGeometryUpdates.constBegin(); it != m_pendingGeometryUpdates.constEnd(); ++it) {
-        const QString& screenName = it.key();
-        const QRect& availableGeometry = it.value();
-
-        qCInfo(lcDaemon) << "Processing geometry update screen= " << screenName
-                         << " availableGeometry= " << availableGeometry;
-
-        // Recalculate zone geometries for active layout at most once (primary screen, or first).
-        // Active layout is global; recalc'ing per-screen overwrites each time (last-wins bug).
-        if (m_layoutManager->activeLayout() && !activeLayoutRecalcDone) {
-            m_layoutManager->activeLayout()->recalculateZoneGeometries(activeLayoutGeometry);
-            activeLayoutRecalcDone = true;
-        }
-
-        // Update screen-specific layout if different from active
-        QString screenId = Utils::screenIdForName(screenName);
-        if (Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenId, currentDesktop, currentActivity)) {
-            if (screenLayout != m_layoutManager->activeLayout()) {
-                screenLayout->recalculateZoneGeometries(availableGeometry);
-            }
+    // Recalculate zone geometries for ALL layouts so fixed-mode zones stay
+    // normalized correctly.  Uses primary screen as the reference geometry
+    // (per-layout useFullScreenGeometry is respected by effectiveScreenGeometry).
+    QScreen* primaryScreen = Utils::primaryScreen();
+    if (primaryScreen) {
+        for (Layout* layout : m_layoutManager->layouts()) {
+            layout->recalculateZoneGeometries(
+                GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
         }
     }
 

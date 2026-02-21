@@ -45,22 +45,21 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
         return QString();
     }
 
-    // Use actualAvailableGeometry() which excludes panels/taskbars (queries PlasmaShell on Wayland)
-    // This matches how zones are rendered and snapped
-    QRectF availableGeom = ScreenManager::actualAvailableGeometry(screen);
+    // Use the layout's geometry preference (full screen or available area)
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
 
     // Guard against zero-size geometry (disconnected or degenerate screen)
-    if (availableGeom.width() <= 0 || availableGeom.height() <= 0) {
+    if (refGeom.width() <= 0 || refGeom.height() <= 0) {
         return QString();
     }
 
     // Find which zone contains this point by checking relative coordinates
-    qreal relX = static_cast<qreal>(x - availableGeom.x()) / availableGeom.width();
-    qreal relY = static_cast<qreal>(y - availableGeom.y()) / availableGeom.height();
+    qreal relX = static_cast<qreal>(x - refGeom.x()) / refGeom.width();
+    qreal relY = static_cast<qreal>(y - refGeom.y()) / refGeom.height();
 
     Zone* foundZone = nullptr;
     for (auto* zone : layout->zones()) {
-        QRectF relGeom = zone->relativeGeometry();
+        QRectF relGeom = zone->normalizedGeometry(refGeom);
         if (relGeom.contains(QPointF(relX, relY))) {
             foundZone = zone;
             break;
@@ -104,15 +103,17 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
     Layout* zoneLayout = qobject_cast<Layout*>(zone->parent());
     int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(zoneLayout, m_settings);
-    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings);
+    bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
+    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+    QRect snapped = GeometryUtils::snapToRect(geom);
 
     // Return as "x,y,width,height"
     return QStringLiteral("%1,%2,%3,%4")
-        .arg(static_cast<int>(geom.x()))
-        .arg(static_cast<int>(geom.y()))
-        .arg(static_cast<int>(geom.width()))
-        .arg(static_cast<int>(geom.height()));
+        .arg(snapped.x())
+        .arg(snapped.y())
+        .arg(snapped.width())
+        .arg(snapped.height());
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
@@ -203,7 +204,14 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
         return QString();
     }
 
-    QRectF currentGeom = currentZone->relativeGeometry();
+    // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
+    QScreen* refScreen = Utils::primaryScreen();
+    if (!refScreen) {
+        return QString();
+    }
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
+
+    QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
     QPointF currentCenter(currentGeom.center());
 
     Zone* bestZone = nullptr;
@@ -214,7 +222,7 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
             continue;
         }
 
-        QRectF zoneGeom = zone->relativeGeometry();
+        QRectF zoneGeom = zone->normalizedGeometry(refGeom);
         QPointF zoneCenter(zoneGeom.center());
 
         // Check if zone is in the correct direction
@@ -270,12 +278,22 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
         return QString();
     }
 
+    // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
+    QScreen* refScreen = DbusHelpers::getScreenOrWarn(screenName, QStringLiteral("getFirstZoneInDirection"));
+    if (!refScreen) {
+        refScreen = Utils::primaryScreen();
+    }
+    if (!refScreen) {
+        return QString();
+    }
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
+
     Zone* bestZone = nullptr;
     qreal bestValue = 0;
     bool initialized = false;
 
     for (auto* zone : layout->zones()) {
-        QRectF geom = zone->relativeGeometry();
+        QRectF geom = zone->normalizedGeometry(refGeom);
         qreal value = 0;
 
         if (direction == Utils::Direction::Left) {
@@ -357,17 +375,19 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenName
 
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior)
-        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+        QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+        QRect snapped = GeometryUtils::snapToRect(geom);
         // Format: "zoneId:x,y,width,height"
         QString entry = QStringLiteral("%1:%2,%3,%4,%5")
                             .arg(zone->id().toString())
-                            .arg(static_cast<int>(geom.x()))
-                            .arg(static_cast<int>(geom.y()))
-                            .arg(static_cast<int>(geom.width()))
-                            .arg(static_cast<int>(geom.height()));
+                            .arg(snapped.x())
+                            .arg(snapped.y())
+                            .arg(snapped.width())
+                            .arg(snapped.height());
         result.append(entry);
     }
 

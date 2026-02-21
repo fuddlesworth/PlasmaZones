@@ -7,6 +7,54 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-02-21
+
+### Added
+- **Per-side edge gaps**: Independent top/bottom/left/right outer gap values instead of a single uniform gap — useful for transparent panels or asymmetric screen setups. Global toggle in KCM with per-layout overrides in the editor. Full undo/redo support. ([#187], [#188])
+- **Per-zone fixed pixel geometry**: Zones can now use absolute pixel coordinates instead of relative 0.0-1.0 values, enabling precise pixel-perfect layouts that don't scale with resolution. Per-zone toggle between Relative and Fixed modes in the editor. ([#180], [#182])
+- **Full screen geometry toggle**: Per-layout option to use the full screen area (ignoring panels/taskbars) for zone calculations, allowing zones to extend behind auto-hide or transparent panels. ([#179], [#181])
+- **AlwaysActive zone activation**: New activation mode that shows zones on every window drag without requiring a modifier key or mouse button — configurable in KCM Zones tab. ([#185], [#186])
+
+### Changed
+- **Copy-on-write layout saving**: Layouts are only written to disk when actually modified, with per-layout dirty tracking to avoid unnecessary I/O during bulk operations.
+
+### Fixed
+- Hardcoded 1920x1080 fallback removed from D-Bus zone detection — uses actual screen geometry.
+- Fixed preview rendering for fixed-geometry zones in KCM new layout dialog.
+- All layouts recalculated on startup and screen changes to prevent stale geometry.
+- Per-side edge gap: -1 sentinel no longer leaks into geometry calculations when settings are unavailable.
+- Per-side edge gap: `usePerSideOuterGap` toggle now persists across save/load even with all-default side values.
+- Per-side edge gap: clearing override in editor is now undoable.
+
+## [1.13.0] - 2026-02-20
+
+### Added
+- **Layout Picker Overlay**: Full-screen interactive layout browser triggered via configurable keyboard shortcut. Browse all available layouts in a centered card grid with keyboard navigation (arrow keys + Enter) and mouse support. Selecting a layout switches to it and resnaps all windows. ([#176])
+- **Shared LayoutCard component**: Extracted reusable `LayoutCard.qml` and `PopupFrame.qml` into `org.plasmazones.common` QML module, shared between the Zone Selector and Layout Picker overlays.
+- **Snap Assist after resnap**: Snap Assist now triggers after resnapping windows when switching layouts via the layout picker, offering to fill any empty zones.
+
+### Fixed
+- **Zone activation broken when Zone Selector disabled** ([#175]): Disabling the Zone Selector popup caused the zone activation hotkey (e.g. Alt+drag) to stop working entirely. Root cause: D-Bus deserialization of trigger settings could silently fail (Qt delivering `QDBusArgument` instead of native `QVariantList<QVariantMap>`), but this was masked when `zoneSelectorEnabled=true` because a bypass gate let all drag events through regardless. Added robust `QDBusArgument` unwrapping, a permissive `m_triggersLoaded` flag that allows drags through until triggers are confirmed loaded, and diagnostic logging for trigger load failures.
+- **Layout Picker double-trigger**: Rapidly pressing the layout picker shortcut could create multiple overlay windows with competing `KeyboardInteractivityExclusive` keyboard grabs on Wayland, causing shortcuts to stop working. Replaced toggle guard with a simple existence guard that prevents re-triggering while any picker window exists.
+
+## [1.12.2] - 2026-02-19
+
+### Fixed
+- **Audio visualizer**: CAVA process silently failed when bar count was odd (exit code 1, "must have even number of bars with stereo output"). Even bar counts are now enforced at all layers: CavaService, KCM setter, and UI slider (stepSize=2).
+- **Audio shader data**: QML `|| []` fallback on `audioSpectrum` binding forced V4 JavaScript conversion, losing the native `QVector<float>` type needed by `ZoneShaderItem`'s fast path. Replaced with a `Binding` element guarded by `when` to preserve type identity through the binding chain.
+- **CAVA stderr capture**: Switched from `ForwardedErrorChannel` to `SeparateChannels` so CAVA error output is captured in daemon logs instead of lost.
+- **CAVA exit diagnostics**: Moved `exitCode()`/`readAllStandardError()` from `stateChanged` to `finished` signal handler per Qt API contract. Only warns on non-zero exit code (stderr on exit 0 is normal for CAVA).
+
+### Changed
+- **Shared audio constants**: `Audio::MinBars`/`Audio::MaxBars` moved to `src/core/constants.h` with `static_assert` for even values, eliminating magic number duplication across CavaService, KCM, and QML.
+- **Nix**: Re-enabled Nix CI, release builds, flake.lock updater, and `plasmazones.nix` release asset now that nixpkgs-unstable has the Plasma 6.6 stack (NixOS/nixpkgs#479797).
+
+## [1.12.1] - 2026-02-18
+
+### Fixed
+- **KCM Editor tab**: Use unique QML type `PlasmaZonesKeySequenceInput` so the Editor tab always loads the bundled shortcut component (with `defaultKeySequence`). Fixes "Type EditorTab unavailable" / "Cannot assign to non-existent property 'defaultKeySequence'" when the KCM runs from system install (e.g. NixOS) where another `KeySequenceInput` could be resolved first.
+- **KWin effect**: Remove explicit `Id` from plugin metadata so the loader uses the filename-derived id and the kf.coreaddons warning is resolved.
+
 ## [1.12.0] - 2026-02-18
 
 ### Added
@@ -511,6 +559,27 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.0...v1.14.0
+[1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.0
+[1.12.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.1...v1.12.2
+[1.12.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.0...v1.12.1
+[1.12.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.8...v1.12.0
+[1.11.8]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.7...v1.11.8
+[1.11.7]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.6...v1.11.7
+[1.11.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.5...v1.11.6
+[1.11.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.4...v1.11.5
+[1.11.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.3...v1.11.4
+[1.11.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.2...v1.11.3
+[1.11.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.1...v1.11.2
+[1.11.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.11.0...v1.11.1
+[1.11.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.10.6...v1.11.0
+[1.10.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.10.5...v1.10.6
+[1.10.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.10.4...v1.10.5
+[1.10.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.10.3...v1.10.4
+[1.10.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.10.2...v1.10.3
+[1.10.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.10.0...v1.10.2
+[1.10.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.9.5...v1.10.0
+[1.9.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.9.3...v1.9.5
 [1.9.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.8.4...v1.9.1
@@ -587,3 +656,13 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#156]: https://github.com/fuddlesworth/PlasmaZones/discussions/156
 [#166]: https://github.com/fuddlesworth/PlasmaZones/discussions/166
 [#167]: https://github.com/fuddlesworth/PlasmaZones/issues/167
+[#175]: https://github.com/fuddlesworth/PlasmaZones/issues/175
+[#176]: https://github.com/fuddlesworth/PlasmaZones/pull/176
+[#179]: https://github.com/fuddlesworth/PlasmaZones/issues/179
+[#180]: https://github.com/fuddlesworth/PlasmaZones/issues/180
+[#181]: https://github.com/fuddlesworth/PlasmaZones/pull/181
+[#182]: https://github.com/fuddlesworth/PlasmaZones/pull/182
+[#185]: https://github.com/fuddlesworth/PlasmaZones/issues/185
+[#186]: https://github.com/fuddlesworth/PlasmaZones/pull/186
+[#187]: https://github.com/fuddlesworth/PlasmaZones/issues/187
+[#188]: https://github.com/fuddlesworth/PlasmaZones/pull/188

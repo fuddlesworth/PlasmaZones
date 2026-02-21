@@ -42,6 +42,10 @@ Item {
     property real zoneSpacing: 0  // Gap between adjacent zones (applied as zoneSpacing/2 per side)
     property real edgeGap: 0      // Gap at screen edges
     property var snapIndicator: null
+    // Fixed geometry support
+    property bool isFixedZone: zoneData ? (zoneData.geometryMode === 1) : false
+    property real screenWidth: controller ? controller.targetScreenSize.width : 1920
+    property real screenHeight: controller ? controller.targetScreenSize.height : 1080
     property int operationState: EditorZone.State.Idle
     // Track if this zone is part of an active divider operation
     // When true, syncFromZoneData() is blocked to prevent overwriting divider updates
@@ -92,6 +96,8 @@ Item {
     signal operationEnded(string zoneId)
 
     // Coordinate conversion helpers
+    // For fixed zones: value is in pixels, scale to canvas using screenWidth/screenHeight
+    // For relative zones: value is 0-1 normalized, scale to canvas directly
     function toCanvasX(relX) {
         if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
             return 0;
@@ -99,6 +105,10 @@ Item {
         if (relX === undefined || relX === null || !isFinite(relX) || isNaN(relX))
             return 0;
 
+        if (isFixedZone && screenWidth > 0) {
+            var result = (relX / screenWidth) * canvasWidth;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
         var result = relX * canvasWidth;
         return isFinite(result) && !isNaN(result) ? result : 0;
     }
@@ -110,6 +120,10 @@ Item {
         if (relY === undefined || relY === null || !isFinite(relY) || isNaN(relY))
             return 0;
 
+        if (isFixedZone && screenHeight > 0) {
+            var result = (relY / screenHeight) * canvasHeight;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
         var result = relY * canvasHeight;
         return isFinite(result) && !isNaN(result) ? result : 0;
     }
@@ -121,6 +135,10 @@ Item {
         if (relW === undefined || relW === null || !isFinite(relW) || isNaN(relW))
             return 0.25 * canvasWidth;
 
+        if (isFixedZone && screenWidth > 0) {
+            var result = (relW / screenWidth) * canvasWidth;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasWidth;
+        }
         var result = relW * canvasWidth;
         return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasWidth;
     }
@@ -132,10 +150,16 @@ Item {
         if (relH === undefined || relH === null || !isFinite(relH) || isNaN(relH))
             return 0.25 * canvasHeight;
 
+        if (isFixedZone && screenHeight > 0) {
+            var result = (relH / screenHeight) * canvasHeight;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasHeight;
+        }
         var result = relH * canvasHeight;
         return isFinite(result) && !isNaN(result) && result > 0 ? result : 0.25 * canvasHeight;
     }
 
+    // For fixed zones: convert canvas pixel -> screen pixel value
+    // For relative zones: convert canvas pixel -> 0-1 normalized value
     function toRelativeX(canvasX) {
         if (!canvasWidth || canvasWidth <= 0 || !isFinite(canvasWidth))
             return 0;
@@ -143,6 +167,10 @@ Item {
         if (canvasX === undefined || canvasX === null || !isFinite(canvasX) || isNaN(canvasX))
             return 0;
 
+        if (isFixedZone && screenWidth > 0) {
+            var result = (canvasX / canvasWidth) * screenWidth;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
         var result = canvasX / canvasWidth;
         return isFinite(result) && !isNaN(result) ? result : 0;
     }
@@ -154,6 +182,10 @@ Item {
         if (canvasY === undefined || canvasY === null || !isFinite(canvasY) || isNaN(canvasY))
             return 0;
 
+        if (isFixedZone && screenHeight > 0) {
+            var result = (canvasY / canvasHeight) * screenHeight;
+            return isFinite(result) && !isNaN(result) ? result : 0;
+        }
         var result = canvasY / canvasHeight;
         return isFinite(result) && !isNaN(result) ? result : 0;
     }
@@ -165,6 +197,10 @@ Item {
         if (canvasW === undefined || canvasW === null || !isFinite(canvasW) || isNaN(canvasW))
             return 0;
 
+        if (isFixedZone && screenWidth > 0) {
+            var result = (canvasW / canvasWidth) * screenWidth;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
+        }
         var result = canvasW / canvasWidth;
         return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
     }
@@ -176,6 +212,10 @@ Item {
         if (canvasH === undefined || canvasH === null || !isFinite(canvasH) || isNaN(canvasH))
             return 0;
 
+        if (isFixedZone && screenHeight > 0) {
+            var result = (canvasH / canvasHeight) * screenHeight;
+            return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
+        }
         var result = canvasH / canvasHeight;
         return isFinite(result) && !isNaN(result) && result > 0 ? result : 0;
     }

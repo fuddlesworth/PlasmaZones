@@ -7,6 +7,8 @@
 #include <QPair>
 #include <QRectF>
 #include <QSet>
+#include <QSize>
+#include <QSizeF>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -98,11 +100,23 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Extract geometry from a zone map as QRectF
+     * @brief Extract relative geometry from a zone map as QRectF
      * @param zone The zone QVariantMap
-     * @return QRectF with x, y, width, height
+     * @return QRectF with x, y, width, height (0-1 normalized)
      */
     QRectF extractZoneGeometry(const QVariantMap& zone) const;
+
+    /**
+     * @brief Extract fixed pixel geometry from a zone map as QRectF
+     * @param zone The zone QVariantMap
+     * @return QRectF with fixedX, fixedY, fixedWidth, fixedHeight (pixels)
+     */
+    QRectF extractFixedGeometry(const QVariantMap& zone) const;
+
+    /**
+     * @brief Check if a zone QVariantMap is in Fixed geometry mode
+     */
+    static bool isFixedMode(const QVariantMap& zone);
 
     /**
      * @brief Get validated zone by ID with logging on failure
@@ -129,6 +143,27 @@ public:
     // Default colors (can be set from QML to use theme colors)
     Q_INVOKABLE void setDefaultColors(const QString& highlightColor, const QString& inactiveColor,
                                       const QString& borderColor);
+
+    // Screen reference for fixed geometry relative fallback computation
+    void setReferenceScreenSize(const QSize& size) { m_referenceScreenSize = size; }
+    QSize referenceScreenSize() const { return m_referenceScreenSize; }
+
+    /**
+     * @brief Get effective screen size as QSizeF (clamped to >= 1.0 per dimension)
+     */
+    QSizeF effectiveScreenSizeF() const;
+
+    /**
+     * @brief Sync fixed pixel geometry from relative coords using m_referenceScreenSize
+     * @param zone Zone QVariantMap to update (modified in place)
+     */
+    void syncFixedFromRelative(QVariantMap& zone) const;
+
+    /**
+     * @brief Sync relative fallback from fixed pixel coords using m_referenceScreenSize
+     * @param zone Zone QVariantMap to update (modified in place)
+     */
+    void syncRelativeFromFixed(QVariantMap& zone) const;
 
     // Helpers
     int findZoneIndex(const QString& zoneId) const;
@@ -211,11 +246,32 @@ private:
     };
 
     /**
-     * @brief Validate and clamp zone geometry to valid bounds
+     * @brief Validated fixed (pixel) geometry result
+     */
+    struct ValidatedFixedGeometry {
+        qreal x, y, width, height;
+        bool isValid = false;
+    };
+
+    /**
+     * @brief Validate and clamp zone geometry to valid bounds (relative 0-1)
      * @param x, y, width, height Input geometry (may be invalid)
      * @return ValidatedGeometry with clamped values and isValid flag
      */
     ValidatedGeometry validateAndClampGeometry(qreal x, qreal y, qreal width, qreal height) const;
+
+    /**
+     * @brief Validate and clamp fixed pixel geometry
+     * @param x, y, width, height Input pixel geometry
+     * @return ValidatedFixedGeometry with clamped values and isValid flag
+     */
+    ValidatedFixedGeometry validateAndClampFixedGeometry(qreal x, qreal y, qreal width, qreal height) const;
+
+    /**
+     * @brief Apply geometry update to a zone map, branching on geometry mode
+     * @return true if geometry was applied, false on invalid input
+     */
+    bool applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qreal width, qreal height) const;
 
     /**
      * @brief Signal types for deferred emission
@@ -244,6 +300,7 @@ private:
     void updateAllZOrderValues();
 
     QVariantList m_zones;
+    QSize m_referenceScreenSize{1920, 1080};
 
     // Default colors (can be overridden from QML with theme colors)
     QString m_defaultHighlightColor;

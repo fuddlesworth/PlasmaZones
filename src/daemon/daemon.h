@@ -179,6 +179,7 @@ private:
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     bool m_running = false;
+    bool m_suppressResnapOsd = false;
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;

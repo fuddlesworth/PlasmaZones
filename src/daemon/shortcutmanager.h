@@ -140,6 +140,13 @@ Q_SIGNALS:
      */
     void snapAllWindowsRequested();
 
+    /**
+     * @brief Emitted when layout picker shortcut is triggered
+     *
+     * Opens the layout picker overlay to browse and switch layouts interactively.
+     */
+    void layoutPickerRequested();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
@@ -225,6 +232,10 @@ private Q_SLOTS:
     void onSnapAllWindows();
     void updateSnapAllWindowsShortcut();
 
+    // Layout Picker
+    void onLayoutPicker();
+    void updateLayoutPickerShortcut();
+
     // Autotile shortcuts
     void onToggleAutotile();
     void onFocusMaster();
@@ -256,6 +267,7 @@ private:
     void setupCycleWindowsShortcuts();
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
+    void setupLayoutPickerShortcut();
     void setupAutotileShortcuts();
 
     Settings* m_settings = nullptr;
@@ -301,6 +313,9 @@ private:
 
     // Snap All Windows action
     QAction* m_snapAllWindowsAction = nullptr;
+
+    // Layout Picker action
+    QAction* m_layoutPickerAction = nullptr;
 
     // Autotile actions
     QAction* m_toggleAutotileAction = nullptr;

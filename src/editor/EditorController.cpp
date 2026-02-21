@@ -29,6 +29,9 @@
 #include "undo/commands/UpdateShaderIdCommand.h"
 #include "undo/commands/UpdateShaderParamsCommand.h"
 #include "undo/commands/UpdateGapOverrideCommand.h"
+#include "undo/commands/UpdateFullScreenGeometryCommand.h"
+#include "undo/commands/ToggleGeometryModeCommand.h"
+#include "undo/commands/UpdateFixedGeometryCommand.h"
 #include "undo/commands/UpdateVisibilityCommand.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
@@ -122,6 +125,9 @@ EditorController::EditorController(QObject* parent)
     connect(m_zoneManager, &ZoneManager::zoneNumberChanged, this, &EditorController::zoneNumberChanged);
     connect(m_zoneManager, &ZoneManager::zoneColorChanged, this, &EditorController::zoneColorChanged);
     connect(m_zoneManager, &ZoneManager::zonesModified, this, &EditorController::markUnsaved);
+
+    // Initialize ZoneManager with default screen size (updated when target screen is set)
+    m_zoneManager->setReferenceScreenSize(targetScreenSize());
 
     connect(m_snappingService, &SnappingService::gridSnappingEnabledChanged, this,
             &EditorController::gridSnappingEnabledChanged);
@@ -427,6 +433,160 @@ void EditorController::setOuterGapDirect(int gap)
     }
 }
 
+bool EditorController::usePerSideOuterGap() const
+{
+    return m_usePerSideOuterGap;
+}
+
+int EditorController::outerGapTop() const
+{
+    return m_outerGapTop;
+}
+
+int EditorController::outerGapBottom() const
+{
+    return m_outerGapBottom;
+}
+
+int EditorController::outerGapLeft() const
+{
+    return m_outerGapLeft;
+}
+
+int EditorController::outerGapRight() const
+{
+    return m_outerGapRight;
+}
+
+bool EditorController::hasPerSideOuterGapOverride() const
+{
+    return m_usePerSideOuterGap && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+}
+
+bool EditorController::globalUsePerSideOuterGap() const
+{
+    return m_cachedGlobalUsePerSideOuterGap;
+}
+
+int EditorController::globalOuterGapTop() const
+{
+    return m_cachedGlobalOuterGapTop;
+}
+
+int EditorController::globalOuterGapBottom() const
+{
+    return m_cachedGlobalOuterGapBottom;
+}
+
+int EditorController::globalOuterGapLeft() const
+{
+    return m_cachedGlobalOuterGapLeft;
+}
+
+int EditorController::globalOuterGapRight() const
+{
+    return m_cachedGlobalOuterGapRight;
+}
+
+void EditorController::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        // Use a gap override command for undo (toggling per-side is conceptually a gap change)
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap,
+                                                 m_usePerSideOuterGap ? 1 : 0, enabled ? 1 : 0);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setUsePerSideOuterGapDirect(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        m_usePerSideOuterGap = enabled;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapTop(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapTop != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop,
+                                                 m_outerGapTop, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapTopDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapTop != gap) {
+        m_outerGapTop = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapBottom(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapBottom != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
+                                                 m_outerGapBottom, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapBottomDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapBottom != gap) {
+        m_outerGapBottom = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapLeft(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapLeft != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft,
+                                                 m_outerGapLeft, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapLeftDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapLeft != gap) {
+        m_outerGapLeft = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapRight(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapRight != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight,
+                                                 m_outerGapRight, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapRightDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapRight != gap) {
+        m_outerGapRight = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
 void EditorController::clearZonePaddingOverride()
 {
     setZonePadding(-1);
@@ -434,7 +594,219 @@ void EditorController::clearZonePaddingOverride()
 
 void EditorController::clearOuterGapOverride()
 {
-    setOuterGap(-1);
+    // Early return if nothing to clear — avoids empty macro on undo stack
+    bool hasAnyOverride = m_outerGap != -1 || m_usePerSideOuterGap
+        || m_outerGapTop != -1 || m_outerGapBottom != -1
+        || m_outerGapLeft != -1 || m_outerGapRight != -1;
+    if (!hasAnyOverride) {
+        return;
+    }
+
+    // Snapshot current state for undo, then push a macro command that resets all gap overrides.
+    // Uses beginMacro/endMacro so the entire clear is one undo step.
+    m_undoController->beginMacro(i18nc("@action", "Clear Edge Gap Override"));
+    if (m_outerGap != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap,
+                                                             m_outerGap, -1));
+    }
+    if (m_usePerSideOuterGap) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap,
+                                                             1, 0));
+    }
+    if (m_outerGapTop != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop,
+                                                             m_outerGapTop, -1));
+    }
+    if (m_outerGapBottom != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
+                                                             m_outerGapBottom, -1));
+    }
+    if (m_outerGapLeft != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft,
+                                                             m_outerGapLeft, -1));
+    }
+    if (m_outerGapRight != -1) {
+        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight,
+                                                             m_outerGapRight, -1));
+    }
+    m_undoController->endMacro();
+}
+
+bool EditorController::useFullScreenGeometry() const
+{
+    return m_useFullScreenGeometry;
+}
+
+void EditorController::setUseFullScreenGeometry(bool enabled)
+{
+    if (m_useFullScreenGeometry != enabled) {
+        auto* cmd = new UpdateFullScreenGeometryCommand(this, m_useFullScreenGeometry, enabled);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setUseFullScreenGeometryDirect(bool enabled)
+{
+    if (m_useFullScreenGeometry != enabled) {
+        m_useFullScreenGeometry = enabled;
+        markUnsaved();
+        Q_EMIT useFullScreenGeometryChanged();
+    }
+}
+
+QSize EditorController::targetScreenSize() const
+{
+    // Get the target screen size for fixed geometry coordinate conversion
+    if (!m_targetScreen.isEmpty()) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screen->name() == m_targetScreen) {
+                return screen->geometry().size();
+            }
+        }
+    }
+    // Fallback to primary screen
+    QScreen* primary = QGuiApplication::primaryScreen();
+    return primary ? primary->geometry().size() : QSize(1920, 1080);
+}
+
+void EditorController::toggleZoneGeometryMode(const QString& zoneId)
+{
+    if (!servicesReady("toggleZoneGeometryMode")) {
+        return;
+    }
+
+    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+    if (zone.isEmpty()) {
+        qCWarning(lcEditor) << "Zone not found for geometry mode toggle:" << zoneId;
+        return;
+    }
+
+    int oldMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    int newMode = (oldMode == 0) ? 1 : 0; // Toggle between Relative(0) and Fixed(1)
+
+    QSize screenSize = targetScreenSize();
+    qreal sw = screenSize.width();
+    qreal sh = screenSize.height();
+
+    QRectF oldRelGeo = m_zoneManager->extractZoneGeometry(zone);
+
+    // Current fixed geometry (may not exist)
+    QRectF oldFixedGeo;
+    if (zone.contains(JsonKeys::FixedX)) {
+        oldFixedGeo = m_zoneManager->extractFixedGeometry(zone);
+    }
+
+    QRectF newRelGeo = oldRelGeo;
+    QRectF newFixedGeo = oldFixedGeo;
+
+    if (newMode == 1) {
+        // Switching to Fixed: convert relative -> pixel
+        newFixedGeo = QRectF(oldRelGeo.x() * sw, oldRelGeo.y() * sh, oldRelGeo.width() * sw, oldRelGeo.height() * sh);
+    } else {
+        // Switching to Relative: convert pixel -> relative (keep relativeGeometry as-is since it's maintained)
+        if (oldFixedGeo.isValid() && sw > 0 && sh > 0) {
+            newRelGeo = QRectF(oldFixedGeo.x() / sw, oldFixedGeo.y() / sh,
+                               oldFixedGeo.width() / sw, oldFixedGeo.height() / sh);
+        }
+    }
+
+    auto* cmd = new ToggleGeometryModeCommand(this, zoneId, oldMode, newMode,
+                                               oldRelGeo, newRelGeo, oldFixedGeo, newFixedGeo);
+    m_undoController->push(cmd);
+    markUnsaved();
+}
+
+void EditorController::updateZoneFixedGeometry(const QString& zoneId, qreal x, qreal y, qreal w, qreal h)
+{
+    if (!servicesReady("updateZoneFixedGeometry")) {
+        return;
+    }
+
+    // Validate fixed geometry
+    x = qMax(0.0, x);
+    y = qMax(0.0, y);
+    w = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), w);
+    h = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), h);
+
+    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+    if (zone.isEmpty()) {
+        return;
+    }
+
+    // Capture old state for undo
+    QRectF oldFixed = m_zoneManager->extractFixedGeometry(zone);
+    QRectF oldRelative = m_zoneManager->extractZoneGeometry(zone);
+    QRectF newFixed(x, y, w, h);
+
+    // Compute new relative fallback
+    QSizeF ss = m_zoneManager->effectiveScreenSizeF();
+    QRectF newRelative(x / ss.width(), y / ss.height(), w / ss.width(), h / ss.height());
+
+    // Skip if nothing changed
+    const qreal tolerance = 0.5; // Sub-pixel tolerance for fixed coords
+    if (qAbs(oldFixed.x() - newFixed.x()) < tolerance && qAbs(oldFixed.y() - newFixed.y()) < tolerance
+        && qAbs(oldFixed.width() - newFixed.width()) < tolerance
+        && qAbs(oldFixed.height() - newFixed.height()) < tolerance) {
+        return;
+    }
+
+    auto* cmd = new UpdateFixedGeometryCommand(QPointer<ZoneManager>(m_zoneManager), zoneId,
+                                                oldFixed, newFixed, oldRelative, newRelative);
+    m_undoController->push(cmd);
+    markUnsaved();
+}
+
+void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, const QRectF& relativeGeo, const QRectF& fixedGeo)
+{
+    if (!m_zoneManager) {
+        return;
+    }
+
+    int index = m_zoneManager->findZoneIndex(zoneId);
+    if (index < 0) {
+        return;
+    }
+
+    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+    if (zone.isEmpty()) {
+        return;
+    }
+
+    // Update geometry mode
+    zone[JsonKeys::GeometryMode] = mode;
+
+    // Update relative geometry
+    zone[JsonKeys::X] = relativeGeo.x();
+    zone[JsonKeys::Y] = relativeGeo.y();
+    zone[JsonKeys::Width] = relativeGeo.width();
+    zone[JsonKeys::Height] = relativeGeo.height();
+
+    if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        // Switching to Fixed: compute and set fixed pixel coords
+        if (fixedGeo.isValid()) {
+            zone[JsonKeys::FixedX] = fixedGeo.x();
+            zone[JsonKeys::FixedY] = fixedGeo.y();
+            zone[JsonKeys::FixedWidth] = fixedGeo.width();
+            zone[JsonKeys::FixedHeight] = fixedGeo.height();
+        } else {
+            // Compute from relative + screen size
+            QSizeF ss = m_zoneManager->effectiveScreenSizeF();
+            zone[JsonKeys::FixedX] = relativeGeo.x() * ss.width();
+            zone[JsonKeys::FixedY] = relativeGeo.y() * ss.height();
+            zone[JsonKeys::FixedWidth] = relativeGeo.width() * ss.width();
+            zone[JsonKeys::FixedHeight] = relativeGeo.height() * ss.height();
+        }
+    } else {
+        // Switching to Relative: remove stale fixed keys
+        zone.remove(QString::fromLatin1(JsonKeys::FixedX));
+        zone.remove(QString::fromLatin1(JsonKeys::FixedY));
+        zone.remove(QString::fromLatin1(JsonKeys::FixedWidth));
+        zone.remove(QString::fromLatin1(JsonKeys::FixedHeight));
+    }
+
+    m_zoneManager->setZoneData(zoneId, zone);
+    ++m_zonesVersion;
+    Q_EMIT zonesChanged();
 }
 
 void EditorController::refreshGlobalZonePadding()
@@ -450,9 +822,27 @@ void EditorController::refreshGlobalZonePadding()
 void EditorController::refreshGlobalOuterGap()
 {
     int newValue = SettingsDbusQueries::queryGlobalOuterGap();
+    bool newUsePerSide = SettingsDbusQueries::queryGlobalUsePerSideOuterGap();
+    int newTop = SettingsDbusQueries::queryGlobalOuterGapTop();
+    int newBottom = SettingsDbusQueries::queryGlobalOuterGapBottom();
+    int newLeft = SettingsDbusQueries::queryGlobalOuterGapLeft();
+    int newRight = SettingsDbusQueries::queryGlobalOuterGapRight();
 
-    if (m_cachedGlobalOuterGap != newValue) {
-        m_cachedGlobalOuterGap = newValue;
+    bool changed = (m_cachedGlobalOuterGap != newValue)
+        || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
+        || (m_cachedGlobalOuterGapTop != newTop)
+        || (m_cachedGlobalOuterGapBottom != newBottom)
+        || (m_cachedGlobalOuterGapLeft != newLeft)
+        || (m_cachedGlobalOuterGapRight != newRight);
+
+    m_cachedGlobalOuterGap = newValue;
+    m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
+    m_cachedGlobalOuterGapTop = newTop;
+    m_cachedGlobalOuterGapBottom = newBottom;
+    m_cachedGlobalOuterGapLeft = newLeft;
+    m_cachedGlobalOuterGapRight = newRight;
+
+    if (changed) {
         Q_EMIT globalOuterGapChanged();
     }
 }
@@ -615,6 +1005,8 @@ void EditorController::setTargetScreen(const QString& screenName)
         QString previousLayout = m_layoutId;
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
+        Q_EMIT targetScreenSizeChanged();
+        m_zoneManager->setReferenceScreenSize(targetScreenSize());
 
         // Load the layout assigned to this screen
         if (!screenName.isEmpty() && m_layoutService) {
@@ -692,6 +1084,8 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
     if (m_targetScreen != screenName) {
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
+        Q_EMIT targetScreenSizeChanged();
+        m_zoneManager->setReferenceScreenSize(targetScreenSize());
     }
 }
 
@@ -721,6 +1115,12 @@ void EditorController::createNewLayout()
     // Reset per-layout gap overrides (-1 = use global)
     m_zonePadding = -1;
     m_outerGap = -1;
+    m_usePerSideOuterGap = false;
+    m_outerGapTop = -1;
+    m_outerGapBottom = -1;
+    m_outerGapLeft = -1;
+    m_outerGapRight = -1;
+    m_useFullScreenGeometry = false;
 
     // Refresh available shaders from daemon
     refreshAvailableShaders();
@@ -737,6 +1137,7 @@ void EditorController::createNewLayout()
     Q_EMIT currentShaderParametersChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT outerGapChanged();
+    Q_EMIT useFullScreenGeometryChanged();
 }
 
 void EditorController::loadLayout(const QString& layoutId)
@@ -784,6 +1185,21 @@ void EditorController::loadLayout(const QString& layoutId)
         zone[JsonKeys::Y] = relGeo[QLatin1String(JsonKeys::Y)].toDouble();
         zone[JsonKeys::Width] = relGeo[QLatin1String(JsonKeys::Width)].toDouble();
         zone[JsonKeys::Height] = relGeo[QLatin1String(JsonKeys::Height)].toDouble();
+
+        // Geometry mode (default: Relative = 0)
+        int geoMode = zoneObj.contains(QLatin1String(JsonKeys::GeometryMode))
+            ? zoneObj[QLatin1String(JsonKeys::GeometryMode)].toInt()
+            : 0;
+        zone[JsonKeys::GeometryMode] = geoMode;
+
+        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)
+            && zoneObj.contains(QLatin1String(JsonKeys::FixedGeometry))) {
+            QJsonObject fixedGeo = zoneObj[QLatin1String(JsonKeys::FixedGeometry)].toObject();
+            zone[JsonKeys::FixedX] = fixedGeo[QLatin1String(JsonKeys::X)].toDouble();
+            zone[JsonKeys::FixedY] = fixedGeo[QLatin1String(JsonKeys::Y)].toDouble();
+            zone[JsonKeys::FixedWidth] = fixedGeo[QLatin1String(JsonKeys::Width)].toDouble();
+            zone[JsonKeys::FixedHeight] = fixedGeo[QLatin1String(JsonKeys::Height)].toDouble();
+        }
 
         // Appearance
         QJsonObject appearance = zoneObj[QLatin1String(JsonKeys::Appearance)].toObject();
@@ -886,13 +1302,23 @@ void EditorController::loadLayout(const QString& layoutId)
 
     // Load per-layout gap overrides (-1 = use global setting)
     int oldZonePadding = m_zonePadding;
-    int oldOuterGap = m_outerGap;
+    bool oldUseFullScreen = m_useFullScreenGeometry;
     m_zonePadding = layoutObj.contains(QLatin1String(JsonKeys::ZonePadding))
         ? layoutObj[QLatin1String(JsonKeys::ZonePadding)].toInt(-1)
         : -1;
     m_outerGap = layoutObj.contains(QLatin1String(JsonKeys::OuterGap))
         ? layoutObj[QLatin1String(JsonKeys::OuterGap)].toInt(-1)
         : -1;
+    m_usePerSideOuterGap = layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)].toBool(false);
+    m_outerGapTop = layoutObj.contains(QLatin1String(JsonKeys::OuterGapTop))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapTop)].toInt(-1) : -1;
+    m_outerGapBottom = layoutObj.contains(QLatin1String(JsonKeys::OuterGapBottom))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapBottom)].toInt(-1) : -1;
+    m_outerGapLeft = layoutObj.contains(QLatin1String(JsonKeys::OuterGapLeft))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapLeft)].toInt(-1) : -1;
+    m_outerGapRight = layoutObj.contains(QLatin1String(JsonKeys::OuterGapRight))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1) : -1;
+    m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
 
     m_selectedZoneId.clear();
     m_selectedZoneIds.clear();
@@ -931,12 +1357,16 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
 
-    // Emit gap change signals if values changed
+    // Emit gap change signals
     if (m_zonePadding != oldZonePadding) {
         Q_EMIT zonePaddingChanged();
     }
-    if (m_outerGap != oldOuterGap) {
-        Q_EMIT outerGapChanged();
+    // Intentional policy exception to signal-on-change rule:
+    // always emit outerGapChanged here because per-side gap values (top/bottom/left/right)
+    // can differ between layouts even when m_outerGap is numerically unchanged.
+    Q_EMIT outerGapChanged();
+    if (m_useFullScreenGeometry != oldUseFullScreen) {
+        Q_EMIT useFullScreenGeometryChanged();
     }
 
     // Emit visibility filtering signals
@@ -988,6 +1418,18 @@ void EditorController::saveLayout()
         relGeo[QLatin1String(JsonKeys::Height)] = zone[JsonKeys::Height].toDouble();
         zoneObj[QLatin1String(JsonKeys::RelativeGeometry)] = relGeo;
 
+        // Write geometry mode and fixed geometry when Fixed
+        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            zoneObj[QLatin1String(JsonKeys::GeometryMode)] = geoMode;
+            QJsonObject fixedGeo;
+            fixedGeo[QLatin1String(JsonKeys::X)] = zone.value(JsonKeys::FixedX, 0.0).toDouble();
+            fixedGeo[QLatin1String(JsonKeys::Y)] = zone.value(JsonKeys::FixedY, 0.0).toDouble();
+            fixedGeo[QLatin1String(JsonKeys::Width)] = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+            fixedGeo[QLatin1String(JsonKeys::Height)] = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+            zoneObj[QLatin1String(JsonKeys::FixedGeometry)] = fixedGeo;
+        }
+
         QJsonObject appearance;
         appearance[QLatin1String(JsonKeys::HighlightColor)] = zone[JsonKeys::HighlightColor].toString();
         appearance[QLatin1String(JsonKeys::InactiveColor)] = zone[JsonKeys::InactiveColor].toString();
@@ -1031,6 +1473,23 @@ void EditorController::saveLayout()
     }
     if (m_outerGap >= 0) {
         layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
+    }
+    // Serialize per-side toggle whenever enabled so user intent is preserved across save/load
+    if (m_usePerSideOuterGap) {
+        layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)] = true;
+        if (m_outerGapTop >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapTop)] = m_outerGapTop;
+        if (m_outerGapBottom >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapBottom)] = m_outerGapBottom;
+        if (m_outerGapLeft >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapLeft)] = m_outerGapLeft;
+        if (m_outerGapRight >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapRight)] = m_outerGapRight;
+    }
+
+    // Include full screen geometry mode (only if enabled)
+    if (m_useFullScreenGeometry) {
+        layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)] = true;
     }
 
     // Include visibility filtering allow-lists (only if non-empty)
@@ -1376,12 +1835,7 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         return;
     }
 
-    if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
-        qCWarning(lcEditor) << "Invalid zone geometry:" << x << y << width << height;
-        return;
-    }
-
-    // Get current geometry for undo state
+    // Get current zone data to check geometry mode
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for geometry update:" << zoneId;
@@ -1389,26 +1843,63 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         return;
     }
 
-    QRectF oldGeometry(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(), zone[JsonKeys::Width].toReal(),
-                       zone[JsonKeys::Height].toReal());
+    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
 
-    // Apply snapping using SnappingService (unless skipSnapping is true, e.g., for keyboard movements)
-    if (!skipSnapping) {
-        QVariantList allZones = m_zoneManager->zones();
-        QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones, zoneId);
-        x = snapped[JsonKeys::X].toDouble();
-        y = snapped[JsonKeys::Y].toDouble();
-        width = snapped[JsonKeys::Width].toDouble();
-        height = snapped[JsonKeys::Height].toDouble();
+    if (isFixed) {
+        // Fixed mode: values are pixel coordinates — validate differently
+        if (width < EditorConstants::MinFixedZoneSize || height < EditorConstants::MinFixedZoneSize) {
+            qCWarning(lcEditor) << "Fixed zone too small:" << width << height;
+            return;
+        }
+        if (x < 0.0 || y < 0.0) {
+            qCWarning(lcEditor) << "Fixed zone negative position:" << x << y;
+            return;
+        }
+    } else {
+        // Relative mode: values are 0-1 normalized
+        if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+            qCWarning(lcEditor) << "Invalid zone geometry:" << x << y << width << height;
+            return;
+        }
     }
 
-    // Minimum size
-    width = qMax(EditorConstants::MinZoneSize, width);
-    height = qMax(EditorConstants::MinZoneSize, height);
+    QRectF oldGeometry;
+    if (isFixed) {
+        oldGeometry = QRectF(zone.value(JsonKeys::FixedX, 0.0).toReal(),
+                             zone.value(JsonKeys::FixedY, 0.0).toReal(),
+                             zone.value(JsonKeys::FixedWidth, 0.0).toReal(),
+                             zone.value(JsonKeys::FixedHeight, 0.0).toReal());
+    } else {
+        oldGeometry = QRectF(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(),
+                             zone[JsonKeys::Width].toReal(), zone[JsonKeys::Height].toReal());
+    }
 
-    // Clamp to screen
-    x = qBound(0.0, x, 1.0 - width);
-    y = qBound(0.0, y, 1.0 - height);
+    if (isFixed) {
+        // Fixed mode: enforce minimum size, clamp position >= 0
+        width = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), width);
+        height = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), height);
+        x = qMax(0.0, x);
+        y = qMax(0.0, y);
+    } else {
+        // Relative mode: apply snapping and 0-1 clamping
+        if (!skipSnapping) {
+            QVariantList allZones = m_zoneManager->zones();
+            QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones, zoneId);
+            x = snapped[JsonKeys::X].toDouble();
+            y = snapped[JsonKeys::Y].toDouble();
+            width = snapped[JsonKeys::Width].toDouble();
+            height = snapped[JsonKeys::Height].toDouble();
+        }
+
+        // Minimum size
+        width = qMax(EditorConstants::MinZoneSize, width);
+        height = qMax(EditorConstants::MinZoneSize, height);
+
+        // Clamp to screen
+        x = qBound(0.0, x, 1.0 - width);
+        y = qBound(0.0, y, 1.0 - height);
+    }
 
     QRectF newGeometry(x, y, width, height);
 
@@ -2080,48 +2571,46 @@ bool EditorController::moveSelectedZone(int direction, qreal step)
         return false;
     }
 
-    QVariantList zones = m_zoneManager->zones();
-    QVariantMap selectedZone;
-    for (const QVariant& zoneVar : zones) {
-        QVariantMap zone = zoneVar.toMap();
-        if (zone[JsonKeys::Id].toString() == m_selectedZoneId) {
-            selectedZone = zone;
-            break;
-        }
-    }
-
+    QVariantMap selectedZone = m_zoneManager->getZoneById(m_selectedZoneId);
     if (selectedZone.isEmpty()) {
         return false;
     }
 
+    if (ZoneManager::isFixedMode(selectedZone)) {
+        // Fixed mode: move in pixel space with screen bounds
+        QRectF fg = m_zoneManager->extractFixedGeometry(selectedZone);
+        qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+        QSize ss = targetScreenSize();
+
+        switch (direction) {
+        case 0: fg.moveLeft(qMax(0.0, fg.x() - pxStep)); break;
+        case 1: fg.moveLeft(qMin(static_cast<qreal>(ss.width()) - fg.width(), fg.x() + pxStep)); break;
+        case 2: fg.moveTop(qMax(0.0, fg.y() - pxStep)); break;
+        case 3: fg.moveTop(qMin(static_cast<qreal>(ss.height()) - fg.height(), fg.y() + pxStep)); break;
+        default: return false;
+        }
+
+        updateZoneGeometry(m_selectedZoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
+        return true;
+    }
+
+    // Relative mode: original behavior
     qreal x = selectedZone[JsonKeys::X].toDouble();
     qreal y = selectedZone[JsonKeys::Y].toDouble();
     qreal width = selectedZone[JsonKeys::Width].toDouble();
     qreal height = selectedZone[JsonKeys::Height].toDouble();
 
-    // Apply movement based on direction
     switch (direction) {
-    case 0: // Left
-        x = qMax(0.0, x - step);
-        break;
-    case 1: // Right
-        x = qMin(1.0 - width, x + step);
-        break;
-    case 2: // Up
-        y = qMax(0.0, y - step);
-        break;
-    case 3: // Down
-        y = qMin(1.0 - height, y + step);
-        break;
-    default:
-        return false;
+    case 0: x = qMax(0.0, x - step); break;
+    case 1: x = qMin(1.0 - width, x + step); break;
+    case 2: y = qMax(0.0, y - step); break;
+    case 3: y = qMin(1.0 - height, y + step); break;
+    default: return false;
     }
 
-    // Clamp to valid bounds
     x = qBound(0.0, x, 1.0 - width);
     y = qBound(0.0, y, 1.0 - height);
 
-    // Update zone geometry (skip snapping for keyboard movements)
     updateZoneGeometry(m_selectedZoneId, x, y, width, height, true);
     return true;
 }
@@ -2138,69 +2627,60 @@ bool EditorController::resizeSelectedZone(int direction, qreal step)
         return false;
     }
 
-    QVariantList zones = m_zoneManager->zones();
-    QVariantMap selectedZone;
-    for (const QVariant& zoneVar : zones) {
-        QVariantMap zone = zoneVar.toMap();
-        if (zone[JsonKeys::Id].toString() == m_selectedZoneId) {
-            selectedZone = zone;
-            break;
-        }
-    }
-
+    QVariantMap selectedZone = m_zoneManager->getZoneById(m_selectedZoneId);
     if (selectedZone.isEmpty()) {
         return false;
     }
 
+    if (ZoneManager::isFixedMode(selectedZone)) {
+        // Fixed mode: resize in pixel space with screen bounds
+        QRectF fg = m_zoneManager->extractFixedGeometry(selectedZone);
+        qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+        qreal minFixed = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
+        QSize ss = targetScreenSize();
+
+        switch (direction) {
+        case 0: fg.setWidth(qMax(minFixed, fg.width() - pxStep)); break;
+        case 1: fg.setWidth(qMin(static_cast<qreal>(ss.width()) - fg.x(), fg.width() + pxStep)); break;
+        case 2: fg.setHeight(qMax(minFixed, fg.height() - pxStep)); break;
+        case 3: fg.setHeight(qMin(static_cast<qreal>(ss.height()) - fg.y(), fg.height() + pxStep)); break;
+        default: return false;
+        }
+        fg.setWidth(qMax(minFixed, fg.width()));
+        fg.setHeight(qMax(minFixed, fg.height()));
+
+        updateZoneGeometry(m_selectedZoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
+        return true;
+    }
+
+    // Relative mode: original behavior
     qreal x = selectedZone[JsonKeys::X].toDouble();
     qreal y = selectedZone[JsonKeys::Y].toDouble();
     qreal width = selectedZone[JsonKeys::Width].toDouble();
     qreal height = selectedZone[JsonKeys::Height].toDouble();
 
-    const qreal minSize = 0.05; // Minimum 5% size
+    const qreal minSize = 0.05;
 
-    // Apply resize based on direction
-    // Left/Up = shrink, Right/Down = grow (intuitive behavior)
     switch (direction) {
-    case 0: // Left (shrink width)
-        width = qMax(minSize, width - step);
-        break;
-    case 1: // Right (grow width)
-        width = qMin(1.0 - x, width + step);
-        break;
-    case 2: // Up (shrink height)
-        height = qMax(minSize, height - step);
-        break;
-    case 3: // Down (grow height)
-        height = qMin(1.0 - y, height + step);
-        break;
-    default:
-        return false;
+    case 0: width = qMax(minSize, width - step); break;
+    case 1: width = qMin(1.0 - x, width + step); break;
+    case 2: height = qMax(minSize, height - step); break;
+    case 3: height = qMin(1.0 - y, height + step); break;
+    default: return false;
     }
 
-    // Ensure minimum size
-    if (width < minSize)
-        width = minSize;
-    if (height < minSize)
-        height = minSize;
+    if (width < minSize) width = minSize;
+    if (height < minSize) height = minSize;
 
-    // Clamp to valid bounds
     if (x + width > 1.0) {
         width = 1.0 - x;
-        if (width < minSize) {
-            width = minSize;
-            x = 1.0 - minSize;
-        }
+        if (width < minSize) { width = minSize; x = 1.0 - minSize; }
     }
     if (y + height > 1.0) {
         height = 1.0 - y;
-        if (height < minSize) {
-            height = minSize;
-            y = 1.0 - minSize;
-        }
+        if (height < minSize) { height = minSize; y = 1.0 - minSize; }
     }
 
-    // Update zone geometry (skip snapping for keyboard resizes)
     updateZoneGeometry(m_selectedZoneId, x, y, width, height, true);
     return true;
 }
@@ -2480,46 +2960,6 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         return false;
     }
 
-    // Calculate movement deltas based on direction
-    qreal dx = 0.0, dy = 0.0;
-    switch (direction) {
-    case 0:
-        dx = -step;
-        break; // Left
-    case 1:
-        dx = step;
-        break; // Right
-    case 2:
-        dy = -step;
-        break; // Up
-    case 3:
-        dy = step;
-        break; // Down
-    default:
-        return false;
-    }
-
-    // Check if movement is valid for all zones (no zone goes out of bounds)
-    for (const auto& pair : zonesToMove) {
-        const QVariantMap& zone = pair.second;
-        qreal x = zone[JsonKeys::X].toDouble() + dx;
-        qreal y = zone[JsonKeys::Y].toDouble() + dy;
-        qreal w = zone[JsonKeys::Width].toDouble();
-        qreal h = zone[JsonKeys::Height].toDouble();
-
-        if (x < 0 || y < 0 || x + w > 1.0 || y + h > 1.0) {
-            // Adjust to boundary
-            if (dx < 0 && x < 0)
-                dx = -zone[JsonKeys::X].toDouble();
-            if (dx > 0 && x + w > 1.0)
-                dx = 1.0 - w - zone[JsonKeys::X].toDouble();
-            if (dy < 0 && y < 0)
-                dy = -zone[JsonKeys::Y].toDouble();
-            if (dy > 0 && y + h > 1.0)
-                dy = 1.0 - h - zone[JsonKeys::Y].toDouble();
-        }
-    }
-
     // Apply movement using RAII scope for undo macro and batch update
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
@@ -2527,10 +2967,34 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
         for (const auto& pair : zonesToMove) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
-            qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
-            qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
-            updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
-                               true); // Skip snapping for keyboard
+            if (ZoneManager::isFixedMode(zone)) {
+                QRectF fg = m_zoneManager->extractFixedGeometry(zone);
+                qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+                QSize ss = targetScreenSize();
+
+                switch (direction) {
+                case 0: fg.moveLeft(qMax(0.0, fg.x() - pxStep)); break;
+                case 1: fg.moveLeft(qMin(static_cast<qreal>(ss.width()) - fg.width(), fg.x() + pxStep)); break;
+                case 2: fg.moveTop(qMax(0.0, fg.y() - pxStep)); break;
+                case 3: fg.moveTop(qMin(static_cast<qreal>(ss.height()) - fg.height(), fg.y() + pxStep)); break;
+                default: continue;
+                }
+                updateZoneGeometry(zoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
+            } else {
+                // Relative mode: compute delta, clamp, and apply
+                qreal dx = 0.0, dy = 0.0;
+                switch (direction) {
+                case 0: dx = -step; break;
+                case 1: dx = step; break;
+                case 2: dy = -step; break;
+                case 3: dy = step; break;
+                default: continue;
+                }
+                qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
+                qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
+                updateZoneGeometry(zoneId, x, y, zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble(),
+                                   true);
+            }
         }
     }
     return true;
@@ -2560,61 +3024,58 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
         return false;
     }
 
-    const qreal minSize = 0.05; // Minimum 5% size
-
     {
         BatchOperationScope scope(m_undoController, m_zoneManager,
                                   i18nc("@action", "Resize %1 Zones", zonesToResize.count()));
         for (const auto& pair : zonesToResize) {
             const QString& zoneId = pair.first;
             const QVariantMap& zone = pair.second;
-            qreal x = zone[JsonKeys::X].toDouble();
-            qreal y = zone[JsonKeys::Y].toDouble();
-            qreal width = zone[JsonKeys::Width].toDouble();
-            qreal height = zone[JsonKeys::Height].toDouble();
+            if (ZoneManager::isFixedMode(zone)) {
+                QRectF fg = m_zoneManager->extractFixedGeometry(zone);
+                qreal pxStep = static_cast<qreal>(EditorConstants::KeyboardStepPixels);
+                qreal minFixed = static_cast<qreal>(EditorConstants::MinFixedZoneSize);
+                QSize ss = targetScreenSize();
 
-            // Apply resize based on direction (same logic as resizeSelectedZone)
-            // Left/Up = shrink, Right/Down = grow (intuitive behavior)
-            switch (direction) {
-            case 0: // Left (shrink width)
-                width = qMax(minSize, width - step);
-                break;
-            case 1: // Right (grow width)
-                width = qMin(1.0 - x, width + step);
-                break;
-            case 2: // Up (shrink height)
-                height = qMax(minSize, height - step);
-                break;
-            case 3: // Down (grow height)
-                height = qMin(1.0 - y, height + step);
-                break;
-            default:
-                continue;
-            }
-
-            // Ensure minimum size
-            if (width < minSize)
-                width = minSize;
-            if (height < minSize)
-                height = minSize;
-
-            // Clamp to valid bounds
-            if (x + width > 1.0) {
-                width = 1.0 - x;
-                if (width < minSize) {
-                    width = minSize;
-                    x = 1.0 - minSize;
+                switch (direction) {
+                case 0: fg.setWidth(qMax(minFixed, fg.width() - pxStep)); break;
+                case 1: fg.setWidth(qMin(static_cast<qreal>(ss.width()) - fg.x(), fg.width() + pxStep)); break;
+                case 2: fg.setHeight(qMax(minFixed, fg.height() - pxStep)); break;
+                case 3: fg.setHeight(qMin(static_cast<qreal>(ss.height()) - fg.y(), fg.height() + pxStep)); break;
+                default: continue;
                 }
-            }
-            if (y + height > 1.0) {
-                height = 1.0 - y;
-                if (height < minSize) {
-                    height = minSize;
-                    y = 1.0 - minSize;
-                }
-            }
+                fg.setWidth(qMax(minFixed, fg.width()));
+                fg.setHeight(qMax(minFixed, fg.height()));
+                updateZoneGeometry(zoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
+            } else {
+                // Relative mode
+                const qreal minSize = 0.05;
+                qreal x = zone[JsonKeys::X].toDouble();
+                qreal y = zone[JsonKeys::Y].toDouble();
+                qreal width = zone[JsonKeys::Width].toDouble();
+                qreal height = zone[JsonKeys::Height].toDouble();
 
-            updateZoneGeometry(zoneId, x, y, width, height, true); // Skip snapping for keyboard
+                switch (direction) {
+                case 0: width = qMax(minSize, width - step); break;
+                case 1: width = qMin(1.0 - x, width + step); break;
+                case 2: height = qMax(minSize, height - step); break;
+                case 3: height = qMin(1.0 - y, height + step); break;
+                default: continue;
+                }
+
+                if (width < minSize) width = minSize;
+                if (height < minSize) height = minSize;
+
+                if (x + width > 1.0) {
+                    width = 1.0 - x;
+                    if (width < minSize) { width = minSize; x = 1.0 - minSize; }
+                }
+                if (y + height > 1.0) {
+                    height = 1.0 - y;
+                    if (height < minSize) { height = minSize; y = 1.0 - minSize; }
+                }
+
+                updateZoneGeometry(zoneId, x, y, width, height, true);
+            }
         }
     }
     return true;
@@ -3474,18 +3935,39 @@ QStringList EditorController::pasteZones(bool withOffset)
         QString newId = QUuid::createUuid().toString();
         zone[JsonKeys::Id] = newId;
 
-        // Adjust position if offset requested
-        qreal x = zone[JsonKeys::X].toDouble() + offsetX;
-        qreal y = zone[JsonKeys::Y].toDouble() + offsetY;
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
+        if (ZoneManager::isFixedMode(zone) && withOffset) {
+            // Fixed mode: offset fixed pixel coords, skip 0-1 clamping for fixed keys
+            QRectF fg = m_zoneManager->extractFixedGeometry(zone);
+            fg.moveLeft(qMax(0.0, fg.x() + EditorConstants::DuplicateOffsetPixels));
+            fg.moveTop(qMax(0.0, fg.y() + EditorConstants::DuplicateOffsetPixels));
+            fg.setWidth(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.width()));
+            fg.setHeight(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.height()));
 
-        // Clamp to bounds
-        x = qBound(0.0, x, 1.0 - width);
-        y = qBound(0.0, y, 1.0 - height);
+            zone[JsonKeys::FixedX] = fg.x();
+            zone[JsonKeys::FixedY] = fg.y();
+            zone[JsonKeys::FixedWidth] = fg.width();
+            zone[JsonKeys::FixedHeight] = fg.height();
 
-        zone[JsonKeys::X] = x;
-        zone[JsonKeys::Y] = y;
+            // Update relative fallback from fixed coords
+            QSizeF ss = m_zoneManager->effectiveScreenSizeF();
+            zone[JsonKeys::X] = fg.x() / ss.width();
+            zone[JsonKeys::Y] = fg.y() / ss.height();
+            zone[JsonKeys::Width] = fg.width() / ss.width();
+            zone[JsonKeys::Height] = fg.height() / ss.height();
+        } else {
+            // Relative mode (or fixed without offset): apply relative offset and clamp
+            qreal x = zone[JsonKeys::X].toDouble() + offsetX;
+            qreal y = zone[JsonKeys::Y].toDouble() + offsetY;
+            qreal width = zone[JsonKeys::Width].toDouble();
+            qreal height = zone[JsonKeys::Height].toDouble();
+
+            x = qBound(0.0, x, 1.0 - width);
+            y = qBound(0.0, y, 1.0 - height);
+
+            zone[JsonKeys::X] = x;
+            zone[JsonKeys::Y] = y;
+        }
+
         zone[JsonKeys::ZoneNumber] = newZoneNumber++;
 
         newZoneIds.append(newId);

@@ -1574,6 +1574,14 @@ void WindowTrackingAdaptor::saveState()
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup tracking = config->group(QStringLiteral("WindowTracking"));
 
+    // Save active layout ID so we can restore it after daemon restart.
+    // Without this, the daemon starts with defaultLayout() which may differ from
+    // what the user was actually on, causing resnap to use the wrong previous layout.
+    if (m_layoutManager && m_layoutManager->activeLayout()) {
+        tracking.writeEntry(QStringLiteral("ActiveLayoutId"),
+                            m_layoutManager->activeLayout()->id().toString());
+    }
+
     // Save zone assignments as JSON arrays (from service state)
     QJsonObject assignmentsObj;
     for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
@@ -1951,6 +1959,22 @@ void WindowTrackingAdaptor::loadState()
     }
     m_service->setUserSnappedClasses(userSnappedClasses);
 
+    // Restore active layout from previous session so that previousLayout() is correct
+    // on the next layout switch. Without this, the daemon starts with defaultLayout()
+    // which may differ from the layout the user was on, causing resnap to build its
+    // zone-position map from the wrong layout's zones (all entries get pos=0 → empty buffer).
+    QString savedActiveLayoutId = tracking.readEntry(QStringLiteral("ActiveLayoutId"), QString());
+    if (!savedActiveLayoutId.isEmpty() && m_layoutManager) {
+        auto savedUuid = Utils::parseUuid(savedActiveLayoutId);
+        if (savedUuid) {
+            Layout* savedLayout = m_layoutManager->layoutById(*savedUuid);
+            if (savedLayout && savedLayout != m_layoutManager->activeLayout()) {
+                qCInfo(lcDbusWindow) << "Restoring active layout from previous session:" << savedLayout->name();
+                m_layoutManager->setActiveLayoutById(*savedUuid);
+            }
+        }
+    }
+
     qCInfo(lcDbusWindow) << "Loaded state from KConfig pendingAssignments= " << pendingZones.size();
     for (auto it = pendingZones.constBegin(); it != pendingZones.constEnd(); ++it) {
         qCInfo(lcDbusWindow) << "  Pending snap window= " << it.key() << " zone= " << it.value();
@@ -2040,11 +2064,11 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     if (!zone) {
         return QString();
     }
-    QRectF relGeom = zone->relativeGeometry();
     for (QScreen* screen : Utils::allScreens()) {
-        QRect availGeom = ScreenManager::actualAvailableGeometry(screen);
-        QPoint zoneCenter(availGeom.x() + static_cast<int>(relGeom.center().x() * availGeom.width()),
-                          availGeom.y() + static_cast<int>(relGeom.center().y() * availGeom.height()));
+        QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+        QRectF normGeom = zone->normalizedGeometry(refGeom);
+        QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
+                          refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
         if (screen->geometry().contains(zoneCenter)) {
             return screen->name();
         }

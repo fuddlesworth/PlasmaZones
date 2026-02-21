@@ -1913,12 +1913,13 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     }
 
     // Calculate zone geometry with gaps applied (matches snap geometry).
-    // useAvailableGeometry=true means zones are calculated within the usable screen area
-    // (excluding panels/taskbars), so windows won't overlap with system UI.
+    // Uses the layout's geometry preference: available area (excluding panels/taskbars)
+    // or full screen geometry depending on useFullScreenGeometry setting.
     // Layout's zonePadding/outerGap takes precedence over global settings
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
-    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
 
     // Convert to overlay window local coordinates
     // The overlay covers the full screen, but zones are positioned within available area
@@ -2052,9 +2053,10 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
             Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings);
-                int outerGap = GeometryUtils::getEffectiveOuterGap(selectedLayout, m_settings);
+                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings);
+                bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
                 QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
-                    zone, screen, zonePadding, outerGap, /*useAvailableGeometry=*/true);
+                    zone, screen, zonePadding, outerGaps, useAvail);
                 return GeometryUtils::snapToRect(geom);
             }
         }
@@ -3023,6 +3025,13 @@ bool OverlayService::eventFilter(QObject* obj, QEvent* event)
             return true;
         }
     }
+    if (obj == m_layoutPickerWindow && event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape) {
+            QTimer::singleShot(0, this, &OverlayService::hideLayoutPicker);
+            return true;
+        }
+    }
     return QObject::eventFilter(obj, event);
 }
 
@@ -3105,6 +3114,152 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
     QString screenName = m_snapAssistScreen ? m_snapAssistScreen->name() : QString();
     // geometryJson is overlay-local; daemon will fetch authoritative zone geometry from service
     Q_EMIT snapAssistWindowSelected(windowId, zoneId, geometryJson, screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Layout Picker Overlay
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void OverlayService::showLayoutPicker(const QString& screenName)
+{
+    // Guard: if picker window already exists (visible or being set up), do nothing.
+    // Prevents double-trigger when shortcut fires before KeyboardInteractivityExclusive
+    // grabs the keyboard on Wayland, and avoids deleteLater() races with stale grabs.
+    if (m_layoutPickerWindow) {
+        return;
+    }
+
+    // Resolve target screen
+    QScreen* screen = nullptr;
+    if (!screenName.isEmpty()) {
+        screen = Utils::findScreenByName(screenName);
+    }
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    if (!screen) {
+        qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
+        return;
+    }
+
+    // Always destroy and recreate for fresh state
+    destroyLayoutPickerWindow();
+    createLayoutPickerWindow(screen);
+    if (!m_layoutPickerWindow) {
+        return;
+    }
+
+    m_layoutPickerWindow->setScreen(screen);
+
+    // Build layouts list
+    const QString screenId = Utils::screenIdentifier(screen);
+    QVariantList layoutsList = buildLayoutsList(screenId);
+    if (layoutsList.isEmpty()) {
+        qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
+        destroyLayoutPickerWindow();
+        return;
+    }
+
+    // Determine active layout ID
+    QString activeId;
+    if (m_layoutManager) {
+        Layout* activeLayout = resolveScreenLayout(screen);
+        if (activeLayout) {
+            activeId = activeLayout->id().toString();
+        }
+    }
+
+    // Calculate screen aspect ratio
+    const QRect screenGeom = screen->geometry();
+    qreal aspectRatio = (screenGeom.height() > 0)
+        ? static_cast<qreal>(screenGeom.width()) / screenGeom.height()
+        : (16.0 / 9.0);
+    aspectRatio = qBound(0.5, aspectRatio, 4.0);
+
+    // Set properties
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("layouts"), layoutsList);
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("activeLayoutId"), activeId);
+    writeQmlProperty(m_layoutPickerWindow, QStringLiteral("screenAspectRatio"), aspectRatio);
+    writeFontProperties(m_layoutPickerWindow, m_settings);
+
+    // Theme colors
+    if (m_settings) {
+        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
+    }
+
+    // Full-screen layer shell with keyboard interactivity
+    if (auto* layerWindow = LayerShellQt::Window::get(m_layoutPickerWindow)) {
+        layerWindow->setScreen(screen);
+        layerWindow->setLayer(LayerShellQt::Window::LayerTop);
+        layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
+        layerWindow->setAnchors(LayerShellQt::Window::Anchors(
+            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+            | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setExclusiveZone(-1);
+        layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
+    }
+
+    assertWindowOnScreen(m_layoutPickerWindow, screen);
+    m_layoutPickerWindow->setGeometry(screenGeom);
+    QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
+    m_layoutPickerWindow->requestActivate();
+
+    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << screen->name()
+                      << "layouts=" << layoutsList.size() << "active=" << activeId;
+}
+
+void OverlayService::hideLayoutPicker()
+{
+    destroyLayoutPickerWindow();
+}
+
+bool OverlayService::isLayoutPickerVisible() const
+{
+    return m_layoutPickerWindow && m_layoutPickerWindow->isVisible();
+}
+
+void OverlayService::createLayoutPickerWindow(QScreen* screen)
+{
+    if (m_layoutPickerWindow) {
+        return;
+    }
+
+    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, "layout picker");
+    if (!window) {
+        qCWarning(lcOverlay) << "Failed to create layout picker overlay";
+        return;
+    }
+
+    connect(window, &QObject::destroyed, this, [this]() {
+        m_layoutPickerWindow = nullptr;
+    });
+
+    // Connect layoutSelected and dismissed signals from QML
+    connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
+    connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutPicker()));
+
+    // Install event filter for reliable Escape key handling on Wayland
+    window->installEventFilter(this);
+
+    m_layoutPickerWindow = window;
+    window->setVisible(false);
+}
+
+void OverlayService::destroyLayoutPickerWindow()
+{
+    if (m_layoutPickerWindow) {
+        disconnect(m_layoutPickerWindow, &QWindow::visibleChanged, this, nullptr);
+        m_layoutPickerWindow->close();
+        m_layoutPickerWindow->deleteLater();
+        m_layoutPickerWindow = nullptr;
+    }
+}
+
+void OverlayService::onLayoutPickerSelected(const QString& layoutId)
+{
+    qCInfo(lcOverlay) << "Layout picker selected:" << layoutId;
+    hideLayoutPicker();
+    Q_EMIT layoutPickerSelected(layoutId);
 }
 
 } // namespace PlasmaZones

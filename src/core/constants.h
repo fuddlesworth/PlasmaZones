@@ -9,6 +9,17 @@
 namespace PlasmaZones {
 
 /**
+ * @brief Geometry mode for individual zones
+ *
+ * Relative: 0.0-1.0 normalized coordinates (default, resolution-independent)
+ * Fixed: Absolute pixel coordinates relative to reference screen origin
+ */
+enum class ZoneGeometryMode {
+    Relative = 0,
+    Fixed = 1
+};
+
+/**
  * @brief Default values for zone appearance and core module constants
  *
  * These defaults are used by core module files that can't depend on config.
@@ -83,12 +94,19 @@ namespace EditorConstants {
 constexpr qreal MinZoneSize = 0.05; // 5% minimum zone size
 constexpr qreal MaxZoneSize = 1.0; // 100% maximum zone size
 
+// Fixed geometry constraints (absolute pixel coordinates)
+constexpr int MinFixedZoneSize = 50; // Minimum fixed zone dimension in pixels
+
 // Snapping thresholds (relative coordinates 0.0-1.0, used in SnappingService)
 constexpr qreal EdgeThreshold = 0.02; // 2% threshold for snapping to zone edges
 constexpr qreal DefaultSnapInterval = 0.1; // 10% default grid snap interval
 
 // Zone duplication offset
 constexpr qreal DuplicateOffset = 0.02; // 2% offset when duplicating zones
+constexpr int DuplicateOffsetPixels = 20; // 20px offset when duplicating fixed zones
+
+// Keyboard step for fixed geometry zones
+constexpr int KeyboardStepPixels = 10; // 10px step for keyboard move/resize of fixed zones
 
 // Default zone colors (hex strings for QML compatibility)
 inline constexpr const char* DefaultHighlightColor = "#800078D4";
@@ -176,6 +194,24 @@ inline constexpr QLatin1String TargetScreen{"targetScreen"};
 // Auto-assign keys
 inline constexpr QLatin1String AutoAssign{"autoAssign"};
 
+// Geometry mode keys
+inline constexpr QLatin1String UseFullScreenGeometry{"useFullScreenGeometry"};
+
+// Per-zone geometry mode keys
+inline constexpr QLatin1String GeometryMode{"geometryMode"};
+inline constexpr QLatin1String FixedGeometry{"fixedGeometry"};
+inline constexpr QLatin1String FixedX{"fixedX"};
+inline constexpr QLatin1String FixedY{"fixedY"};
+inline constexpr QLatin1String FixedWidth{"fixedWidth"};
+inline constexpr QLatin1String FixedHeight{"fixedHeight"};
+
+// Per-side outer gap keys
+inline constexpr QLatin1String UsePerSideOuterGap{"usePerSideOuterGap"};
+inline constexpr QLatin1String OuterGapTop{"outerGapTop"};
+inline constexpr QLatin1String OuterGapBottom{"outerGapBottom"};
+inline constexpr QLatin1String OuterGapLeft{"outerGapLeft"};
+inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
+
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 }
@@ -208,6 +244,14 @@ inline constexpr QLatin1String MonocleShowTabs{"monocleShowTabs"};
 inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
+}
+
+/**
+ * @brief Audio visualization constants (CAVA)
+ */
+namespace Audio {
+constexpr int MinBars = 16;
+constexpr int MaxBars = 256;
 }
 
 /**
@@ -264,5 +308,27 @@ inline QString makeAutotileId(const QString& algorithmId) {
     return AutotilePrefix + algorithmId;
 }
 }
+
+/**
+ * @brief Per-side edge gap values (resolved, non-negative pixel values)
+ *
+ * Used when usePerSideOuterGap is enabled to apply different gaps
+ * to each screen edge. When disabled, the single outerGap value
+ * is used uniformly via EdgeGaps::uniform().
+ *
+ * Default member values (8px) represent the application default.
+ * Note: Layout::rawOuterGaps() returns an EdgeGaps with -1 sentinels
+ * (meaning "use global setting") — those must be resolved via
+ * getEffectiveOuterGaps() before use in geometry calculations.
+ */
+struct EdgeGaps {
+    int top = 8;
+    int bottom = 8;
+    int left = 8;
+    int right = 8;
+    bool operator==(const EdgeGaps&) const = default;
+    bool isUniform() const { return top == bottom && bottom == left && left == right; }
+    static EdgeGaps uniform(int gap) { return {gap, gap, gap, gap}; }
+};
 
 } // namespace PlasmaZones

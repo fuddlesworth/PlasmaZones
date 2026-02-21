@@ -173,6 +173,11 @@ Q_SIGNALS:
     void labelFontStrikeoutChanged();
     void zonePaddingChanged();
     void outerGapChanged();
+    void usePerSideOuterGapChanged();
+    void outerGapTopChanged();
+    void outerGapBottomChanged();
+    void outerGapLeftChanged();
+    void outerGapRightChanged();
     void adjacentThresholdChanged();
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();
@@ -264,6 +269,9 @@ Q_SIGNALS:
 
     // Snap All Windows Shortcut
     void snapAllWindowsShortcutChanged();
+
+    // Layout Picker Shortcut
+    void layoutPickerShortcutChanged();
 
     // Autotile settings
     void autotileEnabledChanged();
@@ -389,6 +397,7 @@ public:
     // Persistence
     virtual void loadLayouts() = 0;
     virtual void saveLayouts() = 0;
+    virtual void saveLayout(Layout* layout) = 0;
     virtual void loadAssignments() = 0;
     virtual void saveAssignments() = 0;
     virtual void importLayout(const QString& filePath) = 0;
@@ -546,6 +555,12 @@ Q_SIGNALS:
      * WindowDragAdaptor subscribes to unregister the KGlobalAccel Escape shortcut.
      */
     void snapAssistDismissed();
+
+    /**
+     * @brief Emitted when a layout is selected from the layout picker overlay
+     * @param layoutId The UUID of the selected layout
+     */
+    void layoutPickerSelected(const QString& layoutId);
 
     /**
      * @brief Emitted when an autotile algorithm layout is selected from the zone selector

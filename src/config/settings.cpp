@@ -424,6 +424,11 @@ void Settings::setLabelFontSizeScale(qreal scale)
 
 SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, 50)
 SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, 50)
+SETTINGS_SETTER(bool, UsePerSideOuterGap, m_usePerSideOuterGap, usePerSideOuterGapChanged)
+SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, 50)
 SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 5, 100)
 SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, 10, 1000)
 SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
@@ -817,6 +822,7 @@ SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForward
 SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut, cycleWindowBackwardShortcutChanged)
 SETTINGS_SETTER(const QString&, ResnapToNewLayoutShortcut, m_resnapToNewLayoutShortcut, resnapToNewLayoutShortcutChanged)
 SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut, snapAllWindowsShortcutChanged)
+SETTINGS_SETTER(const QString&, LayoutPickerShortcut, m_layoutPickerShortcut, layoutPickerShortcutChanged)
 
 bool Settings::isWindowExcluded(const QString& appName, const QString& windowClass) const
 {
@@ -959,6 +965,11 @@ void Settings::load()
     // Zones with validation (defaults from .kcfg via ConfigDefaults)
     m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, 50, "zone padding");
     m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, 50, "outer gap");
+    m_usePerSideOuterGap = zones.readEntry(QLatin1String("UsePerSideOuterGap"), ConfigDefaults::usePerSideOuterGap());
+    m_outerGapTop = readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), 0, 50, "outer gap top");
+    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), 0, 50, "outer gap bottom");
+    m_outerGapLeft = readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), 0, 50, "outer gap left");
+    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), 0, 50, "outer gap right");
     m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 5, 100, "adjacent threshold");
 
     // Performance and behavior settings with validation
@@ -1148,6 +1159,8 @@ void Settings::load()
         globalShortcuts.readEntry(QLatin1String("ResnapToNewLayoutShortcut"), ConfigDefaults::resnapToNewLayoutShortcut());
     m_snapAllWindowsShortcut =
         globalShortcuts.readEntry(QLatin1String("SnapAllWindowsShortcut"), ConfigDefaults::snapAllWindowsShortcut());
+    m_layoutPickerShortcut =
+        globalShortcuts.readEntry(QLatin1String("LayoutPickerShortcut"), ConfigDefaults::layoutPickerShortcut());
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (defaults from .kcfg via ConfigDefaults)
@@ -1291,6 +1304,11 @@ void Settings::save()
     // Zones
     zones.writeEntry(QLatin1String("Padding"), m_zonePadding);
     zones.writeEntry(QLatin1String("OuterGap"), m_outerGap);
+    zones.writeEntry(QLatin1String("UsePerSideOuterGap"), m_usePerSideOuterGap);
+    zones.writeEntry(QLatin1String("OuterGapTop"), m_outerGapTop);
+    zones.writeEntry(QLatin1String("OuterGapBottom"), m_outerGapBottom);
+    zones.writeEntry(QLatin1String("OuterGapLeft"), m_outerGapLeft);
+    zones.writeEntry(QLatin1String("OuterGapRight"), m_outerGapRight);
     zones.writeEntry(QLatin1String("AdjacentThreshold"), m_adjacentThreshold);
 
     // Performance and behavior
@@ -1390,6 +1408,7 @@ void Settings::save()
     globalShortcuts.writeEntry(QLatin1String("CycleWindowBackward"), m_cycleWindowBackwardShortcut);
     globalShortcuts.writeEntry(QLatin1String("ResnapToNewLayoutShortcut"), m_resnapToNewLayoutShortcut);
     globalShortcuts.writeEntry(QLatin1String("SnapAllWindowsShortcut"), m_snapAllWindowsShortcut);
+    globalShortcuts.writeEntry(QLatin1String("LayoutPickerShortcut"), m_layoutPickerShortcut);
 
     // Autotiling Settings
     KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));

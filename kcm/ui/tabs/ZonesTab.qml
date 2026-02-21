@@ -413,9 +413,9 @@ ScrollView {
                         Slider {
                             id: audioBarsSlider
                             Layout.preferredWidth: root.constants.sliderPreferredWidth
-                            from: 16
-                            to: 256
-                            stepSize: 1
+                            from: 16  // Audio::MinBars (src/core/constants.h)
+                            to: 256   // Audio::MaxBars (src/core/constants.h)
+                            stepSize: 2  // CAVA requires even bar count for stereo
                             value: kcm.audioSpectrumBarCount
                             onMoved: kcm.audioSpectrumBarCount = Math.round(value)
                         }
@@ -452,11 +452,24 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Triggers")
                     }
 
+                    CheckBox {
+                        id: alwaysActivateCheck
+                        Layout.fillWidth: true
+                        Kirigami.FormData.label: i18n("Zone activation:")
+                        text: i18n("Activate on every window drag")
+                        checked: kcm.alwaysActivateOnDrag
+                        onToggled: kcm.alwaysActivateOnDrag = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, the zone overlay appears on every window drag without requiring a modifier key or mouse button. Similar to FancyZones and KZones behavior.")
+                    }
+
                     ModifierAndMouseCheckBoxes {
                         id: dragActivationInput
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Zone activation:")
+                        Kirigami.FormData.label: i18n("Hold to activate:")
+                        enabled: !alwaysActivateCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: kcm.dragActivationTriggers
@@ -471,6 +484,8 @@ ScrollView {
                     CheckBox {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Toggle mode:")
+                        enabled: !alwaysActivateCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         text: i18n("Tap trigger to toggle overlay")
                         checked: kcm.toggleActivation
                         onToggled: kcm.toggleActivation = checked
@@ -621,12 +636,66 @@ ScrollView {
                             from: 0
                             to: root.constants.paddingMax
                             value: kcm.outerGap
+                            enabled: !perSideCheck.checked
                             onValueModified: kcm.outerGap = value
                         }
 
                         Label {
                             text: i18n("px")
+                            visible: !perSideCheck.checked
                         }
+
+                        CheckBox {
+                            id: perSideCheck
+                            text: i18n("Set per side")
+                            checked: kcm.usePerSideOuterGap
+                            onToggled: kcm.usePerSideOuterGap = checked
+                        }
+                    }
+
+                    GridLayout {
+                        Kirigami.FormData.label: i18n("Per-side gaps:")
+                        visible: perSideCheck.checked
+                        columns: 6
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Top:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.thresholdMax
+                            value: kcm.outerGapTop
+                            onValueModified: kcm.outerGapTop = value
+                            Accessible.name: i18nc("@label", "Top edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Bottom:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.thresholdMax
+                            value: kcm.outerGapBottom
+                            onValueModified: kcm.outerGapBottom = value
+                            Accessible.name: i18nc("@label", "Bottom edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Left:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.thresholdMax
+                            value: kcm.outerGapLeft
+                            onValueModified: kcm.outerGapLeft = value
+                            Accessible.name: i18nc("@label", "Left edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Right:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.thresholdMax
+                            value: kcm.outerGapRight
+                            onValueModified: kcm.outerGapRight = value
+                            Accessible.name: i18nc("@label", "Right edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
                     }
 
                     CheckBox {

@@ -185,9 +185,11 @@ PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringLi
  *
  * @param layout The layout containing zones (returns empty list if null)
  * @param fields Which fields to include for each zone
+ * @param referenceGeometry Screen geometry for normalizing fixed zones (empty = use raw relativeGeometry)
  * @return QVariantList of zone maps
  */
-PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal);
+PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal,
+                                                   const QRectF& referenceGeometry = QRectF());
 
 } // namespace LayoutUtils
 

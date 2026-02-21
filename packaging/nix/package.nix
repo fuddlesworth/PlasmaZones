@@ -2,9 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, LayerShellQt 6.6, KWin 6.6).
-# You must use nixpkgs that provides the full Plasma 6.6 stack (LayerShellQt 6.6,
-# KWin 6.6). nixos-unstable or a newer channel will have this once KDE 6.6 is
-# merged; until then the build will fail with the assertion below.
+# nixos-unstable has the full Plasma 6.6 stack since Feb 2026 (nixpkgs PR #479797).
 #
 # Usage:
 #   plasmazones = pkgs.callPackage ./packaging/nix/package.nix {

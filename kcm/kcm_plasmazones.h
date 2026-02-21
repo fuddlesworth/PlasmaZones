@@ -46,11 +46,13 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Activation
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
+    Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
+                   alwaysActivateOnDragChanged)
+    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
+                   toggleActivationChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
-    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
-                   toggleActivationChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -96,6 +98,11 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Zones
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Behavior
@@ -250,9 +257,10 @@ public:
 
     // Property getters
     QVariantList dragActivationTriggers() const;
+    bool alwaysActivateOnDrag() const;
+    bool toggleActivation() const;
     bool zoneSpanEnabled() const;
     QVariantList zoneSpanTriggers() const;
-    bool toggleActivation() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
     bool showZoneNumbers() const;
@@ -283,6 +291,11 @@ public:
     int audioSpectrumBarCount() const;
     int zonePadding() const;
     int outerGap() const;
+    bool usePerSideOuterGap() const;
+    int outerGapTop() const;
+    int outerGapBottom() const;
+    int outerGapLeft() const;
+    int outerGapRight() const;
     int adjacentThreshold() const;
     bool keepWindowsInZonesOnResolutionChange() const;
     bool moveNewWindowsToLastZone() const;
@@ -382,9 +395,10 @@ public:
 
     // Property setters
     void setDragActivationTriggers(const QVariantList& triggers);
+    void setAlwaysActivateOnDrag(bool enabled);
+    void setToggleActivation(bool enable);
     void setZoneSpanEnabled(bool enabled);
     void setZoneSpanTriggers(const QVariantList& triggers);
-    void setToggleActivation(bool enable);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
@@ -413,6 +427,11 @@ public:
     void setAudioSpectrumBarCount(int count);
     void setZonePadding(int padding);
     void setOuterGap(int gap);
+    void setUsePerSideOuterGap(bool enabled);
+    void setOuterGapTop(int gap);
+    void setOuterGapBottom(int gap);
+    void setOuterGapLeft(int gap);
+    void setOuterGapRight(int gap);
     void setAdjacentThreshold(int threshold);
     void setKeepWindowsInZonesOnResolutionChange(bool keep);
     void setMoveNewWindowsToLastZone(bool move);
@@ -552,9 +571,10 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void dragActivationTriggersChanged();
+    void alwaysActivateOnDragChanged();
+    void toggleActivationChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanTriggersChanged();
-    void toggleActivationChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
@@ -584,6 +604,11 @@ Q_SIGNALS:
     void audioSpectrumBarCountChanged();
     void zonePaddingChanged();
     void outerGapChanged();
+    void usePerSideOuterGapChanged();
+    void outerGapTopChanged();
+    void outerGapBottomChanged();
+    void outerGapLeftChanged();
+    void outerGapRightChanged();
     void adjacentThresholdChanged();
     void keepWindowsInZonesOnResolutionChangeChanged();
     void moveNewWindowsToLastZoneChanged();

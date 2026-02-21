@@ -191,6 +191,17 @@ QVariantList KCMPlasmaZones::dragActivationTriggers() const
 {
     return convertTriggersForQml(m_settings->dragActivationTriggers());
 }
+bool KCMPlasmaZones::alwaysActivateOnDrag() const
+{
+    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
+    const auto triggers = m_settings->dragActivationTriggers();
+    for (const auto& t : triggers) {
+        if (t.toMap().value(QStringLiteral("modifier"), 0).toInt() == alwaysActive) {
+            return true;
+        }
+    }
+    return false;
+}
 bool KCMPlasmaZones::zoneSpanEnabled() const
 {
     return m_settings->zoneSpanEnabled();
@@ -317,6 +328,26 @@ int KCMPlasmaZones::zonePadding() const
 int KCMPlasmaZones::outerGap() const
 {
     return m_settings->outerGap();
+}
+bool KCMPlasmaZones::usePerSideOuterGap() const
+{
+    return m_settings->usePerSideOuterGap();
+}
+int KCMPlasmaZones::outerGapTop() const
+{
+    return m_settings->outerGapTop();
+}
+int KCMPlasmaZones::outerGapBottom() const
+{
+    return m_settings->outerGapBottom();
+}
+int KCMPlasmaZones::outerGapLeft() const
+{
+    return m_settings->outerGapLeft();
+}
+int KCMPlasmaZones::outerGapRight() const
+{
+    return m_settings->outerGapRight();
 }
 int KCMPlasmaZones::adjacentThreshold() const
 {
@@ -577,12 +608,36 @@ QStringList KCMPlasmaZones::virtualDesktopNames() const
 // Activation setters
 void KCMPlasmaZones::setDragActivationTriggers(const QVariantList& triggers)
 {
+    const bool wasAlwaysActive = alwaysActivateOnDrag();
     const QVariantList converted = convertTriggersForStorage(triggers);
     if (m_settings->dragActivationTriggers() != converted) {
         m_settings->setDragActivationTriggers(converted);
         Q_EMIT dragActivationTriggersChanged();
+        if (alwaysActivateOnDrag() != wasAlwaysActive) {
+            Q_EMIT alwaysActivateOnDragChanged();
+        }
         setNeedsSave(true);
     }
+}
+
+void KCMPlasmaZones::setAlwaysActivateOnDrag(bool enabled)
+{
+    if (alwaysActivateOnDrag() == enabled) {
+        return;
+    }
+    if (enabled) {
+        // Single AlwaysActive trigger — written directly in storage format (DragModifier enum)
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = static_cast<int>(DragModifier::AlwaysActive);
+        trigger[QStringLiteral("mouseButton")] = 0;
+        m_settings->setDragActivationTriggers({trigger});
+    } else {
+        // Revert to default triggers
+        m_settings->setDragActivationTriggers(ConfigDefaults::dragActivationTriggers());
+    }
+    Q_EMIT alwaysActivateOnDragChanged();
+    Q_EMIT dragActivationTriggersChanged();
+    setNeedsSave(true);
 }
 
 void KCMPlasmaZones::setZoneSpanEnabled(bool enabled)
@@ -848,8 +903,11 @@ void KCMPlasmaZones::setEnableAudioVisualizer(bool enable)
 
 void KCMPlasmaZones::setAudioSpectrumBarCount(int count)
 {
-    if (m_settings->audioSpectrumBarCount() != count) {
-        m_settings->setAudioSpectrumBarCount(count);
+    // CAVA requires even bar count for stereo output
+    const int even = (count % 2 != 0) ? count + 1 : count;
+    const int clamped = qBound(Audio::MinBars, even, Audio::MaxBars);
+    if (m_settings->audioSpectrumBarCount() != clamped) {
+        m_settings->setAudioSpectrumBarCount(clamped);
         Q_EMIT audioSpectrumBarCountChanged();
         setNeedsSave(true);
     }
@@ -870,6 +928,51 @@ void KCMPlasmaZones::setOuterGap(int gap)
     if (m_settings->outerGap() != gap) {
         m_settings->setOuterGap(gap);
         Q_EMIT outerGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_settings->usePerSideOuterGap() != enabled) {
+        m_settings->setUsePerSideOuterGap(enabled);
+        Q_EMIT usePerSideOuterGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapTop(int gap)
+{
+    if (m_settings->outerGapTop() != gap) {
+        m_settings->setOuterGapTop(gap);
+        Q_EMIT outerGapTopChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapBottom(int gap)
+{
+    if (m_settings->outerGapBottom() != gap) {
+        m_settings->setOuterGapBottom(gap);
+        Q_EMIT outerGapBottomChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapLeft(int gap)
+{
+    if (m_settings->outerGapLeft() != gap) {
+        m_settings->setOuterGapLeft(gap);
+        Q_EMIT outerGapLeftChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setOuterGapRight(int gap)
+{
+    if (m_settings->outerGapRight() != gap) {
+        m_settings->setOuterGapRight(gap);
+        Q_EMIT outerGapRightChanged();
         setNeedsSave(true);
     }
 }
@@ -1718,6 +1821,7 @@ void KCMPlasmaZones::load()
 {
     m_settings->load();
     // Emit Settings-backed property signals so UI bindings re-evaluate (e.g. after external config change)
+    Q_EMIT alwaysActivateOnDragChanged();
     Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
@@ -1862,6 +1966,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT dragActivationTriggersChanged();
+    Q_EMIT alwaysActivateOnDragChanged();
     Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT zoneSpanTriggersChanged();
     Q_EMIT toggleActivationChanged();
@@ -1894,6 +1999,11 @@ void KCMPlasmaZones::defaults()
     Q_EMIT audioSpectrumBarCountChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT outerGapChanged();
+    Q_EMIT usePerSideOuterGapChanged();
+    Q_EMIT outerGapTopChanged();
+    Q_EMIT outerGapBottomChanged();
+    Q_EMIT outerGapLeftChanged();
+    Q_EMIT outerGapRightChanged();
     Q_EMIT adjacentThresholdChanged();
     Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
     Q_EMIT moveNewWindowsToLastZoneChanged();
@@ -1970,13 +2080,14 @@ void KCMPlasmaZones::defaults()
 void KCMPlasmaZones::createNewLayout()
 {
     QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                    {QStringLiteral("New Layout"), QStringLiteral("grid")});
+                                    {QStringLiteral("New Layout"), QStringLiteral("custom")});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
             m_layoutToSelect = newLayoutId;
-            // Don't emit here - wait for loadLayouts() to complete first
+            // Open the editor for the new blank layout
+            editLayout(newLayoutId);
         }
     }
     // The daemon emits layoutListChanged after creation, which triggers scheduleLoadLayouts()
@@ -2670,6 +2781,7 @@ void KCMPlasmaZones::onSettingsChanged()
         // ones actually changed since external changes are rare, signal emission is cheap,
         // and QML only updates when values differ.
         Q_EMIT dragActivationTriggersChanged();
+        Q_EMIT alwaysActivateOnDragChanged();
         Q_EMIT zoneSpanEnabledChanged();
         Q_EMIT zoneSpanTriggersChanged();
         Q_EMIT toggleActivationChanged();
@@ -2702,6 +2814,11 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT audioSpectrumBarCountChanged();
         Q_EMIT zonePaddingChanged();
         Q_EMIT outerGapChanged();
+        Q_EMIT usePerSideOuterGapChanged();
+        Q_EMIT outerGapTopChanged();
+        Q_EMIT outerGapBottomChanged();
+        Q_EMIT outerGapLeftChanged();
+        Q_EMIT outerGapRightChanged();
         Q_EMIT adjacentThresholdChanged();
         Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
         Q_EMIT moveNewWindowsToLastZoneChanged();

@@ -63,6 +63,7 @@ private:
     void buildConfig();
     void onReadyReadStandardOutput();
     void onProcessStateChanged(QProcess::ProcessState state);
+    void onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus);
     void onProcessError(QProcess::ProcessError error);
     void restartAsync();
     static QString detectAudioMethod();

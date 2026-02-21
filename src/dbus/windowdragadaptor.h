@@ -193,7 +193,7 @@ private:
     // Escape shortcut to cancel overlay during drag (registered on drag start, unregistered on drag end)
     QAction* m_cancelOverlayAction = nullptr;
 
-    // Last emitted zone geometry (emit only when changed, per .cursorrules)
+    // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;
     bool m_restoreSizeEmittedDuringDrag = false;
 

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "constants.h"
 #include "plasmazones_export.h"
 #include <QRectF>
 #include <QScreen>
@@ -37,19 +38,16 @@ namespace GeometryUtils {
 PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen);
 
 /**
- * @brief Get zone geometry with differentiated inner/outer gaps
+ * @brief Get zone geometry with per-side outer gaps
  * @param zone Zone to get geometry for
  * @param screen Screen to calculate relative to
  * @param innerGap Gap between adjacent zones (zonePadding)
- * @param outerGap Gap at screen boundaries
+ * @param outerGaps Per-side edge gaps
  * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
  * @return Geometry with appropriate gaps applied
- *
- * This version applies outerGap to zone edges that touch screen boundaries
- * (relative position 0 or 1), and innerGap/2 to edges between zones.
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap,
-                                                  bool useAvailableGeometry = true);
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
+                                                   bool useAvailableGeometry = true);
 
 /**
  * @brief Get effective zone padding for a layout
@@ -63,21 +61,6 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, i
 PLASMAZONES_EXPORT int getEffectiveZonePadding(Layout* layout, ISettings* settings);
 
 /**
- * @brief Get effective outer gap for a layout
- * @param layout Layout to get outer gap for (may have per-layout override)
- * @param settings Global settings (used if layout has no override)
- * @return Effective outer gap in pixels
- *
- * Returns layout-specific outerGap if set (>= 0), otherwise falls back
- * to global settings->outerGap(), or default of 8.
- *
- * Outer gap is applied to zone edges at screen boundaries (positions 0 or 1),
- * while zonePadding is applied between adjacent zones. Use getZoneGeometryWithGaps()
- * to apply differentiated gaps.
- */
-PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings);
-
-/**
  * @brief Convert QRectF to QRect with edge-consistent rounding
  * @param rf Source floating-point rectangle
  * @return Integer rectangle with consistent edge rounding
@@ -89,6 +72,27 @@ PLASMAZONES_EXPORT int getEffectiveOuterGap(Layout* layout, ISettings* settings)
  * scaling (e.g. 1.2x) produces non-integer zone boundaries.
  */
 PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
+
+/**
+ * @brief Get effective per-side outer gaps for a layout
+ * @param layout Layout to get gaps for (may have per-layout overrides)
+ * @param settings Global settings (used if layout has no override)
+ * @return Effective per-side edge gaps
+ *
+ * Resolution cascade: layout per-side → layout uniform → global per-side → global uniform → default
+ */
+PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings);
+
+/**
+ * @brief Get the effective screen geometry for a layout
+ * @param layout Layout to check (may use full screen geometry)
+ * @param screen Screen to get geometry for
+ * @return Full screen geometry if layout->useFullScreenGeometry(), otherwise available geometry
+ *
+ * Centralizes the decision of whether to use full screen or available (panel-excluded)
+ * geometry based on the layout's useFullScreenGeometry setting.
+ */
+PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen);
 
 /**
  * @brief Extract geometry as QRectF from a zone QVariantMap

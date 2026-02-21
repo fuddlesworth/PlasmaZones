@@ -90,6 +90,12 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
     Q_PROPERTY(bool hasOuterGapOverride READ hasOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasPerSideOuterGapOverride READ hasPerSideOuterGapOverride NOTIFY outerGapChanged)
     Q_PROPERTY(bool showZoneNumbers READ showZoneNumbers WRITE setShowZoneNumbers NOTIFY showZoneNumbersChanged)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zonesChanged)
     Q_PROPERTY(QString sourcePath READ sourcePath WRITE setSourcePath NOTIFY sourcePathChanged)
@@ -102,6 +108,9 @@ class PLASMAZONES_EXPORT Layout : public QObject
 
     // Auto-assign: new windows fill first empty zone
     Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
+
+    // Geometry mode: use full screen or available (panel-excluded) geometry
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
 
     // Visibility filtering
     Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
@@ -162,6 +171,46 @@ public:
         return m_outerGap >= 0;
     }
     void clearOuterGapOverride();
+
+    // Per-side outer gap overrides (-1 = use global setting)
+    bool usePerSideOuterGap() const
+    {
+        return m_usePerSideOuterGap;
+    }
+    void setUsePerSideOuterGap(bool enabled);
+    int outerGapTop() const
+    {
+        return m_outerGapTop;
+    }
+    void setOuterGapTop(int gap);
+    int outerGapBottom() const
+    {
+        return m_outerGapBottom;
+    }
+    void setOuterGapBottom(int gap);
+    int outerGapLeft() const
+    {
+        return m_outerGapLeft;
+    }
+    void setOuterGapLeft(int gap);
+    int outerGapRight() const
+    {
+        return m_outerGapRight;
+    }
+    void setOuterGapRight(int gap);
+    bool hasPerSideOuterGapOverride() const
+    {
+        return m_usePerSideOuterGap && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+    }
+    /**
+     * @brief Raw per-side gap overrides. Values may be -1 (use global).
+     * Callers should use GeometryUtils::getEffectiveOuterGaps() instead
+     * for resolved pixel values.
+     */
+    EdgeGaps rawOuterGaps() const
+    {
+        return {m_outerGapTop, m_outerGapBottom, m_outerGapLeft, m_outerGapRight};
+    }
 
     bool showZoneNumbers() const
     {
@@ -225,6 +274,10 @@ public:
     bool autoAssign() const { return m_autoAssign; }
     void setAutoAssign(bool enabled);
 
+    // Geometry mode: when true, zones span the full screen including panel/taskbar areas
+    bool useFullScreenGeometry() const { return m_useFullScreenGeometry; }
+    void setUseFullScreenGeometry(bool enabled);
+
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
     int defaultOrder() const
     {
@@ -259,6 +312,7 @@ public:
     // Geometry calculations
     Q_INVOKABLE void recalculateZoneGeometries(const QRectF& screenGeometry);
     Q_INVOKABLE void renumberZones();
+    QRectF lastRecalcGeometry() const { return m_lastRecalcGeometry; }
 
     // Serialization
     QJsonObject toJson() const;
@@ -270,6 +324,13 @@ public:
     static Layout* createGridLayout(int columns, int rows, QObject* parent = nullptr);
     static Layout* createPriorityGridLayout(QObject* parent = nullptr);
     static Layout* createFocusLayout(QObject* parent = nullptr);
+
+    // Dirty tracking for copy-on-write saving
+    bool isDirty() const { return m_dirty; }
+    void markDirty() { m_dirty = true; }
+    void clearDirty() { m_dirty = false; }
+    void beginBatchModify();
+    void endBatchModify();
 
 Q_SIGNALS:
     void nameChanged();
@@ -287,18 +348,26 @@ Q_SIGNALS:
     void allowedActivitiesChanged();
     void appRulesChanged();
     void autoAssignChanged();
+    void useFullScreenGeometryChanged();
     void zonesChanged();
     void zoneAdded(Zone* zone);
     void zoneRemoved(Zone* zone);
     void layoutModified();
 
 private:
+    void emitModifiedIfNotBatched();
+
     QUuid m_id;
     QString m_name;
     LayoutType m_type = LayoutType::Custom;
     QString m_description;
     int m_zonePadding = -1;  // -1 = use global setting
     int m_outerGap = -1;     // -1 = use global setting
+    bool m_usePerSideOuterGap = false;
+    int m_outerGapTop = -1;    // -1 = use global setting
+    int m_outerGapBottom = -1;
+    int m_outerGapLeft = -1;
+    int m_outerGapRight = -1;
     bool m_showZoneNumbers = true;
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)
@@ -309,6 +378,9 @@ private:
 
     // Auto-assign: new windows fill first empty zone
     bool m_autoAssign = false;
+
+    // Geometry mode: zones use full screen (true) or available area excluding panels (false)
+    bool m_useFullScreenGeometry = false;
 
     // Shader support
     QString m_shaderId; // Shader effect ID (empty = no shader)
@@ -322,6 +394,10 @@ private:
 
     // Cache last geometry used for recalculation to avoid redundant work
     mutable QRectF m_lastRecalcGeometry;
+
+    // Dirty tracking for copy-on-write saving
+    bool m_dirty = false;
+    int m_batchModifyDepth = 0;
 };
 
 } // namespace PlasmaZones

@@ -25,7 +25,7 @@ namespace PlasmaZones {
         if (member != value) { \
             member = value; \
             Q_EMIT signal(); \
-            Q_EMIT layoutModified(); \
+            emitModifiedIfNotBatched(); \
         } \
     }
 
@@ -49,7 +49,7 @@ namespace PlasmaZones {
         if (member != value) { \
             member = value; \
             Q_EMIT signal(); \
-            Q_EMIT layoutModified(); \
+            emitModifiedIfNotBatched(); \
         } \
     }
 
@@ -75,11 +75,17 @@ Layout::Layout(const Layout& other)
     , m_description(other.m_description)
     , m_zonePadding(other.m_zonePadding)
     , m_outerGap(other.m_outerGap)
+    , m_usePerSideOuterGap(other.m_usePerSideOuterGap)
+    , m_outerGapTop(other.m_outerGapTop)
+    , m_outerGapBottom(other.m_outerGapBottom)
+    , m_outerGapLeft(other.m_outerGapLeft)
+    , m_outerGapRight(other.m_outerGapRight)
     , m_showZoneNumbers(other.m_showZoneNumbers)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
     , m_defaultOrder(other.m_defaultOrder)
     , m_appRules(other.m_appRules)
     , m_autoAssign(other.m_autoAssign)
+    , m_useFullScreenGeometry(other.m_useFullScreenGeometry)
     , m_shaderId(other.m_shaderId)
     , m_shaderParams(other.m_shaderParams)
     , m_hiddenFromSelector(other.m_hiddenFromSelector)
@@ -102,6 +108,8 @@ Layout::~Layout()
 Layout& Layout::operator=(const Layout& other)
 {
     if (this != &other) {
+        beginBatchModify();
+
         // Track visibility changes for signal emission
         bool hiddenChanged = m_hiddenFromSelector != other.m_hiddenFromSelector;
         bool screensChanged = m_allowedScreens != other.m_allowedScreens;
@@ -113,6 +121,11 @@ Layout& Layout::operator=(const Layout& other)
         m_description = other.m_description;
         m_zonePadding = other.m_zonePadding;
         m_outerGap = other.m_outerGap;
+        m_usePerSideOuterGap = other.m_usePerSideOuterGap;
+        m_outerGapTop = other.m_outerGapTop;
+        m_outerGapBottom = other.m_outerGapBottom;
+        m_outerGapLeft = other.m_outerGapLeft;
+        m_outerGapRight = other.m_outerGapRight;
         m_showZoneNumbers = other.m_showZoneNumbers;
         m_defaultOrder = other.m_defaultOrder;
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
@@ -122,6 +135,8 @@ Layout& Layout::operator=(const Layout& other)
         m_appRules = other.m_appRules;
         bool autoAssignDiff = m_autoAssign != other.m_autoAssign;
         m_autoAssign = other.m_autoAssign;
+        bool fullScreenGeomDiff = m_useFullScreenGeometry != other.m_useFullScreenGeometry;
+        m_useFullScreenGeometry = other.m_useFullScreenGeometry;
         m_hiddenFromSelector = other.m_hiddenFromSelector;
         m_allowedScreens = other.m_allowedScreens;
         m_allowedDesktops = other.m_allowedDesktops;
@@ -144,6 +159,10 @@ Layout& Layout::operator=(const Layout& other)
         if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
         if (rulesChanged) Q_EMIT appRulesChanged();
         if (autoAssignDiff) Q_EMIT autoAssignChanged();
+        if (fullScreenGeomDiff) Q_EMIT useFullScreenGeometryChanged();
+
+        m_dirty = true;
+        endBatchModify();
     }
     return *this;
 }
@@ -161,13 +180,14 @@ LAYOUT_SETTER(const QString&, ShaderId, m_shaderId, shaderIdChanged)
 LAYOUT_SETTER(const QVariantMap&, ShaderParams, m_shaderParams, shaderParamsChanged)
 LAYOUT_SETTER(bool, HiddenFromSelector, m_hiddenFromSelector, hiddenFromSelectorChanged)
 LAYOUT_SETTER(bool, AutoAssign, m_autoAssign, autoAssignChanged)
+LAYOUT_SETTER(bool, UseFullScreenGeometry, m_useFullScreenGeometry, useFullScreenGeometryChanged)
 
 void Layout::setAllowedScreens(const QStringList& screens)
 {
     if (m_allowedScreens != screens) {
         m_allowedScreens = screens;
         Q_EMIT allowedScreensChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -176,7 +196,7 @@ void Layout::setAllowedDesktops(const QList<int>& desktops)
     if (m_allowedDesktops != desktops) {
         m_allowedDesktops = desktops;
         Q_EMIT allowedDesktopsChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -185,13 +205,26 @@ void Layout::setAllowedActivities(const QStringList& activities)
     if (m_allowedActivities != activities) {
         m_allowedActivities = activities;
         Q_EMIT allowedActivitiesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
 // Gap setters (allow -1 for "use global" or non-negative values)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(ZonePadding, m_zonePadding, zonePaddingChanged)
 LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGap, m_outerGap, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapTop, m_outerGapTop, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapBottom, m_outerGapBottom, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapLeft, m_outerGapLeft, outerGapChanged)
+LAYOUT_SETTER_MIN_NEGATIVE_ONE(OuterGapRight, m_outerGapRight, outerGapChanged)
+
+void Layout::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        m_usePerSideOuterGap = enabled;
+        Q_EMIT outerGapChanged();
+        emitModifiedIfNotBatched();
+    }
+}
 
 // Source path setter (no layoutModified - internal tracking property)
 LAYOUT_SETTER_NO_MODIFIED(const QString&, SourcePath, m_sourcePath, sourcePathChanged)
@@ -202,7 +235,7 @@ void Layout::setAppRules(const QVector<AppRule>& rules)
     if (m_appRules != rules) {
         m_appRules = rules;
         Q_EMIT appRulesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -291,6 +324,11 @@ void Layout::clearZonePaddingOverride()
 void Layout::clearOuterGapOverride()
 {
     setOuterGap(-1);
+    setUsePerSideOuterGap(false);
+    setOuterGapTop(-1);
+    setOuterGapBottom(-1);
+    setOuterGapLeft(-1);
+    setOuterGapRight(-1);
 }
 
 bool Layout::isSystemLayout() const
@@ -340,7 +378,7 @@ void Layout::addZone(Zone* zone)
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zoneAdded(zone);
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -352,7 +390,7 @@ void Layout::removeZone(Zone* zone)
         zone->deleteLater();
         renumberZones();
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -365,7 +403,7 @@ void Layout::removeZoneAt(int index)
         zone->deleteLater();
         renumberZones();
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -379,7 +417,7 @@ void Layout::clearZones()
         m_zones.clear();
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zonesChanged();
-        Q_EMIT layoutModified();
+        emitModifiedIfNotBatched();
     }
 }
 
@@ -390,6 +428,29 @@ void Layout::moveZone(int fromIndex, int toIndex)
         m_zones.move(fromIndex, toIndex);
         renumberZones();
         Q_EMIT zonesChanged();
+        emitModifiedIfNotBatched();
+    }
+}
+
+void Layout::emitModifiedIfNotBatched()
+{
+    m_dirty = true;
+    if (m_batchModifyDepth == 0) {
+        Q_EMIT layoutModified();
+    }
+}
+
+void Layout::beginBatchModify()
+{
+    ++m_batchModifyDepth;
+}
+
+void Layout::endBatchModify()
+{
+    if (m_batchModifyDepth > 0) {
+        --m_batchModifyDepth;
+    }
+    if (m_batchModifyDepth == 0 && m_dirty) {
         Q_EMIT layoutModified();
     }
 }
@@ -484,6 +545,14 @@ QJsonObject Layout::toJson() const
     if (m_outerGap >= 0) {
         json[JsonKeys::OuterGap] = m_outerGap;
     }
+    // Per-side outer gap overrides — serialize toggle whenever enabled so user intent is preserved
+    if (m_usePerSideOuterGap) {
+        json[JsonKeys::UsePerSideOuterGap] = true;
+        if (m_outerGapTop >= 0) json[JsonKeys::OuterGapTop] = m_outerGapTop;
+        if (m_outerGapBottom >= 0) json[JsonKeys::OuterGapBottom] = m_outerGapBottom;
+        if (m_outerGapLeft >= 0) json[JsonKeys::OuterGapLeft] = m_outerGapLeft;
+        if (m_outerGapRight >= 0) json[JsonKeys::OuterGapRight] = m_outerGapRight;
+    }
     json[JsonKeys::ShowZoneNumbers] = m_showZoneNumbers;
     if (m_defaultOrder != 999) {
         json[JsonKeys::DefaultOrder] = m_defaultOrder;
@@ -522,6 +591,11 @@ QJsonObject Layout::toJson() const
         json[JsonKeys::AutoAssign] = true;
     }
 
+    // Full screen geometry mode - only serialize if true
+    if (m_useFullScreenGeometry) {
+        json[JsonKeys::UseFullScreenGeometry] = true;
+    }
+
     // Visibility filtering - only serialize non-default values
     if (m_hiddenFromSelector) {
         json[JsonKeys::HiddenFromSelector] = true;
@@ -530,7 +604,7 @@ QJsonObject Layout::toJson() const
 
     QJsonArray zonesArray;
     for (const auto* zone : m_zones) {
-        zonesArray.append(zone->toJson());
+        zonesArray.append(zone->toJson(m_lastRecalcGeometry));
     }
     json[JsonKeys::Zones] = zonesArray;
 
@@ -552,6 +626,12 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     // Gap overrides: -1 means use global setting (key absent = no override)
     layout->m_zonePadding = json.contains(JsonKeys::ZonePadding) ? json[JsonKeys::ZonePadding].toInt(-1) : -1;
     layout->m_outerGap = json.contains(JsonKeys::OuterGap) ? json[JsonKeys::OuterGap].toInt(-1) : -1;
+    // Per-side outer gap overrides
+    layout->m_usePerSideOuterGap = json[JsonKeys::UsePerSideOuterGap].toBool(false);
+    layout->m_outerGapTop = json.contains(JsonKeys::OuterGapTop) ? json[JsonKeys::OuterGapTop].toInt(-1) : -1;
+    layout->m_outerGapBottom = json.contains(JsonKeys::OuterGapBottom) ? json[JsonKeys::OuterGapBottom].toInt(-1) : -1;
+    layout->m_outerGapLeft = json.contains(JsonKeys::OuterGapLeft) ? json[JsonKeys::OuterGapLeft].toInt(-1) : -1;
+    layout->m_outerGapRight = json.contains(JsonKeys::OuterGapRight) ? json[JsonKeys::OuterGapRight].toInt(-1) : -1;
     layout->m_showZoneNumbers = json[JsonKeys::ShowZoneNumbers].toBool(true);
     layout->m_defaultOrder = json[JsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
@@ -569,6 +649,9 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
 
     // Auto-assign
     layout->m_autoAssign = json[JsonKeys::AutoAssign].toBool(false);
+
+    // Full screen geometry mode
+    layout->m_useFullScreenGeometry = json[JsonKeys::UseFullScreenGeometry].toBool(false);
 
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);

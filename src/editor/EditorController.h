@@ -10,6 +10,7 @@
 #include <QUuid>
 #include <QScreen>
 #include <QQuickWindow>
+#include <QSize>
 #include <KConfigGroup>
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -86,6 +87,25 @@ class EditorController : public QObject
     Q_PROPERTY(int globalZonePadding READ globalZonePadding NOTIFY globalZonePaddingChanged)
     Q_PROPERTY(int globalOuterGap READ globalOuterGap NOTIFY globalOuterGapChanged)
 
+    // Per-side outer gap overrides
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapChanged)
+    Q_PROPERTY(bool hasPerSideOuterGapOverride READ hasPerSideOuterGapOverride NOTIFY outerGapChanged)
+    Q_PROPERTY(bool globalUsePerSideOuterGap READ globalUsePerSideOuterGap NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapTop READ globalOuterGapTop NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapBottom READ globalOuterGapBottom NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapLeft READ globalOuterGapLeft NOTIFY globalOuterGapChanged)
+    Q_PROPERTY(int globalOuterGapRight READ globalOuterGapRight NOTIFY globalOuterGapChanged)
+
+    // Full screen geometry mode
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
+
+    // Target screen size (for fixed geometry coordinate conversion)
+    Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
+
     // Label font settings (read-only from global Appearance config)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
     Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
@@ -161,6 +181,19 @@ public:
     bool hasOuterGapOverride() const;
     int globalZonePadding() const;
     int globalOuterGap() const;
+    bool usePerSideOuterGap() const;
+    int outerGapTop() const;
+    int outerGapBottom() const;
+    int outerGapLeft() const;
+    int outerGapRight() const;
+    bool hasPerSideOuterGapOverride() const;
+    bool globalUsePerSideOuterGap() const;
+    int globalOuterGapTop() const;
+    int globalOuterGapBottom() const;
+    int globalOuterGapLeft() const;
+    int globalOuterGapRight() const;
+    bool useFullScreenGeometry() const;
+    QSize targetScreenSize() const;
     bool canPaste() const;
     UndoController* undoController() const;
 
@@ -231,10 +264,16 @@ public:
     void setTargetScreenDirect(const QString& screenName); // Sets screen without loading layout (for initialization)
     void setZonePadding(int padding);
     void setOuterGap(int gap);
+    void setUsePerSideOuterGap(bool enabled);
+    void setOuterGapTop(int gap);
+    void setOuterGapBottom(int gap);
+    void setOuterGapLeft(int gap);
+    void setOuterGapRight(int gap);
     Q_INVOKABLE void clearZonePaddingOverride();
     Q_INVOKABLE void clearOuterGapOverride();
     Q_INVOKABLE void refreshGlobalZonePadding();
     Q_INVOKABLE void refreshGlobalOuterGap();
+    void setUseFullScreenGeometry(bool enabled);
 
     // Shader setters (create undo commands)
     void setCurrentShaderId(const QString& id);
@@ -243,6 +282,12 @@ public:
     // Gap override setters - Direct (for undo/redo, bypass command creation)
     void setZonePaddingDirect(int padding);
     void setOuterGapDirect(int gap);
+    void setUsePerSideOuterGapDirect(bool enabled);
+    void setOuterGapTopDirect(int gap);
+    void setOuterGapBottomDirect(int gap);
+    void setOuterGapLeftDirect(int gap);
+    void setOuterGapRightDirect(int gap);
+    void setUseFullScreenGeometryDirect(bool enabled);
 
     // Shader setters - Direct (for undo/redo, bypass command creation)
     void setCurrentShaderIdDirect(const QString& id);
@@ -458,6 +503,32 @@ public Q_SLOTS:
      */
     Q_INVOKABLE void updateSelectedZonesColor(const QString& colorType, const QString& color);
 
+    // Per-zone geometry mode operations
+    /**
+     * @brief Toggle a zone between Relative and Fixed geometry mode
+     * @param zoneId Zone to toggle
+     *
+     * Converts between modes using the target screen resolution.
+     * Creates an undo command for the toggle.
+     */
+    Q_INVOKABLE void toggleZoneGeometryMode(const QString& zoneId);
+
+    /**
+     * @brief Update fixed geometry for a zone (for spinbox edits)
+     * @param zoneId Zone to update
+     * @param x, y, w, h Fixed pixel coordinates
+     */
+    Q_INVOKABLE void updateZoneFixedGeometry(const QString& zoneId, qreal x, qreal y, qreal w, qreal h);
+
+    /**
+     * @brief Apply geometry mode and coordinates directly (for undo/redo)
+     * @param zoneId Zone to update
+     * @param mode Geometry mode (0=Relative, 1=Fixed)
+     * @param relativeGeo Relative geometry
+     * @param fixedGeo Fixed geometry
+     */
+    void applyZoneGeometryMode(const QString& zoneId, int mode, const QRectF& relativeGeo, const QRectF& fixedGeo);
+
     // Validation
     Q_INVOKABLE QString validateZoneName(const QString& zoneId, const QString& name);
     Q_INVOKABLE QString validateZoneNumber(const QString& zoneId, int number);
@@ -527,6 +598,8 @@ Q_SIGNALS:
     void outerGapChanged();
     void globalZonePaddingChanged();
     void globalOuterGapChanged();
+    void useFullScreenGeometryChanged();
+    void targetScreenSizeChanged();
 
     // Shader signals
     void currentShaderIdChanged();
@@ -695,8 +768,19 @@ private:
     // Zone settings (per-layout override, -1 = use global)
     int m_zonePadding = -1;
     int m_outerGap = -1;
+    bool m_usePerSideOuterGap = false;
+    int m_outerGapTop = -1;
+    int m_outerGapBottom = -1;
+    int m_outerGapLeft = -1;
+    int m_outerGapRight = -1;
+    bool m_useFullScreenGeometry = false;
     int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
+    bool m_cachedGlobalUsePerSideOuterGap = false;
+    int m_cachedGlobalOuterGapTop = PlasmaZones::Defaults::OuterGap;
+    int m_cachedGlobalOuterGapBottom = PlasmaZones::Defaults::OuterGap;
+    int m_cachedGlobalOuterGapLeft = PlasmaZones::Defaults::OuterGap;
+    int m_cachedGlobalOuterGapRight = PlasmaZones::Defaults::OuterGap;
 
     // Clipboard state
     bool m_canPaste = false;

@@ -35,10 +35,9 @@ QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, QScreen* screen
         return geometry;
     }
 
-    // The overlay window covers the full screen (geometry()),
-    // but zones are calculated relative to availableGeometry.
+    // The overlay window covers the full screen (geometry()).
     // The geometry parameter is already in absolute screen coordinates
-    // (calculated from availableGeometry), so we just need to convert
+    // (from available or full-screen geometry), so we just need to convert
     // to overlay-local coordinates by subtracting the full screen origin.
     const QRectF screenGeom = screen->geometry();
     return QRectF(geometry.x() - screenGeom.x(), geometry.y() - screenGeom.y(), geometry.width(), geometry.height());
@@ -55,7 +54,45 @@ static QRectF calculateZoneGeometryInAvailableArea(Zone* zone, QScreen* screen)
     return zone->calculateAbsoluteGeometry(availableGeom);
 }
 
-QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap, bool useAvailableGeometry)
+/**
+ * @brief Detect whether each edge of a zone lies at a screen boundary
+ * @param zone The zone to check
+ * @param screenGeom The reference screen geometry (for fixed mode pixel checks)
+ * @return Array of 4 bools: [left, top, right, bottom] — true if at boundary
+ */
+struct EdgeBoundaries {
+    bool left = false;
+    bool top = false;
+    bool right = false;
+    bool bottom = false;
+};
+
+static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
+{
+    EdgeBoundaries edges;
+
+    if (zone->isFixedGeometry()) {
+        // Fixed mode: pixel proximity check (within 5px of screen boundary)
+        constexpr qreal pixelTolerance = 5.0;
+        QRectF fixedGeo = zone->fixedGeometry();
+        edges.left = (fixedGeo.left() < pixelTolerance);
+        edges.top = (fixedGeo.top() < pixelTolerance);
+        edges.right = (fixedGeo.right() > (screenGeom.width() - pixelTolerance));
+        edges.bottom = (fixedGeo.bottom() > (screenGeom.height() - pixelTolerance));
+    } else {
+        // Relative mode: existing check (near 0 or 1, tolerance 0.01)
+        constexpr qreal edgeTolerance = 0.01;
+        QRectF relGeom = zone->relativeGeometry();
+        edges.left = (relGeom.left() < edgeTolerance);
+        edges.top = (relGeom.top() < edgeTolerance);
+        edges.right = (relGeom.right() > (1.0 - edgeTolerance));
+        edges.bottom = (relGeom.bottom() > (1.0 - edgeTolerance));
+    }
+
+    return edges;
+}
+
+QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps, bool useAvailableGeometry)
 {
     if (!zone || !screen) {
         return QRectF();
@@ -69,24 +106,15 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int ou
         geom = calculateZoneGeometry(zone, screen);
     }
 
-    // Get relative geometry to determine which edges are at screen boundaries
-    QRectF relGeom = zone->relativeGeometry();
-
-    // Tolerance for floating point comparison (zones at edge should be within 0.01 of boundary)
-    constexpr qreal edgeTolerance = 0.01;
+    // Detect which edges are at screen boundaries
+    QRectF screenGeom = useAvailableGeometry ? ScreenManager::actualAvailableGeometry(screen) : screen->geometry();
+    EdgeBoundaries edges = detectEdgeBoundaries(zone, screenGeom);
 
     // Calculate adjustments for each edge
-    // Left edge: at boundary (0) -> outerGap, otherwise -> innerGap/2
-    qreal leftAdj = (relGeom.left() < edgeTolerance) ? outerGap : (innerGap / 2.0);
-
-    // Top edge: at boundary (0) -> outerGap, otherwise -> innerGap/2
-    qreal topAdj = (relGeom.top() < edgeTolerance) ? outerGap : (innerGap / 2.0);
-
-    // Right edge: at boundary (1) -> outerGap, otherwise -> innerGap/2
-    qreal rightAdj = (relGeom.right() > (1.0 - edgeTolerance)) ? outerGap : (innerGap / 2.0);
-
-    // Bottom edge: at boundary (1) -> outerGap, otherwise -> innerGap/2
-    qreal bottomAdj = (relGeom.bottom() > (1.0 - edgeTolerance)) ? outerGap : (innerGap / 2.0);
+    qreal leftAdj = edges.left ? outerGaps.left : (innerGap / 2.0);
+    qreal topAdj = edges.top ? outerGaps.top : (innerGap / 2.0);
+    qreal rightAdj = edges.right ? outerGaps.right : (innerGap / 2.0);
+    qreal bottomAdj = edges.bottom ? outerGaps.bottom : (innerGap / 2.0);
 
     // Apply the adjustments (positive inset from edges)
     geom = geom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);
@@ -108,20 +136,6 @@ int getEffectiveZonePadding(Layout* layout, ISettings* settings)
     return Defaults::ZonePadding;
 }
 
-int getEffectiveOuterGap(Layout* layout, ISettings* settings)
-{
-    // Check for layout-specific override first
-    if (layout && layout->hasOuterGapOverride()) {
-        return layout->outerGap();
-    }
-    // Fall back to global outerGap setting
-    if (settings) {
-        return settings->outerGap();
-    }
-    // Last resort: use default constant
-    return Defaults::OuterGap;
-}
-
 QRect snapToRect(const QRectF& rf)
 {
     // Round each edge independently, then derive width/height from the
@@ -135,6 +149,55 @@ QRect snapToRect(const QRectF& rf)
     const int right = qRound(rf.x() + rf.width());
     const int bottom = qRound(rf.y() + rf.height());
     return QRect(left, top, std::max(0, right - left), std::max(0, bottom - top));
+}
+
+EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings)
+{
+    // Check for layout-specific per-side override first
+    if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
+        EdgeGaps gaps = layout->rawOuterGaps();
+        // Fill in -1 sentinel values from global per-side or uniform fallback
+        if (settings && settings->usePerSideOuterGap()) {
+            if (gaps.top < 0) gaps.top = settings->outerGapTop();
+            if (gaps.bottom < 0) gaps.bottom = settings->outerGapBottom();
+            if (gaps.left < 0) gaps.left = settings->outerGapLeft();
+            if (gaps.right < 0) gaps.right = settings->outerGapRight();
+        } else {
+            int fallback = settings ? settings->outerGap() : Defaults::OuterGap;
+            if (gaps.top < 0) gaps.top = fallback;
+            if (gaps.bottom < 0) gaps.bottom = fallback;
+            if (gaps.left < 0) gaps.left = fallback;
+            if (gaps.right < 0) gaps.right = fallback;
+        }
+        return gaps;
+    }
+
+    // Check for layout-specific uniform override
+    if (layout && layout->hasOuterGapOverride()) {
+        return EdgeGaps::uniform(layout->outerGap());
+    }
+
+    // Fall back to global settings
+    if (settings) {
+        if (settings->usePerSideOuterGap()) {
+            return {settings->outerGapTop(), settings->outerGapBottom(),
+                    settings->outerGapLeft(), settings->outerGapRight()};
+        }
+        return EdgeGaps::uniform(settings->outerGap());
+    }
+
+    return EdgeGaps::uniform(Defaults::OuterGap);
+}
+
+QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen)
+{
+    if (!screen) {
+        return QRectF();
+    }
+    if (layout && layout->useFullScreenGeometry()) {
+        return screen->geometry();
+    }
+    return ScreenManager::actualAvailableGeometry(screen);
 }
 
 QRectF extractZoneGeometry(const QVariantMap& zone)
@@ -158,16 +221,18 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         return QStringLiteral("[]");
     }
 
-    layout->recalculateZoneGeometries(ScreenManager::actualAvailableGeometry(screen));
+    bool useAvail = !(layout && layout->useFullScreenGeometry());
+    layout->recalculateZoneGeometries(effectiveScreenGeometry(layout, screen));
+
+    int zonePadding = getEffectiveZonePadding(layout, settings);
+    EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings);
 
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {
         if (!isZoneEmpty(zone)) {
             continue;
         }
-        int zonePadding = getEffectiveZonePadding(layout, settings);
-        int outerGap = getEffectiveOuterGap(layout, settings);
-        QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, true);
+        QRectF geom = getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
         QRectF overlayGeom = availableAreaToOverlayCoordinates(geom, screen);
 
         QJsonObject obj;

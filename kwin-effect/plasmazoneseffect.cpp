@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <QBuffer>
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
@@ -206,7 +207,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // Check if zones are needed right now. If so, send dragStarted
                 // immediately and grab keyboard. Otherwise defer until activation
                 // is detected mid-drag (or skip entirely if user never activates).
-                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
+                //
+                // When triggers haven't loaded yet (!m_triggersLoaded), stay
+                // permissive — send immediately to avoid masking trigger issues (#175).
+                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
                     sendDeferredDragStarted();
                 }
                 // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
@@ -222,7 +226,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // Gate D-Bus calls: if no activation trigger is held, toggle mode is off,
                 // and zone selector is disabled, skip the D-Bus call entirely. This
                 // eliminates 60Hz D-Bus traffic during non-zone drags.
-                if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled) {
+                //
+                // When triggers haven't loaded yet, stay permissive (#175).
+                if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
                     return;
                 }
                 // Ensure dragStarted was sent before any dragMoved
@@ -354,6 +360,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             syncFloatingWindowsFromDaemon();
             loadCachedSettings();
             loadAutotileSettings();
+
+            // Reconnect D-Bus signal subscriptions — Qt may cache the old daemon's
+            // unique bus name in match rules, causing signals from the restarted daemon
+            // to not be delivered. Re-calling connect() refreshes the match rules.
+            connectNavigationSignals();
 
             // Clear stale window tracking — the new daemon has no knowledge of our windows
             m_notifiedWindows.clear();
@@ -609,7 +620,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // Gating: same logic as dragMoved lambda — skip if no activation
             // detected and no reason to send (avoids D-Bus traffic for non-zone drags).
             if (!m_dragBypassedForAutotile) {
-                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled) {
+                // When triggers haven't loaded yet, stay permissive (#175).
+                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
                     sendDeferredDragStarted();
                     callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
                 }
@@ -1097,6 +1109,7 @@ void PlasmaZonesEffect::loadCachedSettings()
     m_minimumWindowWidth = 200;
     m_minimumWindowHeight = 150;
     m_snapAssistEnabled = false;
+    m_triggersLoaded = false; // Permissive until new triggers arrive (#175)
 
     // Use QDBusMessage + QDBusConnection::asyncCall instead of QDBusInterface to avoid
     // synchronous D-Bus introspection that blocks the compositor thread.
@@ -1181,19 +1194,72 @@ void PlasmaZonesEffect::loadCachedSettings()
         w->deleteLater();
         QDBusPendingReply<QVariant> reply = *w;
         if (reply.isValid()) {
-            m_cachedDragActivationTriggers = extractVariant(reply).toList();
+            QVariant triggerVariant = extractVariant(reply);
+
+            // D-Bus may deliver QVariantList-of-QVariantMap as a QDBusArgument
+            // instead of a native QVariantList. Extract manually if needed (#175).
+            // D-Bus wire format is typically `av` (array of variants), so we
+            // extract QVariants first, then handle inner maps per-element below.
+            QVariantList triggerList;
+            if (triggerVariant.canConvert<QDBusArgument>()) {
+                const QDBusArgument arg = triggerVariant.value<QDBusArgument>();
+                arg.beginArray();
+                while (!arg.atEnd()) {
+                    QVariant element;
+                    arg >> element;
+                    triggerList.append(element);
+                }
+                arg.endArray();
+            } else {
+                triggerList = triggerVariant.toList();
+            }
+            m_cachedDragActivationTriggers = triggerList;
+
             // Pre-parse to POD structs so anyLocalTriggerHeld() avoids QVariant
             // unboxing on every call (~30x/sec during drag).
             m_parsedTriggers.clear();
-            m_parsedTriggers.reserve(m_cachedDragActivationTriggers.size());
-            for (const auto& t : std::as_const(m_cachedDragActivationTriggers)) {
-                const auto map = t.toMap();
+            m_parsedTriggers.reserve(triggerList.size());
+            for (const auto& t : std::as_const(triggerList)) {
+                // Each trigger element may also arrive as QDBusArgument
+                QVariantMap map;
+                if (t.canConvert<QDBusArgument>()) {
+                    const QDBusArgument elemArg = t.value<QDBusArgument>();
+                    elemArg >> map;
+                } else {
+                    map = t.toMap();
+                }
                 ParsedTrigger pt;
                 pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
                 pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
                 m_parsedTriggers.append(pt);
             }
+
             qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_parsedTriggers.size() << "triggers";
+            for (int i = 0; i < m_parsedTriggers.size(); ++i) {
+                qCDebug(lcEffect) << "  trigger" << i << "modifier:" << m_parsedTriggers[i].modifier
+                                  << "mouseButton:" << m_parsedTriggers[i].mouseButton;
+            }
+
+            // Safety: if triggers loaded but are all empty (modifier=0, mouseButton=0),
+            // the gating would block ALL drag events when zoneSelectorEnabled=false.
+            // Log a warning so this misconfiguration is visible in debug output.
+            bool anyValidTrigger = false;
+            for (const auto& pt : std::as_const(m_parsedTriggers)) {
+                if (pt.modifier != 0 || pt.mouseButton != 0) {
+                    anyValidTrigger = true;
+                    break;
+                }
+            }
+            if (!m_parsedTriggers.isEmpty() && !anyValidTrigger) {
+                qCWarning(lcEffect) << "All loaded triggers have modifier=0 mouseButton=0"
+                                    << "— possible D-Bus deserialization issue;"
+                                    << "zone activation may not work when zone selector is disabled";
+            }
+            m_triggersLoaded = true;
+        } else {
+            qCWarning(lcEffect) << "Failed to load dragActivationTriggers from daemon"
+                                << "— trigger gating will remain permissive";
+            // Leave m_triggersLoaded = false so gating stays permissive
         }
     });
 
@@ -1464,9 +1530,18 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
 
 void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screenName)
 {
-    if (screenName.isEmpty() || !m_snapAssistEnabled || !ensureWindowTrackingReady("snap assist continuation")) {
+    if (screenName.isEmpty()) {
+        qCInfo(lcEffect) << "Snap assist continuation skipped: empty screen name";
         return;
     }
+    if (!m_snapAssistEnabled) {
+        qCInfo(lcEffect) << "Snap assist continuation skipped: snapAssistEnabled is false";
+        return;
+    }
+    if (!ensureWindowTrackingReady("snap assist continuation")) {
+        return;
+    }
+    qCInfo(lcEffect) << "Snap assist continuation: querying empty zones for screen" << screenName;
     QDBusPendingCall emptyCall =
         m_windowTrackingInterface->asyncCall(QStringLiteral("getEmptyZonesJson"), screenName);
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
@@ -1476,6 +1551,8 @@ void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screen
                 QDBusPendingReply<QString> reply = *w;
                 if (!reply.isValid() || reply.value().isEmpty()
                     || reply.value() == QLatin1String("[]")) {
+                    qCInfo(lcEffect) << "Snap assist continuation: no empty zones"
+                                     << (reply.isValid() ? reply.value() : QStringLiteral("(invalid reply)"));
                     return;
                 }
                 asyncShowSnapAssist(QString(), screenName, reply.value());
@@ -1502,7 +1579,11 @@ void PlasmaZonesEffect::asyncShowSnapAssist(const QString& excludeWindowId, cons
                     }
                 }
                 QJsonArray candidates = buildSnapAssistCandidates(excludeWindowId, screenName, snappedWindowIds);
-                if (candidates.isEmpty() || !ensureOverlayInterface("snap assist show")) {
+                if (candidates.isEmpty()) {
+                    qCInfo(lcEffect) << "Snap assist skipped: no unsnapped candidate windows on" << screenName;
+                    return;
+                }
+                if (!ensureOverlayInterface("snap assist show")) {
                     return;
                 }
                 m_overlayInterface->asyncCall(QStringLiteral("showSnapAssist"), screenName,
@@ -2584,7 +2665,13 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
                 if (savedGeo.isValid() && QRectF(w->frameGeometry()) != savedGeo) {
                     qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << windowId
                                      << "from" << w->frameGeometry() << "to" << savedGeo;
-                    applySnapGeometry(w, savedGeo.toRect());
+                    // Edge-consistent rounding: round edges independently then derive
+                    // width/height, matching snapToRect() in libplasmazones.
+                    const int l = qRound(savedGeo.x());
+                    const int t = qRound(savedGeo.y());
+                    const int r = qRound(savedGeo.x() + savedGeo.width());
+                    const int b = qRound(savedGeo.y() + savedGeo.height());
+                    applySnapGeometry(w, QRect(l, t, std::max(0, r - l), std::max(0, b - t)));
                 }
             }
             m_preAutotileGeometries.remove(screenName);

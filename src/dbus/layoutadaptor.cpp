@@ -24,6 +24,7 @@
 #include <QStandardPaths>
 #include <QCoreApplication>
 #include <QFile>
+#include <QScopeGuard>
 
 namespace PlasmaZones {
 
@@ -375,7 +376,6 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 
     layout->setName(name);
     m_layoutManager->addLayout(layout);
-    m_layoutManager->saveLayouts();
 
     qCInfo(lcDbusLayout) << "Created layout" << name << "of type" << type;
     return layout->id().toString();
@@ -508,6 +508,9 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     }
     QUuid layoutId = layout->id();
 
+    layout->beginBatchModify();
+    auto batchGuard = qScopeGuard([layout]() { layout->endBatchModify(); });
+
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());
 
@@ -517,11 +520,17 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     } else {
         layout->clearZonePaddingOverride();
     }
-    if (obj.contains(JsonKeys::OuterGap)) {
-        layout->setOuterGap(obj[JsonKeys::OuterGap].toInt(-1));
-    } else {
-        layout->clearOuterGapOverride();
-    }
+    // Set each gap field explicitly — avoid clearOuterGapOverride() which clobbers
+    // per-side state before per-side keys are processed
+    layout->setOuterGap(obj.contains(JsonKeys::OuterGap) ? obj[JsonKeys::OuterGap].toInt(-1) : -1);
+    layout->setUsePerSideOuterGap(obj[JsonKeys::UsePerSideOuterGap].toBool(false));
+    layout->setOuterGapTop(obj.contains(JsonKeys::OuterGapTop) ? obj[JsonKeys::OuterGapTop].toInt(-1) : -1);
+    layout->setOuterGapBottom(obj.contains(JsonKeys::OuterGapBottom) ? obj[JsonKeys::OuterGapBottom].toInt(-1) : -1);
+    layout->setOuterGapLeft(obj.contains(JsonKeys::OuterGapLeft) ? obj[JsonKeys::OuterGapLeft].toInt(-1) : -1);
+    layout->setOuterGapRight(obj.contains(JsonKeys::OuterGapRight) ? obj[JsonKeys::OuterGapRight].toInt(-1) : -1);
+
+    // Update full screen geometry mode
+    layout->setUseFullScreenGeometry(obj[JsonKeys::UseFullScreenGeometry].toBool(false));
 
     // Update shader settings
     layout->setShaderId(obj[JsonKeys::ShaderId].toString());
@@ -562,6 +571,14 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         zone->setRelativeGeometry(QRectF(relGeo[JsonKeys::X].toDouble(), relGeo[JsonKeys::Y].toDouble(),
                                          relGeo[JsonKeys::Width].toDouble(), relGeo[JsonKeys::Height].toDouble()));
 
+        // Per-zone geometry mode
+        zone->setGeometryModeInt(zoneObj[JsonKeys::GeometryMode].toInt(0));
+        if (zoneObj.contains(JsonKeys::FixedGeometry)) {
+            QJsonObject fixedGeo = zoneObj[JsonKeys::FixedGeometry].toObject();
+            zone->setFixedGeometry(QRectF(fixedGeo[JsonKeys::X].toDouble(), fixedGeo[JsonKeys::Y].toDouble(),
+                                          fixedGeo[JsonKeys::Width].toDouble(), fixedGeo[JsonKeys::Height].toDouble()));
+        }
+
         QJsonObject appearance = zoneObj[JsonKeys::Appearance].toObject();
         if (!appearance.isEmpty()) {
             zone->setHighlightColor(QColor(appearance[JsonKeys::HighlightColor].toString()));
@@ -588,7 +605,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->addZone(zone);
     }
 
-    m_layoutManager->saveLayouts();
+    // endBatchModify() is called by batchGuard (RAII) when the function returns
 
     m_cachedLayoutJson.remove(layoutId);
     if (m_cachedActiveLayoutId == layoutId) {
@@ -618,7 +635,6 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     }
 
     m_layoutManager->addLayout(layout);
-    m_layoutManager->saveLayouts();
 
     qCInfo(lcDbusLayout) << "Created layout from JSON:" << layout->id();
     return layout->id().toString();

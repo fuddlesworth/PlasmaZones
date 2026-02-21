@@ -409,6 +409,7 @@ Window {
                         // Track zone operations for snap/dimension indicators
                         onOperationStarted: function(zoneId, x, y, width, height) {
                             activeZoneOperation.active = true;
+                            activeZoneOperation.zoneId = zoneId;
                             activeZoneOperation.x = x;
                             activeZoneOperation.y = y;
                             activeZoneOperation.width = width;
@@ -422,6 +423,7 @@ Window {
                         }
                         onOperationEnded: function(zoneId) {
                             activeZoneOperation.active = false;
+                            activeZoneOperation.zoneId = "";
                             // Clear snap lines when operation ends
                             if (snapIndicator)
                                 snapIndicator.clearSnapLines();
@@ -461,6 +463,9 @@ Window {
                     canvasWidth: drawingArea.width
                     canvasHeight: drawingArea.height
                     showDimensions: activeZoneOperation.active
+                    isFixedMode: activeZoneOperation.isFixedZone
+                    screenWidth: editorWindow._editorController ? editorWindow._editorController.targetScreenSize.width : 1920
+                    screenHeight: editorWindow._editorController ? editorWindow._editorController.targetScreenSize.height : 1080
                 }
 
                 // Track active zone operation state
@@ -468,10 +473,16 @@ Window {
                     id: activeZoneOperation
 
                     property bool active: false
+                    property string zoneId: ""
                     property real x: 0
                     property real y: 0
                     property real width: 0
                     property real height: 0
+                    property bool isFixedZone: {
+                        if (!active || !zoneId || !editorWindow._editorController) return false;
+                        var zoneData = editorWindow._editorController.getZoneById(zoneId);
+                        return zoneData ? (zoneData.geometryMode === 1) : false;
+                    }
                 }
 
                 // ═══════════════════════════════════════════════════════════

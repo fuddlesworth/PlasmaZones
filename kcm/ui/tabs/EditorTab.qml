@@ -43,7 +43,7 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    KeySequenceInput {
+                    PlasmaZonesKeySequenceInput {
                         id: editorDuplicateShortcutField
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Duplicate zone:")
@@ -56,7 +56,7 @@ ScrollView {
                         ToolTip.text: i18n("Keyboard shortcut to duplicate the selected zone")
                     }
 
-                    KeySequenceInput {
+                    PlasmaZonesKeySequenceInput {
                         id: editorSplitHorizontalShortcutField
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split horizontally:")
@@ -69,7 +69,7 @@ ScrollView {
                         ToolTip.text: i18n("Keyboard shortcut to split selected zone horizontally")
                     }
 
-                    KeySequenceInput {
+                    PlasmaZonesKeySequenceInput {
                         id: editorSplitVerticalShortcutField
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Split vertically:")
@@ -82,7 +82,7 @@ ScrollView {
                         ToolTip.text: i18n("Keyboard shortcut to split selected zone vertically")
                     }
 
-                    KeySequenceInput {
+                    PlasmaZonesKeySequenceInput {
                         id: editorFillShortcutField
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Fill space:")

@@ -97,6 +97,11 @@ public:
 
     static int zonePadding() { return instance().defaultPaddingValue(); }
     static int outerGap() { return instance().defaultOuterGapValue(); }
+    static bool usePerSideOuterGap() { return instance().defaultUsePerSideOuterGapValue(); }
+    static int outerGapTop() { return instance().defaultOuterGapTopValue(); }
+    static int outerGapBottom() { return instance().defaultOuterGapBottomValue(); }
+    static int outerGapLeft() { return instance().defaultOuterGapLeftValue(); }
+    static int outerGapRight() { return instance().defaultOuterGapRightValue(); }
     static int adjacentThreshold() { return instance().defaultAdjacentThresholdValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -240,6 +245,7 @@ public:
     static QString cycleWindowBackwardShortcut() { return instance().defaultCycleWindowBackwardValue(); }
     static QString resnapToNewLayoutShortcut() { return instance().defaultResnapToNewLayoutShortcutValue(); }
     static QString snapAllWindowsShortcut() { return instance().defaultSnapAllWindowsShortcutValue(); }
+    static QString layoutPickerShortcut() { return instance().defaultLayoutPickerShortcutValue(); }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts

@@ -7,13 +7,14 @@
 #include <QStandardPaths>
 #include <QFileInfo>
 
+#include "../core/constants.h"
 #include "../core/logging.h"
 
 namespace PlasmaZones {
 
 static constexpr int kAsciiMaxRange = 1000; // CAVA ascii_max_range
-static constexpr int kMinBars = 16;
-static constexpr int kMaxBars = 256;
+static_assert(Audio::MinBars % 2 == 0, "Audio::MinBars must be even for CAVA stereo");
+static_assert(Audio::MaxBars % 2 == 0, "Audio::MaxBars must be even for CAVA stereo");
 
 CavaService::CavaService(QObject* parent)
     : QObject(parent)
@@ -52,6 +53,8 @@ void CavaService::start()
                 this, &CavaService::onReadyReadStandardOutput);
         connect(m_process, &QProcess::stateChanged,
                 this, &CavaService::onProcessStateChanged);
+        connect(m_process, &QProcess::finished,
+                this, &CavaService::onProcessFinished);
         connect(m_process, &QProcess::errorOccurred,
                 this, &CavaService::onProcessError);
     }
@@ -59,8 +62,9 @@ void CavaService::start()
     m_stdoutBuffer.clear();
     m_spectrum.clear();
 
-    // Kurve-style: pass config via stdin, read raw output from stdout
-    m_process->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+    // Kurve-style: pass config via stdin, read raw output from stdout.
+    // Use SeparateChannels so we can capture stderr for error diagnostics.
+    m_process->setProcessChannelMode(QProcess::SeparateChannels);
     m_process->start(QStringLiteral("sh"), QStringList{QStringLiteral("-c"),
         QStringLiteral("exec %1 -p /dev/stdin <<'CAVAEOF'\n%2\nCAVAEOF").arg(cavaPath, m_config)});
 
@@ -90,7 +94,10 @@ bool CavaService::isRunning() const
 
 void CavaService::setBarCount(int count)
 {
-    const int clamped = qBound(kMinBars, count, kMaxBars);
+    // CAVA requires even bar count for stereo output (bars split between L/R channels).
+    // Round to even first, then clamp — ensures we never exceed MaxBars after rounding.
+    int even = (count % 2 != 0) ? count + 1 : count;
+    const int clamped = qBound(Audio::MinBars, even, Audio::MaxBars);
     if (m_barCount != clamped) {
         m_barCount = clamped;
         if (isRunning()) {
@@ -204,6 +211,19 @@ void CavaService::onProcessStateChanged(QProcess::ProcessState state)
     Q_EMIT runningChanged(running);
     if (!running) {
         m_spectrum.clear();
+    }
+}
+
+void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitStatus*/)
+{
+    if (m_stopping || m_pendingRestart) {
+        return;
+    }
+    if (exitCode != 0) {
+        const QByteArray stderrOutput = m_process ? m_process->readAllStandardError().left(500)
+                                                  : QByteArray();
+        qCWarning(lcOverlay) << "CAVA exited with code" << exitCode
+                             << "stderr:" << stderrOutput;
     }
 }
 
