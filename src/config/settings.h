@@ -78,6 +78,11 @@ public:
     // Zone settings
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
+    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
+    Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
+    Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
+    Q_PROPERTY(int outerGapRight READ outerGapRight WRITE setOuterGapRight NOTIFY outerGapRightChanged)
     Q_PROPERTY(int adjacentThreshold READ adjacentThreshold WRITE setAdjacentThreshold NOTIFY adjacentThresholdChanged)
 
     // Performance and behavior (configurable constants)
@@ -442,6 +447,36 @@ public:
         return m_outerGap;
     }
     void setOuterGap(int gap) override;
+
+    bool usePerSideOuterGap() const override
+    {
+        return m_usePerSideOuterGap;
+    }
+    void setUsePerSideOuterGap(bool enabled) override;
+
+    int outerGapTop() const override
+    {
+        return m_outerGapTop;
+    }
+    void setOuterGapTop(int gap) override;
+
+    int outerGapBottom() const override
+    {
+        return m_outerGapBottom;
+    }
+    void setOuterGapBottom(int gap) override;
+
+    int outerGapLeft() const override
+    {
+        return m_outerGapLeft;
+    }
+    void setOuterGapLeft(int gap) override;
+
+    int outerGapRight() const override
+    {
+        return m_outerGapRight;
+    }
+    void setOuterGapRight(int gap) override;
 
     int adjacentThreshold() const override
     {
@@ -1003,6 +1038,11 @@ private:
     // Zone settings
     int m_zonePadding = Defaults::ZonePadding;
     int m_outerGap = Defaults::OuterGap;
+    bool m_usePerSideOuterGap = false;
+    int m_outerGapTop = Defaults::OuterGap;
+    int m_outerGapBottom = Defaults::OuterGap;
+    int m_outerGapLeft = Defaults::OuterGap;
+    int m_outerGapRight = Defaults::OuterGap;
     int m_adjacentThreshold = Defaults::AdjacentThreshold;
 
     // Performance and behavior

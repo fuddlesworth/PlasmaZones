@@ -173,6 +173,11 @@ Q_SIGNALS:
     void labelFontStrikeoutChanged();
     void zonePaddingChanged();
     void outerGapChanged();
+    void usePerSideOuterGapChanged();
+    void outerGapTopChanged();
+    void outerGapBottomChanged();
+    void outerGapLeftChanged();
+    void outerGapRightChanged();
     void adjacentThresholdChanged();
     void pollIntervalMsChanged();
     void minimumZoneSizePxChanged();

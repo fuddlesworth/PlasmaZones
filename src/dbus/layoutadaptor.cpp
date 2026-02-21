@@ -464,6 +464,29 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         layout->clearOuterGapOverride();
     }
 
+    // Per-side outer gap overrides
+    layout->setUsePerSideOuterGap(obj[JsonKeys::UsePerSideOuterGap].toBool(false));
+    if (obj.contains(JsonKeys::OuterGapTop)) {
+        layout->setOuterGapTop(obj[JsonKeys::OuterGapTop].toInt(-1));
+    } else {
+        layout->setOuterGapTop(-1);
+    }
+    if (obj.contains(JsonKeys::OuterGapBottom)) {
+        layout->setOuterGapBottom(obj[JsonKeys::OuterGapBottom].toInt(-1));
+    } else {
+        layout->setOuterGapBottom(-1);
+    }
+    if (obj.contains(JsonKeys::OuterGapLeft)) {
+        layout->setOuterGapLeft(obj[JsonKeys::OuterGapLeft].toInt(-1));
+    } else {
+        layout->setOuterGapLeft(-1);
+    }
+    if (obj.contains(JsonKeys::OuterGapRight)) {
+        layout->setOuterGapRight(obj[JsonKeys::OuterGapRight].toInt(-1));
+    } else {
+        layout->setOuterGapRight(-1);
+    }
+
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[JsonKeys::UseFullScreenGeometry].toBool(false));
 

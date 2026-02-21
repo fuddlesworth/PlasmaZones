@@ -423,6 +423,11 @@ void Settings::setLabelFontSizeScale(qreal scale)
 
 SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, INT_MAX)
 SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, INT_MAX)
+SETTINGS_SETTER(bool, UsePerSideOuterGap, m_usePerSideOuterGap, usePerSideOuterGapChanged)
+SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, INT_MAX)
+SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, INT_MAX)
 SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 0, INT_MAX)
 SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, 10, 1000)
 SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
@@ -867,6 +872,11 @@ void Settings::load()
     // Zones with validation (defaults from .kcfg via ConfigDefaults)
     m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, INT_MAX, "zone padding");
     m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, INT_MAX, "outer gap");
+    m_usePerSideOuterGap = zones.readEntry(QLatin1String("UsePerSideOuterGap"), ConfigDefaults::usePerSideOuterGap());
+    m_outerGapTop = readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), 0, INT_MAX, "outer gap top");
+    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), 0, INT_MAX, "outer gap bottom");
+    m_outerGapLeft = readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), 0, INT_MAX, "outer gap left");
+    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), 0, INT_MAX, "outer gap right");
     m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 0, INT_MAX, "adjacent threshold");
 
     // Performance and behavior settings with validation
@@ -1140,6 +1150,11 @@ void Settings::save()
     // Zones
     zones.writeEntry(QLatin1String("Padding"), m_zonePadding);
     zones.writeEntry(QLatin1String("OuterGap"), m_outerGap);
+    zones.writeEntry(QLatin1String("UsePerSideOuterGap"), m_usePerSideOuterGap);
+    zones.writeEntry(QLatin1String("OuterGapTop"), m_outerGapTop);
+    zones.writeEntry(QLatin1String("OuterGapBottom"), m_outerGapBottom);
+    zones.writeEntry(QLatin1String("OuterGapLeft"), m_outerGapLeft);
+    zones.writeEntry(QLatin1String("OuterGapRight"), m_outerGapRight);
     zones.writeEntry(QLatin1String("AdjacentThreshold"), m_adjacentThreshold);
 
     // Performance and behavior

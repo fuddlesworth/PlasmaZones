@@ -24,7 +24,7 @@ class EditorController;
 class UpdateGapOverrideCommand : public QUndoCommand
 {
 public:
-    enum class GapType { ZonePadding, OuterGap };
+    enum class GapType { ZonePadding, OuterGap, OuterGapTop, OuterGapBottom, OuterGapLeft, OuterGapRight, UsePerSideOuterGap };
 
     explicit UpdateGapOverrideCommand(QPointer<EditorController> editorController,
                                       GapType type, int oldValue, int newValue,

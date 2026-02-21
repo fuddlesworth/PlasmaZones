@@ -15,7 +15,9 @@ UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> ed
     : QUndoCommand(text.isEmpty()
                        ? (type == GapType::ZonePadding
                               ? i18nc("@action", "Change Zone Padding")
-                              : i18nc("@action", "Change Edge Gap"))
+                              : (type == GapType::UsePerSideOuterGap
+                                     ? i18nc("@action", "Toggle Per-Side Edge Gap")
+                                     : i18nc("@action", "Change Edge Gap")))
                        : text,
                    parent)
     , m_editorController(editorController)
@@ -47,6 +49,21 @@ void UpdateGapOverrideCommand::applyValue(int value)
         break;
     case GapType::OuterGap:
         m_editorController->setOuterGapDirect(value);
+        break;
+    case GapType::OuterGapTop:
+        m_editorController->setOuterGapTopDirect(value);
+        break;
+    case GapType::OuterGapBottom:
+        m_editorController->setOuterGapBottomDirect(value);
+        break;
+    case GapType::OuterGapLeft:
+        m_editorController->setOuterGapLeftDirect(value);
+        break;
+    case GapType::OuterGapRight:
+        m_editorController->setOuterGapRightDirect(value);
+        break;
+    case GapType::UsePerSideOuterGap:
+        m_editorController->setUsePerSideOuterGapDirect(static_cast<bool>(value));
         break;
     }
 }

@@ -172,6 +172,16 @@ public:
     virtual void setZonePadding(int padding) = 0;
     virtual int outerGap() const = 0;
     virtual void setOuterGap(int gap) = 0;
+    virtual bool usePerSideOuterGap() const = 0;
+    virtual void setUsePerSideOuterGap(bool enabled) = 0;
+    virtual int outerGapTop() const = 0;
+    virtual void setOuterGapTop(int gap) = 0;
+    virtual int outerGapBottom() const = 0;
+    virtual void setOuterGapBottom(int gap) = 0;
+    virtual int outerGapLeft() const = 0;
+    virtual void setOuterGapLeft(int gap) = 0;
+    virtual int outerGapRight() const = 0;
+    virtual void setOuterGapRight(int gap) = 0;
     virtual int adjacentThreshold() const = 0;
     virtual void setAdjacentThreshold(int threshold) = 0;
     virtual int pollIntervalMs() const = 0;

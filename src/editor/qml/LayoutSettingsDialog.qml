@@ -53,6 +53,19 @@ Kirigami.Dialog {
         outerGapSpin.value = root.editorController.hasOuterGapOverride
             ? root.editorController.outerGap
             : root.editorController.globalOuterGap
+        perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap
+        perSideTopSpin.value = root.editorController.outerGapTop >= 0
+            ? root.editorController.outerGapTop
+            : root.editorController.globalOuterGapTop
+        perSideBottomSpin.value = root.editorController.outerGapBottom >= 0
+            ? root.editorController.outerGapBottom
+            : root.editorController.globalOuterGapBottom
+        perSideLeftSpin.value = root.editorController.outerGapLeft >= 0
+            ? root.editorController.outerGapLeft
+            : root.editorController.globalOuterGapLeft
+        perSideRightSpin.value = root.editorController.outerGapRight >= 0
+            ? root.editorController.outerGapRight
+            : root.editorController.globalOuterGapRight
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry
     }
 
@@ -72,6 +85,19 @@ Kirigami.Dialog {
             outerGapSpin.value = root.editorController.hasOuterGapOverride
                 ? root.editorController.outerGap
                 : root.editorController.globalOuterGap
+            perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap
+            perSideTopSpin.value = root.editorController.outerGapTop >= 0
+                ? root.editorController.outerGapTop
+                : root.editorController.globalOuterGapTop
+            perSideBottomSpin.value = root.editorController.outerGapBottom >= 0
+                ? root.editorController.outerGapBottom
+                : root.editorController.globalOuterGapBottom
+            perSideLeftSpin.value = root.editorController.outerGapLeft >= 0
+                ? root.editorController.outerGapLeft
+                : root.editorController.globalOuterGapLeft
+            perSideRightSpin.value = root.editorController.outerGapRight >= 0
+                ? root.editorController.outerGapRight
+                : root.editorController.globalOuterGapRight
         }
         function onGlobalZonePaddingChanged() {
             if (!root.editorController.hasZonePaddingOverride)
@@ -80,6 +106,12 @@ Kirigami.Dialog {
         function onGlobalOuterGapChanged() {
             if (!root.editorController.hasOuterGapOverride)
                 outerGapSpin.value = root.editorController.globalOuterGap
+            if (!root.editorController.hasPerSideOuterGapOverride) {
+                perSideTopSpin.value = root.editorController.globalOuterGapTop
+                perSideBottomSpin.value = root.editorController.globalOuterGapBottom
+                perSideLeftSpin.value = root.editorController.globalOuterGapLeft
+                perSideRightSpin.value = root.editorController.globalOuterGapRight
+            }
         }
         function onUseFullScreenGeometryChanged() {
             fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry
@@ -205,6 +237,91 @@ Kirigami.Dialog {
                         : i18nc("@label showing global default", "px (global)")
                     opacity: outerGapOverrideCheck.checked ? 1.0 : 0.6
                     Layout.preferredWidth: implicitWidth
+                }
+            }
+
+            // Per-side edge gap override
+            CheckBox {
+                id: perSideOverrideCheck
+                text: i18nc("@option:check", "Set per side")
+                checked: root.editorController ? root.editorController.usePerSideOuterGap : false
+                enabled: outerGapOverrideCheck.checked
+                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+                onToggled: {
+                    if (root.editorController) {
+                        root.editorController.usePerSideOuterGap = checked
+                        if (checked) {
+                            // Initialize per-side values from uniform gap if not set
+                            let uniformGap = root.editorController.outerGap >= 0
+                                ? root.editorController.outerGap
+                                : root.editorController.globalOuterGap
+                            if (root.editorController.outerGapTop < 0)
+                                root.editorController.outerGapTop = uniformGap
+                            if (root.editorController.outerGapBottom < 0)
+                                root.editorController.outerGapBottom = uniformGap
+                            if (root.editorController.outerGapLeft < 0)
+                                root.editorController.outerGapLeft = uniformGap
+                            if (root.editorController.outerGapRight < 0)
+                                root.editorController.outerGapRight = uniformGap
+                        }
+                    }
+                }
+            }
+
+            GridLayout {
+                columns: 4
+                columnSpacing: Kirigami.Units.smallSpacing
+                rowSpacing: Kirigami.Units.smallSpacing
+                visible: perSideOverrideCheck.checked && outerGapOverrideCheck.checked
+                Layout.leftMargin: Kirigami.Units.largeSpacing * 2
+
+                Label { text: i18nc("@label edge gap direction", "Top") }
+                SpinBox {
+                    id: perSideTopSpin
+                    from: 0; to: 100
+                    value: 8
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                    Accessible.name: i18nc("@label", "Top edge gap override")
+                    onValueModified: {
+                        if (root.editorController)
+                            root.editorController.outerGapTop = value
+                    }
+                }
+                Label { text: i18nc("@label edge gap direction", "Bottom") }
+                SpinBox {
+                    id: perSideBottomSpin
+                    from: 0; to: 100
+                    value: 8
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                    Accessible.name: i18nc("@label", "Bottom edge gap override")
+                    onValueModified: {
+                        if (root.editorController)
+                            root.editorController.outerGapBottom = value
+                    }
+                }
+                Label { text: i18nc("@label edge gap direction", "Left") }
+                SpinBox {
+                    id: perSideLeftSpin
+                    from: 0; to: 100
+                    value: 8
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                    Accessible.name: i18nc("@label", "Left edge gap override")
+                    onValueModified: {
+                        if (root.editorController)
+                            root.editorController.outerGapLeft = value
+                    }
+                }
+                Label { text: i18nc("@label edge gap direction", "Right") }
+                SpinBox {
+                    id: perSideRightSpin
+                    from: 0; to: 100
+                    value: 8
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 5
+                    Accessible.name: i18nc("@label", "Right edge gap override")
+                    onValueModified: {
+                        if (root.editorController)
+                            root.editorController.outerGapRight = value
+                    }
                 }
             }
         }

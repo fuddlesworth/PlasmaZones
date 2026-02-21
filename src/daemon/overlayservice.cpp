@@ -1912,9 +1912,9 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Layout's zonePadding/outerGap takes precedence over global settings
     int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    int outerGap = GeometryUtils::getEffectiveOuterGap(layout, m_settings);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
-    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGap, useAvail);
+    QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
 
     // Convert to overlay window local coordinates
     // The overlay covers the full screen, but zones are positioned within available area
@@ -2023,10 +2023,10 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
             Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings);
-                int outerGap = GeometryUtils::getEffectiveOuterGap(selectedLayout, m_settings);
+                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings);
                 bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
                 QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
-                    zone, screen, zonePadding, outerGap, useAvail);
+                    zone, screen, zonePadding, outerGaps, useAvail);
                 return geom.toRect();
             }
         }

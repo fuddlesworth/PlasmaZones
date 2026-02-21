@@ -418,6 +418,160 @@ void EditorController::setOuterGapDirect(int gap)
     }
 }
 
+bool EditorController::usePerSideOuterGap() const
+{
+    return m_usePerSideOuterGap;
+}
+
+int EditorController::outerGapTop() const
+{
+    return m_outerGapTop;
+}
+
+int EditorController::outerGapBottom() const
+{
+    return m_outerGapBottom;
+}
+
+int EditorController::outerGapLeft() const
+{
+    return m_outerGapLeft;
+}
+
+int EditorController::outerGapRight() const
+{
+    return m_outerGapRight;
+}
+
+bool EditorController::hasPerSideOuterGapOverride() const
+{
+    return m_usePerSideOuterGap && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+}
+
+bool EditorController::globalUsePerSideOuterGap() const
+{
+    return m_cachedGlobalUsePerSideOuterGap;
+}
+
+int EditorController::globalOuterGapTop() const
+{
+    return m_cachedGlobalOuterGapTop;
+}
+
+int EditorController::globalOuterGapBottom() const
+{
+    return m_cachedGlobalOuterGapBottom;
+}
+
+int EditorController::globalOuterGapLeft() const
+{
+    return m_cachedGlobalOuterGapLeft;
+}
+
+int EditorController::globalOuterGapRight() const
+{
+    return m_cachedGlobalOuterGapRight;
+}
+
+void EditorController::setUsePerSideOuterGap(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        // Use a gap override command for undo (toggling per-side is conceptually a gap change)
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap,
+                                                 m_usePerSideOuterGap ? 1 : 0, enabled ? 1 : 0);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setUsePerSideOuterGapDirect(bool enabled)
+{
+    if (m_usePerSideOuterGap != enabled) {
+        m_usePerSideOuterGap = enabled;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapTop(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapTop != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop,
+                                                 m_outerGapTop, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapTopDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapTop != gap) {
+        m_outerGapTop = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapBottom(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapBottom != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
+                                                 m_outerGapBottom, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapBottomDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapBottom != gap) {
+        m_outerGapBottom = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapLeft(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapLeft != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft,
+                                                 m_outerGapLeft, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapLeftDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapLeft != gap) {
+        m_outerGapLeft = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
+void EditorController::setOuterGapRight(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapRight != gap) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight,
+                                                 m_outerGapRight, gap);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOuterGapRightDirect(int gap)
+{
+    if (gap < -1) gap = -1;
+    if (m_outerGapRight != gap) {
+        m_outerGapRight = gap;
+        markUnsaved();
+        Q_EMIT outerGapChanged();
+    }
+}
+
 void EditorController::clearZonePaddingOverride()
 {
     setZonePadding(-1);
@@ -425,7 +579,13 @@ void EditorController::clearZonePaddingOverride()
 
 void EditorController::clearOuterGapOverride()
 {
-    setOuterGap(-1);
+    // Reset uniform and per-side state via direct setters (compound operation)
+    setOuterGapDirect(-1);
+    setUsePerSideOuterGapDirect(false);
+    setOuterGapTopDirect(-1);
+    setOuterGapBottomDirect(-1);
+    setOuterGapLeftDirect(-1);
+    setOuterGapRightDirect(-1);
 }
 
 bool EditorController::useFullScreenGeometry() const
@@ -618,9 +778,27 @@ void EditorController::refreshGlobalZonePadding()
 void EditorController::refreshGlobalOuterGap()
 {
     int newValue = SettingsDbusQueries::queryGlobalOuterGap();
+    bool newUsePerSide = SettingsDbusQueries::queryGlobalUsePerSideOuterGap();
+    int newTop = SettingsDbusQueries::queryGlobalOuterGapTop();
+    int newBottom = SettingsDbusQueries::queryGlobalOuterGapBottom();
+    int newLeft = SettingsDbusQueries::queryGlobalOuterGapLeft();
+    int newRight = SettingsDbusQueries::queryGlobalOuterGapRight();
 
-    if (m_cachedGlobalOuterGap != newValue) {
-        m_cachedGlobalOuterGap = newValue;
+    bool changed = (m_cachedGlobalOuterGap != newValue)
+        || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
+        || (m_cachedGlobalOuterGapTop != newTop)
+        || (m_cachedGlobalOuterGapBottom != newBottom)
+        || (m_cachedGlobalOuterGapLeft != newLeft)
+        || (m_cachedGlobalOuterGapRight != newRight);
+
+    m_cachedGlobalOuterGap = newValue;
+    m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
+    m_cachedGlobalOuterGapTop = newTop;
+    m_cachedGlobalOuterGapBottom = newBottom;
+    m_cachedGlobalOuterGapLeft = newLeft;
+    m_cachedGlobalOuterGapRight = newRight;
+
+    if (changed) {
         Q_EMIT globalOuterGapChanged();
     }
 }
@@ -893,6 +1071,11 @@ void EditorController::createNewLayout()
     // Reset per-layout gap overrides (-1 = use global)
     m_zonePadding = -1;
     m_outerGap = -1;
+    m_usePerSideOuterGap = false;
+    m_outerGapTop = -1;
+    m_outerGapBottom = -1;
+    m_outerGapLeft = -1;
+    m_outerGapRight = -1;
     m_useFullScreenGeometry = false;
 
     // Refresh available shaders from daemon
@@ -1075,7 +1258,6 @@ void EditorController::loadLayout(const QString& layoutId)
 
     // Load per-layout gap overrides (-1 = use global setting)
     int oldZonePadding = m_zonePadding;
-    int oldOuterGap = m_outerGap;
     bool oldUseFullScreen = m_useFullScreenGeometry;
     m_zonePadding = layoutObj.contains(QLatin1String(JsonKeys::ZonePadding))
         ? layoutObj[QLatin1String(JsonKeys::ZonePadding)].toInt(-1)
@@ -1083,6 +1265,15 @@ void EditorController::loadLayout(const QString& layoutId)
     m_outerGap = layoutObj.contains(QLatin1String(JsonKeys::OuterGap))
         ? layoutObj[QLatin1String(JsonKeys::OuterGap)].toInt(-1)
         : -1;
+    m_usePerSideOuterGap = layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)].toBool(false);
+    m_outerGapTop = layoutObj.contains(QLatin1String(JsonKeys::OuterGapTop))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapTop)].toInt(-1) : -1;
+    m_outerGapBottom = layoutObj.contains(QLatin1String(JsonKeys::OuterGapBottom))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapBottom)].toInt(-1) : -1;
+    m_outerGapLeft = layoutObj.contains(QLatin1String(JsonKeys::OuterGapLeft))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapLeft)].toInt(-1) : -1;
+    m_outerGapRight = layoutObj.contains(QLatin1String(JsonKeys::OuterGapRight))
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1) : -1;
     m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
 
     m_selectedZoneId.clear();
@@ -1122,13 +1313,12 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT currentShaderParamsChanged();
     Q_EMIT currentShaderParametersChanged();
 
-    // Emit gap change signals if values changed
+    // Emit gap change signals — always emit outerGapChanged since per-side
+    // values may differ between layouts even when uniform outerGap is the same
     if (m_zonePadding != oldZonePadding) {
         Q_EMIT zonePaddingChanged();
     }
-    if (m_outerGap != oldOuterGap) {
-        Q_EMIT outerGapChanged();
-    }
+    Q_EMIT outerGapChanged();
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
     }
@@ -1237,6 +1427,20 @@ void EditorController::saveLayout()
     }
     if (m_outerGap >= 0) {
         layoutObj[QLatin1String(JsonKeys::OuterGap)] = m_outerGap;
+    }
+    // Normalize: don't save per-side toggle if no per-side values are overridden
+    bool hasAnySideOverride = (m_outerGapTop >= 0 || m_outerGapBottom >= 0
+                               || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+    if (m_usePerSideOuterGap && hasAnySideOverride) {
+        layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)] = true;
+        if (m_outerGapTop >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapTop)] = m_outerGapTop;
+        if (m_outerGapBottom >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapBottom)] = m_outerGapBottom;
+        if (m_outerGapLeft >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapLeft)] = m_outerGapLeft;
+        if (m_outerGapRight >= 0)
+            layoutObj[QLatin1String(JsonKeys::OuterGapRight)] = m_outerGapRight;
     }
 
     // Include full screen geometry mode (only if enabled)

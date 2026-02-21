@@ -183,6 +183,13 @@ inline constexpr QLatin1String FixedY{"fixedY"};
 inline constexpr QLatin1String FixedWidth{"fixedWidth"};
 inline constexpr QLatin1String FixedHeight{"fixedHeight"};
 
+// Per-side outer gap keys
+inline constexpr QLatin1String UsePerSideOuterGap{"usePerSideOuterGap"};
+inline constexpr QLatin1String OuterGapTop{"outerGapTop"};
+inline constexpr QLatin1String OuterGapBottom{"outerGapBottom"};
+inline constexpr QLatin1String OuterGapLeft{"outerGapLeft"};
+inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
+
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 }
@@ -212,5 +219,22 @@ inline constexpr QLatin1String WindowTracking{"org.plasmazones.WindowTracking"};
 inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
 }
 }
+
+/**
+ * @brief Per-side edge gap values
+ *
+ * Used when usePerSideOuterGap is enabled to apply different gaps
+ * to each screen edge. When disabled, the single outerGap value
+ * is used uniformly via EdgeGaps::uniform().
+ */
+struct EdgeGaps {
+    int top = 8;
+    int bottom = 8;
+    int left = 8;
+    int right = 8;
+    bool operator==(const EdgeGaps&) const = default;
+    bool isUniform() const { return top == bottom && bottom == left && left == right; }
+    static EdgeGaps uniform(int gap) { return {gap, gap, gap, gap}; }
+};
 
 } // namespace PlasmaZones
