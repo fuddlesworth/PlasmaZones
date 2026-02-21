@@ -157,6 +157,17 @@ QVariantList KCMPlasmaZones::dragActivationTriggers() const
 {
     return convertTriggersForQml(m_settings->dragActivationTriggers());
 }
+bool KCMPlasmaZones::alwaysActivateOnDrag() const
+{
+    const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
+    const auto triggers = m_settings->dragActivationTriggers();
+    for (const auto& t : triggers) {
+        if (t.toMap().value(QStringLiteral("modifier"), 0).toInt() == alwaysActive) {
+            return true;
+        }
+    }
+    return false;
+}
 bool KCMPlasmaZones::zoneSpanEnabled() const
 {
     return m_settings->zoneSpanEnabled();
@@ -543,12 +554,36 @@ QStringList KCMPlasmaZones::virtualDesktopNames() const
 // Activation setters
 void KCMPlasmaZones::setDragActivationTriggers(const QVariantList& triggers)
 {
+    const bool wasAlwaysActive = alwaysActivateOnDrag();
     const QVariantList converted = convertTriggersForStorage(triggers);
     if (m_settings->dragActivationTriggers() != converted) {
         m_settings->setDragActivationTriggers(converted);
         Q_EMIT dragActivationTriggersChanged();
+        if (alwaysActivateOnDrag() != wasAlwaysActive) {
+            Q_EMIT alwaysActivateOnDragChanged();
+        }
         setNeedsSave(true);
     }
+}
+
+void KCMPlasmaZones::setAlwaysActivateOnDrag(bool enabled)
+{
+    if (alwaysActivateOnDrag() == enabled) {
+        return;
+    }
+    if (enabled) {
+        // Single AlwaysActive trigger — written directly in storage format (DragModifier enum)
+        QVariantMap trigger;
+        trigger[QStringLiteral("modifier")] = static_cast<int>(DragModifier::AlwaysActive);
+        trigger[QStringLiteral("mouseButton")] = 0;
+        m_settings->setDragActivationTriggers({trigger});
+    } else {
+        // Revert to default triggers
+        m_settings->setDragActivationTriggers(ConfigDefaults::dragActivationTriggers());
+    }
+    Q_EMIT alwaysActivateOnDragChanged();
+    Q_EMIT dragActivationTriggersChanged();
+    setNeedsSave(true);
 }
 
 void KCMPlasmaZones::setZoneSpanEnabled(bool enabled)
@@ -1422,6 +1457,7 @@ void KCMPlasmaZones::load()
 {
     m_settings->load();
     // Emit Settings-backed property signals so UI bindings re-evaluate (e.g. after external config change)
+    Q_EMIT alwaysActivateOnDragChanged();
     Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
@@ -1566,6 +1602,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT dragActivationTriggersChanged();
+    Q_EMIT alwaysActivateOnDragChanged();
     Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT zoneSpanTriggersChanged();
     Q_EMIT toggleActivationChanged();
@@ -2248,6 +2285,7 @@ void KCMPlasmaZones::onSettingsChanged()
         // ones actually changed since external changes are rare, signal emission is cheap,
         // and QML only updates when values differ.
         Q_EMIT dragActivationTriggersChanged();
+        Q_EMIT alwaysActivateOnDragChanged();
         Q_EMIT zoneSpanEnabledChanged();
         Q_EMIT zoneSpanTriggersChanged();
         Q_EMIT toggleActivationChanged();

@@ -452,11 +452,24 @@ ScrollView {
                         Kirigami.FormData.label: i18n("Triggers")
                     }
 
+                    CheckBox {
+                        id: alwaysActivateCheck
+                        Layout.fillWidth: true
+                        Kirigami.FormData.label: i18n("Zone activation:")
+                        text: i18n("Activate on every window drag")
+                        checked: kcm.alwaysActivateOnDrag
+                        onToggled: kcm.alwaysActivateOnDrag = checked
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("When enabled, the zone overlay appears on every window drag without requiring a modifier key or mouse button. Similar to FancyZones and KZones behavior.")
+                    }
+
                     ModifierAndMouseCheckBoxes {
                         id: dragActivationInput
                         Layout.fillWidth: true
                         Layout.preferredWidth: root.constants.sliderPreferredWidth
-                        Kirigami.FormData.label: i18n("Zone activation:")
+                        Kirigami.FormData.label: i18n("Hold to activate:")
+                        enabled: !alwaysActivateCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: kcm.dragActivationTriggers
@@ -471,6 +484,8 @@ ScrollView {
                     CheckBox {
                         Layout.fillWidth: true
                         Kirigami.FormData.label: i18n("Toggle mode:")
+                        enabled: !alwaysActivateCheck.checked
+                        opacity: enabled ? 1 : 0.6
                         text: i18n("Tap trigger to toggle overlay")
                         checked: kcm.toggleActivation
                         onToggled: kcm.toggleActivation = checked

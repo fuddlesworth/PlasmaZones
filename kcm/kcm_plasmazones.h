@@ -45,11 +45,13 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Activation
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
                    dragActivationTriggersChanged)
+    Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
+                   alwaysActivateOnDragChanged)
+    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
+                   toggleActivationChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
-    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
-                   toggleActivationChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -220,9 +222,10 @@ public:
 
     // Property getters
     QVariantList dragActivationTriggers() const;
+    bool alwaysActivateOnDrag() const;
+    bool toggleActivation() const;
     bool zoneSpanEnabled() const;
     QVariantList zoneSpanTriggers() const;
-    bool toggleActivation() const;
     bool showZonesOnAllMonitors() const;
     QStringList disabledMonitors() const;
     bool showZoneNumbers() const;
@@ -330,9 +333,10 @@ public:
 
     // Property setters
     void setDragActivationTriggers(const QVariantList& triggers);
+    void setAlwaysActivateOnDrag(bool enabled);
+    void setToggleActivation(bool enable);
     void setZoneSpanEnabled(bool enabled);
     void setZoneSpanTriggers(const QVariantList& triggers);
-    void setToggleActivation(bool enable);
     void setShowZonesOnAllMonitors(bool show);
     void setShowZoneNumbers(bool show);
     void setFlashZonesOnSwitch(bool flash);
@@ -481,9 +485,10 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void dragActivationTriggersChanged();
+    void alwaysActivateOnDragChanged();
+    void toggleActivationChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanTriggersChanged();
-    void toggleActivationChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
