@@ -205,7 +205,10 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
 
     // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
     QScreen* refScreen = Utils::primaryScreen();
-    QRectF refGeom = refScreen ? GeometryUtils::effectiveScreenGeometry(layout, refScreen) : QRectF(0, 0, 1920, 1080);
+    if (!refScreen) {
+        return QString();
+    }
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
 
     QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
     QPointF currentCenter(currentGeom.center());
@@ -279,7 +282,10 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
     if (!refScreen) {
         refScreen = Utils::primaryScreen();
     }
-    QRectF refGeom = refScreen ? GeometryUtils::effectiveScreenGeometry(layout, refScreen) : QRectF(0, 0, 1920, 1080);
+    if (!refScreen) {
+        return QString();
+    }
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
 
     Zone* bestZone = nullptr;
     qreal bestValue = 0;
