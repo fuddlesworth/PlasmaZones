@@ -195,7 +195,7 @@ public:
     Q_INVOKABLE QRectF applyPadding(int padding) const;
 
     // Serialization
-    QJsonObject toJson() const;
+    QJsonObject toJson(const QRectF& referenceGeometry = QRectF()) const;
     static Zone* fromJson(const QJsonObject& json, QObject* parent = nullptr);
 
 Q_SIGNALS:

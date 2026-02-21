@@ -89,12 +89,19 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF&
         return list;
     }
 
+    // When caller doesn't pass reference geometry, use the layout's cached screen
+    // geometry from the last recalculation.  This ensures fixed-mode zones are
+    // normalized correctly for preview rendering (KCM thumbnails, OSD, zone selector).
+    const QRectF& refGeo = (referenceGeometry.width() > 0 && referenceGeometry.height() > 0)
+        ? referenceGeometry
+        : layout->lastRecalcGeometry();
+
     const auto zones = layout->zones();
     for (Zone* zone : zones) {
         if (!zone) {
             continue;
         }
-        list.append(zoneToVariantMap(zone, fields, referenceGeometry));
+        list.append(zoneToVariantMap(zone, fields, refGeo));
     }
 
     return list;

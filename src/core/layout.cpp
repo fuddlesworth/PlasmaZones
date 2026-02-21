@@ -540,7 +540,7 @@ QJsonObject Layout::toJson() const
 
     QJsonArray zonesArray;
     for (const auto* zone : m_zones) {
-        zonesArray.append(zone->toJson());
+        zonesArray.append(zone->toJson(m_lastRecalcGeometry));
     }
     json[JsonKeys::Zones] = zonesArray;
 

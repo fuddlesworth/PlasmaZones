@@ -197,7 +197,7 @@ QRectF Zone::applyPadding(int padding) const
     return m_geometry.adjusted(padding, padding, -padding, -padding);
 }
 
-QJsonObject Zone::toJson() const
+QJsonObject Zone::toJson(const QRectF& referenceGeometry) const
 {
     using namespace JsonKeys;
 
@@ -207,11 +207,14 @@ QJsonObject Zone::toJson() const
     json[ZoneNumber] = m_zoneNumber;
 
     // Relative geometry for resolution independence (always written for backward compat)
+    // For fixed-mode zones, compute correct 0-1 coords from pixel geometry so that
+    // consumers reading only relativeGeometry (previews, KCM thumbnails) show correct positions.
+    QRectF normGeo = normalizedGeometry(referenceGeometry);
     QJsonObject relGeo;
-    relGeo[X] = m_relativeGeometry.x();
-    relGeo[Y] = m_relativeGeometry.y();
-    relGeo[Width] = m_relativeGeometry.width();
-    relGeo[Height] = m_relativeGeometry.height();
+    relGeo[X] = normGeo.x();
+    relGeo[Y] = normGeo.y();
+    relGeo[Width] = normGeo.width();
+    relGeo[Height] = normGeo.height();
     json[RelativeGeometry] = relGeo;
 
     // Per-zone geometry mode (only write when Fixed to maintain backward compat)
