@@ -318,8 +318,8 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
     // Find zone at cursor position
     Zone* foundZone = nullptr;
     for (auto* zone : layout->zones()) {
-        QRectF relGeom = zone->relativeGeometry();
-        if (relGeom.contains(QPointF(relX, relY))) {
+        QRectF normGeom = zone->normalizedGeometry(refGeom);
+        if (normGeom.contains(QPointF(relX, relY))) {
             foundZone = zone;
             break;
         }

@@ -62,6 +62,26 @@ ZoneManager::ValidatedGeometry ZoneManager::validateAndClampGeometry(qreal x, qr
     return result;
 }
 
+ZoneManager::ValidatedFixedGeometry ZoneManager::validateAndClampFixedGeometry(qreal x, qreal y, qreal width, qreal height) const
+{
+    ValidatedFixedGeometry result;
+
+    // Reject NaN/Inf inputs (consistent with relative validateAndClampGeometry)
+    if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
+        result.isValid = false;
+        return result;
+    }
+
+    // Fixed geometry: pixel values — position >= 0, size >= MinFixedZoneSize
+    result.width = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), width);
+    result.height = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), height);
+    result.x = qMax(0.0, x);
+    result.y = qMax(0.0, y);
+    result.isValid = true;
+
+    return result;
+}
+
 void ZoneManager::emitZoneSignal(SignalType type, const QString& zoneId, bool includeModified)
 {
     if (m_batchUpdateDepth > 0) {
@@ -167,6 +187,7 @@ QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qr
     zone[JsonKeys::BorderWidth] = Defaults::BorderWidth;
     zone[JsonKeys::BorderRadius] = Defaults::BorderRadius;
     zone[JsonKeys::UseCustomColors] = false; // New zones use theme colors by default
+    zone[JsonKeys::GeometryMode] = 0; // Default to Relative geometry mode
     return zone;
 }
 
@@ -196,12 +217,6 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
         return;
     }
 
-    ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
-    if (!geom.isValid) {
-        qCWarning(lcEditorZone) << "Invalid zone geometry:" << x << y << width << height;
-        return;
-    }
-
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
         qCWarning(lcEditorZone) << "Zone not found for geometry update:" << zoneId;
@@ -209,12 +224,40 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
     }
 
     QVariantMap zone = m_zones[index].toMap();
-    zone[JsonKeys::X] = geom.x;
-    zone[JsonKeys::Y] = geom.y;
-    zone[JsonKeys::Width] = geom.width;
-    zone[JsonKeys::Height] = geom.height;
-    m_zones[index] = zone;
+    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
 
+    if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        // Fixed mode: pixel values — use fixed validation
+        ValidatedFixedGeometry geom = validateAndClampFixedGeometry(x, y, width, height);
+        if (!geom.isValid) {
+            qCWarning(lcEditorZone) << "Invalid fixed zone geometry:" << x << y << width << height;
+            return;
+        }
+        zone[JsonKeys::FixedX] = geom.x;
+        zone[JsonKeys::FixedY] = geom.y;
+        zone[JsonKeys::FixedWidth] = geom.width;
+        zone[JsonKeys::FixedHeight] = geom.height;
+        // Update relative fallback so previews render correctly
+        qreal sw = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width()));
+        qreal sh = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height()));
+        zone[JsonKeys::X] = geom.x / sw;
+        zone[JsonKeys::Y] = geom.y / sh;
+        zone[JsonKeys::Width] = geom.width / sw;
+        zone[JsonKeys::Height] = geom.height / sh;
+    } else {
+        // Relative mode: 0-1 normalized — use existing validation
+        ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
+        if (!geom.isValid) {
+            qCWarning(lcEditorZone) << "Invalid zone geometry:" << x << y << width << height;
+            return;
+        }
+        zone[JsonKeys::X] = geom.x;
+        zone[JsonKeys::Y] = geom.y;
+        zone[JsonKeys::Width] = geom.width;
+        zone[JsonKeys::Height] = geom.height;
+    }
+
+    m_zones[index] = zone;
     emitZoneSignal(SignalType::GeometryChanged, zoneId);
 }
 
@@ -230,16 +273,36 @@ void ZoneManager::updateZoneGeometryDirect(const QString& zoneId, qreal x, qreal
         return;
     }
 
-    ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
-    if (!geom.isValid) {
-        return;
+    QVariantMap zone = m_zones[index].toMap();
+    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+
+    if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        ValidatedFixedGeometry geom = validateAndClampFixedGeometry(x, y, width, height);
+        if (!geom.isValid) {
+            return;
+        }
+        zone[JsonKeys::FixedX] = geom.x;
+        zone[JsonKeys::FixedY] = geom.y;
+        zone[JsonKeys::FixedWidth] = geom.width;
+        zone[JsonKeys::FixedHeight] = geom.height;
+        // Update relative fallback so previews render correctly
+        qreal sw = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.width()));
+        qreal sh = qMax(1.0, static_cast<qreal>(m_referenceScreenSize.height()));
+        zone[JsonKeys::X] = geom.x / sw;
+        zone[JsonKeys::Y] = geom.y / sh;
+        zone[JsonKeys::Width] = geom.width / sw;
+        zone[JsonKeys::Height] = geom.height / sh;
+    } else {
+        ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
+        if (!geom.isValid) {
+            return;
+        }
+        zone[JsonKeys::X] = geom.x;
+        zone[JsonKeys::Y] = geom.y;
+        zone[JsonKeys::Width] = geom.width;
+        zone[JsonKeys::Height] = geom.height;
     }
 
-    QVariantMap zone = m_zones[index].toMap();
-    zone[JsonKeys::X] = geom.x;
-    zone[JsonKeys::Y] = geom.y;
-    zone[JsonKeys::Width] = geom.width;
-    zone[JsonKeys::Height] = geom.height;
     m_zones[index] = zone;
 
     // No zonesModified - this is a preview, not a user action
@@ -1167,6 +1230,17 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         zone[useCustomColorsKey] = zoneData[useCustomColorsKey].toBool();
     }
 
+    // Copy geometry mode and fixed geometry
+    if (zoneData.contains(JsonKeys::GeometryMode)) {
+        zone[JsonKeys::GeometryMode] = zoneData[JsonKeys::GeometryMode].toInt();
+    }
+    if (zoneData.contains(JsonKeys::FixedX)) {
+        zone[JsonKeys::FixedX] = zoneData[JsonKeys::FixedX].toDouble();
+        zone[JsonKeys::FixedY] = zoneData[JsonKeys::FixedY].toDouble();
+        zone[JsonKeys::FixedWidth] = zoneData[JsonKeys::FixedWidth].toDouble();
+        zone[JsonKeys::FixedHeight] = zoneData[JsonKeys::FixedHeight].toDouble();
+    }
+
     // Copy z-order if present, otherwise set to end
     if (zoneData.contains(JsonKeys::ZOrder)) {
         zone[JsonKeys::ZOrder] = zoneData[JsonKeys::ZOrder].toInt();
@@ -1266,15 +1340,33 @@ void ZoneManager::restoreZones(const QVariantList& zones)
             return; // Don't restore if invalid
         }
 
-        // Validate geometry
+        // Validate geometry based on geometry mode
+        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
         qreal x = zone[JsonKeys::X].toDouble();
         qreal y = zone[JsonKeys::Y].toDouble();
         qreal width = zone[JsonKeys::Width].toDouble();
         qreal height = zone[JsonKeys::Height].toDouble();
 
-        if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
-            qCWarning(lcEditorZone) << "Invalid zone geometry in restoreZones:" << x << y << width << height;
-            return; // Don't restore if invalid
+        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            // Fixed mode: validate relative fallback is present and fixed pixel data is sane
+            if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
+                qCWarning(lcEditorZone) << "Invalid relative fallback in fixed zone restoreZones:" << x << y << width << height;
+                return;
+            }
+            qreal fx = zone.value(JsonKeys::FixedX, 0.0).toDouble();
+            qreal fy = zone.value(JsonKeys::FixedY, 0.0).toDouble();
+            qreal fw = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+            qreal fh = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+            if (!qIsFinite(fx) || !qIsFinite(fy) || !qIsFinite(fw) || !qIsFinite(fh) || fw <= 0.0 || fh <= 0.0) {
+                qCWarning(lcEditorZone) << "Invalid fixed zone geometry in restoreZones:" << fx << fy << fw << fh;
+                return;
+            }
+        } else {
+            // Relative mode: validate 0-1 range
+            if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+                qCWarning(lcEditorZone) << "Invalid zone geometry in restoreZones:" << x << y << width << height;
+                return; // Don't restore if invalid
+            }
         }
 
         // Check for duplicate IDs — skip duplicates, keep first occurrence

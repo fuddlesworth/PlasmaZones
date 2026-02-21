@@ -44,6 +44,18 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
     relGeoMap[Height] = relGeo.height();
     map[RelativeGeometry] = relGeoMap;
 
+    // Per-zone geometry mode
+    map[GeometryMode] = zone->geometryModeInt();
+    if (zone->isFixedGeometry()) {
+        QRectF fixedGeo = zone->fixedGeometry();
+        QVariantMap fixedGeoMap;
+        fixedGeoMap[X] = fixedGeo.x();
+        fixedGeoMap[Y] = fixedGeo.y();
+        fixedGeoMap[Width] = fixedGeo.width();
+        fixedGeoMap[Height] = fixedGeo.height();
+        map[FixedGeometry] = fixedGeoMap;
+    }
+
     // Optional: Name
     if (fields.testFlag(ZoneField::Name)) {
         map[Name] = zone->name();

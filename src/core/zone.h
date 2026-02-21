@@ -42,6 +42,8 @@ class PLASMAZONES_EXPORT Zone : public QObject
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool isHighlighted READ isHighlighted WRITE setHighlighted NOTIFY highlightedChanged)
     Q_PROPERTY(bool useCustomColors READ useCustomColors WRITE setUseCustomColors NOTIFY useCustomColorsChanged)
+    Q_PROPERTY(int geometryMode READ geometryModeInt WRITE setGeometryModeInt NOTIFY geometryModeChanged)
+    Q_PROPERTY(QRectF fixedGeometry READ fixedGeometry WRITE setFixedGeometry NOTIFY fixedGeometryChanged)
 
 public:
     explicit Zone(QObject* parent = nullptr);
@@ -154,6 +156,38 @@ public:
     }
     void setUseCustomColors(bool useCustom);
 
+    // Per-zone geometry mode
+    ZoneGeometryMode geometryMode() const
+    {
+        return m_geometryMode;
+    }
+    int geometryModeInt() const
+    {
+        return static_cast<int>(m_geometryMode);
+    }
+    bool isFixedGeometry() const
+    {
+        return m_geometryMode == ZoneGeometryMode::Fixed;
+    }
+    void setGeometryMode(ZoneGeometryMode mode);
+    void setGeometryModeInt(int mode);
+
+    QRectF fixedGeometry() const
+    {
+        return m_fixedGeometry;
+    }
+    void setFixedGeometry(const QRectF& geometry);
+
+    /**
+     * @brief Returns normalized 0-1 coordinates regardless of geometry mode
+     * @param referenceGeometry The screen geometry to normalize against
+     * @return Normalized coordinates for spatial queries
+     *
+     * For Relative mode: returns relativeGeometry() directly.
+     * For Fixed mode: converts fixedGeometry pixel coords to 0-1 relative to referenceGeometry dimensions.
+     */
+    Q_INVOKABLE QRectF normalizedGeometry(const QRectF& referenceGeometry) const;
+
     // Geometry calculations
     Q_INVOKABLE bool containsPoint(const QPointF& point) const;
     Q_INVOKABLE qreal distanceToPoint(const QPointF& point) const;
@@ -178,6 +212,8 @@ Q_SIGNALS:
     void borderRadiusChanged();
     void highlightedChanged();
     void useCustomColorsChanged();
+    void geometryModeChanged();
+    void fixedGeometryChanged();
 
 private:
     QUuid m_id;
@@ -196,6 +232,10 @@ private:
     int m_borderRadius = Defaults::BorderRadius;
     bool m_isHighlighted = false;
     bool m_useCustomColors = false;
+
+    // Per-zone geometry mode
+    ZoneGeometryMode m_geometryMode = ZoneGeometryMode::Relative;
+    QRectF m_fixedGeometry; // Absolute pixel coords relative to screen origin
 };
 
 } // namespace PlasmaZones

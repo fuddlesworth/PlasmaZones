@@ -7,6 +7,7 @@
 #include <QPair>
 #include <QRectF>
 #include <QSet>
+#include <QSize>
 #include <QString>
 #include <QVariantList>
 #include <QVariantMap>
@@ -130,6 +131,10 @@ public:
     Q_INVOKABLE void setDefaultColors(const QString& highlightColor, const QString& inactiveColor,
                                       const QString& borderColor);
 
+    // Screen reference for fixed geometry relative fallback computation
+    void setReferenceScreenSize(const QSize& size) { m_referenceScreenSize = size; }
+    QSize referenceScreenSize() const { return m_referenceScreenSize; }
+
     // Helpers
     int findZoneIndex(const QString& zoneId) const;
     int zoneCount() const
@@ -211,11 +216,26 @@ private:
     };
 
     /**
-     * @brief Validate and clamp zone geometry to valid bounds
+     * @brief Validated fixed (pixel) geometry result
+     */
+    struct ValidatedFixedGeometry {
+        qreal x, y, width, height;
+        bool isValid = false;
+    };
+
+    /**
+     * @brief Validate and clamp zone geometry to valid bounds (relative 0-1)
      * @param x, y, width, height Input geometry (may be invalid)
      * @return ValidatedGeometry with clamped values and isValid flag
      */
     ValidatedGeometry validateAndClampGeometry(qreal x, qreal y, qreal width, qreal height) const;
+
+    /**
+     * @brief Validate and clamp fixed pixel geometry
+     * @param x, y, width, height Input pixel geometry
+     * @return ValidatedFixedGeometry with clamped values and isValid flag
+     */
+    ValidatedFixedGeometry validateAndClampFixedGeometry(qreal x, qreal y, qreal width, qreal height) const;
 
     /**
      * @brief Signal types for deferred emission
@@ -244,6 +264,7 @@ private:
     void updateAllZOrderValues();
 
     QVariantList m_zones;
+    QSize m_referenceScreenSize{1920, 1080};
 
     // Default colors (can be overridden from QML with theme colors)
     QString m_defaultHighlightColor;

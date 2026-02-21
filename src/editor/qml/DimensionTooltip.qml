@@ -24,11 +24,19 @@ Rectangle {
     property real canvasWidth: 1
     property real canvasHeight: 1
     property bool showDimensions: false
-    // Calculate percentages
+    property bool isFixedMode: false
+    property real screenWidth: 1920
+    property real screenHeight: 1080
+    // Calculate percentages (relative mode)
     property int widthPercent: (canvasWidth > 0 && !isNaN(zoneWidth)) ? Math.round((zoneWidth / canvasWidth) * 100) : 0
     property int heightPercent: (canvasHeight > 0 && !isNaN(zoneHeight)) ? Math.round((zoneHeight / canvasHeight) * 100) : 0
     property int xPercent: (canvasWidth > 0 && !isNaN(zoneX)) ? Math.round((zoneX / canvasWidth) * 100) : 0
     property int yPercent: (canvasHeight > 0 && !isNaN(zoneY)) ? Math.round((zoneY / canvasHeight) * 100) : 0
+    // Calculate pixel values (fixed mode)
+    property int fixedPosX: (canvasWidth > 0 && screenWidth > 0) ? Math.round((zoneX / canvasWidth) * screenWidth) : 0
+    property int fixedPosY: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneY / canvasHeight) * screenHeight) : 0
+    property int fixedSizeW: (canvasWidth > 0 && screenWidth > 0) ? Math.round((zoneWidth / canvasWidth) * screenWidth) : 0
+    property int fixedSizeH: (canvasHeight > 0 && screenHeight > 0) ? Math.round((zoneHeight / canvasHeight) * screenHeight) : 0
     // Position at bottom center of zone, with bounds checking
     readonly property real bottomPadding: Kirigami.Units.gridUnit
 
@@ -51,7 +59,9 @@ Rectangle {
     border.width: constants.tooltipBorderWidth
     z: 250
     Accessible.name: i18nc("@info:accessibility", "Zone dimensions")
-    Accessible.description: i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
+    Accessible.description: isFixedMode
+        ? i18nc("@info:accessibility", "Position: %1px, %2px  Size: %3px × %4px", fixedPosX, fixedPosY, fixedSizeW, fixedSizeH)
+        : i18nc("@info:accessibility", "Position: %1%, %2%  Size: %3% × %4%", xPercent, yPercent, widthPercent, heightPercent)
 
     // Constants for visual styling
     QtObject {
@@ -76,7 +86,9 @@ Rectangle {
         }
 
         Label {
-            text: i18nc("@info Position as percentages", "%1% × %2%", xPercent, yPercent)
+            text: isFixedMode
+                ? i18nc("@info Position in pixels", "%1px, %2px", fixedPosX, fixedPosY)
+                : i18nc("@info Position as percentages", "%1% × %2%", xPercent, yPercent)
             font.family: "monospace"
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor
@@ -90,7 +102,9 @@ Rectangle {
         }
 
         Label {
-            text: i18nc("@info Size as percentages", "%1% × %2%", widthPercent, heightPercent)
+            text: isFixedMode
+                ? i18nc("@info Size in pixels", "%1px × %2px", fixedSizeW, fixedSizeH)
+                : i18nc("@info Size as percentages", "%1% × %2%", widthPercent, heightPercent)
             font.family: "monospace"
             font.pixelSize: Kirigami.Theme.defaultFont.pixelSize
             color: Kirigami.Theme.textColor

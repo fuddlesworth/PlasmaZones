@@ -81,11 +81,13 @@ void Zone::copyPropertiesFrom(const Zone& other)
     m_borderRadius = other.m_borderRadius;
     m_isHighlighted = other.m_isHighlighted;
     m_useCustomColors = other.m_useCustomColors;
+    m_geometryMode = other.m_geometryMode;
+    m_fixedGeometry = other.m_fixedGeometry;
 }
 
 bool Zone::operator==(const Zone& other) const
 {
-    return m_id == other.m_id;
+    return m_id == other.m_id && m_geometryMode == other.m_geometryMode && m_fixedGeometry == other.m_fixedGeometry;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -114,6 +116,22 @@ ZONE_SETTER_MIN_ZERO(BorderRadius, m_borderRadius, borderRadiusChanged)
 // Bool setters
 ZONE_SETTER(bool, Highlighted, m_isHighlighted, highlightedChanged)
 ZONE_SETTER(bool, UseCustomColors, m_useCustomColors, useCustomColorsChanged)
+
+// Geometry mode setters
+void Zone::setGeometryMode(ZoneGeometryMode mode)
+{
+    if (m_geometryMode != mode) {
+        m_geometryMode = mode;
+        Q_EMIT geometryModeChanged();
+    }
+}
+
+void Zone::setGeometryModeInt(int mode)
+{
+    setGeometryMode(static_cast<ZoneGeometryMode>(mode));
+}
+
+ZONE_SETTER(const QRectF&, FixedGeometry, m_fixedGeometry, fixedGeometryChanged)
 
 bool Zone::containsPoint(const QPointF& point) const
 {
@@ -147,10 +165,29 @@ qreal Zone::distanceToPoint(const QPointF& point) const
 
 QRectF Zone::calculateAbsoluteGeometry(const QRectF& screenGeometry) const
 {
+    if (m_geometryMode == ZoneGeometryMode::Fixed) {
+        // Fixed mode: pixel coords relative to screen origin
+        return QRectF(screenGeometry.x() + m_fixedGeometry.x(),
+                      screenGeometry.y() + m_fixedGeometry.y(),
+                      m_fixedGeometry.width(),
+                      m_fixedGeometry.height());
+    }
+    // Relative mode: multiply by screen dimensions
     return QRectF(screenGeometry.x() + m_relativeGeometry.x() * screenGeometry.width(),
                   screenGeometry.y() + m_relativeGeometry.y() * screenGeometry.height(),
                   m_relativeGeometry.width() * screenGeometry.width(),
                   m_relativeGeometry.height() * screenGeometry.height());
+}
+
+QRectF Zone::normalizedGeometry(const QRectF& referenceGeometry) const
+{
+    if (m_geometryMode == ZoneGeometryMode::Fixed && referenceGeometry.width() > 0 && referenceGeometry.height() > 0) {
+        return QRectF(m_fixedGeometry.x() / referenceGeometry.width(),
+                      m_fixedGeometry.y() / referenceGeometry.height(),
+                      m_fixedGeometry.width() / referenceGeometry.width(),
+                      m_fixedGeometry.height() / referenceGeometry.height());
+    }
+    return m_relativeGeometry;
 }
 
 QRectF Zone::applyPadding(int padding) const
@@ -167,13 +204,25 @@ QJsonObject Zone::toJson() const
     json[Name] = m_name;
     json[ZoneNumber] = m_zoneNumber;
 
-    // Relative geometry for resolution independence
+    // Relative geometry for resolution independence (always written for backward compat)
     QJsonObject relGeo;
     relGeo[X] = m_relativeGeometry.x();
     relGeo[Y] = m_relativeGeometry.y();
     relGeo[Width] = m_relativeGeometry.width();
     relGeo[Height] = m_relativeGeometry.height();
     json[RelativeGeometry] = relGeo;
+
+    // Per-zone geometry mode (only write when Fixed to maintain backward compat)
+    if (m_geometryMode == ZoneGeometryMode::Fixed) {
+        json[GeometryMode] = static_cast<int>(m_geometryMode);
+
+        QJsonObject fixedGeo;
+        fixedGeo[X] = m_fixedGeometry.x();
+        fixedGeo[Y] = m_fixedGeometry.y();
+        fixedGeo[Width] = m_fixedGeometry.width();
+        fixedGeo[Height] = m_fixedGeometry.height();
+        json[FixedGeometry] = fixedGeo;
+    }
 
     // Appearance
     QJsonObject appearance;
@@ -208,6 +257,16 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
     const auto relGeo = json[RelativeGeometry].toObject();
     zone->m_relativeGeometry =
         QRectF(relGeo[X].toDouble(), relGeo[Y].toDouble(), relGeo[Width].toDouble(), relGeo[Height].toDouble());
+
+    // Per-zone geometry mode (default Relative if missing)
+    zone->m_geometryMode = static_cast<ZoneGeometryMode>(json[GeometryMode].toInt(0));
+
+    // Fixed geometry (only present when mode is Fixed)
+    if (json.contains(FixedGeometry)) {
+        const auto fixedGeo = json[FixedGeometry].toObject();
+        zone->m_fixedGeometry =
+            QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(), fixedGeo[Width].toDouble(), fixedGeo[Height].toDouble());
+    }
 
     // Appearance
     const auto appearance = json[Appearance].toObject();

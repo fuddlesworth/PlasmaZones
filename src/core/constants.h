@@ -9,6 +9,17 @@
 namespace PlasmaZones {
 
 /**
+ * @brief Geometry mode for individual zones
+ *
+ * Relative: 0.0-1.0 normalized coordinates (default, resolution-independent)
+ * Fixed: Absolute pixel coordinates relative to reference screen origin
+ */
+enum class ZoneGeometryMode {
+    Relative = 0,
+    Fixed = 1
+};
+
+/**
  * @brief Default values for zone appearance and core module constants
  *
  * These defaults are used by core module files that can't depend on config.
@@ -60,6 +71,9 @@ namespace EditorConstants {
 // Zone size constraints (relative coordinates 0.0-1.0)
 constexpr qreal MinZoneSize = 0.05; // 5% minimum zone size
 constexpr qreal MaxZoneSize = 1.0; // 100% maximum zone size
+
+// Fixed geometry constraints (absolute pixel coordinates)
+constexpr int MinFixedZoneSize = 50; // Minimum fixed zone dimension in pixels
 
 // Snapping thresholds (relative coordinates 0.0-1.0, used in SnappingService)
 constexpr qreal EdgeThreshold = 0.02; // 2% threshold for snapping to zone edges
@@ -156,6 +170,14 @@ inline constexpr QLatin1String AutoAssign{"autoAssign"};
 
 // Geometry mode keys
 inline constexpr QLatin1String UseFullScreenGeometry{"useFullScreenGeometry"};
+
+// Per-zone geometry mode keys
+inline constexpr QLatin1String GeometryMode{"geometryMode"};
+inline constexpr QLatin1String FixedGeometry{"fixedGeometry"};
+inline constexpr QLatin1String FixedX{"fixedX"};
+inline constexpr QLatin1String FixedY{"fixedY"};
+inline constexpr QLatin1String FixedWidth{"fixedWidth"};
+inline constexpr QLatin1String FixedHeight{"fixedHeight"};
 
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};

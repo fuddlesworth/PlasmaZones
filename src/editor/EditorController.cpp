@@ -30,6 +30,8 @@
 #include "undo/commands/UpdateShaderParamsCommand.h"
 #include "undo/commands/UpdateGapOverrideCommand.h"
 #include "undo/commands/UpdateFullScreenGeometryCommand.h"
+#include "undo/commands/ToggleGeometryModeCommand.h"
+#include "undo/commands/UpdateFixedGeometryCommand.h"
 #include "undo/commands/UpdateVisibilityCommand.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
@@ -123,6 +125,9 @@ EditorController::EditorController(QObject* parent)
     connect(m_zoneManager, &ZoneManager::zoneNumberChanged, this, &EditorController::zoneNumberChanged);
     connect(m_zoneManager, &ZoneManager::zoneColorChanged, this, &EditorController::zoneColorChanged);
     connect(m_zoneManager, &ZoneManager::zonesModified, this, &EditorController::markUnsaved);
+
+    // Initialize ZoneManager with default screen size (updated when target screen is set)
+    m_zoneManager->setReferenceScreenSize(targetScreenSize());
 
     connect(m_snappingService, &SnappingService::gridSnappingEnabledChanged, this,
             &EditorController::gridSnappingEnabledChanged);
@@ -445,6 +450,161 @@ void EditorController::setUseFullScreenGeometryDirect(bool enabled)
     }
 }
 
+QSize EditorController::targetScreenSize() const
+{
+    // Get the target screen size for fixed geometry coordinate conversion
+    if (!m_targetScreen.isEmpty()) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screen->name() == m_targetScreen) {
+                return screen->geometry().size();
+            }
+        }
+    }
+    // Fallback to primary screen
+    QScreen* primary = QGuiApplication::primaryScreen();
+    return primary ? primary->geometry().size() : QSize(1920, 1080);
+}
+
+void EditorController::toggleZoneGeometryMode(const QString& zoneId)
+{
+    if (!servicesReady("toggleZoneGeometryMode")) {
+        return;
+    }
+
+    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+    if (zone.isEmpty()) {
+        qCWarning(lcEditor) << "Zone not found for geometry mode toggle:" << zoneId;
+        return;
+    }
+
+    int oldMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    int newMode = (oldMode == 0) ? 1 : 0; // Toggle between Relative(0) and Fixed(1)
+
+    QSize screenSize = targetScreenSize();
+    qreal sw = screenSize.width();
+    qreal sh = screenSize.height();
+
+    // Current relative geometry (always present)
+    qreal relX = zone[JsonKeys::X].toDouble();
+    qreal relY = zone[JsonKeys::Y].toDouble();
+    qreal relW = zone[JsonKeys::Width].toDouble();
+    qreal relH = zone[JsonKeys::Height].toDouble();
+    QRectF oldRelGeo(relX, relY, relW, relH);
+
+    // Current fixed geometry (may not exist)
+    QRectF oldFixedGeo;
+    if (zone.contains(JsonKeys::FixedX)) {
+        oldFixedGeo = QRectF(zone[JsonKeys::FixedX].toDouble(),
+                             zone[JsonKeys::FixedY].toDouble(),
+                             zone[JsonKeys::FixedWidth].toDouble(),
+                             zone[JsonKeys::FixedHeight].toDouble());
+    }
+
+    QRectF newRelGeo = oldRelGeo;
+    QRectF newFixedGeo = oldFixedGeo;
+
+    if (newMode == 1) {
+        // Switching to Fixed: convert relative -> pixel
+        newFixedGeo = QRectF(relX * sw, relY * sh, relW * sw, relH * sh);
+    } else {
+        // Switching to Relative: convert pixel -> relative (keep relativeGeometry as-is since it's maintained)
+        if (oldFixedGeo.isValid() && sw > 0 && sh > 0) {
+            newRelGeo = QRectF(oldFixedGeo.x() / sw, oldFixedGeo.y() / sh,
+                               oldFixedGeo.width() / sw, oldFixedGeo.height() / sh);
+        }
+    }
+
+    auto* cmd = new ToggleGeometryModeCommand(this, zoneId, oldMode, newMode,
+                                               oldRelGeo, newRelGeo, oldFixedGeo, newFixedGeo);
+    m_undoController->push(cmd);
+    markUnsaved();
+}
+
+void EditorController::updateZoneFixedGeometry(const QString& zoneId, qreal x, qreal y, qreal w, qreal h)
+{
+    if (!servicesReady("updateZoneFixedGeometry")) {
+        return;
+    }
+
+    // Validate fixed geometry
+    x = qMax(0.0, x);
+    y = qMax(0.0, y);
+    w = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), w);
+    h = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), h);
+
+    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+    if (zone.isEmpty()) {
+        return;
+    }
+
+    // Capture old state for undo
+    QRectF oldFixed(zone.value(JsonKeys::FixedX, 0.0).toDouble(),
+                    zone.value(JsonKeys::FixedY, 0.0).toDouble(),
+                    zone.value(JsonKeys::FixedWidth, 0.0).toDouble(),
+                    zone.value(JsonKeys::FixedHeight, 0.0).toDouble());
+    QRectF oldRelative(zone[JsonKeys::X].toDouble(), zone[JsonKeys::Y].toDouble(),
+                       zone[JsonKeys::Width].toDouble(), zone[JsonKeys::Height].toDouble());
+
+    QRectF newFixed(x, y, w, h);
+
+    // Compute new relative fallback
+    QSize screenSize = targetScreenSize();
+    qreal sw = qMax(1.0, static_cast<qreal>(screenSize.width()));
+    qreal sh = qMax(1.0, static_cast<qreal>(screenSize.height()));
+    QRectF newRelative(x / sw, y / sh, w / sw, h / sh);
+
+    // Skip if nothing changed
+    const qreal tolerance = 0.5; // Sub-pixel tolerance for fixed coords
+    if (qAbs(oldFixed.x() - newFixed.x()) < tolerance && qAbs(oldFixed.y() - newFixed.y()) < tolerance
+        && qAbs(oldFixed.width() - newFixed.width()) < tolerance
+        && qAbs(oldFixed.height() - newFixed.height()) < tolerance) {
+        return;
+    }
+
+    auto* cmd = new UpdateFixedGeometryCommand(QPointer<ZoneManager>(m_zoneManager), zoneId,
+                                                oldFixed, newFixed, oldRelative, newRelative);
+    m_undoController->push(cmd);
+    markUnsaved();
+}
+
+void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, const QRectF& relativeGeo, const QRectF& fixedGeo)
+{
+    if (!m_zoneManager) {
+        return;
+    }
+
+    int index = m_zoneManager->findZoneIndex(zoneId);
+    if (index < 0) {
+        return;
+    }
+
+    QVariantMap zone = m_zoneManager->getZoneById(zoneId);
+    if (zone.isEmpty()) {
+        return;
+    }
+
+    // Update geometry mode
+    zone[JsonKeys::GeometryMode] = mode;
+
+    // Update relative geometry
+    zone[JsonKeys::X] = relativeGeo.x();
+    zone[JsonKeys::Y] = relativeGeo.y();
+    zone[JsonKeys::Width] = relativeGeo.width();
+    zone[JsonKeys::Height] = relativeGeo.height();
+
+    // Update fixed geometry
+    if (mode == 1 && fixedGeo.isValid()) {
+        zone[JsonKeys::FixedX] = fixedGeo.x();
+        zone[JsonKeys::FixedY] = fixedGeo.y();
+        zone[JsonKeys::FixedWidth] = fixedGeo.width();
+        zone[JsonKeys::FixedHeight] = fixedGeo.height();
+    }
+
+    m_zoneManager->setZoneData(zoneId, zone);
+    ++m_zonesVersion;
+    Q_EMIT zonesChanged();
+}
+
 void EditorController::refreshGlobalZonePadding()
 {
     int newValue = SettingsDbusQueries::queryGlobalZonePadding();
@@ -623,6 +783,8 @@ void EditorController::setTargetScreen(const QString& screenName)
         QString previousLayout = m_layoutId;
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
+        Q_EMIT targetScreenSizeChanged();
+        m_zoneManager->setReferenceScreenSize(targetScreenSize());
 
         // Load the layout assigned to this screen
         if (!screenName.isEmpty() && m_layoutService) {
@@ -700,6 +862,8 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
     if (m_targetScreen != screenName) {
         m_targetScreen = screenName;
         Q_EMIT targetScreenChanged();
+        Q_EMIT targetScreenSizeChanged();
+        m_zoneManager->setReferenceScreenSize(targetScreenSize());
     }
 }
 
@@ -794,6 +958,21 @@ void EditorController::loadLayout(const QString& layoutId)
         zone[JsonKeys::Y] = relGeo[QLatin1String(JsonKeys::Y)].toDouble();
         zone[JsonKeys::Width] = relGeo[QLatin1String(JsonKeys::Width)].toDouble();
         zone[JsonKeys::Height] = relGeo[QLatin1String(JsonKeys::Height)].toDouble();
+
+        // Geometry mode (default: Relative = 0)
+        int geoMode = zoneObj.contains(QLatin1String(JsonKeys::GeometryMode))
+            ? zoneObj[QLatin1String(JsonKeys::GeometryMode)].toInt()
+            : 0;
+        zone[JsonKeys::GeometryMode] = geoMode;
+
+        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)
+            && zoneObj.contains(QLatin1String(JsonKeys::FixedGeometry))) {
+            QJsonObject fixedGeo = zoneObj[QLatin1String(JsonKeys::FixedGeometry)].toObject();
+            zone[JsonKeys::FixedX] = fixedGeo[QLatin1String(JsonKeys::X)].toDouble();
+            zone[JsonKeys::FixedY] = fixedGeo[QLatin1String(JsonKeys::Y)].toDouble();
+            zone[JsonKeys::FixedWidth] = fixedGeo[QLatin1String(JsonKeys::Width)].toDouble();
+            zone[JsonKeys::FixedHeight] = fixedGeo[QLatin1String(JsonKeys::Height)].toDouble();
+        }
 
         // Appearance
         QJsonObject appearance = zoneObj[QLatin1String(JsonKeys::Appearance)].toObject();
@@ -1002,6 +1181,18 @@ void EditorController::saveLayout()
         relGeo[QLatin1String(JsonKeys::Width)] = zone[JsonKeys::Width].toDouble();
         relGeo[QLatin1String(JsonKeys::Height)] = zone[JsonKeys::Height].toDouble();
         zoneObj[QLatin1String(JsonKeys::RelativeGeometry)] = relGeo;
+
+        // Write geometry mode and fixed geometry when Fixed
+        int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+            zoneObj[QLatin1String(JsonKeys::GeometryMode)] = geoMode;
+            QJsonObject fixedGeo;
+            fixedGeo[QLatin1String(JsonKeys::X)] = zone.value(JsonKeys::FixedX, 0.0).toDouble();
+            fixedGeo[QLatin1String(JsonKeys::Y)] = zone.value(JsonKeys::FixedY, 0.0).toDouble();
+            fixedGeo[QLatin1String(JsonKeys::Width)] = zone.value(JsonKeys::FixedWidth, 0.0).toDouble();
+            fixedGeo[QLatin1String(JsonKeys::Height)] = zone.value(JsonKeys::FixedHeight, 0.0).toDouble();
+            zoneObj[QLatin1String(JsonKeys::FixedGeometry)] = fixedGeo;
+        }
 
         QJsonObject appearance;
         appearance[QLatin1String(JsonKeys::HighlightColor)] = zone[JsonKeys::HighlightColor].toString();
@@ -1396,12 +1587,7 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         return;
     }
 
-    if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
-        qCWarning(lcEditor) << "Invalid zone geometry:" << x << y << width << height;
-        return;
-    }
-
-    // Get current geometry for undo state
+    // Get current zone data to check geometry mode
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
         qCWarning(lcEditor) << "Zone not found for geometry update:" << zoneId;
@@ -1409,26 +1595,63 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         return;
     }
 
-    QRectF oldGeometry(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(), zone[JsonKeys::Width].toReal(),
-                       zone[JsonKeys::Height].toReal());
+    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
 
-    // Apply snapping using SnappingService (unless skipSnapping is true, e.g., for keyboard movements)
-    if (!skipSnapping) {
-        QVariantList allZones = m_zoneManager->zones();
-        QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones, zoneId);
-        x = snapped[JsonKeys::X].toDouble();
-        y = snapped[JsonKeys::Y].toDouble();
-        width = snapped[JsonKeys::Width].toDouble();
-        height = snapped[JsonKeys::Height].toDouble();
+    if (isFixed) {
+        // Fixed mode: values are pixel coordinates — validate differently
+        if (width < EditorConstants::MinFixedZoneSize || height < EditorConstants::MinFixedZoneSize) {
+            qCWarning(lcEditor) << "Fixed zone too small:" << width << height;
+            return;
+        }
+        if (x < 0.0 || y < 0.0) {
+            qCWarning(lcEditor) << "Fixed zone negative position:" << x << y;
+            return;
+        }
+    } else {
+        // Relative mode: values are 0-1 normalized
+        if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+            qCWarning(lcEditor) << "Invalid zone geometry:" << x << y << width << height;
+            return;
+        }
     }
 
-    // Minimum size
-    width = qMax(EditorConstants::MinZoneSize, width);
-    height = qMax(EditorConstants::MinZoneSize, height);
+    QRectF oldGeometry;
+    if (isFixed) {
+        oldGeometry = QRectF(zone.value(JsonKeys::FixedX, 0.0).toReal(),
+                             zone.value(JsonKeys::FixedY, 0.0).toReal(),
+                             zone.value(JsonKeys::FixedWidth, 0.0).toReal(),
+                             zone.value(JsonKeys::FixedHeight, 0.0).toReal());
+    } else {
+        oldGeometry = QRectF(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(),
+                             zone[JsonKeys::Width].toReal(), zone[JsonKeys::Height].toReal());
+    }
 
-    // Clamp to screen
-    x = qBound(0.0, x, 1.0 - width);
-    y = qBound(0.0, y, 1.0 - height);
+    if (isFixed) {
+        // Fixed mode: enforce minimum size, clamp position >= 0
+        width = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), width);
+        height = qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), height);
+        x = qMax(0.0, x);
+        y = qMax(0.0, y);
+    } else {
+        // Relative mode: apply snapping and 0-1 clamping
+        if (!skipSnapping) {
+            QVariantList allZones = m_zoneManager->zones();
+            QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones, zoneId);
+            x = snapped[JsonKeys::X].toDouble();
+            y = snapped[JsonKeys::Y].toDouble();
+            width = snapped[JsonKeys::Width].toDouble();
+            height = snapped[JsonKeys::Height].toDouble();
+        }
+
+        // Minimum size
+        width = qMax(EditorConstants::MinZoneSize, width);
+        height = qMax(EditorConstants::MinZoneSize, height);
+
+        // Clamp to screen
+        x = qBound(0.0, x, 1.0 - width);
+        y = qBound(0.0, y, 1.0 - height);
+    }
 
     QRectF newGeometry(x, y, width, height);
 

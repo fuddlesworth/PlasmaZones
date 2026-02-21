@@ -33,44 +33,74 @@ Item {
         if (zoneRoot.canvasWidth > 0 && zoneRoot.canvasHeight > 0 && isFinite(zoneRoot.canvasWidth) && isFinite(zoneRoot.canvasHeight)) {
             var x = 0, y = 0, w = 0.25, h = 0.25;
             var zd = zoneRoot.zoneData;
-            if (zd.x !== undefined && zd.x !== null && isFinite(zd.x))
-                x = zd.x;
-            else if (zd.relativeGeometry && zd.relativeGeometry.x !== undefined)
-                x = zd.relativeGeometry.x || 0;
-            if (zd.y !== undefined && zd.y !== null && isFinite(zd.y))
-                y = zd.y;
-            else if (zd.relativeGeometry && zd.relativeGeometry.y !== undefined)
-                y = zd.relativeGeometry.y || 0;
-            if (zd.width !== undefined && zd.width !== null && isFinite(zd.width) && zd.width > 0)
-                w = zd.width;
-            else if (zd.relativeGeometry && zd.relativeGeometry.width !== undefined)
-                w = zd.relativeGeometry.width || 0.25;
-            if (zd.height !== undefined && zd.height !== null && isFinite(zd.height) && zd.height > 0)
-                h = zd.height;
-            else if (zd.relativeGeometry && zd.relativeGeometry.height !== undefined)
-                h = zd.relativeGeometry.height || 0.25;
-            // Ensure valid values
-            if (!isFinite(x) || isNaN(x))
-                x = 0;
+            var isFixed = zd.geometryMode === 1;
 
-            if (!isFinite(y) || isNaN(y))
-                y = 0;
+            if (isFixed) {
+                // Fixed mode: read pixel coords from fixedX/fixedY/fixedWidth/fixedHeight
+                x = (zd.fixedX !== undefined && zd.fixedX !== null && isFinite(zd.fixedX)) ? zd.fixedX : 0;
+                y = (zd.fixedY !== undefined && zd.fixedY !== null && isFinite(zd.fixedY)) ? zd.fixedY : 0;
+                w = (zd.fixedWidth !== undefined && zd.fixedWidth !== null && isFinite(zd.fixedWidth) && zd.fixedWidth > 0) ? zd.fixedWidth : 100;
+                h = (zd.fixedHeight !== undefined && zd.fixedHeight !== null && isFinite(zd.fixedHeight) && zd.fixedHeight > 0) ? zd.fixedHeight : 100;
 
-            if (!isFinite(w) || isNaN(w) || w <= 0)
-                w = 0.25;
+                // Validate
+                if (!isFinite(x) || isNaN(x)) x = 0;
+                if (!isFinite(y) || isNaN(y)) y = 0;
+                if (!isFinite(w) || isNaN(w) || w <= 0) w = 100;
+                if (!isFinite(h) || isNaN(h) || h <= 0) h = 100;
 
-            if (!isFinite(h) || isNaN(h) || h <= 0)
-                h = 0.25;
+                // Clamp position >= 0
+                x = Math.max(0, x);
+                y = Math.max(0, y);
 
-            // Clamp to valid range
-            x = Math.max(0, Math.min(1, x));
-            y = Math.max(0, Math.min(1, y));
-            w = Math.max(0.05, Math.min(1, w));
-            h = Math.max(0.05, Math.min(1, h));
-            var newVisualX = x * zoneRoot.canvasWidth;
-            var newVisualY = y * zoneRoot.canvasHeight;
-            var newVisualWidth = w * zoneRoot.canvasWidth;
-            var newVisualHeight = h * zoneRoot.canvasHeight;
+                // Convert pixel coords to canvas coords using screen dimensions
+                var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : 1920;
+                var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : 1080;
+                var newVisualX = (x / sw) * zoneRoot.canvasWidth;
+                var newVisualY = (y / sh) * zoneRoot.canvasHeight;
+                var newVisualWidth = (w / sw) * zoneRoot.canvasWidth;
+                var newVisualHeight = (h / sh) * zoneRoot.canvasHeight;
+            } else {
+                // Relative mode: read 0-1 normalized coords
+                if (zd.x !== undefined && zd.x !== null && isFinite(zd.x))
+                    x = zd.x;
+                else if (zd.relativeGeometry && zd.relativeGeometry.x !== undefined)
+                    x = zd.relativeGeometry.x || 0;
+                if (zd.y !== undefined && zd.y !== null && isFinite(zd.y))
+                    y = zd.y;
+                else if (zd.relativeGeometry && zd.relativeGeometry.y !== undefined)
+                    y = zd.relativeGeometry.y || 0;
+                if (zd.width !== undefined && zd.width !== null && isFinite(zd.width) && zd.width > 0)
+                    w = zd.width;
+                else if (zd.relativeGeometry && zd.relativeGeometry.width !== undefined)
+                    w = zd.relativeGeometry.width || 0.25;
+                if (zd.height !== undefined && zd.height !== null && isFinite(zd.height) && zd.height > 0)
+                    h = zd.height;
+                else if (zd.relativeGeometry && zd.relativeGeometry.height !== undefined)
+                    h = zd.relativeGeometry.height || 0.25;
+                // Ensure valid values
+                if (!isFinite(x) || isNaN(x))
+                    x = 0;
+
+                if (!isFinite(y) || isNaN(y))
+                    y = 0;
+
+                if (!isFinite(w) || isNaN(w) || w <= 0)
+                    w = 0.25;
+
+                if (!isFinite(h) || isNaN(h) || h <= 0)
+                    h = 0.25;
+
+                // Clamp to valid range
+                x = Math.max(0, Math.min(1, x));
+                y = Math.max(0, Math.min(1, y));
+                w = Math.max(0.05, Math.min(1, w));
+                h = Math.max(0.05, Math.min(1, h));
+                var newVisualX = x * zoneRoot.canvasWidth;
+                var newVisualY = y * zoneRoot.canvasHeight;
+                var newVisualWidth = w * zoneRoot.canvasWidth;
+                var newVisualHeight = h * zoneRoot.canvasHeight;
+            }
+
             if (zoneRoot.visualWidth === 0 || zoneRoot.visualHeight === 0 || !isFinite(zoneRoot.visualWidth) || !isFinite(zoneRoot.visualHeight)) {
                 zoneRoot.visualX = newVisualX;
                 zoneRoot.visualY = newVisualY;
@@ -167,29 +197,39 @@ Item {
                     if (!updatedZone)
                         return ;
 
-                    var x = (updatedZone.x !== undefined && updatedZone.x !== null) ? updatedZone.x : 0;
-                    var y = (updatedZone.y !== undefined && updatedZone.y !== null) ? updatedZone.y : 0;
-                    var w = (updatedZone.width !== undefined && updatedZone.width !== null && updatedZone.width > 0) ? updatedZone.width : 0.25;
-                    var h = (updatedZone.height !== undefined && updatedZone.height !== null && updatedZone.height > 0) ? updatedZone.height : 0.25;
-                    if (!isFinite(x) || isNaN(x))
-                        x = 0;
-
-                    if (!isFinite(y) || isNaN(y))
-                        y = 0;
-
-                    if (!isFinite(w) || isNaN(w) || w <= 0)
-                        w = 0.25;
-
-                    if (!isFinite(h) || isNaN(h) || h <= 0)
-                        h = 0.25;
-
                     if (canvasW <= 0 || canvasH <= 0 || !isFinite(canvasW) || !isFinite(canvasH))
                         return ;
 
-                    var newVisualX = isFinite(x) ? x * canvasW : 0;
-                    var newVisualY = isFinite(y) ? y * canvasH : 0;
-                    var newVisualW = (isFinite(w) && w > 0) ? w * canvasW : canvasW * 0.25;
-                    var newVisualH = (isFinite(h) && h > 0) ? h * canvasH : canvasH * 0.25;
+                    var isFixed = updatedZone.geometryMode === 1;
+                    var newVisualX, newVisualY, newVisualW, newVisualH;
+
+                    if (isFixed) {
+                        // Fixed mode: read pixel coords
+                        var fx = (updatedZone.fixedX !== undefined && updatedZone.fixedX !== null) ? updatedZone.fixedX : 0;
+                        var fy = (updatedZone.fixedY !== undefined && updatedZone.fixedY !== null) ? updatedZone.fixedY : 0;
+                        var fw = (updatedZone.fixedWidth !== undefined && updatedZone.fixedWidth !== null && updatedZone.fixedWidth > 0) ? updatedZone.fixedWidth : 100;
+                        var fh = (updatedZone.fixedHeight !== undefined && updatedZone.fixedHeight !== null && updatedZone.fixedHeight > 0) ? updatedZone.fixedHeight : 100;
+                        var sw = zoneRoot.screenWidth > 0 ? zoneRoot.screenWidth : 1920;
+                        var sh = zoneRoot.screenHeight > 0 ? zoneRoot.screenHeight : 1080;
+                        newVisualX = (fx / sw) * canvasW;
+                        newVisualY = (fy / sh) * canvasH;
+                        newVisualW = (fw / sw) * canvasW;
+                        newVisualH = (fh / sh) * canvasH;
+                    } else {
+                        // Relative mode: read 0-1 coords
+                        var x = (updatedZone.x !== undefined && updatedZone.x !== null) ? updatedZone.x : 0;
+                        var y = (updatedZone.y !== undefined && updatedZone.y !== null) ? updatedZone.y : 0;
+                        var w = (updatedZone.width !== undefined && updatedZone.width !== null && updatedZone.width > 0) ? updatedZone.width : 0.25;
+                        var h = (updatedZone.height !== undefined && updatedZone.height !== null && updatedZone.height > 0) ? updatedZone.height : 0.25;
+                        if (!isFinite(x) || isNaN(x)) x = 0;
+                        if (!isFinite(y) || isNaN(y)) y = 0;
+                        if (!isFinite(w) || isNaN(w) || w <= 0) w = 0.25;
+                        if (!isFinite(h) || isNaN(h) || h <= 0) h = 0.25;
+                        newVisualX = isFinite(x) ? x * canvasW : 0;
+                        newVisualY = isFinite(y) ? y * canvasH : 0;
+                        newVisualW = (isFinite(w) && w > 0) ? w * canvasW : canvasW * 0.25;
+                        newVisualH = (isFinite(h) && h > 0) ? h * canvasH : canvasH * 0.25;
+                    }
                     if (!zoneRoot || zoneRoot.visualX === undefined)
                         return ;
 
