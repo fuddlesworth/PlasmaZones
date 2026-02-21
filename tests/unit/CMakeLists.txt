@@ -140,3 +140,14 @@ target_link_libraries(test_geometry_utils
 )
 
 add_test(NAME GeometryUtils COMMAND test_geometry_utils)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Headless environment support
+# Set QT_QPA_PLATFORM=offscreen so tests run in CI containers without a display
+# ═══════════════════════════════════════════════════════════════════════════════
+set_tests_properties(
+    WindowIdentity WindowTracking SessionPersistence
+    TilingAlgorithms AlgorithmRegistry AutotileEngine
+    TilingState GeometryUtils
+    PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
