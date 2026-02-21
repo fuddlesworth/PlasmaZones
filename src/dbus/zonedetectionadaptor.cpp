@@ -59,7 +59,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
 
     Zone* foundZone = nullptr;
     for (auto* zone : layout->zones()) {
-        QRectF relGeom = zone->relativeGeometry();
+        QRectF relGeom = zone->normalizedGeometry(refGeom);
         if (relGeom.contains(QPointF(relX, relY))) {
             foundZone = zone;
             break;
@@ -203,7 +203,14 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
         return QString();
     }
 
-    QRectF currentGeom = currentZone->relativeGeometry();
+    // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
+    QScreen* refScreen = Utils::primaryScreen();
+    if (!refScreen) {
+        return QString();
+    }
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
+
+    QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
     QPointF currentCenter(currentGeom.center());
 
     Zone* bestZone = nullptr;
@@ -214,7 +221,7 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
             continue;
         }
 
-        QRectF zoneGeom = zone->relativeGeometry();
+        QRectF zoneGeom = zone->normalizedGeometry(refGeom);
         QPointF zoneCenter(zoneGeom.center());
 
         // Check if zone is in the correct direction
@@ -270,12 +277,22 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
         return QString();
     }
 
+    // Get reference geometry for normalizedGeometry() (needed for fixed-mode zones)
+    QScreen* refScreen = DbusHelpers::getScreenOrWarn(screenName, QStringLiteral("getFirstZoneInDirection"));
+    if (!refScreen) {
+        refScreen = Utils::primaryScreen();
+    }
+    if (!refScreen) {
+        return QString();
+    }
+    QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, refScreen);
+
     Zone* bestZone = nullptr;
     qreal bestValue = 0;
     bool initialized = false;
 
     for (auto* zone : layout->zones()) {
-        QRectF geom = zone->relativeGeometry();
+        QRectF geom = zone->normalizedGeometry(refGeom);
         qreal value = 0;
 
         if (direction == Utils::Direction::Left) {

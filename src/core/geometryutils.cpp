@@ -52,6 +52,44 @@ static QRectF calculateZoneGeometryInAvailableArea(Zone* zone, QScreen* screen)
     return zone->calculateAbsoluteGeometry(availableGeom);
 }
 
+/**
+ * @brief Detect whether each edge of a zone lies at a screen boundary
+ * @param zone The zone to check
+ * @param screenGeom The reference screen geometry (for fixed mode pixel checks)
+ * @return Array of 4 bools: [left, top, right, bottom] — true if at boundary
+ */
+struct EdgeBoundaries {
+    bool left = false;
+    bool top = false;
+    bool right = false;
+    bool bottom = false;
+};
+
+static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
+{
+    EdgeBoundaries edges;
+
+    if (zone->isFixedGeometry()) {
+        // Fixed mode: pixel proximity check (within 5px of screen boundary)
+        constexpr qreal pixelTolerance = 5.0;
+        QRectF fixedGeo = zone->fixedGeometry();
+        edges.left = (fixedGeo.left() < pixelTolerance);
+        edges.top = (fixedGeo.top() < pixelTolerance);
+        edges.right = (fixedGeo.right() > (screenGeom.width() - pixelTolerance));
+        edges.bottom = (fixedGeo.bottom() > (screenGeom.height() - pixelTolerance));
+    } else {
+        // Relative mode: existing check (near 0 or 1, tolerance 0.01)
+        constexpr qreal edgeTolerance = 0.01;
+        QRectF relGeom = zone->relativeGeometry();
+        edges.left = (relGeom.left() < edgeTolerance);
+        edges.top = (relGeom.top() < edgeTolerance);
+        edges.right = (relGeom.right() > (1.0 - edgeTolerance));
+        edges.bottom = (relGeom.bottom() > (1.0 - edgeTolerance));
+    }
+
+    return edges;
+}
+
 QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap, bool useAvailableGeometry)
 {
     if (!zone || !screen) {
@@ -66,24 +104,15 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int ou
         geom = calculateZoneGeometry(zone, screen);
     }
 
-    // Get relative geometry to determine which edges are at screen boundaries
-    QRectF relGeom = zone->relativeGeometry();
-
-    // Tolerance for floating point comparison (zones at edge should be within 0.01 of boundary)
-    constexpr qreal edgeTolerance = 0.01;
+    // Detect which edges are at screen boundaries
+    QRectF screenGeom = useAvailableGeometry ? ScreenManager::actualAvailableGeometry(screen) : screen->geometry();
+    EdgeBoundaries edges = detectEdgeBoundaries(zone, screenGeom);
 
     // Calculate adjustments for each edge
-    // Left edge: at boundary (0) -> outerGap, otherwise -> innerGap/2
-    qreal leftAdj = (relGeom.left() < edgeTolerance) ? outerGap : (innerGap / 2.0);
-
-    // Top edge: at boundary (0) -> outerGap, otherwise -> innerGap/2
-    qreal topAdj = (relGeom.top() < edgeTolerance) ? outerGap : (innerGap / 2.0);
-
-    // Right edge: at boundary (1) -> outerGap, otherwise -> innerGap/2
-    qreal rightAdj = (relGeom.right() > (1.0 - edgeTolerance)) ? outerGap : (innerGap / 2.0);
-
-    // Bottom edge: at boundary (1) -> outerGap, otherwise -> innerGap/2
-    qreal bottomAdj = (relGeom.bottom() > (1.0 - edgeTolerance)) ? outerGap : (innerGap / 2.0);
+    qreal leftAdj = edges.left ? outerGap : (innerGap / 2.0);
+    qreal topAdj = edges.top ? outerGap : (innerGap / 2.0);
+    qreal rightAdj = edges.right ? outerGap : (innerGap / 2.0);
+    qreal bottomAdj = edges.bottom ? outerGap : (innerGap / 2.0);
 
     // Apply the adjustments (positive inset from edges)
     geom = geom.adjusted(leftAdj, topAdj, -rightAdj, -bottomAdj);

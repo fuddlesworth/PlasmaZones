@@ -368,6 +368,104 @@ Rectangle {
                 }
 
                 // ═══════════════════════════════════════════════════════════════
+                // SINGLE ZONE GEOMETRY SECTION
+                // ═══════════════════════════════════════════════════════════════
+                Kirigami.Separator {
+                    visible: panelMode === "single"
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18nc("@title", "Geometry")
+                }
+
+                CheckBox {
+                    id: fixedGeometryCheck
+                    visible: panelMode === "single"
+                    Kirigami.FormData.label: i18nc("@label", "Mode:")
+                    text: i18nc("@option:check", "Fixed pixel size")
+                    checked: selectedZone ? (selectedZone.geometryMode === 1) : false
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@info:accessibility", "Toggle fixed pixel geometry mode")
+                    Accessible.description: i18nc("@info:accessibility", "When enabled, zone uses absolute pixel coordinates instead of relative percentages")
+                    onToggled: {
+                        if (selectedZoneId && editorController)
+                            editorController.toggleZoneGeometryMode(selectedZoneId);
+                    }
+                }
+
+                SpinBox {
+                    id: fixedXSpin
+                    visible: panelMode === "single" && fixedGeometryCheck.checked
+                    Kirigami.FormData.label: i18nc("@label", "X:")
+                    from: 0; to: editorController ? editorController.targetScreenSize.width : 99999
+                    value: selectedZone ? (selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0) : 0
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@label", "X position in pixels")
+                    onValueModified: {
+                        if (selectedZoneId && editorController)
+                            editorController.updateZoneFixedGeometry(selectedZoneId, value, fixedYSpin.value, fixedWidthSpin.value, fixedHeightSpin.value);
+                    }
+                }
+
+                SpinBox {
+                    id: fixedYSpin
+                    visible: panelMode === "single" && fixedGeometryCheck.checked
+                    Kirigami.FormData.label: i18nc("@label", "Y:")
+                    from: 0; to: editorController ? editorController.targetScreenSize.height : 99999
+                    value: selectedZone ? (selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0) : 0
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@label", "Y position in pixels")
+                    onValueModified: {
+                        if (selectedZoneId && editorController)
+                            editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, value, fixedWidthSpin.value, fixedHeightSpin.value);
+                    }
+                }
+
+                SpinBox {
+                    id: fixedWidthSpin
+                    visible: panelMode === "single" && fixedGeometryCheck.checked
+                    Kirigami.FormData.label: i18nc("@label", "Width:")
+                    from: 50; to: editorController ? editorController.targetScreenSize.width : 99999
+                    value: selectedZone ? (selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50) : 50
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@label", "Width in pixels")
+                    onValueModified: {
+                        if (selectedZoneId && editorController)
+                            editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, value, fixedHeightSpin.value);
+                    }
+                }
+
+                SpinBox {
+                    id: fixedHeightSpin
+                    visible: panelMode === "single" && fixedGeometryCheck.checked
+                    Kirigami.FormData.label: i18nc("@label", "Height:")
+                    from: 50; to: editorController ? editorController.targetScreenSize.height : 99999
+                    value: selectedZone ? (selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50) : 50
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@label", "Height in pixels")
+                    onValueModified: {
+                        if (selectedZoneId && editorController)
+                            editorController.updateZoneFixedGeometry(selectedZoneId, fixedXSpin.value, fixedYSpin.value, fixedWidthSpin.value, value);
+                    }
+                }
+
+                // Sync spinbox values when zone data changes (undo/redo, external updates)
+                Connections {
+                    target: editorController
+                    enabled: panelMode === "single" && fixedGeometryCheck.checked && editorController !== null
+
+                    function onZonesChanged() {
+                        if (!selectedZone || !fixedGeometryCheck.checked) return;
+                        // Use Qt.callLater to avoid binding loops
+                        Qt.callLater(function() {
+                            if (!selectedZone) return;
+                            fixedXSpin.value = selectedZone.fixedX !== undefined ? selectedZone.fixedX : 0;
+                            fixedYSpin.value = selectedZone.fixedY !== undefined ? selectedZone.fixedY : 0;
+                            fixedWidthSpin.value = selectedZone.fixedWidth !== undefined ? selectedZone.fixedWidth : 50;
+                            fixedHeightSpin.value = selectedZone.fixedHeight !== undefined ? selectedZone.fixedHeight : 50;
+                        });
+                    }
+                }
+
+                // ═══════════════════════════════════════════════════════════════
                 // SINGLE ZONE APPEARANCE SECTION
                 // ═══════════════════════════════════════════════════════════════
                 Kirigami.Separator {

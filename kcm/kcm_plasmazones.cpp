@@ -1656,13 +1656,14 @@ void KCMPlasmaZones::defaults()
 void KCMPlasmaZones::createNewLayout()
 {
     QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                    {QStringLiteral("New Layout"), QStringLiteral("grid")});
+                                    {QStringLiteral("New Layout"), QStringLiteral("custom")});
 
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString newLayoutId = reply.arguments().first().toString();
         if (!newLayoutId.isEmpty()) {
             m_layoutToSelect = newLayoutId;
-            // Don't emit here - wait for loadLayouts() to complete first
+            // Open the editor for the new blank layout
+            editLayout(newLayoutId);
         }
     }
 

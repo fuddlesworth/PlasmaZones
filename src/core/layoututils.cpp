@@ -22,7 +22,7 @@ namespace LayoutUtils {
 // Zone conversion
 // ═══════════════════════════════════════════════════════════════════════════
 
-QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
+QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& referenceGeometry = QRectF())
 {
     using namespace JsonKeys;
     QVariantMap map;
@@ -36,13 +36,26 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
     map[ZoneNumber] = zone->zoneNumber();
 
     // Relative geometry (0.0-1.0) for resolution-independent rendering
-    QRectF relGeo = zone->relativeGeometry();
+    // Use normalizedGeometry() to compute correct 0-1 coords for any geometry mode
+    QRectF relGeo = zone->normalizedGeometry(referenceGeometry);
     QVariantMap relGeoMap;
     relGeoMap[X] = relGeo.x();
     relGeoMap[Y] = relGeo.y();
     relGeoMap[Width] = relGeo.width();
     relGeoMap[Height] = relGeo.height();
     map[RelativeGeometry] = relGeoMap;
+
+    // Per-zone geometry mode
+    map[GeometryMode] = zone->geometryModeInt();
+    if (zone->isFixedGeometry()) {
+        QRectF fixedGeo = zone->fixedGeometry();
+        QVariantMap fixedGeoMap;
+        fixedGeoMap[X] = fixedGeo.x();
+        fixedGeoMap[Y] = fixedGeo.y();
+        fixedGeoMap[Width] = fixedGeo.width();
+        fixedGeoMap[Height] = fixedGeo.height();
+        map[FixedGeometry] = fixedGeoMap;
+    }
 
     // Optional: Name
     if (fields.testFlag(ZoneField::Name)) {
@@ -68,7 +81,7 @@ QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields)
     return map;
 }
 
-QVariantList zonesToVariantList(Layout* layout, ZoneFields fields)
+QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF& referenceGeometry)
 {
     QVariantList list;
 
@@ -76,12 +89,18 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields)
         return list;
     }
 
+    // Use layout's cached screen geometry to normalize fixed-mode zones to 0-1 coords.
+    // The daemon recalculates ALL layouts on startup and screen changes, so this is always valid.
+    const QRectF& refGeo = (referenceGeometry.width() > 0 && referenceGeometry.height() > 0)
+        ? referenceGeometry
+        : layout->lastRecalcGeometry();
+
     const auto zones = layout->zones();
     for (Zone* zone : zones) {
         if (!zone) {
             continue;
         }
-        list.append(zoneToVariantMap(zone, fields));
+        list.append(zoneToVariantMap(zone, fields, refGeo));
     }
 
     return list;

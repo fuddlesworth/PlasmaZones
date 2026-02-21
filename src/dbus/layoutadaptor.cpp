@@ -503,6 +503,14 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         zone->setRelativeGeometry(QRectF(relGeo[JsonKeys::X].toDouble(), relGeo[JsonKeys::Y].toDouble(),
                                          relGeo[JsonKeys::Width].toDouble(), relGeo[JsonKeys::Height].toDouble()));
 
+        // Per-zone geometry mode
+        zone->setGeometryModeInt(zoneObj[JsonKeys::GeometryMode].toInt(0));
+        if (zoneObj.contains(JsonKeys::FixedGeometry)) {
+            QJsonObject fixedGeo = zoneObj[JsonKeys::FixedGeometry].toObject();
+            zone->setFixedGeometry(QRectF(fixedGeo[JsonKeys::X].toDouble(), fixedGeo[JsonKeys::Y].toDouble(),
+                                          fixedGeo[JsonKeys::Width].toDouble(), fixedGeo[JsonKeys::Height].toDouble()));
+        }
+
         QJsonObject appearance = zoneObj[JsonKeys::Appearance].toObject();
         if (!appearance.isEmpty()) {
             zone->setHighlightColor(QColor(appearance[JsonKeys::HighlightColor].toString()));

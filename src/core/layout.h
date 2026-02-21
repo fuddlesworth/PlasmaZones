@@ -265,6 +265,7 @@ public:
     // Geometry calculations
     Q_INVOKABLE void recalculateZoneGeometries(const QRectF& screenGeometry);
     Q_INVOKABLE void renumberZones();
+    QRectF lastRecalcGeometry() const { return m_lastRecalcGeometry; }
 
     // Serialization
     QJsonObject toJson() const;

@@ -10,6 +10,7 @@
 #include <QUuid>
 #include <QScreen>
 #include <QQuickWindow>
+#include <QSize>
 #include <KConfigGroup>
 #include "../core/constants.h"
 #include "../core/logging.h"
@@ -89,6 +90,9 @@ class EditorController : public QObject
     // Full screen geometry mode
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
 
+    // Target screen size (for fixed geometry coordinate conversion)
+    Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
+
     // Label font settings (read-only from global Appearance config)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily CONSTANT)
     Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale CONSTANT)
@@ -158,6 +162,7 @@ public:
     int globalZonePadding() const;
     int globalOuterGap() const;
     bool useFullScreenGeometry() const;
+    QSize targetScreenSize() const;
     bool canPaste() const;
     UndoController* undoController() const;
 
@@ -457,6 +462,32 @@ public Q_SLOTS:
      */
     Q_INVOKABLE void updateSelectedZonesColor(const QString& colorType, const QString& color);
 
+    // Per-zone geometry mode operations
+    /**
+     * @brief Toggle a zone between Relative and Fixed geometry mode
+     * @param zoneId Zone to toggle
+     *
+     * Converts between modes using the target screen resolution.
+     * Creates an undo command for the toggle.
+     */
+    Q_INVOKABLE void toggleZoneGeometryMode(const QString& zoneId);
+
+    /**
+     * @brief Update fixed geometry for a zone (for spinbox edits)
+     * @param zoneId Zone to update
+     * @param x, y, w, h Fixed pixel coordinates
+     */
+    Q_INVOKABLE void updateZoneFixedGeometry(const QString& zoneId, qreal x, qreal y, qreal w, qreal h);
+
+    /**
+     * @brief Apply geometry mode and coordinates directly (for undo/redo)
+     * @param zoneId Zone to update
+     * @param mode Geometry mode (0=Relative, 1=Fixed)
+     * @param relativeGeo Relative geometry
+     * @param fixedGeo Fixed geometry
+     */
+    void applyZoneGeometryMode(const QString& zoneId, int mode, const QRectF& relativeGeo, const QRectF& fixedGeo);
+
     // Validation
     Q_INVOKABLE QString validateZoneName(const QString& zoneId, const QString& name);
     Q_INVOKABLE QString validateZoneNumber(const QString& zoneId, int number);
@@ -527,6 +558,7 @@ Q_SIGNALS:
     void globalZonePaddingChanged();
     void globalOuterGapChanged();
     void useFullScreenGeometryChanged();
+    void targetScreenSizeChanged();
 
     // Shader signals
     void currentShaderIdChanged();
