@@ -207,6 +207,15 @@ bool Daemon::init()
     m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();
 
+    // Recalculate zone geometries for ALL layouts so that fixed-mode zones
+    // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
+    if (QScreen* primary = Utils::primaryScreen()) {
+        for (Layout* layout : m_layoutManager->layouts()) {
+            layout->recalculateZoneGeometries(
+                GeometryUtils::effectiveScreenGeometry(layout, primary));
+        }
+    }
+
     // Configure overlay service with settings, layout manager, and default layout
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
@@ -919,51 +928,14 @@ void Daemon::processPendingGeometryUpdates()
         return;
     }
 
-    // Use current desktop and activity so per-desktop/per-activity assignments are respected
-    const int currentDesktop = m_virtualDesktopManager->currentDesktop();
-    const QString currentActivity = m_activityManager && ActivityManager::isAvailable()
-        ? m_activityManager->currentActivity()
-        : QString();
-
-    // Choose primary screen for active layout recalc
+    // Recalculate zone geometries for ALL layouts so fixed-mode zones stay
+    // normalized correctly.  Uses primary screen as the reference geometry
+    // (per-layout useFullScreenGeometry is respected by effectiveScreenGeometry).
     QScreen* primaryScreen = Utils::primaryScreen();
-    const QString primaryName = primaryScreen ? primaryScreen->name() : QString();
-
-    // Process all pending geometry updates in a single batch
-    // This prevents N×M work when multiple screens change simultaneously
-    bool activeLayoutRecalcDone = false;
-    for (auto it = m_pendingGeometryUpdates.constBegin(); it != m_pendingGeometryUpdates.constEnd(); ++it) {
-        const QString& screenName = it.key();
-
-        qCInfo(lcDaemon) << "Processing geometry update screen= " << screenName
-                         << " availableGeometry= " << it.value();
-
-        // Recalculate zone geometries for active layout at most once (primary screen, or first).
-        // Active layout is global; recalc'ing per-screen overwrites each time (last-wins bug).
-        Layout* activeLayout = m_layoutManager->activeLayout();
-        if (activeLayout && !activeLayoutRecalcDone) {
-            // Use primary screen if in batch, otherwise first screen
-            QScreen* recalcScreen = (!primaryName.isEmpty() && m_pendingGeometryUpdates.contains(primaryName))
-                ? primaryScreen
-                : m_screenManager->screenByName(screenName);
-            if (recalcScreen) {
-                activeLayout->recalculateZoneGeometries(
-                    GeometryUtils::effectiveScreenGeometry(activeLayout, recalcScreen));
-            }
-            activeLayoutRecalcDone = true;
-        }
-
-        // Update screen-specific layout if different from active
-        QString screenId = Utils::screenIdForName(screenName);
-        if (Layout* screenLayout =
-                m_layoutManager->layoutForScreen(screenId, currentDesktop, currentActivity)) {
-            if (screenLayout != activeLayout) {
-                QScreen* screen = m_screenManager->screenByName(screenName);
-                if (screen) {
-                    screenLayout->recalculateZoneGeometries(
-                        GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
-                }
-            }
+    if (primaryScreen) {
+        for (Layout* layout : m_layoutManager->layouts()) {
+            layout->recalculateZoneGeometries(
+                GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
         }
     }
 

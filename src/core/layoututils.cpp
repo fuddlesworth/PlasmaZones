@@ -89,9 +89,8 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF&
         return list;
     }
 
-    // When caller doesn't pass reference geometry, use the layout's cached screen
-    // geometry from the last recalculation.  This ensures fixed-mode zones are
-    // normalized correctly for preview rendering (KCM thumbnails, OSD, zone selector).
+    // Use layout's cached screen geometry to normalize fixed-mode zones to 0-1 coords.
+    // The daemon recalculates ALL layouts on startup and screen changes, so this is always valid.
     const QRectF& refGeo = (referenceGeometry.width() > 0 && referenceGeometry.height() > 0)
         ? referenceGeometry
         : layout->lastRecalcGeometry();
