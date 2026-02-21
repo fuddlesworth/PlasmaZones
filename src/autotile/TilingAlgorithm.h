@@ -26,7 +26,7 @@ struct TilingParams {
     const TilingState *state = nullptr; ///< Current tiling state (must be non-null)
     int innerGap = 0;                   ///< Gap between adjacent zones in pixels
     int outerGap = 0;                   ///< Gap at screen edges in pixels
-    QVector<QSize> minSizes;            ///< Per-window minimum sizes (may be empty)
+    QVector<QSize> minSizes = {};        ///< Per-window minimum sizes (may be empty)
 };
 
 /**
