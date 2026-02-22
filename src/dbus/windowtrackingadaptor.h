@@ -446,6 +446,14 @@ public Q_SLOTS:
     void saveState();
 
     /**
+     * @brief Flush window tracking state to disk on daemon shutdown
+     *
+     * Stops the debounced save timer and immediately persists state.
+     * Call this from Daemon::stop() so snapped windows are saved before exit.
+     */
+    void saveStateOnShutdown();
+
+    /**
      * @brief Load window tracking state from disk
      *
      * Restores previously persisted window tracking state.

@@ -135,6 +135,15 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
 
     // Load persisted window tracking state from previous session
     loadState();
+
+    // If we have pending restores but missed activeLayoutChanged (layout was set before we
+    // connected), set the flag so tryEmitPendingRestoresAvailable will emit when panel
+    // geometry is ready. Fixes daemon restart: windows that were snapped before stop
+    // are not re-registered because pendingRestoresAvailable was never emitted.
+    if (!m_service->pendingZoneAssignments().isEmpty() && m_layoutManager->activeLayout()) {
+        m_hasPendingRestores = true;
+        qCDebug(lcDbusWindow) << "Pending restores loaded at init - will emit when panel geometry ready";
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1233,6 +1242,14 @@ void WindowTrackingAdaptor::saveState()
 void WindowTrackingAdaptor::requestReapplyWindowGeometries()
 {
     Q_EMIT reapplyWindowGeometriesRequested();
+}
+
+void WindowTrackingAdaptor::saveStateOnShutdown()
+{
+    if (m_saveTimer && m_saveTimer->isActive()) {
+        m_saveTimer->stop();
+    }
+    saveState();
 }
 
 void WindowTrackingAdaptor::loadState()

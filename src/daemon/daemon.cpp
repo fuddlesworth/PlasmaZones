@@ -831,6 +831,9 @@ void Daemon::stop()
     m_layoutManager->saveLayouts();
     m_layoutManager->saveAssignments();
     m_settings->save();
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->saveStateOnShutdown();
+    }
 
     // Save mode tracker state (ensures last mode/layout survives shutdown)
     if (m_modeTracker) {
