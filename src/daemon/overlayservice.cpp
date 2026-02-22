@@ -641,11 +641,14 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
     m_currentOverlayScreen = showOnAllMonitors ? nullptr : cursorScreen;
 
     // Initialize shader timing (shared across all monitors for synchronized effects)
+    // Only start timer if invalid - preserves iTime across show/hide for less predictable animations
     {
         QMutexLocker locker(&m_shaderTimerMutex);
-        m_shaderTimer.start();
-        m_lastFrameTime.store(0);
-        m_frameCount.store(0);
+        if (!m_shaderTimer.isValid()) {
+            m_shaderTimer.start();
+            m_lastFrameTime.store(0);
+            m_frameCount.store(0);
+        }
     }
     m_zoneDataDirty = true; // Rebuild zone data on next frame
 
@@ -746,11 +749,8 @@ void OverlayService::hide()
     // Stop shader animation
     stopShaderAnimation();
 
-    // Invalidate shader timer
-    {
-        QMutexLocker locker(&m_shaderTimerMutex);
-        m_shaderTimer.invalidate();
-    }
+    // Do NOT invalidate m_shaderTimer - keeps iTime continuous across show/hide
+    // so animations feel less predictable and don't restart
 
     for (auto* window : std::as_const(m_overlayWindows)) {
         if (window) {
