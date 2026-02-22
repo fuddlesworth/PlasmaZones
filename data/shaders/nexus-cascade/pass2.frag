@@ -19,9 +19,9 @@ void main() {
     vec2 res = max(iResolution.xy, vec2(1.0));
     vec2 uv = fragCoord / res;
 
-    float bloomRadius = customParams[2].x > 0.1 ? customParams[2].x : 3.0;
-    float bloomStrength = customParams[2].y > 0.001 ? customParams[2].y : 0.25;
-    float blend = customParams[2].z > 0.001 ? customParams[2].z : 0.6;
+    float bloomRadius = customParams[2].x >= 0.0 ? customParams[2].x : 3.0;
+    float bloomStrength = customParams[2].y >= 0.0 ? customParams[2].y : 0.25;
+    float blend = customParams[2].z >= 0.0 ? customParams[2].z : 0.6;
 
     vec2 px = 1.0 / res;
     float r = bloomRadius * 0.5;

@@ -12,15 +12,17 @@ layout(location = 0) out vec4 fragColor;
 #include <audio.glsl>
 
 /*
- * SONIC RIPPLE — Concentric Audio Rings
+ * SONIC RIPPLE — Concentric Audio Rings (Full-Screen with Zone Cutout)
  *
- * The audio spectrum is mapped onto concentric rings radiating from each
- * zone's center.  Low frequencies sit at the core, high frequencies at the
- * edge.  Each ring's brightness and thickness IS the amplitude of its
- * frequency band, so every beat, every note is immediately visible.
+ * A SINGLE continuous ring pattern is centered on the screen center.
+ * Zones act as windows into the shared pattern — rings, shockwaves, and
+ * nebula flow seamlessly across zone boundaries.  Low frequencies sit at
+ * the core, high frequencies at the edge.  Each ring's brightness and
+ * thickness IS the amplitude of its frequency band.
  *
  * Bass kicks launch expanding shockwave rings that travel outward and fade.
  * The entire pattern slowly rotates and breathes with overall energy.
+ * Edge spectrum bars remain zone-local, painting along each zone's walls.
  *
  * Parameters (customParams):
  *   [0].x = reactivity       — audio sensitivity multiplier
@@ -38,65 +40,7 @@ layout(location = 0) out vec4 fragColor;
  *   customColors[2] = bass    (default: orange)
  */
 
-// ─── Noise ──────────────────────────────────────────────────────
 
-float noise1D(float x) {
-    float i = floor(x);
-    float f = fract(x);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(hash11(i), hash11(i + 1.0), f);
-}
-
-float noise2D(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-// Seamless angular noise: sample 2D noise on a circle to avoid atan() seam
-float angularNoise(float angle, float freq, float seed) {
-    vec2 circlePos = vec2(cos(angle), sin(angle)) * freq;
-    return noise2D(circlePos + seed);
-}
-
-// ─── Frequency analysis ─────────────────────────────────────────
-
-float getBass() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int n = min(iAudioSpectrumSize, 8);
-    for (int i = 0; i < n; i++) sum += audioBar(i);
-    return sum / float(n);
-}
-
-float getMids() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int lo = iAudioSpectrumSize / 4;
-    int hi = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < hi && i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(max(hi - lo, 1));
-}
-
-float getTreble() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int lo = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(max(iAudioSpectrumSize - lo, 1));
-}
-
-float getOverall() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    for (int i = 0; i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(iAudioSpectrumSize);
-}
 
 // ─── Shockwave ring ─────────────────────────────────────────────
 
@@ -116,7 +60,8 @@ float shockwave(float r, float birth, float speed) {
 // ─── Per-zone rendering ─────────────────────────────────────────
 
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
-                vec4 params, bool isHighlighted)
+                vec4 params, bool isHighlighted,
+                float bass, float mids, float treble, float overall, bool hasAudio)
 {
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
@@ -159,20 +104,24 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         ringCount = max(ringCount * 0.5, 8.0); // fewer rings
     }
 
-    // Zone geometry
+    // Zone geometry — KEEP for cutout, border, edge effects
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
-    vec2 p        = fragCoord - center;
+    vec2 p        = fragCoord - center;  // KEEP for border/glow angle
     vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
     float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
-    // Audio analysis
-    bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass     = getBass();
-    float mids     = getMids();
-    float treble   = getTreble();
-    float overall  = getOverall();
+    // Screen-space coords for the ring pattern
+    vec2 screenCenter = iResolution.xy * 0.5;
+    vec2 sp = fragCoord - screenCenter;  // offset from SCREEN center
+    vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
+
+    // Mouse — zone-local check, screen-space offsets
+    vec2 mouseLocal = zoneLocalUV(iMouse.xy, rectPos, rectSize);
+    bool mouseInZone = mouseLocal.x >= 0.0 && mouseLocal.x <= 1.0 &&
+                       mouseLocal.y >= 0.0 && mouseLocal.y <= 1.0;
+    vec2 mouseScreenP = iMouse.xy - screenCenter;  // mouse offset from screen center
 
     float energy    = hasAudio ? overall * reactivity : 0.0;
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 0.8 * PI)) * idleAnim;
@@ -182,13 +131,25 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Zone interior ───────────────────────────────────────
 
     if (d < 0.0) {
-        // Normalized radial distance from zone center (0 = center, 1 = edge)
-        // Use the shorter axis as reference so rings are circular, not elliptical
-        float refSize = min(rectSize.x, rectSize.y) * 0.5;
-        float r = length(p) / refSize;
+        // Screen-space reference size for consistent ring scaling
+        float refSize = min(iResolution.x, iResolution.y) * 0.5;
 
-        // Slow rotation of the coordinate space
-        float angle = atan(p.y, p.x) + iTime * rotSpeed;
+        // Gravitational lens: subtle warp toward cursor in screen-space
+        vec2 lensedSP = sp;
+        if (mouseInZone) {
+            vec2 toCursor = mouseScreenP - sp;
+            float cursorDist = length(toCursor);
+            float lensStrength = exp(-cursorDist / (refSize * 0.15)) * refSize * 0.03;
+            lensedSP += normalize(toCursor + vec2(0.001)) * lensStrength;
+        }
+
+        float r = length(lensedSP) / refSize;
+
+        // Slow rotation of the coordinate space (screen-centered)
+        float angle = atan(lensedSP.y, lensedSP.x) + iTime * rotSpeed;
+
+        // Distance from fragment to mouse in screen-space (for secondary rings)
+        float mouseFragR = length(sp - mouseScreenP) / refSize;
 
         // ── Concentric spectrum rings ───────────────────────
         // Map frequency bands to radial distance: bass at center, treble at edge
@@ -220,6 +181,12 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
                 // Ring intensity: gaussian falloff from center of ring
                 float ring = exp(-pow(ringDist / thickness, 2.0)) * specVal;
+
+                // Rings brighten near cursor (screen-space distance)
+                if (mouseInZone) {
+                    float cursorProximity = exp(-length(sp - mouseScreenP) / (refSize * 0.3));
+                    ring *= 1.0 + cursorProximity * 0.3;
+                }
 
                 // Color: gradient from primary (bass) through accent (treble)
                 vec3 col = mix(primary, accent, t);
@@ -259,8 +226,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Warped noise field fills the space between and behind rings.
         // Audio drives the warp intensity, color, and flow speed.
 
-        // Warp the UV with audio-driven distortion
-        vec2 nebUV = localUV * 2.5;
+        // Warp the UV with audio-driven distortion (screen-space for continuity)
+        vec2 nebUV = globalUV * 2.5;
         float warpAmt = 0.4 + energy * 0.8 + idlePulse * 0.3;
         float n1 = noise2D(nebUV + iTime * 0.15);
         float n2 = noise2D(nebUV * 1.7 - iTime * 0.1 + 30.0);
@@ -514,12 +481,20 @@ void main() {
         return;
     }
 
+    // Audio analysis (computed once for all zones)
+    bool  hasAudio = iAudioSpectrumSize > 0;
+    float bass    = getBass();
+    float mids    = getMids();
+    float treble  = getTreble();
+    float overall = getOverall();
+
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
 
         vec4 zoneColor = renderZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
+            zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
+            bass, mids, treble, overall, hasAudio);
 
         color = blendOver(color, zoneColor);
     }

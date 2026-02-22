@@ -178,46 +178,107 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
         return result;
     }
 
-    // Use a simplified 2-zone layout (1 and 2 side-by-side) for the shader preview.
-    // This matches how the overlay looks with typical layouts and avoids cramming
-    // many zone numbers into the small preview area.
     const qreal resW = static_cast<qreal>(width);
     const qreal resH = static_cast<qreal>(height);
-    const int padded = 4;
-    const qreal hw = (resW - padded * 3) / 2.0; // Two equal halves with gap
-    const qreal hh = resH - padded * 2;
 
-    // Stable IDs for demo layout so shader doesn't see churn on every update
-    const QString zone1Id = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
-    const QString zone2Id = QStringLiteral("{00000000-0000-0000-0000-000000000002}");
+    // Use the real layout zones so the preview matches what the user is editing.
+    const QVariantList zones = m_zoneManager ? m_zoneManager->zones() : QVariantList();
 
-    auto makeZone = [&](int zoneNumber, qreal x, qreal y, qreal w, qreal h) {
+    if (zones.isEmpty()) {
+        // Fallback: single zone filling the preview area
         QVariantMap out;
-        out[QLatin1String(JsonKeys::Id)] = (zoneNumber == 1) ? zone1Id : zone2Id;
-        out[QLatin1String(JsonKeys::X)] = x;
-        out[QLatin1String(JsonKeys::Y)] = y;
-        out[QLatin1String(JsonKeys::Width)] = w;
-        out[QLatin1String(JsonKeys::Height)] = h;
-        out[QLatin1String(JsonKeys::ZoneNumber)] = zoneNumber;
+        out[QLatin1String(JsonKeys::Id)] = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
+        out[QLatin1String(JsonKeys::X)] = 4.0;
+        out[QLatin1String(JsonKeys::Y)] = 4.0;
+        out[QLatin1String(JsonKeys::Width)] = resW - 8.0;
+        out[QLatin1String(JsonKeys::Height)] = resH - 8.0;
+        out[QLatin1String(JsonKeys::ZoneNumber)] = 1;
         out[QLatin1String(JsonKeys::IsHighlighted)] = false;
-        const QColor fillColor = Defaults::HighlightColor;
-        const qreal alpha = Defaults::Opacity;
+        const QColor fc = Defaults::HighlightColor;
+        const qreal a = Defaults::Opacity;
+        out[QLatin1String("fillR")] = fc.redF() * a;
+        out[QLatin1String("fillG")] = fc.greenF() * a;
+        out[QLatin1String("fillB")] = fc.blueF() * a;
+        out[QLatin1String("fillA")] = a;
+        const QColor bc = Defaults::BorderColor;
+        out[QLatin1String("borderR")] = bc.redF();
+        out[QLatin1String("borderG")] = bc.greenF();
+        out[QLatin1String("borderB")] = bc.blueF();
+        out[QLatin1String("borderA")] = bc.alphaF();
+        out[QLatin1String("shaderBorderRadius")] = 8.0;
+        out[QLatin1String("shaderBorderWidth")] = 2.0;
+        result.append(out);
+        return result;
+    }
+
+    // Screen size for converting fixed-geometry pixel coords to fractional
+    const QSize screenSz = targetScreenSize();
+    const qreal screenW = qMax(1.0, static_cast<qreal>(screenSz.width()));
+    const qreal screenH = qMax(1.0, static_cast<qreal>(screenSz.height()));
+
+    // Scale zone coordinates to preview pixel dimensions.
+    // Relative zones: fractional 0-1 * preview size.
+    // Fixed zones: pixel coords / screen size * preview size.
+    for (const QVariant& zoneVar : zones) {
+        const QVariantMap zone = zoneVar.toMap();
+        const bool isFixed = ZoneManager::isFixedMode(zone);
+
+        qreal px, py, pw, ph;
+        if (isFixed) {
+            // Fixed geometry: pixel coords relative to screen, scale to preview
+            px = zone.value(JsonKeys::FixedX, 0.0).toReal() / screenW * resW;
+            py = zone.value(JsonKeys::FixedY, 0.0).toReal() / screenH * resH;
+            pw = zone.value(JsonKeys::FixedWidth, 100.0).toReal() / screenW * resW;
+            ph = zone.value(JsonKeys::FixedHeight, 100.0).toReal() / screenH * resH;
+        } else {
+            // Relative geometry: fractional 0-1, scale to preview
+            px = zone.value(JsonKeys::X).toReal() * resW;
+            py = zone.value(JsonKeys::Y).toReal() * resH;
+            pw = zone.value(JsonKeys::Width).toReal() * resW;
+            ph = zone.value(JsonKeys::Height).toReal() * resH;
+        }
+
+        QVariantMap out;
+        out[QLatin1String(JsonKeys::Id)] = zone.value(JsonKeys::Id);
+        out[QLatin1String(JsonKeys::X)] = px;
+        out[QLatin1String(JsonKeys::Y)] = py;
+        out[QLatin1String(JsonKeys::Width)] = pw;
+        out[QLatin1String(JsonKeys::Height)] = ph;
+        out[QLatin1String(JsonKeys::ZoneNumber)] = zone.value(JsonKeys::ZoneNumber);
+        out[QLatin1String(JsonKeys::IsHighlighted)] = zone.value(JsonKeys::IsHighlighted, false);
+
+        // Fill color from zone appearance (or defaults)
+        const bool useCustom = zone.value(JsonKeys::UseCustomColors).toBool();
+        QColor fillColor(zone.value(JsonKeys::HighlightColor).toString());
+        if (!useCustom || !fillColor.isValid())
+            fillColor = Defaults::HighlightColor;
+        const qreal alpha = useCustom
+            ? zone.value(JsonKeys::ActiveOpacity, Defaults::Opacity).toReal()
+            : Defaults::Opacity;
         out[QLatin1String("fillR")] = fillColor.redF() * alpha;
         out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
         out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
         out[QLatin1String("fillA")] = alpha;
-        const QColor borderColor = Defaults::BorderColor;
+
+        // Border color
+        QColor borderColor(zone.value(JsonKeys::BorderColor).toString());
+        if (!useCustom || !borderColor.isValid())
+            borderColor = Defaults::BorderColor;
         out[QLatin1String("borderR")] = borderColor.redF();
         out[QLatin1String("borderG")] = borderColor.greenF();
         out[QLatin1String("borderB")] = borderColor.blueF();
         out[QLatin1String("borderA")] = borderColor.alphaF();
-        out[QLatin1String("shaderBorderRadius")] = 8.0;
-        out[QLatin1String("shaderBorderWidth")] = 2.0;
-        return out;
-    };
 
-    result.append(makeZone(1, padded, padded, hw, hh));
-    result.append(makeZone(2, padded * 2 + hw, padded, hw, hh));
+        // Border dimensions
+        out[QLatin1String("shaderBorderRadius")] = useCustom
+            ? zone.value(JsonKeys::BorderRadius, Defaults::BorderRadius).toReal()
+            : static_cast<qreal>(Defaults::BorderRadius);
+        out[QLatin1String("shaderBorderWidth")] = useCustom
+            ? zone.value(JsonKeys::BorderWidth, Defaults::BorderWidth).toReal()
+            : static_cast<qreal>(Defaults::BorderWidth);
+
+        result.append(out);
+    }
 
     return result;
 }

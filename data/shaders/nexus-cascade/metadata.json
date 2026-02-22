@@ -130,6 +130,46 @@
             "max": 1.0
         },
         {
+            "id": "audioReactivity",
+            "name": "Audio Reactivity",
+            "group": "Audio",
+            "type": "float",
+            "slot": 2,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "bassEruptionStrength",
+            "name": "Bass Eruption Strength",
+            "group": "Audio",
+            "type": "float",
+            "slot": 3,
+            "default": 2.5,
+            "min": 0.0,
+            "max": 5.0
+        },
+        {
+            "id": "swirlSensitivity",
+            "name": "Swirl Sensitivity",
+            "group": "Audio",
+            "type": "float",
+            "slot": 7,
+            "default": 4.0,
+            "min": 0.0,
+            "max": 8.0
+        },
+        {
+            "id": "bassChromaMultiplier",
+            "name": "Bass Chroma Multiplier",
+            "group": "Audio",
+            "type": "float",
+            "slot": 11,
+            "default": 3.0,
+            "min": 0.0,
+            "max": 6.0
+        },
+        {
             "id": "color1",
             "name": "Plasma Color 1",
             "group": "Colors",

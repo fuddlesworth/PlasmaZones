@@ -127,6 +127,10 @@
             "min": 0.8,
             "max": 2.0
         },
+        {"id": "audioReactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 12, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "veinDetail", "name": "Vein Detail", "group": "Pattern", "type": "float", "slot": 13, "default": 0.25, "min": 0.0, "max": 0.6},
+        {"id": "innerGlowStrength", "name": "Inner Glow Strength", "group": "Appearance", "type": "float", "slot": 14, "default": 0.25, "min": 0.0, "max": 0.5},
+        {"id": "sparkleIntensity", "name": "Sparkle Intensity", "group": "Audio", "type": "float", "slot": 15, "default": 2.5, "min": 0.0, "max": 5.0},
         {
             "id": "paletteColorA",
             "name": "Palette Base",
