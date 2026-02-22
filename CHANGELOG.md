@@ -7,6 +7,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-02-22
+
+### Added
+- **Mosaic Pulse shader**: Audio-reactive stained glass mosaic with colorful tiles, pulsing shapes (circles, diamonds, squares), sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. 12 configurable parameters across 6 groups.
+- **User-supplied image textures**: Shader effects can now sample up to 4 user-provided images (bindings 7-10) with configurable wrap modes.
+- **Shared GLSL utilities**: Extracted `common.glsl`, `audio.glsl`, `textures.glsl`, and `multipass.glsl` as shared includes — all shaders updated to use common helpers (hash, noise, SDF, blending, audio bands).
+
+### Fixed
+- **System layout restore**: Deleting a user layout override from KCM now correctly restores the system-provided layout instead of leaving a blank state.
+- **System layout label**: Label now includes "zones" suffix for consistency with other layout names.
+- **Translation extraction**: 33 missing source files added to the extraction list so all translatable strings are captured.
+- **German .po headers**: Normalized header fields for consistency across all 3 translation domains.
+
+### Changed
+- **German translations**: Complete coverage for all 3 domains (daemon, KCM, effect). Removed 49 obsolete entries.
+- Removed outdated shader presets.
+
 ## [1.14.1] - 2026-02-21
 
 ### Fixed
