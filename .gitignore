@@ -16,6 +16,7 @@ CTestTestfile.cmake
 _deps/
 *.cmake
 !CMakeLists.txt
+!cmake/*.cmake
 .cmake/
 
 # -----------------------------------------------------------------------------

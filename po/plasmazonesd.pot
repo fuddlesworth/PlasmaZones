@@ -1,366 +1,219 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR "fuddlesworth"
-# This file is distributed under the same license as the PlasmaZones package.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the plasmazonesd package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"#-#-#-#-#  plasmazonesd-cpp.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
-"Project-Id-Version: PlasmaZones 1.2.0\n"
-"Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-28 17:05-0600\n"
+"Project-Id-Version: plasmazonesd\n"
+"Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
+"POT-Creation-Date: 2026-02-21 18:37-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: English\n"
-"Language: en\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
-"#-#-#-#-#  plasmazonesd-qml.pot (PlasmaZones 1.0.0)  #-#-#-#-#\n"
-"Project-Id-Version: PlasmaZones 1.2.0\n"
-"Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-28 17:15-0600\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: English\n"
-"Language: en\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/daemon/main.cpp:45
+#: src/daemon/main.cpp:50
+#, kde-format
 msgid "PlasmaZones Daemon"
 msgstr ""
 
-#: src/daemon/main.cpp:46
+#: src/daemon/main.cpp:51
+#, kde-format
 msgid "FancyZones-style window snapping for KDE Plasma"
 msgstr ""
 
-#: src/daemon/main.cpp:47
+#: src/daemon/main.cpp:52
+#, kde-format
 msgid "© 2026 fuddlesworth"
 msgstr ""
 
-#: src/daemon/main.cpp:48
+#: src/daemon/main.cpp:53
+#, kde-format
 msgid "fuddlesworth"
 msgstr ""
 
-#: src/daemon/main.cpp:60
+#: src/daemon/main.cpp:65
+#, kde-format
 msgid "Replace existing daemon instance"
 msgstr ""
 
-#: src/daemon/daemon.cpp:580
+#: src/daemon/daemon.cpp:892
+#, kde-format
 msgid "Zone Layout: %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:305
-msgid "Open Zone Editor"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:318
-msgid "Previous Layout"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:323
-msgid "Next Layout"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:337
+#: src/daemon/shortcutmanager.cpp:346
+#, kde-format
 msgid "Apply Layout %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:386
-msgid "Move Window Left"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:393
-msgid "Move Window Right"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:400
-msgid "Move Window Up"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:407
-msgid "Move Window Down"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:415
-msgid "Focus Zone Left"
-msgstr ""
-
 #: src/daemon/shortcutmanager.cpp:422
-msgid "Focus Zone Right"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:429
-msgid "Focus Zone Up"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:436
-msgid "Focus Zone Down"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:444
-msgid "Push to Empty Zone"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:451
-msgid "Restore Window Size"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:459
-msgid "Toggle Window Float"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:620
-msgid "Swap Window Left"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:627
-msgid "Swap Window Right"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:634
-msgid "Swap Window Up"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:641
-msgid "Swap Window Down"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:713
+#, kde-format
 msgid "Snap to Zone %1"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:747
-msgid "Rotate Windows Clockwise"
+#: src/dbus/windowdragadaptor.cpp:57
+#, kde-format
+msgid "Cancel zone overlay"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:755
-msgid "Rotate Windows Counterclockwise"
+#: src/ui/LayoutPickerOverlay.qml:234
+msgid "Choose Layout"
 msgstr ""
 
-#: src/daemon/shortcutmanager.cpp:800
-msgid "Cycle Window Forward in Zone"
-msgstr ""
-
-#: src/daemon/shortcutmanager.cpp:808
-msgid "Cycle Window Backward in Zone"
-msgstr ""
-
-#: src/ui/LayoutPreview.qml:59 src/ui/LayoutPicker.qml:107
+#: src/ui/LayoutPreview.qml:68
 msgctxt "@info:accessibility"
 msgid "Layout: %1"
 msgstr ""
 
-#: src/ui/LayoutPreview.qml:60 src/ui/LayoutPicker.qml:108
+#: src/ui/LayoutPreview.qml:69
 msgctxt "@info:accessibility"
 msgid "Click to select this layout. Contains %1 zones."
 msgstr ""
 
-#: src/ui/LayoutPreview.qml:178
+#: src/ui/LayoutPreview.qml:208
 msgctxt "@tooltip"
 msgid "Current layout: %1"
 msgstr ""
 
-#: src/ui/LayoutPreview.qml:178 src/ui/LayoutPicker.qml:194
+#: src/ui/LayoutPreview.qml:208
 msgctxt "@tooltip"
 msgid "Select layout: %1"
 msgstr ""
 
-#: src/ui/ZoneItem.qml:143
-msgid "Meta+Alt+%1"
+#: src/ui/NavigationOsd.qml:85
+msgid "No zone in that direction"
 msgstr ""
 
-#: src/ui/ZoneOverlay.qml:79
-msgid ""
-"PlasmaZones Overlay Active\n"
-"(No zones defined)"
+#: src/ui/NavigationOsd.qml:87
+msgid "No empty zone available"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:213
-msgid "Select Layout"
+#: src/ui/NavigationOsd.qml:89
+msgid "Nothing to rotate"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:254
-msgid "Layout %1"
+#: src/ui/NavigationOsd.qml:91
+msgid "Nothing to swap"
 msgstr ""
 
-#: src/ui/ZoneSelector.qml:325 src/ui/ZoneSelectorWindow.qml:705
-#: src/ui/LayoutPicker.qml:232
-msgid "No layouts available"
+#: src/ui/NavigationOsd.qml:93
+msgid "Failed"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:22
-msgid "PlasmaZones Layout Editor"
+#: src/ui/NavigationOsd.qml:101
+msgid "Rotated %1 window"
+msgid_plural "Rotated %1 windows"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/NavigationOsd.qml:103
+msgid "Rotated"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:88
-msgid "Canvas (Free-form)"
+#: src/ui/NavigationOsd.qml:107 src/ui/NavigationOsd.qml:122
+msgid "→ Zone %1"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:89
-msgid "Grid"
+#: src/ui/NavigationOsd.qml:109
+msgid "Moved"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:103
-msgid "Columns:"
+#: src/ui/NavigationOsd.qml:112
+msgid "Focus: Zone %1"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:112
-msgid "Rows:"
+#: src/ui/NavigationOsd.qml:114
+msgid "Focus"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:129
-msgid "Add Zone"
+#: src/ui/NavigationOsd.qml:117
+msgid "Zone %1 ↔ Zone %2"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:130
-msgid "Add a new zone to the layout"
+#: src/ui/NavigationOsd.qml:119
+msgid "Swapped"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:137
-msgid "Delete Zone"
+#: src/ui/NavigationOsd.qml:124
+msgid "Pushed"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:139
-msgid "Delete the selected zone"
+#: src/ui/NavigationOsd.qml:126
+msgid "Restored"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:150
-msgid "Layout Name"
+#: src/ui/NavigationOsd.qml:130 src/ui/NavigationOsd.qml:137
+msgid "Snapped"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:159
-msgid "Cancel"
+#: src/ui/NavigationOsd.qml:132
+msgid "Floating"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:160
-msgid "Cancel editing and discard changes"
+#: src/ui/NavigationOsd.qml:135
+msgid "Snapped: Zone %1"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:166
-msgid "Save Layout"
+#: src/ui/NavigationOsd.qml:139
+msgid "Next window"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:169
-msgid "Save the current layout"
+#: src/ui/NavigationOsd.qml:142
+msgid "Resnapped %1 window"
+msgid_plural "Resnapped %1 windows"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/ui/NavigationOsd.qml:144
+msgid "Resnapped"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:299
-msgid "Zone Properties"
+#: src/ui/NavigationOsd.qml:146
+msgid "Done"
 msgstr ""
 
-#: src/ui/ZoneEditor.qml:303
-msgid "Name:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:309
-msgid "Zone Number:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:317
-msgid "Shortcut:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:319
-msgid "e.g., Meta+Alt+1"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:325
-msgid "Appearance"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:329
-msgid "Custom colors:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:335
-msgid "Highlight:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:342
-msgid "Opacity:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:351
-msgid "Border radius:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:361
-msgid "Geometry"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:365
-msgid "Position:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:372
-msgid "Size:"
-msgstr ""
-
-#: src/ui/ZoneEditor.qml:484
-msgid "Custom Layout"
-msgstr ""
-
-#: src/ui/NavigationOsd.qml:19
+#: src/ui/NavigationOsd.qml:282
 msgid "Navigation feedback"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:20
+#: src/ui/NavigationOsd.qml:283
 msgid ""
 "Brief feedback when using keyboard navigation to move or focus windows "
 "between zones"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:50
-msgid "Moved"
+#: src/ui/RenderNodeOverlay.qml:222
+msgid "Shader error"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:50 src/ui/NavigationOsd.qml:52
-msgid "No zone"
+#: src/ui/SnapAssistOverlay.qml:231
+msgid "Snap %1 to this zone"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:52 src/ui/NavigationOsd.qml:66
-msgid "Focus"
+#: src/ui/SnapAssistOverlay.qml:232
+msgid "Snap window to this zone"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:54
-msgid "Pushed"
+#: src/ui/ZoneOverlay.qml:81
+msgid ""
+"PlasmaZones Overlay Active\n"
+"(No zones defined)"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:54
-msgid "No empty zone"
+#: src/ui/ZoneSelector.qml:220
+msgid "Select Layout"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:56
-msgid "Restored"
+#: src/ui/ZoneSelector.qml:261
+msgid "Layout %1"
 msgstr ""
 
-#: src/ui/NavigationOsd.qml:56 src/ui/NavigationOsd.qml:58
-#: src/ui/NavigationOsd.qml:60 src/ui/NavigationOsd.qml:62
-#: src/ui/NavigationOsd.qml:64 src/ui/NavigationOsd.qml:66
-#: src/ui/NavigationOsd.qml:68
-msgid "Failed"
-msgstr ""
-
-#: src/ui/NavigationOsd.qml:58
-msgid "Floating"
-msgstr ""
-
-#: src/ui/NavigationOsd.qml:60
-msgid "Snapped"
-msgstr ""
-
-#: src/ui/NavigationOsd.qml:62
-msgid "Swapped"
-msgstr ""
-
-#: src/ui/NavigationOsd.qml:64
-msgid "Rotated"
-msgstr ""
-
-#: src/ui/NavigationOsd.qml:68
-msgid "Done"
+#: src/ui/ZoneSelector.qml:339 src/ui/ZoneSelectorWindow.qml:536
+msgid "No layouts available"
 msgstr ""

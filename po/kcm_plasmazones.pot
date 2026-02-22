@@ -1,884 +1,265 @@
 # SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR "fuddlesworth"
-# This file is distributed under the same license as the PlasmaZones package.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the kcm_plasmazones package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: PlasmaZones 1.2.0\n"
-"Report-Msgid-Bugs-To: \"https://github.com/plasmazones/plasmazones/issues\"\n"
-"POT-Creation-Date: 2026-01-28 17:15-0600\n"
+"Project-Id-Version: kcm_plasmazones\n"
+"Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
+"POT-Creation-Date: 2026-02-22 12:56-0600\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: English\n"
-"Language: en\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: kcm/ui/main.qml:25
-msgid "PlasmaZones"
-msgstr ""
-
-#: kcm/ui/main.qml:86
-msgid "Enable PlasmaZones"
-msgstr ""
-
-#: kcm/ui/main.qml:93
-msgid "Running"
-msgstr ""
-
-#: kcm/ui/main.qml:93
-msgid "Stopped"
-msgstr ""
-
-#: kcm/ui/main.qml:115
-msgid "Layouts"
-msgstr ""
-
-#: kcm/ui/main.qml:119
-msgid "Editor"
-msgstr ""
-
-#: kcm/ui/main.qml:123
-msgid "Assignments"
-msgstr ""
-
-#: kcm/ui/main.qml:127
-msgid "Appearance"
-msgstr ""
-
-#: kcm/ui/main.qml:131
-msgid "Behavior"
-msgstr ""
-
-#: kcm/ui/main.qml:135
-msgid "Zone Selector"
-msgstr ""
-
-#: kcm/ui/main.qml:139
-msgid "Exclusions"
-msgstr ""
-
-#: kcm/ui/main.qml:163
-msgid "PlasmaZones is disabled"
-msgstr ""
-
-#: kcm/ui/main.qml:169
-msgid "Turn on PlasmaZones to manage window layouts."
-msgstr ""
-
-#: kcm/ui/main.qml:196
-msgid "New Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:202
-msgid "Edit"
-msgstr ""
-
-#: kcm/ui/main.qml:213
-msgid "Duplicate"
-msgstr ""
-
-#: kcm/ui/main.qml:224
-msgid "Delete"
-msgstr ""
-
-#: kcm/ui/main.qml:234
-msgid "Delete the selected layout"
-msgstr ""
-
-#: kcm/ui/main.qml:238
-msgid "Set as Default"
-msgstr ""
-
-#: kcm/ui/main.qml:247
-msgid "Set this layout as the default for screens without specific assignments"
-msgstr ""
-
-#: kcm/ui/main.qml:253
-msgid "Import"
-msgstr ""
-
-#: kcm/ui/main.qml:259
-msgid "Export"
-msgstr ""
-
-#: kcm/ui/main.qml:364
-msgid "Unnamed Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:366
-msgid "System layout with %1 zones"
-msgstr ""
-
-#: kcm/ui/main.qml:367
-msgid "Custom layout with %1 zones"
-msgstr ""
-
-#: kcm/ui/main.qml:445
-msgid "Default layout"
-msgstr ""
-
-#: kcm/ui/main.qml:458
-msgid "System • %1"
-msgstr ""
-
-#: kcm/ui/main.qml:460 kcm/ui/main.qml:1434
-msgid "%1 zones"
-msgstr ""
-
-#: kcm/ui/main.qml:479
-msgid "No layouts available"
-msgstr ""
-
-#: kcm/ui/main.qml:480
-msgid "Start the PlasmaZones daemon or create a new layout"
-msgstr ""
-
-#: kcm/ui/main.qml:499
-msgid "Keyboard Shortcuts"
-msgstr ""
-
-#: kcm/ui/main.qml:504
-msgid "Duplicate zone:"
-msgstr ""
-
-#: kcm/ui/main.qml:510
-msgid "Keyboard shortcut to duplicate the selected zone. Click and press keys."
-msgstr ""
-
-#: kcm/ui/main.qml:515
-msgid "Split horizontally:"
-msgstr ""
-
-#: kcm/ui/main.qml:521
-msgid ""
-"Keyboard shortcut to split selected zone horizontally. Click and press keys."
-msgstr ""
-
-#: kcm/ui/main.qml:526
-msgid "Split vertically:"
-msgstr ""
-
-#: kcm/ui/main.qml:532
-msgid ""
-"Keyboard shortcut to split selected zone vertically. Click and press keys."
-msgstr ""
-
-#: kcm/ui/main.qml:537
-msgid "Fill space:"
-msgstr ""
-
-#: kcm/ui/main.qml:543
-msgid ""
-"Keyboard shortcut to expand selected zone to fill available space. Click and "
-"press keys."
-msgstr ""
-
-#: kcm/ui/main.qml:547
-msgid "Reset shortcuts:"
-msgstr ""
-
-#: kcm/ui/main.qml:551
-msgid "Reset to Defaults"
-msgstr ""
-
-#: kcm/ui/main.qml:558
-msgid "Reset all editor shortcuts to their default values"
-msgstr ""
-
-#: kcm/ui/main.qml:565
-msgid "Snapping"
-msgstr ""
-
-#: kcm/ui/main.qml:569
-msgid "Grid snapping:"
-msgstr ""
-
-#: kcm/ui/main.qml:570
-msgid "Enable grid snapping"
-msgstr ""
-
-#: kcm/ui/main.qml:574
-msgid "Snap zones to a grid while dragging or resizing"
-msgstr ""
-
-#: kcm/ui/main.qml:578
-msgid "Edge snapping:"
-msgstr ""
-
-#: kcm/ui/main.qml:579
-msgid "Enable edge snapping"
-msgstr ""
-
-#: kcm/ui/main.qml:583
-msgid "Snap zones to edges of other zones while dragging or resizing"
-msgstr ""
-
-#: kcm/ui/main.qml:587
-msgid "Grid interval X:"
-msgstr ""
-
-#: kcm/ui/main.qml:607
-msgid "Grid interval Y:"
-msgstr ""
-
-#: kcm/ui/main.qml:628
-msgid "Snap override modifiers:"
-msgstr ""
-
-#: kcm/ui/main.qml:639
-msgid "Fill on Drop"
-msgstr ""
-
-#: kcm/ui/main.qml:644
-msgid "Enable:"
-msgstr ""
-
-#: kcm/ui/main.qml:645
-msgid "Fill zone on drop with modifier key"
-msgstr ""
-
-#: kcm/ui/main.qml:649
-msgid ""
-"When enabled, holding the modifier key while dropping a zone expands it to "
-"fill available space"
-msgstr ""
-
-#: kcm/ui/main.qml:654
-msgid "Fill on drop modifiers:"
-msgstr ""
-
-#: kcm/ui/main.qml:731
-msgid ""
-"Assign different layouts to each monitor and configure quick-switch keyboard "
-"shortcuts."
-msgstr ""
-
-#: kcm/ui/main.qml:742
-msgid "Monitor Assignments"
-msgstr ""
-
-#: kcm/ui/main.qml:798
-msgid "Unknown Monitor"
-msgstr ""
-
-#: kcm/ui/main.qml:808
-msgid "Primary"
-msgstr ""
-
-#: kcm/ui/main.qml:821
-msgid "All Desktops:"
-msgstr ""
-
-#: kcm/ui/main.qml:829
+#: kcm/ui/AssignmentRow.qml:26 kcm/ui/LayoutComboBox.qml:24
+#: kcm/ui/tabs/AppRulesCard.qml:75 kcm/ui/tabs/MonitorAssignmentsCard.qml:120
 msgid "Default"
 msgstr ""
 
-#: kcm/ui/main.qml:881 kcm/ui/main.qml:1229
+#: kcm/ui/AssignmentRow.qml:84 kcm/ui/tabs/MonitorAssignmentsCard.qml:148
 msgid "Clear assignment"
 msgstr ""
 
-#: kcm/ui/main.qml:890
-msgid "Per-desktop"
+#: kcm/ui/AssignmentRow.qml:85
+msgid "Clear assignment for %1"
 msgstr ""
 
-#: kcm/ui/main.qml:895
-msgid "Hide per-desktop assignments"
+#: kcm/ui/ColorButton.qml:24
+msgid "Color picker"
 msgstr ""
 
-#: kcm/ui/main.qml:896
-msgid "Show per-desktop assignments"
+#: kcm/ui/ColorButton.qml:25
+msgid "Current color: %1"
 msgstr ""
 
-#: kcm/ui/main.qml:903
-msgid "Disable PlasmaZones on this monitor"
+#: kcm/ui/FontPickerDialog.qml:11
+msgid "Choose Label Font"
 msgstr ""
 
-#: kcm/ui/main.qml:907
+#: kcm/ui/FontPickerDialog.qml:146
+msgid "Search fonts..."
+msgstr ""
+
+#: kcm/ui/FontPickerDialog.qml:165
+msgid "Family"
+msgstr ""
+
+#: kcm/ui/FontPickerDialog.qml:207
+msgid "Style"
+msgstr ""
+
+#: kcm/ui/FontPickerDialog.qml:247
+msgid "Effects:"
+msgstr ""
+
+#: kcm/ui/FontPickerDialog.qml:252
+msgid "Underline"
+msgstr ""
+
+#: kcm/ui/FontPickerDialog.qml:258
+msgid "Strikeout"
+msgstr ""
+
+#: kcm/ui/FontPickerDialog.qml:274
+msgid "AaBbCc 123"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:30
+msgid "Click to capture modifier"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:30
+msgid "Click to capture mouse button"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:30
+msgid "Click to capture"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:31
+msgid "Press modifier(s)…"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:31
+msgid "Press mouse button…"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:31
+msgid "Press key, modifier, or mouse…"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:229
+msgid "Press modifier(s) — Escape to cancel"
+msgstr ""
+
+#: kcm/ui/InputCapture.qml:230
 msgid ""
-"When enabled, the zone overlay and zone picker will not appear on this "
-"monitor, and windows will not snap to zones here."
+"Press any mouse button (Right, Middle, Back, Forward, etc.) — Escape to "
+"cancel"
 msgstr ""
 
-#: kcm/ui/main.qml:923
-msgid "Per-Desktop Overrides"
+#: kcm/ui/InputCapture.qml:231
+msgid "Press key, modifier(s), or mouse button — Escape to cancel"
 msgstr ""
 
-#: kcm/ui/main.qml:930
-msgid "Override the default layout for specific virtual desktops"
+#: kcm/ui/InputCapture.qml:250
+msgid "Press modifier key(s) only (Escape to cancel)"
 msgstr ""
 
-#: kcm/ui/main.qml:949
-msgid "Desktop %1"
-msgstr ""
-
-#: kcm/ui/main.qml:972 kcm/ui/main.qml:1175
-msgid "Use default"
-msgstr ""
-
-#: kcm/ui/main.qml:1032
-msgid "Clear assignment for this desktop"
-msgstr ""
-
-#: kcm/ui/main.qml:1049
-msgid "No monitors detected"
-msgstr ""
-
-#: kcm/ui/main.qml:1050
-msgid "Make sure the PlasmaZones daemon is running"
-msgstr ""
-
-#: kcm/ui/main.qml:1060
+#: kcm/ui/InputCapture.qml:251
 msgid ""
-"Per-desktop layout assignments are available when using multiple virtual "
-"desktops. Add more desktops in System Settings → Virtual Desktops."
+"Press any mouse button: Right, Middle, Back, Forward, or extra (Escape to "
+"cancel)"
 msgstr ""
 
-#: kcm/ui/main.qml:1075
-msgid "Activity Assignments"
+#: kcm/ui/InputCapture.qml:252
+msgid "Press a key, modifier only, or any mouse button (Escape to cancel)"
 msgstr ""
 
-#: kcm/ui/main.qml:1085
-msgid ""
-"Assign different layouts to KDE Activities. When you switch activities, the "
-"layout will change automatically."
+#: kcm/ui/InputCapture.qml:253
+msgid "Click then press modifier key(s)"
 msgstr ""
 
-#: kcm/ui/main.qml:1136
-msgid "Current"
+#: kcm/ui/InputCapture.qml:254
+msgid "Click then press any mouse button (Right, Middle, Back, Forward, etc.)"
 msgstr ""
 
-#: kcm/ui/main.qml:1246
-msgid "No activities found. Create activities in System Settings → Activities."
+#: kcm/ui/InputCapture.qml:255
+msgid "Click then press key, modifier(s), or any mouse button"
 msgstr ""
 
-#: kcm/ui/main.qml:1255
-msgid "No screens detected. Make sure the PlasmaZones daemon is running."
+#: kcm/ui/KeySequenceInput.qml:47 kcm/ui/KeySequenceInput.qml:245
+#: kcm/ui/KeySequenceInput.qml:246
+msgid "Press keys..."
 msgstr ""
 
-#: kcm/ui/main.qml:1272
-msgid ""
-"KDE Activities support is not available. Activity-based layout assignments "
-"require the KDE Activities service to be running."
+#: kcm/ui/KeySequenceInput.qml:48 kcm/ui/ModifierAndMouseCheckBoxes.qml:297
+msgid "Click to set shortcut"
 msgstr ""
 
-#: kcm/ui/main.qml:1282
-msgid "Quick Layout Shortcuts"
+#: kcm/ui/LayoutComboBox.qml:193
+msgid "No layout assigned"
 msgstr ""
 
-#: kcm/ui/main.qml:1292
-msgid "Assign layouts to keyboard shortcuts for instant switching."
+#: kcm/ui/LayoutComboBox.qml:195
+msgid "No default configured"
 msgstr ""
 
-#: kcm/ui/main.qml:1318
-msgid "Not assigned"
+#: kcm/ui/LayoutComboBox.qml:198
+msgid "→ %1 (%2 zones)"
 msgstr ""
 
-#: kcm/ui/main.qml:1334 kcm/ui/ModifierCheckBoxes.qml:32
-msgid "None"
+#: kcm/ui/LayoutComboBox.qml:200 kcm/ui/tabs/LayoutGridDelegate.qml:221
+msgid "%1 zones"
 msgstr ""
 
-#: kcm/ui/main.qml:1434
-msgid "No shortcut assigned"
+#: kcm/ui/LayoutThumbnail.qml:83
+msgid "Unnamed"
 msgstr ""
 
-#: kcm/ui/main.qml:1481
-msgid "Clear shortcut"
-msgstr ""
-
-#: kcm/ui/main.qml:1505
-msgid "Colors"
-msgstr ""
-
-#: kcm/ui/main.qml:1510
-msgid "Color scheme:"
-msgstr ""
-
-#: kcm/ui/main.qml:1511
-msgid "Use system accent color"
-msgstr ""
-
-#: kcm/ui/main.qml:1517
-msgid "Highlight:"
-msgstr ""
-
-#: kcm/ui/main.qml:1536
-msgid "Inactive:"
-msgstr ""
-
-#: kcm/ui/main.qml:1555
-msgid "Border:"
-msgstr ""
-
-#: kcm/ui/main.qml:1575
-msgid "Import colors:"
-msgstr ""
-
-#: kcm/ui/main.qml:1580
-msgid "From pywal"
-msgstr ""
-
-#: kcm/ui/main.qml:1586
-msgid "From file..."
-msgstr ""
-
-#: kcm/ui/main.qml:1595
-msgid "Opacity"
-msgstr ""
-
-#: kcm/ui/main.qml:1599
-msgid "Active zone:"
-msgstr ""
-
-#: kcm/ui/main.qml:1618
-msgid "Inactive zone:"
-msgstr ""
-
-#: kcm/ui/main.qml:1639
-msgid "Border"
-msgstr ""
-
-#: kcm/ui/main.qml:1643 kcm/ui/main.qml:2378 kcm/ui/PreviewSizeControl.qml:122
-msgid "Width:"
-msgstr ""
-
-#: kcm/ui/main.qml:1654 kcm/ui/main.qml:1670 kcm/ui/main.qml:1831
-#: kcm/ui/main.qml:1856 kcm/ui/main.qml:1872
-msgid "px"
-msgstr ""
-
-#: kcm/ui/main.qml:1659
-msgid "Radius:"
-msgstr ""
-
-#: kcm/ui/main.qml:1677
-msgid "Effects"
-msgstr ""
-
-#: kcm/ui/main.qml:1681
-msgid "Blur:"
-msgstr ""
-
-#: kcm/ui/main.qml:1682
-msgid "Enable blur behind zones"
-msgstr ""
-
-#: kcm/ui/main.qml:1688
-msgid "Shaders:"
-msgstr ""
-
-#: kcm/ui/main.qml:1689
-msgid "Enable shader effects"
-msgstr ""
-
-#: kcm/ui/main.qml:1695
-msgid "Shader FPS:"
-msgstr ""
-
-#: kcm/ui/main.qml:1716
-msgid "Numbers:"
-msgstr ""
-
-#: kcm/ui/main.qml:1717
-msgid "Show zone numbers"
-msgstr ""
-
-#: kcm/ui/main.qml:1723
-msgid "Animation:"
-msgstr ""
-
-#: kcm/ui/main.qml:1724
-msgid "Flash zones when switching layouts"
-msgstr ""
-
-#: kcm/ui/main.qml:1731
-msgid "On-Screen Display"
-msgstr ""
-
-#: kcm/ui/main.qml:1736
-msgid "Layout switch:"
-msgstr ""
-
-#: kcm/ui/main.qml:1737
-msgid "Show OSD when switching layouts"
-msgstr ""
-
-#: kcm/ui/main.qml:1743
-msgid "Keyboard navigation:"
-msgstr ""
-
-#: kcm/ui/main.qml:1744
-msgid "Show OSD when using keyboard navigation"
-msgstr ""
-
-#: kcm/ui/main.qml:1750
-msgid "OSD style:"
-msgstr ""
-
-#: kcm/ui/main.qml:1757
-msgid "Text only"
-msgstr ""
-
-#: kcm/ui/main.qml:1758
-msgid "Visual preview"
-msgstr ""
-
-#: kcm/ui/main.qml:1781
-msgid "Activation"
-msgstr ""
-
-#: kcm/ui/main.qml:1786
-msgid "Zone activation modifiers:"
-msgstr ""
-
-#: kcm/ui/main.qml:1797
-msgid "Multi-Zone Selection"
-msgstr ""
-
-#: kcm/ui/main.qml:1802
-msgid "Multi-zone modifier:"
-msgstr ""
-
-#: kcm/ui/main.qml:1805
-msgid ""
-"Hold this modifier combination while dragging to span windows across "
-"multiple zones"
-msgstr ""
-
-#: kcm/ui/main.qml:1812
-msgid "Middle click:"
-msgstr ""
-
-#: kcm/ui/main.qml:1813
-msgid "Use middle mouse button to select multiple zones"
-msgstr ""
-
-#: kcm/ui/main.qml:1819
-msgid "Edge threshold:"
-msgstr ""
-
-#: kcm/ui/main.qml:1835
-msgid "Distance from zone edge for multi-zone selection"
-msgstr ""
-
-#: kcm/ui/main.qml:1841
-msgid "Zone Settings"
-msgstr ""
-
-#: kcm/ui/main.qml:1845
-msgid "Zone padding:"
-msgstr ""
-
-#: kcm/ui/main.qml:1861
-msgid "Edge gap:"
-msgstr ""
-
-#: kcm/ui/main.qml:1877
-msgid "Display:"
-msgstr ""
-
-#: kcm/ui/main.qml:1878
-msgid "Show zones on all monitors while dragging"
-msgstr ""
-
-#: kcm/ui/main.qml:1886
-msgid "Window Behavior"
-msgstr ""
-
-#: kcm/ui/main.qml:1890
-msgid "Resolution:"
-msgstr ""
-
-#: kcm/ui/main.qml:1891
-msgid "Keep windows in zones when resolution changes"
-msgstr ""
-
-#: kcm/ui/main.qml:1897
-msgid "New windows:"
-msgstr ""
-
-#: kcm/ui/main.qml:1898
-msgid "Move new windows to their last used zone"
-msgstr ""
-
-#: kcm/ui/main.qml:1904
-msgid "Unsnapping:"
-msgstr ""
-
-#: kcm/ui/main.qml:1905
-msgid "Restore original window size when unsnapping"
-msgstr ""
-
-#: kcm/ui/main.qml:1912
-msgid "Sticky windows:"
-msgstr ""
-
-#: kcm/ui/main.qml:1916
-msgid "Treat as normal"
-msgstr ""
-
-#: kcm/ui/main.qml:1917
-msgid "Restore only"
-msgstr ""
-
-#: kcm/ui/main.qml:1918
-msgid "Ignore all"
-msgstr ""
-
-#: kcm/ui/main.qml:1931
-msgid ""
-"Sticky windows appear on all desktops. Choose how snapping should behave."
-msgstr ""
-
-#: kcm/ui/main.qml:1952
-msgid ""
-"The zone selector popup appears when dragging windows to screen edges, "
-"allowing quick layout selection."
-msgstr ""
-
-#: kcm/ui/main.qml:1959
-msgid "Enable zone selector popup"
-msgstr ""
-
-#: kcm/ui/main.qml:1972
-msgid "Position"
-msgstr ""
-
-#: kcm/ui/main.qml:1990
-msgid ""
-"Choose where the popup appears on screen. Edges and corners are supported."
-msgstr ""
-
-#: kcm/ui/main.qml:2004
-msgid "Trigger & Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:2017
-msgid "Trigger distance"
-msgstr ""
-
-#: kcm/ui/main.qml:2022
-msgid "How close to the edge before the popup appears"
-msgstr ""
-
-#: kcm/ui/main.qml:2060
-msgid "Arrangement:"
-msgstr ""
-
-#: kcm/ui/main.qml:2064
-msgid "Grid"
-msgstr ""
-
-#: kcm/ui/main.qml:2065
-msgid "Horizontal"
-msgstr ""
-
-#: kcm/ui/main.qml:2066
-msgid "Vertical"
-msgstr ""
-
-#: kcm/ui/main.qml:2080
-msgid "Grid columns:"
-msgstr ""
-
-#: kcm/ui/main.qml:2089
-msgid "Max visible rows:"
-msgstr ""
-
-#: kcm/ui/main.qml:2098
-msgid "Scrolling enabled when more rows exist"
-msgstr ""
-
-#: kcm/ui/main.qml:2111
-msgid "Preview Size"
-msgstr ""
-
-#: kcm/ui/main.qml:2202
-msgid "Auto"
-msgstr ""
-
-#: kcm/ui/main.qml:2212
-#, javascript-format
-msgid "~10%% of screen width (120-280px)"
-msgstr ""
-
-#: kcm/ui/main.qml:2216 kcm/ui/PreviewSizeControl.qml:31
-msgid "Small"
-msgstr ""
-
-#: kcm/ui/main.qml:2228
-msgid "120px width"
-msgstr ""
-
-#: kcm/ui/main.qml:2232 kcm/ui/PreviewSizeControl.qml:35
-msgid "Medium"
-msgstr ""
-
-#: kcm/ui/main.qml:2244
-msgid "180px width"
-msgstr ""
-
-#: kcm/ui/main.qml:2248 kcm/ui/PreviewSizeControl.qml:39
-msgid "Large"
-msgstr ""
-
-#: kcm/ui/main.qml:2260
-msgid "260px width"
-msgstr ""
-
-#: kcm/ui/main.qml:2264
-msgid "Custom"
-msgstr ""
-
-#: kcm/ui/main.qml:2274
-msgid "Custom size with slider"
-msgstr ""
-
-#: kcm/ui/main.qml:2287
-msgid "Size:"
-msgstr ""
-
-#: kcm/ui/main.qml:2319
-msgid "Preview size adjusts automatically based on your screen resolution."
-msgstr ""
-
-#: kcm/ui/main.qml:2344
-msgid ""
-"Windows from excluded applications or with excluded window classes will not "
-"snap to zones."
-msgstr ""
-
-#: kcm/ui/main.qml:2354
-msgid "Window Filtering"
-msgstr ""
-
-#: kcm/ui/main.qml:2363
-msgid "Exclude transient windows (dialogs, utilities, tooltips)"
-msgstr ""
-
-#: kcm/ui/main.qml:2369
-msgid "Minimum window size for snapping:"
-msgstr ""
-
-#: kcm/ui/main.qml:2388 kcm/ui/main.qml:2405
-msgid "Disabled"
-msgstr ""
-
-#: kcm/ui/main.qml:2395 kcm/ui/PreviewSizeControl.qml:199
-msgid "Height:"
-msgstr ""
-
-#: kcm/ui/main.qml:2412
-msgid ""
-"Windows smaller than these dimensions will not snap to zones. Set to 0 to "
-"disable."
-msgstr ""
-
-#: kcm/ui/main.qml:2428
-msgid "Excluded Applications"
-msgstr ""
-
-#: kcm/ui/main.qml:2442
-msgid "Application name (e.g., firefox, konsole)"
-msgstr ""
-
-#: kcm/ui/main.qml:2453 kcm/ui/main.qml:2539
-msgid "Add"
-msgstr ""
-
-#: kcm/ui/main.qml:2500
-msgid "No excluded applications"
-msgstr ""
-
-#: kcm/ui/main.qml:2501
-msgid "Add application names above to exclude them from zone snapping"
-msgstr ""
-
-#: kcm/ui/main.qml:2514
-msgid "Excluded Window Classes"
-msgstr ""
-
-#: kcm/ui/main.qml:2528
-msgid "Window class (use xprop to find)"
-msgstr ""
-
-#: kcm/ui/main.qml:2587
-msgid "No excluded window classes"
-msgstr ""
-
-#: kcm/ui/main.qml:2588
-msgid "Use 'xprop | grep WM_CLASS' to find window classes"
-msgstr ""
-
-#: kcm/ui/main.qml:2609
-msgid "Choose Highlight Color"
-msgstr ""
-
-#: kcm/ui/main.qml:2615
-msgid "Choose Inactive Zone Color"
-msgstr ""
-
-#: kcm/ui/main.qml:2621
-msgid "Choose Border Color"
-msgstr ""
-
-#: kcm/ui/main.qml:2628
-msgid "Import Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:2636
-msgid "Export Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:2645
-msgid "Import Colors from File"
-msgstr ""
-
-#: kcm/ui/main.qml:2654
-msgid "Delete Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:2655
-msgid "Are you sure you want to delete '%1'?"
-msgstr ""
-
-#: kcm/ui/main.qml:2672
-msgid "Edit Layout"
-msgstr ""
-
-#: kcm/ui/main.qml:2685
-msgid "Use the visual editor to create and modify zone layouts."
-msgstr ""
-
-#: kcm/ui/main.qml:2691
-msgid "Open Layout Editor"
-msgstr ""
-
-#: kcm/ui/main.qml:2705
-msgid "You can also edit layout JSON files directly:"
-msgstr ""
-
-#: kcm/ui/main.qml:2711
-msgid "Open Layouts Folder"
-msgstr ""
-
-#: kcm/ui/ModifierCheckBoxes.qml:36 kcm/ui/ModifierCheckBoxes.qml:100
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:60 kcm/ui/ModifierCheckBoxes.qml:36
+#: kcm/ui/ModifierCheckBoxes.qml:100
 msgid "Shift"
 msgstr ""
 
-#: kcm/ui/ModifierCheckBoxes.qml:39 kcm/ui/ModifierCheckBoxes.qml:116
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:61 kcm/ui/ModifierCheckBoxes.qml:39
+#: kcm/ui/ModifierCheckBoxes.qml:116
 msgid "Ctrl"
 msgstr ""
 
-#: kcm/ui/ModifierCheckBoxes.qml:42 kcm/ui/ModifierCheckBoxes.qml:132
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:62 kcm/ui/ModifierCheckBoxes.qml:42
+#: kcm/ui/ModifierCheckBoxes.qml:132
 msgid "Alt"
 msgstr ""
 
-#: kcm/ui/ModifierCheckBoxes.qml:45 kcm/ui/ModifierCheckBoxes.qml:148
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:63 kcm/ui/ModifierCheckBoxes.qml:45
+#: kcm/ui/ModifierCheckBoxes.qml:148
 msgid "Meta"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:67 kcm/ui/PositionPicker.qml:26
+msgid "Right"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:68
+msgid "Middle"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:69
+msgid "Back"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:70
+msgid "Forward"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:71
+msgid "Extra 3"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:72
+msgid "Extra 4"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:73
+msgid "Extra 5"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:111
+msgid "(none)"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:179
+msgid "Click to change this trigger"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:185
+msgid "Remove trigger"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:199
+msgid "At least one trigger is required"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:200
+msgid "Remove this trigger"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:211
+msgid "Add…"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:219
+msgid "Add another activation trigger"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:226
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:236
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:339
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:342
+msgid "Reset to default"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:348
+msgid "Click to set modifier key(s)"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:349
+msgid "Click to set any mouse button (Right, Middle, Back, Forward, etc.)"
+msgstr ""
+
+#: kcm/ui/ModifierAndMouseCheckBoxes.qml:350
+msgid "Click to set key, modifier, or any mouse button"
+msgstr ""
+
+#: kcm/ui/ModifierCheckBoxes.qml:32 kcm/ui/tabs/QuickLayoutSlotsCard.qml:80
+msgid "None"
 msgstr ""
 
 #: kcm/ui/ModifierCheckBoxes.qml:110
@@ -901,49 +282,6 @@ msgstr ""
 msgid "Active: %1"
 msgstr ""
 
-#: kcm/ui/LayoutThumbnail.qml:70
-msgid "Unnamed"
-msgstr ""
-
-#: kcm/ui/KeySequenceInput.qml:46 kcm/ui/KeySequenceInput.qml:244
-#: kcm/ui/KeySequenceInput.qml:245
-msgid "Press keys..."
-msgstr ""
-
-#: kcm/ui/KeySequenceInput.qml:47
-msgid "Click to set shortcut"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:33
-msgid "Compact layout previews"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:37
-msgid "Balanced size (default)"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:41
-msgid "Detailed layout previews"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:73
-msgid "Presets:"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:109
-msgid "(Custom)"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:263
-msgid "Lock aspect ratio"
-msgstr ""
-
-#: kcm/ui/PreviewSizeControl.qml:348
-msgid ""
-"Preview: %1 x %2 pixels\n"
-"Aspect ratio: %3"
-msgstr ""
-
 #: kcm/ui/PositionPicker.qml:26
 msgid "Top-Left"
 msgstr ""
@@ -961,10 +299,6 @@ msgid "Left"
 msgstr ""
 
 #: kcm/ui/PositionPicker.qml:26
-msgid "Right"
-msgstr ""
-
-#: kcm/ui/PositionPicker.qml:26
 msgid "Bottom-Left"
 msgstr ""
 
@@ -974,4 +308,1353 @@ msgstr ""
 
 #: kcm/ui/PositionPicker.qml:26
 msgid "Bottom-Right"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:31 kcm/ui/tabs/DisplayTab.qml:454
+msgid "Small"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:33
+msgid "Compact layout previews"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:35 kcm/ui/tabs/DisplayTab.qml:470
+msgid "Medium"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:37
+msgid "Balanced size (default)"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:39 kcm/ui/tabs/DisplayTab.qml:486
+msgid "Large"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:41
+msgid "Detailed layout previews"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:73
+msgid "Presets:"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:109
+msgid "(Custom)"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:122 kcm/ui/tabs/ExclusionsTab.qml:81
+msgid "Width:"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:199 kcm/ui/tabs/ExclusionsTab.qml:98
+msgid "Height:"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:263
+msgid "Lock aspect ratio"
+msgstr ""
+
+#: kcm/ui/PreviewSizeControl.qml:348
+msgid ""
+"Preview: %1 x %2 pixels\n"
+"Aspect ratio: %3"
+msgstr ""
+
+#: kcm/ui/ScreenComboBox.qml:25 kcm/ui/tabs/AppRulesCard.qml:133
+msgid "Any Screen"
+msgstr ""
+
+#: kcm/ui/ScreenComboBox.qml:90 kcm/ui/tabs/DisplayTab.qml:129
+msgid "Monitor"
+msgstr ""
+
+#: kcm/ui/ScreenComboBox.qml:102 kcm/ui/tabs/MonitorAssignmentsCard.qml:98
+msgid "Primary"
+msgstr ""
+
+#: kcm/ui/main.qml:27 kcm/ui/tabs/AboutTab.qml:43
+msgid "PlasmaZones"
+msgstr ""
+
+#: kcm/ui/main.qml:96
+msgid "A new version is available: %1 (installed: %2)"
+msgstr ""
+
+#: kcm/ui/main.qml:99
+msgid "View Release"
+msgstr ""
+
+#: kcm/ui/main.qml:104
+msgid "Dismiss"
+msgstr ""
+
+#: kcm/ui/main.qml:117
+msgid "Enable PlasmaZones"
+msgstr ""
+
+#: kcm/ui/main.qml:124
+msgid "Running"
+msgstr ""
+
+#: kcm/ui/main.qml:124
+msgid "Stopped"
+msgstr ""
+
+#: kcm/ui/main.qml:149
+msgid "Layouts"
+msgstr ""
+
+#: kcm/ui/main.qml:154
+msgid "Editor"
+msgstr ""
+
+#: kcm/ui/main.qml:159
+msgid "Assignments"
+msgstr ""
+
+#: kcm/ui/main.qml:164
+msgid "Zones"
+msgstr ""
+
+#: kcm/ui/main.qml:169
+msgid "Display"
+msgstr ""
+
+#: kcm/ui/main.qml:174
+msgid "Exclusions"
+msgstr ""
+
+#: kcm/ui/main.qml:179
+msgid "About"
+msgstr ""
+
+#: kcm/ui/main.qml:203
+msgid "PlasmaZones is disabled"
+msgstr ""
+
+#: kcm/ui/main.qml:209
+msgid "Turn on PlasmaZones to manage window layouts."
+msgstr ""
+
+#: kcm/ui/main.qml:315
+msgid "Choose Highlight Color"
+msgstr ""
+
+#: kcm/ui/main.qml:321
+msgid "Choose Inactive Zone Color"
+msgstr ""
+
+#: kcm/ui/main.qml:327
+msgid "Choose Border Color"
+msgstr ""
+
+#: kcm/ui/main.qml:333
+msgid "Choose Label Color"
+msgstr ""
+
+#: kcm/ui/main.qml:353
+msgid "Import Layout"
+msgstr ""
+
+#: kcm/ui/main.qml:361
+msgid "Export Layout"
+msgstr ""
+
+#: kcm/ui/main.qml:370
+msgid "Import Colors from File"
+msgstr ""
+
+#: kcm/ui/main.qml:379
+msgid "Delete Layout"
+msgstr ""
+
+#: kcm/ui/main.qml:380
+msgid "Are you sure you want to delete '%1'?"
+msgstr ""
+
+#: kcm/ui/main.qml:397
+msgid "Edit Layout"
+msgstr ""
+
+#: kcm/ui/main.qml:410
+msgid "Use the visual editor to create and modify zone layouts."
+msgstr ""
+
+#: kcm/ui/main.qml:416
+msgid "Open Layout Editor"
+msgstr ""
+
+#: kcm/ui/main.qml:430
+msgid "You can also edit layout JSON files directly:"
+msgstr ""
+
+#: kcm/ui/main.qml:436
+msgid "Open Layouts Folder"
+msgstr ""
+
+#: kcm/ui/main.qml:449
+msgid "Color Import Failed"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:48
+msgid "Version %1"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:49
+msgid "Version unknown"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:59
+msgid ""
+"A window tiling and zone management tool for KDE Plasma, inspired by Windows "
+"PowerToys FancyZones. Organize your desktop with customizable zones for "
+"efficient window placement."
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:70
+msgid "Links"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:78
+msgid "GitHub Repository"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:84
+msgid "Report a Bug"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:90
+msgid "Documentation / Wiki"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:96
+msgid "Releases"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:109
+msgid "License"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:118
+msgid ""
+"PlasmaZones is free software licensed under the GNU General Public License "
+"version 3 or later (GPL-3.0-or-later)."
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:123
+msgid "View License"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:136
+msgid "Credits"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:145
+msgid "Created by fuddlesworth"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:151
+msgid "Inspired by Microsoft PowerToys FancyZones"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:157
+msgid "Built with Qt, KDE Frameworks, and Kirigami"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:172
+msgid "Checking..."
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:172
+msgid "Check for Updates"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:222
+msgid "Update available!"
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:224
+msgid "You're up to date."
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:226
+msgid "Could not check for updates."
+msgstr ""
+
+#: kcm/ui/tabs/AboutTab.qml:280
+msgid "Opens %1 in web browser"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:25
+msgid "Activity Assignments"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:35
+msgid ""
+"Assign layouts to KDE Activities. Layout changes automatically when you "
+"switch activities."
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:49
+msgid "Activities list"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:89
+msgid "Current"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:120
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:217
+msgid "Use default"
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:157
+msgid "No activities found. Create activities in System Settings → Activities."
+msgstr ""
+
+#: kcm/ui/tabs/ActivityAssignmentsCard.qml:165
+msgid "No screens detected. Make sure the PlasmaZones daemon is running."
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:43
+msgid "App-to-Zone Rules"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:68
+msgid "Layout:"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:77
+msgid "Layout for app rules"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:106
+msgid "Window class pattern (e.g., firefox, org.kde.dolphin)"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:107
+msgid "Window class pattern"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:118
+msgid "Zone:"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:127
+msgid "Zone number"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:135
+msgid "Target screen"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:139 kcm/ui/tabs/ExclusionListCard.qml:63
+msgid "Add"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:142 kcm/ui/tabs/AppRulesCard.qml:144
+msgid "Add app-to-zone rule"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:153 kcm/ui/tabs/AppRulesCard.qml:155
+#: kcm/ui/tabs/ExclusionListCard.qml:75 kcm/ui/tabs/ExclusionListCard.qml:78
+msgid "Pick from running windows"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:198
+msgid "→ Zone %1 on %2"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:199
+msgid "→ Zone %1"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:209
+msgid "Remove rule for %1"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:219
+msgid "No app rules defined"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:220 kcm/ui/tabs/LayoutsTab.qml:132
+msgid "No layouts available"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:222
+msgid "Add rules above to auto-snap windows to specific zones when they open"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:223
+msgid "Create a layout first to define app-to-zone rules"
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:232
+msgid "A rule with that pattern already exists."
+msgstr ""
+
+#: kcm/ui/tabs/AppRulesCard.qml:243
+msgid ""
+"Rules are checked in order. The first matching pattern determines the zone. "
+"Patterns are case-insensitive substring matches."
+msgstr ""
+
+#: kcm/ui/tabs/AssignmentsTab.qml:40
+msgid ""
+"Assign layouts to monitors, configure quick-switch shortcuts, and set up app-"
+"to-zone rules."
+msgstr ""
+
+#: kcm/ui/tabs/AssignmentsTab.qml:77
+msgid ""
+"KDE Activities support is not available. Activity-based layout assignments "
+"require the KDE Activities service to be running."
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:103
+msgid ""
+"The zone selector popup appears when dragging windows to screen edges, "
+"allowing quick layout selection."
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:110
+msgid "Enable zone selector popup"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:140
+msgid "All Monitors (Default)"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:141
+msgid "Monitor selection"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:158
+msgid "Custom settings for this monitor"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:159
+msgid "Using default settings — changes below create an override"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:164
+msgid "Reset to Default"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:189
+msgid "Position & Trigger"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:217
+msgid "Choose where the popup appears on screen"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:237
+msgid "Trigger Distance"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:243
+msgid "How close to the screen edge before the popup appears"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:287
+msgid "Layout Arrangement"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:294
+msgid "Arrangement:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:298
+msgid "Grid"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:299
+msgid "Horizontal"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:300
+msgid "Vertical"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:314
+msgid "Grid columns:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:323
+msgid "Max visible rows:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:331
+msgid "Scrolling enabled when more rows exist"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:349
+msgid "Preview Size"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:440
+msgid "Auto"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:450
+msgid "Approximately 10% of screen width (120-280px)"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:466
+msgid "120px width"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:482
+msgid "180px width"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:498
+msgid "260px width"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:502
+msgid "Custom"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:512
+msgid "Custom size with slider"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:525
+msgid "Size:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:557
+msgid "Preview size adjusts automatically based on your screen resolution."
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:577
+msgid "On-Screen Display"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:584
+msgid "Layout switch:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:585
+msgid "Show OSD when switching layouts"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:591
+msgid "Keyboard navigation:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:592
+msgid "Show OSD when using keyboard navigation"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:599
+msgid "OSD style:"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:608
+msgid "Text only"
+msgstr ""
+
+#: kcm/ui/tabs/DisplayTab.qml:609
+msgid "Visual preview"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:41
+msgid "Keyboard Shortcuts"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:49
+msgid "Duplicate zone:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:56
+msgid "Keyboard shortcut to duplicate the selected zone"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:62
+msgid "Split horizontally:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:69
+msgid "Keyboard shortcut to split selected zone horizontally"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:75
+msgid "Split vertically:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:82
+msgid "Keyboard shortcut to split selected zone vertically"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:88
+msgid "Fill space:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:95
+msgid "Keyboard shortcut to expand selected zone to fill available space"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:99
+msgid "Reset:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:100
+msgid "Reset to Defaults"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:104
+msgid "Reset all editor shortcuts to their default values"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:123
+msgid "Snapping"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:129
+msgid "Grid snapping:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:130
+msgid "Enable grid snapping"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:134
+msgid "Snap zones to a grid while dragging or resizing"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:138
+msgid "Edge snapping:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:139
+msgid "Enable edge snapping"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:143
+msgid "Snap zones to edges of other zones while dragging or resizing"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:151
+msgid "Grid interval X:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:171
+msgid "Grid interval Y:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:197
+msgid "Override modifier:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:223
+msgid "Fill on Drop"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:230
+msgid "Enable:"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:231
+msgid "Fill zone on drop with modifier key"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:235
+msgid ""
+"When enabled, holding the modifier key while dropping a zone expands it to "
+"fill available space"
+msgstr ""
+
+#: kcm/ui/tabs/EditorTab.qml:241 kcm/ui/tabs/ZonesTab.qml:514
+msgid "Modifier:"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionListCard.qml:127
+msgid "Remove %1"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:42
+msgid ""
+"Windows from excluded applications or with excluded window classes will not "
+"snap to zones."
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:57
+msgid "Window Filtering"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:66
+msgid "Exclude transient windows (dialogs, utilities, tooltips)"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:72
+msgid "Minimum window size for snapping:"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:91 kcm/ui/tabs/ExclusionsTab.qml:108
+msgid "Disabled"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:115
+msgid ""
+"Windows smaller than these dimensions will not snap to zones. Set to 0 to "
+"disable."
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:134
+msgid "Excluded Applications"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:135
+msgid "Application name (e.g., firefox, konsole)"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:136
+msgid "No excluded applications"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:137
+msgid "Add application names above to exclude them from zone snapping"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:158
+msgid "Excluded Window Classes"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:159
+msgid "Window class (e.g., org.kde.dolphin)"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:160
+msgid "No excluded window classes"
+msgstr ""
+
+#: kcm/ui/tabs/ExclusionsTab.qml:161
+msgid "Add window classes above or pick from running windows"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:37
+msgid "Unnamed Layout"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:39
+msgid "System layout with %1 zones"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:40
+msgid "Custom layout with %1 zones"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:125
+msgid "Default layout"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:145
+msgid "This layout has per-screen/desktop/activity restrictions"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:172
+msgid "Auto-assign enabled: new windows fill empty zones. Click to disable."
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:173
+msgid "Click to auto-assign new windows to empty zones"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:190
+msgid "Hidden from zone selector. Click to show."
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:191
+msgid "Visible in zone selector. Click to hide."
+msgstr ""
+
+#: kcm/ui/tabs/LayoutGridDelegate.qml:219
+msgid "System · %1 zones"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:32
+msgid "New Layout"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:39
+msgid "Edit"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:46
+msgid "Duplicate"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:53
+msgid "Delete"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:57
+msgid "Delete the selected layout"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:60
+msgid "Set as Default"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:64
+msgid "Set this layout as the default for screens without specific assignments"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:84
+msgid "Import"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutToolbar.qml:90
+msgid "Export"
+msgstr ""
+
+#: kcm/ui/tabs/LayoutsTab.qml:133
+msgid "Start the PlasmaZones daemon or create a new layout"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:23
+msgid "Monitor Assignments"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:40
+msgid "Monitor list"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:82
+msgid "Unknown Monitor"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:110
+msgid "All Desktops:"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:156
+msgid "Per-desktop"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:161
+msgid "Hide per-desktop assignments"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:162
+msgid "Show per-desktop assignments"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:170
+msgid "Disable PlasmaZones on this monitor"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:174
+msgid "When enabled, zones will not appear on this monitor"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:193
+msgid "Per-Desktop Overrides"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:209
+msgid "Desktop %1"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:253
+msgid "No monitors detected"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:254
+msgid "Make sure the PlasmaZones daemon is running"
+msgstr ""
+
+#: kcm/ui/tabs/MonitorAssignmentsCard.qml:263
+msgid "Per-desktop assignments are available with multiple virtual desktops."
+msgstr ""
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:23
+msgid "Quick Layout Shortcuts"
+msgstr ""
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:33
+msgid "Assign layouts to keyboard shortcuts for instant switching."
+msgstr ""
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:47
+msgid "Quick layout shortcuts list"
+msgstr ""
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:67
+msgid "Not assigned"
+msgstr ""
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:104
+msgid "Clear shortcut"
+msgstr ""
+
+#: kcm/ui/tabs/QuickLayoutSlotsCard.qml:105
+msgid "Clear shortcut %1"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:19
+msgid "Pick Application from Running Windows"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:19
+msgid "Pick Window Class from Running Windows"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:63
+msgid "Refresh"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:75
+msgid "Filter..."
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:158
+msgid "No windows found"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:159
+msgid "No matching windows"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:161
+msgid "Make sure the PlasmaZones daemon and KWin effect are running"
+msgstr ""
+
+#: kcm/ui/tabs/WindowPickerDialog.qml:162
+msgid "Try a different search term"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:61
+msgid "Appearance"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:68
+msgid "Colors"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:73
+msgid "Color scheme:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:74
+msgid "Use system accent color"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:80
+msgid "Highlight:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:96
+msgid "Inactive:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:112
+msgid "Border:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:128
+msgid "Import colors:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:133
+msgid "From pywal"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:139
+msgid "From file..."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:151
+msgid "Active opacity:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:170
+msgid "Inactive opacity:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:190
+msgid "Border"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:194
+msgid "Border width:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:205 kcm/ui/tabs/ZonesTab.qml:221
+#: kcm/ui/tabs/ZonesTab.qml:547 kcm/ui/tabs/ZonesTab.qml:627
+#: kcm/ui/tabs/ZonesTab.qml:644
+msgid "px"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:210
+msgid "Border radius:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:227
+msgid "Zone Labels"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:231
+msgid "Color:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:247
+msgid "Font:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:251
+msgid "System default"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:267
+msgid "Reset to defaults"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:281
+msgid "Scale:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:317
+msgid "Effects"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:324
+msgid "Visual Effects"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:328
+msgid "Blur:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:329
+msgid "Enable blur behind zones"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:335
+msgid "Numbers:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:336
+msgid "Show zone numbers"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:342
+msgid "Animation:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:343
+msgid "Flash zones when switching layouts"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:350
+msgid "Shader Effects"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:355
+msgid "Shaders:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:356
+msgid "Enable shader effects"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:362
+msgid "Frame rate:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:384
+msgid "Audio Visualization"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:389
+msgid "Audio:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:390
+msgid "Enable CAVA audio spectrum"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:397
+msgid "Feeds audio spectrum data to shaders that support it."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:398
+msgid "CAVA is not installed. Install cava to enable audio visualization."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:404
+msgid ""
+"CAVA is not installed. Install the <b>cava</b> package to enable audio-"
+"reactive shader effects."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:409
+msgid "Spectrum bars:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:445
+msgid "Activation"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:452
+msgid "Triggers"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:458
+msgid "Zone activation:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:459
+msgid "Activate on every window drag"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:463
+msgid ""
+"When enabled, the zone overlay appears on every window drag without "
+"requiring a modifier key or mouse button. Similar to FancyZones and KZones "
+"behavior."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:470
+msgid "Hold to activate:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:478
+msgid ""
+"Hold modifier or use mouse button to show zones while dragging. Add multiple "
+"triggers to activate with any of them."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:486
+msgid "Toggle mode:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:489
+msgid "Tap trigger to toggle overlay"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:493
+msgid ""
+"When enabled, press the activation trigger once to show the overlay, press "
+"again to hide it. When disabled, hold the trigger to show."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:498
+msgid "Zone Span"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:503
+msgid "Paint-to-span:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:504
+msgid "Enable zone spanning"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:508
+msgid ""
+"When enabled, you can paint across multiple zones to snap a window to the "
+"combined area."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:522
+msgid ""
+"Hold modifier or use mouse button while dragging to paint across zones. Add "
+"multiple triggers to activate with any of them."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:530
+msgid "Edge threshold:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:543
+msgid "Distance from zone edge for multi-zone selection"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:553
+msgid "Snap Assist"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:558
+msgid "Window picker:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:559
+msgid "Enable snap assist"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:563
+msgid "Show a window picker after snapping to fill remaining empty zones"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:567
+msgid "Behavior:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:568
+msgid "Always show after snapping"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:574
+msgid ""
+"When enabled, after every snap you can pick another window to fill empty "
+"zones. When disabled, hold the trigger below at drop to enable for that snap "
+"only."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:580
+msgid "Hold to enable:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:588
+msgid ""
+"Hold this modifier or mouse button when releasing a window to show the "
+"picker for that snap only. Add multiple triggers to activate with any of "
+"them."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:610
+msgid "Zone Layout"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:616
+msgid "Zone padding:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:632
+msgid "Edge gap:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:650
+msgid "Set per side"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:657
+msgid "Per-side gaps:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:663
+msgid "Top:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:669
+msgctxt "@label"
+msgid "Top edge gap"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:671 kcm/ui/tabs/ZonesTab.qml:680
+#: kcm/ui/tabs/ZonesTab.qml:689 kcm/ui/tabs/ZonesTab.qml:698
+msgctxt "@label"
+msgid "px"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:672
+msgid "Bottom:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:678
+msgctxt "@label"
+msgid "Bottom edge gap"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:681
+msgid "Left:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:687
+msgctxt "@label"
+msgid "Left edge gap"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:690
+msgid "Right:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:696
+msgctxt "@label"
+msgid "Right edge gap"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:702
+msgid "Display:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:703
+msgid "Show zones on all monitors while dragging"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:724
+msgid "Window Behavior"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:730
+msgid "Resolution:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:731
+msgid "Keep windows in zones when resolution changes"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:737
+msgid "New windows:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:738
+msgid "Move new windows to their last used zone"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:744
+msgid "Unsnapping:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:745
+msgid "Restore original window size when unsnapping"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:751
+msgid "Reopening:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:752
+msgid "Restore windows to their previous zone"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:756
+msgid ""
+"When enabled, windows return to their previous zone when reopened, including "
+"after login or session restart."
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:761
+msgid "Sticky windows:"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:765
+msgid "Treat as normal"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:766
+msgid "Restore only"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:767
+msgid "Ignore all"
+msgstr ""
+
+#: kcm/ui/tabs/ZonesTab.qml:773
+msgid ""
+"Sticky windows appear on all desktops. Choose how snapping should behave."
+msgstr ""
+
+#: src/shared/CategoryBadge.qml:37
+msgctxt "@label:badge"
+msgid "Auto"
+msgstr ""
+
+#: src/shared/CategoryBadge.qml:37
+msgctxt "@label:badge"
+msgid "Manual"
 msgstr ""
