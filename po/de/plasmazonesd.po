@@ -1,16 +1,16 @@
-# German translations for PlasmaZones package.
-# Copyright (C) 2026 "fuddlesworth"
-# This file is distributed under the same license as the PlasmaZones package.
+# German translations for plasmazonesd package.
+# Copyright (C) 2026 THE plasmazonesd'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the plasmazonesd package.
 # Automatically generated, 2026.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: PlasmaZones 1.2.0\n"
+"Project-Id-Version: plasmazonesd\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
 "POT-Creation-Date: 2026-02-21 18:37-0600\n"
-"PO-Revision-Date: 2026-02-22 12:00+0100\n"
-"Last-Translator: nlavender\n"
-"Language-Team: German\n"
+"PO-Revision-Date: 2026-02-22 12:00-0600\n"
+"Last-Translator: \n"
+"Language-Team: German <kde-i18n-de@kde.org>\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
