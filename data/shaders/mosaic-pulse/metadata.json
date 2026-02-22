@@ -1,0 +1,23 @@
+{
+    "id": "mosaic-pulse",
+    "name": "Mosaic Pulse",
+    "description": "Audio-reactive stained glass mosaic — colorful tiles with pulsing shapes, sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. Enable CAVA audio visualization in settings.",
+    "author": "PlasmaZones",
+    "version": "1.0",
+    "fragmentShader": "effect.frag",
+    "vertexShader": "zone.vert",
+    "parameters": [
+        {"id": "gridDensity",    "name": "Grid Density",      "group": "Grid",       "type": "float", "slot": 0,  "default": 64.0,  "min": 16.0, "max": 128.0},
+        {"id": "edgeSoftness",   "name": "Edge Softness",     "group": "Grid",       "type": "float", "slot": 1,  "default": 0.18,  "min": 0.02, "max": 0.5},
+        {"id": "gridLineWeight", "name": "Grid Line Weight",  "group": "Grid",       "type": "float", "slot": 2,  "default": 0.75,  "min": 0.0,  "max": 1.0},
+        {"id": "posterize",      "name": "Posterize Levels",  "group": "Grid",       "type": "float", "slot": 3,  "default": 8.0,   "min": 2.0,  "max": 32.0},
+        {"id": "shapeChance",    "name": "Shape Chance",      "group": "Shapes",     "type": "float", "slot": 4,  "default": 0.62,  "min": 0.0,  "max": 1.0},
+        {"id": "shapeSize",      "name": "Shape Size",        "group": "Shapes",     "type": "float", "slot": 5,  "default": 0.26,  "min": 0.05, "max": 0.45},
+        {"id": "sparkleChance",  "name": "Sparkle Chance",    "group": "Shapes",     "type": "float", "slot": 6,  "default": 0.04,  "min": 0.0,  "max": 0.2},
+        {"id": "speed",          "name": "Speed",             "group": "Animation",  "type": "float", "slot": 7,  "default": 1.25,  "min": 0.0,  "max": 4.0},
+        {"id": "reactivity",     "name": "Audio Reactivity",  "group": "Audio",      "type": "float", "slot": 8,  "default": 1.5,   "min": 0.0,  "max": 4.0},
+        {"id": "fillOpacity",    "name": "Fill Opacity",      "group": "Appearance", "type": "float", "slot": 9,  "default": 0.9,   "min": 0.3,  "max": 1.0},
+        {"id": "hueCenter",      "name": "Hue Center",        "group": "Colors",     "type": "color", "slot": 0,  "default": "#4099bf"},
+        {"id": "shapeTint",      "name": "Shape Tint",        "group": "Colors",     "type": "color", "slot": 1,  "default": "#fffff2"}
+    ]
+}
