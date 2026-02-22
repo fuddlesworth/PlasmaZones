@@ -8,9 +8,9 @@ msgstr ""
 "Project-Id-Version: PlasmaZones 1.2.0\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
 "POT-Creation-Date: 2026-02-21 18:37-0600\n"
-"PO-Revision-Date: 2026-01-25 15:15-0600\n"
-"Last-Translator: Gemini 3\n"
-"Language-Team: none\n"
+"PO-Revision-Date: 2026-02-22 12:00+0100\n"
+"Last-Translator: nlavender\n"
+"Language-Team: German\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -60,12 +60,11 @@ msgstr "In Zone %1 einrasten"
 #: src/dbus/windowdragadaptor.cpp:57
 #, kde-format
 msgid "Cancel zone overlay"
-msgstr ""
+msgstr "Zonen-Overlay abbrechen"
 
 #: src/ui/LayoutPickerOverlay.qml:234
-#, fuzzy
 msgid "Choose Layout"
-msgstr "Benutzerdefiniertes Layout"
+msgstr "Layout auswählen"
 
 #: src/ui/LayoutPreview.qml:68
 msgctxt "@info:accessibility"
@@ -89,20 +88,19 @@ msgstr "Layout auswählen: %1"
 
 #: src/ui/NavigationOsd.qml:85
 msgid "No zone in that direction"
-msgstr ""
+msgstr "Keine Zone in dieser Richtung"
 
 #: src/ui/NavigationOsd.qml:87
-#, fuzzy
 msgid "No empty zone available"
-msgstr "Keine freie Zone"
+msgstr "Keine leere Zone verfügbar"
 
 #: src/ui/NavigationOsd.qml:89
 msgid "Nothing to rotate"
-msgstr ""
+msgstr "Nichts zum Rotieren"
 
 #: src/ui/NavigationOsd.qml:91
 msgid "Nothing to swap"
-msgstr ""
+msgstr "Nichts zum Tauschen"
 
 #: src/ui/NavigationOsd.qml:93
 msgid "Failed"
@@ -111,26 +109,24 @@ msgstr "Fehlgeschlagen"
 #: src/ui/NavigationOsd.qml:101
 msgid "Rotated %1 window"
 msgid_plural "Rotated %1 windows"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 Fenster rotiert"
+msgstr[1] "%1 Fenster rotiert"
 
 #: src/ui/NavigationOsd.qml:103
 msgid "Rotated"
-msgstr "Gedreht"
+msgstr "Rotiert"
 
 #: src/ui/NavigationOsd.qml:107 src/ui/NavigationOsd.qml:122
-#, fuzzy
 msgid "→ Zone %1"
-msgstr "In Zone %1 einrasten"
+msgstr "→ Zone %1"
 
 #: src/ui/NavigationOsd.qml:109
 msgid "Moved"
 msgstr "Verschoben"
 
 #: src/ui/NavigationOsd.qml:112
-#, fuzzy
 msgid "Focus: Zone %1"
-msgstr "Zone oberhalb fokussieren"
+msgstr "Fokus: Zone %1"
 
 #: src/ui/NavigationOsd.qml:114
 msgid "Focus"
@@ -138,7 +134,7 @@ msgstr "Fokus"
 
 #: src/ui/NavigationOsd.qml:117
 msgid "Zone %1 ↔ Zone %2"
-msgstr ""
+msgstr "Zone %1 ↔ Zone %2"
 
 #: src/ui/NavigationOsd.qml:119
 msgid "Swapped"
@@ -161,24 +157,22 @@ msgid "Floating"
 msgstr "Schwebend"
 
 #: src/ui/NavigationOsd.qml:135
-#, fuzzy
 msgid "Snapped: Zone %1"
-msgstr "In Zone %1 einrasten"
+msgstr "Eingerastet: Zone %1"
 
 #: src/ui/NavigationOsd.qml:139
 msgid "Next window"
-msgstr ""
+msgstr "Nächstes Fenster"
 
 #: src/ui/NavigationOsd.qml:142
 msgid "Resnapped %1 window"
 msgid_plural "Resnapped %1 windows"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "%1 Fenster neu eingerastet"
+msgstr[1] "%1 Fenster neu eingerastet"
 
 #: src/ui/NavigationOsd.qml:144
-#, fuzzy
 msgid "Resnapped"
-msgstr "Eingerastet"
+msgstr "Neu eingerastet"
 
 #: src/ui/NavigationOsd.qml:146
 msgid "Done"
@@ -198,17 +192,15 @@ msgstr ""
 
 #: src/ui/RenderNodeOverlay.qml:222
 msgid "Shader error"
-msgstr ""
+msgstr "Shader-Fehler"
 
 #: src/ui/SnapAssistOverlay.qml:231
-#, fuzzy
 msgid "Snap %1 to this zone"
-msgstr "In Zone %1 einrasten"
+msgstr "%1 in diese Zone einrasten"
 
 #: src/ui/SnapAssistOverlay.qml:232
-#, fuzzy
 msgid "Snap window to this zone"
-msgstr "Fenster nach unten tauschen"
+msgstr "Fenster in diese Zone einrasten"
 
 #: src/ui/ZoneOverlay.qml:81
 msgid ""
