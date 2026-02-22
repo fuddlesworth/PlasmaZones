@@ -27,70 +27,23 @@ layout(location = 0) out vec4 fragColor;
  *   [1].y = plasmaDetail     — edge plasma turbulence (0–2)
  *   [1].z = colorMix         — audio-driven primary↔accent shift (0–1)
  *   [1].w = idleAnimation    — animation when silent (0–2)
+ *   [2].x = veinIntensity    — energy vein / tendril brightness (0–1)
+ *   [2].y = radialWaves      — bass radial wave strength (0–1)
+ *   [2].z = gridIntensity    — grid / mesh overlay brightness (0–0.15)
+ *   [2].w = fillOpacity      — zone interior fill opacity (0–1)
  *
  * Colors:
  *   customColors[0] = primary neon (default: cyan)
  *   customColors[1] = accent glow (default: magenta)
  */
 
-// ─── Noise ────────────────────────────────────────────────────────
 
-float noise1D(float x) {
-    float i = floor(x);
-    float f = fract(x);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(hash11(i), hash11(i + 1.0), f);
-}
 
-float noise2D(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash21(i);
-    float b = hash21(i + vec2(1.0, 0.0));
-    float c = hash21(i + vec2(0.0, 1.0));
-    float d = hash21(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-}
-
-// ─── Frequency bands ──────────────────────────────────────────────
-
-float getBass() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int n = min(iAudioSpectrumSize, 8);
-    for (int i = 0; i < n; i++) sum += audioBar(i);
-    return sum / float(n);
-}
-
-float getMids() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int lo = iAudioSpectrumSize / 4;
-    int hi = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < hi && i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(max(hi - lo, 1));
-}
-
-float getTreble() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int lo = iAudioSpectrumSize * 3 / 4;
-    for (int i = lo; i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(max(iAudioSpectrumSize - lo, 1));
-}
-
-float getOverall() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    for (int i = 0; i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(iAudioSpectrumSize);
-}
-
-// ─── Per-zone rendering ───────────────────────────────────────────
+// ─── Per-zone rendering (full-screen effect with zone cutout) ─────
 
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
-                vec4 params, bool isHighlighted)
+                vec4 params, bool isHighlighted,
+                float bass, float mids, float treble, float overall, bool hasAudio)
 {
     float borderRadius = max(params.x, 6.0);
     float borderWidth  = max(params.y, 2.5);
@@ -104,14 +57,28 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float plasmaDetail  = customParams[1].y >= 0.0 ? customParams[1].y : 0.8;
     float colorMix      = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
     float idleAnim      = customParams[1].w >= 0.0 ? customParams[1].w : 1.0;
+    float veinIntensity = customParams[2].x >= 0.0 ? customParams[2].x : 0.5;
+    float radialWaveStr = customParams[2].y >= 0.0 ? customParams[2].y : 1.0;
+    float gridOpacity   = customParams[2].z >= 0.0 ? customParams[2].z : 0.15;
+    float fillOpacity   = customParams[2].w >= 0.0 ? customParams[2].w : 0.85;
 
-    // Zone geometry
+    // Zone geometry (zone-local: used for SDF, border, glow)
     vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
     vec2 center   = rectPos + rectSize * 0.5;
     vec2 p        = fragCoord - center;
-    vec2 localUV  = zoneLocalUV(fragCoord, rectPos, rectSize);
     float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+
+    // Screen-space UV: continuous across zones (0-1 over entire screen)
+    vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
+
+    // Screen-space angle (from screen center, for interior effects)
+    vec2 screenCenter = iResolution.xy * 0.5;
+    vec2 sp = fragCoord - screenCenter;
+    float angle = atan(sp.x, -sp.y) / TAU + 0.5;
+
+    // Zone-local angle (follows zone perimeter, for border/spark effects)
+    float borderAngle = atan(p.x, -p.y) / TAU + 0.5;
 
     // Colors
     vec3 primary = colorWithFallback(customColors[0].rgb, fillColor.rgb);
@@ -121,13 +88,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         primary = accent;
         glowIntensity *= 1.3;
     }
-
-    // Audio analysis
-    bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass     = getBass();
-    float mids     = getMids();
-    float treble   = getTreble();
-    float overall  = getOverall();
 
     // Derived modifiers
     float energy     = hasAudio ? overall * reactivity : 0.0;
@@ -139,9 +99,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float colorT     = hasAudio ? clamp(treble / max(bass + 0.01, 0.1) * colorMix, 0.0, 1.0) : 0.0;
     vec3 activeColor = mix(primary, accent, colorT);
 
-    // Perimeter angle for flow effects (0-1 clockwise from top-center)
-    float angle = atan(p.x, -p.y) / TAU + 0.5;
-
     vec4 result = vec4(0.0);
 
     // ── Zone interior ─────────────────────────────────────────
@@ -150,70 +107,140 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Subtle reactive fill
         float fillBreath = 0.04 + 0.03 * (energy + idlePulse);
         result.rgb = activeColor * fillBreath * intensity;
-        result.a   = 0.82;
+        result.a   = fillOpacity;
 
         // Inner glow: brighter near the border edge
         float innerDist = -d;
         float innerGlow = exp(-innerDist / 30.0) * 0.3 * intensity;
         result.rgb += activeColor * innerGlow;
 
-        // ── Spectrum aurora wave ──────────────────────────────
+        // ── Full-screen flowing noise field ───────────────────
         if (hasAudio && waveHeight > 0.02) {
-            float waveTop = 1.0 - waveHeight;
-            if (localUV.y > waveTop) {
-                float inWave = (localUV.y - waveTop) / waveHeight; // 0 at top of wave, 1 at bottom
-                float specVal = audioBarSmooth(localUV.x);
+            // Overall intensity from waveHeight parameter
+            float fieldIntensity = waveHeight * 3.0;
 
-                // The bar fills upward from the bottom of the zone:
-                // filled when (1.0 - inWave) < specVal
-                float barPos = 1.0 - inWave;
-                if (barPos < specVal) {
-                    // Gradient color: low frequency (left) = primary, high (right) = accent
-                    vec3 specColor = mix(primary, accent, localUV.x);
-                    float bright = 0.4 + 0.6 * specVal;
+            // Warped UV for organic motion (screen-space)
+            float t = iTime * flowSpeed * 0.3;
+            vec2 warpUV = globalUV;
+            warpUV.x += noise2D(globalUV * 3.0 + vec2(t * 0.7, 0.0)) * 0.15;
+            warpUV.y += noise2D(globalUV * 3.0 + vec2(0.0, t * 0.5)) * 0.15;
 
-                    // Soft fade at the bar's upper edge
-                    float edgeFade = smoothstep(specVal, specVal - 0.08, barPos);
-                    result.rgb += specColor * bright * edgeFade * reactivity;
-                    result.a = max(result.a, 0.88);
-                }
+            // Multi-octave FBM noise field
+            float n = 0.0;
+            n += noise2D(warpUV * 4.0 + vec2(t * 0.4, t * 0.3)) * 0.5;
+            n += noise2D(warpUV * 8.0 - vec2(t * 0.6, t * 0.2)) * 0.25;
+            n += noise2D(warpUV * 16.0 + vec2(t * 0.8, -t * 0.5)) * 0.125;
+            n = n / 0.875; // Normalize to 0-1
 
-                // Glow above the wave peaks
-                float peakDist = barPos - specVal;
-                if (peakDist > 0.0 && peakDist < 0.15) {
-                    vec3 specColor = mix(primary, accent, localUV.x);
-                    float aurGlow = exp(-peakDist / 0.05) * specVal * 0.4 * reactivity;
-                    result.rgb += specColor * aurGlow;
-                }
+            // Audio-reactive brightness: map spectrum to screen x position
+            float specVal = audioBarSmooth(globalUV.x);
+            float audioBright = 0.3 + 0.7 * specVal;
+
+            // Color gradient: primary (bass/left) to accent (treble/right)
+            vec3 fieldColor = mix(primary, accent, globalUV.x);
+
+            // Additional color variation from noise
+            vec3 fieldColor2 = mix(accent, primary, n);
+            fieldColor = mix(fieldColor, fieldColor2, 0.3);
+
+            float fieldBright = n * audioBright * fieldIntensity * reactivity;
+            result.rgb += fieldColor * fieldBright * 0.5;
+            result.a = max(result.a, 0.85 + 0.05 * fieldBright);
+        }
+
+        // ── Energy veins / tendrils ───────────────────────────
+        if (hasAudio) {
+            float veinSum = 0.0;
+            float t = iTime * flowSpeed * 0.5;
+
+            // Multiple vein layers at different orientations (screen-space)
+            for (int v = 0; v < 5; v++) {
+                float vf = float(v);
+                float yOff = vf * 0.19 + 0.05;
+                // Horizontal veins: sample noise along x, offset by y
+                float veinNoise = noise1D((globalUV.x + yOff) * 8.0 + t + vf * 3.7);
+                // Vein is where noise crosses a threshold — thin line
+                float veinY = yOff + veinNoise * 0.15;
+                float veinDist = abs(globalUV.y - veinY);
+                float veinWidth = 0.006 + 0.004 * sin(t * 2.0 + vf);
+                float vein = smoothstep(veinWidth, 0.0, veinDist);
+
+                // Vertical branching veins
+                float branchNoise = noise1D((globalUV.y + vf * 1.3) * 10.0 - t * 0.8);
+                float branchX = vf * 0.22 + 0.08 + branchNoise * 0.12;
+                float branchDist = abs(globalUV.x - branchX);
+                float branch = smoothstep(0.005, 0.0, branchDist);
+
+                veinSum += vein + branch * 0.5;
             }
+
+            // Pulse with mids and overall energy
+            float veinPulse = 0.3 + 0.7 * (mids * 0.6 + overall * 0.4);
+            vec3 veinColor = mix(primary, accent, 0.4 + 0.2 * sin(iTime * 1.5));
+            result.rgb += veinColor * veinSum * veinPulse * veinIntensity * 0.4 * reactivity;
         }
 
-        // ── Bass center pulse ─────────────────────────────────
-        if (bassHit > 0.3) {
-            float centerDist = length(localUV - 0.5) * 2.0;
-            float pulse = (1.0 - smoothstep(0.0, 1.0, centerDist)) * (bassHit - 0.3) * 0.12;
-            result.rgb += activeColor * pulse;
+        // ── Radial energy waves from screen center ────────────
+        if (bassHit > 0.15) {
+            float centerDist = length(globalUV - 0.5) * 2.0;
+            float bassAmp = (bassHit - 0.15) * 1.2;
+
+            // Multiple expanding concentric rings at different speeds
+            float ring1 = sin((centerDist - iTime * 1.5) * 18.0) * 0.5 + 0.5;
+            ring1 *= smoothstep(1.2, 0.0, centerDist); // Fade at edges
+            float ring2 = sin((centerDist - iTime * 2.2) * 12.0) * 0.5 + 0.5;
+            ring2 *= smoothstep(1.0, 0.0, centerDist);
+            float ring3 = sin((centerDist - iTime * 0.8) * 24.0) * 0.5 + 0.5;
+            ring3 *= smoothstep(1.4, 0.2, centerDist);
+
+            // Sharpen rings to thin bands
+            ring1 = pow(ring1, 4.0);
+            ring2 = pow(ring2, 5.0);
+            ring3 = pow(ring3, 6.0);
+
+            float rings = (ring1 * 0.5 + ring2 * 0.3 + ring3 * 0.2);
+            result.rgb += activeColor * rings * bassAmp * 0.35 * radialWaveStr;
         }
 
-        // ── Idle interior shimmer (when silent) ───────────────
+        // ── Subtle grid / mesh for depth (screen-space) ──────
+        {
+            // Grid coordinates with slight noise distortion
+            vec2 gridUV = globalUV * vec2(20.0, 14.0);
+            float t = iTime * 0.2;
+            gridUV += vec2(
+                noise2D(globalUV * 3.0 + t) * 0.4,
+                noise2D(globalUV * 3.0 + t + 50.0) * 0.4
+            );
+
+            // Rectangular grid lines
+            vec2 gridLines = abs(fract(gridUV) - 0.5);
+            float gridLine = min(gridLines.x, gridLines.y);
+            float grid = 1.0 - smoothstep(0.0, 0.04, gridLine);
+
+            // Very subtle brightness
+            float gridBright = (0.03 + 0.02 * energy) * (gridOpacity / 0.15);
+            result.rgb += activeColor * grid * gridBright;
+        }
+
+        // ── Idle interior shimmer (when silent, screen-space) ─
         if (!hasAudio && idleAnim > 0.01) {
-            float shimmer = noise2D(localUV * 6.0 + iTime * 0.3) * 0.04 * idleAnim;
+            float shimmer = noise2D(globalUV * 6.0 + iTime * 0.3) * 0.04 * idleAnim;
             result.rgb += primary * shimmer;
         }
     }
 
-    // ── Border (neon core with energy flow) ───────────────────
+    // ── Border (neon core with energy flow, zone-local angle) ─
 
     float coreWidth = borderWidth * 0.7;
     float core = softBorder(d, coreWidth);
     if (core > 0.0) {
         // Energy flow: animated brightness racing around perimeter
-        float flow1 = noise1D(angle * 12.0 - iTime * flowSpeed + energy * 4.0);
-        float flow2 = noise1D(angle * 6.0  + iTime * flowSpeed * 0.7);
+        float flow1 = noise1D(borderAngle * 12.0 - iTime * flowSpeed + energy * 4.0);
+        float flow2 = noise1D(borderAngle * 6.0  + iTime * flowSpeed * 0.7);
         float flowPulse = 0.5 + 0.3 * flow1 + 0.2 * flow2;
 
         // Plasma turbulence layered on top
-        float plasma = noise2D(vec2(angle * 20.0, iTime * 1.5) + p * 0.008);
+        float plasma = noise2D(vec2(borderAngle * 20.0, iTime * 1.5) + p * 0.008);
         plasma = plasma * plasmaDetail * 0.3;
 
         float borderBright = intensity * (flowPulse + plasma);
@@ -232,7 +259,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.a   = max(result.a, core);
     }
 
-    // ── Outer glow (bass-reactive expansion) ──────────────────
+    // ── Outer glow (bass-reactive expansion, zone-local angle) ─
 
     float glowRadius = 20.0 + 30.0 * bassHit + 8.0 * idlePulse;
     if (d > 0.0 && d < glowRadius) {
@@ -241,19 +268,19 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float glow2 = expGlow(d, glowRadius * 0.5, intensity * 0.12);
 
         // Flowing color in the glow halo
-        float glowFlow = noise1D(angle * 8.0 - iTime * flowSpeed * 0.5);
+        float glowFlow = noise1D(borderAngle * 8.0 - iTime * flowSpeed * 0.5);
         vec3 glowColor = mix(activeColor, accent, glowFlow * 0.3);
 
         result.rgb += glowColor * (glow1 + glow2);
         result.a    = max(result.a, (glow1 + glow2) * 0.5);
     }
 
-    // ── Edge sparks (treble-driven) ───────────────────────────
+    // ── Edge sparks (treble-driven, zone-local angle) ─────────
 
     if (hasAudio && treble > 0.1 && abs(d) < borderWidth * 4.0) {
         // Each spark is a short-lived bright point on the border
         float sparkTime = floor(iTime * 40.0);
-        float sparkSlot = floor(angle * 60.0);
+        float sparkSlot = floor(borderAngle * 60.0);
         float sparkRand = hash21(vec2(sparkTime, sparkSlot));
         float sparkLife = fract(iTime * 40.0);
 
@@ -276,12 +303,20 @@ void main() {
         return;
     }
 
+    // Audio analysis (computed once for all zones)
+    bool  hasAudio = iAudioSpectrumSize > 0;
+    float bass    = getBass();
+    float mids    = getMids();
+    float treble  = getTreble();
+    float overall = getOverall();
+
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0) continue;
 
         vec4 zoneColor = renderZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5);
+            zoneBorderColors[i], zoneParams[i], zoneParams[i].z > 0.5,
+            bass, mids, treble, overall, hasAudio);
 
         color = blendOver(color, zoneColor);
     }

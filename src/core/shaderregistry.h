@@ -34,12 +34,13 @@ public:
         QString id;
         QString name;
         QString group; ///< Optional group for UI organization (collapsible sections)
-        QString type; ///< "float", "color", "int", "bool"
-        int slot = -1; ///< Uniform slot: 0-15 for floats, 0-7 for colors
+        QString type; ///< "float", "color", "int", "bool", "image"
+        int slot = -1; ///< Uniform slot: 0-15 for floats, 0-7 for colors, 0-3 for images
         QVariant defaultValue;
         QVariant minValue;
         QVariant maxValue;
         bool useZoneColor = false;
+        QString wrap; ///< Wrap mode for image type: "repeat" or "clamp" (default)
 
         /// Convert slot to uniform name (e.g., slot 0 → "customParams1_x", color slot 1 → "customColor2")
         QString uniformName() const;

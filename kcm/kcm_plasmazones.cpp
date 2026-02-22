@@ -2095,11 +2095,7 @@ void KCMPlasmaZones::createNewLayout()
 
 void KCMPlasmaZones::deleteLayout(const QString& layoutId)
 {
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"));
-    msg << layoutId;
-    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("deleteLayout"));
+    callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
     // The daemon emits layoutListChanged after deletion, which triggers scheduleLoadLayouts()
 }
 

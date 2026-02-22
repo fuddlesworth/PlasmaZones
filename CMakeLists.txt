@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 1.14.0 LANGUAGES CXX)
+project(PlasmaZones VERSION 1.15.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -208,47 +208,17 @@ set(PLASMAZONESD_CPP
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
 )
-set(PLASMAZONESD_QML
-    ${CMAKE_SOURCE_DIR}/src/ui/LayoutPreview.qml
-    ${CMAKE_SOURCE_DIR}/src/ui/ZoneItem.qml
-    ${CMAKE_SOURCE_DIR}/src/ui/ZoneOverlay.qml
-    ${CMAKE_SOURCE_DIR}/src/ui/ZoneSelector.qml
-    ${CMAKE_SOURCE_DIR}/src/ui/ZoneSelectorWindow.qml
-    ${CMAKE_SOURCE_DIR}/src/ui/LayoutOsd.qml
-    ${CMAKE_SOURCE_DIR}/src/ui/NavigationOsd.qml
-)
-set(PLASMAZONES_EDITOR_CPP
-    ${CMAKE_SOURCE_DIR}/src/editor/main.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/AddZoneCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ApplyTemplateCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ChangeSelectionCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ChangeZOrderCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DividerResizeCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DuplicateZoneCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/FillZoneCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/SplitZoneCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/ClearAllZonesCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DeleteZoneCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/DeleteZoneWithFillCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/PasteZonesCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateLayoutNameCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneAppearanceCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneGeometryCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneNameCommand.cpp
-    ${CMAKE_SOURCE_DIR}/src/editor/undo/commands/UpdateZoneNumberCommand.cpp
+file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
+file(GLOB PLASMAZONES_EDITOR_CPP
+    "${CMAKE_SOURCE_DIR}/src/editor/main.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/undo/commands/*.cpp"
 )
 file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
-set(KCM_PLASMAZONES_QML
-    ${CMAKE_SOURCE_DIR}/kcm/ui/main.qml
-    ${CMAKE_SOURCE_DIR}/kcm/ui/ModifierCheckBoxes.qml
-    ${CMAKE_SOURCE_DIR}/kcm/ui/LayoutThumbnail.qml
-    ${CMAKE_SOURCE_DIR}/kcm/ui/KeySequenceInput.qml
-    ${CMAKE_SOURCE_DIR}/kcm/ui/PreviewSizeControl.qml
-    ${CMAKE_SOURCE_DIR}/kcm/ui/PositionPicker.qml
-)
+file(GLOB_RECURSE KCM_PLASMAZONES_QML "${CMAKE_SOURCE_DIR}/kcm/ui/*.qml")
+list(APPEND KCM_PLASMAZONES_QML ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml)
 
 if(GETTEXT_XGETTEXT_EXECUTABLE)
     add_custom_target(extract-pot
@@ -346,7 +316,7 @@ install(DIRECTORY data/shaders/
     PATTERN "*.glsl"
     PATTERN "*.vert"
     PATTERN "*.frag"
-    PATTERN "preview.png"
+    PATTERN "*.png"
 )
 
 # Install icons (hicolor for dark themes, hicolor-light for light themes)

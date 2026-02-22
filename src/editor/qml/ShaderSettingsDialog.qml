@@ -309,6 +309,11 @@ Kirigami.Dialog {
                                 + b.toString(16).padStart(2, "0");
                     break;
 
+                case "image":
+                    // Preserve current image path (don't randomize file paths)
+                    value = root.parameterValue(param.id, param.default);
+                    break;
+
                 default:
                     // Unknown type - use default if available
                     value = param.default;

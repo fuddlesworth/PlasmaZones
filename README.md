@@ -48,17 +48,25 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ### Window Snapping
 
+**Snapping**
 - Drag with modifier key or mouse button to snap windows to zones
+- Always-active mode: zones activate on every drag without a modifier key
 - Snap all visible windows to zones at once
 - Auto-assign windows to first empty zone per layout
 - Multi-zone snapping support
+- App-to-zone rules: auto-snap specific applications to designated zones
+
+**Movement**
 - Move windows between zones with keyboard shortcuts
-- Focus adjacent zones without mouse
-- Cycle through windows stacked in the same zone (monocle-style)
+- Swap windows between zones directionally
+- Rotate windows clockwise/counterclockwise through zones
 - Push window to first empty zone
 - Restore original size on unsnap
 - Per-window floating toggle
-- App-to-zone rules: auto-snap specific applications to designated zones
+
+**Focus & Cycling**
+- Focus adjacent zones without mouse
+- Cycle through windows stacked in the same zone (monocle-style)
 
 <p align="center">
   <img src="docs/media/videos/keyboard-nav.gif" alt="Keyboard Navigation" />
@@ -82,30 +90,33 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 
 ### Shader Effects
 
-GPU-accelerated zone overlays with 14 built-in effects, including multipass shaders with 3D raymarching and bloom:
+GPU-accelerated zone overlays with 9 built-in effects, including multipass shaders and audio-reactive visuals:
 
 | Effect | Description |
 |--------|-------------|
 | Aretha Shell | Cyberpunk effect with color grading, hex grid, and data streams |
 | Cosmic Flow | Flowing fractal noise with animated color palette |
-| Crystalline Labels | Zone numbers fractured into Voronoi cells with stained-glass edges |
-| Filled Labels | Zone numbers filled with gradient (vertical, horizontal, or radial) |
-| Flow Labels | Animated flowing plasma zone numbers driven by FBM noise and configurable color palette |
-| Fractal Flow | Organic fractal-like flowing pattern with iterative distortion |
 | Magnetic Field | Mouse-reactive magnetic field with orbiting particles |
-| Neon Glow | Cyberpunk neon borders with bloom and pulsing |
 | Nexus Cascade | Multi-pass plasma with distortion, bloom, and chromatic aberration |
-| Particle Field | Animated floating particles with glow and smooth motion |
-| Rotating Tiles | Rotating tiled grid with radial wave and pulsing edges |
+| Prismata | Crystalline prismatic facets and caustics with audio-reactive chromatic fracture |
+| Sonic Ripple | Audio-reactive concentric rings with bass shockwaves and spectrum visualization |
+| Spectrum Bloom | Polar spectrum contour with frequency-driven shape morphing and aurora effects |
 | Spectrum Pulse | Audio-reactive neon energy with bass glow, spectrum aurora, and CAVA integration |
 | Toxic Circuit | Glowing circuit traces with toxic drip and digital corruption |
-| Voronoi Stained Glass | 3D raymarched stained glass with lead came, backlighting, and bloom |
+
+Shaders support up to 4 user-supplied image textures with configurable wrap modes.
 
 <p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
 </p>
 
 Custom shaders supported — see the [Shader Guide](https://github.com/fuddlesworth/PlasmaZones/wiki/Shaders) on the wiki.
+
+### Snap Assist
+
+After snapping a window, a Snap Assist overlay shows remaining empty zones with window candidates. Click any window thumbnail to snap it into a zone without dragging.
+
+<!-- TODO: screenshot or gif of Snap Assist overlay -->
 
 ### Zone Selector
 
@@ -115,6 +126,12 @@ Drag to screen edge to reveal a layout picker. Choose any layout and zone withou
   <img src="docs/media/videos/zone-selector.gif" alt="Zone Selector" />
 </p>
 
+### Layout Picker
+
+Press `Meta+Alt+Space` to open a fullscreen layout picker overlay. Browse all layouts visually and switch with a single click.
+
+<!-- TODO: screenshot or gif of Layout Picker overlay -->
+
 ### Visual Layout OSD
 
 See a preview of the layout when switching, not just text.
@@ -122,6 +139,12 @@ See a preview of the layout when switching, not just text.
 <p align="center">
   <img src="docs/media/videos/layout-switch.gif" alt="Cycling layouts with OSD" />
 </p>
+
+### Navigation OSD
+
+Keyboard navigation actions (move, focus, swap, rotate, push) show brief feedback overlays with zone numbers and directional context.
+
+<!-- TODO: screenshot or gif of Navigation OSD -->
 
 ### Multi-Monitor & Virtual Desktops
 
@@ -151,7 +174,7 @@ Keyboard shortcuts for zone operations (duplicate, split, fill), grid/edge snapp
 Per-monitor, virtual desktop, and activity layout assignments; quick-switch keyboard slots; app-to-zone auto-snap rules.
 
 #### Zones
-Colors, opacity, borders, blur, shader effects, zone numbers, OSD style, animations, activation modifiers, multi-zone selection, zone padding, and window snap behavior.
+Colors, opacity, borders, blur, shader effects, zone numbers, OSD style, animations, activation modifiers, always-active mode, multi-zone selection, zone padding, per-side edge gaps, and window snap behavior.
 
 ![Zones — Appearance](docs/media/screenshots/kcm-appearance.png)
 
@@ -178,7 +201,7 @@ Version info, update checker with GitHub release notifications, repository/wiki/
 
 - KDE Plasma 6 (Wayland)
 - Qt 6.6+
-- KDE Frameworks 6.0+
+- KDE Frameworks 6.6+
 - LayerShellQt (required for Wayland overlays)
 - CMake 3.16+
 - C++20 compiler
@@ -195,6 +218,14 @@ yay -S plasmazones-bin
 # Source package (builds locally)
 yay -S plasmazones
 ```
+
+### Nix
+
+```bash
+nix profile install github:fuddlesworth/PlasmaZones
+```
+
+Or add to your flake inputs. A `flake.nix` is included in the repository.
 
 ### Building from Source
 
@@ -314,6 +345,7 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 | Previous layout | `Meta+Alt+[` |
 | Next layout | `Meta+Alt+]` |
 | Quick layout 1–9 | `Meta+Alt+1` through `Meta+Alt+9` |
+| Open layout picker | `Meta+Alt+Space` |
 | Resnap windows to new layout | `Meta+Ctrl+Z` |
 
 </details>
@@ -329,7 +361,7 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 | Push to empty zone | `Meta+Alt+Return` |
 | Snap all windows to zones | `Meta+Ctrl+S` |
 | Restore window size | `Meta+Alt+Escape` |
-| Toggle float | `Meta+Alt+F` |
+| Toggle float | `Meta+F` |
 
 </details>
 
@@ -493,10 +525,12 @@ kcm/                # System Settings module (KCM)
 kwin-effect/        # KWin effect plugin (modifier detection, window tracking)
 data/
 ├── layouts/        # Default layout templates (12)
-└── shaders/        # Built-in GLSL shader effects (14)
+├── shaders/        # Built-in GLSL shader effects (9) + shared utilities
+└── shader-presets/ # Bundled shader preset configurations
 packaging/
 ├── arch/           # AUR PKGBUILD (source, binary, git)
 ├── debian/         # Debian packaging (control, changelog, triggers)
+├── nix/            # Nix flake package
 └── rpm/            # RPM spec
 cmake/              # CMake helpers (extract-pot, format-qml, uninstall)
 tests/              # Unit and integration tests

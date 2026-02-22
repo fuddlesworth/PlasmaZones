@@ -28,4 +28,38 @@ float audioBarSmooth(float u) {
     return texture(uAudioSpectrum, vec2(u, 0.5)).r;
 }
 
+// ─── Frequency band helpers ──────────────────────────────────────────────────
+
+float getBass() {
+    if (iAudioSpectrumSize <= 0) return 0.0;
+    float sum = 0.0;
+    int n = min(iAudioSpectrumSize, 8);
+    for (int i = 0; i < n; i++) sum += audioBar(i);
+    return sum / float(n);
+}
+
+float getMids() {
+    if (iAudioSpectrumSize <= 0) return 0.0;
+    float sum = 0.0;
+    int lo = iAudioSpectrumSize / 4;
+    int hi = iAudioSpectrumSize * 3 / 4;
+    for (int i = lo; i < hi && i < iAudioSpectrumSize; i++) sum += audioBar(i);
+    return sum / float(max(hi - lo, 1));
+}
+
+float getTreble() {
+    if (iAudioSpectrumSize <= 0) return 0.0;
+    float sum = 0.0;
+    int lo = iAudioSpectrumSize * 3 / 4;
+    for (int i = lo; i < iAudioSpectrumSize; i++) sum += audioBar(i);
+    return sum / float(max(iAudioSpectrumSize - lo, 1));
+}
+
+float getOverall() {
+    if (iAudioSpectrumSize <= 0) return 0.0;
+    float sum = 0.0;
+    for (int i = 0; i < iAudioSpectrumSize; i++) sum += audioBar(i);
+    return sum / float(iAudioSpectrumSize);
+}
+
 #endif

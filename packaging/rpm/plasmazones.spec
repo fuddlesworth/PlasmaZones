@@ -169,8 +169,10 @@ echo ""
 # Snap Assist: env.d config for KWin screenshot auth (system installs use .desktop; this is fallback)
 %{_libdir}/environment.d/99-plasmazones-screenshot.conf
 
-# Translations (optional - may not exist yet)
+# Translations
 %{_datadir}/locale/*/LC_MESSAGES/plasmazonesd.mo
+%{_datadir}/locale/*/LC_MESSAGES/kcm_plasmazones.mo
+%{_datadir}/locale/*/LC_MESSAGES/plasmazones-editor.mo
 
 %changelog
 # Generated from CHANGELOG.md by packaging/generate-changelog.sh during CI.

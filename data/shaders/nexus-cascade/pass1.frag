@@ -18,10 +18,10 @@ void main() {
     vec2 fragCoord = vFragCoord;
     vec2 uv = fragCoord / max(iResolution.xy, vec2(1.0));
 
-    float distortStrength = customParams[1].x > 0.001 ? customParams[1].x : 0.03;
-    float rippleFreq = customParams[1].y > 0.5 ? customParams[1].y : 8.0;
-    float scanlineOpacity = customParams[1].z;
-    float t = iTime * (customParams[0].x > 0.001 ? customParams[0].x : 0.4);
+    float distortStrength = customParams[1].x >= 0.0 ? customParams[1].x : 0.03;
+    float rippleFreq = customParams[1].y >= 0.0 ? customParams[1].y : 8.0;
+    float scanlineOpacity = customParams[1].z >= 0.0 ? customParams[1].z : 0.0;
+    float t = iTime * (customParams[0].x >= 0.0 ? customParams[0].x : 0.4);
 
     vec2 centered = uv - 0.5;
     float angle = atan(centered.y, centered.x);

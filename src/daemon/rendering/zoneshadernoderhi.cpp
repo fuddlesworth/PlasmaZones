@@ -253,6 +253,22 @@ void ZoneShaderNodeRhi::prepare()
             m_shaderError = QStringLiteral("Failed to create audio spectrum sampler");
             return;
         }
+        // User texture slots (bindings 7-10): 1x1 dummy textures when no user image set
+        for (int i = 0; i < kMaxUserTextures; ++i) {
+            m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+            if (!m_userTextures[i]->create()) {
+                m_shaderError = QStringLiteral("Failed to create user texture ") + QString::number(i);
+                return;
+            }
+            m_userTextureSamplers[i].reset(rhi->newSampler(
+                QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            if (!m_userTextureSamplers[i]->create()) {
+                m_shaderError = QStringLiteral("Failed to create user texture sampler ") + QString::number(i);
+                return;
+            }
+            m_userTextureDirty[i] = true;
+        }
     }
 
     if (m_shaderDirty) {
@@ -519,6 +535,49 @@ void ZoneShaderNodeRhi::prepare()
             onePixel.fill(0);
             batch->uploadTexture(m_audioSpectrumTexture.get(), onePixel);
             cb->resourceUpdate(batch);
+        }
+    }
+
+    // User texture upload and sampler management (bindings 7-10)
+    for (int i = 0; i < kMaxUserTextures; ++i) {
+        // Recreate sampler if reset (e.g. wrap mode change)
+        if (m_userTextures[i] && !m_userTextureSamplers[i]) {
+            const QRhiSampler::AddressMode addr = (m_userTextureWraps[i] == QLatin1String("repeat"))
+                ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            m_userTextureSamplers[i].reset(rhi->newSampler(
+                QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+            if (!m_userTextureSamplers[i]->create()) {
+                continue;
+            }
+            resetAllSrbs();
+        }
+        if (!m_userTextureDirty[i] || !m_userTextures[i] || !m_userTextureSamplers[i]) {
+            continue;
+        }
+        m_userTextureDirty[i] = false;
+        const QImage& img = m_userTextureImages[i];
+        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0)
+                                     ? img.size() : QSize(1, 1);
+        if (m_userTextures[i]->pixelSize() != targetSize) {
+            m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+            if (!m_userTextures[i]->create()) {
+                continue;
+            }
+            resetAllSrbs();
+            if (!ensurePipeline()) {
+                return;
+            }
+        }
+        QRhiResourceUpdateBatch* ubatch = rhi->nextResourceUpdateBatch();
+        if (ubatch) {
+            if (!img.isNull() && img.width() > 0 && img.height() > 0) {
+                ubatch->uploadTexture(m_userTextures[i].get(), img);
+            } else {
+                QImage onePixel(1, 1, QImage::Format_RGBA8888);
+                onePixel.fill(Qt::transparent);
+                ubatch->uploadTexture(m_userTextures[i].get(), onePixel);
+            }
+            cb->resourceUpdate(ubatch);
         }
     }
 }
@@ -840,6 +899,59 @@ void ZoneShaderNodeRhi::setAudioSpectrum(const QVector<float>& spectrum)
     m_audioSpectrum = spectrum;
     m_audioSpectrumDirty = true;
     m_uniformsDirty = true;
+}
+
+void ZoneShaderNodeRhi::setUserTexture(int slot, const QImage& image)
+{
+    if (slot < 0 || slot >= kMaxUserTextures) {
+        return;
+    }
+    // QImage uses implicit sharing; cacheKey() is O(1) and avoids
+    // re-uploading the identical texture to the GPU every frame.
+    if (m_userTextureImages[slot].cacheKey() == image.cacheKey()) {
+        return;
+    }
+    m_userTextureImages[slot] = image;
+    m_userTextureDirty[slot] = true;
+    m_uniformsDirty = true;
+    m_zoneDataDirty = true;
+}
+
+void ZoneShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
+{
+    if (slot < 0 || slot >= kMaxUserTextures) {
+        return;
+    }
+    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    if (m_userTextureWraps[slot] == use) {
+        return;
+    }
+    m_userTextureWraps[slot] = use;
+    // Force sampler recreation with new wrap mode
+    m_userTextureSamplers[slot].reset();
+    resetAllSrbs();
+}
+
+void ZoneShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    for (int t = 0; t < kMaxUserTextures; ++t) {
+        if (m_userTextures[t] && m_userTextureSamplers[t]) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(
+                7 + t, QRhiShaderResourceBinding::FragmentStage,
+                m_userTextures[t].get(), m_userTextureSamplers[t].get()));
+        }
+    }
+}
+
+void ZoneShaderNodeRhi::resetAllSrbs()
+{
+    m_srb.reset();
+    m_srbB.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferSrbs[i].reset();
+    }
 }
 
 void ZoneShaderNodeRhi::setBufferShaderPath(const QString& path)
@@ -1216,6 +1328,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                     bindings.append(QRhiShaderResourceBinding::sampledTexture(
                         6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
                 }
+                appendUserTextureBindings(bindings);
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ");
@@ -1278,6 +1391,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
         }
+        appendUserTextureBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -1355,6 +1469,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
         }
+        appendUserTextureBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -1383,6 +1498,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
             bindings.append(QRhiShaderResourceBinding::sampledTexture(
                 6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
         }
+        appendUserTextureBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -1545,6 +1661,24 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
         m_uniforms.iChannelResolution[i][3] = 0.0f;
     }
     m_uniforms.iAudioSpectrumSize = m_audioSpectrum.size();
+
+    // Pad after iAudioSpectrumSize to match std140 layout
+    m_uniforms._pad_after_audioSpectrum[0] = 0;
+    m_uniforms._pad_after_audioSpectrum[1] = 0;
+    m_uniforms._pad_after_audioSpectrum[2] = 0;
+
+    // User texture resolutions (bindings 7-10)
+    for (int i = 0; i < 4; ++i) {
+        if (i < kMaxUserTextures && m_userTextures[i] && !m_userTextureImages[i].isNull()) {
+            m_uniforms.iTextureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
+            m_uniforms.iTextureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
+        } else {
+            m_uniforms.iTextureResolution[i][0] = 1.0f;
+            m_uniforms.iTextureResolution[i][1] = 1.0f;
+        }
+        m_uniforms.iTextureResolution[i][2] = 0.0f;
+        m_uniforms.iTextureResolution[i][3] = 0.0f;
+    }
 }
 
 void ZoneShaderNodeRhi::releaseRhiResources()
@@ -1578,6 +1712,11 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_labelsSampler.reset();
     m_audioSpectrumTexture.reset();
     m_audioSpectrumSampler.reset();
+    for (int i = 0; i < kMaxUserTextures; ++i) {
+        m_userTextures[i].reset();
+        m_userTextureSamplers[i].reset();
+        m_userTextureDirty[i] = true;
+    }
     m_ubo.reset();
     m_vbo.reset();
     m_vertexShader = QShader();

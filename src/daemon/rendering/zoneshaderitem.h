@@ -17,6 +17,7 @@
 #include <QStringList>
 #include <QVariantList>
 #include <QVector>
+#include <array>
 #include <atomic>
 
 QT_BEGIN_NAMESPACE
@@ -531,6 +532,11 @@ private:
     mutable QMutex m_labelsTextureMutex;
 
     QVector<float> m_audioSpectrum;
+
+    // User texture data (bindings 7-10)
+    std::array<QString, 4> m_userTexturePaths;
+    std::array<QImage, 4> m_userTextureImages;
+    std::array<QString, 4> m_userTextureWraps;
 
     // Thread-safe zone data storage
     // Protected by m_zoneDataMutex for render thread access

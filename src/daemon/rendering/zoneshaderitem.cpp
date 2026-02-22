@@ -290,6 +290,26 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
         setCustomColorByIndex(i + 1, extractColor(QString::fromLatin1(colorKeys[i]), customColorByIndex(i + 1)));
     }
 
+    // User texture params: uTexture0-3 paths and uTexture%1_wrap values
+    for (int i = 0; i < 4; ++i) {
+        const QString texKey = QStringLiteral("uTexture%1").arg(i);
+        if (params.contains(texKey)) {
+            const QString path = params.value(texKey).toString();
+            if (m_userTexturePaths[i] != path) {
+                m_userTexturePaths[i] = path;
+                if (!path.isEmpty() && QFile::exists(path)) {
+                    m_userTextureImages[i] = QImage(path).convertToFormat(QImage::Format_RGBA8888);
+                } else {
+                    m_userTextureImages[i] = QImage();
+                }
+            }
+        }
+        const QString wrapKey = QStringLiteral("uTexture%1_wrap").arg(i);
+        if (params.contains(wrapKey)) {
+            m_userTextureWraps[i] = params.value(wrapKey).toString();
+        }
+    }
+
     Q_EMIT shaderParamsChanged();
     update();
 }
@@ -732,6 +752,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     // Sync audio spectrum (CAVA bar data for audio-reactive shaders)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     node->setAudioSpectrum(m_audioSpectrum);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Sync user textures (bindings 7-10)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    for (int i = 0; i < 4; ++i) {
+        node->setUserTexture(i, m_userTextureImages[i]);
+        node->setUserTextureWrap(i, m_userTextureWraps[i]);
+    }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Sync buffer shader path (multipass)

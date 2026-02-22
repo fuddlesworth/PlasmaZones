@@ -23,7 +23,7 @@
             "group": "Color Grading",
             "type": "float",
             "slot": 1,
-            "default": 0.35,
+            "default": 0.25,
             "min": 0.0,
             "max": 1.0
         },
@@ -136,6 +136,36 @@
             "default": 0.20,
             "min": 0.05,
             "max": 0.5
+        },
+        {
+            "id": "audioSensitivity",
+            "name": "Audio Sensitivity",
+            "group": "Audio",
+            "type": "float",
+            "slot": 13,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 2.0
+        },
+        {
+            "id": "fillOpacity",
+            "name": "Fill Opacity",
+            "group": "Appearance",
+            "type": "float",
+            "slot": 14,
+            "default": 0.95,
+            "min": 0.4,
+            "max": 1.0
+        },
+        {
+            "id": "dataSurgeIntensity",
+            "name": "Data Surge Intensity",
+            "group": "Audio",
+            "type": "float",
+            "slot": 15,
+            "default": 1.0,
+            "min": 0.0,
+            "max": 3.0
         },
         {
             "id": "arethaCyan",

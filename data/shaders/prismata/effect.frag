@@ -30,44 +30,8 @@ layout(location = 0) out vec4 fragColor;
 #include <common.glsl>
 #include <audio.glsl>
 
-// === AUDIO BANDS ===
-float getBass() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    int n = min(iAudioSpectrumSize, 8);
-    for (int i = 0; i < n; i++) sum += audioBar(i);
-    return sum / float(n);
-}
-float getMids() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    int lo = iAudioSpectrumSize / 4, hi = iAudioSpectrumSize * 3 / 4;
-    float sum = 0.0;
-    for (int i = lo; i < hi && i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(max(hi - lo, 1));
-}
-float getTreble() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    int lo = iAudioSpectrumSize * 3 / 4;
-    float sum = 0.0;
-    for (int i = lo; i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(max(iAudioSpectrumSize - lo, 1));
-}
-float getOverall() {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-    float sum = 0.0;
-    for (int i = 0; i < iAudioSpectrumSize; i++) sum += audioBar(i);
-    return sum / float(iAudioSpectrumSize);
-}
 
 // === GLOBAL UNIFIED HELPERS (all use fragCoord / screen space) ===
-
-float rand(vec2 p) {
-    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-}
-
-vec2 rand2(vec2 p) {
-    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453);
-}
 
 // Voronoi: returns (dist to cell center, cell id hash, edge distance)
 vec3 voronoi(vec2 uv, float scale, float time) {
@@ -80,14 +44,14 @@ vec3 voronoi(vec2 uv, float scale, float time) {
     for (int j = -1; j <= 1; j++) {
         for (int i = -1; i <= 1; i++) {
             vec2 g = vec2(float(i), float(j));
-            vec2 o = rand2(n + g);
+            vec2 o = hash22(n + g);
             o = 0.5 + 0.5 * sin(time + TAU * o);
             vec2 r = g + o - f;
             float d = length(r);
             if (d < md) {
                 md2 = md;
                 md = d;
-                mid = rand(n + g);
+                mid = hash21(n + g);
             } else if (d < md2) {
                 md2 = d;
             }
@@ -125,7 +89,8 @@ vec3 palette(float t, vec3 a, vec3 b, vec3 c, vec3 d) {
 // === ZONE RENDER (uses global effect, applies zone tint + novel highlight) ===
 
 vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
-                        vec4 params, bool isHighlighted) {
+                        vec4 params, bool isHighlighted,
+                        float bass, float mids, float treble, float overall, bool hasAudio) {
     float borderRadius = max(params.x, 8.0);
     float borderWidth = max(params.y, 2.0);
 
@@ -138,22 +103,17 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Params
-    float cellScale = customParams[0].x > 1.0 ? customParams[0].x : 12.0;
-    float animSpeed = customParams[0].y > 0.001 ? customParams[0].y : 0.6;
-    float facetSharpness = customParams[0].z > 0.01 ? customParams[0].z : 0.7;
+    float cellScale = customParams[0].x >= 0.0 ? customParams[0].x : 12.0;
+    float animSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 0.6;
+    float facetSharpness = customParams[0].z >= 0.0 ? customParams[0].z : 0.7;
     float zoneTintBlend = customParams[0].w >= 0.0 ? customParams[0].w : 0.35;
-    float fillOpacity = customParams[1].x > 0.1 ? customParams[1].x : 0.88;
-    float causticStr = customParams[1].y > 0.001 ? customParams[1].y : 0.5;
-    float chromaStr = customParams[1].z > 0.001 ? customParams[1].z : 0.4;
-    float resonanceStr = customParams[1].w > 0.001 ? customParams[1].w : 0.6;
+    float fillOpacity = customParams[1].x >= 0.0 ? customParams[1].x : 0.88;
+    float causticStr = customParams[1].y >= 0.0 ? customParams[1].y : 0.5;
+    float chromaStr = customParams[1].z >= 0.0 ? customParams[1].z : 0.4;
+    float resonanceStr = customParams[1].w >= 0.0 ? customParams[1].w : 0.6;
     float audioReact = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
     float idlePulse = customParams[2].y >= 0.0 ? customParams[2].y : 0.8;
 
-    bool hasAudio = iAudioSpectrumSize > 0;
-    float bass = getBass();
-    float mids = getMids();
-    float treble = getTreble();
-    float overall = getOverall();
     float energy = hasAudio ? overall * audioReact : 0.0;
     float idleAnim = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 1.2 * PI)) * idlePulse;
 
@@ -165,6 +125,12 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec3 cryst4 = colorWithFallback(customColors[5].rgb, vec3(0.67, 0.8, 1.0));
     vec3 edgeClr = colorWithFallback(customColors[6].rgb, accent);
 
+    // Mouse interaction
+    vec2 mouseLocal = zoneLocalUV(iMouse.xy, rectPos, rectSize);
+    vec2 mouseGlobal = iMouse.xy / max(iResolution, vec2(1.0));
+    bool mouseInZone = mouseLocal.x >= 0.0 && mouseLocal.x <= 1.0 &&
+                       mouseLocal.y >= 0.0 && mouseLocal.y <= 1.0;
+
     vec4 result = vec4(0.0);
 
     if (d < 0.0) {
@@ -173,8 +139,16 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         float speedMod = 1.0 + energy * 0.8 + idleAnim * 0.4;
         float time = iTime * animSpeed * speedMod;
 
-        // Voronoi cells in screen space (same for all zones at this pixel)
-        vec3 vor = voronoi(globalUV, cellScale, time);
+        float mouseDist = length(globalUV - mouseGlobal);
+        float mouseInfluence = mouseInZone ? smoothstep(0.3, 0.0, mouseDist) : 0.0;
+
+        // Voronoi cells in screen space — distort toward cursor when mouse is in zone
+        vec2 vorUV = globalUV;
+        if (mouseInZone && mouseInfluence > 0.01) {
+            vec2 toCursor = mouseGlobal - globalUV;
+            vorUV += toCursor * mouseInfluence * 0.05;
+        }
+        vec3 vor = voronoi(vorUV, cellScale, time);
         float cellDist = vor.x;
         float cellId = vor.y;
         float edgeDist = vor.z;
@@ -190,10 +164,20 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         // Facet edge — Edge Color brightens at cell boundaries (mids pulse the edge)
         float edgeFactor = exp(-edgeDist * facetSharpness * 4.0);
         float edgePulse = hasAudio ? (0.6 + 0.4 * mids * audioReact) : (0.6 + 0.2 * idleAnim);
+        // Mouse: boost edges near cursor
+        if (mouseInZone) {
+            float cursorEdgeBoost = mouseInfluence * 0.4;
+            edgeFactor = min(edgeFactor + cursorEdgeBoost * edgeFactor, 1.0);
+            edgePulse += mouseInfluence * 0.3;
+        }
         vec3 edgeColor = mix(facetColor, edgeClr, edgeFactor * 0.5 * edgePulse);
 
         // Traveling light — ONE light that sweeps across entire overlay (bass intensifies)
         vec2 lightPos = vec2(0.5 + 0.35 * cos(time * 0.8), 0.5 + 0.35 * sin(time * 0.6));
+        // Mouse: light gravitates toward cursor
+        if (mouseInZone) {
+            lightPos = mix(lightPos, mouseGlobal, mouseInfluence * 0.7);
+        }
         vec2 toLight = lightPos - globalUV;
         float lightDist = length(toLight);
         float spec = pow(max(0.0, 1.0 - lightDist * 3.0), 4.0);
@@ -205,6 +189,12 @@ vec4 renderPrismataZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
         // Base result
         vec3 base = edgeColor + specular;
         base = mix(base, fillColor.rgb, zoneTintBlend); // Zone tint
+
+        // Mouse: cursor glow hotspot
+        if (mouseInZone) {
+            float cursorGlow = exp(-mouseDist * mouseDist * 80.0) * 0.15;
+            base += accent * cursorGlow;
+        }
 
         // === NOVEL HIGHLIGHT EFFECTS (not just color change) ===
         if (isHighlighted) {
@@ -320,6 +310,13 @@ void main() {
         return;
     }
 
+    // Audio analysis (computed once for all zones)
+    bool  hasAudio = iAudioSpectrumSize > 0;
+    float bass    = getBass();
+    float mids    = getMids();
+    float treble  = getTreble();
+    float overall = getOverall();
+
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
         if (rect.z <= 0.0 || rect.w <= 0.0)
@@ -327,7 +324,8 @@ void main() {
 
         bool isHighlighted = zoneParams[i].z > 0.5;
         vec4 zoneColor = renderPrismataZone(fragCoord, rect, zoneFillColors[i],
-            zoneBorderColors[i], zoneParams[i], isHighlighted);
+            zoneBorderColors[i], zoneParams[i], isHighlighted,
+            bass, mids, treble, overall, hasAudio);
         color = blendOver(color, zoneColor);
     }
 

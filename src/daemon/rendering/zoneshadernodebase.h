@@ -65,6 +65,19 @@ public:
         Q_UNUSED(spectrum)
     }
 
+    /** User-supplied image texture (bindings 7-10). Slot 0-3. Default no-op. */
+    virtual void setUserTexture(int slot, const QImage& image)
+    {
+        Q_UNUSED(slot)
+        Q_UNUSED(image)
+    }
+    /** Wrap mode for user texture slot: "repeat" or "clamp". Default no-op. */
+    virtual void setUserTextureWrap(int slot, const QString& wrap)
+    {
+        Q_UNUSED(slot)
+        Q_UNUSED(wrap)
+    }
+
     /** Multi-pass: optional buffer pass fragment shader path. No-op if backend does not support multipass. */
     virtual void setBufferShaderPath(const QString& path) { Q_UNUSED(path) }
     /** Multi-pass: up to 4 buffer pass fragment shader paths (A→B→C→D). Overrides single path when non-empty. */

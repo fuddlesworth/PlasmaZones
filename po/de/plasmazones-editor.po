@@ -1,521 +1,520 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# German translations for plasmazones-editor package.
+# Copyright (C) 2026 THE plasmazones-editor'S COPYRIGHT HOLDER
 # This file is distributed under the same license as the plasmazones-editor package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
-#, fuzzy
 msgid ""
 msgstr ""
 "Project-Id-Version: plasmazones-editor\n"
 "Report-Msgid-Bugs-To: https://github.com/fuddlesworth/PlasmaZones/issues\n"
 "POT-Creation-Date: 2026-02-22 09:41-0600\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"PO-Revision-Date: 2026-02-22 12:00-0600\n"
+"Last-Translator: \n"
+"Language-Team: German <kde-i18n-de@kde.org>\n"
+"Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: src/editor/EditorController.cpp:653
 #, kde-format
 msgctxt "@action"
 msgid "Clear Edge Gap Override"
-msgstr ""
+msgstr "Randabstand-Überschreibung zurücksetzen"
 
 #: src/editor/EditorController.cpp:1147
 #, kde-format
 msgid "New Layout"
-msgstr ""
+msgstr "Neues Layout"
 
 #: src/editor/EditorController.cpp:1192
 #, kde-format
 msgid "Layout ID cannot be empty"
-msgstr ""
+msgstr "Layout-ID darf nicht leer sein"
 
 #: src/editor/EditorController.cpp:1197
 #, kde-format
 msgid "Layout service not initialized"
-msgstr ""
+msgstr "Layout-Dienst nicht initialisiert"
 
 #: src/editor/EditorController.cpp:1209
 #, kde-format
 msgid "Invalid layout data format"
-msgstr ""
+msgstr "Ungültiges Layout-Datenformat"
 
 #: src/editor/EditorController.cpp:1439
 #, kde-format
 msgid "Services not initialized"
-msgstr ""
+msgstr "Dienste nicht initialisiert"
 
 #: src/editor/EditorController.cpp:1888 src/editor/EditorController.cpp:1993
 #: src/editor/EditorController.cpp:2029 src/editor/EditorController.cpp:2108
 #, kde-format
 msgctxt "@info"
 msgid "Zone not found"
-msgstr ""
+msgstr "Zone nicht gefunden"
 
 #: src/editor/EditorController.cpp:1978 src/editor/EditorController.cpp:2014
 #, kde-format
 msgctxt "@info"
 msgid "Services not initialized"
-msgstr ""
+msgstr "Dienste nicht initialisiert"
 
 #: src/editor/EditorController.cpp:2271
 #, kde-format
 msgctxt "@action"
 msgid "Bring to Front"
-msgstr ""
+msgstr "In den Vordergrund"
 
 #: src/editor/EditorController.cpp:2276
 #, kde-format
 msgctxt "@action"
 msgid "Send to Back"
-msgstr ""
+msgstr "In den Hintergrund"
 
 #: src/editor/EditorController.cpp:2281
 #, kde-format
 msgctxt "@action"
 msgid "Bring Forward"
-msgstr ""
+msgstr "Eine Ebene nach vorne"
 
 #: src/editor/EditorController.cpp:2286
 #, kde-format
 msgctxt "@action"
 msgid "Send Backward"
-msgstr ""
+msgstr "Eine Ebene nach hinten"
 
 #: src/editor/EditorController.cpp:2940
 #, kde-format
 msgctxt "@action"
 msgid "Delete %1 Zones"
-msgstr ""
+msgstr "%1 Zonen löschen"
 
 #: src/editor/EditorController.cpp:2968
 #, kde-format
 msgctxt "@action"
 msgid "Duplicate %1 Zones"
-msgstr ""
+msgstr "%1 Zonen duplizieren"
 
 #: src/editor/EditorController.cpp:3012 src/editor/EditorController.cpp:3220
 #, kde-format
 msgctxt "@action"
 msgid "Move %1 Zones"
-msgstr ""
+msgstr "%1 Zonen verschieben"
 
 #: src/editor/EditorController.cpp:3075
 #, kde-format
 msgctxt "@action"
 msgid "Resize %1 Zones"
-msgstr ""
+msgstr "Größe von %1 Zonen ändern"
 
 #: src/editor/EditorController.cpp:3343
 #, kde-format
 msgid "Zone name cannot exceed 100 characters"
-msgstr ""
+msgstr "Zonenname darf nicht länger als 100 Zeichen sein"
 
 #: src/editor/EditorController.cpp:3352
 #, kde-format
 msgid "Zone name contains invalid characters: < > \" ' \\"
-msgstr ""
+msgstr "Zonenname enthält ungültige Zeichen: < > \" ' \\"
 
 #: src/editor/EditorController.cpp:3364
 #, kde-format
 msgid "A zone with this name already exists"
-msgstr ""
+msgstr "Eine Zone mit diesem Namen existiert bereits"
 
 #: src/editor/EditorController.cpp:3383
 #, kde-format
 msgid "Zone number must be at least 1"
-msgstr ""
+msgstr "Die Zonennummer muss mindestens 1 sein"
 
 #: src/editor/EditorController.cpp:3386
 #, kde-format
 msgid "Zone number cannot exceed 99"
-msgstr ""
+msgstr "Die Zonennummer darf nicht größer als 99 sein"
 
 #: src/editor/EditorController.cpp:3406
 #, kde-format
 msgid "Zone number %1 is already in use"
-msgstr ""
+msgstr "Zonennummer %1 wird bereits verwendet"
 
 #: src/editor/EditorController.cpp:3735 src/editor/EditorController.cpp:3778
 #, kde-format
 msgctxt "@info"
 msgid "File path cannot be empty"
-msgstr ""
+msgstr "Dateipfad darf nicht leer sein"
 
 #: src/editor/EditorController.cpp:3740
 #, kde-format
 msgctxt "@info"
 msgid "No shader selected to save"
-msgstr ""
+msgstr "Kein Shader zum Speichern ausgewählt"
 
 #: src/editor/EditorController.cpp:3756
 #, kde-format
 msgctxt "@info"
 msgid "Failed to save preset: %1"
-msgstr ""
+msgstr "Voreinstellung konnte nicht gespeichert werden: %1"
 
 #: src/editor/EditorController.cpp:3764
 #, kde-format
 msgctxt "@info"
 msgid "Failed to write preset file: %1"
-msgstr ""
+msgstr "Voreinstellungsdatei konnte nicht geschrieben werden: %1"
 
 #: src/editor/EditorController.cpp:3784
 #, kde-format
 msgctxt "@info"
 msgid "Failed to open preset file: %1"
-msgstr ""
+msgstr "Voreinstellungsdatei konnte nicht geöffnet werden: %1"
 
 #: src/editor/EditorController.cpp:3793
 #, kde-format
 msgctxt "@info"
 msgid "Invalid preset file: %1"
-msgstr ""
+msgstr "Ungültige Voreinstellungsdatei: %1"
 
 #: src/editor/EditorController.cpp:3800
 #, kde-format
 msgctxt "@info"
 msgid "Preset file must contain a JSON object"
-msgstr ""
+msgstr "Voreinstellungsdatei muss ein JSON-Objekt enthalten"
 
 #: src/editor/EditorController.cpp:3809
 #, kde-format
 msgctxt "@info"
 msgid "Preset file missing shader ID"
-msgstr ""
+msgstr "Shader-ID fehlt in der Voreinstellungsdatei"
 
 #: src/editor/EditorController.cpp:3825
 #, kde-format
 msgctxt "@info"
 msgid "Shader in preset is no longer available"
-msgstr ""
+msgstr "Shader in der Voreinstellung ist nicht mehr verfügbar"
 
 #: src/editor/EditorController.cpp:3873 src/editor/EditorController.cpp:3946
 #, kde-format
 msgctxt "@info"
 msgid "Zone manager not initialized"
-msgstr ""
+msgstr "Zonen-Verwaltung nicht initialisiert"
 
 #: src/editor/EditorController.cpp:3935
 #, kde-format
 msgctxt "@action"
 msgid "Cut %1 Zones"
-msgstr ""
+msgstr "%1 Zonen ausschneiden"
 
 #: src/editor/EditorController.cpp:4035
 #: src/editor/undo/commands/PasteZonesCommand.cpp:13
 #, kde-format
 msgctxt "@action"
 msgid "Paste %1 Zones"
-msgstr ""
+msgstr "%1 Zonen einfügen"
 
 #: src/editor/EditorController.cpp:4158
 #, kde-format
 msgctxt "@action"
 msgid "Reset Shader Parameters"
-msgstr ""
+msgstr "Shader-Parameter zurücksetzen"
 
 #: src/editor/EditorController.cpp:4169
 #, kde-format
 msgctxt "@action"
 msgid "Switch Shader Effect"
-msgstr ""
+msgstr "Shader-Effekt wechseln"
 
 #: src/editor/main.cpp:47
 #, kde-format
 msgid "PlasmaZones Layout Editor"
-msgstr ""
+msgstr "PlasmaZones Layout-Editor"
 
 #: src/editor/main.cpp:48
 #, kde-format
 msgid "Visual layout editor for PlasmaZones"
-msgstr ""
+msgstr "Visueller Layout-Editor für PlasmaZones"
 
 #: src/editor/main.cpp:49
 #, kde-format
 msgid "(c) 2026 fuddlesworth"
-msgstr ""
+msgstr "(c) 2026 fuddlesworth"
 
 #: src/editor/main.cpp:50
 #, kde-format
 msgid "fuddlesworth"
-msgstr ""
+msgstr "fuddlesworth"
 
 #: src/editor/main.cpp:59
 #, kde-format
 msgid "Layout ID to edit"
-msgstr ""
+msgstr "Zu bearbeitende Layout-ID"
 
 #: src/editor/main.cpp:61
 #, kde-format
 msgid "Target screen name"
-msgstr ""
+msgstr "Name des Zielbildschirms"
 
 #: src/editor/main.cpp:63
 #, kde-format
 msgid "Create new layout"
-msgstr ""
+msgstr "Neues Layout erstellen"
 
 #: src/editor/undo/commands/AddZoneCommand.cpp:16
 #, kde-format
 msgctxt "@action"
 msgid "Add Zone"
-msgstr ""
+msgstr "Zone hinzufügen"
 
 #: src/editor/undo/commands/ApplyTemplateCommand.cpp:13
 #, kde-format
 msgctxt "@action"
 msgid "Apply Template: %1"
-msgstr ""
+msgstr "Vorlage anwenden: %1"
 
 #: src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp:20
 #, kde-format
 msgctxt "@action"
 msgid "Update Appearance for %1 Zones"
-msgstr ""
+msgstr "Aussehen von %1 Zonen aktualisieren"
 
 #: src/editor/undo/commands/BatchUpdateAppearanceCommand.cpp:71
 #, kde-format
 msgctxt "@action"
 msgid "Update Color for %1 Zones"
-msgstr ""
+msgstr "Farbe von %1 Zonen aktualisieren"
 
 #: src/editor/undo/commands/ChangeSelectionCommand.cpp:14
 #, kde-format
 msgctxt "@action"
 msgid "Change Selection"
-msgstr ""
+msgstr "Auswahl ändern"
 
 #: src/editor/undo/commands/ChangeZOrderCommand.cpp:13
 #, kde-format
 msgctxt "@action"
 msgid "Change Z-Order"
-msgstr ""
+msgstr "Z-Reihenfolge ändern"
 
 #: src/editor/undo/commands/ClearAllZonesCommand.cpp:12
 #, kde-format
 msgctxt "@action"
 msgid "Clear All Zones"
-msgstr ""
+msgstr "Alle Zonen entfernen"
 
 #: src/editor/undo/commands/DeleteZoneCommand.cpp:14
 #: src/editor/undo/commands/DeleteZoneWithFillCommand.cpp:14
 #, kde-format
 msgctxt "@action"
 msgid "Delete Zone"
-msgstr ""
+msgstr "Zone löschen"
 
 #: src/editor/undo/commands/DividerResizeCommand.cpp:15
 #, kde-format
 msgctxt "@action"
 msgid "Resize at Divider"
-msgstr ""
+msgstr "Größe am Teiler ändern"
 
 #: src/editor/undo/commands/DuplicateZoneCommand.cpp:15
 #, kde-format
 msgctxt "@action"
 msgid "Duplicate Zone"
-msgstr ""
+msgstr "Zone duplizieren"
 
 #: src/editor/undo/commands/FillZoneCommand.cpp:13
 #, kde-format
 msgctxt "@action"
 msgid "Fill Zone"
-msgstr ""
+msgstr "Zone füllen"
 
 #: src/editor/undo/commands/SplitZoneCommand.cpp:16
 #, kde-format
 msgctxt "@action"
 msgid "Split Zone"
-msgstr ""
+msgstr "Zone teilen"
 
 #: src/editor/undo/commands/ToggleGeometryModeCommand.cpp:18
 #, kde-format
 msgctxt "@action"
 msgid "Toggle Zone Geometry Mode"
-msgstr ""
+msgstr "Zonen-Geometriemodus umschalten"
 
 #: src/editor/undo/commands/UpdateFixedGeometryCommand.cpp:15
 #, kde-format
 msgctxt "@action"
 msgid "Edit Fixed Geometry"
-msgstr ""
+msgstr "Feste Geometrie bearbeiten"
 
 #: src/editor/undo/commands/UpdateFullScreenGeometryCommand.cpp:15
 #, kde-format
 msgctxt "@action"
 msgid "Toggle Full Screen Geometry"
-msgstr ""
+msgstr "Vollbild-Geometrie umschalten"
 
 #: src/editor/undo/commands/UpdateGapOverrideCommand.cpp:17
 #, kde-format
 msgctxt "@action"
 msgid "Change Zone Padding"
-msgstr ""
+msgstr "Zonenabstand ändern"
 
 #: src/editor/undo/commands/UpdateGapOverrideCommand.cpp:19
 #, kde-format
 msgctxt "@action"
 msgid "Toggle Per-Side Edge Gap"
-msgstr ""
+msgstr "Seitenweisen Randabstand umschalten"
 
 #: src/editor/undo/commands/UpdateGapOverrideCommand.cpp:20
 #, kde-format
 msgctxt "@action"
 msgid "Change Edge Gap"
-msgstr ""
+msgstr "Randabstand ändern"
 
 #: src/editor/undo/commands/UpdateLayoutNameCommand.cpp:13
 #, kde-format
 msgctxt "@action"
 msgid "Rename Layout"
-msgstr ""
+msgstr "Layout umbenennen"
 
 #: src/editor/undo/commands/UpdateShaderIdCommand.cpp:15
 #, kde-format
 msgctxt "@action"
 msgid "Change Shader Effect"
-msgstr ""
+msgstr "Shader-Effekt ändern"
 
 #: src/editor/undo/commands/UpdateShaderParamsCommand.cpp:17
 #, kde-format
 msgctxt "@action"
 msgid "Change Shader Parameter"
-msgstr ""
+msgstr "Shader-Parameter ändern"
 
 #: src/editor/undo/commands/UpdateShaderParamsCommand.cpp:29
 #, kde-format
 msgctxt "@action"
 msgid "Change Shader Parameters"
-msgstr ""
+msgstr "Shader-Parameter ändern"
 
 #: src/editor/undo/commands/UpdateVisibilityCommand.cpp:17
 #, kde-format
 msgctxt "@action"
 msgid "Change Visibility"
-msgstr ""
+msgstr "Sichtbarkeit ändern"
 
 #: src/editor/undo/commands/UpdateZoneAppearanceCommand.cpp:15
 #, kde-format
 msgctxt "@action"
 msgid "Change Zone Appearance"
-msgstr ""
+msgstr "Zonen-Aussehen ändern"
 
 #: src/editor/undo/commands/UpdateZoneGeometryCommand.cpp:14
 #, kde-format
 msgctxt "@action"
 msgid "Move Zone"
-msgstr ""
+msgstr "Zone verschieben"
 
 #: src/editor/undo/commands/UpdateZoneNameCommand.cpp:14
 #, kde-format
 msgctxt "@action"
 msgid "Rename Zone"
-msgstr ""
+msgstr "Zone umbenennen"
 
 #: src/editor/undo/commands/UpdateZoneNumberCommand.cpp:16
 #, kde-format
 msgctxt "@action"
 msgid "Update Zone Number"
-msgstr ""
+msgstr "Zonennummer aktualisieren"
 
 #: src/editor/qml/ActionButtons.qml:66
 msgctxt "@action:button"
 msgid "Split horizontally"
-msgstr ""
+msgstr "Horizontal teilen"
 
 #: src/editor/qml/ActionButtons.qml:67
 msgctxt "@info:tooltip"
 msgid "Split this zone into two horizontal sections"
-msgstr ""
+msgstr "Diese Zone in zwei horizontale Abschnitte teilen"
 
 #: src/editor/qml/ActionButtons.qml:94
 msgctxt "@tooltip"
 msgid "Split horizontally"
-msgstr ""
+msgstr "Horizontal teilen"
 
 #: src/editor/qml/ActionButtons.qml:126
 msgctxt "@action:button"
 msgid "Split vertically"
-msgstr ""
+msgstr "Vertikal teilen"
 
 #: src/editor/qml/ActionButtons.qml:127
 msgctxt "@info:tooltip"
 msgid "Split this zone into two vertical sections"
-msgstr ""
+msgstr "Diese Zone in zwei vertikale Abschnitte teilen"
 
 #: src/editor/qml/ActionButtons.qml:154
 msgctxt "@tooltip"
 msgid "Split vertically"
-msgstr ""
+msgstr "Vertikal teilen"
 
 #: src/editor/qml/ActionButtons.qml:186
 msgctxt "@action:button"
 msgid "Fill available space"
-msgstr ""
+msgstr "Verfügbaren Platz füllen"
 
 #: src/editor/qml/ActionButtons.qml:187
 msgctxt "@info:tooltip"
 msgid "Expand zone to fill available empty space"
-msgstr ""
+msgstr "Zone erweitern, um verfügbaren leeren Platz zu füllen"
 
 #: src/editor/qml/ActionButtons.qml:214
 msgctxt "@tooltip"
 msgid "Fill available space"
-msgstr ""
+msgstr "Verfügbaren Platz füllen"
 
 #: src/editor/qml/ActionButtons.qml:246
 msgctxt "@action:button"
 msgid "Duplicate zone"
-msgstr ""
+msgstr "Zone duplizieren"
 
 #: src/editor/qml/ActionButtons.qml:247
 msgctxt "@info:tooltip"
 msgid "Create a copy of this zone"
-msgstr ""
+msgstr "Eine Kopie dieser Zone erstellen"
 
 #: src/editor/qml/ActionButtons.qml:274
 msgctxt "@tooltip"
 msgid "Duplicate zone"
-msgstr ""
+msgstr "Zone duplizieren"
 
 #: src/editor/qml/ActionButtons.qml:306
 msgctxt "@action:button"
 msgid "Delete zone"
-msgstr ""
+msgstr "Zone löschen"
 
 #: src/editor/qml/ActionButtons.qml:307
 msgctxt "@info:tooltip"
 msgid "Remove this zone from the layout"
-msgstr ""
+msgstr "Diese Zone aus dem Layout entfernen"
 
 #: src/editor/qml/ActionButtons.qml:334
 msgctxt "@tooltip"
 msgid "Delete zone"
-msgstr ""
+msgstr "Zone löschen"
 
 #: src/editor/qml/ColorPickerRow.qml:86
 msgctxt "@info"
 msgid "Click to set for all"
-msgstr ""
+msgstr "Klicken, um für alle zu setzen"
 
 #: src/editor/qml/ColorPickerRow.qml:95
 msgctxt "@info:accessibility"
 msgid "Color hex code"
-msgstr ""
+msgstr "Farb-Hex-Code"
 
 #: src/editor/qml/ControlBar.qml:45
 msgctxt "@action:button"
 msgid "Add Zone"
-msgstr ""
+msgstr "Zone hinzufügen"
 
 #: src/editor/qml/ControlBar.qml:49
 msgctxt "@info"
 msgid "Click to add a new zone to the layout"
-msgstr ""
+msgstr "Klicken, um eine neue Zone zum Layout hinzuzufügen"
 
 #: src/editor/qml/ControlBar.qml:51
 msgctxt "@tooltip"
@@ -523,81 +522,83 @@ msgid ""
 "Add a new zone to the layout. The zone will be created centered on the "
 "canvas."
 msgstr ""
+"Eine neue Zone zum Layout hinzufügen. Die Zone wird zentriert auf der "
+"Arbeitsfläche erstellt."
 
 #: src/editor/qml/ControlBar.qml:74
 msgctxt "@item:inmenu"
 msgid "Apply Template..."
-msgstr ""
+msgstr "Vorlage anwenden ..."
 
 #: src/editor/qml/ControlBar.qml:81
 msgctxt "@item:inmenu"
 msgid "Grid 2×2"
-msgstr ""
+msgstr "Raster 2×2"
 
 #: src/editor/qml/ControlBar.qml:86 src/editor/qml/ControlBar.qml:93
 msgctxt "@title:group"
 msgid "Grid Layouts"
-msgstr ""
+msgstr "Raster-Layouts"
 
 #: src/editor/qml/ControlBar.qml:88
 msgctxt "@item:inmenu"
 msgid "Grid 3×2"
-msgstr ""
+msgstr "Raster 3×2"
 
 #: src/editor/qml/ControlBar.qml:95
 msgctxt "@item:inmenu"
 msgid "Columns 2"
-msgstr ""
+msgstr "2 Spalten"
 
 #: src/editor/qml/ControlBar.qml:100 src/editor/qml/ControlBar.qml:107
 msgctxt "@title:group"
 msgid "Column Layouts"
-msgstr ""
+msgstr "Spalten-Layouts"
 
 #: src/editor/qml/ControlBar.qml:102
 msgctxt "@item:inmenu"
 msgid "Columns 3"
-msgstr ""
+msgstr "3 Spalten"
 
 #: src/editor/qml/ControlBar.qml:109
 msgctxt "@item:inmenu"
 msgid "Rows 2"
-msgstr ""
+msgstr "2 Zeilen"
 
 #: src/editor/qml/ControlBar.qml:114
 msgctxt "@title:group"
 msgid "Row Layouts"
-msgstr ""
+msgstr "Zeilen-Layouts"
 
 #: src/editor/qml/ControlBar.qml:116
 msgctxt "@item:inmenu"
 msgid "Priority Grid"
-msgstr ""
+msgstr "Prioritätsraster"
 
 #: src/editor/qml/ControlBar.qml:121 src/editor/qml/ControlBar.qml:128
 msgctxt "@title:group"
 msgid "Special Layouts"
-msgstr ""
+msgstr "Spezielle Layouts"
 
 #: src/editor/qml/ControlBar.qml:123
 msgctxt "@item:inmenu"
 msgid "Focus"
-msgstr ""
+msgstr "Fokus"
 
 #: src/editor/qml/ControlBar.qml:132
 msgctxt "@label"
 msgid "Layout templates"
-msgstr ""
+msgstr "Layout-Vorlagen"
 
 #: src/editor/qml/ControlBar.qml:133
 msgctxt "@info"
 msgid "Apply a predefined layout template"
-msgstr ""
+msgstr "Eine vordefinierte Layout-Vorlage anwenden"
 
 #: src/editor/qml/ControlBar.qml:201
 msgctxt "@action:button"
 msgid "Snap to Edges"
-msgstr ""
+msgstr "An Kanten einrasten"
 
 #: src/editor/qml/ControlBar.qml:208
 msgctxt "@info"
@@ -605,12 +606,16 @@ msgid ""
 "Toggle edge snapping. Zones will align with edges of other zones when "
 "enabled."
 msgstr ""
+"Kanteneinrastung umschalten. Zonen werden an den Kanten anderer Zonen "
+"ausgerichtet, wenn aktiviert."
 
 #: src/editor/qml/ControlBar.qml:210
 msgctxt "@tooltip"
 msgid ""
 "Edge snapping enabled. Zones align to edges of other zones. Click to disable."
 msgstr ""
+"Kanteneinrastung aktiviert. Zonen werden an Kanten anderer Zonen ausgerichtet. "
+"Klicken zum Deaktivieren."
 
 #: src/editor/qml/ControlBar.qml:210
 msgctxt "@tooltip"
@@ -618,11 +623,13 @@ msgid ""
 "Edge snapping disabled. Click to enable. Zones will align to edges of other "
 "zones."
 msgstr ""
+"Kanteneinrastung deaktiviert. Klicken zum Aktivieren. Zonen werden an Kanten "
+"anderer Zonen ausgerichtet."
 
 #: src/editor/qml/ControlBar.qml:223
 msgctxt "@action:button"
 msgid "Snap to Grid"
-msgstr ""
+msgstr "Am Raster einrasten"
 
 #: src/editor/qml/ControlBar.qml:229
 msgctxt "@info"
@@ -630,6 +637,9 @@ msgid ""
 "Toggle grid snapping. Zones will align to a grid when enabled. Use the "
 "dropdowns to change horizontal and vertical grid sizes."
 msgstr ""
+"Rastereinrastung umschalten. Zonen werden am Raster ausgerichtet, wenn "
+"aktiviert. Verwenden Sie die Auswahllisten, um die horizontale und vertikale "
+"Rastergröße zu ändern."
 
 #: src/editor/qml/ControlBar.qml:231
 #, javascript-format
@@ -638,59 +648,63 @@ msgid ""
 "Grid snapping enabled (H:%1% V:%2%). Zones align to grid lines. Click to "
 "disable."
 msgstr ""
+"Rastereinrastung aktiviert (H:%1% V:%2%). Zonen werden an Rasterlinien "
+"ausgerichtet. Klicken zum Deaktivieren."
 
 #: src/editor/qml/ControlBar.qml:231
 msgctxt "@tooltip"
 msgid ""
 "Grid snapping disabled. Click to enable. Zones will align to grid lines."
 msgstr ""
+"Rastereinrastung deaktiviert. Klicken zum Aktivieren. Zonen werden an "
+"Rasterlinien ausgerichtet."
 
 #: src/editor/qml/ControlBar.qml:248
 msgctxt "@label"
 msgid "H:"
-msgstr ""
+msgstr "H:"
 
 #: src/editor/qml/ControlBar.qml:249 src/editor/qml/ControlBar.qml:261
 msgctxt "@label"
 msgid "Horizontal grid interval"
-msgstr ""
+msgstr "Horizontaler Rasterabstand"
 
 #: src/editor/qml/ControlBar.qml:262
 msgctxt "@info"
 msgid "Adjust horizontal grid interval (1% to 50%)"
-msgstr ""
+msgstr "Horizontalen Rasterabstand anpassen (1% bis 50%)"
 
 #: src/editor/qml/ControlBar.qml:291
 #, javascript-format
 msgctxt "@info"
 msgid "Horizontal interval: %1%"
-msgstr ""
+msgstr "Horizontaler Abstand: %1%"
 
 #: src/editor/qml/ControlBar.qml:295
 msgctxt "@label"
 msgid "V:"
-msgstr ""
+msgstr "V:"
 
 #: src/editor/qml/ControlBar.qml:297 src/editor/qml/ControlBar.qml:309
 msgctxt "@label"
 msgid "Vertical grid interval"
-msgstr ""
+msgstr "Vertikaler Rasterabstand"
 
 #: src/editor/qml/ControlBar.qml:310
 msgctxt "@info"
 msgid "Adjust vertical grid interval (1% to 50%)"
-msgstr ""
+msgstr "Vertikalen Rasterabstand anpassen (1% bis 50%)"
 
 #: src/editor/qml/ControlBar.qml:339
 #, javascript-format
 msgctxt "@info"
 msgid "Vertical interval: %1%"
-msgstr ""
+msgstr "Vertikaler Abstand: %1%"
 
 #: src/editor/qml/ControlBar.qml:349
 msgctxt "@action:button"
 msgid "Show Grid"
-msgstr ""
+msgstr "Raster anzeigen"
 
 #: src/editor/qml/ControlBar.qml:355
 msgctxt "@info"
@@ -698,202 +712,204 @@ msgid ""
 "Toggle grid overlay visibility. Shows or hides the visual grid lines on the "
 "canvas."
 msgstr ""
+"Sichtbarkeit der Rasterüberlagerung umschalten. Zeigt oder verbirgt die "
+"visuellen Rasterlinien auf der Arbeitsfläche."
 
 #: src/editor/qml/ControlBar.qml:357
 msgctxt "@tooltip"
 msgid "Grid overlay visible. Click to hide grid lines."
-msgstr ""
+msgstr "Rasterüberlagerung sichtbar. Klicken, um Rasterlinien auszublenden."
 
 #: src/editor/qml/ControlBar.qml:357
 msgctxt "@tooltip"
 msgid "Grid overlay hidden. Click to show grid lines."
-msgstr ""
+msgstr "Rasterüberlagerung ausgeblendet. Klicken, um Rasterlinien anzuzeigen."
 
 #: src/editor/qml/ControlBar.qml:390
 msgctxt "@info"
 msgid "Unsaved changes"
-msgstr ""
+msgstr "Ungespeicherte Änderungen"
 
 #: src/editor/qml/ControlBar.qml:415
 msgctxt "@action:button"
 msgid "Cancel"
-msgstr ""
+msgstr "Abbrechen"
 
 #: src/editor/qml/ControlBar.qml:417
 msgctxt "@info"
 msgid "Discard changes and close editor"
-msgstr ""
+msgstr "Änderungen verwerfen und Editor schließen"
 
 #: src/editor/qml/ControlBar.qml:430
 msgctxt "@action:button"
 msgid "Save"
-msgstr ""
+msgstr "Speichern"
 
 #: src/editor/qml/ControlBar.qml:435
 msgctxt "@info"
 msgid "Save layout and close editor"
-msgstr ""
+msgstr "Layout speichern und Editor schließen"
 
 #: src/editor/qml/DimensionTooltip.qml:61
 msgctxt "@info:accessibility"
 msgid "Zone dimensions"
-msgstr ""
+msgstr "Zonenabmessungen"
 
 #: src/editor/qml/DimensionTooltip.qml:63
 msgctxt "@info:accessibility"
 msgid "Position: %1px, %2px  Size: %3px × %4px"
-msgstr ""
+msgstr "Position: %1px, %2px  Größe: %3px × %4px"
 
 #: src/editor/qml/DimensionTooltip.qml:64
 #, javascript-format
 msgctxt "@info:accessibility"
 msgid "Position: %1%, %2%  Size: %3% × %4%"
-msgstr ""
+msgstr "Position: %1%, %2%  Größe: %3% × %4%"
 
 #: src/editor/qml/DimensionTooltip.qml:83
 msgctxt "@label"
 msgid "Pos:"
-msgstr ""
+msgstr "Pos:"
 
 #: src/editor/qml/DimensionTooltip.qml:90
 msgctxt "@info Position in pixels"
 msgid "%1px, %2px"
-msgstr ""
+msgstr "%1px, %2px"
 
 #: src/editor/qml/DimensionTooltip.qml:91
 #, javascript-format
 msgctxt "@info Position as percentages"
 msgid "%1% × %2%"
-msgstr ""
+msgstr "%1% × %2%"
 
 #: src/editor/qml/DimensionTooltip.qml:99
 msgctxt "@label"
 msgid "Size:"
-msgstr ""
+msgstr "Größe:"
 
 #: src/editor/qml/DimensionTooltip.qml:106
 msgctxt "@info Size in pixels"
 msgid "%1px × %2px"
-msgstr ""
+msgstr "%1px × %2px"
 
 #: src/editor/qml/DimensionTooltip.qml:107
 #, javascript-format
 msgctxt "@info Size as percentages"
 msgid "%1% × %2%"
-msgstr ""
+msgstr "%1% × %2%"
 
 #: src/editor/qml/DividerHandle.qml:166
 msgctxt "@action:button"
 msgid "Vertical zone divider"
-msgstr ""
+msgstr "Vertikaler Zonenteiler"
 
 #: src/editor/qml/DividerHandle.qml:166
 msgctxt "@action:button"
 msgid "Horizontal zone divider"
-msgstr ""
+msgstr "Horizontaler Zonenteiler"
 
 #: src/editor/qml/DividerHandle.qml:167
 msgctxt "@info:tooltip"
 msgid "Drag horizontally to resize adjacent zones"
-msgstr ""
+msgstr "Horizontal ziehen, um benachbarte Zonen in der Größe zu ändern"
 
 #: src/editor/qml/DividerHandle.qml:167
 msgctxt "@info:tooltip"
 msgid "Drag vertically to resize adjacent zones"
-msgstr ""
+msgstr "Vertikal ziehen, um benachbarte Zonen in der Größe zu ändern"
 
 #: src/editor/qml/EditorNotifications.qml:62
 msgctxt "@info:accessibility"
 msgid "Success notification"
-msgstr ""
+msgstr "Erfolgsbenachrichtigung"
 
 #: src/editor/qml/EditorNotifications.qml:139
 msgctxt "@info:accessibility"
 msgid "Error notification"
-msgstr ""
+msgstr "Fehlerbenachrichtigung"
 
 #: src/editor/qml/EditorNotifications.qml:176
 msgctxt "@tooltip"
 msgid "Dismiss"
-msgstr ""
+msgstr "Schließen"
 
 #: src/editor/qml/EditorNotifications.qml:178
 msgctxt "@action:button"
 msgid "Dismiss notification"
-msgstr ""
+msgstr "Benachrichtigung schließen"
 
 #: src/editor/qml/EditorWindow.qml:160
 msgctxt "@title"
 msgid "Layout Editor"
-msgstr ""
+msgstr "Layout-Editor"
 
 #: src/editor/qml/EditorWindow.qml:564
 msgid "Exit Fullscreen (F11)"
-msgstr ""
+msgstr "Vollbild beenden (F11)"
 
 #: src/editor/qml/EditorWindow.qml:591
 msgctxt "@title:window"
 msgid "Unsaved Changes"
-msgstr ""
+msgstr "Ungespeicherte Änderungen"
 
 #: src/editor/qml/EditorWindow.qml:592
 msgctxt "@info"
 msgid "You have unsaved changes. What would you like to do?"
-msgstr ""
+msgstr "Sie haben ungespeicherte Änderungen. Was möchten Sie tun?"
 
 #: src/editor/qml/EditorWindow.qml:610
 msgctxt "@title:window"
 msgid "Import Layout"
-msgstr ""
+msgstr "Layout importieren"
 
 #: src/editor/qml/EditorWindow.qml:611 src/editor/qml/EditorWindow.qml:625
 #: src/editor/qml/ShaderSettingsDialog.qml:829
 #: src/editor/qml/ShaderSettingsDialog.qml:861
 msgctxt "@item:inlistbox"
 msgid "JSON files (*.json)"
-msgstr ""
+msgstr "JSON-Dateien (*.json)"
 
 #: src/editor/qml/EditorWindow.qml:611 src/editor/qml/ParameterDelegate.qml:274
 #: src/editor/qml/ShaderSettingsDialog.qml:829
 #: src/editor/qml/ShaderSettingsDialog.qml:861
 msgctxt "@item:inlistbox"
 msgid "All files (*)"
-msgstr ""
+msgstr "Alle Dateien (*)"
 
 #: src/editor/qml/EditorWindow.qml:624
 msgctxt "@title:window"
 msgid "Export Layout"
-msgstr ""
+msgstr "Layout exportieren"
 
 #: src/editor/qml/EditorWindow.qml:654
 msgctxt "@title:window"
 msgid "Layout Editor Help"
-msgstr ""
+msgstr "Layout-Editor-Hilfe"
 
 #: src/editor/qml/EditorWindow.qml:698
 msgctxt "@info"
 msgid "Layout saved successfully"
-msgstr ""
+msgstr "Layout erfolgreich gespeichert"
 
 #: src/editor/qml/EditorWindow.qml:703
 msgctxt "@info"
 msgid "Failed to load layout: %1"
-msgstr ""
+msgstr "Layout konnte nicht geladen werden: %1"
 
 #: src/editor/qml/EditorWindow.qml:708
 msgctxt "@info"
 msgid "Failed to save layout: %1"
-msgstr ""
+msgstr "Layout konnte nicht gespeichert werden: %1"
 
 #: src/editor/qml/EditorZone.qml:443
 msgctxt "@info:accessibility"
 msgid "Zone %1: %2"
-msgstr ""
+msgstr "Zone %1: %2"
 
 #: src/editor/qml/EditorZone.qml:443
 msgctxt "@info:accessibility"
 msgid "Zone %1"
-msgstr ""
+msgstr "Zone %1"
 
 #: src/editor/qml/EditorZone.qml:444
 #, javascript-format
@@ -902,251 +918,255 @@ msgid ""
 "Selected zone. Position: %1% × %2%, Size: %3% × %4%. Click to deselect, drag "
 "to move, use handles to resize."
 msgstr ""
+"Ausgewählte Zone. Position: %1% × %2%, Größe: %3% × %4%. Klicken zum "
+"Abwählen, ziehen zum Verschieben, Anfasser zum Ändern der Größe verwenden."
 
 #: src/editor/qml/EditorZone.qml:444
 #, javascript-format
 msgctxt "@info:accessibility"
 msgid "Zone. Position: %1% × %2%, Size: %3% × %4%. Click to select."
-msgstr ""
+msgstr "Zone. Position: %1% × %2%, Größe: %3% × %4%. Klicken zum Auswählen."
 
 #: src/editor/qml/HelpDialogContent.qml:34
 msgctxt "@title:group"
 msgid "Keyboard Shortcuts"
-msgstr ""
+msgstr "Tastenkürzel"
 
 #: src/editor/qml/HelpDialogContent.qml:44
 msgctxt "@title:group"
 msgid "File & Window"
-msgstr ""
+msgstr "Datei und Fenster"
 
 #: src/editor/qml/HelpDialogContent.qml:45
 msgid "Save layout"
-msgstr ""
+msgstr "Layout speichern"
 
 #: src/editor/qml/HelpDialogContent.qml:46
 msgid "Close editor"
-msgstr ""
+msgstr "Editor schließen"
 
 #: src/editor/qml/HelpDialogContent.qml:47
 msgid "Toggle fullscreen"
-msgstr ""
+msgstr "Vollbild umschalten"
 
 #: src/editor/qml/HelpDialogContent.qml:48
 msgid "Show help"
-msgstr ""
+msgstr "Hilfe anzeigen"
 
 #: src/editor/qml/HelpDialogContent.qml:51
 msgctxt "@title:group"
 msgid "Edit"
-msgstr ""
+msgstr "Bearbeiten"
 
 #: src/editor/qml/HelpDialogContent.qml:52
 msgid "Undo"
-msgstr ""
+msgstr "Rückgängig"
 
 #: src/editor/qml/HelpDialogContent.qml:53
 msgid "Redo"
-msgstr ""
+msgstr "Wiederherstellen"
 
 #: src/editor/qml/HelpDialogContent.qml:54
 msgid "Delete zone(s)"
-msgstr ""
+msgstr "Zone(n) löschen"
 
 #: src/editor/qml/HelpDialogContent.qml:55
 msgid "Select all"
-msgstr ""
+msgstr "Alles auswählen"
 
 #: src/editor/qml/HelpDialogContent.qml:56
 msgid "Duplicate"
-msgstr ""
+msgstr "Duplizieren"
 
 #: src/editor/qml/HelpDialogContent.qml:57
 msgid "Copy"
-msgstr ""
+msgstr "Kopieren"
 
 #: src/editor/qml/HelpDialogContent.qml:58
 msgid "Cut"
-msgstr ""
+msgstr "Ausschneiden"
 
 #: src/editor/qml/HelpDialogContent.qml:59
 msgid "Paste"
-msgstr ""
+msgstr "Einfügen"
 
 #: src/editor/qml/HelpDialogContent.qml:60
 msgid "Paste offset"
-msgstr ""
+msgstr "Versetzt einfügen"
 
 #: src/editor/qml/HelpDialogContent.qml:63
 msgctxt "@title:group"
 msgid "Zone Operations"
-msgstr ""
+msgstr "Zonen-Aktionen"
 
 #: src/editor/qml/HelpDialogContent.qml:64
 msgid "Split horizontal"
-msgstr ""
+msgstr "Horizontal teilen"
 
 #: src/editor/qml/HelpDialogContent.qml:65
 msgid "Split vertical"
-msgstr ""
+msgstr "Vertikal teilen"
 
 #: src/editor/qml/HelpDialogContent.qml:66
 msgid "Fill space"
-msgstr ""
+msgstr "Platz füllen"
 
 #: src/editor/qml/HelpDialogContent.qml:69
 msgctxt "@title:group"
 msgid "Navigation"
-msgstr ""
+msgstr "Navigation"
 
 #: src/editor/qml/HelpDialogContent.qml:70
 msgid "Move zone 1%"
-msgstr ""
+msgstr "Zone um 1% verschieben"
 
 #: src/editor/qml/HelpDialogContent.qml:70
 msgid "Arrow keys"
-msgstr ""
+msgstr "Pfeiltasten"
 
 #: src/editor/qml/HelpDialogContent.qml:71
 msgid "Resize zone 1%"
-msgstr ""
+msgstr "Zonengröße um 1% ändern"
 
 #: src/editor/qml/HelpDialogContent.qml:71
 msgid "Shift+Arrows"
-msgstr ""
+msgstr "Umschalt+Pfeiltasten"
 
 #: src/editor/qml/HelpDialogContent.qml:72
 msgid "Next zone"
-msgstr ""
+msgstr "Nächste Zone"
 
 #: src/editor/qml/HelpDialogContent.qml:73
 msgid "Previous zone"
-msgstr ""
+msgstr "Vorherige Zone"
 
 #: src/editor/qml/HelpDialogContent.qml:79
 msgctxt "@title:group"
 msgid "Mouse Actions"
-msgstr ""
+msgstr "Mausaktionen"
 
 #: src/editor/qml/HelpDialogContent.qml:88
 msgid "Create zone"
-msgstr ""
+msgstr "Zone erstellen"
 
 #: src/editor/qml/HelpDialogContent.qml:88
 msgid "Double-click"
-msgstr ""
+msgstr "Doppelklick"
 
 #: src/editor/qml/HelpDialogContent.qml:89
 msgid "Select zone"
-msgstr ""
+msgstr "Zone auswählen"
 
 #: src/editor/qml/HelpDialogContent.qml:89
 msgid "Click"
-msgstr ""
+msgstr "Klick"
 
 #: src/editor/qml/HelpDialogContent.qml:90
 msgid "Multi-select"
-msgstr ""
+msgstr "Mehrfachauswahl"
 
 #: src/editor/qml/HelpDialogContent.qml:90
 msgid "Ctrl+Click"
-msgstr ""
+msgstr "Strg+Klick"
 
 #: src/editor/qml/HelpDialogContent.qml:91
 msgid "Move zone"
-msgstr ""
+msgstr "Zone verschieben"
 
 #: src/editor/qml/HelpDialogContent.qml:91
 msgid "Drag"
-msgstr ""
+msgstr "Ziehen"
 
 #: src/editor/qml/HelpDialogContent.qml:92
 msgid "Resize zone"
-msgstr ""
+msgstr "Zonengröße ändern"
 
 #: src/editor/qml/HelpDialogContent.qml:92
 msgid "Drag edge"
-msgstr ""
+msgstr "Kante ziehen"
 
 #: src/editor/qml/HelpDialogContent.qml:93
 msgid "Context menu"
-msgstr ""
+msgstr "Kontextmenü"
 
 #: src/editor/qml/HelpDialogContent.qml:93
 msgid "Right-click"
-msgstr ""
+msgstr "Rechtsklick"
 
 #: src/editor/qml/HelpDialogContent.qml:99
 msgctxt "@title:group"
 msgid "Tips"
-msgstr ""
+msgstr "Tipps"
 
 #: src/editor/qml/HelpDialogContent.qml:106
 msgid "Hover a selected zone to reveal action buttons"
-msgstr ""
+msgstr "Über eine ausgewählte Zone fahren, um Aktionsschaltflächen anzuzeigen"
 
 #: src/editor/qml/HelpDialogContent.qml:107
 msgid "Use Templates dropdown for common layouts"
-msgstr ""
+msgstr "Vorlagen-Auswahlliste für gängige Layouts verwenden"
 
 #: src/editor/qml/HelpDialogContent.qml:108
 msgid "Enable grid snapping for precise alignment"
-msgstr ""
+msgstr "Rastereinrastung für präzise Ausrichtung aktivieren"
 
 #: src/editor/qml/HelpDialogContent.qml:109
 msgid "Per-layout gaps in gear button (top bar)"
-msgstr ""
+msgstr "Layoutspezifische Abstände über das Zahnrad-Symbol (obere Leiste)"
 
 #: src/editor/qml/HelpDialogContent.qml:110
 msgid "Zones can overlap for multi-zone snapping"
-msgstr ""
+msgstr "Zonen können sich für Mehrzonen-Einrastung überlappen"
 
 #: src/editor/qml/HelpDialogContent.qml:116
 msgctxt "@title:group"
 msgid "Accessibility"
-msgstr ""
+msgstr "Barrierefreiheit"
 
 #: src/editor/qml/HelpDialogContent.qml:121
 msgid ""
 "Zone info announced to screen readers. Tab navigates UI, Ctrl+Tab navigates "
 "zones."
 msgstr ""
+"Zoneninformationen werden an Bildschirmleseprogramme übermittelt. Tab navigiert "
+"die Oberfläche, Strg+Tab navigiert zwischen Zonen."
 
 #: src/editor/qml/LayoutSettingsDialog.qml:20
 msgctxt "@title:window"
 msgid "Layout Settings"
-msgstr ""
+msgstr "Layout-Einstellungen"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:35
 #: src/editor/qml/ShaderSettingsDialog.qml:768
 #: src/editor/qml/VisibilitySettingsDialog.qml:36
 msgctxt "@action:button"
 msgid "Apply"
-msgstr ""
+msgstr "Anwenden"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:126
 msgctxt "@info"
 msgid "Per-layout overrides for this layout only."
-msgstr ""
+msgstr "Layoutspezifische Überschreibungen nur für dieses Layout."
 
 #: src/editor/qml/LayoutSettingsDialog.qml:144
 msgctxt "@title:group"
 msgid "Spacing"
-msgstr ""
+msgstr "Abstände"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:149
 msgctxt "@info"
 msgid "Override global gap defaults from System Settings."
-msgstr ""
+msgstr "Globale Abstandsvorgaben aus den Systemeinstellungen überschreiben."
 
 #: src/editor/qml/LayoutSettingsDialog.qml:167
 msgctxt "@option:check"
 msgid "Zone Padding"
-msgstr ""
+msgstr "Zonenabstand"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:188
 msgctxt "@label"
 msgid "Zone padding value"
-msgstr ""
+msgstr "Wert für Zonenabstand"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:197
 #: src/editor/qml/LayoutSettingsDialog.qml:236
@@ -1156,317 +1176,317 @@ msgstr ""
 #: src/editor/qml/LayoutSettingsDialog.qml:345
 msgctxt "@label"
 msgid "px"
-msgstr ""
+msgstr "px"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:198
 #: src/editor/qml/LayoutSettingsDialog.qml:237
 msgctxt "@label showing global default"
 msgid "px (global)"
-msgstr ""
+msgstr "px (global)"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:206
 msgctxt "@option:check"
 msgid "Edge Gap"
-msgstr ""
+msgstr "Randabstand"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:227
 msgctxt "@label"
 msgid "Edge gap value"
-msgstr ""
+msgstr "Wert für Randabstand"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:246
 msgctxt "@option:check"
 msgid "Set per side"
-msgstr ""
+msgstr "Pro Seite festlegen"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:278
 msgctxt "@label edge gap direction"
 msgid "Top"
-msgstr ""
+msgstr "Oben"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:288
 msgctxt "@label"
 msgid "Top edge gap override"
-msgstr ""
+msgstr "Überschreibung des oberen Randabstands"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:295
 msgctxt "@label edge gap direction"
 msgid "Bottom"
-msgstr ""
+msgstr "Unten"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:305
 msgctxt "@label"
 msgid "Bottom edge gap override"
-msgstr ""
+msgstr "Überschreibung des unteren Randabstands"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:312
 msgctxt "@label edge gap direction"
 msgid "Left"
-msgstr ""
+msgstr "Links"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:322
 msgctxt "@label"
 msgid "Left edge gap override"
-msgstr ""
+msgstr "Überschreibung des linken Randabstands"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:329
 msgctxt "@label edge gap direction"
 msgid "Right"
-msgstr ""
+msgstr "Rechts"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:339
 msgctxt "@label"
 msgid "Right edge gap override"
-msgstr ""
+msgstr "Überschreibung des rechten Randabstands"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:359
 msgctxt "@title:group"
 msgid "Geometry"
-msgstr ""
+msgstr "Geometrie"
 
 #: src/editor/qml/LayoutSettingsDialog.qml:364
 msgctxt "@info"
 msgid "Control which screen area zones occupy."
-msgstr ""
+msgstr "Festlegen, welchen Bildschirmbereich Zonen einnehmen."
 
 #: src/editor/qml/LayoutSettingsDialog.qml:374
 msgctxt "@option:check"
 msgid "Include area behind panels and taskbars"
-msgstr ""
+msgstr "Bereich hinter Kontrollleisten und Programmleisten einbeziehen"
 
 #: src/editor/qml/ParameterDelegate.qml:200
 msgctxt "@action:button"
 msgid "Choose %1 color"
-msgstr ""
+msgstr "Farbe für %1 wählen"
 
 #: src/editor/qml/ParameterDelegate.qml:241
 msgctxt "@action:button"
 msgid "Choose Image..."
-msgstr ""
+msgstr "Bild wählen ..."
 
 #: src/editor/qml/ParameterDelegate.qml:257
 msgctxt "@info:tooltip"
 msgid "Clear image"
-msgstr ""
+msgstr "Bild entfernen"
 
 #: src/editor/qml/ParameterDelegate.qml:273
 msgctxt "@title:window"
 msgid "Choose Image"
-msgstr ""
+msgstr "Bild wählen"
 
 #: src/editor/qml/ParameterDelegate.qml:274
 msgctxt "@item:inlistbox"
 msgid "Image files (*.png *.jpg *.jpeg *.bmp *.webp)"
-msgstr ""
+msgstr "Bilddateien (*.png *.jpg *.jpeg *.bmp *.webp)"
 
 #: src/editor/qml/PropertyPanel.qml:91
 msgctxt "@title"
 msgid "Zone Properties"
-msgstr ""
+msgstr "Zonen-Eigenschaften"
 
 #: src/editor/qml/PropertyPanel.qml:92
 msgctxt "@title"
 msgid "1 Zone Selected"
 msgid_plural "%1 Zones Selected"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "1 Zone ausgewählt"
+msgstr[1] "%1 Zonen ausgewählt"
 
 #: src/editor/qml/PropertyPanel.qml:100
 msgctxt "@tooltip"
 msgid "Close panel"
-msgstr ""
+msgstr "Seitenleiste schließen"
 
 #: src/editor/qml/PropertyPanel.qml:102
 msgctxt "@info:accessibility"
 msgid "Close properties panel"
-msgstr ""
+msgstr "Eigenschaftenleiste schließen"
 
 #: src/editor/qml/PropertyPanel.qml:122
 msgctxt "@title"
 msgid "Appearance (All Selected)"
-msgstr ""
+msgstr "Aussehen (alle ausgewählten)"
 
 #: src/editor/qml/PropertyPanel.qml:128 src/editor/qml/PropertyPanel.qml:480
 msgctxt "@label"
 msgid "Custom colors:"
-msgstr ""
+msgstr "Benutzerdefinierte Farben:"
 
 #: src/editor/qml/PropertyPanel.qml:129
 msgctxt "@option:check"
 msgid "Enable for all selected"
-msgstr ""
+msgstr "Für alle ausgewählten aktivieren"
 
 #: src/editor/qml/PropertyPanel.qml:132
 msgctxt "@info:accessibility"
 msgid "Enable custom colors for all selected zones"
-msgstr ""
+msgstr "Benutzerdefinierte Farben für alle ausgewählten Zonen aktivieren"
 
 #: src/editor/qml/PropertyPanel.qml:141 src/editor/qml/PropertyPanel.qml:494
 msgctxt "@label"
 msgid "Highlight:"
-msgstr ""
+msgstr "Hervorhebung:"
 
 #: src/editor/qml/PropertyPanel.qml:147
 msgctxt "@label"
 msgid "Highlight color picker for all selected zones"
-msgstr ""
+msgstr "Hervorhebungsfarbe für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:148
 msgctxt "@info:tooltip"
 msgid "Choose highlight color for all selected zones"
-msgstr ""
+msgstr "Hervorhebungsfarbe für alle ausgewählten Zonen wählen"
 
 #: src/editor/qml/PropertyPanel.qml:156 src/editor/qml/PropertyPanel.qml:512
 msgctxt "@label"
 msgid "Inactive:"
-msgstr ""
+msgstr "Inaktiv:"
 
 #: src/editor/qml/PropertyPanel.qml:162
 msgctxt "@label"
 msgid "Inactive color picker for all selected zones"
-msgstr ""
+msgstr "Inaktivfarbe für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:163
 msgctxt "@info:tooltip"
 msgid "Choose inactive color for all selected zones"
-msgstr ""
+msgstr "Inaktivfarbe für alle ausgewählten Zonen wählen"
 
 #: src/editor/qml/PropertyPanel.qml:171 src/editor/qml/PropertyPanel.qml:530
 msgctxt "@label"
 msgid "Border:"
-msgstr ""
+msgstr "Rahmen:"
 
 #: src/editor/qml/PropertyPanel.qml:175
 msgctxt "@label"
 msgid "Border color picker for all selected zones"
-msgstr ""
+msgstr "Rahmenfarbe für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:176
 msgctxt "@info:tooltip"
 msgid "Choose border color for all selected zones"
-msgstr ""
+msgstr "Rahmenfarbe für alle ausgewählten Zonen wählen"
 
 #: src/editor/qml/PropertyPanel.qml:186 src/editor/qml/PropertyPanel.qml:548
 msgctxt "@label"
 msgid "Active opacity:"
-msgstr ""
+msgstr "Aktive Deckkraft:"
 
 #: src/editor/qml/PropertyPanel.qml:191
 msgctxt "@label"
 msgid "Active opacity for all selected zones"
-msgstr ""
+msgstr "Aktive Deckkraft für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:192
 msgctxt "@info:tooltip"
 msgid "Set active opacity for all selected zones (0-100%)"
-msgstr ""
+msgstr "Aktive Deckkraft für alle ausgewählten Zonen festlegen (0-100%)"
 
 #: src/editor/qml/PropertyPanel.qml:201 src/editor/qml/PropertyPanel.qml:563
 msgctxt "@label"
 msgid "Inactive opacity:"
-msgstr ""
+msgstr "Inaktive Deckkraft:"
 
 #: src/editor/qml/PropertyPanel.qml:206
 msgctxt "@label"
 msgid "Inactive opacity for all selected zones"
-msgstr ""
+msgstr "Inaktive Deckkraft für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:207
 msgctxt "@info:tooltip"
 msgid "Set inactive opacity for all selected zones (0-100%)"
-msgstr ""
+msgstr "Inaktive Deckkraft für alle ausgewählten Zonen festlegen (0-100%)"
 
 #: src/editor/qml/PropertyPanel.qml:216 src/editor/qml/PropertyPanel.qml:578
 msgctxt "@label"
 msgid "Border width:"
-msgstr ""
+msgstr "Rahmenbreite:"
 
 #: src/editor/qml/PropertyPanel.qml:222
 msgctxt "@label"
 msgid "Border width for all selected zones"
-msgstr ""
+msgstr "Rahmenbreite für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:223
 msgctxt "@info:tooltip"
 msgid "Set border width for all selected zones (0-20)"
-msgstr ""
+msgstr "Rahmenbreite für alle ausgewählten Zonen festlegen (0-20)"
 
 #: src/editor/qml/PropertyPanel.qml:231 src/editor/qml/PropertyPanel.qml:593
 msgctxt "@label"
 msgid "Border radius:"
-msgstr ""
+msgstr "Eckenradius:"
 
 #: src/editor/qml/PropertyPanel.qml:237
 msgctxt "@label"
 msgid "Border radius for all selected zones"
-msgstr ""
+msgstr "Eckenradius für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:238
 msgctxt "@info:tooltip"
 msgid "Set corner radius for all selected zones (0-50)"
-msgstr ""
+msgstr "Eckenradius für alle ausgewählten Zonen festlegen (0-50)"
 
 #: src/editor/qml/PropertyPanel.qml:251 src/editor/qml/PropertyPanel.qml:613
 msgctxt "@title"
 msgid "Actions"
-msgstr ""
+msgstr "Aktionen"
 
 #: src/editor/qml/PropertyPanel.qml:257
 msgctxt "@info"
 msgid "Actions will apply to all selected zones."
-msgstr ""
+msgstr "Aktionen werden auf alle ausgewählten Zonen angewendet."
 
 #: src/editor/qml/PropertyPanel.qml:266
 msgctxt "@action:button"
 msgid "Delete Selected Zones"
-msgstr ""
+msgstr "Ausgewählte Zonen löschen"
 
 #: src/editor/qml/PropertyPanel.qml:270
 msgctxt "@info"
 msgid "Delete 1 selected zone"
 msgid_plural "Delete %1 selected zones"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "1 ausgewählte Zone löschen"
+msgstr[1] "%1 ausgewählte Zonen löschen"
 
 #: src/editor/qml/PropertyPanel.qml:284
 msgctxt "@label"
 msgid "Name:"
-msgstr ""
+msgstr "Name:"
 
 #: src/editor/qml/PropertyPanel.qml:287
 msgctxt "@label"
 msgid "Zone name"
-msgstr ""
+msgstr "Zonenname"
 
 #: src/editor/qml/PropertyPanel.qml:345
 msgctxt "@label"
 msgid "Number:"
-msgstr ""
+msgstr "Nummer:"
 
 #: src/editor/qml/PropertyPanel.qml:349
 msgctxt "@label"
 msgid "Zone number"
-msgstr ""
+msgstr "Zonennummer"
 
 #: src/editor/qml/PropertyPanel.qml:376
 msgctxt "@title"
 msgid "Geometry"
-msgstr ""
+msgstr "Geometrie"
 
 #: src/editor/qml/PropertyPanel.qml:382
 msgctxt "@label"
 msgid "Mode:"
-msgstr ""
+msgstr "Modus:"
 
 #: src/editor/qml/PropertyPanel.qml:383
 msgctxt "@option:check"
 msgid "Fixed pixel size"
-msgstr ""
+msgstr "Feste Pixelgröße"
 
 #: src/editor/qml/PropertyPanel.qml:386
 msgctxt "@info:accessibility"
 msgid "Toggle fixed pixel geometry mode"
-msgstr ""
+msgstr "Festen Pixel-Geometriemodus umschalten"
 
 #: src/editor/qml/PropertyPanel.qml:387
 msgctxt "@info:accessibility"
@@ -1474,592 +1494,594 @@ msgid ""
 "When enabled, zone uses absolute pixel coordinates instead of relative "
 "percentages"
 msgstr ""
+"Wenn aktiviert, verwendet die Zone absolute Pixelkoordinaten anstelle von "
+"relativen Prozentwerten"
 
 #: src/editor/qml/PropertyPanel.qml:397
 msgctxt "@label"
 msgid "X:"
-msgstr ""
+msgstr "X:"
 
 #: src/editor/qml/PropertyPanel.qml:401
 msgctxt "@label"
 msgid "X position in pixels"
-msgstr ""
+msgstr "X-Position in Pixeln"
 
 #: src/editor/qml/PropertyPanel.qml:411
 msgctxt "@label"
 msgid "Y:"
-msgstr ""
+msgstr "Y:"
 
 #: src/editor/qml/PropertyPanel.qml:415
 msgctxt "@label"
 msgid "Y position in pixels"
-msgstr ""
+msgstr "Y-Position in Pixeln"
 
 #: src/editor/qml/PropertyPanel.qml:425
 msgctxt "@label"
 msgid "Width:"
-msgstr ""
+msgstr "Breite:"
 
 #: src/editor/qml/PropertyPanel.qml:429
 msgctxt "@label"
 msgid "Width in pixels"
-msgstr ""
+msgstr "Breite in Pixeln"
 
 #: src/editor/qml/PropertyPanel.qml:439
 msgctxt "@label"
 msgid "Height:"
-msgstr ""
+msgstr "Höhe:"
 
 #: src/editor/qml/PropertyPanel.qml:443
 msgctxt "@label"
 msgid "Height in pixels"
-msgstr ""
+msgstr "Höhe in Pixeln"
 
 #: src/editor/qml/PropertyPanel.qml:474
 msgctxt "@title"
 msgid "Appearance"
-msgstr ""
+msgstr "Aussehen"
 
 #: src/editor/qml/PropertyPanel.qml:481
 msgctxt "@option:check"
 msgid "Use custom colors"
-msgstr ""
+msgstr "Benutzerdefinierte Farben verwenden"
 
 #: src/editor/qml/PropertyPanel.qml:485
 msgctxt "@info:accessibility"
 msgid "Enable custom colors for this zone"
-msgstr ""
+msgstr "Benutzerdefinierte Farben für diese Zone aktivieren"
 
 #: src/editor/qml/PropertyPanel.qml:500
 msgctxt "@label"
 msgid "Highlight color picker"
-msgstr ""
+msgstr "Farbwähler für Hervorhebung"
 
 #: src/editor/qml/PropertyPanel.qml:501
 msgctxt "@info:tooltip"
 msgid "Choose color for highlighted/active zones"
-msgstr ""
+msgstr "Farbe für hervorgehobene/aktive Zonen wählen"
 
 #: src/editor/qml/PropertyPanel.qml:518
 msgctxt "@label"
 msgid "Inactive color picker"
-msgstr ""
+msgstr "Farbwähler für Inaktiv"
 
 #: src/editor/qml/PropertyPanel.qml:519
 msgctxt "@info:tooltip"
 msgid "Choose color for non-selected zones"
-msgstr ""
+msgstr "Farbe für nicht ausgewählte Zonen wählen"
 
 #: src/editor/qml/PropertyPanel.qml:534
 msgctxt "@label"
 msgid "Border color picker"
-msgstr ""
+msgstr "Farbwähler für Rahmen"
 
 #: src/editor/qml/PropertyPanel.qml:535
 msgctxt "@info:tooltip"
 msgid "Choose color for zone borders"
-msgstr ""
+msgstr "Farbe für Zonenrahmen wählen"
 
 #: src/editor/qml/PropertyPanel.qml:553
 msgctxt "@label"
 msgid "Zone active opacity"
-msgstr ""
+msgstr "Aktive Deckkraft der Zone"
 
 #: src/editor/qml/PropertyPanel.qml:554
 msgctxt "@info:tooltip"
 msgid "Adjust zone opacity when highlighted (0-100%)"
-msgstr ""
+msgstr "Deckkraft der Zone bei Hervorhebung anpassen (0-100%)"
 
 #: src/editor/qml/PropertyPanel.qml:568
 msgctxt "@label"
 msgid "Zone inactive opacity"
-msgstr ""
+msgstr "Inaktive Deckkraft der Zone"
 
 #: src/editor/qml/PropertyPanel.qml:569
 msgctxt "@info:tooltip"
 msgid "Adjust zone opacity when not highlighted (0-100%)"
-msgstr ""
+msgstr "Deckkraft der Zone ohne Hervorhebung anpassen (0-100%)"
 
 #: src/editor/qml/PropertyPanel.qml:584
 msgctxt "@label"
 msgid "Border width in pixels"
-msgstr ""
+msgstr "Rahmenbreite in Pixeln"
 
 #: src/editor/qml/PropertyPanel.qml:585
 msgctxt "@info:tooltip"
 msgid "Set zone border width in pixels (0-20)"
-msgstr ""
+msgstr "Zonenrahmenbreite in Pixeln festlegen (0-20)"
 
 #: src/editor/qml/PropertyPanel.qml:599
 msgctxt "@label"
 msgid "Border radius in pixels"
-msgstr ""
+msgstr "Eckenradius in Pixeln"
 
 #: src/editor/qml/PropertyPanel.qml:600
 msgctxt "@info:tooltip"
 msgid "Set zone corner radius in pixels (0-50)"
-msgstr ""
+msgstr "Eckenradius der Zone in Pixeln festlegen (0-50)"
 
 #: src/editor/qml/PropertyPanel.qml:619
 msgctxt "@action:button"
 msgid "Delete Zone"
-msgstr ""
+msgstr "Zone löschen"
 
 #: src/editor/qml/PropertyPanel.qml:623
 msgctxt "@info"
 msgid "Delete the selected zone"
-msgstr ""
+msgstr "Die ausgewählte Zone löschen"
 
 #: src/editor/qml/PropertyPanel.qml:660
 msgctxt "@title:window"
 msgid "Zone Highlight Color"
-msgstr ""
+msgstr "Zonen-Hervorhebungsfarbe"
 
 #: src/editor/qml/PropertyPanel.qml:673
 msgctxt "@title:window"
 msgid "Zone Inactive Color"
-msgstr ""
+msgstr "Zonen-Inaktivfarbe"
 
 #: src/editor/qml/PropertyPanel.qml:686
 msgctxt "@title:window"
 msgid "Zone Border Color"
-msgstr ""
+msgstr "Zonen-Rahmenfarbe"
 
 #: src/editor/qml/PropertyPanel.qml:702
 msgctxt "@title:window"
 msgid "Highlight Color for All Selected Zones"
-msgstr ""
+msgstr "Hervorhebungsfarbe für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:714
 msgctxt "@title:window"
 msgid "Inactive Color for All Selected Zones"
-msgstr ""
+msgstr "Inaktivfarbe für alle ausgewählten Zonen"
 
 #: src/editor/qml/PropertyPanel.qml:726
 msgctxt "@title:window"
 msgid "Border Color for All Selected Zones"
-msgstr ""
+msgstr "Rahmenfarbe für alle ausgewählten Zonen"
 
 #: src/editor/qml/ResizeHandles.qml:201
 msgctxt "@action:button"
 msgid "Northwest corner resize handle"
-msgstr ""
+msgstr "Anfasser an der nordwestlichen Ecke"
 
 #: src/editor/qml/ResizeHandles.qml:202
 msgctxt "@action:button"
 msgid "North edge resize handle"
-msgstr ""
+msgstr "Anfasser an der oberen Kante"
 
 #: src/editor/qml/ResizeHandles.qml:203
 msgctxt "@action:button"
 msgid "Northeast corner resize handle"
-msgstr ""
+msgstr "Anfasser an der nordöstlichen Ecke"
 
 #: src/editor/qml/ResizeHandles.qml:204
 msgctxt "@action:button"
 msgid "East edge resize handle"
-msgstr ""
+msgstr "Anfasser an der rechten Kante"
 
 #: src/editor/qml/ResizeHandles.qml:205
 msgctxt "@action:button"
 msgid "Southeast corner resize handle"
-msgstr ""
+msgstr "Anfasser an der südöstlichen Ecke"
 
 #: src/editor/qml/ResizeHandles.qml:206
 msgctxt "@action:button"
 msgid "South edge resize handle"
-msgstr ""
+msgstr "Anfasser an der unteren Kante"
 
 #: src/editor/qml/ResizeHandles.qml:207
 msgctxt "@action:button"
 msgid "Southwest corner resize handle"
-msgstr ""
+msgstr "Anfasser an der südwestlichen Ecke"
 
 #: src/editor/qml/ResizeHandles.qml:208
 msgctxt "@action:button"
 msgid "West edge resize handle"
-msgstr ""
+msgstr "Anfasser an der linken Kante"
 
 #: src/editor/qml/ResizeHandles.qml:210
 msgctxt "@action:button"
 msgid "Resize handle"
-msgstr ""
+msgstr "Größenänderungs-Anfasser"
 
 #: src/editor/qml/ResizeHandles.qml:214
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from northwest corner"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der nordwestlichen Ecke aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:215
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from top edge"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der oberen Kante aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:216
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from northeast corner"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der nordöstlichen Ecke aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:217
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from right edge"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der rechten Kante aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:218
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from southeast corner"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der südöstlichen Ecke aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:219
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from bottom edge"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der unteren Kante aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:220
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from southwest corner"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der südwestlichen Ecke aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:221
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone from left edge"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße von der linken Kante aus zu ändern"
 
 #: src/editor/qml/ResizeHandles.qml:223
 msgctxt "@info:tooltip"
 msgid "Drag to resize zone"
-msgstr ""
+msgstr "Ziehen, um die Zonengröße zu ändern"
 
 #: src/editor/qml/ShaderParameterSection.qml:109
 msgctxt "@action"
 msgid "collapse"
-msgstr ""
+msgstr "einklappen"
 
 #: src/editor/qml/ShaderParameterSection.qml:109
 msgctxt "@action"
 msgid "expand"
-msgstr ""
+msgstr "ausklappen"
 
 #: src/editor/qml/ShaderParameterSection.qml:107
 msgctxt "@info:tooltip"
 msgid "%1 parameters. Click to %2."
-msgstr ""
+msgstr "%1 Parameter. Klicken zum %2."
 
 #: src/editor/qml/ShaderSettingsDialog.qml:25
 msgctxt "@title:window"
 msgid "Shader Settings"
-msgstr ""
+msgstr "Shader-Einstellungen"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:394
 msgctxt "@title:group"
 msgid "General"
-msgstr ""
+msgstr "Allgemein"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:437
 msgctxt "@label"
 msgid "Enable effect:"
-msgstr ""
+msgstr "Effekt aktivieren:"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:438
 msgctxt "@option:check"
 msgid "Enable shader effect"
-msgstr ""
+msgstr "Shader-Effekt aktivieren"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:454
 msgctxt "@label"
 msgid "Shader:"
-msgstr ""
+msgstr "Shader:"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:513
 #: src/editor/qml/ShaderSettingsDialog.qml:515
 msgctxt "@info:placeholder"
 msgid "No description available"
-msgstr ""
+msgstr "Keine Beschreibung verfügbar"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:536
 msgctxt "@info shader author"
 msgid "by %1"
-msgstr ""
+msgstr "von %1"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:537
 msgctxt "@info shader version"
 msgid "v%1"
-msgstr ""
+msgstr "v%1"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:538
 msgctxt "@info user-installed shader"
 msgid "(User shader)"
-msgstr ""
+msgstr "(Benutzer-Shader)"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:564
 msgctxt "@title:group"
 msgid "Parameters"
-msgstr ""
+msgstr "Parameter"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:571
 msgctxt "@info:tooltip"
 msgid "Randomize all parameters"
-msgstr ""
+msgstr "Alle Parameter zufällig setzen"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:572
 msgctxt "@action:button"
 msgid "Random"
-msgstr ""
+msgstr "Zufall"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:582
 msgctxt "@info"
 msgid "This effect has no configurable parameters."
-msgstr ""
+msgstr "Dieser Effekt hat keine konfigurierbaren Parameter."
 
 #: src/editor/qml/ShaderSettingsDialog.qml:695
 msgctxt "@info"
 msgid "Enable the shader effect to configure visual effects for zone overlays."
-msgstr ""
+msgstr "Aktivieren Sie den Shader-Effekt, um visuelle Effekte für Zonenüberlagerungen einzurichten."
 
 #: src/editor/qml/ShaderSettingsDialog.qml:718
 msgctxt "@action:button"
 msgid "Dismiss"
-msgstr ""
+msgstr "Schließen"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:732
 msgctxt "@action:button"
 msgid "Load Preset"
-msgstr ""
+msgstr "Voreinstellung laden"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:734
 msgctxt "@info:tooltip"
 msgid "Load shader settings from a preset file"
-msgstr ""
+msgstr "Shader-Einstellungen aus einer Voreinstellungsdatei laden"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:745
 msgctxt "@action:button"
 msgid "Save Preset"
-msgstr ""
+msgstr "Voreinstellung speichern"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:748
 msgctxt "@info:tooltip"
 msgid "Save current shader settings as a preset file"
-msgstr ""
+msgstr "Aktuelle Shader-Einstellungen als Voreinstellungsdatei speichern"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:761
 msgctxt "@action:button"
 msgid "Defaults"
-msgstr ""
+msgstr "Voreinstellungen"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:811
 msgctxt "@title:window"
 msgid "Choose %1"
-msgstr ""
+msgstr "%1 wählen"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:828
 msgctxt "@title:window"
 msgid "Save Shader Preset"
-msgstr ""
+msgstr "Shader-Voreinstellung speichern"
 
 #: src/editor/qml/ShaderSettingsDialog.qml:860
 msgctxt "@title:window"
 msgid "Load Shader Preset"
-msgstr ""
+msgstr "Shader-Voreinstellung laden"
 
 #: src/editor/qml/TopBar.qml:56
 msgctxt "@info"
 msgid "Select screen for layout editing"
-msgstr ""
+msgstr "Bildschirm für Layout-Bearbeitung auswählen"
 
 #: src/editor/qml/TopBar.qml:93
 msgctxt "@label"
 msgid "Layout:"
-msgstr ""
+msgstr "Layout:"
 
 #: src/editor/qml/TopBar.qml:107
 msgctxt "@label"
 msgid "Layout name"
-msgstr ""
+msgstr "Layout-Name"
 
 #: src/editor/qml/TopBar.qml:108
 msgctxt "@info"
 msgid "Enter name for the layout"
-msgstr ""
+msgstr "Namen für das Layout eingeben"
 
 #: src/editor/qml/TopBar.qml:127
 msgctxt "@info"
 msgid "%1/%2"
-msgstr ""
+msgstr "%1/%2"
 
 #: src/editor/qml/TopBar.qml:131
 msgctxt "@info"
 msgid "Character count: %1 of %2"
-msgstr ""
+msgstr "Zeichenanzahl: %1 von %2"
 
 #: src/editor/qml/TopBar.qml:132
 msgctxt "@info"
 msgid "Shows how many characters are used in the layout name"
-msgstr ""
+msgstr "Zeigt an, wie viele Zeichen im Layout-Namen verwendet werden"
 
 #: src/editor/qml/TopBar.qml:212
 msgctxt "@action:tooltip"
 msgid "Undo: %1"
-msgstr ""
+msgstr "Rückgängig: %1"
 
 #: src/editor/qml/TopBar.qml:212
 msgctxt "@action:tooltip"
 msgid "Undo"
-msgstr ""
+msgstr "Rückgängig"
 
 #: src/editor/qml/TopBar.qml:214
 msgctxt "@action"
 msgid "Undo"
-msgstr ""
+msgstr "Rückgängig"
 
 #: src/editor/qml/TopBar.qml:230
 msgctxt "@action:tooltip"
 msgid "Redo: %1"
-msgstr ""
+msgstr "Wiederherstellen: %1"
 
 #: src/editor/qml/TopBar.qml:230
 msgctxt "@action:tooltip"
 msgid "Redo"
-msgstr ""
+msgstr "Wiederherstellen"
 
 #: src/editor/qml/TopBar.qml:232
 msgctxt "@action"
 msgid "Redo"
-msgstr ""
+msgstr "Wiederherstellen"
 
 #: src/editor/qml/TopBar.qml:254
 msgctxt "@tooltip"
 msgid "Layout-specific settings (gaps)"
-msgstr ""
+msgstr "Layoutspezifische Einstellungen (Abstände)"
 
 #: src/editor/qml/TopBar.qml:256
 msgctxt "@action"
 msgid "Layout Settings"
-msgstr ""
+msgstr "Layout-Einstellungen"
 
 #: src/editor/qml/TopBar.qml:257
 msgctxt "@info"
 msgid "Configure per-layout gap overrides"
-msgstr ""
+msgstr "Layoutspezifische Abstands-Überschreibungen konfigurieren"
 
 #: src/editor/qml/TopBar.qml:275
 msgctxt "@tooltip"
 msgid "Layout visibility (per monitor/desktop/activity)"
-msgstr ""
+msgstr "Layout-Sichtbarkeit (pro Bildschirm/Arbeitsfläche/Aktivität)"
 
 #: src/editor/qml/TopBar.qml:277
 msgctxt "@action"
 msgid "Layout Visibility"
-msgstr ""
+msgstr "Layout-Sichtbarkeit"
 
 #: src/editor/qml/TopBar.qml:278
 msgctxt "@info"
 msgid "Configure where this layout appears in the zone selector"
-msgstr ""
+msgstr "Festlegen, wo dieses Layout in der Zonenauswahl angezeigt wird"
 
 #: src/editor/qml/TopBar.qml:297
 msgctxt "@tooltip"
 msgid "Shader effect settings"
-msgstr ""
+msgstr "Shader-Effekt-Einstellungen"
 
 #: src/editor/qml/TopBar.qml:299
 msgctxt "@action"
 msgid "Shader Settings"
-msgstr ""
+msgstr "Shader-Einstellungen"
 
 #: src/editor/qml/TopBar.qml:300
 msgctxt "@info"
 msgid "Configure visual shader effects for zones"
-msgstr ""
+msgstr "Visuelle Shader-Effekte für Zonen konfigurieren"
 
 #: src/editor/qml/TopBar.qml:323
 msgctxt "@tooltip"
 msgid "Import layout from file"
-msgstr ""
+msgstr "Layout aus Datei importieren"
 
 #: src/editor/qml/TopBar.qml:325
 msgctxt "@action"
 msgid "Import Layout"
-msgstr ""
+msgstr "Layout importieren"
 
 #: src/editor/qml/TopBar.qml:326
 msgctxt "@info"
 msgid "Import a layout from a JSON file"
-msgstr ""
+msgstr "Layout aus einer JSON-Datei importieren"
 
 #: src/editor/qml/TopBar.qml:334
 msgctxt "@tooltip"
 msgid "Export layout to file"
-msgstr ""
+msgstr "Layout in Datei exportieren"
 
 #: src/editor/qml/TopBar.qml:336
 msgctxt "@action"
 msgid "Export Layout"
-msgstr ""
+msgstr "Layout exportieren"
 
 #: src/editor/qml/TopBar.qml:337
 msgctxt "@info"
 msgid "Export the current layout to a JSON file"
-msgstr ""
+msgstr "Das aktuelle Layout in eine JSON-Datei exportieren"
 
 #: src/editor/qml/TopBar.qml:350
 msgctxt "@tooltip"
 msgid "Exit fullscreen mode (F11)"
-msgstr ""
+msgstr "Vollbildmodus beenden (F11)"
 
 #: src/editor/qml/TopBar.qml:350
 msgctxt "@tooltip"
 msgid "Enter fullscreen mode (F11)"
-msgstr ""
+msgstr "Vollbildmodus aktivieren (F11)"
 
 #: src/editor/qml/TopBar.qml:353
 msgctxt "@action"
 msgid "Exit Fullscreen"
-msgstr ""
+msgstr "Vollbild beenden"
 
 #: src/editor/qml/TopBar.qml:353
 msgctxt "@action"
 msgid "Fullscreen"
-msgstr ""
+msgstr "Vollbild"
 
 #: src/editor/qml/TopBar.qml:354
 msgctxt "@info"
 msgid "Toggle fullscreen editing mode"
-msgstr ""
+msgstr "Vollbild-Bearbeitungsmodus umschalten"
 
 #: src/editor/qml/TopBar.qml:361
 msgctxt "@tooltip"
 msgid "Quick reference guide (F1)"
-msgstr ""
+msgstr "Kurzreferenz (F1)"
 
 #: src/editor/qml/TopBar.qml:363
 msgctxt "@action"
 msgid "Help"
-msgstr ""
+msgstr "Hilfe"
 
 #: src/editor/qml/TopBar.qml:364
 msgctxt "@info"
 msgid "Open quick reference guide"
-msgstr ""
+msgstr "Kurzreferenz öffnen"
 
 #: src/editor/qml/TopBar.qml:376
 msgctxt "@tooltip"
 msgid "Close editor"
-msgstr ""
+msgstr "Editor schließen"
 
 #: src/editor/qml/TopBar.qml:378
 msgctxt "@action"
 msgid "Close"
-msgstr ""
+msgstr "Schließen"
 
 #: src/editor/qml/TopBar.qml:379
 msgctxt "@info"
 msgid "Close the layout editor"
-msgstr ""
+msgstr "Den Layout-Editor schließen"
 
 #: src/editor/qml/VisibilitySettingsDialog.qml:21
 msgctxt "@title:window"
 msgid "Zone Selector Visibility"
-msgstr ""
+msgstr "Sichtbarkeit der Zonenauswahl"
 
 #: src/editor/qml/VisibilitySettingsDialog.qml:50
 msgctxt "@info"
@@ -2067,123 +2089,125 @@ msgid ""
 "Choose where this layout appears in the zone selector popup. All checked "
 "means visible everywhere."
 msgstr ""
+"Wählen Sie aus, wo dieses Layout im Zonenauswahl-Fenster angezeigt wird. "
+"Alle aktiviert bedeutet überall sichtbar."
 
 #: src/editor/qml/VisibilitySettingsDialog.qml:70
 msgctxt "@title:group"
 msgid "Screens"
-msgstr ""
+msgstr "Bildschirme"
 
 #: src/editor/qml/VisibilitySettingsDialog.qml:120
 msgctxt "@title:group"
 msgid "Virtual Desktops"
-msgstr ""
+msgstr "Virtuelle Arbeitsflächen"
 
 #: src/editor/qml/VisibilitySettingsDialog.qml:132
 msgctxt "@label"
 msgid "Desktop %1"
-msgstr ""
+msgstr "Arbeitsfläche %1"
 
 #: src/editor/qml/VisibilitySettingsDialog.qml:170
 msgctxt "@title:group"
 msgid "Activities"
-msgstr ""
+msgstr "Aktivitäten"
 
 #: src/editor/qml/ZoneContextMenu.qml:34
 msgctxt "@action"
 msgid "Split Horizontally"
-msgstr ""
+msgstr "Horizontal teilen"
 
 #: src/editor/qml/ZoneContextMenu.qml:42
 msgctxt "@action"
 msgid "Split Vertically"
-msgstr ""
+msgstr "Vertikal teilen"
 
 #: src/editor/qml/ZoneContextMenu.qml:53
 msgctxt "@action"
 msgid "Copy"
-msgstr ""
+msgstr "Kopieren"
 
 #: src/editor/qml/ZoneContextMenu.qml:62
 msgctxt "@action"
 msgid "Copy zone"
-msgstr ""
+msgstr "Zone kopieren"
 
 #: src/editor/qml/ZoneContextMenu.qml:63
 msgctxt "@info"
 msgid "Copy the selected zone to clipboard"
-msgstr ""
+msgstr "Die ausgewählte Zone in die Zwischenablage kopieren"
 
 #: src/editor/qml/ZoneContextMenu.qml:68
 msgctxt "@action"
 msgid "Cut"
-msgstr ""
+msgstr "Ausschneiden"
 
 #: src/editor/qml/ZoneContextMenu.qml:77
 msgctxt "@action"
 msgid "Cut zone"
-msgstr ""
+msgstr "Zone ausschneiden"
 
 #: src/editor/qml/ZoneContextMenu.qml:78
 msgctxt "@info"
 msgid "Cut the selected zone to clipboard"
-msgstr ""
+msgstr "Die ausgewählte Zone in die Zwischenablage ausschneiden"
 
 #: src/editor/qml/ZoneContextMenu.qml:83
 msgctxt "@action"
 msgid "Duplicate"
-msgstr ""
+msgstr "Duplizieren"
 
 #: src/editor/qml/ZoneContextMenu.qml:91
 msgctxt "@action"
 msgid "Delete"
-msgstr ""
+msgstr "Löschen"
 
 #: src/editor/qml/ZoneContextMenu.qml:99
 msgctxt "@action"
 msgid "Delete and Fill"
-msgstr ""
+msgstr "Löschen und füllen"
 
 #: src/editor/qml/ZoneContextMenu.qml:103
 msgctxt "@info:tooltip"
 msgid "Delete this zone and expand neighbors to fill the space"
-msgstr ""
+msgstr "Diese Zone löschen und Nachbarzonen erweitern, um den Platz zu füllen"
 
 #: src/editor/qml/ZoneContextMenu.qml:111
 msgctxt "@action"
 msgid "Paste"
-msgstr ""
+msgstr "Einfügen"
 
 #: src/editor/qml/ZoneContextMenu.qml:119
 msgctxt "@action"
 msgid "Paste zone"
-msgstr ""
+msgstr "Zone einfügen"
 
 #: src/editor/qml/ZoneContextMenu.qml:120
 msgctxt "@info"
 msgid "Paste zones from clipboard"
-msgstr ""
+msgstr "Zonen aus der Zwischenablage einfügen"
 
 #: src/editor/qml/ZoneContextMenu.qml:125
 msgctxt "@action"
 msgid "Paste with Offset"
-msgstr ""
+msgstr "Versetzt einfügen"
 
 #: src/editor/qml/ZoneContextMenu.qml:133
 msgctxt "@action"
 msgid "Paste zone with offset"
-msgstr ""
+msgstr "Zone versetzt einfügen"
 
 #: src/editor/qml/ZoneContextMenu.qml:134
 msgctxt "@info"
 msgid "Paste zones from clipboard with offset to avoid overlap"
-msgstr ""
+msgstr "Zonen aus der Zwischenablage versetzt einfügen, um Überlappung zu vermeiden"
 
 #: src/editor/qml/ZoneContextMenu.qml:142
 msgctxt "@action"
 msgid "Fill Available Space"
-msgstr ""
+msgstr "Verfügbaren Platz füllen"
 
 #: src/editor/qml/ZoneContextMenu.qml:146
 msgctxt "@info:tooltip"
 msgid "Expand zone to fill adjacent empty space"
-msgstr ""
+msgstr "Zone erweitern, um angrenzenden leeren Platz zu füllen"

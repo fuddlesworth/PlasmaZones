@@ -33,9 +33,9 @@ void main() {
     vFragCoord = vec2(texCoord.x, 1.0 - texCoord.y) * iResolution;
 
     // Get parameters
-    float fieldStrength = customParams[0].x > 0.01 ? customParams[0].x : 1.0;
-    float waveSpeed = customParams[0].y > 0.01 ? customParams[0].y : 1.5;
-    float distortionAmount = customParams[1].w > 0.01 ? customParams[1].w : 0.4;
+    float fieldStrength = customParams[0].x >= 0.0 ? customParams[0].x : 1.0;
+    float waveSpeed = customParams[0].y >= 0.0 ? customParams[0].y : 1.5;
+    float distortionAmount = customParams[1].w >= 0.0 ? customParams[1].w : 0.4;
     
     // Mouse position in normalized coordinates
     vec2 mouseNorm = iMouse.zw;

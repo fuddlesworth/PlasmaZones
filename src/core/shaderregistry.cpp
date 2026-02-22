@@ -44,6 +44,14 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
         return QString();
     }
 
+    // Image slots 0-3 → uTexture0-3
+    if (type == QLatin1String("image")) {
+        if (slot >= 0 && slot < 4) {
+            return QStringLiteral("uTexture%1").arg(slot);
+        }
+        return QString();
+    }
+
     // Float/int/bool slots 0-15 → customParams1_x through customParams4_w
     if (slot >= 0 && slot < 16) {
         const int vecIndex = slot / 4;
@@ -389,6 +397,7 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
         param.minValue = paramObj.value(QLatin1String("min")).toVariant();
         param.maxValue = paramObj.value(QLatin1String("max")).toVariant();
         param.useZoneColor = paramObj.value(QLatin1String("use_zone_color")).toBool(false);
+        param.wrap = paramObj.value(QLatin1String("wrap")).toString();
 
         if (!param.id.isEmpty()) {
             info.parameters.append(param);
@@ -475,6 +484,9 @@ QVariantMap ShaderRegistry::parameterInfoToVariantMap(const ParameterInfo& param
     map[QStringLiteral("slot")] = param.slot;
     map[QStringLiteral("mapsTo")] = param.uniformName(); // Computed from slot for compatibility
     map[QStringLiteral("useZoneColor")] = param.useZoneColor;
+    if (!param.wrap.isEmpty()) {
+        map[QStringLiteral("wrap")] = param.wrap;
+    }
 
     // Only include optional values if they are valid (D-Bus can't marshal null QVariants)
     if (!param.group.isEmpty()) {
@@ -568,6 +580,9 @@ bool ShaderRegistry::validateParameterValue(const ParameterInfo& param, const QV
     } else if (param.type == QLatin1String("bool")) {
         if (!value.canConvert<bool>())
             return false;
+    } else if (param.type == QLatin1String("image")) {
+        if (!value.canConvert<QString>())
+            return false;
     }
     return true;
 }
@@ -641,6 +656,19 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
             } else {
                 result[uniformName] = param.defaultValue;
             }
+        }
+
+        // For image parameters: resolve relative paths against shader directory, emit wrap mode
+        if (param.type == QLatin1String("image") && !uniformName.isEmpty()) {
+            const QString imgPath = result.value(uniformName).toString();
+            if (!imgPath.isEmpty() && QFileInfo(imgPath).isRelative()) {
+                const QDir shaderDir = QFileInfo(info.sourcePath).absoluteDir();
+                const QString resolved = shaderDir.absoluteFilePath(imgPath);
+                if (QFile::exists(resolved)) {
+                    result[uniformName] = resolved;
+                }
+            }
+            result[uniformName + QStringLiteral("_wrap")] = param.wrap.isEmpty() ? QStringLiteral("clamp") : param.wrap;
         }
     }
 

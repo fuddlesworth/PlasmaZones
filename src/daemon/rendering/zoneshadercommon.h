@@ -73,6 +73,12 @@ struct alignas(16) ZoneShaderUniforms
 
     // Audio spectrum (CAVA): number of bars; 0 = disabled. Texture at binding 6.
     int iAudioSpectrumSize;
+
+    // Padding to 16-byte boundary after iAudioSpectrumSize (std140 alignment for following array)
+    int _pad_after_audioSpectrum[3];
+
+    // User texture resolutions (bindings 7-10): [i][0]=width, [i][1]=height, [i][2..3]=padding
+    float iTextureResolution[4][4];
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");

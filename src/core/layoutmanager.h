@@ -222,6 +222,7 @@ Q_SIGNALS:
 private:
     void ensureLayoutDirectory();
     void loadLayoutsFromDirectory(const QString& directory);
+    Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
     QString layoutFilePath(const QUuid& id) const;
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;

@@ -7,91 +7,19 @@
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [
-        {
-            "id": "fieldStrength",
-            "name": "Field Strength",
-            "type": "float",
-            "slot": 0,
-            "default": 1.0,
-            "min": 0.2,
-            "max": 2.0
-        },
-        {
-            "id": "waveSpeed",
-            "name": "Wave Speed",
-            "type": "float",
-            "slot": 1,
-            "default": 1.5,
-            "min": 0.5,
-            "max": 3.0
-        },
-        {
-            "id": "rippleSize",
-            "name": "Ripple Size",
-            "type": "float",
-            "slot": 2,
-            "default": 0.5,
-            "min": 0.1,
-            "max": 1.0
-        },
-        {
-            "id": "glowIntensity",
-            "name": "Glow Intensity",
-            "type": "float",
-            "slot": 3,
-            "default": 0.6,
-            "min": 0.1,
-            "max": 1.0
-        },
-        {
-            "id": "particleCount",
-            "name": "Particle Count",
-            "type": "float",
-            "slot": 4,
-            "default": 30.0,
-            "min": 10.0,
-            "max": 50.0
-        },
-        {
-            "id": "particleSize",
-            "name": "Particle Size",
-            "type": "float",
-            "slot": 5,
-            "default": 1.5,
-            "min": 0.5,
-            "max": 3.0
-        },
-        {
-            "id": "trailLength",
-            "name": "Trail Length",
-            "type": "float",
-            "slot": 6,
-            "default": 0.5,
-            "min": 0.1,
-            "max": 1.0
-        },
-        {
-            "id": "distortionAmount",
-            "name": "Distortion",
-            "type": "float",
-            "slot": 7,
-            "default": 0.4,
-            "min": 0.0,
-            "max": 1.0
-        },
-        {
-            "id": "fieldColor",
-            "name": "Field Color",
-            "type": "color",
-            "slot": 0,
-            "default": "#8b5cf6"
-        },
-        {
-            "id": "highlightColor",
-            "name": "Highlight Color",
-            "type": "color",
-            "slot": 1,
-            "default": "#facc15"
-        }
+        {"id": "fieldStrength", "name": "Field Strength", "group": "Field", "type": "float", "slot": 0, "default": 1.0, "min": 0.2, "max": 2.0},
+        {"id": "waveSpeed", "name": "Wave Speed", "group": "Animation", "type": "float", "slot": 1, "default": 1.5, "min": 0.5, "max": 3.0},
+        {"id": "rippleSize", "name": "Ripple Size", "group": "Field", "type": "float", "slot": 2, "default": 0.5, "min": 0.1, "max": 1.0},
+        {"id": "glowIntensity", "name": "Glow Intensity", "group": "Appearance", "type": "float", "slot": 3, "default": 0.6, "min": 0.1, "max": 1.0},
+        {"id": "particleCount", "name": "Particle Count", "group": "Particles", "type": "float", "slot": 4, "default": 30.0, "min": 10.0, "max": 50.0},
+        {"id": "particleSize", "name": "Particle Size", "group": "Particles", "type": "float", "slot": 5, "default": 1.5, "min": 0.5, "max": 3.0},
+        {"id": "trailLength", "name": "Trail Length", "group": "Particles", "type": "float", "slot": 6, "default": 0.5, "min": 0.1, "max": 1.0},
+        {"id": "distortionAmount", "name": "Distortion", "group": "Field", "type": "float", "slot": 7, "default": 0.4, "min": 0.0, "max": 1.0},
+        {"id": "audioReactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 8, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "nebulaIntensity", "name": "Nebula Intensity", "group": "Background", "type": "float", "slot": 9, "default": 0.15, "min": 0.0, "max": 0.4},
+        {"id": "shockwaveStrength", "name": "Shockwave Strength", "group": "Audio", "type": "float", "slot": 10, "default": 1.0, "min": 0.0, "max": 3.0},
+        {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 11, "default": 0.85, "min": 0.4, "max": 1.0},
+        {"id": "fieldColor", "name": "Field Color", "group": "Colors", "type": "color", "slot": 0, "default": "#8b5cf6"},
+        {"id": "highlightColor", "name": "Highlight Color", "group": "Colors", "type": "color", "slot": 1, "default": "#facc15"}
     ]
 }

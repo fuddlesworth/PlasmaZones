@@ -16,6 +16,7 @@ CTestTestfile.cmake
 _deps/
 *.cmake
 !CMakeLists.txt
+!cmake/*.cmake
 .cmake/
 
 # -----------------------------------------------------------------------------
@@ -51,6 +52,9 @@ ui_*.h
 *.obj
 *.lo
 *.slo
+
+# SPIR-V compiled shaders
+*.spv
 
 # Precompiled Headers
 *.gch

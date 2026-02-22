@@ -203,10 +203,11 @@ void LayoutManager::removeLayout(Layout* layout)
         return;
     }
 
-    // Store ID and state BEFORE any operations that might invalidate the pointer
+    // Store state BEFORE any operations that might invalidate the pointer
     const QUuid layoutId = layout->id();
     const bool wasActive = (m_activeLayout == layout);
     const QString filePath = layoutFilePath(layoutId);
+    const QString systemPath = layout->systemSourcePath();
 
     // Remove from layouts list
     m_layouts.removeOne(layout);
@@ -238,13 +239,48 @@ void LayoutManager::removeLayout(Layout* layout)
     // Delete layout file (using stored path)
     QFile::remove(filePath);
 
-    // Emit signals before deleting
-    Q_EMIT layoutRemoved(layout);
-    Q_EMIT layoutsChanged();
+    // Clear stale pointer before deletion
+    if (m_previousLayout == layout) {
+        m_previousLayout = nullptr;
+    }
 
-    // Schedule deletion (safe - we've already removed from all containers)
+    Q_EMIT layoutRemoved(layout);
     layout->deleteLater();
 
+    // If this was a user override of a system layout, restore the system original.
+    // Uses the stored system path — no filesystem scanning needed.
+    Layout* restored = restoreSystemLayout(layoutId, systemPath);
+
+    if (restored) {
+        // System layout restored — assignments and shortcuts stay valid (same UUID).
+        // If deleted layout was active, activate the restored system layout.
+        if (wasActive) {
+            setActiveLayout(restored);
+        }
+    } else {
+        // Truly deleted — clean up assignments and shortcuts referencing this layout
+        for (auto it = m_assignments.begin(); it != m_assignments.end();) {
+            if (it.value() == layoutIdStr) {
+                it = m_assignments.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
+            if (it.value() == layoutIdStr) {
+                it = m_quickLayoutShortcuts.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        if (wasActive) {
+            setActiveLayout(defaultLayout());
+        }
+    }
+
+    Q_EMIT layoutsChanged();
     saveAssignments();
 }
 
@@ -828,6 +864,10 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                 // if we find a duplicate, the new one is from user directory and should replace
                 if (!layout->isSystemLayout() && existing->isSystemLayout()) {
                     // User layout overrides system layout - replace the existing one
+                    // Preserve the system origin path so we can restore on deletion
+                    if (layout->systemSourcePath().isEmpty()) {
+                        layout->setSystemSourcePath(existing->sourcePath());
+                    }
                     int index = m_layouts.indexOf(existing);
                     disconnect(existing, &Layout::layoutModified, this, nullptr);
                     m_layouts.replace(index, layout);
@@ -855,6 +895,13 @@ void LayoutManager::saveLayout(Layout* layout)
 
     ensureLayoutDirectory();
 
+    // If this is a system layout being saved to user dir for the first time,
+    // capture the system origin path before toJson/sourcePath changes
+    if (layout->isSystemLayout() && !layout->hasSystemOrigin()) {
+        layout->setSystemSourcePath(layout->sourcePath());
+        qCInfo(lcLayout) << "Captured system origin for" << layout->name() << "from=" << layout->sourcePath();
+    }
+
     const QString filePath = layoutFilePath(layout->id());
     QFile file(filePath);
 
@@ -864,6 +911,7 @@ void LayoutManager::saveLayout(Layout* layout)
         return;
     }
 
+    // toJson() includes systemSourcePath so it persists across daemon restarts
     QJsonDocument doc(layout->toJson());
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
 
@@ -1132,6 +1180,39 @@ void LayoutManager::exportLayout(Layout* layout, const QString& filePath)
     }
 
     qCInfo(lcLayout) << "Successfully exported layout:" << layout->name() << "to" << filePath;
+}
+
+Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& systemPath)
+{
+    if (systemPath.isEmpty() || layoutById(id)) {
+        return nullptr;
+    }
+
+    QFile file(systemPath);
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+        qCWarning(lcLayout) << "System layout file missing:" << systemPath;
+        return nullptr;
+    }
+
+    QJsonParseError parseError;
+    const auto doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError) {
+        qCWarning(lcLayout) << "System layout parse error:" << systemPath << parseError.errorString();
+        return nullptr;
+    }
+
+    auto* layout = Layout::fromJson(doc.object(), this);
+    if (!layout || layout->id() != id) {
+        delete layout;
+        return nullptr;
+    }
+
+    layout->setSourcePath(systemPath);
+    m_layouts.append(layout);
+    connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
+    Q_EMIT layoutAdded(layout);
+    qCInfo(lcLayout) << "Restored system layout name=" << layout->name() << "from=" << systemPath;
+    return layout;
 }
 
 void LayoutManager::ensureLayoutDirectory()

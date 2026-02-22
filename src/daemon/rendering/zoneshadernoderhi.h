@@ -64,6 +64,8 @@ public:
     void setCustomColor8(const QColor& color) override;
     void setLabelsTexture(const QImage& image) override;
     void setAudioSpectrum(const QVector<float>& spectrum) override;
+    void setUserTexture(int slot, const QImage& image) override;
+    void setUserTextureWrap(int slot, const QString& wrap) override;
     void setBufferShaderPath(const QString& path) override;
     void setBufferShaderPaths(const QStringList& paths) override;
     void setBufferFeedback(bool enable) override;
@@ -84,6 +86,8 @@ private:
     bool ensureBufferTarget();
     void syncUniformsFromData();
     void releaseRhiResources();
+    void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    void resetAllSrbs();
 
     QQuickItem* m_item = nullptr;
 
@@ -190,6 +194,14 @@ private:
     std::unique_ptr<QRhiTexture> m_audioSpectrumTexture;
     std::unique_ptr<QRhiSampler> m_audioSpectrumSampler;
     bool m_audioSpectrumDirty = false;
+
+    // User texture slots (bindings 7-10)
+    static constexpr int kMaxUserTextures = 4;
+    std::array<QImage, kMaxUserTextures> m_userTextureImages;
+    std::array<std::unique_ptr<QRhiTexture>, kMaxUserTextures> m_userTextures;
+    std::array<std::unique_ptr<QRhiSampler>, kMaxUserTextures> m_userTextureSamplers;
+    std::array<QString, kMaxUserTextures> m_userTextureWraps;
+    std::array<bool, kMaxUserTextures> m_userTextureDirty = {};
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */

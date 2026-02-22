@@ -3,6 +3,7 @@
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -217,6 +218,75 @@ Item {
         Item {
             visible: paramDelegate.paramType === "color"
             Layout.fillWidth: true
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        // IMAGE PARAMETER
+        // ═══════════════════════════════════════════════════════════════
+        Button {
+            id: imagePickerButton
+            visible: paramDelegate.paramType === "image"
+            Layout.fillWidth: true
+
+            property string currentPath: {
+                void(paramDelegate._pendingRef);
+                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot) return "";
+                return String(paramDelegate.resolvedDialogRoot.parameterValue(
+                    paramDelegate.paramData.id,
+                    paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : ""
+                ) || "");
+            }
+
+            text: {
+                if (!currentPath || currentPath.length === 0) return i18nc("@action:button", "Choose Image...");
+                var lastSlash = currentPath.lastIndexOf("/");
+                return lastSlash >= 0 ? currentPath.substring(lastSlash + 1) : currentPath;
+            }
+
+            onClicked: {
+                if (paramDelegate.resolvedDialogRoot) {
+                    paramDelegate.resolvedDialogRoot.hideShaderPreview();
+                }
+                imageFileDialog.open();
+            }
+        }
+
+        ToolButton {
+            visible: paramDelegate.paramType === "image" && imagePickerButton.currentPath.length > 0
+            icon.name: "edit-clear"
+            ToolTip.text: i18nc("@info:tooltip", "Clear image")
+            onClicked: {
+                if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {
+                    paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, "");
+                }
+            }
+        }
+
+        Item {
+            visible: paramDelegate.paramType === "image"
+            Layout.fillWidth: true
+        }
+    }
+
+    FileDialog {
+        id: imageFileDialog
+        title: i18nc("@title:window", "Choose Image")
+        nameFilters: [i18nc("@item:inlistbox", "Image files (*.png *.jpg *.jpeg *.bmp *.webp)"), i18nc("@item:inlistbox", "All files (*)")]
+        fileMode: FileDialog.OpenFile
+
+        onAccepted: {
+            if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot) {
+                var path = decodeURIComponent(selectedFile.toString().replace(/^file:\/\/+/, "/"));
+                paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, path);
+            }
+            if (paramDelegate.resolvedDialogRoot) {
+                paramDelegate.resolvedDialogRoot.restoreShaderPreview();
+            }
+        }
+        onRejected: function() {
+            if (paramDelegate.resolvedDialogRoot) {
+                paramDelegate.resolvedDialogRoot.restoreShaderPreview();
+            }
         }
     }
 }

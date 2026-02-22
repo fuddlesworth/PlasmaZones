@@ -7,6 +7,33 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-02-22
+
+### Fixed
+- **RPM packaging**: Added KCM and editor translation files (`kcm_plasmazones.mo`, `plasmazones-editor.mo`) to spec `%files` section, fixing "unpackaged file(s) found" build failure on Fedora.
+
+## [1.15.0] - 2026-02-22
+
+### Added
+- **Mosaic Pulse shader**: Audio-reactive stained glass mosaic with colorful tiles, pulsing shapes (circles, diamonds, squares), sparkles, and dithered posterization. Bass drives shape pulse, mids shift hue, treble triggers sparkles. 12 configurable parameters across 6 groups.
+- **User-supplied image textures**: Shader effects can now sample up to 4 user-provided images (bindings 7-10) with configurable wrap modes.
+- **Shared GLSL utilities**: Extracted `common.glsl`, `audio.glsl`, `textures.glsl`, and `multipass.glsl` as shared includes — all shaders updated to use common helpers (hash, noise, SDF, blending, audio bands).
+
+### Fixed
+- **System layout restore**: Deleting a user layout override from KCM now correctly restores the system-provided layout instead of leaving a blank state.
+- **System layout label**: Label now includes "zones" suffix for consistency with other layout names.
+- **Translation extraction**: 33 missing source files added to the extraction list so all translatable strings are captured.
+- **German .po headers**: Normalized header fields for consistency across all 3 translation domains.
+
+### Changed
+- **German translations**: Complete coverage for all 3 domains (daemon, KCM, effect). Removed 49 obsolete entries.
+- Removed outdated shader presets.
+
+## [1.14.1] - 2026-02-21
+
+### Fixed
+- **Zone persistence on daemon restart**: Windows that were snapped to zones are now correctly re-registered when the daemon is stopped and started. Root cause: `pendingRestoresAvailable` was never emitted because the layout was set before the WindowTrackingAdaptor connected to `activeLayoutChanged`. Now sets `m_hasPendingRestores` at init when pending assignments are loaded. Also saves window tracking state on daemon shutdown so snapped windows persist across restarts.
+
 ## [1.14.0] - 2026-02-21
 
 ### Added
@@ -559,6 +586,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...HEAD
+[1.14.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.0...v1.14.1
 [1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.1...v1.12.2

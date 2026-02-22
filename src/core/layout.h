@@ -229,6 +229,12 @@ public:
     // This determines whether the layout can be edited/deleted in place
     bool isSystemLayout() const;
 
+    // Original system layout path — set when a user override replaces a system layout.
+    // Persisted in user JSON so deletion can restore the system original without scanning.
+    QString systemSourcePath() const { return m_systemSourcePath; }
+    void setSystemSourcePath(const QString& path) { m_systemSourcePath = path; }
+    bool hasSystemOrigin() const { return !m_systemSourcePath.isEmpty(); }
+
     // Shader support
     QString shaderId() const
     {
@@ -370,6 +376,7 @@ private:
     int m_outerGapRight = -1;
     bool m_showZoneNumbers = true;
     QString m_sourcePath; // Path where layout was loaded from (empty for new layouts)
+    QString m_systemSourcePath; // Original system path if this is a user override of a system layout
     int m_defaultOrder = 999; // Optional: lower values appear first when choosing default (999 = not set)
     QVector<Zone*> m_zones;
 

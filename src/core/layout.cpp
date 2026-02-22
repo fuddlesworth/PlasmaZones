@@ -129,6 +129,7 @@ Layout& Layout::operator=(const Layout& other)
         m_showZoneNumbers = other.m_showZoneNumbers;
         m_defaultOrder = other.m_defaultOrder;
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
+        m_systemSourcePath.clear(); // New copy has no system origin
         m_shaderId = other.m_shaderId;
         m_shaderParams = other.m_shaderParams;
         bool rulesChanged = m_appRules != other.m_appRules;
@@ -559,6 +560,11 @@ QJsonObject Layout::toJson() const
     }
     // Note: isBuiltIn is no longer serialized - it's determined by source path at load time
 
+    // Persist system origin path so user overrides can be restored on deletion
+    if (!m_systemSourcePath.isEmpty()) {
+        json[JsonKeys::SystemSourcePath] = m_systemSourcePath;
+    }
+
     // Shader support - only persist params belonging to the active shader
     if (!ShaderRegistry::isNoneShader(m_shaderId)) {
         json[JsonKeys::ShaderId] = m_shaderId;
@@ -635,6 +641,8 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_showZoneNumbers = json[JsonKeys::ShowZoneNumbers].toBool(true);
     layout->m_defaultOrder = json[JsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
+    // But systemSourcePath IS persisted in user JSON for system override restoration
+    layout->m_systemSourcePath = json[JsonKeys::SystemSourcePath].toString();
 
     // Shader support
     layout->m_shaderId = json[JsonKeys::ShaderId].toString();

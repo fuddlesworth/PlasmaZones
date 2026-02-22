@@ -7,15 +7,19 @@
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [
-        {"id": "glowIntensity", "name": "Glow Intensity", "type": "float", "slot": 0, "default": 2.5, "min": 1, "max": 5},
-        {"id": "reactivity", "name": "Audio Reactivity", "type": "float", "slot": 1, "default": 1.5, "min": 0.5, "max": 3},
-        {"id": "waveHeight", "name": "Spectrum Aurora Height", "type": "float", "slot": 2, "default": 0.15, "min": 0.05, "max": 0.4},
-        {"id": "bassExpand", "name": "Bass Glow Expansion", "type": "float", "slot": 3, "default": 1.5, "min": 0, "max": 3},
-        {"id": "flowSpeed", "name": "Energy Flow Speed", "type": "float", "slot": 4, "default": 2.0, "min": 0.5, "max": 4},
-        {"id": "plasmaDetail", "name": "Plasma Turbulence", "type": "float", "slot": 5, "default": 0.8, "min": 0, "max": 2},
-        {"id": "colorMix", "name": "Audio Color Shift", "type": "float", "slot": 6, "default": 0.5, "min": 0, "max": 1},
-        {"id": "idleAnimation", "name": "Idle Animation", "type": "float", "slot": 7, "default": 1.0, "min": 0, "max": 2},
-        {"id": "primaryColor", "name": "Primary Neon", "type": "color", "slot": 0, "default": "#00ffff"},
-        {"id": "accentColor", "name": "Accent Glow", "type": "color", "slot": 1, "default": "#ff00ff"}
+        {"id": "glowIntensity", "name": "Glow Intensity", "group": "Appearance", "type": "float", "slot": 0, "default": 2.5, "min": 1, "max": 5},
+        {"id": "reactivity", "name": "Audio Reactivity", "group": "Audio", "type": "float", "slot": 1, "default": 1.5, "min": 0.5, "max": 3},
+        {"id": "waveHeight", "name": "Spectrum Aurora Height", "group": "Audio", "type": "float", "slot": 2, "default": 0.15, "min": 0.05, "max": 0.4},
+        {"id": "bassExpand", "name": "Bass Glow Expansion", "group": "Audio", "type": "float", "slot": 3, "default": 1.5, "min": 0, "max": 3},
+        {"id": "flowSpeed", "name": "Energy Flow Speed", "group": "Animation", "type": "float", "slot": 4, "default": 2.0, "min": 0.5, "max": 4},
+        {"id": "plasmaDetail", "name": "Plasma Turbulence", "group": "Animation", "type": "float", "slot": 5, "default": 0.8, "min": 0, "max": 2},
+        {"id": "colorMix", "name": "Audio Color Shift", "group": "Audio", "type": "float", "slot": 6, "default": 0.5, "min": 0, "max": 1},
+        {"id": "idleAnimation", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 7, "default": 1.0, "min": 0, "max": 2},
+        {"id": "veinIntensity", "name": "Energy Vein Intensity", "group": "Effects", "type": "float", "slot": 8, "default": 0.5, "min": 0.0, "max": 1.0},
+        {"id": "radialWaveStr", "name": "Radial Wave Strength", "group": "Effects", "type": "float", "slot": 9, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "gridOpacity", "name": "Grid Opacity", "group": "Effects", "type": "float", "slot": 10, "default": 0.15, "min": 0.0, "max": 0.5},
+        {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 11, "default": 0.85, "min": 0.4, "max": 1.0},
+        {"id": "primaryColor", "name": "Primary Neon", "group": "Colors", "type": "color", "slot": 0, "default": "#00ffff"},
+        {"id": "accentColor", "name": "Accent Glow", "group": "Colors", "type": "color", "slot": 1, "default": "#ff00ff"}
     ]
 }
