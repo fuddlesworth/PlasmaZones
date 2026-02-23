@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.2] - 2026-02-22
+
+### Fixed
+- **Overlapping zone snapping**: When zones overlap, the smallest zone at the cursor position is now selected instead of the first in list order. Matches FancyZones' area-covered heuristic so the more specific zone wins.
+
 ## [1.15.1] - 2026-02-22
 
 ### Fixed
