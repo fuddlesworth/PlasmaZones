@@ -7,6 +7,7 @@
 #include <QKeySequence>
 #include <QScreen>
 #include <cmath>
+#include <limits>
 #include <KGlobalAccel>
 #include <KLocalizedString>
 #include "windowtrackingadaptor.h"
@@ -315,13 +316,17 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
     qreal relX = static_cast<qreal>(x - refGeom.x()) / refGeom.width();
     qreal relY = static_cast<qreal>(y - refGeom.y()) / refGeom.height();
 
-    // Find zone at cursor position
+    // Find zone at cursor position — prefer smallest overlapping zone (FancyZones area-covered heuristic)
     Zone* foundZone = nullptr;
+    qreal bestArea = std::numeric_limits<qreal>::max();
     for (auto* zone : layout->zones()) {
         QRectF normGeom = zone->normalizedGeometry(refGeom);
         if (normGeom.contains(QPointF(relX, relY))) {
-            foundZone = zone;
-            break;
+            qreal area = normGeom.width() * normGeom.height();
+            if (area < bestArea) {
+                bestArea = area;
+                foundZone = zone;
+            }
         }
     }
 

@@ -57,12 +57,18 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     qreal relX = static_cast<qreal>(x - refGeom.x()) / refGeom.width();
     qreal relY = static_cast<qreal>(y - refGeom.y()) / refGeom.height();
 
+    // When zones overlap, pick the smallest zone containing the cursor.
+    // This matches FancyZones' "area covered" heuristic.
     Zone* foundZone = nullptr;
+    qreal bestArea = std::numeric_limits<qreal>::max();
     for (auto* zone : layout->zones()) {
         QRectF relGeom = zone->normalizedGeometry(refGeom);
         if (relGeom.contains(QPointF(relX, relY))) {
-            foundZone = zone;
-            break;
+            qreal area = relGeom.width() * relGeom.height();
+            if (area < bestArea) {
+                bestArea = area;
+                foundZone = zone;
+            }
         }
     }
 

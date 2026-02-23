@@ -10,6 +10,7 @@
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
+#include <limits>
 
 namespace PlasmaZones {
 
@@ -458,12 +459,22 @@ void Layout::endBatchModify()
 
 Zone* Layout::zoneAtPoint(const QPointF& point) const
 {
+    // When zones overlap, pick the smallest zone containing the point.
+    // This matches FancyZones' "area covered" heuristic: the cursor covers
+    // a larger proportion of a smaller zone, so it wins the overlap.
+    Zone* best = nullptr;
+    qreal bestArea = std::numeric_limits<qreal>::max();
+
     for (auto* zone : m_zones) {
         if (zone->containsPoint(point)) {
-            return zone;
+            qreal area = zone->geometry().width() * zone->geometry().height();
+            if (area < bestArea) {
+                bestArea = area;
+                best = zone;
+            }
         }
     }
-    return nullptr;
+    return best;
 }
 
 Zone* Layout::nearestZone(const QPointF& point, qreal maxDistance) const
