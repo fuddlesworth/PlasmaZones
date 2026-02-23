@@ -170,7 +170,7 @@ KCM.AbstractKCM {
             }
             TabButton {
                 width: tabBar.availableWidth / tabBar.count
-                text: i18n("Zones")
+                text: i18n("Snapping")
                 icon.name: "view-split-left-right"
             }
             TabButton {
