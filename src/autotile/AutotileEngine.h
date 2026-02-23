@@ -15,6 +15,7 @@
 #include <QTimer>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -189,6 +190,43 @@ public:
      * @param settings Settings object to read from (not owned)
      */
     void syncFromSettings(Settings* settings);
+
+    /**
+     * @brief Apply per-screen configuration overrides
+     *
+     * Merges per-screen autotile settings into the TilingState for a screen.
+     * Overrides take precedence over global config for that screen.
+     *
+     * @param screenName Screen to configure
+     * @param overrides Key-value map of autotile settings
+     */
+    void applyPerScreenConfig(const QString& screenName, const QVariantMap& overrides);
+
+    /**
+     * @brief Clear per-screen configuration overrides
+     *
+     * Removes all overrides for the screen and restores global defaults
+     * on its TilingState.
+     *
+     * @param screenName Screen to clear overrides for
+     */
+    void clearPerScreenConfig(const QString& screenName);
+
+    /**
+     * @brief Get currently applied per-screen overrides for comparison
+     */
+    QVariantMap perScreenOverrides(const QString& screenName) const;
+
+    /**
+     * @brief Check if a screen has a per-screen override for a specific key
+     */
+    bool hasPerScreenOverride(const QString& screenName, const QString& key) const;
+
+    // Effective per-screen values (per-screen override → global fallback)
+    int effectiveInnerGap(const QString& screenName) const;
+    int effectiveOuterGap(const QString& screenName) const;
+    bool effectiveSmartGaps(const QString& screenName) const;
+    bool effectiveRespectMinimumSize(const QString& screenName) const;
 
     /**
      * @brief Connect to Settings change signals for live updates
@@ -663,6 +701,14 @@ private:
     QTimer m_settingsRetileTimer; // Debounce timer for settings changes
     bool m_pendingSettingsRetile = false;
     bool m_retiling = false;
+
+    // Per-screen config overrides (screenName -> key-value map)
+    // Stored here so effective*() helpers can resolve per-screen values
+    // and connectToSettings handlers can skip screens with overrides.
+    QHash<QString, QVariantMap> m_perScreenOverrides;
+
+    // Helper: look up a per-screen override value, returns std::nullopt if not found
+    std::optional<QVariant> perScreenOverride(const QString& screenName, const QString& key) const;
 
     /**
      * @brief Schedule a debounced retile after settings change

@@ -18,11 +18,43 @@ Kirigami.Card {
     required property var kcm
     required property QtObject constants
 
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    property int viewMode: 0
+
+    function getScreenLayout(screenName) {
+        return viewMode === 1
+            ? (kcm.getTilingLayoutForScreen(screenName) || "")
+            : (kcm.getLayoutForScreen(screenName) || "")
+    }
+    function getScreenActivityLayout(screenName, activityId) {
+        if (viewMode === 1) {
+            return kcm.hasExplicitTilingAssignmentForScreenActivity(screenName, activityId)
+                ? (kcm.getTilingLayoutForScreenActivity(screenName, activityId) || "") : ""
+        } else {
+            return kcm.hasExplicitAssignmentForScreenActivity(screenName, activityId)
+                ? (kcm.getLayoutForScreenActivity(screenName, activityId) || "") : ""
+        }
+    }
+    function assignScreenActivity(screenName, activityId, layoutId) {
+        if (viewMode === 1) {
+            kcm.assignTilingLayoutToScreenActivity(screenName, activityId, layoutId)
+        } else {
+            kcm.assignLayoutToScreenActivity(screenName, activityId, layoutId)
+        }
+    }
+    function clearScreenActivity(screenName, activityId) {
+        if (viewMode === 1) {
+            kcm.clearTilingScreenActivityAssignment(screenName, activityId)
+        } else {
+            kcm.clearScreenActivityAssignment(screenName, activityId)
+        }
+    }
+
     visible: kcm.activitiesAvailable
 
     header: Kirigami.Heading {
         level: 3
-        text: i18n("Activity Assignments")
+        text: root.viewMode === 1 ? i18n("Activity Tiling Assignments") : i18n("Activity Assignments")
         padding: Kirigami.Units.smallSpacing
     }
 
@@ -32,7 +64,9 @@ Kirigami.Card {
         Label {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            text: i18n("Assign layouts to KDE Activities. Layout changes automatically when you switch activities.")
+            text: root.viewMode === 1
+                ? i18n("Assign tiling algorithms to KDE Activities. Algorithm changes automatically when you switch activities.")
+                : i18n("Assign layouts to KDE Activities. Layout changes automatically when you switch activities.")
             wrapMode: Text.WordWrap
             opacity: root.constants.labelSecondaryOpacity
         }
@@ -59,6 +93,10 @@ Kirigami.Card {
                 property string activityId: modelData.id || ""
                 property string activityName: modelData.name || ""
                 property string activityIcon: modelData.icon && modelData.icon !== "" ? modelData.icon : "activities"
+                // Revision counter — incremented when assignment data changes,
+                // forcing currentLayoutId bindings to re-evaluate without
+                // breaking the binding (imperative assignment breaks bindings).
+                property int _activityRevision: 0
 
                 ColumnLayout {
                     id: activityContent
@@ -105,11 +143,17 @@ Kirigami.Card {
                             property string screenName: modelData.name || ""
 
                             // Activity "Default" resolves to monitor's layout (or global if monitor has none)
-                            property string monitorLayout: root.kcm.getLayoutForScreen(screenName) || ""
+                            // Uses revision counter to avoid imperative assignment breaking the binding
+                            property string monitorLayout: {
+                                void(activityDelegate._activityRevision)
+                                return root.getScreenLayout(screenRow.screenName)
+                            }
 
                             kcm: root.kcm
                             iconSource: "video-display"
                             iconOpacity: 0.7
+                            layoutFilter: root.viewMode === 1 ? 1 : 0
+                            showPreview: root.viewMode === 0
                             labelText: {
                                 let mfr = modelData.manufacturer || ""
                                 let mdl = modelData.model || ""
@@ -120,28 +164,23 @@ Kirigami.Card {
                             noneText: i18n("Use default")
                             resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
                             currentLayoutId: {
-                                let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenName, activityDelegate.activityId)
-                                return hasExplicit ? (root.kcm.getLayoutForScreenActivity(screenName, activityDelegate.activityId) || "") : ""
+                                void(activityDelegate._activityRevision)
+                                return root.getScreenActivityLayout(screenRow.screenName, activityDelegate.activityId)
                             }
 
                             Connections {
                                 target: root.kcm
-                                function onActivityAssignmentsChanged() {
-                                    let hasExplicit = root.kcm.hasExplicitAssignmentForScreenActivity(screenRow.screenName, activityDelegate.activityId)
-                                    screenRow.currentLayoutId = hasExplicit ?
-                                        (root.kcm.getLayoutForScreenActivity(screenRow.screenName, activityDelegate.activityId) || "") : ""
-                                }
-                                function onScreenAssignmentsChanged() {
-                                    // Update resolved default when monitor assignment changes
-                                    screenRow.monitorLayout = root.kcm.getLayoutForScreen(screenRow.screenName) || ""
-                                }
+                                function onActivityAssignmentsChanged() { activityDelegate._activityRevision++ }
+                                function onTilingActivityAssignmentsChanged() { activityDelegate._activityRevision++ }
+                                function onScreenAssignmentsChanged() { activityDelegate._activityRevision++ }
+                                function onTilingScreenAssignmentsChanged() { activityDelegate._activityRevision++ }
                             }
 
                             onAssignmentSelected: (layoutId) => {
-                                root.kcm.assignLayoutToScreenActivity(screenName, activityDelegate.activityId, layoutId)
+                                root.assignScreenActivity(screenRow.screenName, activityDelegate.activityId, layoutId)
                             }
                             onAssignmentCleared: {
-                                root.kcm.clearScreenActivityAssignment(screenName, activityDelegate.activityId)
+                                root.clearScreenActivity(screenRow.screenName, activityDelegate.activityId)
                             }
                         }
                     }

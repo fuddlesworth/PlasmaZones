@@ -595,6 +595,30 @@ QVariantMap KCMPlasmaZones::screenAssignments() const
     return m_screenAssignments;
 }
 
+int KCMPlasmaZones::assignmentViewMode() const
+{
+    return m_assignmentViewMode;
+}
+
+void KCMPlasmaZones::setAssignmentViewMode(int mode)
+{
+    int clamped = qBound(0, mode, 1);
+    if (m_assignmentViewMode != clamped) {
+        m_assignmentViewMode = clamped;
+        // Persist to KConfig so it survives KCM restart (UI preference — saves immediately)
+        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        KConfigGroup general = config->group(QStringLiteral("General"));
+        general.writeEntry(QStringLiteral("AssignmentViewMode"), m_assignmentViewMode);
+        config->sync();
+        Q_EMIT assignmentViewModeChanged();
+    }
+}
+
+QVariantMap KCMPlasmaZones::tilingScreenAssignments() const
+{
+    return m_tilingScreenAssignments;
+}
+
 // Virtual desktop getters
 int KCMPlasmaZones::virtualDesktopCount() const
 {
@@ -1638,6 +1662,90 @@ void KCMPlasmaZones::save()
         failedOperations.append(QStringLiteral("Quick layout slots"));
     }
 
+    // Shadow-save all per-screen assignments to KConfig in a single config open/sync.
+    // Uses EDID-based screen IDs in group names to persist across connector name changes.
+    // Tiling assignments are KCM-owned state (no D-Bus push) — the daemon resolves
+    // tiling via LayoutManager which reads from Settings, not from these groups directly.
+    {
+        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        const QStringList allGroups = config->groupList();
+
+        // Helper: resolve connector name to EDID-based screen ID, with warning on fallback.
+        // When a screen is disconnected, screenIdForName returns the connector name verbatim.
+        auto safeScreenId = [](const QString& connectorName) -> QString {
+            QString screenId = Utils::screenIdForName(connectorName);
+            if (screenId == connectorName && !connectorName.contains(QLatin1Char(':'))) {
+                qCWarning(lcKcm) << "Screen" << connectorName
+                                 << "not found - saving with connector name (may not survive port changes)";
+            }
+            return screenId;
+        };
+
+        // Delete old per-screen groups (all types in one pass)
+        for (const QString& groupName : allGroups) {
+            if (groupName.startsWith(QLatin1String("SnappingScreen:")) ||
+                groupName.startsWith(QLatin1String("TilingScreen:")) ||
+                groupName.startsWith(QLatin1String("TilingActivity:")) ||
+                groupName.startsWith(QLatin1String("TilingDesktop:"))) {
+                config->deleteGroup(groupName);
+            }
+        }
+
+        // Clean up legacy flat-key groups if present
+        for (const auto& legacyName : {QStringLiteral("SnappingScreenAssignments"),
+                                        QStringLiteral("TilingScreenAssignments")}) {
+            KConfigGroup legacy = config->group(legacyName);
+            if (legacy.exists()) {
+                legacy.deleteGroup();
+            }
+        }
+
+        // Write snapping per-screen groups
+        for (auto it = m_screenAssignments.constBegin(); it != m_screenAssignments.constEnd(); ++it) {
+            QString screenId = safeScreenId(it.key());
+            KConfigGroup screenGroup = config->group(QStringLiteral("SnappingScreen:") + screenId);
+            screenGroup.writeEntry(QStringLiteral("Assignment"), it.value().toString());
+        }
+
+        // Write tiling per-screen groups
+        for (auto it = m_tilingScreenAssignments.constBegin(); it != m_tilingScreenAssignments.constEnd(); ++it) {
+            QString screenId = safeScreenId(it.key());
+            KConfigGroup screenGroup = config->group(QStringLiteral("TilingScreen:") + screenId);
+            screenGroup.writeEntry(QStringLiteral("Assignment"), it.value().toString());
+        }
+
+        // Write tiling activity assignments ([TilingActivity:edidId|activityId])
+        for (auto it = m_tilingActivityAssignments.constBegin(); it != m_tilingActivityAssignments.constEnd(); ++it) {
+            int sepIdx = it.key().lastIndexOf(QLatin1Char('|'));
+            if (sepIdx <= 0) continue;
+            QString connectorName = it.key().left(sepIdx);
+            QString activityId = it.key().mid(sepIdx + 1);
+            QString screenId = safeScreenId(connectorName);
+            KConfigGroup actGroup = config->group(QStringLiteral("TilingActivity:%1|%2").arg(screenId, activityId));
+            actGroup.writeEntry(QStringLiteral("Assignment"), it.value());
+        }
+
+        // Write tiling per-desktop assignments ([TilingDesktop:edidId|desktopNumber])
+        for (auto it = m_tilingDesktopAssignments.constBegin(); it != m_tilingDesktopAssignments.constEnd(); ++it) {
+            int sepIdx = it.key().lastIndexOf(QLatin1Char('|'));
+            if (sepIdx <= 0) continue;
+            QString connectorName = it.key().left(sepIdx);
+            QString desktopNum = it.key().mid(sepIdx + 1);
+            QString screenId = safeScreenId(connectorName);
+            KConfigGroup deskGroup = config->group(QStringLiteral("TilingDesktop:%1|%2").arg(screenId, desktopNum));
+            deskGroup.writeEntry(QStringLiteral("Assignment"), it.value());
+        }
+
+        // Tiling quick layout slots (simple integer keys, no screen ID issues)
+        KConfigGroup tilingSlots = config->group(QStringLiteral("TilingQuickLayoutSlots"));
+        tilingSlots.deleteGroup();
+        for (auto it = m_tilingQuickLayoutSlots.constBegin(); it != m_tilingQuickLayoutSlots.constEnd(); ++it) {
+            tilingSlots.writeEntry(QString::number(it.key()), it.value());
+        }
+
+        config->sync();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-Desktop Assignments (batch)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1831,30 +1939,145 @@ void KCMPlasmaZones::load()
 
     const QString layoutInterface = QString(DBus::Interface::LayoutManager);
 
-    // Load screen assignments from daemon (single source of truth)
-    // No fallback to local config - daemon owns this data via assignments.json
+    // Load all per-screen assignments from KConfig in a single config open.
+    // Uses EDID-based screen IDs in group names and converts back to connector names.
     m_screenAssignments.clear();
-    QDBusMessage assignmentsReply = callDaemon(layoutInterface, QStringLiteral("getAllScreenAssignments"));
-    if (assignmentsReply.type() == QDBusMessage::ReplyMessage && !assignmentsReply.arguments().isEmpty()) {
-        QString assignmentsJson = assignmentsReply.arguments().first().toString();
-        QJsonDocument doc = QJsonDocument::fromJson(assignmentsJson.toUtf8());
-        if (doc.isObject()) {
-            QJsonObject root = doc.object();
-            // Structure: { "screenName": { "default": "layoutId", "1": "layoutId", ... } }
-            for (auto it = root.begin(); it != root.end(); ++it) {
-                QString screenName = it.key();
-                QJsonObject screenObj = it.value().toObject();
-                // Use the "default" (all desktops) assignment for the simple screen assignment
-                if (screenObj.contains(QStringLiteral("default"))) {
-                    QString layoutId = screenObj.value(QStringLiteral("default")).toString();
+    m_tilingScreenAssignments.clear();
+    m_tilingActivityAssignments.clear();
+    m_tilingDesktopAssignments.clear();
+    m_tilingQuickLayoutSlots.clear();
+    {
+        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
+        const QStringList allGroups = config->groupList();
+
+        // Helper: resolve EDID-based screen ID or legacy connector name to current connector
+        auto resolveScreenId = [](const QString& screenId) -> QString {
+            if (Utils::isConnectorName(screenId)) {
+                return screenId; // Legacy: stored with connector name (pre-migration)
+            }
+            return Utils::screenNameForId(screenId);
+        };
+
+        // Helper: load assignments from per-screen groups with a given prefix
+        auto loadPerScreenAssignments = [&](const QLatin1String& prefix, QVariantMap& target) {
+            for (const QString& groupName : allGroups) {
+                if (groupName.startsWith(prefix)) {
+                    QString screenId = groupName.mid(prefix.size());
+                    if (screenId.isEmpty()) continue;
+                    KConfigGroup screenGroup = config->group(groupName);
+                    QString layoutId = screenGroup.readEntry(QStringLiteral("Assignment"), QString());
                     if (!layoutId.isEmpty()) {
-                        m_screenAssignments[screenName] = layoutId;
+                        QString connectorName = resolveScreenId(screenId);
+                        if (!connectorName.isEmpty()) {
+                            target[connectorName] = layoutId;
+                        }
+                    }
+                }
+            }
+        };
+
+        // Helper: load compound-key assignments (screenId|suffix) from per-screen groups
+        auto loadCompoundAssignments = [&](const QLatin1String& prefix, QMap<QString, QString>& target) {
+            for (const QString& groupName : allGroups) {
+                if (groupName.startsWith(prefix)) {
+                    QString compoundKey = groupName.mid(prefix.size());
+                    int sepIdx = compoundKey.lastIndexOf(QLatin1Char('|'));
+                    if (sepIdx <= 0) continue;
+                    QString screenId = compoundKey.left(sepIdx);
+                    QString suffix = compoundKey.mid(sepIdx + 1);
+                    if (screenId.isEmpty() || suffix.isEmpty()) continue;
+                    KConfigGroup group = config->group(groupName);
+                    QString layoutId = group.readEntry(QStringLiteral("Assignment"), QString());
+                    if (!layoutId.isEmpty()) {
+                        QString connectorName = resolveScreenId(screenId);
+                        if (!connectorName.isEmpty()) {
+                            target[QStringLiteral("%1|%2").arg(connectorName, suffix)] = layoutId;
+                        }
+                    }
+                }
+            }
+        };
+
+        // Snapping screen assignments
+        const QLatin1String snappingPrefix("SnappingScreen:");
+        bool foundSnappingGroups = false;
+        for (const QString& groupName : allGroups) {
+            if (groupName.startsWith(snappingPrefix)) {
+                foundSnappingGroups = true;
+                break;
+            }
+        }
+        if (foundSnappingGroups) {
+            loadPerScreenAssignments(snappingPrefix, m_screenAssignments);
+        } else {
+            // Try legacy flat-key group
+            KConfigGroup legacySnapping = config->group(QStringLiteral("SnappingScreenAssignments"));
+            if (legacySnapping.exists()) {
+                const QStringList keys = legacySnapping.keyList();
+                for (const QString& key : keys) {
+                    QString layoutId = legacySnapping.readEntry(key, QString());
+                    if (!layoutId.isEmpty()) {
+                        m_screenAssignments[key] = layoutId;
+                    }
+                }
+            } else {
+                // Fallback: load from daemon for first run (no shadow yet)
+                QDBusMessage assignmentsReply = callDaemon(layoutInterface, QStringLiteral("getAllScreenAssignments"));
+                if (assignmentsReply.type() == QDBusMessage::ReplyMessage && !assignmentsReply.arguments().isEmpty()) {
+                    QString assignmentsJson = assignmentsReply.arguments().first().toString();
+                    QJsonDocument doc = QJsonDocument::fromJson(assignmentsJson.toUtf8());
+                    if (doc.isObject()) {
+                        QJsonObject root = doc.object();
+                        for (auto it = root.begin(); it != root.end(); ++it) {
+                            QString screenName = it.key();
+                            QJsonObject screenObj = it.value().toObject();
+                            if (screenObj.contains(QStringLiteral("default"))) {
+                                QString layoutId = screenObj.value(QStringLiteral("default")).toString();
+                                if (!layoutId.isEmpty() && !layoutId.startsWith(QLatin1String("autotile:"))) {
+                                    m_screenAssignments[screenName] = layoutId;
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
+
+        // Tiling screen assignments
+        const QLatin1String tilingPrefix("TilingScreen:");
+        loadPerScreenAssignments(tilingPrefix, m_tilingScreenAssignments);
+        if (m_tilingScreenAssignments.isEmpty()) {
+            KConfigGroup legacyTiling = config->group(QStringLiteral("TilingScreenAssignments"));
+            if (legacyTiling.exists()) {
+                const QStringList keys = legacyTiling.keyList();
+                for (const QString& key : keys) {
+                    QString layoutId = legacyTiling.readEntry(key, QString());
+                    if (!layoutId.isEmpty()) {
+                        m_tilingScreenAssignments[key] = layoutId;
+                    }
+                }
+            }
+        }
+
+        // Tiling activity assignments
+        loadCompoundAssignments(QLatin1String("TilingActivity:"), m_tilingActivityAssignments);
+
+        // Tiling desktop assignments
+        loadCompoundAssignments(QLatin1String("TilingDesktop:"), m_tilingDesktopAssignments);
+
+        // Tiling quick layout slots
+        KConfigGroup tilingSlots = config->group(QStringLiteral("TilingQuickLayoutSlots"));
+        for (int slot = 1; slot <= 9; ++slot) {
+            QString layoutId = tilingSlots.readEntry(QString::number(slot), QString());
+            if (!layoutId.isEmpty()) {
+                m_tilingQuickLayoutSlots[slot] = layoutId;
+            }
+        }
+
+        // Assignment view mode
+        KConfigGroup general = config->group(QStringLiteral("General"));
+        m_assignmentViewMode = qBound(0, general.readEntry(QStringLiteral("AssignmentViewMode"), 0), 1);
     }
-    // If daemon not available, m_screenAssignments stays empty (correct behavior)
 
     // Load quick layout slots from daemon (single source of truth)
     // No fallback to local config - daemon owns this data via assignments.json
@@ -1891,7 +2114,11 @@ void KCMPlasmaZones::load()
     m_pendingAppRules.clear();
 
     Q_EMIT screenAssignmentsChanged();
+    Q_EMIT tilingScreenAssignmentsChanged();
     Q_EMIT activityAssignmentsChanged();
+    Q_EMIT tilingActivityAssignmentsChanged();
+    Q_EMIT tilingDesktopAssignmentsChanged();
+    Q_EMIT assignmentViewModeChanged();
     Q_EMIT appRulesRefreshed();
     setNeedsSave(false);
 }
@@ -1920,6 +2147,19 @@ void KCMPlasmaZones::defaults()
 
     // Clear quick layout slots
     m_quickLayoutSlots.clear();
+
+    // Clear tiling-mode assignments and view mode
+    m_tilingScreenAssignments.clear();
+    m_tilingActivityAssignments.clear();
+    m_tilingDesktopAssignments.clear();
+    m_tilingQuickLayoutSlots.clear();
+    m_assignmentViewMode = 0;
+    // Note: quickLayoutSlotsChanged / tilingQuickLayoutSlotsChanged are emitted
+    // in the bulk "emit all" block below — no need to duplicate them here.
+    Q_EMIT tilingScreenAssignmentsChanged();
+    Q_EMIT tilingActivityAssignmentsChanged();
+    Q_EMIT tilingDesktopAssignmentsChanged();
+    Q_EMIT assignmentViewModeChanged();
 
     // Clear pending per-desktop and per-activity assignments
     m_pendingDesktopAssignments.clear();
@@ -1964,6 +2204,8 @@ void KCMPlasmaZones::defaults()
 
     // Emit all property change signals so UI updates
     Q_EMIT screenAssignmentsChanged();
+    Q_EMIT quickLayoutSlotsChanged();
+    Q_EMIT tilingQuickLayoutSlotsChanged();
     Q_EMIT activityAssignmentsChanged();
     Q_EMIT dragActivationTriggersChanged();
     Q_EMIT alwaysActivateOnDragChanged();
@@ -2048,18 +2290,43 @@ void KCMPlasmaZones::defaults()
     Q_EMIT autotileMonocleHideOthersChanged();
     Q_EMIT autotileMonocleShowTabsChanged();
 
-    // Reset editor shortcuts to defaults
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
-    editorGroup.deleteGroup(); // Delete editor group to use defaults
+    // Reset editor shortcuts, assignment view mode, and legacy config groups in one config open
+    {
+        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
 
-    // Clean up legacy config groups (no longer used - daemon owns this data)
-    KConfigGroup assignmentsGroup = config->group(QStringLiteral("ScreenAssignments"));
-    assignmentsGroup.deleteGroup();
-    KConfigGroup slotsGroup = config->group(QStringLiteral("QuickLayoutSlots"));
-    slotsGroup.deleteGroup();
+        // Clear assignment view mode
+        KConfigGroup general = config->group(QStringLiteral("General"));
+        general.deleteEntry(QStringLiteral("AssignmentViewMode"));
 
-    config->sync();
+        // Reset editor shortcuts to defaults
+        KConfigGroup editorGroup = config->group(QStringLiteral("Editor"));
+        editorGroup.deleteGroup();
+
+        // Clean up legacy config groups (no longer used - daemon owns this data)
+        for (const auto& legacyName : {QStringLiteral("ScreenAssignments"),
+                                        QStringLiteral("QuickLayoutSlots"),
+                                        QStringLiteral("SnappingScreenAssignments"),
+                                        QStringLiteral("TilingScreenAssignments"),
+                                        QStringLiteral("TilingQuickLayoutSlots")}) {
+            KConfigGroup legacy = config->group(legacyName);
+            if (legacy.exists()) {
+                legacy.deleteGroup();
+            }
+        }
+
+        // Clean up per-screen assignment groups
+        const QStringList allGroupsForClean = config->groupList();
+        for (const QString& groupName : allGroupsForClean) {
+            if (groupName.startsWith(QLatin1String("SnappingScreen:")) ||
+                groupName.startsWith(QLatin1String("TilingScreen:")) ||
+                groupName.startsWith(QLatin1String("TilingActivity:")) ||
+                groupName.startsWith(QLatin1String("TilingDesktop:"))) {
+                config->deleteGroup(groupName);
+            }
+        }
+
+        config->sync();
+    }
 
     // Emit editor shortcut change signals (app-specific shortcuts only)
     Q_EMIT editorDuplicateShortcutChanged();
@@ -3230,6 +3497,78 @@ bool KCMPlasmaZones::hasExplicitAssignmentForScreenActivity(const QString& scree
     return false;
 }
 
+void KCMPlasmaZones::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                         const QString& layoutId)
+{
+    if (screenName.isEmpty() || activityId.isEmpty()) {
+        qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name or activity ID";
+        return;
+    }
+    QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
+    if (layoutId.isEmpty()) {
+        m_tilingActivityAssignments.remove(key);
+    } else {
+        m_tilingActivityAssignments[key] = layoutId;
+    }
+    Q_EMIT tilingActivityAssignmentsChanged();
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
+{
+    assignTilingLayoutToScreenActivity(screenName, activityId, QString());
+}
+
+QString KCMPlasmaZones::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
+{
+    QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
+    return m_tilingActivityAssignments.value(key);
+}
+
+bool KCMPlasmaZones::hasExplicitTilingAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const
+{
+    QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
+    return m_tilingActivityAssignments.contains(key);
+}
+
+void KCMPlasmaZones::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
+                                                        const QString& layoutId)
+{
+    if (screenName.isEmpty()) {
+        qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name";
+        return;
+    }
+    if (virtualDesktop < 1) {
+        qCWarning(lcKcm) << "Cannot assign tiling layout - invalid desktop number:" << virtualDesktop;
+        return;
+    }
+    QString key = QStringLiteral("%1|%2").arg(screenName).arg(virtualDesktop);
+    if (layoutId.isEmpty()) {
+        m_tilingDesktopAssignments.remove(key);
+    } else {
+        m_tilingDesktopAssignments[key] = layoutId;
+    }
+    Q_EMIT tilingDesktopAssignmentsChanged();
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
+{
+    assignTilingLayoutToScreenDesktop(screenName, virtualDesktop, QString());
+}
+
+QString KCMPlasmaZones::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
+{
+    QString key = QStringLiteral("%1|%2").arg(screenName).arg(virtualDesktop);
+    return m_tilingDesktopAssignments.value(key);
+}
+
+bool KCMPlasmaZones::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
+{
+    QString key = QStringLiteral("%1|%2").arg(screenName).arg(virtualDesktop);
+    return m_tilingDesktopAssignments.contains(key);
+}
+
 void KCMPlasmaZones::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
     // Store the assignment locally - it will be persisted on save()
@@ -3258,6 +3597,53 @@ void KCMPlasmaZones::clearScreenAssignment(const QString& screenName)
 QString KCMPlasmaZones::getLayoutForScreen(const QString& screenName) const
 {
     return m_screenAssignments.value(screenName).toString();
+}
+
+void KCMPlasmaZones::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
+{
+    QString oldLayoutId = m_tilingScreenAssignments.value(screenName).toString();
+    if (oldLayoutId != layoutId) {
+        if (layoutId.isEmpty()) {
+            m_tilingScreenAssignments.remove(screenName);
+        } else {
+            m_tilingScreenAssignments[screenName] = layoutId;
+        }
+        Q_EMIT tilingScreenAssignmentsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::clearTilingScreenAssignment(const QString& screenName)
+{
+    if (m_tilingScreenAssignments.contains(screenName)) {
+        m_tilingScreenAssignments.remove(screenName);
+        Q_EMIT tilingScreenAssignmentsChanged();
+        setNeedsSave(true);
+    }
+}
+
+QString KCMPlasmaZones::getTilingLayoutForScreen(const QString& screenName) const
+{
+    return m_tilingScreenAssignments.value(screenName).toString();
+}
+
+QString KCMPlasmaZones::getTilingQuickLayoutSlot(int slotNumber) const
+{
+    return m_tilingQuickLayoutSlots.value(slotNumber, QString());
+}
+
+void KCMPlasmaZones::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
+{
+    if (slotNumber < 1 || slotNumber > 9) return;
+    if (m_tilingQuickLayoutSlots.value(slotNumber) != layoutId) {
+        if (layoutId.isEmpty()) {
+            m_tilingQuickLayoutSlots.remove(slotNumber);
+        } else {
+            m_tilingQuickLayoutSlots[slotNumber] = layoutId;
+        }
+        Q_EMIT tilingQuickLayoutSlotsChanged();
+        setNeedsSave(true);
+    }
 }
 
 bool KCMPlasmaZones::isMonitorDisabled(const QString& screenName) const
@@ -3322,6 +3708,42 @@ void KCMPlasmaZones::clearPerScreenZoneSelectorSettings(const QString& screenNam
 bool KCMPlasmaZones::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
     return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : false;
+}
+
+// Per-screen autotile settings
+QVariantMap KCMPlasmaZones::getPerScreenAutotileSettings(const QString& screenName) const
+{
+    return m_settings ? m_settings->getPerScreenAutotileSettings(Utils::screenIdForName(screenName)) : QVariantMap();
+}
+
+void KCMPlasmaZones::setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    m_settings->setPerScreenAutotileSetting(Utils::screenIdForName(screenName), key, value);
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearPerScreenAutotileSettings(const QString& screenName)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    m_settings->clearPerScreenAutotileSettings(Utils::screenIdForName(screenName));
+    setNeedsSave(true);
+}
+
+bool KCMPlasmaZones::hasPerScreenAutotileSettings(const QString& screenName) const
+{
+    return m_settings ? m_settings->hasPerScreenAutotileSettings(Utils::screenIdForName(screenName)) : false;
+}
+
+// Returns whether this screen has a tiling assignment in the KCM's in-memory state.
+// This reflects KCM state only — not live daemon state.
+bool KCMPlasmaZones::isScreenInTilingMode(const QString& screenName) const
+{
+    return m_tilingScreenAssignments.contains(screenName);
 }
 
 void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
@@ -3452,6 +3874,7 @@ void KCMPlasmaZones::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
         } else {
             m_quickLayoutSlots[slotNumber] = layoutId;
         }
+        Q_EMIT quickLayoutSlotsChanged();
         setNeedsSave(true);
     }
 }

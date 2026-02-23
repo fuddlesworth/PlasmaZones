@@ -872,6 +872,11 @@ void Daemon::start()
         updateAutotileScreens();
     });
 
+    // Re-apply per-screen autotile overrides when per-screen settings change
+    connect(m_settings.get(), &Settings::perScreenAutotileSettingsChanged, this, [this]() {
+        updateAutotileScreens();
+    });
+
     // Connect unified layout controller signals for OSD display and mode tracking
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
         if (m_modeTracker) {
@@ -1495,7 +1500,33 @@ void Daemon::updateAutotileScreens()
         }
     }
 
+    // setAutotileScreens creates TilingStates for newly added screens with global defaults.
+    // Per-screen overrides must be applied AFTER so they don't get overwritten.
     m_autotileEngine->setAutotileScreens(autotileScreens);
+
+    // Apply per-screen autotile config overrides; only retile if overrides actually changed
+    bool overridesChanged = false;
+    if (m_settings) {
+        for (QScreen* screen : m_screenManager->screens()) {
+            if (!autotileScreens.contains(screen->name())) continue;
+            QString screenId = Utils::screenIdentifier(screen);
+            QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
+            // Compare against currently applied overrides to avoid redundant retiles
+            QVariantMap current = m_autotileEngine->perScreenOverrides(screen->name());
+            if (overrides != current) {
+                if (!overrides.isEmpty()) {
+                    m_autotileEngine->applyPerScreenConfig(screen->name(), overrides);
+                } else {
+                    m_autotileEngine->clearPerScreenConfig(screen->name());
+                }
+                overridesChanged = true;
+            }
+        }
+    }
+    // Only force retile when overrides actually changed (avoids flicker on unrelated assignment changes)
+    if (overridesChanged) {
+        m_autotileEngine->retile();
+    }
 
     // Propagate to overlay service so initializeOverlay() skips autotile screens
     if (m_overlayService) {

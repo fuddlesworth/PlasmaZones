@@ -136,6 +136,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
         it.next();
         if (!m_autotileScreens.contains(it.key())) {
             releasedWindows.append(it.value()->tiledWindows());
+            m_perScreenOverrides.remove(it.key());
             it.value()->deleteLater();
             it.remove();
         }
@@ -364,9 +365,10 @@ void AutotileEngine::connectToSettings(Settings* settings)
     connect(settings, &Settings::autotileSplitRatioChanged, this, [this]() {
         if (m_settings) {
             m_config->splitRatio = m_settings->autotileSplitRatio();
-            for (TilingState* state : m_screenStates) {
-                if (state) {
-                    state->setSplitRatio(m_config->splitRatio);
+            for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                // Skip screens with per-screen split ratio overrides
+                if (it.value() && !hasPerScreenOverride(it.key(), QStringLiteral("SplitRatio"))) {
+                    it.value()->setSplitRatio(m_config->splitRatio);
                 }
             }
             scheduleSettingsRetile();
@@ -376,9 +378,10 @@ void AutotileEngine::connectToSettings(Settings* settings)
     connect(settings, &Settings::autotileMasterCountChanged, this, [this]() {
         if (m_settings) {
             m_config->masterCount = m_settings->autotileMasterCount();
-            for (TilingState* state : m_screenStates) {
-                if (state) {
-                    state->setMasterCount(m_config->masterCount);
+            for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                // Skip screens with per-screen master count overrides
+                if (it.value() && !hasPerScreenOverride(it.key(), QStringLiteral("MasterCount"))) {
+                    it.value()->setMasterCount(m_config->masterCount);
                 }
             }
             scheduleSettingsRetile();
@@ -408,6 +411,109 @@ void AutotileEngine::connectToSettings(Settings* settings)
 
 #undef CONNECT_SETTING_RETILE
 #undef CONNECT_SETTING_NO_RETILE
+}
+
+void AutotileEngine::applyPerScreenConfig(const QString& screenName, const QVariantMap& overrides)
+{
+    if (screenName.isEmpty()) {
+        return;
+    }
+
+    if (overrides.isEmpty()) {
+        clearPerScreenConfig(screenName);
+        return;
+    }
+
+    // Store overrides so effective*() helpers and connectToSettings handlers
+    // can resolve per-screen values and skip screens with overrides.
+    m_perScreenOverrides[screenName] = overrides;
+
+    TilingState* state = stateForScreen(screenName);
+    if (!state) {
+        return;
+    }
+
+    // Apply TilingState-level overrides (splitRatio, masterCount)
+    auto it = overrides.constFind(QStringLiteral("SplitRatio"));
+    if (it != overrides.constEnd()) {
+        state->setSplitRatio(qBound(AutotileDefaults::MinSplitRatio, it->toDouble(), AutotileDefaults::MaxSplitRatio));
+    }
+
+    it = overrides.constFind(QStringLiteral("MasterCount"));
+    if (it != overrides.constEnd()) {
+        state->setMasterCount(qBound(AutotileDefaults::MinMasterCount, it->toInt(), AutotileDefaults::MaxMasterCount));
+    }
+
+    // Gap overrides (InnerGap, OuterGap, SmartGaps) and RespectMinimumSize are
+    // resolved at retile time via effective*() helpers in recalculateLayout().
+
+    qCDebug(lcAutotile) << "Applied per-screen config for" << screenName
+                        << "keys:" << overrides.keys();
+}
+
+void AutotileEngine::clearPerScreenConfig(const QString& screenName)
+{
+    if (!m_perScreenOverrides.remove(screenName)) {
+        return;
+    }
+    // Restore global defaults on TilingState
+    TilingState* state = m_screenStates.value(screenName);
+    if (state) {
+        state->setSplitRatio(m_config->splitRatio);
+        state->setMasterCount(m_config->masterCount);
+    }
+    qCDebug(lcAutotile) << "Cleared per-screen config for" << screenName;
+}
+
+QVariantMap AutotileEngine::perScreenOverrides(const QString& screenName) const
+{
+    return m_perScreenOverrides.value(screenName);
+}
+
+bool AutotileEngine::hasPerScreenOverride(const QString& screenName, const QString& key) const
+{
+    auto it = m_perScreenOverrides.constFind(screenName);
+    return it != m_perScreenOverrides.constEnd() && it->contains(key);
+}
+
+std::optional<QVariant> AutotileEngine::perScreenOverride(const QString& screenName, const QString& key) const
+{
+    auto it = m_perScreenOverrides.constFind(screenName);
+    if (it != m_perScreenOverrides.constEnd()) {
+        auto git = it->constFind(key);
+        if (git != it->constEnd()) {
+            return *git;
+        }
+    }
+    return std::nullopt;
+}
+
+int AutotileEngine::effectiveInnerGap(const QString& screenName) const
+{
+    if (auto v = perScreenOverride(screenName, QStringLiteral("InnerGap")))
+        return qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
+    return m_config->innerGap;
+}
+
+int AutotileEngine::effectiveOuterGap(const QString& screenName) const
+{
+    if (auto v = perScreenOverride(screenName, QStringLiteral("OuterGap")))
+        return qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
+    return m_config->outerGap;
+}
+
+bool AutotileEngine::effectiveSmartGaps(const QString& screenName) const
+{
+    if (auto v = perScreenOverride(screenName, QStringLiteral("SmartGaps")))
+        return v->toBool();
+    return m_config->smartGaps;
+}
+
+bool AutotileEngine::effectiveRespectMinimumSize(const QString& screenName) const
+{
+    if (auto v = perScreenOverride(screenName, QStringLiteral("RespectMinimumSize")))
+        return v->toBool();
+    return m_config->respectMinimumSize;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1223,12 +1329,12 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     // Calculate zone geometries using the algorithm, with gap-aware zones.
     // Algorithms apply gaps directly using their topology knowledge, eliminating
     // the fragile post-processing step that previously guessed adjacency.
-    const bool skipGaps = m_config->smartGaps && windowCount == 1;
-    const int innerGap = skipGaps ? 0 : m_config->innerGap;
-    const int outerGap = skipGaps ? 0 : m_config->outerGap;
+    const bool skipGaps = effectiveSmartGaps(screenName) && windowCount == 1;
+    const int innerGap = skipGaps ? 0 : effectiveInnerGap(screenName);
+    const int outerGap = skipGaps ? 0 : effectiveOuterGap(screenName);
     // Build minSizes vector for the algorithm (when respectMinimumSize is enabled)
     QVector<QSize> minSizes;
-    if (m_config->respectMinimumSize) {
+    if (effectiveRespectMinimumSize(screenName)) {
         const QStringList windows = state->tiledWindows();
         // KWin reports min size in logical pixels (same as QScreen/zone geometry);
         // do not divide by devicePixelRatio or we under-report and steal too little.
@@ -1252,8 +1358,8 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     // Lightweight safety net: the algorithm handles min sizes directly, but
     // enforceWindowMinSizes catches any residual deficits from rounding or
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable constraints).
-    if (m_config->respectMinimumSize && !minSizes.isEmpty()) {
-        const int threshold = m_config->innerGap + qMax(AutotileDefaults::GapEdgeThresholdPx, 12);
+    if (effectiveRespectMinimumSize(screenName) && !minSizes.isEmpty()) {
+        const int threshold = effectiveInnerGap(screenName) + qMax(AutotileDefaults::GapEdgeThresholdPx, 12);
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
     }
 

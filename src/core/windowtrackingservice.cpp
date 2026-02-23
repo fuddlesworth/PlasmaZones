@@ -1595,7 +1595,15 @@ void WindowTrackingService::onLayoutChanged()
     }
 
     // Remove stale assignments: check each window against its screen's effective layout
-    // (not just the global active), so per-screen assignments aren't incorrectly purged
+    // (not just the global active), so per-screen assignments aren't incorrectly purged.
+    // Skip windows on autotile screens — their zone assignments must survive the
+    // autotile period so resnapCurrentAssignments() can restore them when tiling is toggled off.
+    const int currentDesktop = m_layoutManager->currentVirtualDesktop();
+    const QString currentActivity = m_layoutManager->currentActivity();
+
+    // Cache autotile status per screen to avoid redundant lookups (O(screens) instead of O(windows))
+    QHash<QString, bool> screenIsAutotile;
+
     QStringList toRemove;
     for (auto it = m_windowZoneAssignments.constBegin();
          it != m_windowZoneAssignments.constEnd(); ++it) {
@@ -1605,6 +1613,17 @@ void WindowTrackingService::onLayoutChanged()
             continue;
         }
         QString windowScreen = m_windowScreenAssignments.value(it.key());
+
+        // If this screen's assignment is autotile, preserve zone assignments for resnap
+        auto cached = screenIsAutotile.constFind(windowScreen);
+        if (cached == screenIsAutotile.constEnd()) {
+            QString assignmentId = m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
+            cached = screenIsAutotile.insert(windowScreen, LayoutId::isAutotile(assignmentId));
+        }
+        if (*cached) {
+            continue;
+        }
+
         Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
         if (!effectiveLayout) {
             toRemove.append(it.key());

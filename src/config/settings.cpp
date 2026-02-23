@@ -136,6 +136,135 @@ constexpr const char* kPerScreenKeys[] = {
     ZoneSelectorConfigKey::TriggerDistance,
 };
 
+// Known per-screen autotile config keys for iteration during load
+constexpr const char* kPerScreenAutotileKeys[] = {
+    "Algorithm",
+    "InnerGap",
+    "OuterGap",
+    "SmartGaps",
+    "SplitRatio",
+    "MasterCount",
+    "MaxWindows",
+    "InsertPosition",
+    "FocusNewWindows",
+    "FocusFollowsMouse",
+    "RespectMinimumSize",
+    "AnimationsEnabled",
+    "AnimationDuration",
+    "MonocleHideOthers",
+    "MonocleShowTabs",
+};
+
+// Validate a per-screen autotile override value.
+// Returns valid QVariant with clamped value for known keys,
+// or invalid QVariant for unknown keys.
+QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
+{
+    using namespace AutotileDefaults;
+    if (key == QLatin1String("Algorithm")) {
+        QString alg = value.toString();
+        if (alg.isEmpty() || !AlgorithmRegistry::instance()->hasAlgorithm(alg)) {
+            qCDebug(lcConfig) << "Invalid per-screen algorithm value:" << alg;
+            return QVariant{};
+        }
+        return value;
+    }
+    if (key == QLatin1String("InnerGap")) return qBound(MinGap, value.toInt(), MaxGap);
+    if (key == QLatin1String("OuterGap")) return qBound(MinGap, value.toInt(), MaxGap);
+    if (key == QLatin1String("SmartGaps")) return value.toBool();
+    if (key == QLatin1String("SplitRatio")) return qBound(MinSplitRatio, value.toDouble(), MaxSplitRatio);
+    if (key == QLatin1String("MasterCount")) return qBound(MinMasterCount, value.toInt(), MaxMasterCount);
+    if (key == QLatin1String("MaxWindows")) return qBound(MinMaxWindows, value.toInt(), MaxMaxWindows);
+    if (key == QLatin1String("InsertPosition")) return qBound(MinInsertPosition, value.toInt(), MaxInsertPosition);
+    if (key == QLatin1String("FocusNewWindows")) return value.toBool();
+    if (key == QLatin1String("FocusFollowsMouse")) return value.toBool();
+    if (key == QLatin1String("RespectMinimumSize")) return value.toBool();
+    if (key == QLatin1String("AnimationsEnabled")) return value.toBool();
+    if (key == QLatin1String("AnimationDuration")) return qBound(MinAnimationDuration, value.toInt(), MaxAnimationDuration);
+    if (key == QLatin1String("MonocleHideOthers")) return value.toBool();
+    if (key == QLatin1String("MonocleShowTabs")) return value.toBool();
+    return {}; // Unknown key
+}
+
+/**
+ * @brief Read a per-screen autotile entry with the correct type-specific default.
+ *
+ * Centralizes the type/default mapping so load() doesn't need per-key branches.
+ * Bool defaults match the global defaults in AutotileDefaults / Settings.
+ */
+QVariant readPerScreenAutotileEntry(const KConfigGroup& group, const QLatin1String& key)
+{
+    // Booleans defaulting to true (matching global defaults)
+    if (key == QLatin1String("SmartGaps") || key == QLatin1String("FocusNewWindows")
+        || key == QLatin1String("RespectMinimumSize")
+        || key == QLatin1String("AnimationsEnabled") || key == QLatin1String("MonocleHideOthers")) {
+        return group.readEntry(key, true);
+    }
+    // Booleans defaulting to false (matching global defaults)
+    if (key == QLatin1String("FocusFollowsMouse") || key == QLatin1String("MonocleShowTabs")) {
+        return group.readEntry(key, false);
+    }
+    // Floating-point
+    if (key == QLatin1String("SplitRatio")) {
+        return group.readEntry(key, AutotileDefaults::DefaultSplitRatio);
+    }
+    // String
+    if (key == QLatin1String("Algorithm")) {
+        return group.readEntry(key, QString());
+    }
+    // Everything else is int (gaps, counts, positions, durations)
+    return group.readEntry(key, 0);
+}
+
+/**
+ * @brief Delete old per-screen config groups matching prefix, then rewrite from source hash
+ */
+void savePerScreenOverrides(KSharedConfigPtr config, const QLatin1String& prefix,
+                            const QHash<QString, QVariantMap>& source)
+{
+    const QStringList groups = config->groupList();
+    for (const QString& groupName : groups) {
+        if (groupName.startsWith(prefix)) {
+            config->deleteGroup(groupName);
+        }
+    }
+    for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
+        const QVariantMap& overrides = it.value();
+        if (overrides.isEmpty()) continue;
+        KConfigGroup screenGroup = config->group(prefix + it.key());
+        for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
+            screenGroup.writeEntry(oit.key(), oit.value());
+        }
+    }
+}
+
+/**
+ * @brief Migrate legacy connector name keys to stable EDID-based screen IDs
+ */
+void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
+{
+    QHash<QString, QVariantMap> migrated;
+    for (auto it = settings.begin(); it != settings.end(); ) {
+        if (Utils::isConnectorName(it.key())) {
+            QString resolved = Utils::screenIdForName(it.key());
+            if (resolved != it.key()) {
+                if (migrated.contains(resolved)) {
+                    qCWarning(lcConfig) << "EDID collision during migration:"
+                                        << it.key() << "and another connector both resolve to"
+                                        << resolved << "— later entry wins";
+                }
+                migrated[resolved] = it.value();
+                it = settings.erase(it);
+                continue;
+            }
+        }
+        ++it;
+    }
+    for (auto mit = migrated.constBegin(); mit != migrated.constEnd(); ++mit) {
+        settings.insert(mit.key(), mit.value());
+    }
+}
+
 } // anonymous namespace
 
 Settings::Settings(QObject* parent)
@@ -1074,24 +1203,39 @@ void Settings::load()
         }
     }
 
-    // Migrate legacy connector name keys to stable EDID-based screen IDs
-    {
-        QHash<QString, QVariantMap> migrated;
-        for (auto it = m_perScreenZoneSelectorSettings.begin(); it != m_perScreenZoneSelectorSettings.end(); ) {
-            if (Utils::isConnectorName(it.key())) {
-                QString resolved = Utils::screenIdForName(it.key());
-                if (resolved != it.key()) {
-                    migrated[resolved] = it.value();
-                    it = m_perScreenZoneSelectorSettings.erase(it);
-                    continue;
+    migrateConnectorNames(m_perScreenZoneSelectorSettings);
+
+    // Per-screen autotile overrides (groups matching AutotileScreen:*)
+    m_perScreenAutotileSettings.clear();
+    const QLatin1String autotileScreenPrefix("AutotileScreen:");
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(autotileScreenPrefix)) {
+            QString screenName = groupName.mid(autotileScreenPrefix.size());
+            if (screenName.isEmpty()) {
+                continue;
+            }
+            KConfigGroup screenGroup = config->group(groupName);
+            QVariantMap overrides;
+            for (const char* key : kPerScreenAutotileKeys) {
+                QLatin1String keyStr(key);
+                if (screenGroup.hasKey(keyStr)) {
+                    // Read with type-appropriate default for each key.
+                    // Booleans: match the global defaults in AutotileDefaults/Settings.
+                    QVariant raw = readPerScreenAutotileEntry(screenGroup, keyStr);
+                    QVariant validated = validatePerScreenAutotileValue(keyStr, raw);
+                    if (validated.isValid()) {
+                        overrides[QString::fromLatin1(key)] = validated;
+                    }
                 }
             }
-            ++it;
-        }
-        for (auto mit = migrated.constBegin(); mit != migrated.constEnd(); ++mit) {
-            m_perScreenZoneSelectorSettings.insert(mit.key(), mit.value());
+            if (!overrides.isEmpty()) {
+                m_perScreenAutotileSettings[screenName] = overrides;
+                qCDebug(lcConfig) << "Loaded per-screen autotile overrides for" << screenName << ":" << overrides.keys();
+            }
         }
     }
+
+    migrateConnectorNames(m_perScreenAutotileSettings);
 
     // Shader Effects (defaults from .kcfg via ConfigDefaults)
     // Save old values so we can emit specific signals for settings with runtime side-effects
@@ -1350,24 +1494,9 @@ void Settings::save()
     zoneSelector.writeEntry(QLatin1String("SizeMode"), static_cast<int>(m_zoneSelectorSizeMode));
     zoneSelector.writeEntry(QLatin1String("MaxRows"), m_zoneSelectorMaxRows);
 
-    // Per-screen zone selector overrides - delete all old groups, rewrite current ones
-    const QStringList allGroups = config->groupList();
-    const QLatin1String perScreenPrefix("ZoneSelector:");
-    for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(perScreenPrefix)) {
-            config->deleteGroup(groupName);
-        }
-    }
-    for (auto it = m_perScreenZoneSelectorSettings.constBegin(); it != m_perScreenZoneSelectorSettings.constEnd(); ++it) {
-        const QVariantMap& overrides = it.value();
-        if (overrides.isEmpty()) {
-            continue;
-        }
-        KConfigGroup screenGroup = config->group(QStringLiteral("ZoneSelector:") + it.key());
-        for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
-            screenGroup.writeEntry(oit.key(), oit.value());
-        }
-    }
+    // Per-screen overrides - delete all old groups, rewrite current ones
+    savePerScreenOverrides(config, QLatin1String("ZoneSelector:"), m_perScreenZoneSelectorSettings);
+    savePerScreenOverrides(config, QLatin1String("AutotileScreen:"), m_perScreenAutotileSettings);
 
     // Shader Effects
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
@@ -1473,10 +1602,11 @@ void Settings::reset()
         config->deleteGroup(groupName);
     }
 
-    // Also delete per-screen zone selector override groups
+    // Also delete per-screen override groups
     const QStringList allGroups = config->groupList();
     for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(QLatin1String("ZoneSelector:"))) {
+        if (groupName.startsWith(QLatin1String("ZoneSelector:"))
+            || groupName.startsWith(QLatin1String("AutotileScreen:"))) {
             config->deleteGroup(groupName);
         }
     }
@@ -1568,6 +1698,49 @@ bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 QStringList Settings::screensWithZoneSelectorOverrides() const
 {
     return m_perScreenZoneSelectorSettings.keys();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-Screen Autotile Config
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenName) const
+{
+    return m_perScreenAutotileSettings.value(screenName);
+}
+
+void Settings::setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    if (screenName.isEmpty() || key.isEmpty()) {
+        return;
+    }
+
+    QVariant validated = validatePerScreenAutotileValue(key, value);
+    if (!validated.isValid()) {
+        qCWarning(lcConfig) << "Rejected per-screen autotile setting:" << key << "=" << value;
+        return;
+    }
+
+    QVariantMap& screenSettings = m_perScreenAutotileSettings[screenName];
+    if (screenSettings.value(key) == validated) {
+        return;
+    }
+    screenSettings[key] = validated;
+    Q_EMIT perScreenAutotileSettingsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::clearPerScreenAutotileSettings(const QString& screenName)
+{
+    if (m_perScreenAutotileSettings.remove(screenName)) {
+        Q_EMIT perScreenAutotileSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenAutotileSettings(const QString& screenName) const
+{
+    return m_perScreenAutotileSettings.contains(screenName);
 }
 
 QString Settings::loadColorsFromFile(const QString& filePath)

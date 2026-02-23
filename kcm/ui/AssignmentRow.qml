@@ -27,6 +27,7 @@ RowLayout {
     property int comboWidth: Kirigami.Units.gridUnit * 16
     property bool showPreview: true  // Default to true for unified layout model with previews
     property real iconOpacity: 1.0
+    property int layoutFilter: -1  // -1 = all, 0 = manual/zone only, 1 = autotile only
 
     // The layout ID that "Default" resolves to (set by parent based on hierarchy)
     property string resolvedDefaultId: kcm?.defaultLayoutId ?? ""
@@ -61,6 +62,7 @@ RowLayout {
         kcm: root.kcm
         noneText: root.noneText
         showPreview: root.showPreview
+        layoutFilter: root.layoutFilter
         currentLayoutId: root.currentLayoutId
         resolvedDefaultId: root.resolvedDefaultId
 

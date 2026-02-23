@@ -18,9 +18,25 @@ Kirigami.Card {
     required property var kcm
     required property QtObject constants
 
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    property int viewMode: 0
+
+    function getSlot(slotNumber) {
+        return viewMode === 1
+            ? (kcm.getTilingQuickLayoutSlot(slotNumber) || "")
+            : (kcm.getQuickLayoutSlot(slotNumber) || "")
+    }
+    function setSlot(slotNumber, value) {
+        if (viewMode === 1) {
+            kcm.setTilingQuickLayoutSlot(slotNumber, value)
+        } else {
+            kcm.setQuickLayoutSlot(slotNumber, value)
+        }
+    }
+
     header: Kirigami.Heading {
         level: 3
-        text: i18n("Quick Layout Shortcuts")
+        text: root.viewMode === 1 ? i18n("Tiling Quick Shortcuts") : i18n("Quick Layout Shortcuts")
         padding: Kirigami.Units.smallSpacing
     }
 
@@ -30,7 +46,9 @@ Kirigami.Card {
         Label {
             Layout.fillWidth: true
             Layout.margins: Kirigami.Units.smallSpacing
-            text: i18n("Assign layouts to keyboard shortcuts for instant switching.")
+            text: root.viewMode === 1
+                ? i18n("Assign tiling algorithms to keyboard shortcuts for instant switching.")
+                : i18n("Assign layouts to keyboard shortcuts for instant switching.")
             wrapMode: Text.WordWrap
             opacity: root.constants.labelSecondaryOpacity
         }
@@ -55,6 +73,7 @@ Kirigami.Card {
 
                 property int slotNumber: index + 1
                 property string shortcutText: root.kcm.getQuickLayoutShortcut(slotNumber)
+                property int _slotRevision: 0
 
                 RowLayout {
                     id: slotRow
@@ -78,26 +97,29 @@ Kirigami.Card {
                         Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                         kcm: root.kcm
                         noneText: i18n("None")
-                        showPreview: true
-                        resolvedDefaultId: ""  // "None" means no assignment, not a resolution to something
-                        currentLayoutId: root.kcm.getQuickLayoutSlot(slotDelegate.slotNumber) || ""
+                        showPreview: root.viewMode === 0
+                        layoutFilter: root.viewMode === 1 ? 1 : 0
+                        resolvedDefaultId: ""
+                        currentLayoutId: {
+                            void(slotDelegate._slotRevision)
+                            return root.getSlot(slotDelegate.slotNumber)
+                        }
 
                         Connections {
                             target: root.kcm
-                            function onScreenAssignmentsChanged() {
-                                slotLayoutCombo.currentLayoutId = root.kcm.getQuickLayoutSlot(slotDelegate.slotNumber) || ""
-                            }
+                            function onQuickLayoutSlotsChanged() { slotDelegate._slotRevision++ }
+                            function onTilingQuickLayoutSlotsChanged() { slotDelegate._slotRevision++ }
                         }
 
                         onActivated: {
-                            root.kcm.setQuickLayoutSlot(slotDelegate.slotNumber, model[currentIndex].value)
+                            root.setSlot(slotDelegate.slotNumber, model[currentIndex].value)
                         }
                     }
 
                     ToolButton {
                         icon.name: "edit-clear"
                         onClicked: {
-                            root.kcm.setQuickLayoutSlot(slotDelegate.slotNumber, "")
+                            root.setSlot(slotDelegate.slotNumber, "")
                             slotLayoutCombo.clearSelection()
                         }
                         ToolTip.visible: hovered

@@ -697,6 +697,12 @@ public:
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
     Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
 
+    // Per-screen autotile config (override > global fallback)
+    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1201,6 +1207,9 @@ private:
 
     // Per-screen zone selector overrides (screenName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;
+
+    // Per-screen autotile overrides (screenName -> settings map)
+    QHash<QString, QVariantMap> m_perScreenAutotileSettings;
 
     // Autotiling Settings
     bool m_autotileEnabled = false;

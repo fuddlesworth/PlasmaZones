@@ -29,15 +29,6 @@ ScrollView {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // INFO MESSAGE + ENABLE TOGGLE
-        // ═══════════════════════════════════════════════════════════════════════
-        Kirigami.InlineMessage {
-            Layout.fillWidth: true
-            type: Kirigami.MessageType.Information
-            text: i18n("Autotiling automatically arranges windows using tiling algorithms. When enabled, manual zone layouts are suspended.")
-        }
-
         // Enable toggle - prominent at top
         CheckBox {
             id: autotileEnabledCheck

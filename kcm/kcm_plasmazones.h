@@ -229,6 +229,8 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Screens and assignments
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
     Q_PROPERTY(QVariantMap screenAssignments READ screenAssignments NOTIFY screenAssignmentsChanged)
+    Q_PROPERTY(int assignmentViewMode READ assignmentViewMode WRITE setAssignmentViewMode NOTIFY assignmentViewModeChanged)
+    Q_PROPERTY(QVariantMap tilingScreenAssignments READ tilingScreenAssignments NOTIFY tilingScreenAssignmentsChanged)
 
     // Virtual desktop support
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopCountChanged)
@@ -369,6 +371,9 @@ public:
     QString layoutToSelect() const;
     QVariantList screens() const;
     QVariantMap screenAssignments() const;
+    int assignmentViewMode() const;
+    void setAssignmentViewMode(int mode);
+    QVariantMap tilingScreenAssignments() const;
 
     // Virtual desktop support
     int virtualDesktopCount() const;
@@ -535,6 +540,15 @@ public Q_SLOTS:
     Q_INVOKABLE void clearScreenAssignment(const QString& screenName);
     Q_INVOKABLE QString getLayoutForScreen(const QString& screenName) const;
 
+    // Tiling-mode screen assignments (separate from snapping assignments)
+    Q_INVOKABLE void assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId);
+    Q_INVOKABLE void clearTilingScreenAssignment(const QString& screenName);
+    Q_INVOKABLE QString getTilingLayoutForScreen(const QString& screenName) const;
+
+    // Tiling-mode quick layout slots
+    Q_INVOKABLE QString getTilingQuickLayoutSlot(int slotNumber) const;
+    Q_INVOKABLE void setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId);
+
     // Per-virtual-desktop screen assignments
     Q_INVOKABLE void assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
                                                  const QString& layoutId);
@@ -550,6 +564,14 @@ public Q_SLOTS:
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
+
+    // Per-screen autotile settings
+    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
+    Q_INVOKABLE bool isScreenInTilingMode(const QString& screenName) const;
+
     // Quick layout slots (1-9)
     Q_INVOKABLE QString getQuickLayoutSlot(int slotNumber) const;
     Q_INVOKABLE void setQuickLayoutSlot(int slotNumber, const QString& layoutId);
@@ -561,6 +583,21 @@ public Q_SLOTS:
     Q_INVOKABLE void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
     Q_INVOKABLE QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
     Q_INVOKABLE bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
+
+    // Tiling-mode per-activity screen assignments (KCM-persisted, not daemon-owned)
+    Q_INVOKABLE void assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                                         const QString& layoutId);
+    Q_INVOKABLE void clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId);
+    Q_INVOKABLE QString getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
+
+    // Tiling-mode per-virtual-desktop screen assignments (KCM-persisted, not daemon-owned)
+    Q_INVOKABLE void assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
+                                                        const QString& layoutId);
+    Q_INVOKABLE void clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
+    Q_INVOKABLE QString getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
+    Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
+
     // Daemon control
     Q_INVOKABLE void startDaemon();
     Q_INVOKABLE void stopDaemon();
@@ -669,6 +706,12 @@ Q_SIGNALS:
     void layoutToSelectChanged();
     void screensChanged();
     void screenAssignmentsChanged();
+    void assignmentViewModeChanged();
+    void tilingScreenAssignmentsChanged();
+    void tilingActivityAssignmentsChanged();
+    void tilingDesktopAssignmentsChanged();
+    void quickLayoutSlotsChanged();
+    void tilingQuickLayoutSlotsChanged();
     void virtualDesktopCountChanged();
     void virtualDesktopNamesChanged();
     void activitiesAvailableChanged();
@@ -748,6 +791,11 @@ private:
     QVariantList m_screens;
     QVariantMap m_screenAssignments; // screenName -> layoutId (for virtualDesktop=0, all desktops)
     QMap<int, QString> m_quickLayoutSlots; // slotNumber (1-9) -> layoutId
+    QVariantMap m_tilingScreenAssignments; // screenName -> autotile layoutId (for tiling mode)
+    QMap<int, QString> m_tilingQuickLayoutSlots; // slotNumber (1-9) -> autotile layoutId
+    QMap<QString, QString> m_tilingActivityAssignments; // "connectorName|activityId" -> autotile layoutId
+    QMap<QString, QString> m_tilingDesktopAssignments; // "connectorName|desktopNumber" -> autotile layoutId
+    int m_assignmentViewMode = 0; // 0 = snapping, 1 = tiling
 
     // Virtual desktop support
     int m_virtualDesktopCount = 1;

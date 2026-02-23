@@ -18,9 +18,12 @@ Kirigami.Card {
     required property var kcm
     required property QtObject constants
 
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    property int viewMode: 0
+
     header: Kirigami.Heading {
         level: 3
-        text: i18n("Monitor Assignments")
+        text: root.viewMode === 1 ? i18n("Monitor Tiling Assignments") : i18n("Monitor Assignments")
         padding: Kirigami.Units.smallSpacing
     }
 
@@ -49,6 +52,10 @@ Kirigami.Card {
 
                 property bool expanded: false
                 property string screenName: modelData.name || ""
+                // Revision counter — incremented when assignment data changes,
+                // forcing currentLayoutId bindings to re-evaluate without
+                // breaking the binding (imperative assignment breaks bindings).
+                property int _assignmentRevision: 0
 
                 ColumnLayout {
                     id: monitorContent
@@ -107,7 +114,7 @@ Kirigami.Card {
                         }
 
                         Label {
-                            text: i18n("All Desktops:")
+                            text: root.viewMode === 1 ? i18n("Algorithm:") : i18n("All Desktops:")
                             Layout.alignment: Qt.AlignVCenter
                         }
 
@@ -118,22 +125,36 @@ Kirigami.Card {
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 16
                             kcm: root.kcm
                             noneText: i18n("Default")
-                            showPreview: true
-                            currentLayoutId: root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
+                            showPreview: root.viewMode === 0
+                            layoutFilter: root.viewMode === 1 ? 1 : 0
+                            currentLayoutId: {
+                                void(monitorDelegate._assignmentRevision) // force re-evaluate on data change
+                                return root.viewMode === 1
+                                    ? (root.kcm.getTilingLayoutForScreen(monitorDelegate.screenName) || "")
+                                    : (root.kcm.getLayoutForScreen(monitorDelegate.screenName) || "")
+                            }
 
                             Connections {
                                 target: root.kcm
-                                function onScreenAssignmentsChanged() {
-                                    screenLayoutCombo.currentLayoutId = root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
-                                }
+                                function onScreenAssignmentsChanged() { monitorDelegate._assignmentRevision++ }
+                                function onTilingScreenAssignmentsChanged() { monitorDelegate._assignmentRevision++ }
+                                function onTilingDesktopAssignmentsChanged() { monitorDelegate._assignmentRevision++ }
                             }
 
                             onActivated: {
                                 let selectedValue = model[currentIndex].value
-                                if (selectedValue === "") {
-                                    root.kcm.clearScreenAssignment(monitorDelegate.screenName)
+                                if (root.viewMode === 1) {
+                                    if (selectedValue === "") {
+                                        root.kcm.clearTilingScreenAssignment(monitorDelegate.screenName)
+                                    } else {
+                                        root.kcm.assignTilingLayoutToScreen(monitorDelegate.screenName, selectedValue)
+                                    }
                                 } else {
-                                    root.kcm.assignLayoutToScreen(monitorDelegate.screenName, selectedValue)
+                                    if (selectedValue === "") {
+                                        root.kcm.clearScreenAssignment(monitorDelegate.screenName)
+                                    } else {
+                                        root.kcm.assignLayoutToScreen(monitorDelegate.screenName, selectedValue)
+                                    }
                                 }
                             }
                         }
@@ -141,7 +162,11 @@ Kirigami.Card {
                         ToolButton {
                             icon.name: "edit-clear"
                             onClicked: {
-                                root.kcm.clearScreenAssignment(monitorDelegate.screenName)
+                                if (root.viewMode === 1) {
+                                    root.kcm.clearTilingScreenAssignment(monitorDelegate.screenName)
+                                } else {
+                                    root.kcm.clearScreenAssignment(monitorDelegate.screenName)
+                                }
                                 screenLayoutCombo.clearSelection()
                             }
                             ToolTip.visible: hovered
@@ -209,34 +234,44 @@ Kirigami.Card {
                                 property string desktopName: root.kcm.virtualDesktopNames[index] || i18n("Desktop %1", desktopNumber)
 
                                 // Per-desktop "Default" resolves to monitor's layout (or global if monitor has none)
-                                property string monitorLayout: root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
+                                property string monitorLayout: {
+                                    void(monitorDelegate._assignmentRevision)
+                                    return root.viewMode === 1
+                                        ? (root.kcm.getTilingLayoutForScreen(monitorDelegate.screenName) || "")
+                                        : (root.kcm.getLayoutForScreen(monitorDelegate.screenName) || "")
+                                }
 
                                 kcm: root.kcm
                                 iconSource: "preferences-desktop-virtual"
                                 labelText: desktopName
+                                layoutFilter: root.viewMode === 1 ? 1 : 0
+                                showPreview: root.viewMode === 0
                                 noneText: i18n("Use default")
                                 resolvedDefaultId: monitorLayout !== "" ? monitorLayout : (root.kcm.defaultLayoutId || "")
                                 currentLayoutId: {
-                                    let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber)
-                                    return hasExplicit ? (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : ""
-                                }
-
-                                Connections {
-                                    target: root.kcm
-                                    function onScreenAssignmentsChanged() {
-                                        let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopRow.desktopNumber)
-                                        desktopRow.currentLayoutId = hasExplicit ?
-                                            (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopRow.desktopNumber) || "") : ""
-                                        // Also update resolved default when monitor assignment changes
-                                        desktopRow.monitorLayout = root.kcm.getLayoutForScreen(monitorDelegate.screenName) || ""
+                                    void(monitorDelegate._assignmentRevision)
+                                    if (root.viewMode === 1) {
+                                        let hasExplicit = root.kcm.hasExplicitTilingAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber)
+                                        return hasExplicit ? (root.kcm.getTilingLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : ""
+                                    } else {
+                                        let hasExplicit = root.kcm.hasExplicitAssignmentForScreenDesktop(monitorDelegate.screenName, desktopNumber)
+                                        return hasExplicit ? (root.kcm.getLayoutForScreenDesktop(monitorDelegate.screenName, desktopNumber) || "") : ""
                                     }
                                 }
 
                                 onAssignmentSelected: (layoutId) => {
-                                    root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopNumber, layoutId)
+                                    if (root.viewMode === 1) {
+                                        root.kcm.assignTilingLayoutToScreenDesktop(monitorDelegate.screenName, desktopNumber, layoutId)
+                                    } else {
+                                        root.kcm.assignLayoutToScreenDesktop(monitorDelegate.screenName, desktopNumber, layoutId)
+                                    }
                                 }
                                 onAssignmentCleared: {
-                                    root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopNumber)
+                                    if (root.viewMode === 1) {
+                                        root.kcm.clearTilingScreenDesktopAssignment(monitorDelegate.screenName, desktopNumber)
+                                    } else {
+                                        root.kcm.clearScreenDesktopAssignment(monitorDelegate.screenName, desktopNumber)
+                                    }
                                 }
                             }
                         }

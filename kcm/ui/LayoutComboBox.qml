@@ -27,6 +27,9 @@ ComboBox {
     property string currentLayoutId: ""
     property bool showPreview: false
 
+    // Filter layouts by category: -1 = show all, 0 = manual/zone only, 1 = autotile only
+    property int layoutFilter: -1
+
     // The layout ID that "Default" actually resolves to at runtime.
     // Set by parent based on context:
     // - Monitor dropdown: kcm.defaultLayoutId (global default)
@@ -80,7 +83,8 @@ ComboBox {
             text: noneText,
             value: "",
             layout: defaultLayout,
-            category: getCategory(defaultLayout, -1),
+            // Match the active filter so the default item is semantically consistent
+            category: root.layoutFilter >= 0 ? root.layoutFilter : getCategory(defaultLayout, -1),
             isDefaultOption: true
         }]
 
@@ -89,11 +93,16 @@ ComboBox {
             let layoutItems = []
             for (let i = 0; i < layouts.length; i++) {
                 let layout = layouts[i]
+                let cat = getCategory(layout, 0)
+                // Filter by category if layoutFilter is set
+                if (root.layoutFilter >= 0 && cat !== root.layoutFilter) {
+                    continue
+                }
                 layoutItems.push({
                     text: layout.name,
                     value: layout.id,
                     layout: layout,
-                    category: getCategory(layout, 0),
+                    category: cat,
                     isDefaultOption: false
                 })
             }
@@ -212,6 +221,7 @@ ComboBox {
     }
     onResolvedDefaultIdChanged: rebuildModel()
     onNoneTextChanged: rebuildModel()
+    onLayoutFilterChanged: rebuildModel()
 
     // Update selection when currentLayoutId changes externally.
     onCurrentLayoutIdChanged: updateSelection()

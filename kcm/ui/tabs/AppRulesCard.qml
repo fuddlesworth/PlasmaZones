@@ -20,6 +20,9 @@ Kirigami.Card {
     required property QtObject constants
     required property WindowPickerDialog windowPickerDialog
 
+    // 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
+    property int viewMode: 0
+
     // Current layout selection (populated from kcm.layouts)
     property string selectedLayoutId: ""
     property var currentRules: []
@@ -31,6 +34,13 @@ Kirigami.Card {
         : (kcm ? kcm.defaultLayoutId : "")
     readonly property bool hasSelectedLayout: effectiveLayoutId !== ""
 
+    onViewModeChanged: {
+        selectedLayoutId = ""
+        if (layoutCombo) layoutCombo.clearSelection()
+        updateSelectedLayoutZoneCount()
+        refreshRules()
+    }
+
     Connections {
         target: root.kcm
         function onAppRulesRefreshed() {
@@ -40,7 +50,7 @@ Kirigami.Card {
 
     header: Kirigami.Heading {
         level: 3
-        text: i18n("App-to-Zone Rules")
+        text: root.viewMode === 1 ? i18n("App-to-Zone Tiling Rules") : i18n("App-to-Zone Rules")
         padding: Kirigami.Units.smallSpacing
     }
 
@@ -73,7 +83,8 @@ Kirigami.Card {
                 Layout.fillWidth: true
                 kcm: root.kcm
                 noneText: i18n("Default")
-                showPreview: true
+                layoutFilter: root.viewMode === 1 ? 1 : 0
+                showPreview: root.viewMode === 0
                 Accessible.name: i18n("Layout for app rules")
 
                 onActivated: {
@@ -240,7 +251,9 @@ Kirigami.Card {
         }
 
         Label {
-            text: i18n("Rules are checked in order. The first matching pattern determines the zone. Patterns are case-insensitive substring matches.")
+            text: root.viewMode === 1
+                ? i18n("Rules are shared across modes. Zone numbers correspond to the algorithm's tile positions.")
+                : i18n("Rules are checked in order. The first matching pattern determines the zone. Patterns are case-insensitive substring matches.")
             font.italic: true
             opacity: 0.7
             wrapMode: Text.WordWrap
