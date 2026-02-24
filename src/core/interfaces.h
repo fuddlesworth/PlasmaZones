@@ -281,6 +281,11 @@ Q_SIGNALS:
     void autotileMasterCountChanged();
     void autotileInnerGapChanged();
     void autotileOuterGapChanged();
+    void autotileUsePerSideOuterGapChanged();
+    void autotileOuterGapTopChanged();
+    void autotileOuterGapBottomChanged();
+    void autotileOuterGapLeftChanged();
+    void autotileOuterGapRightChanged();
     void autotileSmartGapsChanged();
     void autotileMaxWindowsChanged();
     void autotileFocusNewWindowsChanged();

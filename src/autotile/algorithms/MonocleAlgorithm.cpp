@@ -39,7 +39,7 @@ QVector<QRect> MonocleAlgorithm::calculateZones(const TilingParams &params) cons
 {
     const int windowCount = params.windowCount;
     const auto &screenGeometry = params.screenGeometry;
-    const int outerGap = params.outerGap;
+    const auto &outerGaps = params.outerGaps;
 
     QVector<QRect> zones;
 
@@ -49,7 +49,7 @@ QVector<QRect> MonocleAlgorithm::calculateZones(const TilingParams &params) cons
 
     // In monocle mode, every window gets the gap-inset area.
     // No inner gaps since windows are stacked, not side-by-side.
-    const QRect area = innerRect(screenGeometry, outerGap);
+    const QRect area = innerRect(screenGeometry, outerGaps);
     zones.reserve(windowCount);
     for (int i = 0; i < windowCount; ++i) {
         zones.append(area);

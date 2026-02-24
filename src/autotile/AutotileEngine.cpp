@@ -271,6 +271,11 @@ void AutotileEngine::syncFromSettings(Settings* settings)
     m_config->masterCount = settings->autotileMasterCount();
     m_config->innerGap = settings->autotileInnerGap();
     m_config->outerGap = settings->autotileOuterGap();
+    m_config->usePerSideOuterGap = settings->autotileUsePerSideOuterGap();
+    m_config->outerGapTop = settings->autotileOuterGapTop();
+    m_config->outerGapBottom = settings->autotileOuterGapBottom();
+    m_config->outerGapLeft = settings->autotileOuterGapLeft();
+    m_config->outerGapRight = settings->autotileOuterGapRight();
     m_config->focusNewWindows = settings->autotileFocusNewWindows();
     m_config->smartGaps = settings->autotileSmartGaps();
     m_config->insertPosition = static_cast<AutotileConfig::InsertPosition>(settings->autotileInsertPositionInt());
@@ -392,6 +397,11 @@ void AutotileEngine::connectToSettings(Settings* settings)
     });
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
     CONNECT_SETTING_RETILE(autotileOuterGapChanged, outerGap, autotileOuterGap);
+    CONNECT_SETTING_RETILE(autotileUsePerSideOuterGapChanged, usePerSideOuterGap, autotileUsePerSideOuterGap);
+    CONNECT_SETTING_RETILE(autotileOuterGapTopChanged, outerGapTop, autotileOuterGapTop);
+    CONNECT_SETTING_RETILE(autotileOuterGapBottomChanged, outerGapBottom, autotileOuterGapBottom);
+    CONNECT_SETTING_RETILE(autotileOuterGapLeftChanged, outerGapLeft, autotileOuterGapLeft);
+    CONNECT_SETTING_RETILE(autotileOuterGapRightChanged, outerGapRight, autotileOuterGapRight);
     CONNECT_SETTING_RETILE(autotileSmartGapsChanged, smartGaps, autotileSmartGaps);
     CONNECT_SETTING_RETILE(autotileRespectMinimumSizeChanged, respectMinimumSize, autotileRespectMinimumSize);
 
@@ -517,6 +527,40 @@ int AutotileEngine::effectiveOuterGap(const QString& screenName) const
     if (auto v = perScreenOverride(screenName, QStringLiteral("OuterGap")))
         return qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
     return m_config->outerGap;
+}
+
+EdgeGaps AutotileEngine::effectiveOuterGaps(const QString& screenName) const
+{
+    // Check per-screen per-side overrides first
+    auto topOv = perScreenOverride(screenName, QStringLiteral("OuterGapTop"));
+    auto bottomOv = perScreenOverride(screenName, QStringLiteral("OuterGapBottom"));
+    auto leftOv = perScreenOverride(screenName, QStringLiteral("OuterGapLeft"));
+    auto rightOv = perScreenOverride(screenName, QStringLiteral("OuterGapRight"));
+
+    // If any per-screen per-side override exists, build from those
+    if (topOv || bottomOv || leftOv || rightOv) {
+        // Use per-screen uniform gap as base, then per-side overrides on top
+        const int base = effectiveOuterGap(screenName);
+        return EdgeGaps{
+            topOv ? qBound(AutotileDefaults::MinGap, topOv->toInt(), AutotileDefaults::MaxGap) : base,
+            bottomOv ? qBound(AutotileDefaults::MinGap, bottomOv->toInt(), AutotileDefaults::MaxGap) : base,
+            leftOv ? qBound(AutotileDefaults::MinGap, leftOv->toInt(), AutotileDefaults::MaxGap) : base,
+            rightOv ? qBound(AutotileDefaults::MinGap, rightOv->toInt(), AutotileDefaults::MaxGap) : base
+        };
+    }
+
+    // Check per-screen uniform outer gap
+    if (auto v = perScreenOverride(screenName, QStringLiteral("OuterGap"))) {
+        const int gap = qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
+        return EdgeGaps::uniform(gap);
+    }
+
+    // Fall back to global config
+    if (m_config->usePerSideOuterGap) {
+        return EdgeGaps{m_config->outerGapTop, m_config->outerGapBottom,
+                        m_config->outerGapLeft, m_config->outerGapRight};
+    }
+    return EdgeGaps::uniform(m_config->outerGap);
 }
 
 bool AutotileEngine::effectiveSmartGaps(const QString& screenName) const
@@ -1364,7 +1408,7 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     // the fragile post-processing step that previously guessed adjacency.
     const bool skipGaps = effectiveSmartGaps(screenName) && windowCount == 1;
     const int innerGap = skipGaps ? 0 : effectiveInnerGap(screenName);
-    const int outerGap = skipGaps ? 0 : effectiveOuterGap(screenName);
+    const EdgeGaps outerGaps = skipGaps ? EdgeGaps::uniform(0) : effectiveOuterGaps(screenName);
     // Build minSizes vector for the algorithm (when respectMinimumSize is enabled)
     QVector<QSize> minSizes;
     if (effectiveRespectMinimumSize(screenName)) {
@@ -1379,7 +1423,7 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
 
     // Pass minSizes to algorithm so it can incorporate them directly into zone
     // calculations using its topology knowledge (split tree, column structure, etc.)
-    QVector<QRect> zones = algo->calculateZones({windowCount, screen, state, innerGap, outerGap, minSizes});
+    QVector<QRect> zones = algo->calculateZones({windowCount, screen, state, innerGap, outerGaps, minSizes});
 
     // Validate algorithm returned correct number of zones
     if (zones.size() != windowCount) {

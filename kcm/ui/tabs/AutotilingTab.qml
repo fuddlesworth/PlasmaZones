@@ -129,6 +129,7 @@ ScrollView {
                             from: 0
                             to: root.constants.autotileGapMax
                             value: kcm.autotileOuterGap
+                            enabled: !autotilePerSideCheck.checked
                             onValueModified: kcm.autotileOuterGap = value
 
                             ToolTip.visible: hovered && root.isCurrentTab
@@ -137,7 +138,60 @@ ScrollView {
 
                         Label {
                             text: i18n("px")
+                            visible: !autotilePerSideCheck.checked
                         }
+
+                        CheckBox {
+                            id: autotilePerSideCheck
+                            text: i18n("Set per side")
+                            checked: kcm.autotileUsePerSideOuterGap
+                            onToggled: kcm.autotileUsePerSideOuterGap = checked
+                        }
+                    }
+
+                    GridLayout {
+                        Kirigami.FormData.label: i18n("Per-side gaps:")
+                        visible: autotilePerSideCheck.checked
+                        columns: 6
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Top:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: kcm.autotileOuterGapTop
+                            onValueModified: kcm.autotileOuterGapTop = value
+                            Accessible.name: i18nc("@label", "Top edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Bottom:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: kcm.autotileOuterGapBottom
+                            onValueModified: kcm.autotileOuterGapBottom = value
+                            Accessible.name: i18nc("@label", "Bottom edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Left:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: kcm.autotileOuterGapLeft
+                            onValueModified: kcm.autotileOuterGapLeft = value
+                            Accessible.name: i18nc("@label", "Left edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Right:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: kcm.autotileOuterGapRight
+                            onValueModified: kcm.autotileOuterGapRight = value
+                            Accessible.name: i18nc("@label", "Right edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
                     }
 
                     CheckBox {

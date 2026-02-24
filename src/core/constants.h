@@ -238,6 +238,12 @@ inline constexpr QLatin1String SplitRatio{"splitRatio"};
 inline constexpr QLatin1String AlgorithmId{"algorithmId"};
 inline constexpr QLatin1String InnerGap{"innerGap"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
+// Per-side outer gap keys (shared with LayoutJsonKeys — same wire format)
+using JsonKeys::UsePerSideOuterGap;
+using JsonKeys::OuterGapTop;
+using JsonKeys::OuterGapBottom;
+using JsonKeys::OuterGapLeft;
+using JsonKeys::OuterGapRight;
 inline constexpr QLatin1String SmartGaps{"smartGaps"};
 inline constexpr QLatin1String FocusNewWindows{"focusNewWindows"};
 inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};

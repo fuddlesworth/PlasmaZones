@@ -732,6 +732,34 @@
       <min>0</min>
       <max>50</max>
     </entry>
+    <entry name="AutotileUsePerSideOuterGap" type="Bool">
+      <label>Use independent gap values for each screen edge</label>
+      <default>false</default>
+    </entry>
+    <entry name="AutotileOuterGapTop" type="Int">
+      <label>Gap at top screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="AutotileOuterGapBottom" type="Int">
+      <label>Gap at bottom screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="AutotileOuterGapLeft" type="Int">
+      <label>Gap at left screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
+    <entry name="AutotileOuterGapRight" type="Int">
+      <label>Gap at right screen edge in pixels</label>
+      <default>8</default>
+      <min>0</min>
+      <max>50</max>
+    </entry>
     <entry name="AutotileSmartGaps" type="Bool">
       <label>Remove gaps when only one window is tiled</label>
       <default>true</default>

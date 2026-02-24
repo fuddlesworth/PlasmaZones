@@ -442,7 +442,7 @@ private Q_SLOTS:
             auto *algo = registry->algorithm(id);
             QVERIFY(algo != nullptr);
 
-            auto zones = algo->calculateZones({4, screen, &state});
+            auto zones = algo->calculateZones({4, screen, &state, 0, {}});
             QCOMPARE(zones.size(), 4);
 
             // All zones should be valid

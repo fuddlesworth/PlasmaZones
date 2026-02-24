@@ -707,6 +707,55 @@ void Settings::setAutotileOuterGap(int gap)
     }
 }
 
+void Settings::setAutotileUsePerSideOuterGap(bool enabled)
+{
+    if (m_autotileUsePerSideOuterGap != enabled) {
+        m_autotileUsePerSideOuterGap = enabled;
+        Q_EMIT autotileUsePerSideOuterGapChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileOuterGapTop(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileOuterGapTop != gap) {
+        m_autotileOuterGapTop = gap;
+        Q_EMIT autotileOuterGapTopChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileOuterGapBottom(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileOuterGapBottom != gap) {
+        m_autotileOuterGapBottom = gap;
+        Q_EMIT autotileOuterGapBottomChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileOuterGapLeft(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileOuterGapLeft != gap) {
+        m_autotileOuterGapLeft = gap;
+        Q_EMIT autotileOuterGapLeftChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAutotileOuterGapRight(int gap)
+{
+    gap = qBound(AutotileDefaults::MinGap, gap, AutotileDefaults::MaxGap);
+    if (m_autotileOuterGapRight != gap) {
+        m_autotileOuterGapRight = gap;
+        Q_EMIT autotileOuterGapRightChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 // Autotile bool setters
 SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
 SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
@@ -1318,6 +1367,11 @@ void Settings::load()
     const int oldMasterCount = m_autotileMasterCount;
     const int oldInnerGap = m_autotileInnerGap;
     const int oldOuterGap = m_autotileOuterGap;
+    const bool oldUsePerSideOuterGap = m_autotileUsePerSideOuterGap;
+    const int oldOuterGapTop = m_autotileOuterGapTop;
+    const int oldOuterGapBottom = m_autotileOuterGapBottom;
+    const int oldOuterGapLeft = m_autotileOuterGapLeft;
+    const int oldOuterGapRight = m_autotileOuterGapRight;
     m_autotileEnabled = autotiling.readEntry(QLatin1String("AutotileEnabled"), ConfigDefaults::autotileEnabled());
     m_autotileAlgorithm = autotiling.readEntry(QLatin1String("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
 
@@ -1339,6 +1393,15 @@ void Settings::load()
                                           AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile inner gap");
     m_autotileOuterGap = readValidatedInt(autotiling, "AutotileOuterGap", ConfigDefaults::autotileOuterGap(),
                                           AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap");
+    m_autotileUsePerSideOuterGap = autotiling.readEntry(QLatin1String("AutotileUsePerSideOuterGap"), ConfigDefaults::autotileUsePerSideOuterGap());
+    m_autotileOuterGapTop = readValidatedInt(autotiling, "AutotileOuterGapTop", ConfigDefaults::autotileOuterGapTop(),
+                                              AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap top");
+    m_autotileOuterGapBottom = readValidatedInt(autotiling, "AutotileOuterGapBottom", ConfigDefaults::autotileOuterGapBottom(),
+                                                 AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap bottom");
+    m_autotileOuterGapLeft = readValidatedInt(autotiling, "AutotileOuterGapLeft", ConfigDefaults::autotileOuterGapLeft(),
+                                               AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap left");
+    m_autotileOuterGapRight = readValidatedInt(autotiling, "AutotileOuterGapRight", ConfigDefaults::autotileOuterGapRight(),
+                                                AutotileDefaults::MinGap, AutotileDefaults::MaxGap, "autotile outer gap right");
     m_autotileFocusNewWindows = autotiling.readEntry(QLatin1String("AutotileFocusNewWindows"), ConfigDefaults::autotileFocusNewWindows());
     m_autotileSmartGaps = autotiling.readEntry(QLatin1String("AutotileSmartGaps"), ConfigDefaults::autotileSmartGaps());
     m_autotileMaxWindows = readValidatedInt(autotiling, "AutotileMaxWindows", ConfigDefaults::autotileMaxWindows(),
@@ -1405,6 +1468,16 @@ void Settings::load()
         Q_EMIT autotileInnerGapChanged();
     if (m_autotileOuterGap != oldOuterGap)
         Q_EMIT autotileOuterGapChanged();
+    if (m_autotileUsePerSideOuterGap != oldUsePerSideOuterGap)
+        Q_EMIT autotileUsePerSideOuterGapChanged();
+    if (m_autotileOuterGapTop != oldOuterGapTop)
+        Q_EMIT autotileOuterGapTopChanged();
+    if (m_autotileOuterGapBottom != oldOuterGapBottom)
+        Q_EMIT autotileOuterGapBottomChanged();
+    if (m_autotileOuterGapLeft != oldOuterGapLeft)
+        Q_EMIT autotileOuterGapLeftChanged();
+    if (m_autotileOuterGapRight != oldOuterGapRight)
+        Q_EMIT autotileOuterGapRightChanged();
 }
 
 void Settings::save()
@@ -1562,6 +1635,11 @@ void Settings::save()
     autotiling.writeEntry(QLatin1String("AutotileMasterCount"), m_autotileMasterCount);
     autotiling.writeEntry(QLatin1String("AutotileInnerGap"), m_autotileInnerGap);
     autotiling.writeEntry(QLatin1String("AutotileOuterGap"), m_autotileOuterGap);
+    autotiling.writeEntry(QLatin1String("AutotileUsePerSideOuterGap"), m_autotileUsePerSideOuterGap);
+    autotiling.writeEntry(QLatin1String("AutotileOuterGapTop"), m_autotileOuterGapTop);
+    autotiling.writeEntry(QLatin1String("AutotileOuterGapBottom"), m_autotileOuterGapBottom);
+    autotiling.writeEntry(QLatin1String("AutotileOuterGapLeft"), m_autotileOuterGapLeft);
+    autotiling.writeEntry(QLatin1String("AutotileOuterGapRight"), m_autotileOuterGapRight);
     autotiling.writeEntry(QLatin1String("AutotileFocusNewWindows"), m_autotileFocusNewWindows);
     autotiling.writeEntry(QLatin1String("AutotileSmartGaps"), m_autotileSmartGaps);
     autotiling.writeEntry(QLatin1String("AutotileMaxWindows"), m_autotileMaxWindows);

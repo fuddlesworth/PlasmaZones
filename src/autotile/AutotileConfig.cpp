@@ -46,6 +46,11 @@ bool AutotileConfig::operator==(const AutotileConfig &other) const
         && masterCount == other.masterCount
         && innerGap == other.innerGap
         && outerGap == other.outerGap
+        && usePerSideOuterGap == other.usePerSideOuterGap
+        && outerGapTop == other.outerGapTop
+        && outerGapBottom == other.outerGapBottom
+        && outerGapLeft == other.outerGapLeft
+        && outerGapRight == other.outerGapRight
         && insertPosition == other.insertPosition
         && focusFollowsMouse == other.focusFollowsMouse
         && focusNewWindows == other.focusNewWindows
@@ -68,6 +73,11 @@ QJsonObject AutotileConfig::toJson() const
     json[MasterCount] = masterCount;
     json[InnerGap] = innerGap;
     json[OuterGap] = outerGap;
+    json[AutotileJsonKeys::UsePerSideOuterGap] = usePerSideOuterGap;
+    json[AutotileJsonKeys::OuterGapTop] = outerGapTop;
+    json[AutotileJsonKeys::OuterGapBottom] = outerGapBottom;
+    json[AutotileJsonKeys::OuterGapLeft] = outerGapLeft;
+    json[AutotileJsonKeys::OuterGapRight] = outerGapRight;
     json[AutotileJsonKeys::InsertPosition] = insertPositionToString(insertPosition);
     json[FocusFollowsMouse] = focusFollowsMouse;
     json[FocusNewWindows] = focusNewWindows;
@@ -100,6 +110,21 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
     if (json.contains(OuterGap)) {
         config.outerGap = json[OuterGap].toInt(config.outerGap);
         config.outerGap = std::clamp(config.outerGap, MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::UsePerSideOuterGap)) {
+        config.usePerSideOuterGap = json[AutotileJsonKeys::UsePerSideOuterGap].toBool(config.usePerSideOuterGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapTop)) {
+        config.outerGapTop = std::clamp(json[AutotileJsonKeys::OuterGapTop].toInt(config.outerGapTop), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapBottom)) {
+        config.outerGapBottom = std::clamp(json[AutotileJsonKeys::OuterGapBottom].toInt(config.outerGapBottom), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapLeft)) {
+        config.outerGapLeft = std::clamp(json[AutotileJsonKeys::OuterGapLeft].toInt(config.outerGapLeft), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapRight)) {
+        config.outerGapRight = std::clamp(json[AutotileJsonKeys::OuterGapRight].toInt(config.outerGapRight), MinGap, MaxGap);
     }
     if (json.contains(AutotileJsonKeys::InsertPosition)) {
         config.insertPosition = stringToInsertPosition(json[AutotileJsonKeys::InsertPosition].toString());

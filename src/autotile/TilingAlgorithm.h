@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/constants.h"
 #include <QObject>
 #include <QRect>
 #include <QString>
@@ -25,7 +26,7 @@ struct TilingParams {
     QRect screenGeometry;               ///< Available screen area in absolute pixels
     const TilingState *state = nullptr; ///< Current tiling state (must be non-null)
     int innerGap = 0;                   ///< Gap between adjacent zones in pixels
-    int outerGap = 0;                   ///< Gap at screen edges in pixels
+    EdgeGaps outerGaps;                 ///< Gaps at screen edges in pixels (per-side)
     QVector<QSize> minSizes = {};        ///< Per-window minimum sizes (may be empty)
 };
 
@@ -181,13 +182,22 @@ protected:
     static QVector<int> distributeEvenly(int total, int count);
 
     /**
-     * @brief Compute the usable area after subtracting outer gaps from screen edges
+     * @brief Compute the usable area after subtracting uniform outer gap from screen edges
      *
      * @param screenGeometry Full screen rectangle
      * @param outerGap Gap at each edge in pixels
      * @return Inset rectangle (clamped to at least 1x1)
      */
     static QRect innerRect(const QRect &screenGeometry, int outerGap);
+
+    /**
+     * @brief Compute the usable area after subtracting per-side outer gaps from screen edges
+     *
+     * @param screenGeometry Full screen rectangle
+     * @param gaps Per-side gap values
+     * @return Inset rectangle (clamped to at least 1x1)
+     */
+    static QRect innerRect(const QRect &screenGeometry, const EdgeGaps &gaps);
 
     /**
      * @brief Distribute total space among count items with gaps between them

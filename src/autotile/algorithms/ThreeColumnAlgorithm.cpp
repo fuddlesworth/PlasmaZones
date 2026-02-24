@@ -42,7 +42,7 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
     const int windowCount = params.windowCount;
     const auto &screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const int outerGap = params.outerGap;
+    const auto &outerGaps = params.outerGaps;
     const auto &minSizes = params.minSizes;
 
     QVector<QRect> zones;
@@ -53,7 +53,7 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
 
     const auto &state = *params.state;
 
-    const QRect area = innerRect(screenGeometry, outerGap);
+    const QRect area = innerRect(screenGeometry, outerGaps);
 
     // Single window takes full available area
     if (windowCount == 1) {

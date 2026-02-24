@@ -150,6 +150,11 @@ public:
     Q_PROPERTY(int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
     Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
     Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
+    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap NOTIFY autotileUsePerSideOuterGapChanged)
+    Q_PROPERTY(int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
+    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY autotileOuterGapBottomChanged)
+    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY autotileOuterGapLeftChanged)
+    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY autotileOuterGapRightChanged)
     Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
     Q_PROPERTY(int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
@@ -725,6 +730,21 @@ public:
     int autotileOuterGap() const { return m_autotileOuterGap; }
     void setAutotileOuterGap(int gap);
 
+    bool autotileUsePerSideOuterGap() const { return m_autotileUsePerSideOuterGap; }
+    void setAutotileUsePerSideOuterGap(bool enabled);
+
+    int autotileOuterGapTop() const { return m_autotileOuterGapTop; }
+    void setAutotileOuterGapTop(int gap);
+
+    int autotileOuterGapBottom() const { return m_autotileOuterGapBottom; }
+    void setAutotileOuterGapBottom(int gap);
+
+    int autotileOuterGapLeft() const { return m_autotileOuterGapLeft; }
+    void setAutotileOuterGapLeft(int gap);
+
+    int autotileOuterGapRight() const { return m_autotileOuterGapRight; }
+    void setAutotileOuterGapRight(int gap);
+
     bool autotileFocusNewWindows() const { return m_autotileFocusNewWindows; }
     void setAutotileFocusNewWindows(bool focus);
 
@@ -1218,6 +1238,11 @@ private:
     int m_autotileMasterCount = 1;
     int m_autotileInnerGap = 8;
     int m_autotileOuterGap = 8;
+    bool m_autotileUsePerSideOuterGap = false;
+    int m_autotileOuterGapTop = 8;
+    int m_autotileOuterGapBottom = 8;
+    int m_autotileOuterGapLeft = 8;
+    int m_autotileOuterGapRight = 8;
     bool m_autotileFocusNewWindows = true;
     bool m_autotileSmartGaps = true;
     int m_autotileMaxWindows = 6;

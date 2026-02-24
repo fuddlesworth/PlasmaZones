@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/constants.h"
 #include <QHash>
 #include <QObject>
 #include <QPointer>
@@ -225,6 +226,7 @@ public:
     // Effective per-screen values (per-screen override → global fallback)
     int effectiveInnerGap(const QString& screenName) const;
     int effectiveOuterGap(const QString& screenName) const;
+    EdgeGaps effectiveOuterGaps(const QString& screenName) const;
     bool effectiveSmartGaps(const QString& screenName) const;
     bool effectiveRespectMinimumSize(const QString& screenName) const;
     QString effectiveAlgorithmId(const QString& screenName) const;

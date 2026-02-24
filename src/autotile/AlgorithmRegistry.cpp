@@ -251,7 +251,7 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
     previewState.setMasterCount(1);
     previewState.setSplitRatio(AutotileDefaults::DefaultSplitRatio);
 
-    QVector<QRect> zones = algorithm->calculateZones({algorithm->defaultMaxWindows(), previewRect, &previewState});
+    QVector<QRect> zones = algorithm->calculateZones({algorithm->defaultMaxWindows(), previewRect, &previewState, 0, {}});
 
     // Convert to relative geometry (handles monocle offset detection internally)
     QVariantList list = zonesToRelativeGeometry(zones, previewRect);

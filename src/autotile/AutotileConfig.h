@@ -70,12 +70,25 @@ struct PLASMAZONES_EXPORT AutotileConfig
     int innerGap = 8;
 
     /**
-     * @brief Gap from screen edges in pixels
+     * @brief Gap from screen edges in pixels (uniform)
      *
      * Range: 0 to 50
      * Default: 8
      */
     int outerGap = 8;
+
+    /**
+     * @brief Whether to use per-side outer gaps instead of uniform
+     */
+    bool usePerSideOuterGap = false;
+
+    /**
+     * @brief Per-side outer gap values (used when usePerSideOuterGap is true)
+     */
+    int outerGapTop = 8;
+    int outerGapBottom = 8;
+    int outerGapLeft = 8;
+    int outerGapRight = 8;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Window Insertion Behavior

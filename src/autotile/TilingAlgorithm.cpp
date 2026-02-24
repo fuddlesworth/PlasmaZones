@@ -80,6 +80,25 @@ QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, int outerGap)
     return QRect(x, y, w, h);
 }
 
+QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, const EdgeGaps &gaps)
+{
+    const int l = std::max(0, gaps.left);
+    const int r = std::max(0, gaps.right);
+    const int t = std::max(0, gaps.top);
+    const int b = std::max(0, gaps.bottom);
+    const int w = std::max(1, screenGeometry.width() - l - r);
+    const int h = std::max(1, screenGeometry.height() - t - b);
+    // When gaps exceed screen dimension, center the result to avoid placing
+    // the rect off-screen (same behavior as the uniform overload)
+    const int x = (l + r >= screenGeometry.width())
+        ? screenGeometry.left() + (screenGeometry.width() - w) / 2
+        : screenGeometry.left() + l;
+    const int y = (t + b >= screenGeometry.height())
+        ? screenGeometry.top() + (screenGeometry.height() - h) / 2
+        : screenGeometry.top() + t;
+    return QRect(x, y, w, h);
+}
+
 QVector<int> TilingAlgorithm::distributeWithGaps(int total, int count, int gap)
 {
     if (count <= 0 || total <= 0) {

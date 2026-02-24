@@ -1336,7 +1336,7 @@ QVariantList KCMPlasmaZones::generateAlgorithmPreview(const QString &algorithmId
     state.setSplitRatio(splitRatio);
 
     const int count = qMax(1, windowCount);
-    QVector<QRect> zones = algo->calculateZones({count, previewRect, &state});
+    QVector<QRect> zones = algo->calculateZones({count, previewRect, &state, 0, {}});
 
     return PlasmaZones::AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
 }

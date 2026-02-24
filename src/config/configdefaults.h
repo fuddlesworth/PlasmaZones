@@ -173,6 +173,11 @@ public:
     static int autotileMasterCount() { return instance().defaultAutotileMasterCountValue(); }
     static int autotileInnerGap() { return instance().defaultAutotileInnerGapValue(); }
     static int autotileOuterGap() { return instance().defaultAutotileOuterGapValue(); }
+    static bool autotileUsePerSideOuterGap() { return instance().defaultAutotileUsePerSideOuterGapValue(); }
+    static int autotileOuterGapTop() { return instance().defaultAutotileOuterGapTopValue(); }
+    static int autotileOuterGapBottom() { return instance().defaultAutotileOuterGapBottomValue(); }
+    static int autotileOuterGapLeft() { return instance().defaultAutotileOuterGapLeftValue(); }
+    static int autotileOuterGapRight() { return instance().defaultAutotileOuterGapRightValue(); }
     static bool autotileFocusNewWindows() { return instance().defaultAutotileFocusNewWindowsValue(); }
     static bool autotileSmartGaps() { return instance().defaultAutotileSmartGapsValue(); }
     static int autotileInsertPosition() { return instance().defaultAutotileInsertPositionValue(); }

@@ -41,7 +41,7 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
     const int windowCount = params.windowCount;
     const auto &screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const int outerGap = params.outerGap;
+    const auto &outerGaps = params.outerGaps;
     const auto &minSizes = params.minSizes;
 
     QVector<QRect> zones;
@@ -50,7 +50,7 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
         return zones;
     }
 
-    const QRect area = innerRect(screenGeometry, outerGap);
+    const QRect area = innerRect(screenGeometry, outerGaps);
 
     // Single window takes full available area — keep the tree intact so split
     // ratios are preserved when windows return
