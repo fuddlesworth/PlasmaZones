@@ -221,7 +221,27 @@ ComboBox {
     }
     onResolvedDefaultIdChanged: rebuildModel()
     onNoneTextChanged: rebuildModel()
-    onLayoutFilterChanged: rebuildModel()
+    // Filter change (e.g., viewMode switch) completely replaces model content.
+    // Rebuild the model synchronously, but do NOT call updateSelection() here.
+    // Both layoutFilter and currentLayoutId depend on the same root property
+    // (viewMode), and QML evaluates sibling bindings in undefined order.
+    // If layoutFilter evaluates first, currentLayoutId still holds the stale
+    // value from the previous mode.  onCurrentLayoutIdChanged (below) will
+    // fire once that binding settles and call updateSelection() with the
+    // correct value against the already-rebuilt model.
+    onLayoutFilterChanged: {
+        _rebuildScheduled = false
+        let items = _buildItems()
+        if (_modelMatchesItems(items)) return
+        if (popup && popup.visible) { _rebuildPending = true; return }
+        model = items
+        // Defer selection sync until sibling bindings (currentLayoutId) settle.
+        // If currentLayoutId also changed, onCurrentLayoutIdChanged handles it
+        // first; Qt.callLater deduplicates so this is a no-op in that case.
+        // If currentLayoutId did NOT change (both modes have ""), this ensures
+        // currentIndex is still correct against the new model.
+        Qt.callLater(updateSelection)
+    }
 
     // Update selection when currentLayoutId changes externally.
     onCurrentLayoutIdChanged: updateSelection()

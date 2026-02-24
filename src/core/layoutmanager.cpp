@@ -59,6 +59,13 @@ static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
     return it != layouts.end() ? *it : nullptr;
 }
 
+// Helper: emit layoutAssigned for a single screenId/layoutId pair
+void LayoutManager::emitLayoutAssigned(const QString& screenId, const QString& layoutId)
+{
+    Layout* layout = LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
+    Q_EMIT layoutAssigned(screenId, layout);
+}
+
 // Helper for validating layout assignment
 // Returns true if layoutId should be skipped (null or non-existent)
 bool LayoutManager::shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const
@@ -561,8 +568,9 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
         }
     }
 
-    // Set new assignments
+    // Set new assignments, tracking which screens were successfully stored
     int count = 0;
+    QSet<QString> storedScreens;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key();
         const QString& layoutId = it.value();
@@ -577,11 +585,20 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
 
         LayoutAssignmentKey key{screenId, 0, QString()};
         m_assignments[key] = layoutId;
+        storedScreens.insert(screenId);
         ++count;
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
     }
 
     saveAssignments();
+
+    // Emit layoutAssigned for stored entries, deduplicated by screenId.
+    // Use assignmentIdForScreen (cascading resolution) so the signal carries
+    // the effective layout for the current desktop/activity context.
+    for (const QString& screenId : storedScreens) {
+        emitLayoutAssigned(screenId, assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
+    }
+
     qCInfo(lcLayout) << "Batch set" << count << "screen assignments";
 }
 
@@ -596,8 +613,9 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
         }
     }
 
-    // Set new assignments
+    // Set new assignments, tracking which screens were successfully stored
     int count = 0;
+    QSet<QString> storedScreens;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key().first;
         int virtualDesktop = it.key().second;
@@ -614,11 +632,19 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
 
         LayoutAssignmentKey key{screenId, virtualDesktop, QString()};
         m_assignments[key] = layoutId;
+        storedScreens.insert(screenId);
         ++count;
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
     }
 
     saveAssignments();
+
+    // Emit once per screen (deduplicated) — use cascading resolution so the
+    // signal carries the effective layout for the current context.
+    for (const QString& screenId : storedScreens) {
+        emitLayoutAssigned(screenId, assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
+    }
+
     qCInfo(lcLayout) << "Batch set" << count << "desktop assignments";
 }
 
@@ -633,8 +659,9 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
         }
     }
 
-    // Set new assignments
+    // Set new assignments, tracking which screens were successfully stored
     int count = 0;
+    QSet<QString> storedScreens;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenId = it.key().first;
         const QString& activityId = it.key().second;
@@ -651,11 +678,19 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
 
         LayoutAssignmentKey key{screenId, 0, activityId};
         m_assignments[key] = layoutId;
+        storedScreens.insert(screenId);
         ++count;
         qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
     }
 
     saveAssignments();
+
+    // Emit once per screen (deduplicated) — use cascading resolution so the
+    // signal carries the effective layout for the current context.
+    for (const QString& screenId : storedScreens) {
+        emitLayoutAssigned(screenId, assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
+    }
+
     qCInfo(lcLayout) << "Batch set" << count << "activity assignments";
 }
 

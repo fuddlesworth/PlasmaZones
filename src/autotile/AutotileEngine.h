@@ -227,6 +227,8 @@ public:
     int effectiveOuterGap(const QString& screenName) const;
     bool effectiveSmartGaps(const QString& screenName) const;
     bool effectiveRespectMinimumSize(const QString& screenName) const;
+    QString effectiveAlgorithmId(const QString& screenName) const;
+    TilingAlgorithm* effectiveAlgorithm(const QString& screenName) const;
 
     /**
      * @brief Connect to Settings change signals for live updates
@@ -672,6 +674,28 @@ private:
      * @param tiledWindows List of tiled window IDs
      */
     void emitMonocleVisibility(const TilingState* state, const QStringList& tiledWindows);
+
+    /**
+     * @brief Check if a screen is in monocle-hide mode
+     *
+     * Convenience helper that combines the per-screen algorithm check with
+     * the monocleHideOthers config flag.
+     *
+     * @param screenName Connector name of the screen
+     * @return true if the screen uses the Monocle algorithm and hide-others is enabled
+     */
+    bool isMonocleHideMode(const QString& screenName) const;
+
+    /**
+     * @brief Emit a windowsTiled signal for a single window
+     *
+     * Used by monocle mode to tile only the visible (focused) window
+     * without building a full batch for all tiled windows.
+     *
+     * @param windowId Window to tile
+     * @param geo Target geometry for the window
+     */
+    void emitSingleWindowTile(const QString& windowId, const QRect& geo);
 
     /**
      * @brief Get TilingState for a window by looking up its screen

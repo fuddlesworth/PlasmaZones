@@ -972,17 +972,19 @@ QString LayoutAdaptor::getAllScreenAssignments()
 
         // "default" key: resolve with current desktop+activity so the KCM
         // sees the *effective* layout (including per-desktop assignments
-        // from cycleLayout / applyQuickLayout).
-        auto* effectiveLayout = m_layoutManager->layoutForScreen(screenId, currentDesktop, currentActivity);
-        if (effectiveLayout) {
-            screenObj[QStringLiteral("default")] = effectiveLayout->id().toString();
+        // from cycleLayout / applyQuickLayout).  Use assignmentIdForScreen
+        // so autotile IDs (e.g. "autotile:bsp") are included — layoutForScreen
+        // returns nullptr for autotile and would silently drop them.
+        QString effectiveId = m_layoutManager->assignmentIdForScreen(screenId, currentDesktop, currentActivity);
+        if (!effectiveId.isEmpty()) {
+            screenObj[QStringLiteral("default")] = effectiveId;
         }
 
         // Per-desktop entries (desktop > 0)
         for (int desktop = 1; desktop <= desktopCount; ++desktop) {
-            auto* layout = m_layoutManager->layoutForScreen(screenId, desktop, QString());
-            if (layout) {
-                screenObj[QString::number(desktop)] = layout->id().toString();
+            QString desktopId = m_layoutManager->assignmentIdForScreen(screenId, desktop, QString());
+            if (!desktopId.isEmpty()) {
+                screenObj[QString::number(desktop)] = desktopId;
             }
         }
 

@@ -6,6 +6,7 @@
 #include "layout.h"
 #include "interfaces.h"
 #include <QHash>
+#include <QSet>
 #include <QUuid>
 #include <QString>
 
@@ -226,6 +227,7 @@ private:
     QString layoutFilePath(const QUuid& id) const;
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
+    void emitLayoutAssigned(const QString& screenId, const QString& layoutId);
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
 

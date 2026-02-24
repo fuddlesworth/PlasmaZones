@@ -816,6 +816,10 @@ private:
     QMap<QString, QString> m_pendingDesktopAssignments;
     QSet<QString> m_clearedDesktopAssignments; // Keys that should be cleared on save
 
+    // Dirty flags for tiling per-desktop/per-activity assignments (need D-Bus push on save)
+    bool m_tilingDesktopAssignmentsDirty = false;
+    bool m_tilingActivityAssignmentsDirty = false;
+
     // Pending layout visibility changes (staged until Apply)
     // Key: layoutId, Value: hiddenFromSelector state
     QHash<QString, bool> m_pendingHiddenStates;

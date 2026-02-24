@@ -1313,6 +1313,11 @@ void Settings::load()
     KConfigGroup autotiling = config->group(QStringLiteral("Autotiling"));
 
     const bool oldAutotileEnabled = m_autotileEnabled;
+    const QString oldAutotileAlgorithm = m_autotileAlgorithm;
+    const qreal oldSplitRatio = m_autotileSplitRatio;
+    const int oldMasterCount = m_autotileMasterCount;
+    const int oldInnerGap = m_autotileInnerGap;
+    const int oldOuterGap = m_autotileOuterGap;
     m_autotileEnabled = autotiling.readEntry(QLatin1String("AutotileEnabled"), ConfigDefaults::autotileEnabled());
     m_autotileAlgorithm = autotiling.readEntry(QLatin1String("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
 
@@ -1390,6 +1395,16 @@ void Settings::load()
         Q_EMIT defaultLayoutIdChanged();
     if (m_autotileEnabled != oldAutotileEnabled)
         Q_EMIT autotileEnabledChanged();
+    if (m_autotileAlgorithm != oldAutotileAlgorithm)
+        Q_EMIT autotileAlgorithmChanged();
+    if (!qFuzzyCompare(m_autotileSplitRatio, oldSplitRatio))
+        Q_EMIT autotileSplitRatioChanged();
+    if (m_autotileMasterCount != oldMasterCount)
+        Q_EMIT autotileMasterCountChanged();
+    if (m_autotileInnerGap != oldInnerGap)
+        Q_EMIT autotileInnerGapChanged();
+    if (m_autotileOuterGap != oldOuterGap)
+        Q_EMIT autotileOuterGapChanged();
 }
 
 void Settings::save()

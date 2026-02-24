@@ -1647,6 +1647,16 @@ void KCMPlasmaZones::save()
     for (auto it = m_screenAssignments.begin(); it != m_screenAssignments.end(); ++it) {
         screenAssignments[it.key()] = it.value().toString();
     }
+    // Merge tiling screen assignments — autotile per-screen layouts need to reach the
+    // daemon just like snapping assignments. These override any snapping assignment for
+    // the same screen (a screen is either snapping with a manual layout or tiling with
+    // an autotile algorithm; autotile IDs take precedence).
+    for (auto it = m_tilingScreenAssignments.constBegin(); it != m_tilingScreenAssignments.constEnd(); ++it) {
+        QString layoutId = it.value().toString();
+        if (!layoutId.isEmpty()) {
+            screenAssignments[it.key()] = layoutId;
+        }
+    }
     QDBusMessage screenReply = callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
     if (screenReply.type() == QDBusMessage::ErrorMessage) {
         failedOperations.append(QStringLiteral("Screen assignments"));
@@ -1664,8 +1674,9 @@ void KCMPlasmaZones::save()
 
     // Shadow-save all per-screen assignments to KConfig in a single config open/sync.
     // Uses EDID-based screen IDs in group names to persist across connector name changes.
-    // Tiling assignments are KCM-owned state (no D-Bus push) — the daemon resolves
-    // tiling via LayoutManager which reads from Settings, not from these groups directly.
+    // Tiling screen assignments are also pushed via D-Bus above (merged into
+    // setAllScreenAssignments); these KConfig groups serve as a persistent shadow copy
+    // so the KCM can restore the dual-mode (snapping/tiling) state on next load.
     {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         const QStringList allGroups = config->groupList();
@@ -1751,7 +1762,8 @@ void KCMPlasmaZones::save()
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Query current state, merge with pending changes, send as batch
-    if (!m_pendingDesktopAssignments.isEmpty() || !m_clearedDesktopAssignments.isEmpty()) {
+    if (!m_pendingDesktopAssignments.isEmpty() || !m_clearedDesktopAssignments.isEmpty()
+        || m_tilingDesktopAssignmentsDirty) {
         QVariantMap desktopAssignments;
 
         // Get current state from daemon
@@ -1770,6 +1782,15 @@ void KCMPlasmaZones::save()
             desktopAssignments[it.key()] = it.value();
         }
 
+        // Merge tiling per-desktop assignments (autotile layouts per screen per desktop).
+        // IMPORTANT: This loop MUST run after the snapping merge above so that autotile
+        // IDs take precedence over any snapping assignment for the same key.
+        for (auto it = m_tilingDesktopAssignments.constBegin(); it != m_tilingDesktopAssignments.constEnd(); ++it) {
+            if (!it.value().isEmpty()) {
+                desktopAssignments[it.key()] = it.value();
+            }
+        }
+
         // Send full state as batch
         QDBusMessage desktopReply = callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
         if (desktopReply.type() == QDBusMessage::ErrorMessage) {
@@ -1778,6 +1799,7 @@ void KCMPlasmaZones::save()
 
         m_clearedDesktopAssignments.clear();
         m_pendingDesktopAssignments.clear();
+        m_tilingDesktopAssignmentsDirty = false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1785,7 +1807,8 @@ void KCMPlasmaZones::save()
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Query current state, merge with pending changes, send as batch
-    if (!m_pendingActivityAssignments.isEmpty() || !m_clearedActivityAssignments.isEmpty()) {
+    if (!m_pendingActivityAssignments.isEmpty() || !m_clearedActivityAssignments.isEmpty()
+        || m_tilingActivityAssignmentsDirty) {
         QVariantMap activityAssignments;
 
         // Get current state from daemon
@@ -1804,6 +1827,15 @@ void KCMPlasmaZones::save()
             activityAssignments[it.key()] = it.value();
         }
 
+        // Merge tiling per-activity assignments (autotile layouts per screen per activity).
+        // IMPORTANT: This loop MUST run after the snapping merge above so that autotile
+        // IDs take precedence over any snapping assignment for the same key.
+        for (auto it = m_tilingActivityAssignments.constBegin(); it != m_tilingActivityAssignments.constEnd(); ++it) {
+            if (!it.value().isEmpty()) {
+                activityAssignments[it.key()] = it.value();
+            }
+        }
+
         // Send full state as batch
         QDBusMessage activityReply = callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
         if (activityReply.type() == QDBusMessage::ErrorMessage) {
@@ -1812,6 +1844,7 @@ void KCMPlasmaZones::save()
 
         m_clearedActivityAssignments.clear();
         m_pendingActivityAssignments.clear();
+        m_tilingActivityAssignmentsDirty = false;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1946,6 +1979,8 @@ void KCMPlasmaZones::load()
     m_tilingActivityAssignments.clear();
     m_tilingDesktopAssignments.clear();
     m_tilingQuickLayoutSlots.clear();
+    m_tilingDesktopAssignmentsDirty = false;
+    m_tilingActivityAssignmentsDirty = false;
     {
         auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
         const QStringList allGroups = config->groupList();
@@ -2021,7 +2056,9 @@ void KCMPlasmaZones::load()
                     }
                 }
             } else {
-                // Fallback: load from daemon for first run (no shadow yet)
+                // Fallback: load from daemon for first run (no shadow yet).
+                // Splits autotile IDs into m_tilingScreenAssignments and manual
+                // layout UUIDs into m_screenAssignments from the same D-Bus response.
                 QDBusMessage assignmentsReply = callDaemon(layoutInterface, QStringLiteral("getAllScreenAssignments"));
                 if (assignmentsReply.type() == QDBusMessage::ReplyMessage && !assignmentsReply.arguments().isEmpty()) {
                     QString assignmentsJson = assignmentsReply.arguments().first().toString();
@@ -2033,8 +2070,12 @@ void KCMPlasmaZones::load()
                             QJsonObject screenObj = it.value().toObject();
                             if (screenObj.contains(QStringLiteral("default"))) {
                                 QString layoutId = screenObj.value(QStringLiteral("default")).toString();
-                                if (!layoutId.isEmpty() && !layoutId.startsWith(QLatin1String("autotile:"))) {
-                                    m_screenAssignments[screenName] = layoutId;
+                                if (!layoutId.isEmpty()) {
+                                    if (layoutId.startsWith(QLatin1String("autotile:"))) {
+                                        m_tilingScreenAssignments[screenName] = layoutId;
+                                    } else {
+                                        m_screenAssignments[screenName] = layoutId;
+                                    }
                                 }
                             }
                         }
@@ -2057,6 +2098,9 @@ void KCMPlasmaZones::load()
                     }
                 }
             }
+            // No separate D-Bus fallback needed here: the snapping D-Bus fallback
+            // above already splits autotile IDs into m_tilingScreenAssignments when
+            // both KConfig groups are absent (first-run case).
         }
 
         // Tiling activity assignments
@@ -2153,6 +2197,8 @@ void KCMPlasmaZones::defaults()
     m_tilingActivityAssignments.clear();
     m_tilingDesktopAssignments.clear();
     m_tilingQuickLayoutSlots.clear();
+    m_tilingDesktopAssignmentsDirty = false;
+    m_tilingActivityAssignmentsDirty = false;
     m_assignmentViewMode = 0;
     // Note: quickLayoutSlotsChanged / tilingQuickLayoutSlotsChanged are emitted
     // in the bulk "emit all" block below — no need to duplicate them here.
@@ -2990,13 +3036,25 @@ void KCMPlasmaZones::onScreenLayoutChanged(const QString& screenName, const QStr
         connectorName = screenName;
     }
 
-    if (layoutId.isEmpty()) {
-        m_screenAssignments.remove(connectorName);
-    } else {
-        m_screenAssignments[connectorName] = layoutId;
-    }
+    const bool isAutotile = layoutId.startsWith(QLatin1String("autotile:"));
 
-    Q_EMIT screenAssignmentsChanged();
+    if (layoutId.isEmpty()) {
+        // Empty means the daemon's active assignment was cleared (e.g., autotile
+        // disabled). Only clear the tiling preference — the snapping preference
+        // is the user's chosen zone layout and should survive mode switches.
+        m_tilingScreenAssignments.remove(connectorName);
+        Q_EMIT tilingScreenAssignmentsChanged();
+    } else if (isAutotile) {
+        // Autotile IDs go to tiling assignments; keep snapping preference
+        // so the user's zone layout choice survives mode switches.
+        m_tilingScreenAssignments[connectorName] = layoutId;
+        Q_EMIT tilingScreenAssignmentsChanged();
+    } else {
+        // Manual layout UUIDs go to snapping assignments; keep the tiling
+        // algorithm preference so the user's choice survives mode switches.
+        m_screenAssignments[connectorName] = layoutId;
+        Q_EMIT screenAssignmentsChanged();
+    }
 
     // Also refresh screens to update any screen-related UI
     refreshScreens();
@@ -3510,6 +3568,7 @@ void KCMPlasmaZones::assignTilingLayoutToScreenActivity(const QString& screenNam
     } else {
         m_tilingActivityAssignments[key] = layoutId;
     }
+    m_tilingActivityAssignmentsDirty = true;
     Q_EMIT tilingActivityAssignmentsChanged();
     setNeedsSave(true);
 }
@@ -3548,6 +3607,7 @@ void KCMPlasmaZones::assignTilingLayoutToScreenDesktop(const QString& screenName
     } else {
         m_tilingDesktopAssignments[key] = layoutId;
     }
+    m_tilingDesktopAssignmentsDirty = true;
     Q_EMIT tilingDesktopAssignmentsChanged();
     setNeedsSave(true);
 }

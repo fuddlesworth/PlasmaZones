@@ -188,9 +188,12 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         if (qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + oldDefault)) {
             const qreal newDefault = newAlgo->defaultSplitRatio();
             m_config->splitRatio = newDefault;
-            applyToAllStates([newDefault](TilingState* state) {
-                state->setSplitRatio(newDefault);
-            });
+            // Only reset split ratio for screens without per-screen overrides
+            for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                if (it.value() && !hasPerScreenOverride(it.key(), QStringLiteral("SplitRatio"))) {
+                    it.value()->setSplitRatio(newDefault);
+                }
+            }
         }
     }
 
@@ -444,6 +447,20 @@ void AutotileEngine::applyPerScreenConfig(const QString& screenName, const QVari
         state->setMasterCount(qBound(AutotileDefaults::MinMasterCount, it->toInt(), AutotileDefaults::MaxMasterCount));
     }
 
+    // If algorithm changed and split ratio wasn't explicitly overridden,
+    // reset to the new algorithm's default (matching setAlgorithm() logic).
+    it = overrides.constFind(QStringLiteral("Algorithm"));
+    if (it != overrides.constEnd()) {
+        QString algoId = it->toString();
+        auto* registry = AlgorithmRegistry::instance();
+        TilingAlgorithm* newAlgo = registry->algorithm(algoId);
+        if (newAlgo) {
+            if (!overrides.contains(QStringLiteral("SplitRatio"))) {
+                state->setSplitRatio(newAlgo->defaultSplitRatio());
+            }
+        }
+    }
+
     // Gap overrides (InnerGap, OuterGap, SmartGaps) and RespectMinimumSize are
     // resolved at retile time via effective*() helpers in recalculateLayout().
 
@@ -514,6 +531,18 @@ bool AutotileEngine::effectiveRespectMinimumSize(const QString& screenName) cons
     if (auto v = perScreenOverride(screenName, QStringLiteral("RespectMinimumSize")))
         return v->toBool();
     return m_config->respectMinimumSize;
+}
+
+QString AutotileEngine::effectiveAlgorithmId(const QString& screenName) const
+{
+    if (auto v = perScreenOverride(screenName, QStringLiteral("Algorithm")))
+        return v->toString();
+    return m_algorithmId;
+}
+
+TilingAlgorithm* AutotileEngine::effectiveAlgorithm(const QString& screenName) const
+{
+    return AlgorithmRegistry::instance()->algorithm(effectiveAlgorithmId(screenName));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1213,12 +1242,16 @@ void AutotileEngine::onWindowFocused(const QString& windowId)
 
     state->setFocusedWindow(windowId);
 
-    // In monocle mode with monocleHideOthers, update window visibility
-    // when focus changes so the newly focused window is shown
-    if (isAutotileScreen(m_windowToScreen.value(windowId)) && m_algorithmId == DBus::AutotileAlgorithm::Monocle
-        && m_config->monocleHideOthers) {
+    // In monocle mode with monocleHideOthers, tile the newly focused window
+    // (it was skipped in applyTiling's optimization) then update visibility.
+    if (isAutotileScreen(m_activeScreen) && isMonocleHideMode(m_activeScreen)) {
         const QStringList windows = state->tiledWindows();
         if (windows.size() > 1) {
+            const QVector<QRect> zones = state->calculatedZones();
+            const int idx = windows.indexOf(windowId);
+            if (idx >= 0 && idx < zones.size()) {
+                emitSingleWindowTile(windowId, zones[idx]);
+            }
             emitMonocleVisibility(state, windows);
         }
     }
@@ -1305,7 +1338,7 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
         return;
     }
 
-    TilingAlgorithm* algo = currentAlgorithm();
+    TilingAlgorithm* algo = effectiveAlgorithm(screenName);
     if (!algo) {
         qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: no algorithm set";
         return;
@@ -1324,7 +1357,7 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     }
 
     qCDebug(lcAutotile) << "recalculateLayout: screen=" << screenName << "geometry=" << screen
-                        << "windows=" << windowCount << "algo=" << m_algorithmId;
+                        << "windows=" << windowCount << "algo=" << effectiveAlgorithmId(screenName);
 
     // Calculate zone geometries using the algorithm, with gap-aware zones.
     // Algorithms apply gaps directly using their topology knowledge, eliminating
@@ -1358,7 +1391,10 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     // Lightweight safety net: the algorithm handles min sizes directly, but
     // enforceWindowMinSizes catches any residual deficits from rounding or
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable constraints).
-    if (effectiveRespectMinimumSize(screenName) && !minSizes.isEmpty()) {
+    // Skip for Monocle: zones intentionally overlap (stacked windows), and
+    // removeZoneOverlaps would separate them into side-by-side columns.
+    if (effectiveRespectMinimumSize(screenName) && !minSizes.isEmpty()
+        && effectiveAlgorithmId(screenName) != DBus::AutotileAlgorithm::Monocle) {
         const int threshold = effectiveInnerGap(screenName) + qMax(AutotileDefaults::GapEdgeThresholdPx, 12);
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
     }
@@ -1383,6 +1419,21 @@ void AutotileEngine::applyTiling(const QString& screenName)
         return;
     }
 
+    // Monocle optimization: only tile the visible (focused) window. The N-1
+    // hidden windows don't need moveResize since they're minimized, avoiding
+    // expensive per-window stacking-order scans, D-Bus calls, and repaints.
+    // When focus changes, onWindowFocused() tiles the newly visible window.
+    if (isMonocleHideMode(screenName) && windows.size() > 1) {
+        const QString focused = state->focusedWindow();
+        const int focusIdx = focused.isEmpty() ? -1 : windows.indexOf(focused);
+        const int visibleIdx = (focusIdx >= 0) ? focusIdx : 0;
+
+        emitSingleWindowTile(windows[visibleIdx], zones[visibleIdx]);
+
+        emitMonocleVisibility(state, windows);
+        return;
+    }
+
     // Build batch JSON and emit once to avoid race when effect applies many geometries
     QJsonArray arr;
     for (int i = 0; i < windows.size(); ++i) {
@@ -1396,13 +1447,6 @@ void AutotileEngine::applyTiling(const QString& screenName)
         arr.append(obj);
     }
     Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
-
-    // Monocle visibility management: when algorithm is "monocle" and
-    // monocleHideOthers is enabled, minimize all tiled windows except
-    // the focused one (or the first window if none focused)
-    if (m_algorithmId == DBus::AutotileAlgorithm::Monocle && m_config->monocleHideOthers && windows.size() > 1) {
-        emitMonocleVisibility(state, windows);
-    }
 }
 
 bool AutotileEngine::shouldTileWindow(const QString& windowId) const
@@ -1607,6 +1651,25 @@ void AutotileEngine::setFocusNewWindows(bool enabled)
     if (m_config) {
         m_config->focusNewWindows = enabled;
     }
+}
+
+bool AutotileEngine::isMonocleHideMode(const QString& screenName) const
+{
+    return effectiveAlgorithmId(screenName) == DBus::AutotileAlgorithm::Monocle
+        && m_config && m_config->monocleHideOthers;
+}
+
+void AutotileEngine::emitSingleWindowTile(const QString& windowId, const QRect& geo)
+{
+    QJsonArray arr;
+    QJsonObject obj;
+    obj[QLatin1String("windowId")] = windowId;
+    obj[QLatin1String("x")] = geo.x();
+    obj[QLatin1String("y")] = geo.y();
+    obj[QLatin1String("width")] = geo.width();
+    obj[QLatin1String("height")] = geo.height();
+    arr.append(obj);
+    Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
 }
 
 void AutotileEngine::emitMonocleVisibility(const TilingState* state, const QStringList& tiledWindows)

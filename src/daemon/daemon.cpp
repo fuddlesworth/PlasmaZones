@@ -881,6 +881,7 @@ void Daemon::start()
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
         if (m_modeTracker) {
             m_modeTracker->setCurrentMode(TilingMode::Manual);
+            m_modeTracker->recordManualLayout(layout->id());
         }
         if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
             showLayoutOsd(layout, m_unifiedLayoutController->currentScreenName());
@@ -1492,25 +1493,33 @@ void Daemon::updateAutotileScreens()
                              ? m_activityManager->currentActivity() : QString();
 
     QSet<QString> autotileScreens;
+    QHash<QString, QString> screenAlgorithms;
     for (QScreen* screen : m_screenManager->screens()) {
         QString screenId = Utils::screenIdentifier(screen);
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screen->name());
+            QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+            if (!algoId.isEmpty()) {
+                screenAlgorithms[screen->name()] = algoId;
+            }
         }
     }
 
-    // setAutotileScreens creates TilingStates for newly added screens with global defaults.
-    // Per-screen overrides must be applied AFTER so they don't get overwritten.
-    m_autotileEngine->setAutotileScreens(autotileScreens);
-
-    // Apply per-screen autotile config overrides; only retile if overrides actually changed
+    // Apply per-screen overrides BEFORE setAutotileScreens so that newly added
+    // screens are retiled with the correct per-screen algorithm (not the global
+    // fallback).  applyPerScreenConfig lazily creates TilingStates via
+    // stateForScreen(), which setAutotileScreens reuses for added screens.
     bool overridesChanged = false;
     if (m_settings) {
         for (QScreen* screen : m_screenManager->screens()) {
             if (!autotileScreens.contains(screen->name())) continue;
             QString screenId = Utils::screenIdentifier(screen);
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
+            // Inject algorithm from layout assignment (authoritative source)
+            if (screenAlgorithms.contains(screen->name())) {
+                overrides[QStringLiteral("Algorithm")] = screenAlgorithms.value(screen->name());
+            }
             // Compare against currently applied overrides to avoid redundant retiles
             QVariantMap current = m_autotileEngine->perScreenOverrides(screen->name());
             if (overrides != current) {
@@ -1523,7 +1532,15 @@ void Daemon::updateAutotileScreens()
             }
         }
     }
-    // Only force retile when overrides actually changed (avoids flicker on unrelated assignment changes)
+
+    // setAutotileScreens creates TilingStates for newly added screens (reusing
+    // any already created by applyPerScreenConfig above) and retiles them.
+    // Because per-screen overrides are set first, retileAfterOperation inside
+    // setAutotileScreens uses effectiveAlgorithm() with the correct per-screen algo.
+    m_autotileEngine->setAutotileScreens(autotileScreens);
+
+    // Force retile for existing screens whose overrides changed (newly added
+    // screens were already retiled by setAutotileScreens above).
     if (overridesChanged) {
         m_autotileEngine->retile();
     }

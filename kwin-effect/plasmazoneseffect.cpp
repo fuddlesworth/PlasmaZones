@@ -2643,6 +2643,25 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
         }
         m_notifiedWindows -= windowsOnRemovedScreens;
 
+        // Unminimize windows on removed screens that Monocle may have hidden.
+        // Must happen before geometry restore so applySnapGeometry operates on
+        // visible windows and KWin processes the geometry change immediately.
+        for (KWin::EffectWindow* w : windows) {
+            if (!w || !shouldHandleWindow(w)) {
+                continue;
+            }
+            if (!removed.contains(getWindowScreenName(w))) {
+                continue;
+            }
+            if (w->isMinimized()) {
+                KWin::Window* kw = w->window();
+                if (kw) {
+                    kw->setMinimized(false);
+                    qCDebug(lcEffect) << "Autotile restore: unminimized window" << getWindowId(w);
+                }
+            }
+        }
+
         // Restore pre-autotile geometries for windows on removed screens.
         // This covers windows that weren't snapped to zones before autotile
         // (the daemon's resnapCurrentAssignments handles zone-snapped windows).
