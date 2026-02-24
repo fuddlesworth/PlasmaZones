@@ -67,6 +67,17 @@ void AutotileEngine::connectSignals()
                     if (m_retiling)
                         return; // Ignore zone changes during retile
                     if (zoneId.isEmpty()) {
+                        // Don't remove floating windows — clearing their zone assignment
+                        // (e.g., by an external D-Bus caller or legacy code path) would
+                        // cause onWindowRemoved to drop the window from autotile. Since
+                        // floating windows are still managed by autotile, skip removal.
+                        // Note: windowClosed() calls onWindowRemoved() directly and
+                        // bypasses this guard, so closed floating windows are cleaned up.
+                        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                            if (it.value() && it.value()->isFloating(windowId)) {
+                                return;
+                            }
+                        }
                         onWindowRemoved(windowId);
                     } else {
                         // Window was assigned to a zone - treat as added if not already tracked
@@ -135,7 +146,13 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     while (it.hasNext()) {
         it.next();
         if (!m_autotileScreens.contains(it.key())) {
+            // Save floating windows so they stay floating when autotile is re-enabled
+            const QStringList floated = it.value()->floatingWindows();
+            for (const QString& fid : floated) {
+                m_savedFloatingWindows.insert(fid);
+            }
             releasedWindows.append(it.value()->tiledWindows());
+            releasedWindows.append(it.value()->floatingWindows());
             m_perScreenOverrides.remove(it.key());
             it.value()->deleteLater();
             it.remove();
@@ -1117,21 +1134,87 @@ void AutotileEngine::toggleFocusedWindowFloat()
     tiledWindowsForFocusedScreen(screenName, state);
 
     if (!state) {
+        qCWarning(lcAutotile) << "toggleFocusedWindowFloat: no state found for focused screen"
+                               << "(m_activeScreen=" << m_activeScreen << ")";
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
+                                           QStringLiteral("no_focused_screen"),
+                                           QString(), QString(), m_activeScreen);
         return;
     }
 
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
+        qCWarning(lcAutotile) << "toggleFocusedWindowFloat: no focused window on screen" << screenName;
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
+                                           QStringLiteral("no_focused_window"),
+                                           QString(), QString(), screenName);
         return;
     }
 
-    // Toggle floating state
-    state->toggleFloating(focused);
-    retileAfterOperation(screenName, true); // Always retile after successful toggle
+    performToggleFloat(state, focused, screenName);
+}
 
-    bool isNowFloating = state->isFloating(focused);
-    qCInfo(lcAutotile) << "Window" << focused << (isNowFloating ? "now floating" : "now tiled");
-    Q_EMIT windowFloatingChanged(focused, isNowFloating, screenName);
+void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& screenName)
+{
+    if (!warnIfEmptyWindowId(windowId, "toggleWindowFloat")) {
+        return;
+    }
+
+    if (screenName.isEmpty()) {
+        qCWarning(lcAutotile) << "toggleWindowFloat: empty screenName for window" << windowId;
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
+                                           QStringLiteral("no_screen"),
+                                           QString(), QString(), QString());
+        return;
+    }
+
+    // Try the given screen first
+    QString resolvedScreen = screenName;
+    TilingState* state = nullptr;
+
+    if (isAutotileScreen(screenName)) {
+        state = stateForScreen(screenName);
+        if (state && !state->containsWindow(windowId)) {
+            state = nullptr; // Window not on this screen
+        }
+    }
+
+    // Cross-screen fallback: the window may have been moved (e.g., pre-autotile
+    // geometry restore put it on a different screen). Search all autotile states.
+    if (!state) {
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            if (it.value() && it.value()->containsWindow(windowId)) {
+                state = it.value();
+                resolvedScreen = it.key();
+                qCInfo(lcAutotile) << "toggleWindowFloat: window" << windowId
+                                   << "found on screen" << resolvedScreen
+                                   << "(caller reported" << screenName << ")";
+                break;
+            }
+        }
+    }
+
+    if (!state) {
+        qCWarning(lcAutotile) << "toggleWindowFloat: window" << windowId
+                               << "not found in any autotile state";
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
+                                           QStringLiteral("window_not_tracked"),
+                                           QString(), QString(), screenName);
+        return;
+    }
+
+    performToggleFloat(state, windowId, resolvedScreen);
+}
+
+void AutotileEngine::performToggleFloat(TilingState* state, const QString& windowId, const QString& screenName)
+{
+    state->toggleFloating(windowId);
+    retileAfterOperation(screenName, true);
+
+    const bool isNowFloating = state->isFloating(windowId);
+    qCInfo(lcAutotile) << "Window" << windowId << (isNowFloating ? "now floating" : "now tiled")
+                       << "on screen" << screenName;
+    Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenName);
 }
 
 void AutotileEngine::floatWindow(const QString& windowId)
@@ -1217,6 +1300,10 @@ void AutotileEngine::windowClosed(const QString& windowId)
         return;
     }
 
+    // Clean up saved floating state even if window isn't currently tracked
+    // (it may have been floating when autotile was disabled on its screen)
+    m_savedFloatingWindows.remove(windowId);
+
     onWindowRemoved(windowId);
 }
 
@@ -1253,6 +1340,11 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     const bool inserted = insertWindow(windowId, screenName);
     retileAfterOperation(screenName, inserted);
+
+    // Notify listeners if the window was restored as floating (e.g., after mode toggle)
+    if (inserted && state && state->isFloating(windowId)) {
+        Q_EMIT windowFloatingChanged(windowId, true, screenName);
+    }
 
     if (inserted && m_config && m_config->focusNewWindows) {
         Q_EMIT focusWindowRequested(windowId);
@@ -1352,6 +1444,12 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         break;
     }
 
+    // Restore floating state if this window was floating before autotile was deactivated
+    if (m_savedFloatingWindows.remove(windowId)) {
+        state->setFloating(windowId, true);
+        qCInfo(lcAutotile) << "Restored floating state for window" << windowId << "on screen" << screenName;
+    }
+
     m_windowToScreen.insert(windowId, screenName);
     return true;
 }
@@ -1368,6 +1466,9 @@ void AutotileEngine::removeWindow(const QString& windowId)
     if (state) {
         state->removeWindow(windowId);
     }
+
+    // Clean up saved floating state for closed windows
+    m_savedFloatingWindows.remove(windowId);
 }
 
 void AutotileEngine::recalculateLayout(const QString& screenName)

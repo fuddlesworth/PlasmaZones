@@ -1614,6 +1614,60 @@ void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
     }
     QString windowId = getWindowId(activeWindow);
     QString screenName = getWindowScreenName(activeWindow);
+
+    // On autotile screens, route through the autotile engine. Also catch floating
+    // autotile windows whose pre-autotile geometry restore may have moved them to a
+    // non-autotile screen — identified by having saved pre-autotile geometry.
+    // The engine's cross-screen fallback (toggleWindowFloat) finds the window
+    // in any autotile state regardless of the reported screen.
+    bool isAutotileWindow = m_autotileScreens.contains(screenName);
+    if (!isAutotileWindow) {
+        // Check if window has pre-autotile geometry on any screen (cross-screen float)
+        for (auto it = m_preAutotileGeometries.constBegin(); it != m_preAutotileGeometries.constEnd(); ++it) {
+            if (hasSavedGeometryForWindow(it.value(), windowId)) {
+                isAutotileWindow = true;
+                break;
+            }
+        }
+    }
+    if (isAutotileWindow) {
+        // If the window is currently floating, capture its geometry now before
+        // the D-Bus call. The engine's retile emits windowsTileRequested before
+        // windowFloatingChanged on D-Bus, so reading frameGeometry in the unfloat
+        // handler would yield the already-tiled geometry, not the floating position.
+        if (m_navigationHandler->isWindowFloating(windowId)) {
+            const QRectF frame = activeWindow->frameGeometry();
+            if (frame.isValid() && frame.width() > 0 && frame.height() > 0) {
+                auto& screenGeometries = m_preAutotileGeometries[screenName];
+                const QString savedKey = findSavedGeometryKey(screenGeometries, windowId);
+                const QString key = savedKey.isEmpty() ? windowId : savedKey;
+                screenGeometries[key] = frame;
+                qCDebug(lcEffect) << "Pre-saved floating geometry before unfloat:" << windowId << frame;
+                if (ensureWindowTrackingReady("pre-save floating geometry") && m_windowTrackingInterface) {
+                    m_windowTrackingInterface->asyncCall(QStringLiteral("recordPreAutotileGeometry"),
+                        windowId, screenName,
+                        static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                        static_cast<int>(frame.width()), static_cast<int>(frame.height()));
+                }
+            }
+        }
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath,
+            DBus::Interface::Autotile,
+            QStringLiteral("toggleWindowFloat"));
+        msg << windowId << screenName;
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto *watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
+            w->deleteLater();
+            if (w->isError()) {
+                qCWarning(lcEffect) << "toggleWindowFloat D-Bus call failed for" << windowId
+                                    << ":" << w->error().message();
+            }
+        });
+        return;
+    }
+
     if (!ensureWindowTrackingReady("toggle float")) {
         return;
     }
@@ -2327,6 +2381,30 @@ bool PlasmaZonesEffect::hasSavedGeometryForWindow(const QHash<QString, QRectF>& 
     return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
 }
 
+bool PlasmaZonesEffect::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
+                                                          const QRectF& frame)
+{
+    if (windowId.isEmpty() || screenName.isEmpty()) {
+        return false;
+    }
+    if (!frame.isValid() || frame.width() <= 0 || frame.height() <= 0) {
+        return false;
+    }
+    auto& screenGeometries = m_preAutotileGeometries[screenName];
+    if (hasSavedGeometryForWindow(screenGeometries, windowId)) {
+        return false;
+    }
+    screenGeometries[windowId] = frame;
+    qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenName << ":" << frame;
+    if (ensureWindowTrackingReady("record pre-autotile geometry") && m_windowTrackingInterface) {
+        m_windowTrackingInterface->asyncCall(QStringLiteral("recordPreAutotileGeometry"),
+            windowId, screenName,
+            static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+            static_cast<int>(frame.width()), static_cast<int>(frame.height()));
+    }
+    return true;
+}
+
 QString PlasmaZonesEffect::deriveShortNameFromWindowClass(const QString& windowClass)
 {
     if (windowClass.isEmpty()) {
@@ -2564,6 +2642,14 @@ void PlasmaZonesEffect::connectAutotileSignals()
         this,
         SLOT(slotAutotileScreensChanged(QStringList)));
 
+    bus.connect(
+        DBus::ServiceName,
+        DBus::ObjectPath,
+        DBus::Interface::Autotile,
+        QStringLiteral("windowFloatingChanged"),
+        this,
+        SLOT(slotAutotileWindowFloatingChanged(QString,bool,QString)));
+
     qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
 }
 
@@ -2600,10 +2686,7 @@ void PlasmaZonesEffect::loadAutotileSettings()
                             const QString windowId = getWindowId(win);
                             // Only save if not already recorded (tile requests
                             // may have already saved the correct pre-tile geometry)
-                            auto& screenGeos = m_preAutotileGeometries[screenName];
-                            if (!hasSavedGeometryForWindow(screenGeos, windowId)) {
-                                screenGeos[windowId] = win->frameGeometry();
-                            }
+                            saveAndRecordPreAutotileGeometry(windowId, screenName, win->frameGeometry());
                             m_notifiedWindows.remove(windowId); // Allow re-notification
                             notifyWindowAdded(win);
                         }
@@ -2714,16 +2797,11 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
                 continue;
             }
             const QString windowId = getWindowId(w);
-            // Only save pre-autotile geometry if we don't already have one.
+            // Save pre-autotile geometry if we don't already have one.
             // slotAutotileWindowsTileRequested saves the correct pre-tile
             // geometry BEFORE applying the tiled geometry, and that signal
             // arrives before autotileScreensChanged on the D-Bus wire.
-            // Overwriting here would replace the original geometry with the
-            // already-tiled geometry, breaking restore on mode toggle.
-            auto& screenGeometries = m_preAutotileGeometries[screenName];
-            if (!hasSavedGeometryForWindow(screenGeometries, windowId)) {
-                screenGeometries[windowId] = w->frameGeometry();
-            }
+            saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
 
             // Re-notify windows on added screens (they may have been skipped
             // because m_autotileScreens was empty at startup)
@@ -2734,6 +2812,18 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
     }
 
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
+}
+
+void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName)
+{
+    qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating << "screen:" << screenName;
+
+    // Sync the navigation handler's floating cache. No geometry work here:
+    // - Float: daemon handles restore via applyGeometryForFloat → applyGeometryRequested.
+    // - Unfloat: floating geometry was pre-saved in slotToggleWindowFloatRequested before
+    //   the D-Bus call (avoids race with windowsTileRequested overwriting frameGeometry).
+    //   The engine retiles via windowsTileRequested → slotAutotileWindowsTileRequested.
+    m_navigationHandler->setWindowFloating(windowId, isFloating);
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const
@@ -2909,23 +2999,8 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         // m_autotileScreens may not include this screen yet. The daemon only
         // emits windowsTileRequested for autotile screens, so the check is
         // redundant and would cause the pre-autotile geometry to be lost.
-        const QString screenName = getWindowScreenName(e.window);
-        if (!screenName.isEmpty()) {
-            auto& screenGeometries = m_preAutotileGeometries[screenName];
-            const QRectF currentFrame = e.window->frameGeometry();
-            if (currentFrame.isValid() && currentFrame.width() > 0 && currentFrame.height() > 0
-                && !hasSavedGeometryForWindow(screenGeometries, e.windowId)) {
-                screenGeometries[e.windowId] = currentFrame;
-                qCDebug(lcEffect) << "Saved pre-autotile geometry for" << e.windowId << "on" << screenName
-                                 << ":" << currentFrame;
-                if (ensureWindowTrackingReady("record pre-autotile geometry") && m_windowTrackingInterface) {
-                    m_windowTrackingInterface->asyncCall(QStringLiteral("recordPreAutotileGeometry"),
-                        e.windowId, screenName,
-                        static_cast<int>(currentFrame.x()), static_cast<int>(currentFrame.y()),
-                        static_cast<int>(currentFrame.width()), static_cast<int>(currentFrame.height()));
-                }
-            }
-        }
+        saveAndRecordPreAutotileGeometry(e.windowId, getWindowScreenName(e.window),
+                                         e.window->frameGeometry());
         qCInfo(lcEffect) << "Autotile tile request:" << e.windowId << "QRect=" << e.geometry;
         applySnapGeometry(e.window, e.geometry);
     }

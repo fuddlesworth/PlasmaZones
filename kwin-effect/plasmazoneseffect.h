@@ -109,6 +109,7 @@ private Q_SLOTS:
     void slotMonocleVisibilityChanged(const QString& focusedWindowId, const QStringList& windowsToHide);
     void slotAutotileEnabledChanged(bool enabled);
     void slotAutotileScreensChanged(const QStringList& screenNames);
+    void slotAutotileWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
@@ -277,6 +278,15 @@ private:
      */
     static bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries,
                                          const QString& windowId);
+
+    /**
+     * @brief Save pre-autotile geometry locally and record it on the daemon via D-Bus.
+     * Validates the frame, checks hasSavedGeometryForWindow guard, and sends the
+     * recordPreAutotileGeometry async call. No-op if geometry is already saved or invalid.
+     * @return true if geometry was saved, false if skipped (already saved or invalid).
+     */
+    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
+                                          const QRectF& frame);
 
     /**
      * @brief Derive short name from window class for icon/app display

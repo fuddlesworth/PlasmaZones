@@ -907,7 +907,7 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
         m_service->unsnapForFloat(windowId);
         m_service->setWindowFloating(windowId, true);
         m_service->clearPreSnapGeometry(windowId);
-        m_service->clearPreAutotileGeometry(windowId);
+        // NOTE: Do NOT clear pre-autotile geometry — see applyGeometryForFloat comment.
         QRect geo(x, y, w, h);
         Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
         Q_EMIT windowFloatingChanged(windowId, true);
@@ -923,7 +923,11 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
         return false;
     }
     m_service->clearPreSnapGeometry(windowId);
-    m_service->clearPreAutotileGeometry(windowId);
+    // NOTE: Do NOT clear pre-autotile geometry here. It represents the window's
+    // original geometry before autotile first took over and must persist across
+    // float/unfloat cycles. The effect-side hasSavedGeometryForWindow guard
+    // prevents re-recording on the daemon after unfloat+retile, so clearing here
+    // would leave the daemon with no pre-autotile geometry on the next float.
     QRect geo(x, y, w, h);
     Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
     qCDebug(lcDbusWindow) << "Applied geometry for float:" << windowId << geo;

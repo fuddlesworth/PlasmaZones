@@ -407,8 +407,24 @@ public:
      *
      * When the window is tiled, it becomes floating and is excluded from
      * automatic tiling. When floating, it re-enters the tiling layout.
+     *
+     * @note Prefer toggleWindowFloat() which takes explicit IDs and avoids
+     *       focus-tracking desync issues.
      */
     Q_INVOKABLE void toggleFocusedWindowFloat();
+
+    /**
+     * @brief Toggle a specific window between tiled and floating states
+     *
+     * Bypasses internal focus tracking by using the caller-supplied windowId
+     * and screenName directly. This avoids silent no-ops caused by
+     * m_activeScreen or focusedWindow() desyncing from KWin's actual state
+     * after rapid repeated toggles.
+     *
+     * @param windowId Window identifier from KWin
+     * @param screenName Screen where the window is located
+     */
+    Q_INVOKABLE void toggleWindowFloat(const QString& windowId, const QString& screenName);
 
     /**
      * @brief Swap the focused window with the adjacent window in tiling order
@@ -689,6 +705,13 @@ private:
     bool isMonocleHideMode(const QString& screenName) const;
 
     /**
+     * @brief Shared toggle-float implementation for toggleFocusedWindowFloat/toggleWindowFloat
+     *
+     * Toggles the floating state, retiles, and emits windowFloatingChanged.
+     */
+    void performToggleFloat(TilingState* state, const QString& windowId, const QString& screenName);
+
+    /**
      * @brief Emit a windowsTiled signal for a single window
      *
      * Used by monocle mode to tile only the visible (focused) window
@@ -721,6 +744,11 @@ private:
     QHash<QString, TilingState*> m_screenStates; // Owned via Qt parent (this)
     QHash<QString, QString> m_windowToScreen; // windowId -> screenName
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
+
+    // Floating window IDs preserved across mode switches.
+    // When autotile is deactivated, floated windows are saved here so that
+    // re-enabling autotile restores them as floating regardless of screen.
+    QSet<QString> m_savedFloatingWindows;
 
     // Settings synchronization
     QPointer<Settings> m_settings; // QPointer for safe access if Settings destroyed

@@ -63,6 +63,7 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
     connect(m_engine, &AutotileEngine::focusWindowRequested, this, &AutotileAdaptor::focusWindowRequested);
     connect(m_engine, &AutotileEngine::monocleVisibilityChanged, this, &AutotileAdaptor::monocleVisibilityChanged);
     connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this, &AutotileAdaptor::windowsReleasedFromTiling);
+    connect(m_engine, &AutotileEngine::windowFloatingChanged, this, &AutotileAdaptor::windowFloatingChanged);
 
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }
@@ -384,6 +385,45 @@ void AutotileAdaptor::floatWindow(const QString& windowId)
     }
     qCDebug(lcDbusAutotile) << "D-Bus floatWindow:" << windowId;
     m_engine->floatWindow(windowId);
+}
+
+void AutotileAdaptor::unfloatWindow(const QString& windowId)
+{
+    if (!ensureEngine("unfloatWindow")) {
+        return;
+    }
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusAutotile) << "Cannot unfloatWindow - empty window ID";
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "D-Bus unfloatWindow:" << windowId;
+    m_engine->unfloatWindow(windowId);
+}
+
+void AutotileAdaptor::toggleFocusedWindowFloat()
+{
+    if (!ensureEngine("toggleFocusedWindowFloat")) {
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "D-Bus toggleFocusedWindowFloat";
+    m_engine->toggleFocusedWindowFloat();
+}
+
+void AutotileAdaptor::toggleWindowFloat(const QString& windowId, const QString& screenName)
+{
+    if (!ensureEngine("toggleWindowFloat")) {
+        return;
+    }
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusAutotile) << "Cannot toggleWindowFloat - empty window ID";
+        return;
+    }
+    if (screenName.isEmpty()) {
+        qCWarning(lcDbusAutotile) << "Cannot toggleWindowFloat - empty screen name";
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "D-Bus toggleWindowFloat:" << windowId << "screen:" << screenName;
+    m_engine->toggleWindowFloat(windowId, screenName);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

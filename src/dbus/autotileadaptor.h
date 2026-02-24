@@ -184,6 +184,35 @@ public Q_SLOTS:
      */
     void floatWindow(const QString& windowId);
 
+    /**
+     * @brief Unfloat a window back into autotile management
+     *
+     * @param windowId Window identifier from KWin
+     */
+    void unfloatWindow(const QString& windowId);
+
+    /**
+     * @brief Toggle floating state of the focused window
+     *
+     * Called by KWin effect shortcut on autotile screens. Delegates to
+     * AutotileEngine::toggleFocusedWindowFloat() which emits
+     * windowFloatingChanged.
+     *
+     * @note Prefer toggleWindowFloat() which takes explicit IDs.
+     */
+    void toggleFocusedWindowFloat();
+
+    /**
+     * @brief Toggle floating state of a specific window
+     *
+     * Bypasses internal focus tracking by using caller-supplied IDs.
+     * Preferred over toggleFocusedWindowFloat() to avoid desync issues.
+     *
+     * @param windowId Window identifier from KWin
+     * @param screenName Screen where the window is located
+     */
+    void toggleWindowFloat(const QString& windowId, const QString& screenName);
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment
     // ═══════════════════════════════════════════════════════════════════════════
@@ -297,6 +326,18 @@ Q_SIGNALS:
      * @param windowIds Window IDs no longer under autotile control
      */
     void windowsReleasedFromTiling(const QStringList& windowIds);
+
+    /**
+     * @brief Emitted when a window's floating state changes in autotile
+     *
+     * The KWin effect listens to this signal to restore pre-autotile geometry
+     * when floating, and to update its floating cache.
+     *
+     * @param windowId Window ID whose floating state changed
+     * @param isFloating New floating state
+     * @param screenName Screen where the window is located
+     */
+    void windowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
 
     /**
      * @brief Emitted when any configuration property changes

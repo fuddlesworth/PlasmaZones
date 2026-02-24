@@ -699,18 +699,22 @@ void Daemon::start()
         // Sync autotile float state and show OSD when a window is floated/unfloated
         connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingChanged,
                 this, [this](const QString& windowId, bool floating, const QString& screenName) {
-            // F1+F2 fix: Sync floating state to WindowTrackingService and propagate
+            // Sync floating state to WindowTrackingService and propagate
             // to KWin effect's NavigationHandler::m_floatingWindows via D-Bus signal.
-            // WTA::setWindowFloating() calls WTS::setWindowFloating() + emits D-Bus signal.
             if (m_windowTrackingAdaptor) {
                 m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
             }
-            // Save pre-float zone assignment for restore on unfloat
-            if (floating && m_windowTrackingAdaptor) {
-                m_windowTrackingAdaptor->service()->unsnapForFloat(windowId);
-            }
+            // NOTE: Do NOT call unsnapForFloat() here — it destroys the window's
+            // zone assignment from manual mode, making it "not snapped" when
+            // returning to manual mode. Zone assignments are preserved so
+            // switching back to manual restores the snapped state.
 
-            // When floating: restore pre-autotile geometry (KWin syncs it via recordPreAutotileGeometry)
+            // Restore geometry: applyGeometryForFloat uses validatedPreSnapOrAutotileGeometry
+            // which prefers pre-snap (original free geometry) over pre-autotile (zone position).
+            // On first float: restores to pre-snap, clears it so subsequent floats use pre-autotile.
+            // On subsequent floats: pre-snap exhausted, falls through to pre-autotile (which the
+            // effect updates to the last floating position on each unfloat).
+            // The effect does NOT apply geometry on float — the daemon is the single source.
             if (floating && m_windowTrackingAdaptor) {
                 m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
             }
@@ -728,8 +732,15 @@ void Daemon::start()
         // their pre-autotile zone positions so they don't remain stuck at tiled geometry.
         connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling,
                 this, [this](const QStringList& windowIds) {
-            Q_UNUSED(windowIds)
             if (m_windowTrackingAdaptor) {
+                // Clear autotile floating state for released windows so they can be
+                // resnapped to their manual-mode zones. Without this, windows that
+                // were floating in autotile remain marked floating in WTS.
+                for (const QString& windowId : windowIds) {
+                    if (m_windowTrackingAdaptor->service()->isWindowFloating(windowId)) {
+                        m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+                    }
+                }
                 m_windowTrackingAdaptor->resnapCurrentAssignments();
             }
         });
@@ -1229,15 +1240,16 @@ void Daemon::handleRotate(bool clockwise)
 
 void Daemon::handleFloat()
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    // Always delegate to WTA → effect → correct handler.
+    // The effect knows the actual KWin active window and its screen, avoiding
+    // focus-tracking desync in the autotile engine's toggleFocusedWindowFloat().
+    // For autotile screens, the effect routes to AutotileAdaptor::toggleWindowFloat()
+    // with explicit windowId + screenName. For non-autotile, it routes to
+    // WTA::toggleFloatForWindow().
+    if (!m_windowTrackingAdaptor) {
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
-        m_autotileEngine->toggleFocusedWindowFloat();
-    } else {
-        m_windowTrackingAdaptor->toggleWindowFloat();
-    }
+    m_windowTrackingAdaptor->toggleWindowFloat();
 }
 
 void Daemon::handleMove(NavigationDirection direction)
