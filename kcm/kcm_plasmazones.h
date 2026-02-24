@@ -184,6 +184,16 @@ class KCMPlasmaZones : public KQuickConfigModule
                    autotileMonocleHideOthersChanged)
     Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY
                    autotileMonocleShowTabsChanged)
+    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap NOTIFY
+                   autotileUsePerSideOuterGapChanged)
+    Q_PROPERTY(int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY
+                   autotileOuterGapTopChanged)
+    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY
+                   autotileOuterGapBottomChanged)
+    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY
+                   autotileOuterGapLeftChanged)
+    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY
+                   autotileOuterGapRightChanged)
 
     // Default values for reset-to-default in UI components (CONSTANT — never change at runtime)
     Q_PROPERTY(QVariantList defaultDragActivationTriggers READ defaultDragActivationTriggers CONSTANT)
@@ -342,6 +352,11 @@ public:
     bool autotileRespectMinimumSize() const;
     bool autotileMonocleHideOthers() const;
     bool autotileMonocleShowTabs() const;
+    bool autotileUsePerSideOuterGap() const;
+    int autotileOuterGapTop() const;
+    int autotileOuterGapBottom() const;
+    int autotileOuterGapLeft() const;
+    int autotileOuterGapRight() const;
     Q_INVOKABLE QVariantList availableAlgorithms() const;
     Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString &algorithmId, int windowCount,
                                                       double splitRatio, int masterCount) const;
@@ -480,6 +495,11 @@ public:
     void setAutotileRespectMinimumSize(bool respect);
     void setAutotileMonocleHideOthers(bool hide);
     void setAutotileMonocleShowTabs(bool show);
+    void setAutotileUsePerSideOuterGap(bool enabled);
+    void setAutotileOuterGapTop(int gap);
+    void setAutotileOuterGapBottom(int gap);
+    void setAutotileOuterGapLeft(int gap);
+    void setAutotileOuterGapRight(int gap);
 
     void setEditorDuplicateShortcut(const QString& shortcut);
     void setEditorSplitHorizontalShortcut(const QString& shortcut);
@@ -571,6 +591,12 @@ public Q_SLOTS:
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
     Q_INVOKABLE bool isScreenInTilingMode(const QString& screenName) const;
+
+    // Per-screen snapping settings
+    Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenName) const;
+    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
 
     // Quick layout slots (1-9)
     Q_INVOKABLE QString getQuickLayoutSlot(int slotNumber) const;
@@ -689,6 +715,11 @@ Q_SIGNALS:
     void autotileRespectMinimumSizeChanged();
     void autotileMonocleHideOthersChanged();
     void autotileMonocleShowTabsChanged();
+    void autotileUsePerSideOuterGapChanged();
+    void autotileOuterGapTopChanged();
+    void autotileOuterGapBottomChanged();
+    void autotileOuterGapLeftChanged();
+    void autotileOuterGapRightChanged();
 
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();

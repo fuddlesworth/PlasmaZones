@@ -1916,8 +1916,9 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Layout's zonePadding/outerGap takes precedence over global settings
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+    QString screenId = Utils::screenIdentifier(screen);
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
 
@@ -2052,8 +2053,9 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
             && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
             Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
-                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings);
-                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings);
+                QString screenId = Utils::screenIdentifier(screen);
+                int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings, screenId);
+                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings, screenId);
                 bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
                 QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
                     zone, screen, zonePadding, outerGaps, useAvail);

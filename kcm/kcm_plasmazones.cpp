@@ -1297,6 +1297,26 @@ bool KCMPlasmaZones::autotileMonocleShowTabs() const
 {
     return m_settings->autotileMonocleShowTabs();
 }
+bool KCMPlasmaZones::autotileUsePerSideOuterGap() const
+{
+    return m_settings->autotileUsePerSideOuterGap();
+}
+int KCMPlasmaZones::autotileOuterGapTop() const
+{
+    return m_settings->autotileOuterGapTop();
+}
+int KCMPlasmaZones::autotileOuterGapBottom() const
+{
+    return m_settings->autotileOuterGapBottom();
+}
+int KCMPlasmaZones::autotileOuterGapLeft() const
+{
+    return m_settings->autotileOuterGapLeft();
+}
+int KCMPlasmaZones::autotileOuterGapRight() const
+{
+    return m_settings->autotileOuterGapRight();
+}
 
 QVariantList KCMPlasmaZones::availableAlgorithms() const
 {
@@ -1493,6 +1513,55 @@ void KCMPlasmaZones::setAutotileMonocleShowTabs(bool show)
     if (m_settings->autotileMonocleShowTabs() != show) {
         m_settings->setAutotileMonocleShowTabs(show);
         Q_EMIT autotileMonocleShowTabsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileUsePerSideOuterGap(bool enabled)
+{
+    if (m_settings->autotileUsePerSideOuterGap() != enabled) {
+        m_settings->setAutotileUsePerSideOuterGap(enabled);
+        Q_EMIT autotileUsePerSideOuterGapChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileOuterGapTop(int gap)
+{
+    gap = qBound(0, gap, Defaults::MaxGap);
+    if (m_settings->autotileOuterGapTop() != gap) {
+        m_settings->setAutotileOuterGapTop(gap);
+        Q_EMIT autotileOuterGapTopChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileOuterGapBottom(int gap)
+{
+    gap = qBound(0, gap, Defaults::MaxGap);
+    if (m_settings->autotileOuterGapBottom() != gap) {
+        m_settings->setAutotileOuterGapBottom(gap);
+        Q_EMIT autotileOuterGapBottomChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileOuterGapLeft(int gap)
+{
+    gap = qBound(0, gap, Defaults::MaxGap);
+    if (m_settings->autotileOuterGapLeft() != gap) {
+        m_settings->setAutotileOuterGapLeft(gap);
+        Q_EMIT autotileOuterGapLeftChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileOuterGapRight(int gap)
+{
+    gap = qBound(0, gap, Defaults::MaxGap);
+    if (m_settings->autotileOuterGapRight() != gap) {
+        m_settings->setAutotileOuterGapRight(gap);
+        Q_EMIT autotileOuterGapRightChanged();
         setNeedsSave(true);
     }
 }
@@ -2335,6 +2404,11 @@ void KCMPlasmaZones::defaults()
     Q_EMIT autotileRespectMinimumSizeChanged();
     Q_EMIT autotileMonocleHideOthersChanged();
     Q_EMIT autotileMonocleShowTabsChanged();
+    Q_EMIT autotileUsePerSideOuterGapChanged();
+    Q_EMIT autotileOuterGapTopChanged();
+    Q_EMIT autotileOuterGapBottomChanged();
+    Q_EMIT autotileOuterGapLeftChanged();
+    Q_EMIT autotileOuterGapRightChanged();
 
     // Reset editor shortcuts, assignment view mode, and legacy config groups in one config open
     {
@@ -3188,6 +3262,11 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT autotileRespectMinimumSizeChanged();
         Q_EMIT autotileMonocleHideOthersChanged();
         Q_EMIT autotileMonocleShowTabsChanged();
+        Q_EMIT autotileUsePerSideOuterGapChanged();
+        Q_EMIT autotileOuterGapTopChanged();
+        Q_EMIT autotileOuterGapBottomChanged();
+        Q_EMIT autotileOuterGapLeftChanged();
+        Q_EMIT autotileOuterGapRightChanged();
     }
 }
 
@@ -3797,6 +3876,35 @@ void KCMPlasmaZones::clearPerScreenAutotileSettings(const QString& screenName)
 bool KCMPlasmaZones::hasPerScreenAutotileSettings(const QString& screenName) const
 {
     return m_settings ? m_settings->hasPerScreenAutotileSettings(Utils::screenIdForName(screenName)) : false;
+}
+
+// Per-screen snapping settings
+QVariantMap KCMPlasmaZones::getPerScreenSnappingSettings(const QString& screenName) const
+{
+    return m_settings ? m_settings->getPerScreenSnappingSettings(Utils::screenIdForName(screenName)) : QVariantMap();
+}
+
+void KCMPlasmaZones::setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    m_settings->setPerScreenSnappingSetting(Utils::screenIdForName(screenName), key, value);
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearPerScreenSnappingSettings(const QString& screenName)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    m_settings->clearPerScreenSnappingSettings(Utils::screenIdForName(screenName));
+    setNeedsSave(true);
+}
+
+bool KCMPlasmaZones::hasPerScreenSnappingSettings(const QString& screenName) const
+{
+    return m_settings ? m_settings->hasPerScreenSnappingSettings(Utils::screenIdForName(screenName)) : false;
 }
 
 // Returns whether this screen has a tiling assignment in the KCM's in-memory state.

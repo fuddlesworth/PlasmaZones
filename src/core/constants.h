@@ -48,6 +48,7 @@ constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
 constexpr int ZonePadding = 8;
 constexpr int OuterGap = 8;  // Gap at screen edges (separate from zonePadding between zones)
+constexpr int MaxGap = 50;   // Maximum for zone padding and outer gap settings
 constexpr int AdjacentThreshold = 20;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;

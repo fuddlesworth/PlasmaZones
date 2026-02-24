@@ -185,8 +185,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
             auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
             if (layout) {
                 layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
-                int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+                QString screenId = Utils::screenIdentifier(screen);
+                int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
+                EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
                 bool useAvail = !(layout && layout->useFullScreenGeometry());
 
                 for (auto* zone : layout->zones()) {
@@ -216,8 +217,9 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
     if (zones.isEmpty()) {
         return QRectF();
     }
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+    QString screenId = Utils::screenIdentifier(screen);
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
     for (int i = 1; i < zones.size(); ++i) {
@@ -442,8 +444,9 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-            EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+            QString screenId = Utils::screenIdentifier(screen);
+            int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
+            EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
             bool useAvail = !(layout && layout->useFullScreenGeometry());
             QRectF geom =
                 GeometryUtils::getZoneGeometryWithGaps(result.primaryZone, screen, zonePadding, outerGaps, useAvail);

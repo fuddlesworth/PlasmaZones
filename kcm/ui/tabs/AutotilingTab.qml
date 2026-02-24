@@ -84,127 +84,6 @@ ScrollView {
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        // GAPS CARD (global)
-        // ═══════════════════════════════════════════════════════════════════════
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: gapsCard.implicitHeight
-
-            Kirigami.Card {
-                id: gapsCard
-                anchors.fill: parent
-                enabled: kcm.autotileEnabled
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Gaps")
-                    padding: Kirigami.Units.smallSpacing
-                }
-
-                contentItem: Kirigami.FormLayout {
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Inner gap:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 0
-                            to: root.constants.autotileGapMax
-                            value: kcm.autotileInnerGap
-                            onValueModified: kcm.autotileInnerGap = value
-
-                            ToolTip.visible: hovered && root.isCurrentTab
-                            ToolTip.text: i18n("Gap between tiled windows")
-                        }
-
-                        Label {
-                            text: i18n("px")
-                        }
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Outer gap:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 0
-                            to: root.constants.autotileGapMax
-                            value: kcm.autotileOuterGap
-                            enabled: !autotilePerSideCheck.checked
-                            onValueModified: kcm.autotileOuterGap = value
-
-                            ToolTip.visible: hovered && root.isCurrentTab
-                            ToolTip.text: i18n("Gap from screen edges")
-                        }
-
-                        Label {
-                            text: i18n("px")
-                            visible: !autotilePerSideCheck.checked
-                        }
-
-                        CheckBox {
-                            id: autotilePerSideCheck
-                            text: i18n("Set per side")
-                            checked: kcm.autotileUsePerSideOuterGap
-                            onToggled: kcm.autotileUsePerSideOuterGap = checked
-                        }
-                    }
-
-                    GridLayout {
-                        Kirigami.FormData.label: i18n("Per-side gaps:")
-                        visible: autotilePerSideCheck.checked
-                        columns: 6
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
-
-                        Label { text: i18n("Top:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.autotileGapMax
-                            value: kcm.autotileOuterGapTop
-                            onValueModified: kcm.autotileOuterGapTop = value
-                            Accessible.name: i18nc("@label", "Top edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Bottom:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.autotileGapMax
-                            value: kcm.autotileOuterGapBottom
-                            onValueModified: kcm.autotileOuterGapBottom = value
-                            Accessible.name: i18nc("@label", "Bottom edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Left:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.autotileGapMax
-                            value: kcm.autotileOuterGapLeft
-                            onValueModified: kcm.autotileOuterGapLeft = value
-                            Accessible.name: i18nc("@label", "Left edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Right:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.autotileGapMax
-                            value: kcm.autotileOuterGapRight
-                            onValueModified: kcm.autotileOuterGapRight = value
-                            Accessible.name: i18nc("@label", "Right edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                    }
-
-                    CheckBox {
-                        Kirigami.FormData.label: i18n("Smart gaps:")
-                        text: i18n("Hide gaps when only one window is tiled")
-                        checked: kcm.autotileSmartGaps
-                        onToggled: kcm.autotileSmartGaps = checked
-                    }
-                }
-            }
-        }
-
-        // ═══════════════════════════════════════════════════════════════════════
         // BEHAVIOR CARD (global)
         // ═══════════════════════════════════════════════════════════════════════
         Item {
@@ -340,6 +219,127 @@ ScrollView {
             onResetClicked: {
                 kcm.clearPerScreenAutotileSettings(root.selectedScreenName)
                 root.reloadPerScreenOverrides()
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // GAPS CARD (per-monitor)
+        // ═══════════════════════════════════════════════════════════════════════
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: gapsCard.implicitHeight
+
+            Kirigami.Card {
+                id: gapsCard
+                anchors.fill: parent
+                enabled: kcm.autotileEnabled
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Gaps")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: Kirigami.FormLayout {
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Inner gap:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: root.settingValue("InnerGap", kcm.autotileInnerGap)
+                            onValueModified: root.writeSetting("InnerGap", value, function(v) { kcm.autotileInnerGap = v })
+
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("Gap between tiled windows")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Outer gap:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: root.settingValue("OuterGap", kcm.autotileOuterGap)
+                            enabled: !autotilePerSideCheck.checked
+                            onValueModified: root.writeSetting("OuterGap", value, function(v) { kcm.autotileOuterGap = v })
+
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("Gap from screen edges")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                            visible: !autotilePerSideCheck.checked
+                        }
+
+                        CheckBox {
+                            id: autotilePerSideCheck
+                            text: i18n("Set per side")
+                            checked: root.settingValue("UsePerSideOuterGap", kcm.autotileUsePerSideOuterGap)
+                            onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) { kcm.autotileUsePerSideOuterGap = v })
+                        }
+                    }
+
+                    GridLayout {
+                        Kirigami.FormData.label: i18n("Per-side gaps:")
+                        visible: autotilePerSideCheck.checked
+                        columns: 6
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Top:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: root.settingValue("OuterGapTop", kcm.autotileOuterGapTop)
+                            onValueModified: root.writeSetting("OuterGapTop", value, function(v) { kcm.autotileOuterGapTop = v })
+                            Accessible.name: i18nc("@label", "Top edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Bottom:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: root.settingValue("OuterGapBottom", kcm.autotileOuterGapBottom)
+                            onValueModified: root.writeSetting("OuterGapBottom", value, function(v) { kcm.autotileOuterGapBottom = v })
+                            Accessible.name: i18nc("@label", "Bottom edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Left:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: root.settingValue("OuterGapLeft", kcm.autotileOuterGapLeft)
+                            onValueModified: root.writeSetting("OuterGapLeft", value, function(v) { kcm.autotileOuterGapLeft = v })
+                            Accessible.name: i18nc("@label", "Left edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Right:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.autotileGapMax
+                            value: root.settingValue("OuterGapRight", kcm.autotileOuterGapRight)
+                            onValueModified: root.writeSetting("OuterGapRight", value, function(v) { kcm.autotileOuterGapRight = v })
+                            Accessible.name: i18nc("@label", "Right edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                    }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Smart gaps:")
+                        text: i18n("Hide gaps when only one window is tiled")
+                        checked: root.settingValue("SmartGaps", kcm.autotileSmartGaps)
+                        onToggled: root.writeSetting("SmartGaps", checked, function(v) { kcm.autotileSmartGaps = v })
+                    }
+                }
             }
         }
 

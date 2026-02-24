@@ -8,6 +8,7 @@
 #include <QStringList>
 #include <QColor>
 #include <QVariantList>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -194,6 +195,9 @@ public:
     virtual void setMinimumZoneSizePx(int size) = 0;
     virtual int minimumZoneDisplaySizePx() const = 0;
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
+
+    // Per-screen snapping config resolution (override > global fallback)
+    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenName*/) const { return {}; }
 };
 
 /**

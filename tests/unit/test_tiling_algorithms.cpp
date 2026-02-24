@@ -90,7 +90,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({7, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({7, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 7);
 
         // Verify sum equals screen width exactly
@@ -116,7 +116,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setMasterCount(1);
 
-        auto zones = algo.calculateZones({8, m_screenGeometry, &state, 0, {}}); // 1 master + 7 stack
+        auto zones = algo.calculateZones({8, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}); // 1 master + 7 stack
         QCOMPARE(zones.size(), 8);
 
         // Stack zones (indices 1-7) should have pixel-perfect distribution
@@ -148,7 +148,7 @@ private Q_SLOTS:
         MasterStackAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -157,7 +157,7 @@ private Q_SLOTS:
         MasterStackAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -168,7 +168,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         // Master should be 60% width
@@ -191,7 +191,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 4);
 
         // Master takes left half
@@ -220,7 +220,7 @@ private Q_SLOTS:
         state.setMasterCount(2);
         state.setSplitRatio(0.6);
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         // First 2 zones are masters (stacked vertically on left)
@@ -250,7 +250,7 @@ private Q_SLOTS:
         }
         state.setMasterCount(5); // More than windows we'll tile
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         // All should be full width (no stack since masterCount >= windowCount)
@@ -268,7 +268,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, {}});
+        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -291,7 +291,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -300,7 +300,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -310,7 +310,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         QCOMPARE(zones[0].x(), 0);
@@ -330,7 +330,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         // 1920 / 3 = 640, remainder 0 - actually divides evenly
@@ -352,7 +352,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 10);
 
         // Verify contiguous and fill screen
@@ -389,7 +389,7 @@ private Q_SLOTS:
         BSPAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -398,7 +398,7 @@ private Q_SLOTS:
         BSPAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -409,7 +409,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         // Screen is wider than tall, so should split left/right
@@ -428,7 +428,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 4);
 
         QVERIFY(noOverlaps(zones));
@@ -441,7 +441,7 @@ private Q_SLOTS:
         BSPAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         QVERIFY(noOverlaps(zones));
@@ -453,7 +453,7 @@ private Q_SLOTS:
         BSPAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({16, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({16, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 16);
 
         QVERIFY(noOverlaps(zones));
@@ -473,7 +473,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect squareScreen(0, 0, 1000, 1000);
-        auto zones = algo.calculateZones({4, squareScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({4, squareScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 4);
 
         QVERIFY(noOverlaps(zones));
@@ -488,11 +488,11 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         // Calculate zones for 4 windows
-        QVector<QRect> zones4 = algo->calculateZones({4, screen, &state, 0, {}});
+        QVector<QRect> zones4 = algo->calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones4.size(), 4);
 
         // Calculate zones for 5 windows (incremental grow)
-        QVector<QRect> zones5 = algo->calculateZones({5, screen, &state, 0, {}});
+        QVector<QRect> zones5 = algo->calculateZones({5, screen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones5.size(), 5);
 
         // BSP grows by splitting the largest leaf into two children. The
@@ -508,7 +508,7 @@ private Q_SLOTS:
                  qPrintable(QStringLiteral("Only %1/4 zone geometries preserved after grow").arg(preservedCount)));
 
         // Shrink back to 4
-        QVector<QRect> zones4again = algo->calculateZones({4, screen, &state, 0, {}});
+        QVector<QRect> zones4again = algo->calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones4again.size(), 4);
     }
 
@@ -532,7 +532,7 @@ private Q_SLOTS:
         FibonacciAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -541,7 +541,7 @@ private Q_SLOTS:
         FibonacciAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -552,7 +552,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         // Fibonacci always uses balanced 0.5 splits regardless of state ratio
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         // Dwindle: first split is vertical — window 1 on left (50%)
@@ -576,7 +576,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         // With 0.5 ratio: first split vertical (left half), second split horizontal (top of right)
@@ -602,7 +602,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.618);
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         // First window should have the largest area
@@ -625,7 +625,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.618);
 
-        auto zones = algo.calculateZones({12, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({12, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 12);
 
         // All zones should have positive dimensions
@@ -649,7 +649,7 @@ private Q_SLOTS:
 
         // Very small screen with many windows: should degrade gracefully
         QRect tinyScreen(0, 0, 200, 150);
-        auto zones = algo.calculateZones({20, tinyScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({20, tinyScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 20);
 
         // When the remaining area is too small to split (< MinZoneSizePx),
@@ -672,7 +672,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, {}});
+        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -682,7 +682,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect offsetScreen(100, 50, 1920, 1080);
-        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
         QVERIFY(allWithinBounds(zones, offsetScreen));
         QVERIFY(noOverlaps(zones));
@@ -707,7 +707,7 @@ private Q_SLOTS:
         MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -716,7 +716,7 @@ private Q_SLOTS:
         MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -726,7 +726,7 @@ private Q_SLOTS:
         MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         // Both zones should be the full screen (all windows overlap)
@@ -739,7 +739,7 @@ private Q_SLOTS:
         MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 10);
 
         // Every zone must equal the full screen geometry
@@ -753,7 +753,7 @@ private Q_SLOTS:
         MonocleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 50);
 
         for (const QRect& zone : zones) {
@@ -767,7 +767,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, {}});
+        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -777,7 +777,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect offsetScreen(200, 100, 1920, 1080);
-        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         for (const QRect& zone : zones) {
@@ -791,7 +791,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect smallScreen(0, 0, 200, 150);
-        auto zones = algo.calculateZones({8, smallScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({8, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 8);
 
         for (const QRect& zone : zones) {
@@ -818,7 +818,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -827,7 +827,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -837,7 +837,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         QCOMPARE(zones[0].x(), 0);
@@ -859,7 +859,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         // 1080 / 3 = 360, remainder 0 -- divides evenly
@@ -884,7 +884,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({7, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({7, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 7);
 
         int totalHeight = 0;
@@ -907,7 +907,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         // Verify each row starts exactly where the previous one ends
@@ -929,7 +929,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 10);
 
         int currentY = 0;
@@ -950,7 +950,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, {}});
+        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -960,7 +960,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect offsetScreen(100, 50, 1920, 1080);
-        auto zones = algo.calculateZones({4, offsetScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({4, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 4);
         QVERIFY(allWithinBounds(zones, offsetScreen));
         QVERIFY(noOverlaps(zones));
@@ -990,7 +990,7 @@ private Q_SLOTS:
         ThreeColumnAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -999,7 +999,7 @@ private Q_SLOTS:
         ThreeColumnAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -1010,7 +1010,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
         // Two-window case: master gets splitRatio portion, second gets remainder
@@ -1033,7 +1033,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 3);
 
         // Center column (master) gets 50% width
@@ -1066,7 +1066,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 4);
 
         // 4 windows: master (center) + 3 stack
@@ -1102,7 +1102,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
 
         // 5 windows: master + 4 stack
@@ -1124,7 +1124,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
-        auto zones = algo.calculateZones({11, m_screenGeometry, &state, 0, {}});
+        auto zones = algo.calculateZones({11, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 11);
 
         // All zones should have positive dimensions
@@ -1144,7 +1144,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect invalidRect;
-        auto zones = algo.calculateZones({3, invalidRect, &state, 0, {}});
+        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
@@ -1154,7 +1154,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         QRect offsetScreen(100, 50, 1920, 1080);
-        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, {}});
+        auto zones = algo.calculateZones({5, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 5);
         QVERIFY(allWithinBounds(zones, offsetScreen));
         QVERIFY(noOverlaps(zones));
@@ -1169,7 +1169,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 10, 20});
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 10, EdgeGaps::uniform(20)});
 
         QCOMPARE(zones.size(), 1);
         // Should have outer gap on all sides
@@ -1184,7 +1184,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 10, 20});
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 10, EdgeGaps::uniform(20)});
 
         QCOMPARE(zones.size(), 2);
         // Left zone starts at outer gap
@@ -1204,8 +1204,8 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zonesNoGap = algo.calculateZones({3, m_screenGeometry, &state, 0, 0});
-        auto zonesDefault = algo.calculateZones({3, m_screenGeometry, &state, 0, {}});
+        auto zonesNoGap = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto zonesDefault = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
 
         // With zero gaps, should match the default (no-gap) calculation
         QCOMPARE(zonesNoGap, zonesDefault);
@@ -1216,7 +1216,7 @@ private Q_SLOTS:
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 9, 0});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 9, EdgeGaps::uniform(0)});
 
         QCOMPARE(zones.size(), 3);
         // Gap between zone 0 and zone 1
@@ -1235,7 +1235,7 @@ private Q_SLOTS:
 
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 8, outerGap});
+        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 8, EdgeGaps::uniform(outerGap)});
 
         for (const QRect& zone : zones) {
             QVERIFY2(insetScreen.contains(zone),
@@ -1255,7 +1255,7 @@ private Q_SLOTS:
     {
         ColumnsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 8, 8});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 8, EdgeGaps::uniform(8)});
 
         QVERIFY2(noOverlaps(zones), "Gap-aware zones must not overlap");
         const QRect inner(8, 8, ScreenWidth - 16, ScreenHeight - 16);
@@ -1273,7 +1273,7 @@ private Q_SLOTS:
         state.addWindow(QStringLiteral("w3"));
         state.setSplitRatio(0.6);
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 8, 8});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 8, EdgeGaps::uniform(8)});
 
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
@@ -1293,7 +1293,7 @@ private Q_SLOTS:
         RowsAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
-        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 10, 15});
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 10, EdgeGaps::uniform(15)});
 
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
@@ -1316,25 +1316,25 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         MasterStackAlgorithm masterStack;
-        QVERIFY(masterStack.calculateZones({-1, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(masterStack.calculateZones({-1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         ColumnsAlgorithm columns;
-        QVERIFY(columns.calculateZones({-5, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(columns.calculateZones({-5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         BSPAlgorithm bsp;
-        QVERIFY(bsp.calculateZones({-10, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(bsp.calculateZones({-10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         FibonacciAlgorithm fibonacci;
-        QVERIFY(fibonacci.calculateZones({-3, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(fibonacci.calculateZones({-3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         MonocleAlgorithm monocle;
-        QVERIFY(monocle.calculateZones({-1, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(monocle.calculateZones({-1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         RowsAlgorithm rows;
-        QVERIFY(rows.calculateZones({-7, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(rows.calculateZones({-7, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         ThreeColumnAlgorithm threeCol;
-        QVERIFY(threeCol.calculateZones({-2, m_screenGeometry, &state, 0, {}}).isEmpty());
+        QVERIFY(threeCol.calculateZones({-2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
     }
 
     void testAllAlgorithms_largeWindowCount()
@@ -1343,35 +1343,35 @@ private Q_SLOTS:
 
         // Test with 50 windows - should still work without crashes
         MasterStackAlgorithm masterStack;
-        auto msZones = masterStack.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto msZones = masterStack.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(msZones.size(), 50);
         QVERIFY(noOverlaps(msZones));
 
         ColumnsAlgorithm columns;
-        auto colZones = columns.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto colZones = columns.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(colZones.size(), 50);
         QVERIFY(noOverlaps(colZones));
 
         BSPAlgorithm bsp;
-        auto bspZones = bsp.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto bspZones = bsp.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(bspZones.size(), 50);
         QVERIFY(noOverlaps(bspZones));
 
         FibonacciAlgorithm fibonacci;
-        auto fibZones = fibonacci.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto fibZones = fibonacci.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(fibZones.size(), 50);
 
         MonocleAlgorithm monocle;
-        auto monZones = monocle.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto monZones = monocle.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(monZones.size(), 50);
 
         RowsAlgorithm rows;
-        auto rowZones = rows.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto rowZones = rows.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(rowZones.size(), 50);
         QVERIFY(noOverlaps(rowZones));
 
         ThreeColumnAlgorithm threeCol;
-        auto tcZones = threeCol.calculateZones({50, m_screenGeometry, &state, 0, {}});
+        auto tcZones = threeCol.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 50);
         QVERIFY(noOverlaps(tcZones));
     }
@@ -1383,32 +1383,32 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         MasterStackAlgorithm masterStack;
-        auto msZones = masterStack.calculateZones({3, offsetScreen, &state, 0, {}});
+        auto msZones = masterStack.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(msZones.size(), 3);
         QVERIFY(allWithinBounds(msZones, offsetScreen));
 
         ColumnsAlgorithm columns;
-        auto colZones = columns.calculateZones({3, offsetScreen, &state, 0, {}});
+        auto colZones = columns.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(colZones.size(), 3);
         QVERIFY(allWithinBounds(colZones, offsetScreen));
 
         BSPAlgorithm bsp;
-        auto bspZones = bsp.calculateZones({3, offsetScreen, &state, 0, {}});
+        auto bspZones = bsp.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(bspZones.size(), 3);
         QVERIFY(allWithinBounds(bspZones, offsetScreen));
 
         FibonacciAlgorithm fibonacci;
-        auto fibZones = fibonacci.calculateZones({3, offsetScreen, &state, 0, {}});
+        auto fibZones = fibonacci.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(fibZones.size(), 3);
         QVERIFY(allWithinBounds(fibZones, offsetScreen));
 
         RowsAlgorithm rows;
-        auto rowZones = rows.calculateZones({3, offsetScreen, &state, 0, {}});
+        auto rowZones = rows.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(rowZones.size(), 3);
         QVERIFY(allWithinBounds(rowZones, offsetScreen));
 
         ThreeColumnAlgorithm threeCol;
-        auto tcZones = threeCol.calculateZones({3, offsetScreen, &state, 0, {}});
+        auto tcZones = threeCol.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 3);
         QVERIFY(allWithinBounds(tcZones, offsetScreen));
     }
@@ -1420,27 +1420,27 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         MasterStackAlgorithm masterStack;
-        auto msZones = masterStack.calculateZones({4, smallScreen, &state, 0, {}});
+        auto msZones = masterStack.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(msZones.size(), 4);
         QVERIFY(zonesFillScreen(msZones, smallScreen));
 
         ColumnsAlgorithm columns;
-        auto colZones = columns.calculateZones({4, smallScreen, &state, 0, {}});
+        auto colZones = columns.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(colZones.size(), 4);
         QVERIFY(zonesFillScreen(colZones, smallScreen));
 
         BSPAlgorithm bsp;
-        auto bspZones = bsp.calculateZones({4, smallScreen, &state, 0, {}});
+        auto bspZones = bsp.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(bspZones.size(), 4);
         QVERIFY(zonesFillScreen(bspZones, smallScreen));
 
         RowsAlgorithm rows;
-        auto rowZones = rows.calculateZones({4, smallScreen, &state, 0, {}});
+        auto rowZones = rows.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(rowZones.size(), 4);
         QVERIFY(zonesFillScreen(rowZones, smallScreen));
 
         ThreeColumnAlgorithm threeCol;
-        auto tcZones = threeCol.calculateZones({4, smallScreen, &state, 0, {}});
+        auto tcZones = threeCol.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 4);
         QVERIFY(zonesFillScreen(tcZones, smallScreen));
     }
@@ -1480,7 +1480,7 @@ private Q_SLOTS:
 
         ThreeColumnAlgorithm algo;
         // calculateZones(count, screen, state, innerGap, outerGap)
-        auto zones = algo.calculateZones({3, screen, &state, 10, 20});
+        auto zones = algo.calculateZones({3, screen, &state, 10, EdgeGaps::uniform(20)});
 
         QCOMPARE(zones.size(), 3);
 
@@ -1509,7 +1509,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         // innerGap=200 exceeds screen width after outerGap — should not crash
-        auto zones = algo.calculateZones({3, screen, &state, 200, 10});
+        auto zones = algo.calculateZones({3, screen, &state, 200, EdgeGaps::uniform(10)});
         QCOMPARE(zones.size(), 3);
         for (const auto &z : zones) {
             QVERIFY2(z.width() > 0 && z.height() > 0,
@@ -1528,7 +1528,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         // Large innerGap relative to screen — should degrade gracefully
-        auto zones = algo.calculateZones({5, screen, &state, 80, 10});
+        auto zones = algo.calculateZones({5, screen, &state, 80, EdgeGaps::uniform(10)});
         QCOMPARE(zones.size(), 5);
         for (const auto &z : zones) {
             QVERIFY2(z.width() > 0 && z.height() > 0,
@@ -1549,12 +1549,13 @@ private Q_SLOTS:
 
         // Both columns need 300px each in 400px screen (impossible)
         QVector<QSize> minSizes = {QSize(300, 0), QSize(300, 0)};
-        auto zones = algo.calculateZones({2, screen, &state, 10, {}, minSizes});
+        auto zones = algo.calculateZones({2, screen, &state, 10, EdgeGaps::uniform(0), minSizes});
         QCOMPARE(zones.size(), 2);
 
         // Both should get roughly proportional allocation (no negative widths)
         QVERIFY2(zones[0].width() > 0, "Master width must be positive");
         QVERIFY2(zones[1].width() > 0, "Stack width must be positive");
+        // zones[0] + innerGap(10) + zones[1] must equal screen width (no outer gaps)
         QCOMPARE(zones[0].width() + 10 + zones[1].width(), 400);
     }
 
@@ -1570,7 +1571,7 @@ private Q_SLOTS:
 
         // All three columns want 200px each in 300px screen (impossible)
         QVector<QSize> minSizes = {QSize(200, 0), QSize(200, 0), QSize(200, 0)};
-        auto zones = algo.calculateZones({3, screen, &state, 10, {}, minSizes});
+        auto zones = algo.calculateZones({3, screen, &state, 10, EdgeGaps::uniform(0), minSizes});
         QCOMPARE(zones.size(), 3);
 
         // All zones should have positive widths (proportional allocation)
@@ -1592,7 +1593,7 @@ private Q_SLOTS:
 
         // All algorithms should handle negative coordinates correctly
         MasterStackAlgorithm masterStack;
-        auto msZones = masterStack.calculateZones({3, screen, &state, 0, {}});
+        auto msZones = masterStack.calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(msZones.size(), 3);
         for (int i = 0; i < msZones.size(); ++i) {
             QVERIFY2(msZones[i].left() >= screen.left(),
@@ -1607,7 +1608,7 @@ private Q_SLOTS:
         }
 
         BSPAlgorithm bsp;
-        auto bspZones = bsp.calculateZones({4, screen, &state, 0, {}});
+        auto bspZones = bsp.calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(bspZones.size(), 4);
         for (int i = 0; i < bspZones.size(); ++i) {
             QVERIFY2(bspZones[i].left() >= screen.left(),
@@ -1616,7 +1617,7 @@ private Q_SLOTS:
         }
 
         ThreeColumnAlgorithm threeCol;
-        auto tcZones = threeCol.calculateZones({5, screen, &state, 0, {}});
+        auto tcZones = threeCol.calculateZones({5, screen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 5);
         for (int i = 0; i < tcZones.size(); ++i) {
             QVERIFY2(tcZones[i].left() >= screen.left(),
@@ -1627,7 +1628,7 @@ private Q_SLOTS:
         // Monitor above primary (negative Y)
         QRect topScreen(0, -1080, 1920, 1080);
         ColumnsAlgorithm cols;
-        auto colZones = cols.calculateZones({3, topScreen, &state, 0, {}});
+        auto colZones = cols.calculateZones({3, topScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(colZones.size(), 3);
         for (int i = 0; i < colZones.size(); ++i) {
             QVERIFY2(colZones[i].top() >= topScreen.top(),
@@ -1649,7 +1650,7 @@ private Q_SLOTS:
             state.setSplitRatio(0.1);
 
             MasterStackAlgorithm algo;
-            auto zones = algo.calculateZones({3, screen, &state, 0, {}});
+            auto zones = algo.calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});
             QCOMPARE(zones.size(), 3);
             // Master should be narrow but still positive
             QVERIFY2(zones[0].width() > 0,
@@ -1669,7 +1670,7 @@ private Q_SLOTS:
             state.setSplitRatio(0.9);
 
             MasterStackAlgorithm algo;
-            auto zones = algo.calculateZones({3, screen, &state, 0, {}});
+            auto zones = algo.calculateZones({3, screen, &state, 0, EdgeGaps::uniform(0)});
             QCOMPARE(zones.size(), 3);
             // Stack windows should still be visible
             for (int i = 1; i < zones.size(); ++i) {
@@ -1685,7 +1686,7 @@ private Q_SLOTS:
             state.setSplitRatio(0.1);
 
             FibonacciAlgorithm algo;
-            auto zones = algo.calculateZones({4, screen, &state, 0, {}});
+            auto zones = algo.calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
             QCOMPARE(zones.size(), 4);
             for (int i = 0; i < zones.size(); ++i) {
                 QVERIFY2(zones[i].width() > 0 && zones[i].height() > 0,
@@ -1700,7 +1701,7 @@ private Q_SLOTS:
             state.setSplitRatio(0.9);
 
             ThreeColumnAlgorithm algo;
-            auto zones = algo.calculateZones({4, screen, &state, 0, {}});
+            auto zones = algo.calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
             QCOMPARE(zones.size(), 4);
             for (int i = 0; i < zones.size(); ++i) {
                 QVERIFY2(zones[i].width() > 0 && zones[i].height() > 0,
@@ -1719,33 +1720,33 @@ private Q_SLOTS:
 
         // BSP and Fibonacci don't use state (fixed 0.5 ratio), so they produce zones
         BSPAlgorithm bsp;
-        auto bspZones = bsp.calculateZones({3, screen, nullptr, 0, {}});
+        auto bspZones = bsp.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(bspZones.size(), 3);
 
         FibonacciAlgorithm fib;
-        auto fibZones = fib.calculateZones({3, screen, nullptr, 0, {}});
+        auto fibZones = fib.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(fibZones.size(), 3);
 
         // Algorithms that dereference state must handle nullptr gracefully
         MasterStackAlgorithm ms;
-        auto msZones = ms.calculateZones({3, screen, nullptr, 0, {}});
+        auto msZones = ms.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(msZones.size(), 0);
 
         ThreeColumnAlgorithm tc;
-        auto tcZones = tc.calculateZones({3, screen, nullptr, 0, {}});
+        auto tcZones = tc.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 0);
 
         // Columns, Rows, Monocle don't dereference state but should still work
         ColumnsAlgorithm cols;
-        auto colZones = cols.calculateZones({3, screen, nullptr, 0, {}});
+        auto colZones = cols.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(colZones.size(), 3);
 
         RowsAlgorithm rows;
-        auto rowZones = rows.calculateZones({3, screen, nullptr, 0, {}});
+        auto rowZones = rows.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(rowZones.size(), 3);
 
         MonocleAlgorithm mono;
-        auto monoZones = mono.calculateZones({3, screen, nullptr, 0, {}});
+        auto monoZones = mono.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(monoZones.size(), 3);
     }
 
@@ -1759,7 +1760,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
 
         // outerGap=500 far exceeds screen — should produce valid centered zone
-        auto zones = algo.calculateZones({1, screen, &state, 0, 500});
+        auto zones = algo.calculateZones({1, screen, &state, 0, EdgeGaps::uniform(500)});
         QCOMPARE(zones.size(), 1);
         QVERIFY2(zones[0].width() >= 1, "Zone width must be at least 1");
         QVERIFY2(zones[0].height() >= 1, "Zone height must be at least 1");

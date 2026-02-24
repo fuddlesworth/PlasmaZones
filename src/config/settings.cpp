@@ -153,6 +153,11 @@ constexpr const char* kPerScreenAutotileKeys[] = {
     "AnimationDuration",
     "MonocleHideOthers",
     "MonocleShowTabs",
+    "UsePerSideOuterGap",
+    "OuterGapTop",
+    "OuterGapBottom",
+    "OuterGapLeft",
+    "OuterGapRight",
 };
 
 // Validate a per-screen autotile override value.
@@ -183,6 +188,11 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (key == QLatin1String("AnimationDuration")) return qBound(MinAnimationDuration, value.toInt(), MaxAnimationDuration);
     if (key == QLatin1String("MonocleHideOthers")) return value.toBool();
     if (key == QLatin1String("MonocleShowTabs")) return value.toBool();
+    if (key == QLatin1String("UsePerSideOuterGap")) return value.toBool();
+    if (key == QLatin1String("OuterGapTop")) return qBound(MinGap, value.toInt(), MaxGap);
+    if (key == QLatin1String("OuterGapBottom")) return qBound(MinGap, value.toInt(), MaxGap);
+    if (key == QLatin1String("OuterGapLeft")) return qBound(MinGap, value.toInt(), MaxGap);
+    if (key == QLatin1String("OuterGapRight")) return qBound(MinGap, value.toInt(), MaxGap);
     return {}; // Unknown key
 }
 
@@ -201,7 +211,8 @@ QVariant readPerScreenAutotileEntry(const KConfigGroup& group, const QLatin1Stri
         return group.readEntry(key, true);
     }
     // Booleans defaulting to false (matching global defaults)
-    if (key == QLatin1String("FocusFollowsMouse") || key == QLatin1String("MonocleShowTabs")) {
+    if (key == QLatin1String("FocusFollowsMouse") || key == QLatin1String("MonocleShowTabs")
+        || key == QLatin1String("UsePerSideOuterGap")) {
         return group.readEntry(key, false);
     }
     // Floating-point
@@ -213,6 +224,44 @@ QVariant readPerScreenAutotileEntry(const KConfigGroup& group, const QLatin1Stri
         return group.readEntry(key, QString());
     }
     // Everything else is int (gaps, counts, positions, durations)
+    return group.readEntry(key, 0);
+}
+
+// Known per-screen snapping config keys for iteration during load
+constexpr const char* kPerScreenSnappingKeys[] = {
+    "ZonePadding",
+    "OuterGap",
+    "UsePerSideOuterGap",
+    "OuterGapTop",
+    "OuterGapBottom",
+    "OuterGapLeft",
+    "OuterGapRight",
+};
+
+// Validate a per-screen snapping override value.
+QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
+{
+    constexpr int Min = 0;
+    constexpr int Max = Defaults::MaxGap;
+    if (key == QLatin1String("ZonePadding")) return qBound(Min, value.toInt(), Max);
+    if (key == QLatin1String("OuterGap")) return qBound(Min, value.toInt(), Max);
+    if (key == QLatin1String("UsePerSideOuterGap")) return value.toBool();
+    if (key == QLatin1String("OuterGapTop")) return qBound(Min, value.toInt(), Max);
+    if (key == QLatin1String("OuterGapBottom")) return qBound(Min, value.toInt(), Max);
+    if (key == QLatin1String("OuterGapLeft")) return qBound(Min, value.toInt(), Max);
+    if (key == QLatin1String("OuterGapRight")) return qBound(Min, value.toInt(), Max);
+    return {}; // Unknown key
+}
+
+/**
+ * @brief Read a per-screen snapping entry with the correct type-specific default.
+ */
+QVariant readPerScreenSnappingEntry(const KConfigGroup& group, const QLatin1String& key)
+{
+    if (key == QLatin1String("UsePerSideOuterGap")) {
+        return group.readEntry(key, false);
+    }
+    // Everything else is int (padding, gaps)
     return group.readEntry(key, 0);
 }
 
@@ -551,13 +600,13 @@ void Settings::setLabelFontSizeScale(qreal scale)
     }
 }
 
-SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, 50)
-SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, 0, Defaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, 0, Defaults::MaxGap)
 SETTINGS_SETTER(bool, UsePerSideOuterGap, m_usePerSideOuterGap, usePerSideOuterGapChanged)
-SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, 50)
-SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, 50)
-SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, 50)
-SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, 50)
+SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, 0, Defaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, 0, Defaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, 0, Defaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, 0, Defaults::MaxGap)
 SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged, 5, 100)
 SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, 10, 1000)
 SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged, 50, 500)
@@ -1141,13 +1190,13 @@ void Settings::load()
     m_labelFontStrikeout = appearance.readEntry(QLatin1String("LabelFontStrikeout"), ConfigDefaults::labelFontStrikeout());
 
     // Zones with validation (defaults from .kcfg via ConfigDefaults)
-    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, 50, "zone padding");
-    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, 50, "outer gap");
+    m_zonePadding = readValidatedInt(zones, "Padding", ConfigDefaults::zonePadding(), 0, Defaults::MaxGap, "zone padding");
+    m_outerGap = readValidatedInt(zones, "OuterGap", ConfigDefaults::outerGap(), 0, Defaults::MaxGap, "outer gap");
     m_usePerSideOuterGap = zones.readEntry(QLatin1String("UsePerSideOuterGap"), ConfigDefaults::usePerSideOuterGap());
-    m_outerGapTop = readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), 0, 50, "outer gap top");
-    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), 0, 50, "outer gap bottom");
-    m_outerGapLeft = readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), 0, 50, "outer gap left");
-    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), 0, 50, "outer gap right");
+    m_outerGapTop = readValidatedInt(zones, "OuterGapTop", ConfigDefaults::outerGapTop(), 0, Defaults::MaxGap, "outer gap top");
+    m_outerGapBottom = readValidatedInt(zones, "OuterGapBottom", ConfigDefaults::outerGapBottom(), 0, Defaults::MaxGap, "outer gap bottom");
+    m_outerGapLeft = readValidatedInt(zones, "OuterGapLeft", ConfigDefaults::outerGapLeft(), 0, Defaults::MaxGap, "outer gap left");
+    m_outerGapRight = readValidatedInt(zones, "OuterGapRight", ConfigDefaults::outerGapRight(), 0, Defaults::MaxGap, "outer gap right");
     m_adjacentThreshold = readValidatedInt(zones, "AdjacentThreshold", ConfigDefaults::adjacentThreshold(), 5, 100, "adjacent threshold");
 
     // Performance and behavior settings with validation
@@ -1285,6 +1334,36 @@ void Settings::load()
     }
 
     migrateConnectorNames(m_perScreenAutotileSettings);
+
+    // Per-screen snapping overrides (groups matching SnappingScreen:*)
+    m_perScreenSnappingSettings.clear();
+    const QLatin1String snappingScreenPrefix("SnappingScreen:");
+    for (const QString& groupName : allGroups) {
+        if (groupName.startsWith(snappingScreenPrefix)) {
+            QString screenName = groupName.mid(snappingScreenPrefix.size());
+            if (screenName.isEmpty()) {
+                continue;
+            }
+            KConfigGroup screenGroup = config->group(groupName);
+            QVariantMap overrides;
+            for (const char* key : kPerScreenSnappingKeys) {
+                QLatin1String keyStr(key);
+                if (screenGroup.hasKey(keyStr)) {
+                    QVariant raw = readPerScreenSnappingEntry(screenGroup, keyStr);
+                    QVariant validated = validatePerScreenSnappingValue(keyStr, raw);
+                    if (validated.isValid()) {
+                        overrides[QString::fromLatin1(key)] = validated;
+                    }
+                }
+            }
+            if (!overrides.isEmpty()) {
+                m_perScreenSnappingSettings[screenName] = overrides;
+                qCDebug(lcConfig) << "Loaded per-screen snapping overrides for" << screenName << ":" << overrides.keys();
+            }
+        }
+    }
+
+    migrateConnectorNames(m_perScreenSnappingSettings);
 
     // Shader Effects (defaults from .kcfg via ConfigDefaults)
     // Save old values so we can emit specific signals for settings with runtime side-effects
@@ -1585,6 +1664,7 @@ void Settings::save()
     // Per-screen overrides - delete all old groups, rewrite current ones
     savePerScreenOverrides(config, QLatin1String("ZoneSelector:"), m_perScreenZoneSelectorSettings);
     savePerScreenOverrides(config, QLatin1String("AutotileScreen:"), m_perScreenAutotileSettings);
+    savePerScreenOverrides(config, QLatin1String("SnappingScreen:"), m_perScreenSnappingSettings);
 
     // Shader Effects
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
@@ -1699,7 +1779,8 @@ void Settings::reset()
     const QStringList allGroups = config->groupList();
     for (const QString& groupName : allGroups) {
         if (groupName.startsWith(QLatin1String("ZoneSelector:"))
-            || groupName.startsWith(QLatin1String("AutotileScreen:"))) {
+            || groupName.startsWith(QLatin1String("AutotileScreen:"))
+            || groupName.startsWith(QLatin1String("SnappingScreen:"))) {
             config->deleteGroup(groupName);
         }
     }
@@ -1709,6 +1790,53 @@ void Settings::reset()
     load();
 
     qCInfo(lcConfig) << "Settings reset to defaults";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared per-screen helpers (used by zone-selector, autotile, and snapping)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Resolve a screen name key in a per-screen hash, trying connector-name
+// backward compatibility if the direct lookup misses.
+template <typename T>
+static typename QHash<QString, T>::const_iterator
+findPerScreenEntry(const QHash<QString, T>& hash, const QString& screenName)
+{
+    auto it = hash.constFind(screenName);
+    if (it != hash.constEnd()) {
+        return it;
+    }
+    // Forward: connector name → EDID-based ID
+    if (Utils::isConnectorName(screenName)) {
+        QString resolved = Utils::screenIdForName(screenName);
+        if (resolved != screenName) {
+            it = hash.constFind(resolved);
+            if (it != hash.constEnd()) return it;
+        }
+    }
+    // Reverse: EDID-based ID → connector name (for un-migrated entries)
+    QString connector = Utils::screenNameForId(screenName);
+    if (!connector.isEmpty() && connector != screenName) {
+        it = hash.constFind(connector);
+        if (it != hash.constEnd()) return it;
+    }
+    return hash.constEnd();
+}
+
+// Clear a per-screen entry by name, with connector-name fallback.
+template <typename T>
+static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenName)
+{
+    if (hash.remove(screenName)) {
+        return true;
+    }
+    if (Utils::isConnectorName(screenName)) {
+        QString resolved = Utils::screenIdForName(screenName);
+        if (resolved != screenName && hash.remove(resolved)) return true;
+    }
+    QString connector = Utils::screenNameForId(screenName);
+    if (!connector.isEmpty() && connector != screenName && hash.remove(connector)) return true;
+    return false;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1731,14 +1859,7 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
     };
 
     // Apply per-screen overrides if they exist
-    auto it = m_perScreenZoneSelectorSettings.constFind(screenName);
-    // Backward compat: if screenName looks like a connector name, try resolving
-    if (it == m_perScreenZoneSelectorSettings.constEnd() && Utils::isConnectorName(screenName)) {
-        QString resolved = Utils::screenIdForName(screenName);
-        if (resolved != screenName) {
-            it = m_perScreenZoneSelectorSettings.constFind(resolved);
-        }
-    }
+    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName);
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
         return config;
     }
@@ -1749,7 +1870,8 @@ ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenNam
 
 QVariantMap Settings::getPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_perScreenZoneSelectorSettings.value(screenName);
+    auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName);
+    return (it != m_perScreenZoneSelectorSettings.constEnd()) ? it.value() : QVariantMap();
 }
 
 void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
@@ -1777,7 +1899,7 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenName, const 
 
 void Settings::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
-    if (m_perScreenZoneSelectorSettings.remove(screenName)) {
+    if (removePerScreenEntry(m_perScreenZoneSelectorSettings, screenName)) {
         Q_EMIT perScreenZoneSelectorSettingsChanged();
         Q_EMIT settingsChanged();
     }
@@ -1785,7 +1907,7 @@ void Settings::clearPerScreenZoneSelectorSettings(const QString& screenName)
 
 bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_perScreenZoneSelectorSettings.contains(screenName);
+    return findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName) != m_perScreenZoneSelectorSettings.constEnd();
 }
 
 QStringList Settings::screensWithZoneSelectorOverrides() const
@@ -1799,7 +1921,8 @@ QStringList Settings::screensWithZoneSelectorOverrides() const
 
 QVariantMap Settings::getPerScreenAutotileSettings(const QString& screenName) const
 {
-    return m_perScreenAutotileSettings.value(screenName);
+    auto it = findPerScreenEntry(m_perScreenAutotileSettings, screenName);
+    return (it != m_perScreenAutotileSettings.constEnd()) ? it.value() : QVariantMap();
 }
 
 void Settings::setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value)
@@ -1825,7 +1948,7 @@ void Settings::setPerScreenAutotileSetting(const QString& screenName, const QStr
 
 void Settings::clearPerScreenAutotileSettings(const QString& screenName)
 {
-    if (m_perScreenAutotileSettings.remove(screenName)) {
+    if (removePerScreenEntry(m_perScreenAutotileSettings, screenName)) {
         Q_EMIT perScreenAutotileSettingsChanged();
         Q_EMIT settingsChanged();
     }
@@ -1833,7 +1956,51 @@ void Settings::clearPerScreenAutotileSettings(const QString& screenName)
 
 bool Settings::hasPerScreenAutotileSettings(const QString& screenName) const
 {
-    return m_perScreenAutotileSettings.contains(screenName);
+    return findPerScreenEntry(m_perScreenAutotileSettings, screenName) != m_perScreenAutotileSettings.constEnd();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Per-Screen Snapping Config
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantMap Settings::getPerScreenSnappingSettings(const QString& screenName) const
+{
+    auto it = findPerScreenEntry(m_perScreenSnappingSettings, screenName);
+    return (it != m_perScreenSnappingSettings.constEnd()) ? it.value() : QVariantMap();
+}
+
+void Settings::setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value)
+{
+    if (screenName.isEmpty() || key.isEmpty()) {
+        return;
+    }
+
+    QVariant validated = validatePerScreenSnappingValue(key, value);
+    if (!validated.isValid()) {
+        qCWarning(lcConfig) << "Rejected per-screen snapping setting:" << key << "=" << value;
+        return;
+    }
+
+    QVariantMap& screenSettings = m_perScreenSnappingSettings[screenName];
+    if (screenSettings.value(key) == validated) {
+        return;
+    }
+    screenSettings[key] = validated;
+    Q_EMIT perScreenSnappingSettingsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::clearPerScreenSnappingSettings(const QString& screenName)
+{
+    if (removePerScreenEntry(m_perScreenSnappingSettings, screenName)) {
+        Q_EMIT perScreenSnappingSettingsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+bool Settings::hasPerScreenSnappingSettings(const QString& screenName) const
+{
+    return findPerScreenEntry(m_perScreenSnappingSettings, screenName) != m_perScreenSnappingSettings.constEnd();
 }
 
 QString Settings::loadColorsFromFile(const QString& filePath)

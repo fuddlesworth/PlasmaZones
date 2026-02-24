@@ -708,6 +708,12 @@ public:
     Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenName) const;
 
+    // Per-screen snapping config (override > global fallback)
+    Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenName) const override;
+    Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
+    Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1230,6 +1236,9 @@ private:
 
     // Per-screen autotile overrides (screenName -> settings map)
     QHash<QString, QVariantMap> m_perScreenAutotileSettings;
+
+    // Per-screen snapping overrides (screenName -> settings map)
+    QHash<QString, QVariantMap> m_perScreenSnappingSettings;
 
     // Autotiling Settings
     bool m_autotileEnabled = false;

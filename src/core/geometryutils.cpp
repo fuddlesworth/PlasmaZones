@@ -8,6 +8,7 @@
 #include "interfaces.h"
 #include "constants.h"
 #include "screenmanager.h"
+#include "utils.h"
 #include <algorithm>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -122,9 +123,17 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const 
     return geom;
 }
 
-int getEffectiveZonePadding(Layout* layout, ISettings* settings)
+int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenName)
 {
-    // Check for layout-specific override first
+    // Per-screen snapping override (highest priority)
+    if (!screenName.isEmpty() && settings) {
+        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenName);
+        auto it = perScreen.constFind(QLatin1String("ZonePadding"));
+        if (it != perScreen.constEnd()) {
+            return it->toInt();
+        }
+    }
+    // Check for layout-specific override
     if (layout && layout->hasZonePaddingOverride()) {
         return layout->zonePadding();
     }
@@ -151,8 +160,43 @@ QRect snapToRect(const QRectF& rf)
     return QRect(left, top, std::max(0, right - left), std::max(0, bottom - top));
 }
 
-EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings)
+EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenName)
 {
+    // Per-screen snapping override (highest priority)
+    if (!screenName.isEmpty() && settings) {
+        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenName);
+        if (!perScreen.isEmpty()) {
+            auto usePerSideIt = perScreen.constFind(QLatin1String("UsePerSideOuterGap"));
+            bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
+            if (usePerSide) {
+                auto topIt = perScreen.constFind(QLatin1String("OuterGapTop"));
+                auto bottomIt = perScreen.constFind(QLatin1String("OuterGapBottom"));
+                auto leftIt = perScreen.constFind(QLatin1String("OuterGapLeft"));
+                auto rightIt = perScreen.constFind(QLatin1String("OuterGapRight"));
+                // If any per-side key is present, use per-screen per-side gaps
+                if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd()
+                    || leftIt != perScreen.constEnd() || rightIt != perScreen.constEnd()) {
+                    // Fall back to per-screen uniform OuterGap, then global for missing sides
+                    auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
+                    int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt()
+                                    : settings->outerGap();
+                    return {
+                        (topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
+                        (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
+                        (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
+                        (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback
+                    };
+                }
+            }
+            // UsePerSideOuterGap not set or false — per-side keys ignored if present
+            // Per-screen uniform outer gap
+            auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
+            if (uniformIt != perScreen.constEnd()) {
+                return EdgeGaps::uniform(uniformIt->toInt());
+            }
+        }
+    }
+
     // Check for layout-specific per-side override first
     if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
         EdgeGaps gaps = layout->rawOuterGaps();
@@ -224,8 +268,9 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     layout->recalculateZoneGeometries(effectiveScreenGeometry(layout, screen));
 
-    int zonePadding = getEffectiveZonePadding(layout, settings);
-    EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings);
+    QString screenId = Utils::screenIdentifier(screen);
+    int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
+    EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {

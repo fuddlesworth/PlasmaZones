@@ -208,6 +208,7 @@ Q_SIGNALS:
     void zoneSelectorMaxRowsChanged();
     void perScreenZoneSelectorSettingsChanged();
     void perScreenAutotileSettingsChanged();
+    void perScreenSnappingSettingsChanged();
     // Shader effects
     void enableShaderEffectsChanged();
     void shaderFrameRateChanged();

@@ -26,6 +26,41 @@ ScrollView {
     // Screen aspect ratio for preview calculations (passed through to ZoneSelectorSection)
     property real screenAspectRatio: 16/9
 
+    // Per-screen snapping gap/padding state
+    property string selectedSnappingScreenName: ""
+    readonly property bool isPerScreenSnapping: selectedSnappingScreenName !== ""
+    readonly property bool hasSnappingOverrides: isPerScreenSnapping && Object.keys(snappingPerScreenOverrides).length > 0
+
+    onSelectedSnappingScreenNameChanged: reloadSnappingPerScreenOverrides()
+
+    property var snappingPerScreenOverrides: ({})
+
+    function reloadSnappingPerScreenOverrides() {
+        if (isPerScreenSnapping && selectedSnappingScreenName !== "") {
+            snappingPerScreenOverrides = kcm.getPerScreenSnappingSettings(selectedSnappingScreenName)
+        } else {
+            snappingPerScreenOverrides = {}
+        }
+    }
+
+    function snappingSettingValue(key, globalValue) {
+        if (isPerScreenSnapping && snappingPerScreenOverrides.hasOwnProperty(key)) {
+            return snappingPerScreenOverrides[key]
+        }
+        return globalValue
+    }
+
+    function writeSnappingSetting(key, value, globalSetter) {
+        if (isPerScreenSnapping) {
+            kcm.setPerScreenSnappingSetting(selectedSnappingScreenName, key, value)
+            var updated = Object.assign({}, snappingPerScreenOverrides)
+            updated[key] = value
+            snappingPerScreenOverrides = updated
+        } else {
+            globalSetter(value)
+        }
+    }
+
     // Signals for color dialog interactions (handled by main.qml)
     signal requestHighlightColorDialog()
     signal requestInactiveColorDialog()
@@ -591,137 +626,30 @@ ScrollView {
         }
 
         // ═══════════════════════════════════════════════════════════════════════
-        // ZONE LAYOUT CARD
+        // SNAPPING BEHAVIOR CARD (global)
         // ═══════════════════════════════════════════════════════════════════════
         Item {
             Layout.fillWidth: true
-            implicitHeight: zoneLayoutCard.implicitHeight
+            implicitHeight: snappingBehaviorCard.implicitHeight
 
             Kirigami.Card {
-                id: zoneLayoutCard
+                id: snappingBehaviorCard
                 anchors.fill: parent
 
                 header: Kirigami.Heading {
                     level: 3
-                    text: i18n("Zone Layout")
+                    text: i18n("Snapping Behavior")
                     padding: Kirigami.Units.smallSpacing
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Zone padding:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 0
-                            to: root.constants.paddingMax
-                            value: kcm.zonePadding
-                            onValueModified: kcm.zonePadding = value
-                        }
-
-                        Label {
-                            text: i18n("px")
-                        }
-                    }
-
-                    RowLayout {
-                        Kirigami.FormData.label: i18n("Edge gap:")
-                        spacing: Kirigami.Units.smallSpacing
-
-                        SpinBox {
-                            from: 0
-                            to: root.constants.paddingMax
-                            value: kcm.outerGap
-                            enabled: !perSideCheck.checked
-                            onValueModified: kcm.outerGap = value
-                        }
-
-                        Label {
-                            text: i18n("px")
-                            visible: !perSideCheck.checked
-                        }
-
-                        CheckBox {
-                            id: perSideCheck
-                            text: i18n("Set per side")
-                            checked: kcm.usePerSideOuterGap
-                            onToggled: kcm.usePerSideOuterGap = checked
-                        }
-                    }
-
-                    GridLayout {
-                        Kirigami.FormData.label: i18n("Per-side gaps:")
-                        visible: perSideCheck.checked
-                        columns: 6
-                        columnSpacing: Kirigami.Units.smallSpacing
-                        rowSpacing: Kirigami.Units.smallSpacing
-
-                        Label { text: i18n("Top:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.thresholdMax
-                            value: kcm.outerGapTop
-                            onValueModified: kcm.outerGapTop = value
-                            Accessible.name: i18nc("@label", "Top edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Bottom:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.thresholdMax
-                            value: kcm.outerGapBottom
-                            onValueModified: kcm.outerGapBottom = value
-                            Accessible.name: i18nc("@label", "Bottom edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Left:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.thresholdMax
-                            value: kcm.outerGapLeft
-                            onValueModified: kcm.outerGapLeft = value
-                            Accessible.name: i18nc("@label", "Left edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Right:") }
-                        SpinBox {
-                            from: 0
-                            to: root.constants.thresholdMax
-                            value: kcm.outerGapRight
-                            onValueModified: kcm.outerGapRight = value
-                            Accessible.name: i18nc("@label", "Right edge gap")
-                        }
-                        Label { text: i18nc("@label", "px") }
-                    }
-
                     CheckBox {
                         Kirigami.FormData.label: i18n("Display:")
                         text: i18n("Show zones on all monitors while dragging")
                         checked: kcm.showZonesOnAllMonitors
                         onToggled: kcm.showZonesOnAllMonitors = checked
                     }
-                }
-            }
-        }
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // WINDOW BEHAVIOR CARD
-        // ═══════════════════════════════════════════════════════════════════════
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: windowBehaviorCard.implicitHeight
-
-            Kirigami.Card {
-                id: windowBehaviorCard
-                anchors.fill: parent
-
-                header: Kirigami.Heading {
-                    level: 3
-                    text: i18n("Window Behavior")
-                    padding: Kirigami.Units.smallSpacing
-                }
-
-                contentItem: Kirigami.FormLayout {
                     CheckBox {
                         Kirigami.FormData.label: i18n("Resolution:")
                         text: i18n("Keep windows in zones when resolution changes")
@@ -767,6 +695,130 @@ ScrollView {
 
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Sticky windows appear on all desktops. Choose how snapping should behave.")
+                    }
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // PER-MONITOR SNAPPING GAPS
+        // ═══════════════════════════════════════════════════════════════════════
+
+        MonitorSelectorSection {
+            Layout.fillWidth: true
+            kcm: root.kcm
+            featureEnabled: true
+            selectedScreenName: root.selectedSnappingScreenName
+            hasOverrides: root.hasSnappingOverrides
+            onSelectedScreenNameChanged: root.selectedSnappingScreenName = selectedScreenName
+            onResetClicked: {
+                kcm.clearPerScreenSnappingSettings(root.selectedSnappingScreenName)
+                root.reloadSnappingPerScreenOverrides()
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // GAPS CARD (per-monitor)
+        // ═══════════════════════════════════════════════════════════════════════
+        Item {
+            Layout.fillWidth: true
+            implicitHeight: gapsCard.implicitHeight
+
+            Kirigami.Card {
+                id: gapsCard
+                anchors.fill: parent
+
+                header: Kirigami.Heading {
+                    level: 3
+                    text: i18n("Gaps")
+                    padding: Kirigami.Units.smallSpacing
+                }
+
+                contentItem: Kirigami.FormLayout {
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Zone padding:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.constants.paddingMax
+                            value: root.snappingSettingValue("ZonePadding", kcm.zonePadding)
+                            onValueModified: root.writeSnappingSetting("ZonePadding", value, function(v) { kcm.zonePadding = v })
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Edge gap:")
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: root.constants.paddingMax
+                            value: root.snappingSettingValue("OuterGap", kcm.outerGap)
+                            enabled: !perSideCheck.checked
+                            onValueModified: root.writeSnappingSetting("OuterGap", value, function(v) { kcm.outerGap = v })
+                        }
+
+                        Label {
+                            text: i18n("px")
+                            visible: !perSideCheck.checked
+                        }
+
+                        CheckBox {
+                            id: perSideCheck
+                            text: i18n("Set per side")
+                            checked: root.snappingSettingValue("UsePerSideOuterGap", kcm.usePerSideOuterGap)
+                            onToggled: root.writeSnappingSetting("UsePerSideOuterGap", checked, function(v) { kcm.usePerSideOuterGap = v })
+                        }
+                    }
+
+                    GridLayout {
+                        Kirigami.FormData.label: i18n("Per-side gaps:")
+                        visible: perSideCheck.checked
+                        columns: 6
+                        columnSpacing: Kirigami.Units.smallSpacing
+                        rowSpacing: Kirigami.Units.smallSpacing
+
+                        Label { text: i18n("Top:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.paddingMax
+                            value: root.snappingSettingValue("OuterGapTop", kcm.outerGapTop)
+                            onValueModified: root.writeSnappingSetting("OuterGapTop", value, function(v) { kcm.outerGapTop = v })
+                            Accessible.name: i18nc("@label", "Top edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Bottom:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.paddingMax
+                            value: root.snappingSettingValue("OuterGapBottom", kcm.outerGapBottom)
+                            onValueModified: root.writeSnappingSetting("OuterGapBottom", value, function(v) { kcm.outerGapBottom = v })
+                            Accessible.name: i18nc("@label", "Bottom edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Left:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.paddingMax
+                            value: root.snappingSettingValue("OuterGapLeft", kcm.outerGapLeft)
+                            onValueModified: root.writeSnappingSetting("OuterGapLeft", value, function(v) { kcm.outerGapLeft = v })
+                            Accessible.name: i18nc("@label", "Left edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
+                        Label { text: i18n("Right:") }
+                        SpinBox {
+                            from: 0
+                            to: root.constants.paddingMax
+                            value: root.snappingSettingValue("OuterGapRight", kcm.outerGapRight)
+                            onValueModified: root.writeSnappingSetting("OuterGapRight", value, function(v) { kcm.outerGapRight = v })
+                            Accessible.name: i18nc("@label", "Right edge gap")
+                        }
+                        Label { text: i18nc("@label", "px") }
                     }
                 }
             }
