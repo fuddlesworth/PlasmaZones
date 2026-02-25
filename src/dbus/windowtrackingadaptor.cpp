@@ -847,6 +847,14 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
     }
 
     const bool currentlyFloating = m_service->isWindowFloating(windowId);
+    const bool currentlySnapped = m_service->isWindowSnapped(windowId);
+
+    // If the window is neither snapped nor floating, it was never managed — nothing to toggle.
+    if (!currentlyFloating && !currentlySnapped) {
+        qCInfo(lcDbusWindow) << "toggleFloatForWindow: window" << windowId
+                             << "is not snapped or floating, ignoring";
+        return;
+    }
 
     if (currentlyFloating) {
         // Unfloat: restore to pre-float zone
@@ -896,7 +904,7 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
         // Float: restore to pre-snap geometry
         int x, y, w, h;
         if (!getValidatedPreSnapGeometry(windowId, x, y, w, h) || w <= 0 || h <= 0) {
-            // No pre-snap geometry - still mark as floating, no geometry change
+            // Snapped but no pre-snap geometry — still mark as floating, no geometry restore
             m_service->unsnapForFloat(windowId);
             m_service->setWindowFloating(windowId, true);
             Q_EMIT windowFloatingChanged(windowId, true);
