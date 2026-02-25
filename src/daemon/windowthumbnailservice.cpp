@@ -122,8 +122,15 @@ void WindowThumbnailService::captureWindowAsync(const QString& kwinHandle, int m
 
                 QDBusPendingReply<QVariantMap> reply(*w);
                 if (reply.isError()) {
-                    qCInfo(lcOverlay) << "captureWindowAsync:" << kwinHandle << "DBus error:"
-                                     << reply.error().message();
+                    const QString errMsg = reply.error().message();
+                    // Invalid window requested (closed before capture) is expected; log at debug level
+                    if (errMsg.contains(QLatin1String("Invalid window requested"))) {
+                        qCDebug(lcOverlay) << "captureWindowAsync:" << kwinHandle
+                                           << "window invalid (closed?):" << errMsg;
+                    } else {
+                        qCInfo(lcOverlay) << "captureWindowAsync:" << kwinHandle
+                                          << "DBus error:" << errMsg;
+                    }
                     close(readFd);
                     Q_EMIT captureFinished(kwinHandle, QString());
                     return;

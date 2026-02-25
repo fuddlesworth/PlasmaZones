@@ -326,7 +326,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     // If the saved screen name no longer exists (monitor replugged under a different
     // connector name), fall back to the caller's screen so unfloat still works.
     QString restoreScreen = m_service->preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty() && !Utils::findScreenByName(restoreScreen)) {
+    if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
         qCInfo(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
                               << "no longer exists, falling back to" << screenName;
         restoreScreen.clear();
@@ -933,6 +933,13 @@ void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
     qCInfo(lcDbusWindow) << "cycleWindowsInZone called, forward:" << forward;
     QString directive = forward ? QStringLiteral("cycle:forward") : QStringLiteral("cycle:backward");
     Q_EMIT cycleWindowsInZoneRequested(directive, QString());
+}
+
+void WindowTrackingAdaptor::SnapActiveWindowToZone(int zoneNumber, const QString& screenName)
+{
+    qCDebug(lcDbusWindow) << "SnapActiveWindowToZone called (alias) zoneNumber:" << zoneNumber
+                          << "screen:" << screenName;
+    snapToZoneByNumber(zoneNumber, screenName);
 }
 
 void WindowTrackingAdaptor::resnapToNewLayout()

@@ -2297,7 +2297,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screen
     // daemons on Wayland. Callers should always pass screenName from KWin effect data.
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -2467,7 +2467,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationTime.restart();
 
     // Show on the screen where the navigation occurred, fallback to primary
-    QScreen* screen = Utils::findScreenByName(screenName);
+    QScreen* screen = Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }
@@ -2631,7 +2631,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);
@@ -2821,7 +2821,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
 
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -3077,7 +3077,7 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     // Resolve target screen
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::primaryScreen();

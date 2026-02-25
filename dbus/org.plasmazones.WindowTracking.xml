@@ -443,6 +443,15 @@
         <method name="resnapToNewLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout. Maps by zone number (1-&gt;1, 2-&gt;2) with cycling when new layout has fewer zones. Call after switching layouts."/>
         </method>
+        <method name="SnapActiveWindowToZone">
+            <annotation name="org.gtk.GDBus.DocString" value="Snap the active window to a zone by number. Alias for snapToZoneByNumber for compatibility with external callers."/>
+            <arg name="zoneNumber" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Zone number (1-9)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen name (e.g. DP-1) or empty for cursor screen."/>
+            </arg>
+        </method>
         <method name="setWindowSticky">
             <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is sticky (visible on all virtual desktops)."/>
             <arg name="windowId" type="s" direction="in">

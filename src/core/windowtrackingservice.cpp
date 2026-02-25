@@ -1028,7 +1028,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
         // Get screen and gap settings for geometry calculation
         QScreen* screen = screenName.isEmpty()
             ? Utils::primaryScreen()
-            : Utils::findScreenByName(screenName);
+            : Utils::findScreenByIdOrName(screenName);
         if (!screen) {
             screen = Utils::primaryScreen();
         }
@@ -1143,7 +1143,7 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
     // Get screen and gap settings for geometry calculation
     QScreen* screen = screenName.isEmpty()
         ? Utils::primaryScreen()
-        : Utils::findScreenByName(screenName);
+        : Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }

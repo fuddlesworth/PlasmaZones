@@ -356,6 +356,15 @@ public Q_SLOTS:
     void cycleWindowsInZone(bool forward);
 
     /**
+     * @brief Snap the active window to a zone by number (D-Bus alias for compatibility)
+     * @param zoneNumber Zone number (1-9)
+     * @param screenName Screen name (empty = cursor screen)
+     * @note Delegates to snapToZoneByNumber; provided for external callers expecting this API
+     * @note PascalCase name kept for D-Bus compatibility with external callers (violates .cursorrules camelCase)
+     */
+    void SnapActiveWindowToZone(int zoneNumber, const QString& screenName = QString());
+
+    /**
      * @brief Resnap all windows from the previous layout to the current layout
      *
      * When switching layouts (e.g. A -> B), windows that were snapped to layout A

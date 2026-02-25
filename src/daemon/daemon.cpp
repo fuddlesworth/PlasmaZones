@@ -99,7 +99,7 @@ QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
     // Prefer cursor screen — tracks the physical cursor position
     const QString& cursorScreen = trackingAdaptor->lastCursorScreenName();
     if (!cursorScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByName(cursorScreen);
+        QScreen* screen = Utils::findScreenByIdOrName(cursorScreen);
         if (screen) {
             return screen;
         }
@@ -109,7 +109,7 @@ QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
     // Fall back to focused window's screen.
     const QString& activeScreen = trackingAdaptor->lastActiveScreenName();
     if (!activeScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByName(activeScreen);
+        QScreen* screen = Utils::findScreenByIdOrName(activeScreen);
         if (screen) {
             return screen;
         }
@@ -151,9 +151,7 @@ Daemon::~Daemon()
 
 bool Daemon::init()
 {
-    // Load settings
-    m_settings->load();
-
+    // Settings constructor already calls load(); avoid duplicate load
     // Initialize shader registry singleton (must be done early, before D-Bus adaptors)
     // The registry checks for Qt6::ShaderTools availability at compile time
     // and for qsb tool availability at runtime
@@ -528,7 +526,7 @@ void Daemon::start()
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
         QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
         if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
-            screen = Utils::findScreenByName(m_unifiedLayoutController->currentScreenName());
+            screen = Utils::findScreenByIdOrName(m_unifiedLayoutController->currentScreenName());
         }
         if (screen) {
             m_layoutAdaptor->openEditorForScreen(screen->name());

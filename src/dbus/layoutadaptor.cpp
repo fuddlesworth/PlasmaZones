@@ -632,7 +632,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenName, const QStrin
     }
 
     // Warn if screen name is not in the daemon's screen list (e.g. script using wrong name)
-    if (!Utils::findScreenByName(screenName)) {
+    if (!Utils::findScreenByIdOrName(screenName)) {
         qCWarning(lcDbusLayout)
             << "assignLayoutToScreen: screen name" << screenName
             << "not found in daemon's screen list. Use org.plasmazones.Screen.getScreens for valid names.";

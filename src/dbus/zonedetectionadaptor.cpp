@@ -132,7 +132,7 @@ QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
     }
 
     // Find screen
-    QScreen* screen = Utils::findScreenByName(screenName);
+    QScreen* screen = Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         return zoneIds;
     }
