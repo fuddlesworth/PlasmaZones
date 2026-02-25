@@ -827,7 +827,7 @@ SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut
 // Animation setters (general — applies to snapping and autotiling)
 SETTINGS_SETTER(bool, AnimationsEnabled, m_animationsEnabled, animationsEnabledChanged)
 SETTINGS_SETTER_CLAMPED(AnimationDuration, m_animationDuration, animationDurationChanged, 50, 500)
-SETTINGS_SETTER_CLAMPED(AnimationEasingCurve, m_animationEasingCurve, animationEasingCurveChanged, 0, 12) // 12 = InOutElastic; must match EasingCurve enum in windowanimator.h
+SETTINGS_SETTER(const QString&, AnimationEasingCurve, m_animationEasingCurve, animationEasingCurveChanged)
 
 SETTINGS_SETTER_CLAMPED(AnimationMinDistance, m_animationMinDistance, animationMinDistanceChanged, 0, 200)
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
@@ -1491,7 +1491,7 @@ void Settings::load()
     KConfigGroup animations = config->group(QStringLiteral("Animations"));
     m_animationsEnabled = animations.readEntry(QLatin1String("AnimationsEnabled"), ConfigDefaults::animationsEnabled());
     m_animationDuration = readValidatedInt(animations, "AnimationDuration", ConfigDefaults::animationDuration(), 50, 500, "animation duration");
-    m_animationEasingCurve = readValidatedInt(animations, "AnimationEasingCurve", ConfigDefaults::animationEasingCurve(), 0, 12, "animation easing curve");
+    m_animationEasingCurve = animations.readEntry(QLatin1String("AnimationEasingCurve"), ConfigDefaults::animationEasingCurve());
     m_animationMinDistance = readValidatedInt(animations, "AnimationMinDistance", ConfigDefaults::animationMinDistance(), 0, 200, "animation min distance");
 
     // Additional Autotiling Settings

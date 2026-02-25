@@ -176,7 +176,7 @@ class KCMPlasmaZones : public KQuickConfigModule
                    animationsEnabledChanged)
     Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY
                    animationDurationChanged)
-    Q_PROPERTY(int animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY
+    Q_PROPERTY(QString animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY
                    animationEasingCurveChanged)
     Q_PROPERTY(int animationMinDistance READ animationMinDistance WRITE setAnimationMinDistance NOTIFY
                    animationMinDistanceChanged)
@@ -352,7 +352,7 @@ public:
     int autotileInsertPosition() const;
     bool animationsEnabled() const;
     int animationDuration() const;
-    int animationEasingCurve() const;
+    QString animationEasingCurve() const;
     int animationMinDistance() const;
     bool autotileFocusFollowsMouse() const;
     bool autotileRespectMinimumSize() const;
@@ -497,7 +497,7 @@ public:
     void setAutotileInsertPosition(int position);
     void setAnimationsEnabled(bool enabled);
     void setAnimationDuration(int duration);
-    void setAnimationEasingCurve(int curve);
+    void setAnimationEasingCurve(const QString& curve);
     void setAnimationMinDistance(int distance);
     void setAutotileFocusFollowsMouse(bool focus);
     void setAutotileRespectMinimumSize(bool respect);

@@ -153,6 +153,20 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("showZoneNumbers", showZoneNumbers, setShowZoneNumbers)
     REGISTER_BOOL_SETTING("flashZonesOnSwitch", flashZonesOnSwitch, setFlashZonesOnSwitch)
     REGISTER_BOOL_SETTING("showOsdOnLayoutSwitch", showOsdOnLayoutSwitch, setShowOsdOnLayoutSwitch)
+    REGISTER_BOOL_SETTING("showNavigationOsd", showNavigationOsd, setShowNavigationOsd)
+    // osdStyle: enum (0=None, 1=Text, 2=Preview) — use interface's OsdStyle
+    m_getters[QStringLiteral("osdStyle")] = [this]() {
+        return static_cast<int>(m_settings->osdStyle());
+    };
+    m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 2) {
+            m_settings->setOsdStyle(static_cast<OsdStyle>(val));
+            return true;
+        }
+        return false;
+    };
+    REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
@@ -225,7 +239,7 @@ void SettingsAdaptor::initializeRegistry()
     // Animation settings (global — applies to snapping and autotiling)
     REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
     REGISTER_INT_SETTING("animationDuration", animationDuration, setAnimationDuration)
-    REGISTER_INT_SETTING("animationEasingCurve", animationEasingCurve, setAnimationEasingCurve)
+    REGISTER_STRING_SETTING("animationEasingCurve", animationEasingCurve, setAnimationEasingCurve)
 
     REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
 

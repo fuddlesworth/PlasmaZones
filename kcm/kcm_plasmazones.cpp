@@ -1281,7 +1281,7 @@ int KCMPlasmaZones::animationDuration() const
 {
     return m_settings->animationDuration();
 }
-int KCMPlasmaZones::animationEasingCurve() const
+QString KCMPlasmaZones::animationEasingCurve() const
 {
     return m_settings->animationEasingCurve();
 }
@@ -1489,9 +1489,8 @@ void KCMPlasmaZones::setAnimationDuration(int duration)
     }
 }
 
-void KCMPlasmaZones::setAnimationEasingCurve(int curve)
+void KCMPlasmaZones::setAnimationEasingCurve(const QString& curve)
 {
-    curve = qBound(0, curve, 12); // Must match EasingCurve::Count - 1 in windowanimator.h
     if (m_settings->animationEasingCurve() != curve) {
         m_settings->setAnimationEasingCurve(curve);
         Q_EMIT animationEasingCurveChanged();

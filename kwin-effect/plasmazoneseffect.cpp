@@ -78,7 +78,7 @@ static void ensureInterface(InterfacePtr& interface, const QString& interfaceNam
     }
 
     interface = std::make_unique<QDBusInterface>(DBus::ServiceName, DBus::ObjectPath, interfaceName,
-                                                  QDBusConnection::sessionBus());
+                                                 QDBusConnection::sessionBus());
 
     if (!interface->isValid()) {
         qCWarning(lcEffect) << "Cannot connect to" << logName << "interface -" << interface->lastError().message();
@@ -103,11 +103,12 @@ QRect PlasmaZonesEffect::parseZoneGeometry(const QString& json) const
     }
 
     QJsonObject obj = doc.object();
-    return QRect(obj[QLatin1String("x")].toInt(), obj[QLatin1String("y")].toInt(),
-                 obj[QLatin1String("width")].toInt(), obj[QLatin1String("height")].toInt());
+    return QRect(obj[QLatin1String("x")].toInt(), obj[QLatin1String("y")].toInt(), obj[QLatin1String("width")].toInt(),
+                 obj[QLatin1String("height")].toInt());
 }
 
-void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId, const QRectF& preCapturedGeometry)
+void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const QString& windowId,
+                                                    const QRectF& preCapturedGeometry)
 {
     if (!w || windowId.isEmpty()) {
         return;
@@ -124,25 +125,26 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
     QDBusPendingCall pendingCall = m_windowTrackingInterface->asyncCall(QStringLiteral("hasPreSnapGeometry"), windowId);
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow, capturedWindowId, capturedGeom](QDBusPendingCallWatcher* watcher) {
-        watcher->deleteLater();
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, safeWindow, capturedWindowId, capturedGeom](QDBusPendingCallWatcher* watcher) {
+                watcher->deleteLater();
 
-        QDBusPendingReply<bool> reply = *watcher;
-        bool hasGeometry = reply.isValid() && reply.value();
+                QDBusPendingReply<bool> reply = *watcher;
+                bool hasGeometry = reply.isValid() && reply.value();
 
-        if (!hasGeometry && m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
-            // Use pre-captured geometry if provided, otherwise read from window
-            QRectF geom = capturedGeom.isValid() ? capturedGeom
-                                                  : (safeWindow ? safeWindow->frameGeometry() : QRectF());
-            if (geom.width() > 0 && geom.height() > 0) {
-                m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), capturedWindowId,
-                                                     static_cast<int>(geom.x()), static_cast<int>(geom.y()),
-                                                     static_cast<int>(geom.width()),
-                                                     static_cast<int>(geom.height()));
-                qCInfo(lcEffect) << "Stored pre-snap geometry for window" << capturedWindowId;
-            }
-        }
-    });
+                if (!hasGeometry && m_windowTrackingInterface && m_windowTrackingInterface->isValid()) {
+                    // Use pre-captured geometry if provided, otherwise read from window
+                    QRectF geom =
+                        capturedGeom.isValid() ? capturedGeom : (safeWindow ? safeWindow->frameGeometry() : QRectF());
+                    if (geom.width() > 0 && geom.height() > 0) {
+                        m_windowTrackingInterface->asyncCall(QStringLiteral("storePreSnapGeometry"), capturedWindowId,
+                                                             static_cast<int>(geom.x()), static_cast<int>(geom.y()),
+                                                             static_cast<int>(geom.width()),
+                                                             static_cast<int>(geom.height()));
+                        qCInfo(lcEffect) << "Stored pre-snap geometry for window" << capturedWindowId;
+                    }
+                }
+            });
 }
 
 QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap(bool filterHandleable) const
@@ -246,14 +248,13 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // to ensure consistent behavior even if autotile screens changed mid-drag.
                 if (m_dragBypassedForAutotile) {
                     if (!cancelled) {
-                        QDBusMessage msg = QDBusMessage::createMethodCall(
-                            DBus::ServiceName, DBus::ObjectPath,
-                            DBus::Interface::Autotile,
-                            QStringLiteral("floatWindow"));
+                        QDBusMessage msg =
+                            QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
+                                                           DBus::Interface::Autotile, QStringLiteral("floatWindow"));
                         msg << windowId;
                         QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-                        auto *watcher = new QDBusPendingCallWatcher(pending, this);
-                        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher *w) {
+                        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+                        connect(watcher, &QDBusPendingCallWatcher::finished, this, [](QDBusPendingCallWatcher* w) {
                             if (w->isError()) {
                                 qCWarning(lcEffect) << "floatWindow D-Bus call failed:" << w->error().message();
                             }
@@ -322,9 +323,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // that individual callers handle via isValid()/isError() checks.
     // On Wayland, this watcher uses D-Bus monitoring (not X11 selection),
     // which works reliably across both sessions.
-    auto* serviceWatcher = new QDBusServiceWatcher(
-        DBus::ServiceName, QDBusConnection::sessionBus(),
-        QDBusServiceWatcher::WatchForRegistration, this);
+    auto* serviceWatcher = new QDBusServiceWatcher(DBus::ServiceName, QDBusConnection::sessionBus(),
+                                                   QDBusServiceWatcher::WatchForRegistration, this);
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service registered — scheduling state re-push";
 
@@ -343,10 +343,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             qCInfo(lcEffect) << "Re-pushing state after daemon registration";
 
             // Re-push cursor screen
-            if (!m_lastCursorScreenName.isEmpty()
-                && ensureWindowTrackingReady("daemon re-register cursor screen")) {
-                m_windowTrackingInterface->asyncCall(
-                    QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
+            if (!m_lastCursorScreenName.isEmpty() && ensureWindowTrackingReady("daemon re-register cursor screen")) {
+                m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
                 qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastCursorScreenName;
             }
 
@@ -415,8 +413,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // Defer the D-Bus call so the daemon has time to register its service
         QTimer::singleShot(500, this, [this, initialName = m_lastCursorScreenName]() {
             // Only send if no mouse movement has already updated the screen
-            if (m_lastCursorScreenName == initialName
-                && !initialName.isEmpty()
+            if (m_lastCursorScreenName == initialName && !initialName.isEmpty()
                 && ensureWindowTrackingReady("initial cursor screen")) {
                 m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), initialName);
                 qCDebug(lcEffect) << "Sent initial cursor screen:" << initialName;
@@ -463,8 +460,7 @@ bool PlasmaZonesEffect::isActive() const
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
 {
-    if (e->type() == QEvent::KeyPress && e->key() == Qt::Key_Escape
-        && m_dragTracker->isDragging()) {
+    if (e->type() == QEvent::KeyPress && e->key() == Qt::Key_Escape && m_dragTracker->isDragging()) {
         // The keyboard grab ensures this runs before KWin's MoveResizeFilter,
         // so Escape never reaches the interactive move handler. The daemon
         // hides the overlay and sets snapCancelled; the drag continues as
@@ -585,7 +581,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     const bool buttonsChanged = (oldbuttons != buttons);
 
     if (buttonsChanged && m_dragTracker->isDragging()) {
-        qCInfo(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->" << static_cast<int>(buttons);
+        qCInfo(lcEffect) << "mouseChanged buttons:" << static_cast<int>(oldbuttons) << "->"
+                         << static_cast<int>(buttons);
     }
 
     if (modifiersChanged) {
@@ -623,7 +620,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
                 // When triggers haven't loaded yet, stay permissive (#175).
                 if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
                     sendDeferredDragStarted();
-                    callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
+                    callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers,
+                                  static_cast<int>(m_currentMouseButtons));
                 }
             }
         } else {
@@ -666,8 +664,8 @@ void PlasmaZonesEffect::slotScreenGeometryChanged()
 
     QRect currentGeometry = KWin::effects->virtualScreenGeometry();
     qCInfo(lcEffect) << "virtualScreenGeometryChanged fired"
-                      << "- current:" << currentGeometry << "- previous:" << m_lastVirtualScreenGeometry
-                      << "- pending:" << m_pendingScreenChange;
+                     << "- current:" << currentGeometry << "- previous:" << m_lastVirtualScreenGeometry
+                     << "- pending:" << m_pendingScreenChange;
 
     // Check if the geometry actually changed significantly
     if (currentGeometry == m_lastVirtualScreenGeometry && !m_pendingScreenChange) {
@@ -687,7 +685,7 @@ void PlasmaZonesEffect::applyScreenGeometryChange()
 
     QRect currentGeometry = KWin::effects->virtualScreenGeometry();
     qCInfo(lcEffect) << "Applying debounced screen geometry change"
-                      << "- previous:" << m_lastVirtualScreenGeometry << "- current:" << currentGeometry;
+                     << "- previous:" << m_lastVirtualScreenGeometry << "- current:" << currentGeometry;
 
     m_pendingScreenChange = false;
 
@@ -823,7 +821,7 @@ void PlasmaZonesEffect::applyWindowGeometriesFromJson(const QString& geometriesJ
             QRectF currentWindowGeometry = window->frameGeometry();
             if (QRect(currentWindowGeometry.toRect()) != newGeometry) {
                 qCInfo(lcEffect) << "Repositioning window" << windowId << "from" << currentWindowGeometry << "to"
-                                  << newGeometry;
+                                 << newGeometry;
                 applySnapGeometry(window, newGeometry);
             }
         }
@@ -1006,8 +1004,7 @@ bool PlasmaZonesEffect::ensureOverlayInterface(const char* methodName)
     return true;
 }
 
-QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWindowId,
-                                                        const QString& screenName,
+QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWindowId, const QString& screenName,
                                                         const QSet<QString>& snappedWindowIds) const
 {
     // Candidates: unsnapped windows (including floated — user can snap them to fill empty zones)
@@ -1015,8 +1012,7 @@ QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWi
     const auto windows = KWin::effects->stackingOrder();
 
     for (KWin::EffectWindow* w : windows) {
-        if (!w || !shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
-            || !w->isOnCurrentActivity()) {
+        if (!w || !shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
 
@@ -1044,8 +1040,7 @@ QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWi
             // Count how many live windows share this stable ID
             int sameStableCount = 0;
             for (KWin::EffectWindow* other : windows) {
-                if (other && shouldHandleWindow(other)
-                    && extractStableId(getWindowId(other)) == stableId) {
+                if (other && shouldHandleWindow(other) && extractStableId(getWindowId(other)) == stableId) {
                     ++sameStableCount;
                 }
             }
@@ -1083,8 +1078,7 @@ QJsonArray PlasmaZonesEffect::buildSnapAssistCandidates(const QString& excludeWi
                 QBuffer buffer(&ba);
                 buffer.open(QIODevice::WriteOnly);
                 if (pix.toImage().save(&buffer, "PNG")) {
-                    QString dataUrl = QStringLiteral("data:image/png;base64,")
-                        + QString::fromUtf8(ba.toBase64());
+                    QString dataUrl = QStringLiteral("data:image/png;base64,") + QString::fromUtf8(ba.toBase64());
                     obj[QLatin1String("iconPng")] = dataUrl;
                 }
             }
@@ -1123,9 +1117,8 @@ void PlasmaZonesEffect::loadCachedSettings()
 
     // Helper: create a fully-async D-Bus call to getSetting without QDBusInterface
     auto makeSettingCall = [](const QString& settingName) -> QDBusPendingCall {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
-            QStringLiteral("getSetting"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
+                                                          DBus::Interface::Settings, QStringLiteral("getSetting"));
         msg << settingName;
         return QDBusConnection::sessionBus().asyncCall(msg);
     };
@@ -1140,20 +1133,20 @@ void PlasmaZonesEffect::loadCachedSettings()
     };
 
     // Load excludeTransientWindows
-    auto* excludeWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("excludeTransientWindows")), this);
-    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_excludeTransientWindows = extractVariant(reply).toBool();
-            qCDebug(lcEffect) << "Loaded excludeTransientWindows:" << m_excludeTransientWindows;
-        }
-    });
+    auto* excludeWatcher =
+        new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("excludeTransientWindows")), this);
+    connect(excludeWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_excludeTransientWindows = extractVariant(reply).toBool();
+                    qCDebug(lcEffect) << "Loaded excludeTransientWindows:" << m_excludeTransientWindows;
+                }
+            });
 
     // Load minimumWindowWidth
-    auto* widthWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("minimumWindowWidth")), this);
+    auto* widthWatcher = new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("minimumWindowWidth")), this);
     connect(widthWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         QDBusPendingReply<QVariant> reply = *w;
@@ -1164,175 +1157,178 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
 
     // Load minimumWindowHeight
-    auto* heightWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("minimumWindowHeight")), this);
-    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_minimumWindowHeight = extractVariant(reply).toInt();
-            qCDebug(lcEffect) << "Loaded minimumWindowHeight:" << m_minimumWindowHeight;
-        }
-    });
+    auto* heightWatcher = new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("minimumWindowHeight")), this);
+    connect(heightWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_minimumWindowHeight = extractVariant(reply).toInt();
+                    qCDebug(lcEffect) << "Loaded minimumWindowHeight:" << m_minimumWindowHeight;
+                }
+            });
 
     // Load snapAssistEnabled (for Snap Assist continuation gating)
-    auto* snapAssistWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("snapAssistEnabled")), this);
-    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_snapAssistEnabled = extractVariant(reply).toBool();
-            qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
-        }
-    });
+    auto* snapAssistWatcher = new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("snapAssistEnabled")), this);
+    connect(snapAssistWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_snapAssistEnabled = extractVariant(reply).toBool();
+                    qCDebug(lcEffect) << "Loaded snapAssistEnabled:" << m_snapAssistEnabled;
+                }
+            });
 
     // Load animation settings (general — applies to both snapping and autotiling)
-    auto* animEnabledWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("animationsEnabled")), this);
-    connect(animEnabledWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_windowAnimator->setEnabled(extractVariant(reply).toBool());
-            qCDebug(lcEffect) << "Loaded animationsEnabled:" << m_windowAnimator->isEnabled();
-        }
-    });
+    auto* animEnabledWatcher = new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("animationsEnabled")), this);
+    connect(animEnabledWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_windowAnimator->setEnabled(extractVariant(reply).toBool());
+                    qCDebug(lcEffect) << "Loaded animationsEnabled:" << m_windowAnimator->isEnabled();
+                }
+            });
 
-    auto* animDurationWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("animationDuration")), this);
-    connect(animDurationWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_windowAnimator->setDuration(qBound(50, extractVariant(reply).toInt(), 500));
-            qCDebug(lcEffect) << "Loaded animationDuration:" << m_windowAnimator->duration();
-        }
-    });
+    auto* animDurationWatcher = new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("animationDuration")), this);
+    connect(animDurationWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_windowAnimator->setDuration(qBound(50, extractVariant(reply).toInt(), 500));
+                    qCDebug(lcEffect) << "Loaded animationDuration:" << m_windowAnimator->duration();
+                }
+            });
 
-    auto* animEasingWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("animationEasingCurve")), this);
-    connect(animEasingWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            int curve = qBound(0, extractVariant(reply).toInt(),
-                               static_cast<int>(PlasmaZones::EasingCurve::Count) - 1);
-            m_windowAnimator->setEasingCurve(static_cast<PlasmaZones::EasingCurve>(curve));
-            qCDebug(lcEffect) << "Loaded animationEasingCurve:" << curve;
-        }
-    });
+    auto* animEasingWatcher =
+        new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("animationEasingCurve")), this);
+    connect(animEasingWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    QString curveStr = extractVariant(reply).toString();
+                    m_windowAnimator->setEasingCurve(PlasmaZones::CubicBezierCurve::fromString(curveStr));
+                    qCDebug(lcEffect) << "Loaded animationEasingCurve:" << curveStr;
+                }
+            });
 
-    auto* animMinDistWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("animationMinDistance")), this);
-    connect(animMinDistWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_windowAnimator->setMinDistance(qBound(0, extractVariant(reply).toInt(), 200));
-            qCDebug(lcEffect) << "Loaded animationMinDistance:" << m_windowAnimator->minDistance();
-        }
-    });
+    auto* animMinDistWatcher =
+        new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("animationMinDistance")), this);
+    connect(animMinDistWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_windowAnimator->setMinDistance(qBound(0, extractVariant(reply).toInt(), 200));
+                    qCDebug(lcEffect) << "Loaded animationMinDistance:" << m_windowAnimator->minDistance();
+                }
+            });
 
     // Load dragActivationTriggers (for local trigger gating — avoids 60Hz D-Bus during non-zone drags)
-    auto* triggersWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("dragActivationTriggers")), this);
-    connect(triggersWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            QVariant triggerVariant = extractVariant(reply);
+    auto* triggersWatcher =
+        new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("dragActivationTriggers")), this);
+    connect(triggersWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    QVariant triggerVariant = extractVariant(reply);
 
-            // D-Bus may deliver QVariantList-of-QVariantMap as a QDBusArgument
-            // instead of a native QVariantList. Extract manually if needed (#175).
-            // D-Bus wire format is typically `av` (array of variants), so we
-            // extract QVariants first, then handle inner maps per-element below.
-            QVariantList triggerList;
-            if (triggerVariant.canConvert<QDBusArgument>()) {
-                const QDBusArgument arg = triggerVariant.value<QDBusArgument>();
-                arg.beginArray();
-                while (!arg.atEnd()) {
-                    QVariant element;
-                    arg >> element;
-                    triggerList.append(element);
-                }
-                arg.endArray();
-            } else {
-                triggerList = triggerVariant.toList();
-            }
-            m_cachedDragActivationTriggers = triggerList;
+                    // D-Bus may deliver QVariantList-of-QVariantMap as a QDBusArgument
+                    // instead of a native QVariantList. Extract manually if needed (#175).
+                    // D-Bus wire format is typically `av` (array of variants), so we
+                    // extract QVariants first, then handle inner maps per-element below.
+                    QVariantList triggerList;
+                    if (triggerVariant.canConvert<QDBusArgument>()) {
+                        const QDBusArgument arg = triggerVariant.value<QDBusArgument>();
+                        arg.beginArray();
+                        while (!arg.atEnd()) {
+                            QVariant element;
+                            arg >> element;
+                            triggerList.append(element);
+                        }
+                        arg.endArray();
+                    } else {
+                        triggerList = triggerVariant.toList();
+                    }
+                    m_cachedDragActivationTriggers = triggerList;
 
-            // Pre-parse to POD structs so anyLocalTriggerHeld() avoids QVariant
-            // unboxing on every call (~30x/sec during drag).
-            m_parsedTriggers.clear();
-            m_parsedTriggers.reserve(triggerList.size());
-            for (const auto& t : std::as_const(triggerList)) {
-                // Each trigger element may also arrive as QDBusArgument
-                QVariantMap map;
-                if (t.canConvert<QDBusArgument>()) {
-                    const QDBusArgument elemArg = t.value<QDBusArgument>();
-                    elemArg >> map;
+                    // Pre-parse to POD structs so anyLocalTriggerHeld() avoids QVariant
+                    // unboxing on every call (~30x/sec during drag).
+                    m_parsedTriggers.clear();
+                    m_parsedTriggers.reserve(triggerList.size());
+                    for (const auto& t : std::as_const(triggerList)) {
+                        // Each trigger element may also arrive as QDBusArgument
+                        QVariantMap map;
+                        if (t.canConvert<QDBusArgument>()) {
+                            const QDBusArgument elemArg = t.value<QDBusArgument>();
+                            elemArg >> map;
+                        } else {
+                            map = t.toMap();
+                        }
+                        ParsedTrigger pt;
+                        pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
+                        pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
+                        m_parsedTriggers.append(pt);
+                    }
+
+                    qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_parsedTriggers.size() << "triggers";
+                    for (int i = 0; i < m_parsedTriggers.size(); ++i) {
+                        qCDebug(lcEffect) << "  trigger" << i << "modifier:" << m_parsedTriggers[i].modifier
+                                          << "mouseButton:" << m_parsedTriggers[i].mouseButton;
+                    }
+
+                    // Safety: if triggers loaded but are all empty (modifier=0, mouseButton=0),
+                    // the gating would block ALL drag events when zoneSelectorEnabled=false.
+                    // Log a warning so this misconfiguration is visible in debug output.
+                    bool anyValidTrigger = false;
+                    for (const auto& pt : std::as_const(m_parsedTriggers)) {
+                        if (pt.modifier != 0 || pt.mouseButton != 0) {
+                            anyValidTrigger = true;
+                            break;
+                        }
+                    }
+                    if (!m_parsedTriggers.isEmpty() && !anyValidTrigger) {
+                        qCWarning(lcEffect) << "All loaded triggers have modifier=0 mouseButton=0"
+                                            << "— possible D-Bus deserialization issue;"
+                                            << "zone activation may not work when zone selector is disabled";
+                    }
+                    m_triggersLoaded = true;
                 } else {
-                    map = t.toMap();
+                    qCWarning(lcEffect) << "Failed to load dragActivationTriggers from daemon"
+                                        << "— trigger gating will remain permissive";
+                    // Leave m_triggersLoaded = false so gating stays permissive
                 }
-                ParsedTrigger pt;
-                pt.modifier = map.value(QStringLiteral("modifier"), 0).toInt();
-                pt.mouseButton = map.value(QStringLiteral("mouseButton"), 0).toInt();
-                m_parsedTriggers.append(pt);
-            }
-
-            qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_parsedTriggers.size() << "triggers";
-            for (int i = 0; i < m_parsedTriggers.size(); ++i) {
-                qCDebug(lcEffect) << "  trigger" << i << "modifier:" << m_parsedTriggers[i].modifier
-                                  << "mouseButton:" << m_parsedTriggers[i].mouseButton;
-            }
-
-            // Safety: if triggers loaded but are all empty (modifier=0, mouseButton=0),
-            // the gating would block ALL drag events when zoneSelectorEnabled=false.
-            // Log a warning so this misconfiguration is visible in debug output.
-            bool anyValidTrigger = false;
-            for (const auto& pt : std::as_const(m_parsedTriggers)) {
-                if (pt.modifier != 0 || pt.mouseButton != 0) {
-                    anyValidTrigger = true;
-                    break;
-                }
-            }
-            if (!m_parsedTriggers.isEmpty() && !anyValidTrigger) {
-                qCWarning(lcEffect) << "All loaded triggers have modifier=0 mouseButton=0"
-                                    << "— possible D-Bus deserialization issue;"
-                                    << "zone activation may not work when zone selector is disabled";
-            }
-            m_triggersLoaded = true;
-        } else {
-            qCWarning(lcEffect) << "Failed to load dragActivationTriggers from daemon"
-                                << "— trigger gating will remain permissive";
-            // Leave m_triggersLoaded = false so gating stays permissive
-        }
-    });
+            });
 
     // Load toggleActivation
-    auto* toggleWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("toggleActivation")), this);
-    connect(toggleWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_cachedToggleActivation = extractVariant(reply).toBool();
-            qCDebug(lcEffect) << "Loaded toggleActivation:" << m_cachedToggleActivation;
-        }
-    });
+    auto* toggleWatcher = new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("toggleActivation")), this);
+    connect(toggleWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_cachedToggleActivation = extractVariant(reply).toBool();
+                    qCDebug(lcEffect) << "Loaded toggleActivation:" << m_cachedToggleActivation;
+                }
+            });
 
     // Load zoneSelectorEnabled
-    auto* zoneSelectorWatcher = new QDBusPendingCallWatcher(
-        makeSettingCall(QStringLiteral("zoneSelectorEnabled")), this);
-    connect(zoneSelectorWatcher, &QDBusPendingCallWatcher::finished, this, [this, extractVariant](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
-        QDBusPendingReply<QVariant> reply = *w;
-        if (reply.isValid()) {
-            m_cachedZoneSelectorEnabled = extractVariant(reply).toBool();
-            qCDebug(lcEffect) << "Loaded zoneSelectorEnabled:" << m_cachedZoneSelectorEnabled;
-        }
-    });
+    auto* zoneSelectorWatcher =
+        new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("zoneSelectorEnabled")), this);
+    connect(zoneSelectorWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    m_cachedZoneSelectorEnabled = extractVariant(reply).toBool();
+                    qCDebug(lcEffect) << "Loaded zoneSelectorEnabled:" << m_cachedZoneSelectorEnabled;
+                }
+            });
 
     qCDebug(lcEffect) << "Loading cached settings asynchronously, using defaults until loaded";
 }
@@ -1345,18 +1341,30 @@ bool PlasmaZonesEffect::checkLocalModifier(int modifierSetting, Qt::KeyboardModi
     const bool metaHeld = mods.testFlag(Qt::MetaModifier);
 
     switch (modifierSetting) {
-    case 0:  return false;                    // Disabled
-    case 1:  return shiftHeld;                // Shift
-    case 2:  return ctrlHeld;                 // Ctrl
-    case 3:  return altHeld;                  // Alt
-    case 4:  return metaHeld;                 // Meta
-    case 5:  return ctrlHeld && altHeld;      // CtrlAlt
-    case 6:  return ctrlHeld && shiftHeld;    // CtrlShift
-    case 7:  return altHeld && shiftHeld;     // AltShift
-    case 8:  return true;                     // AlwaysActive
-    case 9:  return altHeld && metaHeld;      // AltMeta
-    case 10: return ctrlHeld && altHeld && metaHeld; // CtrlAltMeta
-    default: return false;
+    case 0:
+        return false; // Disabled
+    case 1:
+        return shiftHeld; // Shift
+    case 2:
+        return ctrlHeld; // Ctrl
+    case 3:
+        return altHeld; // Alt
+    case 4:
+        return metaHeld; // Meta
+    case 5:
+        return ctrlHeld && altHeld; // CtrlAlt
+    case 6:
+        return ctrlHeld && shiftHeld; // CtrlShift
+    case 7:
+        return altHeld && shiftHeld; // AltShift
+    case 8:
+        return true; // AlwaysActive
+    case 9:
+        return altHeld && metaHeld; // AltMeta
+    case 10:
+        return ctrlHeld && altHeld && metaHeld; // CtrlAltMeta
+    default:
+        return false;
     }
 }
 
@@ -1525,7 +1533,7 @@ void PlasmaZonesEffect::slotMoveWindowToZoneRequested(const QString& targetZoneI
 }
 
 void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
-                                                             const QString& geometryJson)
+                                                              const QString& geometryJson)
 {
     QRect geometry = parseZoneGeometry(geometryJson);
     if (!geometry.isValid()) {
@@ -1589,31 +1597,27 @@ void PlasmaZonesEffect::showSnapAssistContinuationIfNeeded(const QString& screen
         return;
     }
     qCInfo(lcEffect) << "Snap assist continuation: querying empty zones for screen" << screenName;
-    QDBusPendingCall emptyCall =
-        m_windowTrackingInterface->asyncCall(QStringLiteral("getEmptyZonesJson"), screenName);
+    QDBusPendingCall emptyCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getEmptyZonesJson"), screenName);
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, screenName](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                QDBusPendingReply<QString> reply = *w;
-                if (!reply.isValid() || reply.value().isEmpty()
-                    || reply.value() == QLatin1String("[]")) {
-                    qCInfo(lcEffect) << "Snap assist continuation: no empty zones"
-                                     << (reply.isValid() ? reply.value() : QStringLiteral("(invalid reply)"));
-                    return;
-                }
-                asyncShowSnapAssist(QString(), screenName, reply.value());
-            });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenName](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<QString> reply = *w;
+        if (!reply.isValid() || reply.value().isEmpty() || reply.value() == QLatin1String("[]")) {
+            qCInfo(lcEffect) << "Snap assist continuation: no empty zones"
+                             << (reply.isValid() ? reply.value() : QStringLiteral("(invalid reply)"));
+            return;
+        }
+        asyncShowSnapAssist(QString(), screenName, reply.value());
+    });
 }
 
 void PlasmaZonesEffect::asyncShowSnapAssist(const QString& excludeWindowId, const QString& screenName,
-                                             const QString& emptyZonesJson)
+                                            const QString& emptyZonesJson)
 {
     if (!ensureWindowTrackingReady("snap assist snapped windows")) {
         return;
     }
-    QDBusPendingCall snapCall =
-        m_windowTrackingInterface->asyncCall(QStringLiteral("getSnappedWindows"));
+    QDBusPendingCall snapCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
     connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
             [this, excludeWindowId, screenName, emptyZonesJson](QDBusPendingCallWatcher* w) {
@@ -1633,10 +1637,9 @@ void PlasmaZonesEffect::asyncShowSnapAssist(const QString& excludeWindowId, cons
                 if (!ensureOverlayInterface("snap assist show")) {
                     return;
                 }
-                m_overlayInterface->asyncCall(QStringLiteral("showSnapAssist"), screenName,
-                                              emptyZonesJson,
-                                              QString::fromUtf8(
-                                                  QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
+                m_overlayInterface->asyncCall(
+                    QStringLiteral("showSnapAssist"), screenName, emptyZonesJson,
+                    QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact)));
                 qCInfo(lcEffect) << "Snap Assist shown with" << candidates.size() << "candidates";
             });
 }
@@ -1690,25 +1693,22 @@ void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
                 screenGeometries[key] = frame;
                 qCDebug(lcEffect) << "Pre-saved floating geometry before unfloat:" << windowId << frame;
                 if (ensureWindowTrackingReady("pre-save floating geometry") && m_windowTrackingInterface) {
-                    m_windowTrackingInterface->asyncCall(QStringLiteral("recordPreAutotileGeometry"),
-                        windowId, screenName,
-                        static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                        static_cast<int>(frame.width()), static_cast<int>(frame.height()));
+                    m_windowTrackingInterface->asyncCall(
+                        QStringLiteral("recordPreAutotileGeometry"), windowId, screenName, static_cast<int>(frame.x()),
+                        static_cast<int>(frame.y()), static_cast<int>(frame.width()), static_cast<int>(frame.height()));
                 }
             }
         }
         QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            DBus::Interface::Autotile,
-            QStringLiteral("toggleWindowFloat"));
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("toggleWindowFloat"));
         msg << windowId << screenName;
         QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-        auto *watcher = new QDBusPendingCallWatcher(pending, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
-                qCWarning(lcEffect) << "toggleWindowFloat D-Bus call failed for" << windowId
-                                    << ":" << w->error().message();
+                qCWarning(lcEffect) << "toggleWindowFloat D-Bus call failed for" << windowId << ":"
+                                    << w->error().message();
             }
         });
         return;
@@ -1731,7 +1731,7 @@ void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
 }
 
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson,
-                                                  const QString& zoneId, const QString& screenName)
+                                                   const QString& zoneId, const QString& screenName)
 {
     QRect geometry = parseZoneGeometry(geometryJson);
     if (!geometry.isValid()) {
@@ -1751,7 +1751,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, cons
 }
 
 void PlasmaZonesEffect::slotSwapWindowsRequested(const QString& targetZoneId, const QString& targetWindowId,
-                                                  const QString& zoneGeometry)
+                                                 const QString& zoneGeometry)
 {
     m_navigationHandler->handleSwapWindows(targetZoneId, targetWindowId, zoneGeometry);
 }
@@ -1778,8 +1778,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenName)
     QDBusPendingCall snapCall = m_windowTrackingInterface->asyncCall(QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
 
-    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, screenName](QDBusPendingCallWatcher* sw) {
+    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this, [this, screenName](QDBusPendingCallWatcher* sw) {
         sw->deleteLater();
 
         QDBusPendingReply<QStringList> snapReply = *sw;
@@ -1835,8 +1834,8 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenName)
 
         if (unsnappedWindowIds.isEmpty()) {
             qCDebug(lcEffect) << "No unsnapped windows to snap on screen" << screenName;
-            emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"),
-                                   QString(), QString(), screenName);
+            emitNavigationFeedback(false, QStringLiteral("snap_all"), QStringLiteral("no_unsnapped_windows"), QString(),
+                                   QString(), screenName);
             return;
         }
 
@@ -1845,12 +1844,11 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenName)
         }
 
         // Ask daemon to calculate zone assignments
-        QDBusPendingCall calcCall = m_windowTrackingInterface->asyncCall(
-            QStringLiteral("calculateSnapAllWindows"), unsnappedWindowIds, screenName);
+        QDBusPendingCall calcCall = m_windowTrackingInterface->asyncCall(QStringLiteral("calculateSnapAllWindows"),
+                                                                         unsnappedWindowIds, screenName);
         auto* calcWatcher = new QDBusPendingCallWatcher(calcCall, this);
 
-        connect(calcWatcher, &QDBusPendingCallWatcher::finished, this,
-                [this, screenName](QDBusPendingCallWatcher* cw) {
+        connect(calcWatcher, &QDBusPendingCallWatcher::finished, this, [this, screenName](QDBusPendingCallWatcher* cw) {
             cw->deleteLater();
 
             QDBusPendingReply<QString> calcReply = *cw;
@@ -1960,8 +1958,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         }
 
         // Include all normal, non-special windows (relaxed filter for the picker)
-        if (w->isSpecialWindow() || w->isDesktop() || w->isDock()
-            || w->isSkipSwitcher() || w->isNotification()
+        if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isSkipSwitcher() || w->isNotification()
             || w->isOnScreenDisplay() || w->isPopupWindow()) {
             continue;
         }
@@ -2036,30 +2033,33 @@ void PlasmaZonesEffect::callSnapToLastZone(KWin::EffectWindow* window)
 
     // FOURTH: Snap to last zone (final fallback)
     auto tryLastZone = [this, safeWindow, windowId, sticky]() {
-        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) return;
+        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid())
+            return;
         QString screen = getWindowScreenName(safeWindow);
-        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToLastZone"),
-                          {windowId, screen, sticky}, safeWindow, windowId, true, nullptr);
+        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToLastZone"), {windowId, screen, sticky},
+                         safeWindow, windowId, true, nullptr);
     };
 
     // THIRD: Auto-assign to empty zone
     auto tryEmptyZone = [this, safeWindow, windowId, sticky, tryLastZone]() {
-        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) return;
+        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid())
+            return;
         QString screen = getWindowScreenName(safeWindow);
-        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"),
-                          {windowId, screen, sticky}, safeWindow, windowId, true, tryLastZone);
+        tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"), {windowId, screen, sticky},
+                         safeWindow, windowId, true, tryLastZone);
     };
 
     // SECOND: Restore from persisted zone (uses captured screenName — persisted zone matches open-time screen)
     auto tryRestore = [this, safeWindow, windowId, screenName, sticky, tryEmptyZone]() {
-        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid()) return;
+        if (!safeWindow || !m_windowTrackingInterface || !m_windowTrackingInterface->isValid())
+            return;
         tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("restoreToPersistedZone"),
-                          {windowId, screenName, sticky}, safeWindow, windowId, true, tryEmptyZone);
+                         {windowId, screenName, sticky}, safeWindow, windowId, true, tryEmptyZone);
     };
 
     // FIRST: App rules (highest priority — uses captured screenName for open-time screen matching)
-    tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToAppRule"),
-                      {windowId, screenName, sticky}, safeWindow, windowId, true, tryRestore);
+    tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToAppRule"), {windowId, screenName, sticky},
+                     safeWindow, windowId, true, tryRestore);
 }
 
 void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)
@@ -2089,11 +2089,10 @@ void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& g
     // compositor thread (~25s timeout) if the daemon is registered but not yet
     // processing messages. QDBusMessage is purely local — no D-Bus communication
     // until asyncCall, which returns immediately.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-        QStringLiteral("dragStarted"));
-    msg << windowId << geometry.x() << geometry.y() << geometry.width()
-        << geometry.height() << appName << windowClass << static_cast<int>(m_currentMouseButtons);
+    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                                      QStringLiteral("dragStarted"));
+    msg << windowId << geometry.x() << geometry.y() << geometry.width() << geometry.height() << appName << windowClass
+        << static_cast<int>(m_currentMouseButtons);
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
@@ -2116,7 +2115,8 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
     m_windowTrackingInterface->asyncCall(QStringLiteral("setWindowSticky"), windowId, sticky);
 }
 
-void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons)
+void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods,
+                                      int mouseButtons)
 {
     // Don't send manual zone drag updates when drag was started on an autotile screen.
     // Use captured flag (not live m_autotileScreens) for consistency with drag start/stop.
@@ -2126,11 +2126,10 @@ void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cu
 
     // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
     // See callDragStarted() comment for rationale.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-        QStringLiteral("dragMoved"));
-    msg << windowId << static_cast<int>(cursorPos.x())
-        << static_cast<int>(cursorPos.y()) << static_cast<int>(mods) << mouseButtons;
+    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                                      QStringLiteral("dragMoved"));
+    msg << windowId << static_cast<int>(cursorPos.x()) << static_cast<int>(cursorPos.y()) << static_cast<int>(mods)
+        << mouseButtons;
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
@@ -2146,12 +2145,10 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
 
     // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
     // See callDragStarted() comment for rationale.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-        QStringLiteral("dragStopped"));
-    msg << windowId << static_cast<int>(cursorAtRelease.x())
-        << static_cast<int>(cursorAtRelease.y()) << static_cast<int>(m_currentModifiers)
-        << static_cast<int>(m_currentMouseButtons);
+    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                                      QStringLiteral("dragStopped"));
+    msg << windowId << static_cast<int>(cursorAtRelease.x()) << static_cast<int>(cursorAtRelease.y())
+        << static_cast<int>(m_currentModifiers) << static_cast<int>(m_currentMouseButtons);
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(msg);
 
     // Use QPointer to safely handle window destruction during async call
@@ -2161,127 +2158,127 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
-        w->deleteLater();
+                w->deleteLater();
 
-        QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, QString> reply = *w;
-        if (reply.isError()) {
-            qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
-            return;
-        }
-
-        int snapX = reply.argumentAt<0>();
-        int snapY = reply.argumentAt<1>();
-        int snapWidth = reply.argumentAt<2>();
-        int snapHeight = reply.argumentAt<3>();
-        bool shouldSnap = reply.argumentAt<4>();
-        QString releaseScreenName = reply.argumentAt<5>();
-        bool restoreSizeOnly = reply.argumentAt<6>();
-        bool snapAssistRequested = reply.argumentAt<7>();
-        QString emptyZonesJson = reply.argumentAt<8>();
-
-        qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
-                          << "releaseScreen=" << releaseScreenName
-                          << "restoreSizeOnly=" << restoreSizeOnly
-                          << "geometry=" << QRect(snapX, snapY, snapWidth, snapHeight);
-
-        if (shouldSnap && safeWindow) {
-            // Final fullscreen check before applying geometry - window could have
-            // transitioned to fullscreen between drag stop and this point
-            if (safeWindow->isFullScreen()) {
-                qCDebug(lcEffect) << "Window is fullscreen at drag stop, skipping snap";
-            } else {
-                QRect snapGeometry;
-                bool shouldApply = true;
-                if (restoreSizeOnly) {
-                    // Drag-to-unsnap: apply only pre-snap width/height, keep current position
-                    QRectF frame = safeWindow->frameGeometry();
-                    snapGeometry = QRect(static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                                         snapWidth, snapHeight);
-                    // Skip if already restored during drag (slotRestoreSizeDuringDrag) to avoid redundant moveResize
-                    if (qAbs(frame.width() - snapWidth) <= 1 && qAbs(frame.height() - snapHeight) <= 1) {
-                        shouldApply = false;
-                        qCDebug(lcEffect) << "Skip restore apply - already at correct size from during-drag restore";
-                    }
-                } else {
-                    snapGeometry = QRect(snapX, snapY, snapWidth, snapHeight);
+                QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, QString> reply = *w;
+                if (reply.isError()) {
+                    qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
+                    return;
                 }
-                if (shouldApply) {
-                    // If the window is still in user-move state because only the
-                    // activation mouse button is held (LMB already released),
-                    // cancel KWin's interactive move so we can snap immediately.
-                    // Without this, applySnapGeometry defers (100 ms retry) until
-                    // ALL buttons are released, causing a noticeable delay when
-                    // using a mouse button (e.g. RMB) for zone activation.
-                    if (safeWindow->isUserMove()
-                        && !(m_currentMouseButtons & Qt::LeftButton)) {
-                        KWin::Window* kw = safeWindow->window();
-                        if (kw) {
-                            qCDebug(lcEffect) << "Cancelling interactive move"
-                                " (activation button held, LMB released)";
-                            kw->cancelInteractiveMoveResize();
+
+                int snapX = reply.argumentAt<0>();
+                int snapY = reply.argumentAt<1>();
+                int snapWidth = reply.argumentAt<2>();
+                int snapHeight = reply.argumentAt<3>();
+                bool shouldSnap = reply.argumentAt<4>();
+                QString releaseScreenName = reply.argumentAt<5>();
+                bool restoreSizeOnly = reply.argumentAt<6>();
+                bool snapAssistRequested = reply.argumentAt<7>();
+                QString emptyZonesJson = reply.argumentAt<8>();
+
+                qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
+                                 << "releaseScreen=" << releaseScreenName << "restoreSizeOnly=" << restoreSizeOnly
+                                 << "geometry=" << QRect(snapX, snapY, snapWidth, snapHeight);
+
+                if (shouldSnap && safeWindow) {
+                    // Final fullscreen check before applying geometry - window could have
+                    // transitioned to fullscreen between drag stop and this point
+                    if (safeWindow->isFullScreen()) {
+                        qCDebug(lcEffect) << "Window is fullscreen at drag stop, skipping snap";
+                    } else {
+                        QRect snapGeometry;
+                        bool shouldApply = true;
+                        if (restoreSizeOnly) {
+                            // Drag-to-unsnap: apply only pre-snap width/height, keep current position
+                            QRectF frame = safeWindow->frameGeometry();
+                            snapGeometry =
+                                QRect(static_cast<int>(frame.x()), static_cast<int>(frame.y()), snapWidth, snapHeight);
+                            // Skip if already restored during drag (slotRestoreSizeDuringDrag) to avoid redundant
+                            // moveResize
+                            if (qAbs(frame.width() - snapWidth) <= 1 && qAbs(frame.height() - snapHeight) <= 1) {
+                                shouldApply = false;
+                                qCDebug(lcEffect)
+                                    << "Skip restore apply - already at correct size from during-drag restore";
+                            }
+                        } else {
+                            snapGeometry = QRect(snapX, snapY, snapWidth, snapHeight);
+                        }
+                        if (shouldApply) {
+                            // If the window is still in user-move state because only the
+                            // activation mouse button is held (LMB already released),
+                            // cancel KWin's interactive move so we can snap immediately.
+                            // Without this, applySnapGeometry defers (100 ms retry) until
+                            // ALL buttons are released, causing a noticeable delay when
+                            // using a mouse button (e.g. RMB) for zone activation.
+                            if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
+                                KWin::Window* kw = safeWindow->window();
+                                if (kw) {
+                                    qCDebug(lcEffect) << "Cancelling interactive move"
+                                                         " (activation button held, LMB released)";
+                                    kw->cancelInteractiveMoveResize();
+                                }
+                            }
+                            applySnapGeometry(safeWindow, snapGeometry);
                         }
                     }
-                    applySnapGeometry(safeWindow, snapGeometry);
                 }
-            }
-        }
 
-        // Auto-fill: if window was dropped without snapping to a zone, try snapping to
-        // the first empty zone on the release screen (where the user released the drag).
-        // Use daemon-provided releaseScreenName (cursor position), not window's current
-        // screen - after cross-screen drag the window may still report the old screen.
-        if (!shouldSnap && safeWindow && !releaseScreenName.isEmpty() && ensureWindowTrackingReady("auto-fill on drop")) {
-            bool sticky = isWindowSticky(safeWindow);
-            auto onSnapSuccess = [this](const QString&, const QString& snappedScreenName) {
-                showSnapAssistContinuationIfNeeded(snappedScreenName);
-            };
-            tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"),
-                              {windowId, releaseScreenName, sticky}, safeWindow, windowId, true, nullptr,
-                              onSnapSuccess);
-        }
+                // Auto-fill: if window was dropped without snapping to a zone, try snapping to
+                // the first empty zone on the release screen (where the user released the drag).
+                // Use daemon-provided releaseScreenName (cursor position), not window's current
+                // screen - after cross-screen drag the window may still report the old screen.
+                if (!shouldSnap && safeWindow && !releaseScreenName.isEmpty()
+                    && ensureWindowTrackingReady("auto-fill on drop")) {
+                    bool sticky = isWindowSticky(safeWindow);
+                    auto onSnapSuccess = [this](const QString&, const QString& snappedScreenName) {
+                        showSnapAssistContinuationIfNeeded(snappedScreenName);
+                    };
+                    tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("snapToEmptyZone"),
+                                     {windowId, releaseScreenName, sticky}, safeWindow, windowId, true, nullptr,
+                                     onSnapSuccess);
+                }
 
-        // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist.
-        // All D-Bus calls are async to prevent compositor freeze if daemon is busy with
-        // overlay teardown / layout change (see discussion #158).
-        if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenName.isEmpty()) {
-            asyncShowSnapAssist(windowId, releaseScreenName, emptyZonesJson);
-        }
-    });
+                // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist.
+                // All D-Bus calls are async to prevent compositor freeze if daemon is busy with
+                // overlay teardown / layout change (see discussion #158).
+                if (snapAssistRequested && !emptyZonesJson.isEmpty() && !releaseScreenName.isEmpty()) {
+                    asyncShowSnapAssist(windowId, releaseScreenName, emptyZonesJson);
+                }
+            });
 }
 
 void PlasmaZonesEffect::callCancelSnap()
 {
     qCInfo(lcEffect) << "Calling cancelSnap (drag cancelled by Escape or external event)";
     // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-        QStringLiteral("cancelSnap"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                                      QStringLiteral("cancelSnap"));
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
 void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method,
-                                          const QList<QVariant>& args,
-                                          QPointer<KWin::EffectWindow> window, const QString& windowId,
-                                          bool storePreSnap, std::function<void()> fallback,
-                                          std::function<void(const QString&, const QString&)> onSnapSuccess)
+                                         const QList<QVariant>& args, QPointer<KWin::EffectWindow> window,
+                                         const QString& windowId, bool storePreSnap, std::function<void()> fallback,
+                                         std::function<void(const QString&, const QString&)> onSnapSuccess)
 {
     QDBusPendingCall call = iface.asyncCallWithArgumentList(method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args](
-                QDBusPendingCallWatcher* w) {
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
                 if (reply.isError()) {
                     qCDebug(lcEffect) << method << "error:" << reply.error().message();
-                    if (fallback) fallback();
+                    if (fallback)
+                        fallback();
                     return;
                 }
                 if (reply.argumentAt<4>() && window) {
-                    QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(),
-                             reply.argumentAt<2>(), reply.argumentAt<3>());
+                    QRect geo(reply.argumentAt<0>(), reply.argumentAt<1>(), reply.argumentAt<2>(),
+                              reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
-                    if (storePreSnap) ensurePreSnapGeometryStored(window, windowId);
+                    if (storePreSnap)
+                        ensurePreSnapGeometryStored(window, windowId);
                     applySnapGeometry(window, geo);
                     // args[1] is screenName (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {
@@ -2289,11 +2286,13 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
                     }
                     return;
                 }
-                if (fallback) fallback();
+                if (fallback)
+                    fallback();
             });
 }
 
-void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag, int retriesLeft)
+void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
+                                          int retriesLeft)
 {
     if (!window) {
         qCWarning(lcEffect) << "Cannot apply geometry - window is null";
@@ -2364,8 +2363,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
         QRectF target(geo);
-        qCInfo(lcEffect) << "moveResize: QRect=" << geo
-                         << "-> QRectF=" << target;
+        qCInfo(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << target;
         kwinWindow->moveResize(target);
 
         // Request repaint of old and new regions. When applying geometry to many
@@ -2413,8 +2411,7 @@ QString PlasmaZonesEffect::extractStableId(const QString& windowId)
     return windowId;
 }
 
-QString PlasmaZonesEffect::findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries,
-                                                const QString& windowId)
+QString PlasmaZonesEffect::findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
 {
     auto it = savedGeometries.constFind(windowId);
     if (it != savedGeometries.constEnd()) {
@@ -2437,13 +2434,13 @@ QString PlasmaZonesEffect::findSavedGeometryKey(const QHash<QString, QRectF>& sa
 }
 
 bool PlasmaZonesEffect::hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries,
-                                                 const QString& windowId)
+                                                  const QString& windowId)
 {
     return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
 }
 
 bool PlasmaZonesEffect::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
-                                                          const QRectF& frame)
+                                                         const QRectF& frame)
 {
     if (windowId.isEmpty() || screenName.isEmpty()) {
         return false;
@@ -2458,10 +2455,9 @@ bool PlasmaZonesEffect::saveAndRecordPreAutotileGeometry(const QString& windowId
     screenGeometries[windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenName << ":" << frame;
     if (ensureWindowTrackingReady("record pre-autotile geometry") && m_windowTrackingInterface) {
-        m_windowTrackingInterface->asyncCall(QStringLiteral("recordPreAutotileGeometry"),
-            windowId, screenName,
-            static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-            static_cast<int>(frame.width()), static_cast<int>(frame.height()));
+        m_windowTrackingInterface->asyncCall(QStringLiteral("recordPreAutotileGeometry"), windowId, screenName,
+                                             static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                                             static_cast<int>(frame.width()), static_cast<int>(frame.height()));
     }
     return true;
 }
@@ -2532,16 +2528,13 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
 
     // Notify autotile daemon (uses its own D-Bus path, independent of WindowTracking)
     if (m_autotileScreens.contains(screenName)) {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName,
-            DBus::ObjectPath,
-            DBus::Interface::Autotile,
-            QStringLiteral("windowClosed"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
+                                                          DBus::Interface::Autotile, QStringLiteral("windowClosed"));
         msg << windowId;
 
         QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-        auto *watcher = new QDBusPendingCallWatcher(pending, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
                 qCWarning(lcEffect) << "windowClosed D-Bus call failed for" << windowId << ":" << w->error().message();
@@ -2578,16 +2571,15 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // m_windowToScreen is updated (also addresses R5: cross-screen detection)
     if (m_autotileScreens.contains(screenName)) {
         QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            DBus::Interface::Autotile,
-            QStringLiteral("notifyWindowFocused"));
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("notifyWindowFocused"));
         msg << windowId << screenName;
         QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-        auto *watcher = new QDBusPendingCallWatcher(pending, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher *w) {
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
-                qCWarning(lcEffect) << "notifyWindowFocused D-Bus call failed for" << windowId << ":" << w->error().message();
+                qCWarning(lcEffect) << "notifyWindowFocused D-Bus call failed for" << windowId << ":"
+                                    << w->error().message();
             }
         });
     }
@@ -2626,7 +2618,7 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
         // width) to overflow their assigned zones and overlap neighbors.
         int minWidth = 0;
         int minHeight = 0;
-        KWin::Window *kw = w->window();
+        KWin::Window* kw = w->window();
         if (kw) {
             const QSizeF minSize = kw->minSize();
             if (minSize.isValid()) {
@@ -2635,19 +2627,16 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
             }
         }
 
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName,
-            DBus::ObjectPath,
-            DBus::Interface::Autotile,
-            QStringLiteral("windowOpened"));
+        QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
+                                                          DBus::Interface::Autotile, QStringLiteral("windowOpened"));
         msg << windowId;
         msg << screenName;
         msg << minWidth;
         msg << minHeight;
 
         QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
-        auto *watcher = new QDBusPendingCallWatcher(pending, this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher *w) {
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             if (w->isError()) {
                 qCWarning(lcEffect) << "windowOpened D-Bus call failed for" << windowId << ":" << w->error().message();
@@ -2663,53 +2652,24 @@ void PlasmaZonesEffect::connectAutotileSignals()
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
 
-    bus.connect(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("windowsTileRequested"),
-        this,
-        SLOT(slotAutotileWindowsTileRequested(QString)));
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowsTileRequested"),
+                this, SLOT(slotAutotileWindowsTileRequested(QString)));
 
-    bus.connect(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("focusWindowRequested"),
-        this,
-        SLOT(slotAutotileFocusWindowRequested(QString)));
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("focusWindowRequested"),
+                this, SLOT(slotAutotileFocusWindowRequested(QString)));
 
-    bus.connect(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("monocleVisibilityChanged"),
-        this,
-        SLOT(slotMonocleVisibilityChanged(QString, QStringList)));
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                QStringLiteral("monocleVisibilityChanged"), this,
+                SLOT(slotMonocleVisibilityChanged(QString, QStringList)));
 
-    bus.connect(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("enabledChanged"),
-        this,
-        SLOT(slotAutotileEnabledChanged(bool)));
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("enabledChanged"), this,
+                SLOT(slotAutotileEnabledChanged(bool)));
 
-    bus.connect(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("autotileScreensChanged"),
-        this,
-        SLOT(slotAutotileScreensChanged(QStringList)));
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                QStringLiteral("autotileScreensChanged"), this, SLOT(slotAutotileScreensChanged(QStringList)));
 
-    bus.connect(
-        DBus::ServiceName,
-        DBus::ObjectPath,
-        DBus::Interface::Autotile,
-        QStringLiteral("windowFloatingChanged"),
-        this,
-        SLOT(slotAutotileWindowFloatingChanged(QString,bool,QString)));
+    bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowFloatingChanged"),
+                this, SLOT(slotAutotileWindowFloatingChanged(QString, bool, QString)));
 
     qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
 }
@@ -2719,14 +2679,12 @@ void PlasmaZonesEffect::loadAutotileSettings()
     // Query initial autotile screen set from daemon asynchronously.
     // After this, we track changes via the autotileScreensChanged D-Bus signal.
     QDBusMessage msg = QDBusMessage::createMethodCall(
-        DBus::ServiceName, DBus::ObjectPath,
-        QStringLiteral("org.freedesktop.DBus.Properties"),
-        QStringLiteral("Get"));
+        DBus::ServiceName, DBus::ObjectPath, QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
     msg << DBus::Interface::Autotile << QStringLiteral("autotileScreens");
 
     QDBusPendingCall call = QDBusConnection::sessionBus().asyncCall(msg);
-    auto *watcher = new QDBusPendingCallWatcher(call, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher *w) {
+    auto* watcher = new QDBusPendingCallWatcher(call, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
         QDBusPendingReply<QDBusVariant> reply = *w;
         if (reply.isValid()) {
@@ -2826,8 +2784,8 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
                 }
                 const QRectF& savedGeo = savedGeometries.value(savedKey);
                 if (savedGeo.isValid() && QRectF(w->frameGeometry()) != savedGeo) {
-                    qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << windowId
-                                     << "from" << w->frameGeometry() << "to" << savedGeo;
+                    qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << windowId << "from"
+                                     << w->frameGeometry() << "to" << savedGeo;
                     // Edge-consistent rounding: round edges independently then derive
                     // width/height, matching snapToRect() in libplasmazones.
                     const int l = qRound(savedGeo.x());
@@ -2875,9 +2833,11 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
 }
 
-void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName)
+void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowId, bool isFloating,
+                                                          const QString& screenName)
 {
-    qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating << "screen:" << screenName;
+    qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating
+                     << "screen:" << screenName;
 
     // Sync the navigation handler's floating cache. No geometry work here:
     // - Float: daemon handles restore via applyGeometryForFloat → applyGeometryRequested.
@@ -2946,7 +2906,8 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         return;
     }
 
-    struct Entry {
+    struct Entry
+    {
         QString windowId;
         QRect geometry;
         KWin::EffectWindow* window = nullptr;
@@ -2958,15 +2919,12 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
     for (const QJsonValue& val : arr) {
         QJsonObject obj = val.toObject();
         QString windowId = obj.value(QLatin1String("windowId")).toString();
-        QRect geo(obj.value(QLatin1String("x")).toInt(),
-                 obj.value(QLatin1String("y")).toInt(),
-                 obj.value(QLatin1String("width")).toInt(),
-                 obj.value(QLatin1String("height")).toInt());
+        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
+                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
         QRect normalizedGeometry = geo.normalized();
 
         if (normalizedGeometry.width() <= 0 || normalizedGeometry.height() <= 0) {
-            qCWarning(lcEffect) << "Autotile tile request: invalid geometry for" << windowId
-                               << normalizedGeometry;
+            qCWarning(lcEffect) << "Autotile tile request: invalid geometry for" << windowId << normalizedGeometry;
             continue;
         }
 
@@ -3024,8 +2982,8 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         // Multiple entries with same stableId: assign by position (left zone -> leftmost window)
         QVector<KWin::EffectWindow*> candidates = entries[indices[0]].candidates;
         if (candidates.size() != indices.size()) {
-            qCDebug(lcEffect) << "Autotile: stableId has" << indices.size() << "entries and"
-                             << candidates.size() << "candidates; assigning by position";
+            qCDebug(lcEffect) << "Autotile: stableId has" << indices.size() << "entries and" << candidates.size()
+                              << "candidates; assigning by position";
         }
         // Sort entries by target geometry x (left to right)
         QVector<int> sortedIndices = indices;
@@ -3060,8 +3018,7 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         // m_autotileScreens may not include this screen yet. The daemon only
         // emits windowsTileRequested for autotile screens, so the check is
         // redundant and would cause the pre-autotile geometry to be lost.
-        saveAndRecordPreAutotileGeometry(e.windowId, getWindowScreenName(e.window),
-                                         e.window->frameGeometry());
+        saveAndRecordPreAutotileGeometry(e.windowId, getWindowScreenName(e.window), e.window->frameGeometry());
         qCInfo(lcEffect) << "Autotile tile request:" << e.windowId << "QRect=" << e.geometry;
         applySnapGeometry(e.window, e.geometry);
     }
@@ -3078,8 +3035,7 @@ void PlasmaZonesEffect::slotAutotileFocusWindowRequested(const QString& windowId
     KWin::effects->activateWindow(w);
 }
 
-void PlasmaZonesEffect::slotMonocleVisibilityChanged(const QString& focusedWindowId,
-                                                       const QStringList& windowsToHide)
+void PlasmaZonesEffect::slotMonocleVisibilityChanged(const QString& focusedWindowId, const QStringList& windowsToHide)
 {
     // Unminimize the focused window
     KWin::EffectWindow* focusedW = findWindowById(focusedWindowId);
@@ -3106,7 +3062,7 @@ void PlasmaZonesEffect::slotMonocleVisibilityChanged(const QString& focusedWindo
 }
 
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
-                                        std::chrono::milliseconds presentTime)
+                                       std::chrono::milliseconds presentTime)
 {
     if (m_windowAnimator->hasAnimation(w)) {
         // Mark window as transformed so paintWindow gets called
@@ -3145,10 +3101,9 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
     }
 }
 
-void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget,
-                                     const KWin::RenderViewport& viewport,
-                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
-                                     KWin::WindowPaintData& data)
+void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                    KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
+                                    KWin::WindowPaintData& data)
 {
     // Apply animation transform if window is being animated
     m_windowAnimator->applyTransform(w, data);

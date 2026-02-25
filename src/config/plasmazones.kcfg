@@ -812,11 +812,9 @@
       <min>50</min>
       <max>500</max>
     </entry>
-    <entry name="AnimationEasingCurve" type="Int">
-      <label>Easing curve for animations (0=Linear, 1=OutQuad, 2=OutCubic, 3=InOutCubic, 4=OutBack, 5=OutElastic, 6=OutBounce, 7=InOutBack, 8=OutQuart, 9=OutQuint, 10=OutExpo, 11=InOutQuad, 12=InOutElastic)</label>
-      <default>2</default>
-      <min>0</min>
-      <max>12</max>
+    <entry name="AnimationEasingCurve" type="String">
+      <label>Cubic bezier control points for animation easing (x1,y1,x2,y2)</label>
+      <default>0.33,1.00,0.68,1.00</default>
     </entry>
     <entry name="AnimationMinDistance" type="Int">
       <label>Minimum geometry change in pixels to trigger animation (smaller changes snap instantly)</label>

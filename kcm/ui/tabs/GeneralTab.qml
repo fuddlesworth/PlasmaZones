@@ -22,23 +22,6 @@ ScrollView {
     clip: true
     contentWidth: availableWidth
 
-    // Easing curve descriptions (indexed by EasingCurve enum)
-    readonly property var easingDescriptions: [
-        i18n("Constant speed from start to finish."),
-        i18n("Quick start with gentle deceleration."),
-        i18n("Smooth deceleration into place. Snappy and natural."),
-        i18n("Smooth acceleration then deceleration."),
-        i18n("Slight overshoot past the target, then settles back."),
-        i18n("Spring-like bounce past the target."),
-        i18n("Bounces at the end like a dropped ball."),
-        i18n("Overshoots on both start and end."),
-        i18n("Sharper deceleration than Cubic. Very responsive."),
-        i18n("Even sharper deceleration. Ultra-snappy."),
-        i18n("Exponential deceleration. Fastest non-overshoot curve."),
-        i18n("Gentle symmetric acceleration and deceleration."),
-        i18n("Elastic spring on both ends. Very expressive.")
-    ]
-
     ColumnLayout {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
@@ -75,26 +58,19 @@ ScrollView {
                         ToolTip.text: i18n("Animate windows when snapping to zones or tiling. Applies to both manual snapping and autotiling.")
                     }
 
-                    // Easing curve preview (visual)
+                    // Cubic bezier curve editor with animated preview
                     EasingPreview {
                         id: easingPreview
                         Layout.fillWidth: true
-                        Layout.maximumWidth: 320
+                        Layout.maximumWidth: 500
                         Layout.alignment: Qt.AlignHCenter
-                        easingCurveIndex: kcm.animationEasingCurve
+                        curve: kcm.animationEasingCurve
                         animationDuration: kcm.animationDuration
                         previewEnabled: animationsEnabledCheck.checked
                         opacity: animationsEnabledCheck.checked ? 1.0 : 0.4
-                    }
-
-                    // Replay button
-                    Button {
-                        Layout.alignment: Qt.AlignHCenter
-                        text: i18n("Replay Preview")
-                        icon.name: "media-playback-start"
-                        enabled: animationsEnabledCheck.checked
-                        onClicked: easingPreview.replay()
-                        flat: true
+                        onCurveEdited: function(newCurve) {
+                            kcm.animationEasingCurve = newCurve
+                        }
                     }
 
                     Kirigami.Separator {
@@ -104,44 +80,71 @@ ScrollView {
                     Kirigami.FormLayout {
                         Layout.fillWidth: true
 
-                        // Easing curve selector
+                        // Preset selector
                         ComboBox {
-                            id: easingCurveCombo
-                            Kirigami.FormData.label: i18n("Easing curve:")
+                            id: easingPresetCombo
+                            Kirigami.FormData.label: i18n("Preset:")
                             enabled: animationsEnabledCheck.checked
 
-                            currentIndex: kcm.animationEasingCurve
-                            model: [
-                                i18n("Linear"),
-                                i18n("Ease Out (Quad)"),
-                                i18n("Ease Out (Cubic)"),
-                                i18n("Ease In-Out (Cubic)"),
-                                i18n("Overshoot"),
-                                i18n("Elastic"),
-                                i18n("Bounce"),
-                                i18n("Overshoot (In-Out)"),
-                                i18n("Ease Out (Quart)"),
-                                i18n("Ease Out (Quint)"),
-                                i18n("Ease Out (Expo)"),
-                                i18n("Ease In-Out (Quad)"),
-                                i18n("Elastic (In-Out)")
+                            readonly property var presets: [
+                                { name: i18n("Custom"), curve: "" },
+                                { name: i18n("Linear"), curve: "0.00,0.00,1.00,1.00" },
+                                { name: i18n("Ease Out (Quad)"), curve: "0.25,0.46,0.45,0.94" },
+                                { name: i18n("Ease Out (Cubic)"), curve: "0.33,1.00,0.68,1.00" },
+                                { name: i18n("Ease In-Out (Cubic)"), curve: "0.65,0.00,0.35,1.00" },
+                                { name: i18n("Overshoot"), curve: "0.18,0.89,0.32,1.28" },
+                                { name: i18n("Ease Out (Quart)"), curve: "0.25,1.00,0.50,1.00" },
+                                { name: i18n("Ease Out (Quint)"), curve: "0.23,1.00,0.32,1.00" },
+                                { name: i18n("Ease Out (Expo)"), curve: "0.16,1.00,0.30,1.00" },
+                                { name: i18n("Ease In-Out (Quad)"), curve: "0.46,0.03,0.52,0.96" },
+                                { name: i18n("Overshoot (In-Out)"), curve: "0.68,-0.55,0.27,1.55" }
                             ]
+
+                            model: presets.map(p => p.name)
+
+                            // Normalize curve string to "x1,y1,x2,y2" with 2 decimals for comparison
+                            function normalizeCurve(curve) {
+                                if (!curve || curve === "") return ""
+                                var parts = curve.split(",")
+                                if (parts.length !== 4) return ""
+                                var x1 = parseFloat(parts[0])
+                                var y1 = parseFloat(parts[1])
+                                var x2 = parseFloat(parts[2])
+                                var y2 = parseFloat(parts[3])
+                                if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2))
+                                    return ""
+                                return x1.toFixed(2) + "," + y1.toFixed(2) + "," + x2.toFixed(2) + "," + y2.toFixed(2)
+                            }
+
+                            // Find matching preset for current curve (normalized comparison)
+                            function findPresetIndex(curve) {
+                                var norm = normalizeCurve(curve)
+                                if (norm === "") return 0
+                                for (var i = 1; i < presets.length; i++) {
+                                    if (normalizeCurve(presets[i].curve) === norm)
+                                        return i
+                                }
+                                return 0 // Custom
+                            }
+
+                            currentIndex: findPresetIndex(kcm.animationEasingCurve)
+
                             onActivated: (index) => {
-                                kcm.animationEasingCurve = index
+                                if (index > 0) {
+                                    kcm.animationEasingCurve = presets[index].curve
+                                }
+                            }
+
+                            // Update when curve changes externally (e.g. from editor drag)
+                            Connections {
+                                target: kcm
+                                function onAnimationEasingCurveChanged() {
+                                    easingPresetCombo.currentIndex = easingPresetCombo.findPresetIndex(kcm.animationEasingCurve)
+                                }
                             }
 
                             ToolTip.visible: hovered
-                            ToolTip.text: i18n("Controls the acceleration curve of the animation")
-                        }
-
-                        // Easing description
-                        Label {
-                            Kirigami.FormData.label: " "
-                            Layout.fillWidth: true
-                            text: root.easingDescriptions[kcm.animationEasingCurve] || ""
-                            wrapMode: Text.WordWrap
-                            opacity: animationsEnabledCheck.checked ? 0.7 : 0.3
-                            font.italic: true
+                            ToolTip.text: i18n("Select a preset or drag control points to customize")
                         }
 
                         // Duration slider
@@ -243,14 +246,20 @@ ScrollView {
                         readonly property int osdStyleText: 1
                         readonly property int osdStylePreview: 2
 
-                        currentIndex: Math.max(0, kcm.osdStyle - osdStyleText)
+                        currentIndex: Math.max(0, Math.min(kcm.osdStyle, 2))
                         model: [
+                            i18n("None"),
                             i18n("Text only"),
                             i18n("Visual preview")
                         ]
                         onActivated: (index) => {
-                            kcm.osdStyle = index + osdStyleText
+                            kcm.osdStyle = index
                         }
+
+                        ToolTip.visible: hovered
+                        ToolTip.text: currentIndex === 0
+                            ? i18n("No OSD shown. Enable layout switch or keyboard navigation above to show OSD.")
+                            : (currentIndex === 1 ? i18n("Show layout name as text only") : i18n("Show visual layout preview"))
                     }
                 }
             }

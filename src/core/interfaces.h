@@ -140,8 +140,8 @@ public:
     virtual void setAnimationsEnabled(bool enabled) = 0;
     virtual int animationDuration() const = 0;
     virtual void setAnimationDuration(int duration) = 0;
-    virtual int animationEasingCurve() const = 0;
-    virtual void setAnimationEasingCurve(int curve) = 0;
+    virtual QString animationEasingCurve() const = 0;
+    virtual void setAnimationEasingCurve(const QString& curve) = 0;
     virtual int animationMinDistance() const = 0;
     virtual void setAnimationMinDistance(int distance) = 0;
 

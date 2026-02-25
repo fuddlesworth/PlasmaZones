@@ -163,7 +163,7 @@ public:
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
     Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY animationDurationChanged)
-    Q_PROPERTY(int animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY animationEasingCurveChanged)
+    Q_PROPERTY(QString animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY animationEasingCurveChanged)
     Q_PROPERTY(int animationMinDistance READ animationMinDistance WRITE setAnimationMinDistance NOTIFY animationMinDistanceChanged)
 
     // Autotile Behavior and Visual Settings
@@ -800,8 +800,8 @@ public:
     int animationDuration() const override { return m_animationDuration; }
     void setAnimationDuration(int duration) override;
 
-    int animationEasingCurve() const override { return m_animationEasingCurve; }
-    void setAnimationEasingCurve(int curve) override;
+    QString animationEasingCurve() const override { return m_animationEasingCurve; }
+    void setAnimationEasingCurve(const QString& curve) override;
 
     int animationMinDistance() const override { return m_animationMinDistance; }
     void setAnimationMinDistance(int distance) override;
@@ -1268,7 +1268,7 @@ private:
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     bool m_animationsEnabled = true;
     int m_animationDuration = 150; // milliseconds
-    int m_animationEasingCurve = 2; // EasingCurve::OutCubic
+    QString m_animationEasingCurve = QStringLiteral("0.33,1.00,0.68,1.00");
     int m_animationMinDistance = 0; // pixels — skip animation for smaller changes
 
     // Additional Autotiling Settings (must match plasmazones.kcfg Autotiling defaults)
