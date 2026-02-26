@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QRect>
 #include <QRectF>
+#include <QPointF>
 #include <QString>
 #include <QElapsedTimer>
 #include <QtMath>
@@ -54,16 +55,19 @@ struct CubicBezierCurve
 };
 
 /**
- * @brief Animation data for window geometry transitions
+ * @brief Animation data for translate-only window transitions
  *
- * Stores the start/end geometry and progress for smooth window animations.
+ * Stores the start position and target geometry for smooth slide animations.
+ * The window's actual frame is moved to targetGeometry immediately via
+ * moveResize(); this animation only provides a visual translation offset
+ * that slides from the old position to the new. No scale transforms.
  */
 struct WindowAnimation
 {
-    QRectF startGeometry; ///< Window geometry at animation start
-    QRectF endGeometry; ///< Target window geometry
-    QElapsedTimer timer; ///< Timer for animation progress calculation
-    qreal duration = 150.0; ///< Animation duration in milliseconds (default 150ms)
+    QPointF startPosition;   ///< Visual top-left position before snap
+    QRect targetGeometry;    ///< Target geometry (for duplicate detection)
+    QElapsedTimer timer;     ///< Timer for animation progress
+    qreal duration = 150.0;  ///< Animation duration in milliseconds
     CubicBezierCurve easing; ///< Easing curve for this animation
 
     /// Check if the animation timer has been started
@@ -75,7 +79,7 @@ struct WindowAnimation
     /// Calculate current progress (0.0 to 1.0) with the configured easing
     qreal progress() const
     {
-        if (!timer.isValid()) {
+        if (!timer.isValid() || duration <= 0.0) {
             return 0.0;
         }
         qreal t = qMin(1.0, timer.elapsed() / duration);
@@ -86,28 +90,34 @@ struct WindowAnimation
     bool isComplete() const
     {
         if (!timer.isValid()) {
-            return true; // Invalid animation is considered complete
+            return true;
+        }
+        if (duration <= 0.0) {
+            return true;
         }
         return timer.elapsed() >= duration;
     }
 
-    /// Interpolate geometry based on current progress
-    QRectF currentGeometry() const
+    /// Absolute visual top-left position at the current animation progress.
+    /// At t=0 returns startPosition; at t=1 returns targetGeometry.topLeft().
+    QPointF currentVisualPosition() const
     {
-        qreal p = progress();
-        return QRectF(startGeometry.x() + (endGeometry.x() - startGeometry.x()) * p,
-                      startGeometry.y() + (endGeometry.y() - startGeometry.y()) * p,
-                      startGeometry.width() + (endGeometry.width() - startGeometry.width()) * p,
-                      startGeometry.height() + (endGeometry.height() - startGeometry.height()) * p);
+        const qreal p = progress();
+        const qreal tx = targetGeometry.x();
+        const qreal ty = targetGeometry.y();
+        return QPointF(startPosition.x() + (tx - startPosition.x()) * p,
+                       startPosition.y() + (ty - startPosition.y()) * p);
     }
 };
 
 /**
- * @brief Manages window geometry animations
+ * @brief Manages translate-only window slide animations
  *
- * Tracks animation state, computes interpolated geometry, and determines
- * when animations are complete. The effect applies geometry immediately via
- * moveResize(), then visually interpolates from old to new using paint transforms.
+ * When a window is snapped to a zone, the caller applies moveResize()
+ * immediately to set the final geometry. This animator provides a visual
+ * translation offset that slides the window from its old position to the
+ * new one. No scale transforms are used, avoiding Wayland buffer desync
+ * artifacts (flickering, zoom, size jumps).
  */
 class WindowAnimator : public QObject
 {
@@ -156,27 +166,29 @@ public:
         return !m_animations.isEmpty();
     }
     bool hasAnimation(KWin::EffectWindow* window) const;
-    bool startAnimation(KWin::EffectWindow* window, const QRectF& startGeometry, const QRect& endGeometry);
+    bool startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QRect& targetGeometry);
     void removeAnimation(KWin::EffectWindow* window);
     void clear();
 
     // Animation state queries
-    bool isAnimationComplete(KWin::EffectWindow* window) const;
-    QRectF currentGeometry(KWin::EffectWindow* window) const;
-    QRect finalGeometry(KWin::EffectWindow* window) const;
-
-    // Paint helper - applies transform to paint data
-    void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data);
-
-    // Get the bounding rect covering the full animation path (start ∪ end geometry)
-    // Used by the effect to request screen-region repaints that prevent ghost artifacts
-    QRectF animationBounds(KWin::EffectWindow* window) const;
-
-    // Check if window is already animating to the same target
     bool isAnimatingToTarget(KWin::EffectWindow* window, const QRect& targetGeometry) const;
 
-    // Redirect animation to new target (for rapid geometry changes)
-    void redirectAnimation(KWin::EffectWindow* window, const QRect& newTarget);
+    /// Current visual top-left position (lerped between start and target).
+    /// Used to chain animations when redirecting to a new target mid-flight.
+    QPointF currentVisualPosition(KWin::EffectWindow* window) const;
+
+    // Per-frame: clean up completed animations. Called from prePaintScreen().
+    void advanceAnimations();
+
+    // Schedule targeted repaints for active animation regions. Called from postPaintScreen().
+    void scheduleRepaints() const;
+
+    // Paint helper — applies translate-only offset (no scale transforms).
+    // The window visually slides from startPosition to its real frame position.
+    void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
+
+    // Bounding rect covering the full animation path (for repaint regions)
+    QRectF animationBounds(KWin::EffectWindow* window) const;
 
 private:
     QHash<KWin::EffectWindow*, WindowAnimation> m_animations;

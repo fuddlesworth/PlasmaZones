@@ -3,9 +3,12 @@
 
 #include "windowanimator.h"
 
+#include <effect/effect.h>
+#include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
 #include <QStringList>
+#include <QLineF>
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
@@ -90,40 +93,31 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* window) const
     return m_animations.contains(window);
 }
 
-bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QRectF& startGeometry, const QRect& endGeometry)
+bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QRect& targetGeometry)
 {
     if (!window || !m_enabled) {
         return false;
     }
 
-    // If geometry is the same, no animation needed
-    if (startGeometry.toRect() == endGeometry) {
+    // Skip if position change is below the minimum distance threshold
+    const QPointF newPos = targetGeometry.topLeft();
+    const qreal dist = QLineF(oldPosition, newPos).length();
+    if (dist < qMax(1.0, qreal(m_minDistance))) {
         return false;
     }
 
-    // Skip animation if geometry change is below the minimum distance threshold
-    if (m_minDistance > 0) {
-        qreal maxDelta =
-            qMax(qMax(qAbs(endGeometry.x() - startGeometry.x()), qAbs(endGeometry.y() - startGeometry.y())),
-                 qMax(qAbs(endGeometry.width() - startGeometry.width()),
-                      qAbs(endGeometry.height() - startGeometry.height())));
-        if (maxDelta < m_minDistance) {
-            return false;
-        }
-    }
-
     WindowAnimation anim;
-    anim.startGeometry = startGeometry;
-    anim.endGeometry = QRectF(endGeometry);
+    anim.startPosition = oldPosition;
+    anim.targetGeometry = targetGeometry;
     anim.duration = m_duration;
     anim.easing = m_easing;
     anim.timer.start();
     m_animations[window] = anim;
 
-    // Request repaint to start animation
     window->addRepaintFull();
 
-    qCDebug(lcEffect) << "Started animation from" << startGeometry << "to" << endGeometry << "duration:" << m_duration
+    qCDebug(lcEffect) << "Started slide animation from" << oldPosition << "to" << newPos
+                      << "distance:" << dist << "duration:" << m_duration
                       << "easing:" << m_easing.toString();
     return true;
 }
@@ -138,60 +132,79 @@ void WindowAnimator::clear()
     m_animations.clear();
 }
 
-bool WindowAnimator::isAnimationComplete(KWin::EffectWindow* window) const
+bool WindowAnimator::isAnimatingToTarget(KWin::EffectWindow* window, const QRect& targetGeometry) const
 {
     auto it = m_animations.constFind(window);
     if (it == m_animations.constEnd()) {
-        return true; // No animation = complete
+        return false;
     }
-    return it->isComplete();
+    return it->targetGeometry == targetGeometry;
 }
 
-QRectF WindowAnimator::currentGeometry(KWin::EffectWindow* window) const
+QPointF WindowAnimator::currentVisualPosition(KWin::EffectWindow* window) const
 {
     auto it = m_animations.constFind(window);
     if (it == m_animations.constEnd()) {
-        return window ? window->frameGeometry() : QRectF();
+        return window ? window->frameGeometry().topLeft() : QPointF();
     }
-    return it->currentGeometry();
+    return it->currentVisualPosition();
 }
 
-QRect WindowAnimator::finalGeometry(KWin::EffectWindow* window) const
+void WindowAnimator::advanceAnimations()
+{
+    // Iterate over a snapshot of keys — signal handlers triggered by repaint
+    // could indirectly modify m_animations.
+    const auto windows = m_animations.keys();
+    for (KWin::EffectWindow* window : windows) {
+        auto it = m_animations.find(window);
+        if (it == m_animations.end()) {
+            continue;
+        }
+
+        if (!it->isValid()) {
+            m_animations.erase(it);
+            continue;
+        }
+
+        if (it->isComplete()) {
+            // Animation done — window is already at its final position
+            // (moveResize was called before the animation started).
+            // Clean up and repaint the full animation path.
+            const QRectF bounds = animationBounds(window);
+            m_animations.erase(it);
+            window->addRepaintFull();
+            if (bounds.isValid()) {
+                KWin::effects->addRepaint(bounds.toAlignedRect());
+            }
+            qCDebug(lcEffect) << "Window slide animation complete";
+        }
+    }
+}
+
+void WindowAnimator::scheduleRepaints() const
+{
+    for (auto it = m_animations.constBegin(); it != m_animations.constEnd(); ++it) {
+        const QRectF bounds = animationBounds(it.key());
+        if (bounds.isValid()) {
+            KWin::effects->addRepaint(bounds.toAlignedRect());
+        }
+    }
+}
+
+void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const
 {
     auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd()) {
-        return QRect();
-    }
-    return it->endGeometry.toRect();
-}
-
-void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data)
-{
-    auto it = m_animations.find(window);
-    if (it == m_animations.end()) {
+    if (it == m_animations.constEnd() || !it->isValid()) {
         return;
     }
 
-    const WindowAnimation& anim = *it;
-
-    // Validate animation state
-    if (!anim.isValid()) {
-        m_animations.erase(it);
-        return;
-    }
-
-    QRectF current = anim.currentGeometry();
-    QRectF original = window->frameGeometry();
-
-    // Calculate translation offset
-    data += QPointF(current.x() - original.x(), current.y() - original.y());
-
-    // Calculate scale factors; use minimum divisor to avoid division by zero for very small windows
-    constexpr qreal MinDimension = 1.0;
-    const qreal w = qMax(original.width(), MinDimension);
-    const qreal h = qMax(original.height(), MinDimension);
-    data.setXScale(current.width() / w);
-    data.setYScale(current.height() / h);
+    // On Wayland, moveResize() triggers a configure/ack cycle so frameGeometry()
+    // may lag behind the target for several frames. Using a relative offset from
+    // frameGeometry() produces a "doubled offset" glitch until geometry catches up.
+    // Computing absolute lerped position + offset-from-actual avoids this entirely.
+    const QPointF desiredPos = it->currentVisualPosition();
+    const QPointF actualPos = window->frameGeometry().topLeft();
+    data += (desiredPos - actualPos);
 }
 
 QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
@@ -200,49 +213,40 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     if (it == m_animations.constEnd()) {
         return QRectF();
     }
-    QRectF bounds = it->startGeometry.united(it->endGeometry);
 
-    // Check if control points overshoot the [0,1] range
+    // The window's expanded geometry (includes shadow/decoration padding)
+    // at its real post-moveResize position.
+    QRectF expanded = window ? window->expandedGeometry() : QRectF(it->targetGeometry);
+
+    // The same visual footprint translated to the animation start position
+    const QPointF maxOffset(it->startPosition.x() - it->targetGeometry.x(),
+                            it->startPosition.y() - it->targetGeometry.y());
+    QRectF atStart = expanded.translated(maxOffset);
+
+    QRectF bounds = expanded.united(atStart);
+
+    // For overshooting easing curves (control points outside [0,1]), the
+    // translation offset can overshoot past both start and end positions.
+    // Sample the curve to find extremes and expand bounds accordingly.
     if (it->easing.y1 < 0.0 || it->easing.y1 > 1.0 || it->easing.y2 < 0.0 || it->easing.y2 > 1.0) {
-        // Compute actual overshoot from control points
-        qreal maxOvershoot =
-            qMax(qMax(qAbs(it->easing.y1 - 0.5) - 0.5, 0.0), qMax(qAbs(it->easing.y2 - 0.5) - 0.5, 0.0));
-        qreal overshoot = qMax(0.4, maxOvershoot * 2.0); // at least 40%, scale with actual overshoot
-        const qreal dx = qAbs(it->endGeometry.x() - it->startGeometry.x()) * overshoot;
-        const qreal dy = qAbs(it->endGeometry.y() - it->startGeometry.y()) * overshoot;
-        const qreal dw = qAbs(it->endGeometry.width() - it->startGeometry.width()) * overshoot;
-        const qreal dh = qAbs(it->endGeometry.height() - it->startGeometry.height()) * overshoot;
-        bounds.adjust(-dx - dw, -dy - dh, dx + dw, dy + dh);
+        qreal pMin = 0.0, pMax = 1.0;
+        constexpr int nSamples = 10;
+        for (int i = 1; i < nSamples; ++i) {
+            qreal p = it->easing.evaluate(qreal(i) / nSamples);
+            pMin = qMin(pMin, p);
+            pMax = qMax(pMax, p);
+        }
+        // Offset at eased value p: maxOffset * (1 - p)
+        if (pMax > 1.0) {
+            bounds = bounds.united(expanded.translated(maxOffset * (1.0 - pMax)));
+        }
+        if (pMin < 0.0) {
+            bounds = bounds.united(expanded.translated(maxOffset * (1.0 - pMin)));
+        }
     }
+
+    bounds.adjust(-2.0, -2.0, 2.0, 2.0);
     return bounds;
-}
-
-bool WindowAnimator::isAnimatingToTarget(KWin::EffectWindow* window, const QRect& targetGeometry) const
-{
-    auto it = m_animations.constFind(window);
-    if (it == m_animations.constEnd()) {
-        return false;
-    }
-    return it->endGeometry.toRect() == targetGeometry;
-}
-
-void WindowAnimator::redirectAnimation(KWin::EffectWindow* window, const QRect& newTarget)
-{
-    auto it = m_animations.find(window);
-    if (it == m_animations.end()) {
-        return;
-    }
-
-    // Start new animation from current interpolated position
-    WindowAnimation anim;
-    anim.startGeometry = it->currentGeometry();
-    anim.endGeometry = QRectF(newTarget);
-    anim.duration = m_duration;
-    anim.easing = m_easing;
-    anim.timer.start();
-    *it = anim;
-
-    qCDebug(lcEffect) << "Redirected animation from" << anim.startGeometry << "to" << newTarget;
 }
 
 } // namespace PlasmaZones

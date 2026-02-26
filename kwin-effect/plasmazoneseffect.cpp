@@ -2291,6 +2291,15 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
             });
 }
 
+void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo)
+{
+    window->addRepaintFull();
+    if (oldFrame.isValid()) {
+        KWin::effects->addRepaint(oldFrame.toAlignedRect());
+    }
+    KWin::effects->addRepaint(newGeo);
+}
+
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
                                           int retriesLeft)
 {
@@ -2342,38 +2351,47 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         return;
     }
 
-    // Start visual animation from old → new geometry. The moveResize below applies
-    // the final geometry instantly (KWin internal state), while the animator paints
-    // the smooth visual transition via paintWindow transforms. Skip animation during
-    // drag (allowDuringDrag) for instant visual feedback, and when already animating
-    // to this target (redirect handles mid-flight retargets).
+    // Translate-only animation: moveResize to the final geometry immediately,
+    // then slide the window visually from the old position to the new one.
+    // No scale transforms — avoids Wayland buffer desync (flickering, zoom,
+    // size jumps) since the client buffer is always rendered at its natural size.
+    QPointF animStartPos;
     if (!allowDuringDrag && m_windowAnimator->isEnabled()) {
         if (m_windowAnimator->hasAnimation(window)) {
-            if (!m_windowAnimator->isAnimatingToTarget(window, geo)) {
-                m_windowAnimator->redirectAnimation(window, geo);
+            if (m_windowAnimator->isAnimatingToTarget(window, geo)) {
+                return; // Already sliding to this target
             }
+            // Capture current visual position before changing anything
+            animStartPos = m_windowAnimator->currentVisualPosition(window);
+            m_windowAnimator->removeAnimation(window);
         } else {
-            m_windowAnimator->startAnimation(window, oldFrame, geo);
+            animStartPos = oldFrame.topLeft();
         }
+
+        // Apply final geometry immediately — client starts re-rendering at new size
+        KWin::Window* kw = window->window();
+        if (kw) {
+            kw->moveResize(QRectF(geo));
+        }
+
+        // Start slide animation from old visual position to new position
+        m_windowAnimator->startAnimation(window, animStartPos, geo);
+
+        repaintSnapRegions(window, oldFrame, geo);
+        return;
     }
 
-    // KWin 6: EffectWindow exposes window() which returns the underlying Window*
-    // Window has moveResize(const QRectF &geometry) method. Same path as manual
-    // zone snapping — no size adjustment; if manual snap is correct, autotile should be too.
+    // No animation path (disabled, during drag, etc.): apply moveResize directly.
+    if (m_windowAnimator->hasAnimation(window)) {
+        m_windowAnimator->removeAnimation(window);
+    }
+
     KWin::Window* kwinWindow = window->window();
     if (kwinWindow) {
-        QRectF target(geo);
-        qCInfo(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << target;
-        kwinWindow->moveResize(target);
+        qCInfo(lcEffect) << "moveResize: QRect=" << geo << "-> QRectF=" << QRectF(geo);
+        kwinWindow->moveResize(QRectF(geo));
 
-        // Request repaint of old and new regions. When applying geometry to many
-        // windows in quick succession (retile), the compositor may not repaint all
-        // affected regions; explicit repaint ensures every window is rendered.
-        window->addRepaintFull();
-        if (oldFrame.isValid()) {
-            KWin::effects->addRepaint(oldFrame.toAlignedRect());
-        }
-        KWin::effects->addRepaint(geo);
+        repaintSnapRegions(window, oldFrame, geo);
     } else {
         qCWarning(lcEffect) << "Cannot get underlying Window from EffectWindow";
     }
@@ -3061,51 +3079,42 @@ void PlasmaZonesEffect::slotMonocleVisibilityChanged(const QString& focusedWindo
     }
 }
 
+void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)
+{
+    // Clean up completed animations before the paint cycle
+    m_windowAnimator->advanceAnimations();
+
+    if (m_windowAnimator->hasActiveAnimations()) {
+        // Windows have translation transforms that move them outside their
+        // frame geometry bounds — force full compositing mode.
+        data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
+    }
+    KWin::effects->prePaintScreen(data, presentTime);
+}
+
+void PlasmaZonesEffect::postPaintScreen()
+{
+    // Schedule targeted repaints for active animations instead of full-screen
+    m_windowAnimator->scheduleRepaints();
+    KWin::effects->postPaintScreen();
+}
+
 void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                                        std::chrono::milliseconds presentTime)
 {
-    if (m_windowAnimator->hasAnimation(w)) {
-        // Mark window as transformed so paintWindow gets called
+    if (w && m_windowAnimator->hasAnimation(w)) {
+        // Mark as transformed so paintWindow applies our translation offset
         data.setTransformed();
     }
 
     KWin::effects->prePaintWindow(view, w, data, presentTime);
-
-    // Post-paint logic: animation completion and repaint requests (KWin has no postPaintWindow)
-    // Note: moveResize was already called when the animation started, so we only need
-    // to clean up the visual animation state — no second applySnapGeometry call.
-    //
-    // Ghost artifact fix: addRepaintFull() only covers the window's actual frame geometry
-    // (post-moveResize final position). The animation transform paints the window at a
-    // different interpolated position, so we must also repaint the full animation bounding
-    // rect (start ∪ end geometry) to ensure the compositor clears pixels from the previous
-    // frame's visual position.
-    if (w && m_windowAnimator->hasAnimation(w)) {
-        if (m_windowAnimator->isAnimationComplete(w)) {
-            // Capture bounds before removing so we can repaint the full animation region
-            const QRectF bounds = m_windowAnimator->animationBounds(w);
-            m_windowAnimator->removeAnimation(w);
-            w->addRepaintFull();
-            if (bounds.isValid()) {
-                KWin::effects->addRepaint(bounds.toAlignedRect());
-            }
-            qCDebug(lcEffect) << "Window animation complete";
-        } else {
-            // Animation still running — repaint the full animation region to clear
-            // ghost artifacts from the previous frame's interpolated position
-            const QRectF bounds = m_windowAnimator->animationBounds(w);
-            if (bounds.isValid()) {
-                KWin::effects->addRepaint(bounds.toAlignedRect());
-            }
-        }
-    }
 }
 
 void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
-    // Apply animation transform if window is being animated
+    // Apply translate-only slide animation (no scale)
     m_windowAnimator->applyTransform(w, data);
 
     KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);

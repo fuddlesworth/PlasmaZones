@@ -65,6 +65,8 @@ public:
     void reconfigure(ReconfigureFlags flags) override;
     bool isActive() const override;
 
+    void prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime) override;
+    void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
@@ -241,6 +243,7 @@ private:
     // When allowDuringDrag is true, applies immediately even if window is in user move state (for FancyZones-style)
     // retriesLeft caps the deferred-retry chain (avoids unbounded timers if isUserMove gets stuck)
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false, int retriesLeft = 20);
+    void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
     // iface must remain valid for the duration of the async call (caller guarantees
