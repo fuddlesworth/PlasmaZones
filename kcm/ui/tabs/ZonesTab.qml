@@ -189,6 +189,7 @@ ScrollView {
                             to: root.constants.opacitySliderMax
                             value: kcm.activeOpacity * root.constants.opacitySliderMax
                             onMoved: kcm.activeOpacity = value / root.constants.opacitySliderMax
+                            Accessible.name: i18n("Active zone opacity")
                         }
 
                         Label {
@@ -208,6 +209,7 @@ ScrollView {
                             to: root.constants.opacitySliderMax
                             value: kcm.inactiveOpacity * root.constants.opacitySliderMax
                             onMoved: kcm.inactiveOpacity = value / root.constants.opacitySliderMax
+                            Accessible.name: i18n("Inactive zone opacity")
                         }
 
                         Label {
@@ -230,6 +232,7 @@ ScrollView {
                             to: root.constants.borderWidthMax
                             value: kcm.borderWidth
                             onValueModified: kcm.borderWidth = value
+                            Accessible.name: i18n("Border width")
                         }
 
                         Label {
@@ -246,6 +249,7 @@ ScrollView {
                             to: root.constants.borderRadiusMax
                             value: kcm.borderRadius
                             onValueModified: kcm.borderRadius = value
+                            Accessible.name: i18n("Border radius")
                         }
 
                         Label {
@@ -320,6 +324,7 @@ ScrollView {
                             stepSize: 5
                             value: kcm.labelFontSizeScale * 100
                             onMoved: kcm.labelFontSizeScale = value / 100
+                            Accessible.name: i18n("Label font size scale")
                         }
 
                         Label {

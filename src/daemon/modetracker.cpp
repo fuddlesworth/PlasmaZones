@@ -35,11 +35,22 @@ void ModeTracker::setCurrentMode(TilingMode mode)
     qCInfo(lcDaemon) << "Mode changed to:" << (mode == TilingMode::Autotile ? "Autotile" : "Manual");
 }
 
+// toggleMode() emits two signals with distinct purposes:
+//   - modeToggled:       action-oriented, indicates the user explicitly toggled
+//   - currentModeChanged: state-oriented (emitted by setCurrentMode), reports the new state
+// Slots connected to currentModeChanged must NOT call toggleMode() recursively,
+// as this would cause infinite re-entrance through setCurrentMode -> emit -> toggle.
+// The m_toggling guard prevents this at runtime.
 TilingMode ModeTracker::toggleMode()
 {
+    if (m_toggling) {
+        return m_currentMode;
+    }
+    m_toggling = true;
     TilingMode newMode = (m_currentMode == TilingMode::Manual) ? TilingMode::Autotile : TilingMode::Manual;
     setCurrentMode(newMode);
     Q_EMIT modeToggled(newMode);
+    m_toggling = false;
     return newMode;
 }
 

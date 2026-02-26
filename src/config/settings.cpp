@@ -555,7 +555,7 @@ SETTINGS_SETTER(const QColor&, LabelFontColor, m_labelFontColor, labelFontColorC
 void Settings::setActiveOpacity(qreal opacity)
 {
     opacity = qBound(0.0, opacity, 1.0);
-    if (!qFuzzyCompare(m_activeOpacity, opacity)) {
+    if (!qFuzzyCompare(1.0 + m_activeOpacity, 1.0 + opacity)) {
         m_activeOpacity = opacity;
         Q_EMIT activeOpacityChanged();
         Q_EMIT settingsChanged();
@@ -565,7 +565,7 @@ void Settings::setActiveOpacity(qreal opacity)
 void Settings::setInactiveOpacity(qreal opacity)
 {
     opacity = qBound(0.0, opacity, 1.0);
-    if (!qFuzzyCompare(m_inactiveOpacity, opacity)) {
+    if (!qFuzzyCompare(1.0 + m_inactiveOpacity, 1.0 + opacity)) {
         m_inactiveOpacity = opacity;
         Q_EMIT inactiveOpacityChanged();
         Q_EMIT settingsChanged();

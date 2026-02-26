@@ -299,6 +299,23 @@ public Q_SLOTS:
                                 int& snapWidth, int& snapHeight, bool& shouldRestore);
 
     /**
+     * Run the full 4-level snap-restore fallback chain in one call:
+     * appRule → persisted → emptyZone → lastZone.
+     * Returns geometry on first match, avoiding multiple sequential D-Bus round-trips.
+     *
+     * @param windowId Window to restore
+     * @param screenName Screen where the window is located
+     * @param sticky Whether window is on all desktops
+     * @param snapX Output: X position to snap to
+     * @param snapY Output: Y position to snap to
+     * @param snapWidth Output: Width to snap to
+     * @param snapHeight Output: Height to snap to
+     * @param shouldSnap Output: True if any strategy matched
+     */
+    void resolveWindowRestore(const QString& windowId, const QString& screenName, bool sticky,
+                              int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap);
+
+    /**
      * Get updated geometries for all tracked windows (for resolution change handling)
      * @return JSON array of objects: [{windowId, x, y, width, height}, ...]
      * @note Returns empty if keepWindowsInZonesOnResolutionChange is disabled

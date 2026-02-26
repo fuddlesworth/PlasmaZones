@@ -161,6 +161,7 @@ ScrollView {
                                 stepSize: 10
                                 value: kcm.animationDuration
                                 onMoved: kcm.animationDuration = Math.round(value)
+                                Accessible.name: i18n("Animation duration")
 
                                 ToolTip.visible: hovered
                                 ToolTip.text: i18n("How long window animations take to complete (milliseconds)")

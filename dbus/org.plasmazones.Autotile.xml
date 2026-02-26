@@ -212,6 +212,19 @@
             </arg>
         </signal>
 
+        <signal name="windowFloatingChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a window's floating state changes."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID whose floating state changed."/>
+            </arg>
+            <arg name="isFloating" type="b">
+                <annotation name="org.gtk.GDBus.DocString" value="Whether the window is now floating."/>
+            </arg>
+            <arg name="screenName" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
+            </arg>
+        </signal>
+
         <!-- ═══════════════════════════════════════════════════════════════════════════
              Window Event Notifications (called by KWin effect)
              ═══════════════════════════════════════════════════════════════════════════ -->
@@ -243,6 +256,27 @@
             <annotation name="org.gtk.GDBus.DocString" value="Float a window from autotile management (drag-to-float). Marks the window as floating and retiles remaining windows."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window ID to float from autotiling."/>
+            </arg>
+        </method>
+
+        <method name="unfloatWindow">
+            <annotation name="org.gtk.GDBus.DocString" value="Unfloat a window back into autotile management."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to unfloat back into autotiling."/>
+            </arg>
+        </method>
+
+        <method name="toggleFocusedWindowFloat">
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle floating state of the focused window. Called by KWin effect shortcut on autotile screens. Prefer toggleWindowFloat() which takes explicit IDs."/>
+        </method>
+
+        <method name="toggleWindowFloat">
+            <annotation name="org.gtk.GDBus.DocString" value="Toggle floating state of a specific window. Bypasses internal focus tracking by using caller-supplied IDs. Preferred over toggleFocusedWindowFloat() to avoid desync issues."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID to toggle floating state."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window is located."/>
             </arg>
         </method>
     </interface>

@@ -207,6 +207,7 @@ ColumnLayout {
                                 from: 10
                                 to: root.constants.zoneSelectorTriggerMax
                                 stepSize: 10
+                                Accessible.name: i18n("Trigger distance")
                                 Binding on value {
                                     value: root.effectiveTriggerDistance
                                     when: !triggerSlider.pressed
@@ -480,6 +481,7 @@ ColumnLayout {
                         from: root.constants.zoneSelectorPreviewWidthMin
                         to: root.constants.zoneSelectorPreviewWidthMax
                         stepSize: 10
+                        Accessible.name: i18n("Preview size")
                         Binding on value {
                             value: root.effectivePreviewWidth
                             when: !customSizeSlider.pressed

@@ -416,8 +416,7 @@ Item {
             Layout.rightMargin: root.canvasPad
             text: i18n("cubic-bezier(%1, %2, %3, %4)",
                 root.cp1x.toFixed(2), root.cp1y.toFixed(2), root.cp2x.toFixed(2), root.cp2y.toFixed(2))
-            font.family: "monospace"
-            font.pointSize: Kirigami.Theme.smallFont.pointSize
+            font: Kirigami.Theme.fixedWidthFont
             color: Kirigami.Theme.disabledTextColor
             horizontalAlignment: Text.AlignHCenter
         }

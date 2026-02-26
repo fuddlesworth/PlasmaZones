@@ -82,11 +82,11 @@ qreal SnappingService::snapValueToGrid(qreal value, qreal interval) const
 
     // Grid snapping should not snap to canvas boundaries (0.0 or 1.0).
     // Edge snapping handles boundaries; grid snapping returns interior grid points only.
-    if (qFuzzyCompare(snapped, 1.0)) {
+    if (qFuzzyCompare(1.0 + snapped, 2.0)) {
         // Would snap to right/bottom boundary - return previous grid point instead
         qreal prevGridPoint = qFloor(value / interval) * interval;
         return qBound(0.0, prevGridPoint, 1.0 - interval);
-    } else if (qFuzzyCompare(snapped, 0.0)) {
+    } else if (qFuzzyCompare(1.0 + snapped, 1.0)) {
         // Would snap to left/top boundary - return next grid point instead
         qreal nextGridPoint = qCeil(value / interval) * interval;
         return qBound(interval, nextGridPoint, 1.0);

@@ -367,6 +367,10 @@ void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString
         qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty window ID (focus cleared)";
         return;
     }
+    if (screenName.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "notifyWindowFocused: empty screenName";
+        return;
+    }
     qCDebug(lcDbusAutotile) << "D-Bus notifyWindowFocused:" << windowId << "screen:" << screenName;
     // R2 fix: Pass screen name to engine so m_windowToScreen is updated on focus
     // change. This also addresses R5 (cross-screen window movement detection) since
@@ -502,12 +506,12 @@ QString AutotileAdaptor::algorithmInfo(const QString& algorithmId)
     }
 
     QJsonObject info;
-    info[QStringLiteral("id")] = algorithmId;
-    info[QStringLiteral("name")] = algo->name();
-    info[QStringLiteral("description")] = algo->description();
-    info[QStringLiteral("icon")] = algo->icon();
-    info[QStringLiteral("supportsMasterCount")] = algo->supportsMasterCount();
-    info[QStringLiteral("supportsSplitRatio")] = algo->supportsSplitRatio();
+    info[QLatin1String("id")] = algorithmId;
+    info[QLatin1String("name")] = algo->name();
+    info[QLatin1String("description")] = algo->description();
+    info[QLatin1String("icon")] = algo->icon();
+    info[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
+    info[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
 
     return QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact));
 }

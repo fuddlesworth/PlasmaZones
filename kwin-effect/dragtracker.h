@@ -5,6 +5,7 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QPointF>
 #include <QRectF>
@@ -74,7 +75,7 @@ private:
     void finishDrag(bool cancelled);
 
     PlasmaZonesEffect* m_effect;
-    KWin::EffectWindow* m_draggedWindow = nullptr;
+    QPointer<KWin::EffectWindow> m_draggedWindow;
     QString m_draggedWindowId;
     QPointF m_lastCursorPos;
 

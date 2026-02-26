@@ -129,6 +129,7 @@ KCM.AbstractKCM {
                 id: daemonEnabledSwitch
                 checked: kcm.daemonEnabled
                 onToggled: kcm.daemonEnabled = checked
+                Accessible.name: i18n("Enable PlasmaZones")
             }
         }
 

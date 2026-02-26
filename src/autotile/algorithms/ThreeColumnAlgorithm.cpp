@@ -110,6 +110,13 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
     // Deduct two vertical gaps (left|center and center|right)
     const int contentWidth = area.width() - 2 * innerGap;
 
+    if (contentWidth <= 0) {
+        // Degenerate case: screen too narrow for 3 columns with gaps — stack all windows
+        for (int i = 0; i < windowCount; ++i)
+            zones.append(area);
+        return zones;
+    }
+
     // Count windows for each column (excluding master)
     const int stackCount = windowCount - 1;
     const int leftCount = (stackCount + 1) / 2;  // Left gets extra if odd

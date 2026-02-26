@@ -633,7 +633,7 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
                 }
 
                 QJsonObject obj = doc.object();
-                bool found = obj.value(QStringLiteral("found")).toBool(false);
+                bool found = obj.value(QLatin1String("found")).toBool(false);
                 if (!found) {
                     qCDebug(lcEffect) << "No pre-float zone found for window";
                     return;
@@ -646,19 +646,19 @@ void NavigationHandler::executeFloatToggle(KWin::EffectWindow* activeWindow, con
 
                 // Extract zone IDs
                 QStringList zoneIds;
-                const QJsonArray zoneArray = obj.value(QStringLiteral("zoneIds")).toArray();
+                const QJsonArray zoneArray = obj.value(QLatin1String("zoneIds")).toArray();
                 for (const QJsonValue& v : zoneArray) {
                     zoneIds.append(v.toString());
                 }
 
                 // Extract combined geometry
-                QRect geometry(obj.value(QStringLiteral("x")).toInt(),
-                               obj.value(QStringLiteral("y")).toInt(),
-                               obj.value(QStringLiteral("width")).toInt(),
-                               obj.value(QStringLiteral("height")).toInt());
+                QRect geometry(obj.value(QLatin1String("x")).toInt(),
+                               obj.value(QLatin1String("y")).toInt(),
+                               obj.value(QLatin1String("width")).toInt(),
+                               obj.value(QLatin1String("height")).toInt());
 
                 // Extract the screen where the zone was originally snapped
-                QString restoreScreen = obj.value(QStringLiteral("screenName")).toString();
+                QString restoreScreen = obj.value(QLatin1String("screenName")).toString();
 
                 if (!geometry.isValid() || zoneIds.isEmpty()) {
                     qCDebug(lcEffect) << "Invalid geometry or empty zones for unfloat";

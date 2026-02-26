@@ -39,7 +39,7 @@ namespace PlasmaZones {
     void Zone::set##name(qreal opacity) \
     { \
         opacity = qBound(0.0, opacity, 1.0); \
-        if (!qFuzzyCompare(member, opacity)) { \
+        if (!qFuzzyCompare(1.0 + member, 1.0 + opacity)) { \
             member = opacity; \
             Q_EMIT signal(); \
         } \

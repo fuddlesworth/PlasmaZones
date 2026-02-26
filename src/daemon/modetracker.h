@@ -80,6 +80,7 @@ Q_SIGNALS:
 private:
     QPointer<Settings> m_settings;
     TilingMode m_currentMode = TilingMode::Manual;
+    bool m_toggling = false; // Re-entrance guard for toggleMode()
     QString m_lastManualLayoutId;
     QString m_lastAutotileAlgorithm = QStringLiteral("master-stack");
 };

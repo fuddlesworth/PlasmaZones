@@ -793,7 +793,7 @@ void KCMPlasmaZones::setLabelFontColor(const QColor& color)
 
 void KCMPlasmaZones::setActiveOpacity(qreal opacity)
 {
-    if (!qFuzzyCompare(m_settings->activeOpacity(), opacity)) {
+    if (!qFuzzyCompare(1.0 + m_settings->activeOpacity(), 1.0 + opacity)) {
         m_settings->setActiveOpacity(opacity);
         Q_EMIT activeOpacityChanged();
         setNeedsSave(true);
@@ -802,7 +802,7 @@ void KCMPlasmaZones::setActiveOpacity(qreal opacity)
 
 void KCMPlasmaZones::setInactiveOpacity(qreal opacity)
 {
-    if (!qFuzzyCompare(m_settings->inactiveOpacity(), opacity)) {
+    if (!qFuzzyCompare(1.0 + m_settings->inactiveOpacity(), 1.0 + opacity)) {
         m_settings->setInactiveOpacity(opacity);
         Q_EMIT inactiveOpacityChanged();
         setNeedsSave(true);

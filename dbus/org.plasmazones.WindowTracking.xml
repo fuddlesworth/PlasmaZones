@@ -338,6 +338,33 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if caller should apply the geometry."/>
             </arg>
         </method>
+        <method name="resolveWindowRestore">
+            <annotation name="org.gtk.GDBus.DocString" value="Run the full 4-level snap-restore fallback chain server-side in one call: appRule → persisted → emptyZone → lastZone. Returns geometry and shouldSnap on first match."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window to restore."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window's current screen (e.g. DP-1)."/>
+            </arg>
+            <arg name="sticky" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if window is on all desktops."/>
+            </arg>
+            <arg name="snapX" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap X (if shouldSnap)."/>
+            </arg>
+            <arg name="snapY" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap Y (if shouldSnap)."/>
+            </arg>
+            <arg name="snapWidth" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap width (if shouldSnap)."/>
+            </arg>
+            <arg name="snapHeight" type="i" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Snap height (if shouldSnap)."/>
+            </arg>
+            <arg name="shouldSnap" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if any strategy matched and window should be snapped."/>
+            </arg>
+        </method>
         <method name="getUpdatedWindowGeometries">
             <annotation name="org.gtk.GDBus.DocString" value="Return updated window geometries after resolution change (respects keepWindowsInZonesOnResolutionChange)."/>
             <arg name="geometriesJson" type="s" direction="out">

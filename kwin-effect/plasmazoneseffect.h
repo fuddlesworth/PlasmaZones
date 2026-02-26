@@ -129,7 +129,7 @@ private:
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
     void callCancelSnap();
-    void callSnapToLastZone(KWin::EffectWindow* window);
+    void callResolveWindowRestore(KWin::EffectWindow* window);
     void ensureWindowTrackingInterface();
     void connectNavigationSignals();
     void syncFloatingWindowsFromDaemon();
@@ -242,7 +242,7 @@ private:
     // Apply snap geometry to window
     // When allowDuringDrag is true, applies immediately even if window is in user move state (for FancyZones-style)
     // retriesLeft caps the deferred-retry chain (avoids unbounded timers if isUserMove gets stuck)
-    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false, int retriesLeft = 20);
+    void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false, int retriesLeft = 20, bool skipAnimation = false);
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -253,7 +253,8 @@ private:
     void tryAsyncSnapCall(QDBusAbstractInterface& iface, const QString& method, const QList<QVariant>& args,
                           QPointer<KWin::EffectWindow> window, const QString& windowId,
                           bool storePreSnap, std::function<void()> fallback,
-                          std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr);
+                          std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
+                          bool skipAnimation = false);
 
     /**
      * If there are empty zones and unsnapped candidates, show Snap Assist.

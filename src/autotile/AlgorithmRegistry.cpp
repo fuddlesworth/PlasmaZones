@@ -215,22 +215,22 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect> &zo
 
     for (int i = 0; i < zones.size(); ++i) {
         QVariantMap zoneMap;
-        zoneMap[QStringLiteral("zoneNumber")] = i + 1;
+        zoneMap[QLatin1String("zoneNumber")] = i + 1;
 
         QVariantMap relGeo;
         if (isMonocle) {
             const qreal offset = i * MonoclePreviewOffset;
-            relGeo[QStringLiteral("x")] = offset;
-            relGeo[QStringLiteral("y")] = offset;
-            relGeo[QStringLiteral("width")] = 1.0 - offset * 2;
-            relGeo[QStringLiteral("height")] = 1.0 - offset * 2;
+            relGeo[QLatin1String("x")] = offset;
+            relGeo[QLatin1String("y")] = offset;
+            relGeo[QLatin1String("width")] = 1.0 - offset * 2;
+            relGeo[QLatin1String("height")] = 1.0 - offset * 2;
         } else {
-            relGeo[QStringLiteral("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
-            relGeo[QStringLiteral("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
-            relGeo[QStringLiteral("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
-            relGeo[QStringLiteral("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
+            relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
+            relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
+            relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
+            relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
         }
-        zoneMap[QStringLiteral("relativeGeometry")] = relGeo;
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
 
         result.append(zoneMap);
     }
@@ -259,9 +259,9 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
     // Enrich with extra fields needed by zone selector / layout cards
     for (int i = 0; i < list.size(); ++i) {
         QVariantMap zoneMap = list[i].toMap();
-        zoneMap[QStringLiteral("id")] = QString::number(i);
-        zoneMap[QStringLiteral("name")] = QString();
-        zoneMap[QStringLiteral("useCustomColors")] = false;
+        zoneMap[QLatin1String("id")] = QString::number(i);
+        zoneMap[QLatin1String("name")] = QString();
+        zoneMap[QLatin1String("useCustomColors")] = false;
         list[i] = zoneMap;
     }
 
@@ -277,13 +277,13 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm *algorithm,
     }
 
     // Use autotile: prefix for ID to distinguish from manual layout UUIDs
-    map[QStringLiteral("id")] = LayoutId::makeAutotileId(algorithmId);
-    map[QStringLiteral("name")] = algorithm->name();
-    map[QStringLiteral("description")] = algorithm->description();
-    map[QStringLiteral("type")] = -1; // Not a standard LayoutType
-    map[QStringLiteral("zoneCount")] = algorithm->defaultMaxWindows();
-    map[QStringLiteral("zones")] = generatePreviewZones(algorithm);
-    map[QStringLiteral("category")] = static_cast<int>(LayoutCategory::Autotile);
+    map[QLatin1String("id")] = LayoutId::makeAutotileId(algorithmId);
+    map[QLatin1String("name")] = algorithm->name();
+    map[QLatin1String("description")] = algorithm->description();
+    map[QLatin1String("type")] = -1; // Not a standard LayoutType
+    map[QLatin1String("zoneCount")] = algorithm->defaultMaxWindows();
+    map[QLatin1String("zones")] = generatePreviewZones(algorithm);
+    map[QLatin1String("category")] = static_cast<int>(LayoutCategory::Autotile);
 
     return map;
 }
