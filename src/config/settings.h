@@ -171,6 +171,7 @@ public:
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY autotileRespectMinimumSizeChanged)
     Q_PROPERTY(bool autotileMonocleHideOthers READ autotileMonocleHideOthers WRITE setAutotileMonocleHideOthers NOTIFY autotileMonocleHideOthersChanged)
     Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY autotileMonocleShowTabsChanged)
+    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY autotileHideTitleBarsChanged)
 
     // Autotile Shortcuts
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
@@ -819,6 +820,9 @@ public:
     bool autotileMonocleShowTabs() const { return m_autotileMonocleShowTabs; }
     void setAutotileMonocleShowTabs(bool show);
 
+    bool autotileHideTitleBars() const override { return m_autotileHideTitleBars; }
+    void setAutotileHideTitleBars(bool hide) override;
+
     // Shader Effects
     bool enableShaderEffects() const override
     {
@@ -1276,6 +1280,7 @@ private:
     bool m_autotileRespectMinimumSize = true;
     bool m_autotileMonocleHideOthers = true;
     bool m_autotileMonocleShowTabs = false;
+    bool m_autotileHideTitleBars = false;
 
     // Autotile Shortcuts (must match plasmazones.kcfg GlobalShortcuts defaults)
     QString m_autotileToggleShortcut = QStringLiteral("Meta+Shift+T");

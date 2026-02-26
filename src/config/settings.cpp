@@ -834,6 +834,7 @@ SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, au
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
 SETTINGS_SETTER(bool, AutotileMonocleHideOthers, m_autotileMonocleHideOthers, autotileMonocleHideOthersChanged)
 SETTINGS_SETTER(bool, AutotileMonocleShowTabs, m_autotileMonocleShowTabs, autotileMonocleShowTabsChanged)
+SETTINGS_SETTER(bool, AutotileHideTitleBars, m_autotileHideTitleBars, autotileHideTitleBarsChanged)
 
 // Shader Effects implementations
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
@@ -1499,6 +1500,7 @@ void Settings::load()
     m_autotileRespectMinimumSize = autotiling.readEntry(QLatin1String("AutotileRespectMinimumSize"), ConfigDefaults::autotileRespectMinimumSize());
     m_autotileMonocleHideOthers = autotiling.readEntry(QLatin1String("AutotileMonocleHideOthers"), ConfigDefaults::autotileMonocleHideOthers());
     m_autotileMonocleShowTabs = autotiling.readEntry(QLatin1String("AutotileMonocleShowTabs"), ConfigDefaults::autotileMonocleShowTabs());
+    m_autotileHideTitleBars = autotiling.readEntry(QLatin1String("AutotileHideTitleBars"), ConfigDefaults::autotileHideTitleBars());
 
     // Autotiling Shortcuts
     // Note: These are stored in a separate "AutotileShortcuts" config group
@@ -1739,6 +1741,7 @@ void Settings::save()
     autotiling.writeEntry(QLatin1String("AutotileRespectMinimumSize"), m_autotileRespectMinimumSize);
     autotiling.writeEntry(QLatin1String("AutotileMonocleHideOthers"), m_autotileMonocleHideOthers);
     autotiling.writeEntry(QLatin1String("AutotileMonocleShowTabs"), m_autotileMonocleShowTabs);
+    autotiling.writeEntry(QLatin1String("AutotileHideTitleBars"), m_autotileHideTitleBars);
 
     // Autotile Shortcuts
     KConfigGroup autotileShortcuts = config->group(QStringLiteral("AutotileShortcuts"));

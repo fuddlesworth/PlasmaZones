@@ -188,6 +188,8 @@ class KCMPlasmaZones : public KQuickConfigModule
                    autotileMonocleHideOthersChanged)
     Q_PROPERTY(bool autotileMonocleShowTabs READ autotileMonocleShowTabs WRITE setAutotileMonocleShowTabs NOTIFY
                    autotileMonocleShowTabsChanged)
+    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
+                   autotileHideTitleBarsChanged)
     Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap NOTIFY
                    autotileUsePerSideOuterGapChanged)
     Q_PROPERTY(int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY
@@ -358,6 +360,7 @@ public:
     bool autotileRespectMinimumSize() const;
     bool autotileMonocleHideOthers() const;
     bool autotileMonocleShowTabs() const;
+    bool autotileHideTitleBars() const;
     bool autotileUsePerSideOuterGap() const;
     int autotileOuterGapTop() const;
     int autotileOuterGapBottom() const;
@@ -503,6 +506,7 @@ public:
     void setAutotileRespectMinimumSize(bool respect);
     void setAutotileMonocleHideOthers(bool hide);
     void setAutotileMonocleShowTabs(bool show);
+    void setAutotileHideTitleBars(bool hide);
     void setAutotileUsePerSideOuterGap(bool enabled);
     void setAutotileOuterGapTop(int gap);
     void setAutotileOuterGapBottom(int gap);
@@ -725,6 +729,7 @@ Q_SIGNALS:
     void autotileRespectMinimumSizeChanged();
     void autotileMonocleHideOthersChanged();
     void autotileMonocleShowTabsChanged();
+    void autotileHideTitleBarsChanged();
     void autotileUsePerSideOuterGapChanged();
     void autotileOuterGapTopChanged();
     void autotileOuterGapBottomChanged();

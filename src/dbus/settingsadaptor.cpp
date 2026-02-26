@@ -250,6 +250,9 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
 
+    // Autotile decoration settings
+    REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
+
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
 #undef REGISTER_BOOL_SETTING

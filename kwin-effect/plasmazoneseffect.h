@@ -214,6 +214,7 @@ private:
     void notifyWindowAdded(KWin::EffectWindow* w);
     void connectAutotileSignals();
     void loadAutotileSettings();
+    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
     /**
@@ -407,6 +408,8 @@ private:
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
     bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
+    bool m_autotileHideTitleBars = false;
+    QSet<QString> m_borderlessWindows; // window IDs we've forced borderless
 
     // Autotile: track windows already notified to daemon to avoid duplicate notifications
     QSet<QString> m_notifiedWindows;

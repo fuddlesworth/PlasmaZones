@@ -145,6 +145,10 @@ public:
     virtual int animationMinDistance() const = 0;
     virtual void setAnimationMinDistance(int distance) = 0;
 
+    // Autotile decoration settings (fetched by KWin effect via D-Bus)
+    virtual bool autotileHideTitleBars() const = 0;
+    virtual void setAutotileHideTitleBars(bool hide) = 0;
+
     // Persistence (unique to ISettings)
     virtual void load() = 0;
     virtual void save() = 0;
@@ -305,6 +309,7 @@ Q_SIGNALS:
     void autotileFocusFollowsMouseChanged();
     void autotileMonocleHideOthersChanged();
     void autotileMonocleShowTabsChanged();
+    void autotileHideTitleBarsChanged();
 
     // Animation settings (general)
     void animationsEnabledChanged();

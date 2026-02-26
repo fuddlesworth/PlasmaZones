@@ -520,6 +520,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
 
     m_windowAnimator->removeAnimation(w);
 
+    // Clean up borderless tracking (no need to restore — window is closing)
+    m_borderlessWindows.remove(getWindowId(w));
+
     // Notify daemon for cleanup
     notifyWindowClosed(w);
 }
@@ -1314,6 +1317,32 @@ void PlasmaZonesEffect::loadCachedSettings()
                 if (reply.isValid()) {
                     m_cachedZoneSelectorEnabled = extractVariant(reply).toBool();
                     qCDebug(lcEffect) << "Loaded zoneSelectorEnabled:" << m_cachedZoneSelectorEnabled;
+                }
+            });
+
+    // Load autotileHideTitleBars
+    auto* hideTitleBarsWatcher =
+        new QDBusPendingCallWatcher(makeSettingCall(QStringLiteral("autotileHideTitleBars")), this);
+    connect(hideTitleBarsWatcher, &QDBusPendingCallWatcher::finished, this,
+            [this, extractVariant](QDBusPendingCallWatcher* w) {
+                w->deleteLater();
+                QDBusPendingReply<QVariant> reply = *w;
+                if (reply.isValid()) {
+                    const bool newValue = extractVariant(reply).toBool();
+                    const bool wasEnabled = m_autotileHideTitleBars;
+                    m_autotileHideTitleBars = newValue;
+                    qCDebug(lcEffect) << "Loaded autotileHideTitleBars:" << m_autotileHideTitleBars;
+
+                    // If toggled OFF, restore all borderless windows
+                    if (wasEnabled && !newValue) {
+                        const QSet<QString> toRestore = m_borderlessWindows;
+                        for (const QString& windowId : toRestore) {
+                            KWin::EffectWindow* win = findWindowById(windowId);
+                            if (win) {
+                                setWindowBorderless(win, windowId, false);
+                            }
+                        }
+                    }
                 }
             });
 
@@ -2685,6 +2714,35 @@ void PlasmaZonesEffect::loadAutotileSettings()
     });
 }
 
+void PlasmaZonesEffect::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless)
+{
+    if (!w) {
+        return;
+    }
+    KWin::Window* kw = w->window();
+    if (!kw) {
+        return;
+    }
+    if (borderless) {
+        // Skip CSD windows (GTK/Electron) — hasDecoration() is false for them.
+        // Only check on the hide path: after setNoBorder(true), hasDecoration()
+        // returns false, so checking on restore would prevent re-adding the border.
+        if (!w->hasDecoration()) {
+            return;
+        }
+        if (!m_borderlessWindows.contains(windowId)) {
+            kw->setNoBorder(true);
+            m_borderlessWindows.insert(windowId);
+            qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId;
+        }
+    } else {
+        if (m_borderlessWindows.remove(windowId)) {
+            kw->setNoBorder(false);
+            qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId;
+        }
+    }
+}
+
 void PlasmaZonesEffect::slotAutotileEnabledChanged(bool enabled)
 {
     // enabledChanged is still emitted for backward compat; the real state
@@ -2711,6 +2769,16 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
             }
         }
         m_notifiedWindows -= windowsOnRemovedScreens;
+
+        // Restore title bars for windows on removed screens
+        for (const QString& windowId : std::as_const(windowsOnRemovedScreens)) {
+            if (m_borderlessWindows.contains(windowId)) {
+                KWin::EffectWindow* w = findWindowById(windowId);
+                if (w) {
+                    setWindowBorderless(w, windowId, false);
+                }
+            }
+        }
 
         // Unminimize windows on removed screens that Monocle may have hidden.
         // Must happen before geometry restore so applySnapGeometry operates on
@@ -2812,6 +2880,14 @@ void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowI
     //   the D-Bus call (avoids race with windowsTileRequested overwriting frameGeometry).
     //   The engine retiles via windowsTileRequested → slotAutotileWindowsTileRequested.
     m_navigationHandler->setWindowFloating(windowId, isFloating);
+
+    // Restore title bar when window becomes floating
+    if (isFloating && m_borderlessWindows.contains(windowId)) {
+        KWin::EffectWindow* w = findWindowById(windowId);
+        if (w) {
+            setWindowBorderless(w, windowId, false);
+        }
+    }
 }
 
 KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) const
@@ -2988,6 +3064,34 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         saveAndRecordPreAutotileGeometry(e.windowId, getWindowScreenName(e.window), e.window->frameGeometry());
         qCInfo(lcEffect) << "Autotile tile request:" << e.windowId << "QRect=" << e.geometry;
         applySnapGeometry(e.window, e.geometry);
+
+        // Hide title bar if setting is enabled
+        if (m_autotileHideTitleBars) {
+            setWindowBorderless(e.window, e.windowId, true);
+        }
+    }
+
+    // Restore borders for borderless windows no longer in this tile request.
+    // windowsTileRequested is per-screen, so scope to windows on the same screen
+    // to avoid restoring borders on other screens' still-tiled windows.
+    if (m_autotileHideTitleBars && !m_borderlessWindows.isEmpty()) {
+        QSet<QString> tiledWindowIds;
+        QString tileScreenName;
+        for (const Entry& e : std::as_const(entries)) {
+            if (e.window) {
+                tiledWindowIds.insert(e.windowId);
+                if (tileScreenName.isEmpty()) {
+                    tileScreenName = getWindowScreenName(e.window);
+                }
+            }
+        }
+        const QSet<QString> toRestore = m_borderlessWindows - tiledWindowIds;
+        for (const QString& windowId : toRestore) {
+            KWin::EffectWindow* win = findWindowById(windowId);
+            if (win && getWindowScreenName(win) == tileScreenName && !win->isMinimized()) {
+                setWindowBorderless(win, windowId, false);
+            }
+        }
     }
 }
 

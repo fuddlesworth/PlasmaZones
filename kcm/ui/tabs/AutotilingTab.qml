@@ -142,6 +142,16 @@ ScrollView {
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Windows won't be resized smaller than their minimum. May cause layout to not fill screen.")
                     }
+
+                    CheckBox {
+                        Kirigami.FormData.label: i18n("Decorations:")
+                        text: i18n("Hide title bars on tiled windows")
+                        checked: kcm.autotileHideTitleBars
+                        onToggled: kcm.autotileHideTitleBars = checked
+
+                        ToolTip.visible: hovered && root.isCurrentTab
+                        ToolTip.text: i18n("Remove window title bars while autotiled. Restored when floating or leaving autotile mode.")
+                    }
                 }
             }
         }

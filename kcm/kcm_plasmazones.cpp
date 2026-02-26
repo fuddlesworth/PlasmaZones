@@ -1305,6 +1305,10 @@ bool KCMPlasmaZones::autotileMonocleShowTabs() const
 {
     return m_settings->autotileMonocleShowTabs();
 }
+bool KCMPlasmaZones::autotileHideTitleBars() const
+{
+    return m_settings->autotileHideTitleBars();
+}
 bool KCMPlasmaZones::autotileUsePerSideOuterGap() const
 {
     return m_settings->autotileUsePerSideOuterGap();
@@ -1540,6 +1544,15 @@ void KCMPlasmaZones::setAutotileMonocleShowTabs(bool show)
     if (m_settings->autotileMonocleShowTabs() != show) {
         m_settings->setAutotileMonocleShowTabs(show);
         Q_EMIT autotileMonocleShowTabsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileHideTitleBars(bool hide)
+{
+    if (m_settings->autotileHideTitleBars() != hide) {
+        m_settings->setAutotileHideTitleBars(hide);
+        Q_EMIT autotileHideTitleBarsChanged();
         setNeedsSave(true);
     }
 }
@@ -2433,6 +2446,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT autotileRespectMinimumSizeChanged();
     Q_EMIT autotileMonocleHideOthersChanged();
     Q_EMIT autotileMonocleShowTabsChanged();
+    Q_EMIT autotileHideTitleBarsChanged();
     Q_EMIT autotileUsePerSideOuterGapChanged();
     Q_EMIT autotileOuterGapTopChanged();
     Q_EMIT autotileOuterGapBottomChanged();
@@ -3293,6 +3307,7 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT autotileRespectMinimumSizeChanged();
         Q_EMIT autotileMonocleHideOthersChanged();
         Q_EMIT autotileMonocleShowTabsChanged();
+        Q_EMIT autotileHideTitleBarsChanged();
         Q_EMIT autotileUsePerSideOuterGapChanged();
         Q_EMIT autotileOuterGapTopChanged();
         Q_EMIT autotileOuterGapBottomChanged();
