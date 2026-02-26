@@ -6,6 +6,17 @@
 # Find KWin for effect development
 find_package(KWin 6.6 REQUIRED)
 
+# KWin effect plugins embed EffectPluginFactory<VERSION> in their IID; the plugin will
+# only load when the runtime KWin version matches. Log the build-time version so
+# packagers can verify (e.g. when building RPMs, ensure kwin-devel matches target).
+if(KWin_FOUND AND KWin_DIR)
+    file(READ "${KWin_DIR}/KWinConfigVersion.cmake" _kwin_version_file)
+    string(REGEX MATCH "set\\(PACKAGE_VERSION \"([0-9.]+)\"\\)" _ "${_kwin_version_file}")
+    if(CMAKE_MATCH_1)
+        message(STATUS "PlasmaZones KWin effect: building against KWin ${CMAKE_MATCH_1} (plugin IID locked; rebuild when KWin updates)")
+    endif()
+endif()
+
 # Tell AutoMoc about KWin's effect factory macro (suppresses false positive warning)
 list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 

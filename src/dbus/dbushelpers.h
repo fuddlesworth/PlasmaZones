@@ -213,7 +213,7 @@ inline Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, con
 template <typename LogCategory>
 QScreen* getScreenOrWarn(const QString& screenName, const QString& operation, LogCategory category)
 {
-    QScreen* screen = Utils::findScreenByName(screenName);
+    QScreen* screen = Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         qCWarning(category) << operation << ": screen not found:" << screenName;
         return nullptr;

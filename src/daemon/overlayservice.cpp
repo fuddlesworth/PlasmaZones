@@ -3134,7 +3134,7 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     // Resolve target screen
     QScreen* screen = nullptr;
     if (!screenName.isEmpty()) {
-        screen = Utils::findScreenByName(screenName);
+        screen = Utils::findScreenByIdOrName(screenName);
     }
     if (!screen) {
         screen = Utils::primaryScreen();

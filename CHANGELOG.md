@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.3] - 2026-02-26
+
+### Fixed
+- **KWin effect plugin version lock**: Effect plugin embeds EffectPluginFactory version in its IID; it only loads when runtime KWin matches. Added build-time version visibility in CMake and RPM spec now requires exact KWin version match, preventing 6.6.0-built plugins from installing on 6.6.1 systems where they fail to load.
+
 ## [1.15.2] - 2026-02-22
 
 ### Fixed

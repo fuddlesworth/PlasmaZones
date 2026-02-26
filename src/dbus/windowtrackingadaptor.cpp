@@ -327,7 +327,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     // If the saved screen name no longer exists (monitor replugged under a different
     // connector name), fall back to the caller's screen so unfloat still works.
     QString restoreScreen = m_service->preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty() && !Utils::findScreenByName(restoreScreen)) {
+    if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
         qCInfo(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
                               << "no longer exists, falling back to" << screenName;
         restoreScreen.clear();
