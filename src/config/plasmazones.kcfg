@@ -709,7 +709,7 @@
       <default>false</default>
     </entry>
     <entry name="AutotileAlgorithm" type="String">
-      <label>Active tiling algorithm (master-stack, bsp, columns, rows, fibonacci, monocle, three-column)</label>
+      <label>Active tiling algorithm (master-stack, bsp, columns, rows, dwindle, spiral, monocle, three-column, grid, wide, centered-master)</label>
       <default>master-stack</default>
     </entry>
     <entry name="AutotileSplitRatio" type="Double">

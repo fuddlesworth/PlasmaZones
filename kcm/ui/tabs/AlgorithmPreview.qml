@@ -71,7 +71,7 @@ Item {
             required property var modelData
             required property int index
 
-            visible: root.algorithmId === "master-stack" && index < root.masterCount
+            visible: (root.algorithmId === "master-stack" || root.algorithmId === "wide" || root.algorithmId === "centered-master") && index < root.masterCount
             x: (modelData.relativeGeometry?.x || 0) * root.width + Kirigami.Units.smallSpacing
             y: (modelData.relativeGeometry?.y || 0) * root.height + Kirigami.Units.smallSpacing
             width: Kirigami.Units.smallSpacing * 2
@@ -96,9 +96,13 @@ Item {
                 case "bsp": return i18n("BSP")
                 case "columns": return i18n("Columns")
                 case "rows": return i18n("Rows")
-                case "fibonacci": return i18n("Fibonacci")
+                case "dwindle": return i18n("Dwindle")
+                case "spiral": return i18n("Spiral")
                 case "monocle": return i18n("Monocle")
                 case "three-column": return i18n("Three Column")
+                case "grid": return i18n("Grid")
+                case "wide": return i18n("Wide")
+                case "centered-master": return i18n("Centered Master")
                 default: return root.algorithmId
             }
         }

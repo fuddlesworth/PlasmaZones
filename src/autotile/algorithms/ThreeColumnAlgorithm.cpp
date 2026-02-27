@@ -154,59 +154,16 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
         }
     }
 
-    // Clamp center ratio so side columns are at least MinZoneSizePx wide
-    const int minSideFloor = std::max(static_cast<int>(MinZoneSizePx),
-                                      std::max(minLeftWidth, minRightWidth));
-    const qreal maxCenter = std::min(
-        static_cast<double>(MaxSplitRatio),
-        1.0 - (2.0 * minSideFloor / static_cast<double>(contentWidth)));
-    qreal centerRatio = std::clamp(state.splitRatio(), MinSplitRatio, std::max(MinSplitRatio, maxCenter));
+    const auto cols = solveThreeColumnWidths(
+        area.x(), contentWidth, innerGap, state.splitRatio(),
+        minLeftWidth, minCenterWidth, minRightWidth);
 
-    // Also ensure center satisfies its minimum
-    if (minCenterWidth > 0) {
-        const qreal minCenterRatio = static_cast<qreal>(minCenterWidth) / contentWidth;
-        centerRatio = std::max(centerRatio, std::min(minCenterRatio, maxCenter));
-    }
-
-    const qreal sideRatio = (1.0 - centerRatio) / 2.0;
-
-    int leftWidth = static_cast<int>(contentWidth * sideRatio);
-    int centerWidth = static_cast<int>(contentWidth * centerRatio);
-    int rightWidth = contentWidth - leftWidth - centerWidth;
-
-    // Joint min-width solve for all three columns
-    const int totalColumnMin = std::max(minLeftWidth, 0) + std::max(minCenterWidth, 0) + std::max(minRightWidth, 0);
-    if (totalColumnMin > contentWidth && totalColumnMin > 0) {
-        // Unsatisfiable: distribute proportionally by minimum weight
-        const int effLeft = std::max(minLeftWidth, 1);
-        const int effCenter = std::max(minCenterWidth, 1);
-        const int effRight = std::max(minRightWidth, 1);
-        const int effTotal = effLeft + effCenter + effRight;
-        leftWidth = static_cast<int>(static_cast<qint64>(contentWidth) * effLeft / effTotal);
-        centerWidth = static_cast<int>(static_cast<qint64>(contentWidth) * effCenter / effTotal);
-        rightWidth = contentWidth - leftWidth - centerWidth;
-    } else {
-        if (minLeftWidth > 0 && leftWidth < minLeftWidth) {
-            int deficit = minLeftWidth - leftWidth;
-            leftWidth = minLeftWidth;
-            int fromCenter = std::min(deficit, centerWidth - std::max(minCenterWidth, 1));
-            fromCenter = std::max(0, fromCenter);
-            centerWidth -= fromCenter;
-            rightWidth = contentWidth - leftWidth - centerWidth;
-        }
-        if (minRightWidth > 0 && rightWidth < minRightWidth) {
-            int deficit = minRightWidth - rightWidth;
-            rightWidth = minRightWidth;
-            int fromCenter = std::min(deficit, centerWidth - std::max(minCenterWidth, 1));
-            fromCenter = std::max(0, fromCenter);
-            centerWidth -= fromCenter;
-            leftWidth = contentWidth - rightWidth - centerWidth;
-        }
-    }
-
-    const int leftX = area.x();
-    const int centerX = area.x() + leftWidth + innerGap;
-    const int rightX = area.x() + leftWidth + innerGap + centerWidth + innerGap;
+    const int leftWidth = cols.leftWidth;
+    const int centerWidth = cols.centerWidth;
+    const int rightWidth = cols.rightWidth;
+    const int leftX = cols.leftX;
+    const int centerX = cols.centerX;
+    const int rightX = cols.rightX;
 
     // Build per-column min heights from minSizes interleaving order
     QVector<int> leftMinHeights;

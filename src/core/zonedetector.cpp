@@ -111,7 +111,7 @@ bool sharesEdge(const QRectF& r1, const QRectF& r2, qreal tolerance, qreal minOv
 // Expand seed zones to include all zones that intersect the bounding rectangle.
 // Used by paint-to-span to fill gaps between user-painted zones.
 // The bounding rect grows iteratively so transitive gaps get filled
-// (e.g. painting zones 2 and 4 in fibonacci fills zone 5 via zone 3).
+// (e.g. painting zones 2 and 4 in dwindle fills zone 5 via zone 3).
 QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& seedZones)
 {
     if (!layout || seedZones.isEmpty()) {

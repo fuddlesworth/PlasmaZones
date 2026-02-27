@@ -32,7 +32,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
     /**
      * @brief ID of the tiling algorithm to use
      *
-     * Common values: "master-stack", "bsp", "columns", "fibonacci", "monocle"
+     * Common values: "master-stack", "bsp", "columns", "dwindle", "spiral", "monocle"
      * See AlgorithmRegistry for available algorithms.
      */
     QString algorithmId = QStringLiteral("master-stack");

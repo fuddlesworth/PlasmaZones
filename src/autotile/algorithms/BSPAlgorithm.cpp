@@ -3,6 +3,7 @@
 
 #include "BSPAlgorithm.h"
 #include "../AlgorithmRegistry.h"
+#include "../TilingState.h"
 #include "core/constants.h"
 #include <KLocalizedString>
 #include <cmath>
@@ -46,7 +47,7 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
 
     QVector<QRect> zones;
 
-    if (windowCount <= 0 || !screenGeometry.isValid()) {
+    if (windowCount <= 0 || !screenGeometry.isValid() || !params.state) {
         return zones;
     }
 
@@ -59,18 +60,19 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
         return zones;
     }
 
-    // BSP always uses balanced 0.5 splits — the split ratio setting
-    // is a master-stack concept and does not apply here.
-    constexpr qreal stateRatio = 0.5;
+    // Read the user's split ratio from TilingState as the default for new nodes.
+    // Each node stores its own ratio (set at creation time), enabling per-split
+    // adjustment like bspwm.
+    const qreal defaultRatio = std::clamp(params.state->splitRatio(),
+                                          MinSplitRatio, MaxSplitRatio);
 
     // Grow or shrink the persistent tree to match window count.
     // Uses the actual screen area (not hardcoded 1920x1080) so split
     // direction heuristics match the real screen aspect ratio.
-    ensureTreeSize(windowCount, stateRatio, area);
+    ensureTreeSize(windowCount, defaultRatio, area);
 
     // Apply geometry top-down with inner gaps at each split point.
-    // Passes stateRatio so ALL nodes use the current slider value
-    // (overrides per-node ratios that were frozen at construction time).
+    // Each node uses its own splitRatio (per-node, like bspwm).
     //
     // minSizes are passed so BSP clamps split ratios at each node to
     // satisfy subtree minimum dimensions. Per-node clamping at H-splits
@@ -79,7 +81,7 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
     // uses a single aggregate clamp so the main vertical boundary stays
     // consistent. This is preferable to deferring to post-processing,
     // which can't correctly propagate boundary shifts across tree levels.
-    applyGeometry(m_root.get(), area, innerGap, minSizes, 0, stateRatio);
+    applyGeometry(m_root.get(), area, innerGap, minSizes, 0);
 
     // Collect leaf geometries
     collectLeaves(m_root.get(), zones);
@@ -163,7 +165,7 @@ void BSPAlgorithm::buildTree(int windowCount, qreal defaultRatio, const QRect &r
     constexpr int MaxIterations = 1000;
     while (m_leafCount < windowCount && iterations++ < MaxIterations) {
         // Apply geometry so largestLeaf can find the optimal split candidate
-        applyGeometry(m_root.get(), buildRect, 0, {}, 0, defaultRatio);
+        applyGeometry(m_root.get(), buildRect, 0, {}, 0);
         if (!growTree(defaultRatio)) {
             break;
         }
@@ -303,8 +305,7 @@ QSize BSPAlgorithm::computeSubtreeMinDims(const BSPNode *node, const QVector<QSi
 }
 
 void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
-                                  const QVector<QSize> &minSizes, int leafStartIdx,
-                                  qreal stateRatio) const
+                                  const QVector<QSize> &minSizes, int leafStartIdx) const
 {
     if (!node) {
         return;
@@ -316,9 +317,9 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
         return;
     }
 
-    // Use the fixed 0.5 ratio for ALL nodes so splits are balanced.
-    // Per-node ratios (set at construction) are overridden for consistency.
-    qreal ratio = std::clamp(stateRatio, MinSplitRatio, MaxSplitRatio);
+    // Use the node's own split ratio (set when it was created or resized),
+    // enabling per-split adjustment like bspwm.
+    qreal ratio = std::clamp(node->splitRatio, MinSplitRatio, MaxSplitRatio);
 
     // Clamp ratio to respect subtree minimum dimensions
     if (!minSizes.isEmpty()) {
@@ -377,8 +378,8 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
             return;
         }
 
-        applyGeometry(node->first.get(), firstRect, innerGap, minSizes, leafStartIdx, stateRatio);
-        applyGeometry(node->second.get(), secondRect, innerGap, minSizes, leafStartIdx + firstChildLeaves, stateRatio);
+        applyGeometry(node->first.get(), firstRect, innerGap, minSizes, leafStartIdx);
+        applyGeometry(node->second.get(), secondRect, innerGap, minSizes, leafStartIdx + firstChildLeaves);
     } else {
         // Split left/right with innerGap between children
         const int contentWidth = rect.width() - innerGap;
@@ -395,8 +396,8 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
             return;
         }
 
-        applyGeometry(node->first.get(), firstRect, innerGap, minSizes, leafStartIdx, stateRatio);
-        applyGeometry(node->second.get(), secondRect, innerGap, minSizes, leafStartIdx + firstChildLeaves, stateRatio);
+        applyGeometry(node->first.get(), firstRect, innerGap, minSizes, leafStartIdx);
+        applyGeometry(node->second.get(), secondRect, innerGap, minSizes, leafStartIdx + firstChildLeaves);
     }
 }
 

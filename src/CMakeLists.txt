@@ -103,12 +103,20 @@ set(plasmazones_core_SRCS
     autotile/algorithms/RowsAlgorithm.h
     autotile/algorithms/BSPAlgorithm.cpp
     autotile/algorithms/BSPAlgorithm.h
-    autotile/algorithms/FibonacciAlgorithm.cpp
-    autotile/algorithms/FibonacciAlgorithm.h
+    autotile/algorithms/DwindleAlgorithm.cpp
+    autotile/algorithms/DwindleAlgorithm.h
+    autotile/algorithms/SpiralAlgorithm.cpp
+    autotile/algorithms/SpiralAlgorithm.h
     autotile/algorithms/ThreeColumnAlgorithm.cpp
     autotile/algorithms/ThreeColumnAlgorithm.h
     autotile/algorithms/MonocleAlgorithm.cpp
     autotile/algorithms/MonocleAlgorithm.h
+    autotile/algorithms/GridAlgorithm.cpp
+    autotile/algorithms/GridAlgorithm.h
+    autotile/algorithms/WideAlgorithm.cpp
+    autotile/algorithms/WideAlgorithm.h
+    autotile/algorithms/CenteredMasterAlgorithm.cpp
+    autotile/algorithms/CenteredMasterAlgorithm.h
     ${plasmazones_settings_SRCS}
 )
 

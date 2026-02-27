@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "FibonacciAlgorithm.h"
+#include "DwindleAlgorithm.h"
 #include "../AlgorithmRegistry.h"
+#include "../TilingState.h"
 #include "core/constants.h"
 #include <KLocalizedString>
 #include <cmath>
@@ -11,32 +12,32 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Fibonacci provides dwindle layout (priority 35)
+// Self-registration: Dwindle provides alternating V/H subdivision (priority 35)
 namespace {
-AlgorithmRegistrar<FibonacciAlgorithm> s_fibonacciRegistrar(DBus::AutotileAlgorithm::Fibonacci, 35);
+AlgorithmRegistrar<DwindleAlgorithm> s_dwindleRegistrar(DBus::AutotileAlgorithm::Dwindle, 35);
 }
 
-FibonacciAlgorithm::FibonacciAlgorithm(QObject *parent)
+DwindleAlgorithm::DwindleAlgorithm(QObject *parent)
     : TilingAlgorithm(parent)
 {
 }
 
-QString FibonacciAlgorithm::name() const
+QString DwindleAlgorithm::name() const
 {
-    return i18n("Fibonacci");
+    return i18n("Dwindle");
 }
 
-QString FibonacciAlgorithm::description() const
+QString DwindleAlgorithm::description() const
 {
-    return i18n("Dwindle subdivision with alternating splits");
+    return i18n("Dwindle subdivision with alternating vertical/horizontal splits");
 }
 
-QString FibonacciAlgorithm::icon() const noexcept
+QString DwindleAlgorithm::icon() const noexcept
 {
-    return QStringLiteral("shape-spiral");
+    return QStringLiteral("view-grid-symbolic");
 }
 
-QVector<QRect> FibonacciAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams &params) const
 {
     const int windowCount = params.windowCount;
     const auto &screenGeometry = params.screenGeometry;
@@ -46,7 +47,7 @@ QVector<QRect> FibonacciAlgorithm::calculateZones(const TilingParams &params) co
 
     QVector<QRect> zones;
 
-    if (windowCount <= 0 || !screenGeometry.isValid()) {
+    if (windowCount <= 0 || !screenGeometry.isValid() || !params.state) {
         return zones;
     }
 
@@ -58,9 +59,9 @@ QVector<QRect> FibonacciAlgorithm::calculateZones(const TilingParams &params) co
         return zones;
     }
 
-    // Fibonacci always uses balanced 0.5 splits — the split ratio setting
-    // is a master-stack concept and does not apply here.
-    constexpr qreal splitRatio = 0.5;
+    // Read split ratio from TilingState (user-adjustable via slider)
+    const qreal splitRatio = std::clamp(params.state->splitRatio(),
+                                        MinSplitRatio, MaxSplitRatio);
 
     // Precompute cumulative min dimensions for remaining windows at each split.
     // remainingMinWidth[i] = sum of minWidths for windows i..windowCount-1 + gaps

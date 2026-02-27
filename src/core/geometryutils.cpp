@@ -320,7 +320,7 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
 //   7. Write adjusted boundaries back into zone geometries.
 //   Repeat symmetrically for row groups on the vertical axis.
 //
-// Phase 2 -- Pairwise fallback (handles irregular BSP/Fibonacci grids):
+// Phase 2 -- Pairwise fallback (handles irregular BSP/Dwindle grids):
 //   For any zone still below its minimum, steal from any adjacent neighbor
 //   that has surplus above *its* minimum. No hadDeficit guard -- any zone
 //   with surplus can donate, which fixes the pass-through blocking bug.

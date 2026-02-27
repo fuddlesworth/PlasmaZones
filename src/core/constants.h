@@ -295,9 +295,13 @@ inline constexpr QLatin1String MasterStack{"master-stack"};
 inline constexpr QLatin1String BSP{"bsp"};
 inline constexpr QLatin1String Columns{"columns"};
 inline constexpr QLatin1String Rows{"rows"};
-inline constexpr QLatin1String Fibonacci{"fibonacci"};
+inline constexpr QLatin1String Dwindle{"dwindle"};
+inline constexpr QLatin1String Spiral{"spiral"};
 inline constexpr QLatin1String Monocle{"monocle"};
 inline constexpr QLatin1String ThreeColumn{"three-column"};
+inline constexpr QLatin1String Grid{"grid"};
+inline constexpr QLatin1String Wide{"wide"};
+inline constexpr QLatin1String CenteredMaster{"centered-master"};
 }
 }
 

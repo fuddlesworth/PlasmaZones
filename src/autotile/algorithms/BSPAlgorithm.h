@@ -54,7 +54,7 @@ public:
     QVector<QRect> calculateZones(const TilingParams &params) const override;
 
     bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return false; }
+    bool supportsSplitRatio() const noexcept override { return true; }
     qreal defaultSplitRatio() const noexcept override { return 0.5; }
     int defaultMaxWindows() const noexcept override { return 5; }
 
@@ -110,17 +110,15 @@ private:
      * @brief Apply geometry to all nodes top-down from root
      *
      * Recursively computes child geometries from parent geometry.
-     * Uses stateRatio for ALL nodes (overriding per-node ratios) so
-     * the split ratio slider updates all splits uniformly.
+     * Uses each node's own splitRatio (set when the node was created),
+     * allowing per-split ratio adjustment like bspwm.
      * When minSizes is non-empty, clamps the ratio so both subtrees
      * get at least their minimum dimension.
      *
-     * @param stateRatio Split ratio from TilingState (user-adjustable)
      * @param leafStartIdx Index of the first leaf in minSizes for this subtree
      */
     void applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
-                       const QVector<QSize> &minSizes, int leafStartIdx,
-                       qreal stateRatio) const;
+                       const QVector<QSize> &minSizes, int leafStartIdx) const;
 
     /**
      * @brief Compute minimum width and height required by a subtree

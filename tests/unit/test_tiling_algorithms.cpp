@@ -11,10 +11,14 @@
 #include "autotile/algorithms/MasterStackAlgorithm.h"
 #include "autotile/algorithms/ColumnsAlgorithm.h"
 #include "autotile/algorithms/BSPAlgorithm.h"
-#include "autotile/algorithms/FibonacciAlgorithm.h"
+#include "autotile/algorithms/DwindleAlgorithm.h"
+#include "autotile/algorithms/SpiralAlgorithm.h"
 #include "autotile/algorithms/MonocleAlgorithm.h"
 #include "autotile/algorithms/RowsAlgorithm.h"
 #include "autotile/algorithms/ThreeColumnAlgorithm.h"
+#include "autotile/algorithms/GridAlgorithm.h"
+#include "autotile/algorithms/WideAlgorithm.h"
+#include "autotile/algorithms/CenteredMasterAlgorithm.h"
 #include "core/constants.h"
 
 using namespace PlasmaZones;
@@ -379,7 +383,7 @@ private Q_SLOTS:
         QCOMPARE(algo.name(), QStringLiteral("BSP"));
         QVERIFY(!algo.icon().isEmpty());
         QVERIFY(!algo.supportsMasterCount());
-        QVERIFY(!algo.supportsSplitRatio());
+        QVERIFY(algo.supportsSplitRatio());
         QCOMPARE(algo.masterZoneIndex(), -1); // No master concept
         QCOMPARE(algo.defaultSplitRatio(), 0.5);
     }
@@ -513,32 +517,32 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // FibonacciAlgorithm tests
+    // DwindleAlgorithm tests (renamed from Fibonacci — same 2-direction V↔H logic)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    void testFibonacci_metadata()
+    void testDwindle_metadata()
     {
-        FibonacciAlgorithm algo;
-        QCOMPARE(algo.name(), QStringLiteral("Fibonacci"));
+        DwindleAlgorithm algo;
+        QCOMPARE(algo.name(), QStringLiteral("Dwindle"));
         QVERIFY(!algo.icon().isEmpty());
         QVERIFY(!algo.supportsMasterCount());
-        QVERIFY(!algo.supportsSplitRatio());
+        QVERIFY(algo.supportsSplitRatio());
         QCOMPARE(algo.masterZoneIndex(), -1); // No master concept
-        QCOMPARE(algo.defaultSplitRatio(), 0.5); // Dwindle default
+        QCOMPARE(algo.defaultSplitRatio(), 0.5);
     }
 
-    void testFibonacci_zeroWindows()
+    void testDwindle_zeroWindows()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
         auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QVERIFY(zones.isEmpty());
     }
 
-    void testFibonacci_oneWindow()
+    void testDwindle_oneWindow()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
         auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
@@ -546,12 +550,12 @@ private Q_SLOTS:
         QCOMPARE(zones[0], m_screenGeometry);
     }
 
-    void testFibonacci_twoWindows_spiralSplit()
+    void testDwindle_twoWindows_dwindleSplit()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
 
-        // Fibonacci always uses balanced 0.5 splits regardless of state ratio
         auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(zones.size(), 2);
 
@@ -570,9 +574,9 @@ private Q_SLOTS:
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 
-    void testFibonacci_threeWindows_spiralPattern()
+    void testDwindle_threeWindows_dwindlePattern()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
@@ -596,9 +600,9 @@ private Q_SLOTS:
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 
-    void testFibonacci_goldenRatio_firstWindowLargest()
+    void testDwindle_customRatio_firstWindowLargest()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.618);
 
@@ -619,9 +623,9 @@ private Q_SLOTS:
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 
-    void testFibonacci_manyWindows()
+    void testDwindle_manyWindows()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.618);
 
@@ -634,16 +638,16 @@ private Q_SLOTS:
             QVERIFY(zone.height() > 0);
         }
 
-        // NOTE: noOverlaps is intentionally NOT checked here. Fibonacci produces overlapping
+        // NOTE: noOverlaps is intentionally NOT checked here. Dwindle produces overlapping
         // zones when the remaining area becomes too small to split, duplicating the last zone
         // for surplus windows (similar to Monocle stacking). This is expected behavior.
 
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
 
-    void testFibonacci_minimumSizeEnforcement()
+    void testDwindle_minimumSizeEnforcement()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.618);
 
@@ -659,16 +663,16 @@ private Q_SLOTS:
             QVERIFY(zone.height() > 0);
         }
 
-        // NOTE: noOverlaps is intentionally NOT checked here. Fibonacci produces overlapping
+        // NOTE: noOverlaps is intentionally NOT checked here. Dwindle produces overlapping
         // zones when the remaining area becomes too small to split, duplicating the last zone
         // for surplus windows (similar to Monocle stacking). This is expected behavior.
 
         QVERIFY(allWithinBounds(zones, tinyScreen));
     }
 
-    void testFibonacci_invalidGeometry()
+    void testDwindle_invalidGeometry()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
         QRect invalidRect;
@@ -676,9 +680,9 @@ private Q_SLOTS:
         QVERIFY(zones.isEmpty());
     }
 
-    void testFibonacci_offsetScreen()
+    void testDwindle_offsetScreen()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         TilingState state(QStringLiteral("test"));
 
         QRect offsetScreen(100, 50, 1920, 1080);
@@ -686,6 +690,146 @@ private Q_SLOTS:
         QCOMPARE(zones.size(), 5);
         QVERIFY(allWithinBounds(zones, offsetScreen));
         QVERIFY(noOverlaps(zones));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // SpiralAlgorithm tests (4-direction rotation: right→down→left→up)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSpiral_metadata()
+    {
+        SpiralAlgorithm algo;
+        QCOMPARE(algo.name(), QStringLiteral("Spiral"));
+        QVERIFY(!algo.icon().isEmpty());
+        QVERIFY(!algo.supportsMasterCount());
+        QVERIFY(algo.supportsSplitRatio());
+        QCOMPARE(algo.masterZoneIndex(), -1);
+        QCOMPARE(algo.defaultSplitRatio(), 0.5);
+    }
+
+    void testSpiral_zeroWindows()
+    {
+        SpiralAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QVERIFY(zones.isEmpty());
+    }
+
+    void testSpiral_oneWindow()
+    {
+        SpiralAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 1);
+        QCOMPARE(zones[0], m_screenGeometry);
+    }
+
+    void testSpiral_twoWindows()
+    {
+        SpiralAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 2);
+
+        // dir=0 (Right): vertical split, window=left, remaining=right
+        int expectedWidth = static_cast<int>(ScreenWidth * 0.5);
+        QCOMPARE(zones[0].x(), 0);
+        QCOMPARE(zones[0].width(), expectedWidth);
+        QCOMPARE(zones[0].height(), ScreenHeight);
+        QCOMPARE(zones[1].x(), expectedWidth);
+
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+    }
+
+    void testSpiral_fiveWindows_fourDirectionRotation()
+    {
+        SpiralAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 5);
+
+        // Window 1 (dir=0, Right): left half of screen
+        QCOMPARE(zones[0].x(), 0);
+        QCOMPARE(zones[0].width(), ScreenWidth / 2);
+        QCOMPARE(zones[0].height(), ScreenHeight);
+
+        // Window 2 (dir=1, Down): top of right half
+        QCOMPARE(zones[1].x(), ScreenWidth / 2);
+        QCOMPARE(zones[1].height(), ScreenHeight / 2);
+
+        // Window 3 (dir=2, Left): right portion of bottom-right quadrant
+        // After dir=2 split, window takes the RIGHT side (reversed from dir=0)
+        QVERIFY(zones[2].x() > zones[0].x());
+        QVERIFY(zones[2].y() >= ScreenHeight / 2); // In bottom half
+
+        // Window 4 (dir=3, Up): bottom portion (reversed from dir=1)
+        QVERIFY(zones[3].y() > zones[1].y());
+
+        // All zones valid
+        for (const QRect& zone : zones) {
+            QVERIFY(zone.width() > 0);
+            QVERIFY(zone.height() > 0);
+        }
+
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+    }
+
+    void testSpiral_differenceFromDwindle()
+    {
+        // Spiral and Dwindle should produce DIFFERENT layouts for 5 windows
+        // because Spiral rotates 4 directions while Dwindle alternates 2
+        SpiralAlgorithm spiral;
+        DwindleAlgorithm dwindle;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto spiralZones = spiral.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        auto dwindleZones = dwindle.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+
+        QCOMPARE(spiralZones.size(), 5);
+        QCOMPARE(dwindleZones.size(), 5);
+
+        // First two windows should be the same (both start with dir=Right, dir=Down)
+        QCOMPARE(spiralZones[0], dwindleZones[0]);
+        QCOMPARE(spiralZones[1], dwindleZones[1]);
+
+        // Window 3+ should differ: Spiral does Left (reversed), Dwindle does Right again
+        QVERIFY(spiralZones[2] != dwindleZones[2]);
+    }
+
+    void testSpiral_manyWindows()
+    {
+        SpiralAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({12, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 12);
+
+        for (const QRect& zone : zones) {
+            QVERIFY(zone.width() > 0);
+            QVERIFY(zone.height() > 0);
+        }
+
+        QVERIFY(allWithinBounds(zones, m_screenGeometry));
+    }
+
+    void testSpiral_invalidGeometry()
+    {
+        SpiralAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        QRect invalidRect;
+        auto zones = algo.calculateZones({3, invalidRect, &state, 0, EdgeGaps::uniform(0)});
+        QVERIFY(zones.isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1324,7 +1468,7 @@ private Q_SLOTS:
         BSPAlgorithm bsp;
         QVERIFY(bsp.calculateZones({-10, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
-        FibonacciAlgorithm fibonacci;
+        DwindleAlgorithm fibonacci;
         QVERIFY(fibonacci.calculateZones({-3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
 
         MonocleAlgorithm monocle;
@@ -1335,6 +1479,15 @@ private Q_SLOTS:
 
         ThreeColumnAlgorithm threeCol;
         QVERIFY(threeCol.calculateZones({-2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+
+        GridAlgorithm grid;
+        QVERIFY(grid.calculateZones({-3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+
+        WideAlgorithm wide;
+        QVERIFY(wide.calculateZones({-4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
+
+        CenteredMasterAlgorithm centeredMaster;
+        QVERIFY(centeredMaster.calculateZones({-1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)}).isEmpty());
     }
 
     void testAllAlgorithms_largeWindowCount()
@@ -1357,7 +1510,7 @@ private Q_SLOTS:
         QCOMPARE(bspZones.size(), 50);
         QVERIFY(noOverlaps(bspZones));
 
-        FibonacciAlgorithm fibonacci;
+        DwindleAlgorithm fibonacci;
         auto fibZones = fibonacci.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(fibZones.size(), 50);
 
@@ -1374,6 +1527,21 @@ private Q_SLOTS:
         auto tcZones = threeCol.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 50);
         QVERIFY(noOverlaps(tcZones));
+
+        GridAlgorithm grid;
+        auto gridZones = grid.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(gridZones.size(), 50);
+        QVERIFY(noOverlaps(gridZones));
+
+        WideAlgorithm wide;
+        auto wideZones = wide.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(wideZones.size(), 50);
+        QVERIFY(noOverlaps(wideZones));
+
+        CenteredMasterAlgorithm centeredMaster;
+        auto cmZones = centeredMaster.calculateZones({50, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(cmZones.size(), 50);
+        QVERIFY(noOverlaps(cmZones));
     }
 
     void testAllAlgorithms_offsetScreen()
@@ -1397,7 +1565,7 @@ private Q_SLOTS:
         QCOMPARE(bspZones.size(), 3);
         QVERIFY(allWithinBounds(bspZones, offsetScreen));
 
-        FibonacciAlgorithm fibonacci;
+        DwindleAlgorithm fibonacci;
         auto fibZones = fibonacci.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(fibZones.size(), 3);
         QVERIFY(allWithinBounds(fibZones, offsetScreen));
@@ -1411,6 +1579,21 @@ private Q_SLOTS:
         auto tcZones = threeCol.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 3);
         QVERIFY(allWithinBounds(tcZones, offsetScreen));
+
+        GridAlgorithm grid;
+        auto gridZones = grid.calculateZones({4, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(gridZones.size(), 4);
+        QVERIFY(allWithinBounds(gridZones, offsetScreen));
+
+        WideAlgorithm wide;
+        auto wideZones = wide.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(wideZones.size(), 3);
+        QVERIFY(allWithinBounds(wideZones, offsetScreen));
+
+        CenteredMasterAlgorithm centeredMaster;
+        auto cmZones = centeredMaster.calculateZones({3, offsetScreen, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(cmZones.size(), 3);
+        QVERIFY(allWithinBounds(cmZones, offsetScreen));
     }
 
     void testAllAlgorithms_smallScreen()
@@ -1443,6 +1626,11 @@ private Q_SLOTS:
         auto tcZones = threeCol.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 4);
         QVERIFY(zonesFillScreen(tcZones, smallScreen));
+
+        GridAlgorithm grid;
+        auto gridZones = grid.calculateZones({4, smallScreen, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(gridZones.size(), 4);
+        QVERIFY(zonesFillScreen(gridZones, smallScreen));
     }
 
     void testThreeColumn_withGaps()
@@ -1519,11 +1707,11 @@ private Q_SLOTS:
     }
 
     // =============================================================================
-    // Edge case: Fibonacci with gap exceeding remaining area
+    // Edge case: Dwindle with gap exceeding remaining area
     // =============================================================================
-    void test_fibonacciGapExceedsRemaining()
+    void test_dwindleGapExceedsRemaining()
     {
-        FibonacciAlgorithm algo;
+        DwindleAlgorithm algo;
         QRect screen(0, 0, 200, 200);
         TilingState state(QStringLiteral("test"));
 
@@ -1680,17 +1868,17 @@ private Q_SLOTS:
             }
         }
 
-        // Fibonacci with extreme ratios
+        // Dwindle with extreme ratios
         {
             TilingState state(QStringLiteral("test"));
             state.setSplitRatio(0.1);
 
-            FibonacciAlgorithm algo;
+            DwindleAlgorithm algo;
             auto zones = algo.calculateZones({4, screen, &state, 0, EdgeGaps::uniform(0)});
             QCOMPARE(zones.size(), 4);
             for (int i = 0; i < zones.size(); ++i) {
                 QVERIFY2(zones[i].width() > 0 && zones[i].height() > 0,
-                          qPrintable(QStringLiteral("Fibonacci zone %1 non-positive at ratio 0.1")
+                          qPrintable(QStringLiteral("Dwindle zone %1 non-positive at ratio 0.1")
                               .arg(i)));
             }
         }
@@ -1711,6 +1899,290 @@ private Q_SLOTS:
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Grid Algorithm tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testGrid_singleWindow()
+    {
+        GridAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 1);
+        QCOMPARE(zones[0], m_screenGeometry);
+    }
+
+    void testGrid_fourWindows()
+    {
+        // 4 windows → 2x2 grid
+        GridAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 4);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(zonesFillScreen(zones, m_screenGeometry));
+
+        // 2 cols, 2 rows: each cell = 960x540
+        QCOMPARE(zones[0].width(), 960);
+        QCOMPARE(zones[0].height(), 540);
+        QCOMPARE(zones[1].width(), 960);
+        QCOMPARE(zones[3].x(), 960);
+        QCOMPARE(zones[3].y(), 540);
+    }
+
+    void testGrid_fiveWindows()
+    {
+        // 5 windows → 3 cols, 2 rows; last row has 2 windows
+        GridAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 5);
+        QVERIFY(noOverlaps(zones));
+
+        // First row: 3 windows
+        QCOMPARE(zones[0].y(), 0);
+        QCOMPARE(zones[1].y(), 0);
+        QCOMPARE(zones[2].y(), 0);
+
+        // Last row: 2 windows spanning full width
+        QCOMPARE(zones[3].y(), zones[0].height());
+        QCOMPARE(zones[4].y(), zones[0].height());
+        QCOMPARE(zones[3].width() + zones[4].width(), ScreenWidth);
+    }
+
+    void testGrid_nineWindows()
+    {
+        // 9 windows → 3x3 grid
+        GridAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({9, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 9);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(zonesFillScreen(zones, m_screenGeometry));
+
+        // 3 cols = 640px each
+        QCOMPARE(zones[0].width(), 640);
+        // 3 rows = 360px each
+        QCOMPARE(zones[0].height(), 360);
+    }
+
+    void testGrid_withGaps()
+    {
+        GridAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({4, m_screenGeometry, &state, 10, EdgeGaps::uniform(20)});
+        QCOMPARE(zones.size(), 4);
+        QVERIFY(noOverlaps(zones));
+
+        // All zones within bounds
+        QRect area(20, 20, 1880, 1040);
+        QVERIFY(allWithinBounds(zones, area));
+
+        // Gaps between zones
+        QVERIFY(zones[1].x() > zones[0].right());
+        QVERIFY(zones[2].y() > zones[0].bottom());
+    }
+
+    void testGrid_metadata()
+    {
+        GridAlgorithm algo;
+        QVERIFY(!algo.supportsMasterCount());
+        QVERIFY(!algo.supportsSplitRatio());
+        QCOMPARE(algo.defaultMaxWindows(), 9);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Wide Algorithm tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testWide_singleWindow()
+    {
+        WideAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 1);
+        QCOMPARE(zones[0], m_screenGeometry);
+    }
+
+    void testWide_twoWindows()
+    {
+        // Master top, stack bottom (50/50)
+        WideAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(zonesFillScreen(zones, m_screenGeometry));
+
+        // Master on top
+        QCOMPARE(zones[0].y(), 0);
+        QCOMPARE(zones[0].width(), ScreenWidth);
+        // Stack on bottom
+        QCOMPARE(zones[1].width(), ScreenWidth);
+        QCOMPARE(zones[0].height() + zones[1].height(), ScreenHeight);
+    }
+
+    void testWide_withMasterCountTwo()
+    {
+        WideAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setMasterCount(2);
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 3);
+        QVERIFY(noOverlaps(zones));
+
+        // Two masters in top row, side by side
+        QCOMPARE(zones[0].y(), 0);
+        QCOMPARE(zones[1].y(), 0);
+        QCOMPARE(zones[0].width() + zones[1].width(), ScreenWidth);
+
+        // One stack in bottom row
+        QCOMPARE(zones[2].width(), ScreenWidth);
+    }
+
+    void testWide_withSplitRatio()
+    {
+        WideAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.65);
+
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 2);
+
+        // Master row should be taller
+        QVERIFY(zones[0].height() > zones[1].height());
+    }
+
+    void testWide_allMasters()
+    {
+        WideAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setMasterCount(3);
+
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 3);
+        QVERIFY(noOverlaps(zones));
+
+        // All masters in single row spanning full height
+        for (int i = 0; i < 3; ++i) {
+            QCOMPARE(zones[i].y(), 0);
+            QCOMPARE(zones[i].height(), ScreenHeight);
+        }
+        int totalWidth = 0;
+        for (const auto &z : zones) totalWidth += z.width();
+        QCOMPARE(totalWidth, ScreenWidth);
+    }
+
+    void testWide_metadata()
+    {
+        WideAlgorithm algo;
+        QVERIFY(algo.supportsMasterCount());
+        QVERIFY(algo.supportsSplitRatio());
+        QCOMPARE(algo.defaultMaxWindows(), 5);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Centered Master Algorithm tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testCenteredMaster_singleWindow()
+    {
+        CenteredMasterAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+
+        auto zones = algo.calculateZones({1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 1);
+        QCOMPARE(zones[0], m_screenGeometry);
+    }
+
+    void testCenteredMaster_twoWindows()
+    {
+        // Master left, stack right (2-column mode)
+        CenteredMasterAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 2);
+        QVERIFY(noOverlaps(zones));
+        QVERIFY(zonesFillScreen(zones, m_screenGeometry));
+    }
+
+    void testCenteredMaster_threeWindows()
+    {
+        // 3-column: left stack, center master, right stack
+        CenteredMasterAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 3);
+        QVERIFY(noOverlaps(zones));
+
+        // Zone 0 is master (center), zones 1,2 are stacks (left, right)
+        // Center should be between left and right
+        QVERIFY(zones[0].x() > zones[1].x()); // master right of left stack
+        QVERIFY(zones[0].x() < zones[2].x()); // master left of right stack
+    }
+
+    void testCenteredMaster_withMasterCountTwo()
+    {
+        CenteredMasterAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setMasterCount(2);
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 5);
+        QVERIFY(noOverlaps(zones));
+
+        // 2 masters stacked vertically in center
+        // zones[0] and zones[1] are masters
+        QCOMPARE(zones[0].x(), zones[1].x()); // same column
+        QCOMPARE(zones[0].width(), zones[1].width()); // same width
+        QVERIFY(zones[1].y() > zones[0].y()); // vertically stacked
+    }
+
+    void testCenteredMaster_fiveWindows()
+    {
+        // 1 master center, 2 left, 2 right
+        CenteredMasterAlgorithm algo;
+        TilingState state(QStringLiteral("test"));
+        state.setSplitRatio(0.5);
+
+        auto zones = algo.calculateZones({5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(zones.size(), 5);
+        QVERIFY(noOverlaps(zones));
+
+        // Zone 0 is master (center), full height
+        QCOMPARE(zones[0].height(), ScreenHeight);
+        // Zones 1,3 are left stack; zones 2,4 are right stack
+        // Left stack windows should be in left column
+        QVERIFY(zones[1].x() < zones[0].x());
+        QVERIFY(zones[3].x() < zones[0].x());
+        // Right stack windows should be in right column
+        QVERIFY(zones[2].x() > zones[0].x());
+        QVERIFY(zones[4].x() > zones[0].x());
+    }
+
+    void testCenteredMaster_metadata()
+    {
+        CenteredMasterAlgorithm algo;
+        QVERIFY(algo.supportsMasterCount());
+        QVERIFY(algo.supportsSplitRatio());
+        QCOMPARE(algo.defaultMaxWindows(), 7);
+    }
+
     // =============================================================================
     // Edge case: null state pointer — should return empty, not crash
     // =============================================================================
@@ -1718,14 +2190,17 @@ private Q_SLOTS:
     {
         QRect screen(0, 0, 1920, 1080);
 
-        // BSP and Fibonacci don't use state (fixed 0.5 ratio), so they produce zones
+        // BSP and Dwindle now use state->splitRatio(), so nullptr should be handled
+        // BSP returns zones because it has per-node ratios as fallback
         BSPAlgorithm bsp;
         auto bspZones = bsp.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
-        QCOMPARE(bspZones.size(), 3);
+        // BSP now dereferences state for defaultRatio, so nullptr → empty
+        QCOMPARE(bspZones.size(), 0);
 
-        FibonacciAlgorithm fib;
+        DwindleAlgorithm fib;
         auto fibZones = fib.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
-        QCOMPARE(fibZones.size(), 3);
+        // Dwindle now dereferences state for splitRatio, so nullptr → empty
+        QCOMPARE(fibZones.size(), 0);
 
         // Algorithms that dereference state must handle nullptr gracefully
         MasterStackAlgorithm ms;
@@ -1735,6 +2210,19 @@ private Q_SLOTS:
         ThreeColumnAlgorithm tc;
         auto tcZones = tc.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
         QCOMPARE(tcZones.size(), 0);
+
+        WideAlgorithm wide;
+        auto wideZones = wide.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(wideZones.size(), 0);
+
+        CenteredMasterAlgorithm cm;
+        auto cmZones = cm.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(cmZones.size(), 0);
+
+        // Grid doesn't dereference state
+        GridAlgorithm grid;
+        auto gridZones = grid.calculateZones({3, screen, nullptr, 0, EdgeGaps::uniform(0)});
+        QCOMPARE(gridZones.size(), 3);
 
         // Columns, Rows, Monocle don't dereference state but should still work
         ColumnsAlgorithm cols;

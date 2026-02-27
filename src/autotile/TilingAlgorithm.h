@@ -241,6 +241,38 @@ protected:
      */
     static int minHeightAt(const QVector<QSize> &minSizes, int index);
 
+    /**
+     * @brief Result of solving three-column width distribution
+     */
+    struct ThreeColumnWidths {
+        int leftWidth;
+        int centerWidth;
+        int rightWidth;
+        int leftX;
+        int centerX;
+        int rightX;
+    };
+
+    /**
+     * @brief Solve three-column width distribution with ratio and min-size constraints
+     *
+     * Shared by ThreeColumnAlgorithm and CenteredMasterAlgorithm. Computes
+     * left/center/right widths from a center split ratio, applying MinZoneSizePx
+     * floor, min-width clamping, and joint min-width proportional fallback.
+     *
+     * @param areaX Left edge X coordinate
+     * @param contentWidth Total width minus two inter-column gaps
+     * @param innerGap Gap between columns
+     * @param splitRatio Center column ratio (0.0-1.0, will be clamped)
+     * @param minLeftWidth Minimum width for left column (0 = unconstrained)
+     * @param minCenterWidth Minimum width for center column (0 = unconstrained)
+     * @param minRightWidth Minimum width for right column (0 = unconstrained)
+     * @return Solved widths and X positions
+     */
+    static ThreeColumnWidths solveThreeColumnWidths(
+        int areaX, int contentWidth, int innerGap, qreal splitRatio,
+        int minLeftWidth, int minCenterWidth, int minRightWidth);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when algorithm parameters change

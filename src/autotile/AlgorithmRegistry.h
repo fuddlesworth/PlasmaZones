@@ -29,8 +29,8 @@ class TilingAlgorithm;
  * - Columns: Equal-width vertical columns
  * - BSP: Binary space partitioning
  *
- * Future algorithms (Monocle, Fibonacci, Rows, ThreeColumn) can be added
- * by implementing TilingAlgorithm and calling registerAlgorithm().
+ * Future algorithms (Monocle, Dwindle, Spiral, Rows, ThreeColumn) can be
+ * added by implementing TilingAlgorithm and calling registerAlgorithm().
  *
  * Usage:
  * @code
