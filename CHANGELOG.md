@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.5] - 2026-02-27
+
+### Fixed
+- **Multi-zone snap cascade in tiling layouts**: Edge-adjacent detection no longer flood-fill expands through shared edges, which caused all zones to highlight in tiling layouts. Seed zones are now used directly for multi-zone snap. Bounding-rect expansion is retained only for paint-to-span mode where rectangular gap-filling is needed.
+
 ## [1.15.4] - 2026-02-26
 
 ### Fixed
