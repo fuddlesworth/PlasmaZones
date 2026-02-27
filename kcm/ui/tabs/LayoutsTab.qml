@@ -26,17 +26,38 @@ ColumnLayout {
     signal requestImportLayout()
     signal requestExportLayout(string layoutId)
 
+    // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
+    property int viewMode: 0
+
     // Current layout helper for toolbar
     readonly property var currentLayout: layoutGrid.currentItem?.modelData ?? null
 
     spacing: Kirigami.Units.largeSpacing
 
-    // Toolbar - extracted component
+    // Reset to Snapping Layouts when autotiling is disabled
+    Connections {
+        target: root.kcm
+        function onAutotileEnabledChanged() {
+            if (!root.kcm.autotileEnabled && root.viewMode !== 0) {
+                root.viewMode = 0
+                layoutGrid.currentIndex = -1
+                layoutGrid.rebuildModel()
+            }
+        }
+    }
+
+    // Toolbar - extracted component (includes view switcher ComboBox)
     LayoutToolbar {
         Layout.fillWidth: true
         kcm: root.kcm
         currentLayout: root.currentLayout
+        viewMode: root.viewMode
 
+        onViewModeRequested: (mode) => {
+            root.viewMode = mode
+            layoutGrid.currentIndex = -1
+            layoutGrid.rebuildModel()
+        }
         onRequestDeleteLayout: (layout) => root.requestDeleteLayout(layout)
         onRequestImportLayout: root.requestImportLayout()
         onRequestExportLayout: (layoutId) => root.requestExportLayout(layoutId)
@@ -69,7 +90,18 @@ ColumnLayout {
         }
 
         function rebuildModel() {
-            let newLayouts = kcm?.layouts ?? []
+            let allLayouts = kcm?.layouts ?? []
+
+            // Filter by view mode
+            let newLayouts = []
+            for (let i = 0; i < allLayouts.length; i++) {
+                let isAutotile = allLayouts[i].isAutotile === true
+                if (root.viewMode === 0 && !isAutotile) {
+                    newLayouts.push(allLayouts[i])
+                } else if (root.viewMode === 1 && isAutotile) {
+                    newLayouts.push(allLayouts[i])
+                }
+            }
 
             // Compare by ID list — skip swap if order hasn't changed
             let oldIds = _extractIds(model)
@@ -158,6 +190,7 @@ ColumnLayout {
         // into components with matching required properties
         delegate: LayoutGridDelegate {
             kcm: root.kcm
+            viewMode: root.viewMode
             cellWidth: layoutGrid.cellWidth
             cellHeight: layoutGrid.cellHeight
             isSelected: GridView.isCurrentItem
@@ -172,8 +205,10 @@ ColumnLayout {
             anchors.centerIn: parent
             width: parent.width - Kirigami.Units.gridUnit * 4
             visible: layoutGrid.count === 0
-            text: i18n("No layouts available")
-            explanation: i18n("Start the PlasmaZones daemon or create a new layout")
+            text: root.viewMode === 1 ? i18n("No autotile algorithms available") : i18n("No layouts available")
+            explanation: root.viewMode === 1
+                ? i18n("Enable autotiling to use tiling algorithms")
+                : i18n("Start the PlasmaZones daemon or create a new layout")
         }
     }
 }

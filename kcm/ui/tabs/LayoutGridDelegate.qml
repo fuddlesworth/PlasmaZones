@@ -21,6 +21,10 @@ Item {
     required property var kcm
     required property real cellWidth
     required property real cellHeight
+    property int viewMode: 0  // 0 = Snapping Layouts, 1 = Auto Tile
+
+    // The full autotile default ID including prefix, for comparison
+    readonly property string autotileDefaultId: "autotile:" + root.kcm.autotileAlgorithm
 
     // Selection state (bound from parent GridView)
     property bool isSelected: false
@@ -113,14 +117,18 @@ Item {
                     Kirigami.Icon {
                         id: defaultIcon
                         source: "favorite"
-                        visible: root.modelData.id === root.kcm.defaultLayoutId
+                        visible: root.viewMode === 1
+                            ? root.modelData.id === root.autotileDefaultId
+                            : root.modelData.id === root.kcm.defaultLayoutId
                         width: Kirigami.Units.iconSizes.small
                         height: Kirigami.Units.iconSizes.small
                         color: Kirigami.Theme.positiveTextColor
 
                         HoverHandler { id: defaultIconHover }
                         ToolTip.visible: defaultIconHover.hovered
-                        ToolTip.text: i18n("Default layout")
+                        ToolTip.text: root.viewMode === 1
+                            ? i18n("Default autotile algorithm")
+                            : i18n("Default layout")
                     }
 
                     Kirigami.Icon {
