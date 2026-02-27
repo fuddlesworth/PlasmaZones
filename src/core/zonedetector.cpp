@@ -107,19 +107,12 @@ bool sharesEdge(const QRectF& r1, const QRectF& r2, qreal tolerance, qreal minOv
     return false;
 }
 
-// Check if two rects spatially overlap (intersection is thick on both axes).
-// Distinguishes true area-overlap from edge-touching.
-bool spatiallyOverlaps(const QRectF& r1, const QRectF& r2, qreal tolerance)
-{
-    QRectF intersection = r1.intersected(r2);
-    return intersection.width() > tolerance && intersection.height() > tolerance;
-}
 
-// Expand seed zones by edge-adjacency flood-fill. A zone is added only if it shares
-// an edge with an already-selected zone AND does not spatially overlap any seed zone.
-// This preserves gap-filling for non-overlapping tiling layouts while preventing
-// cascade through stacked/overlapping zones.
-QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& seedZones, qreal edgeTolerance)
+// Expand seed zones to include all zones that intersect the bounding rectangle.
+// Used by paint-to-span to fill gaps between user-painted zones.
+// The bounding rect grows iteratively so transitive gaps get filled
+// (e.g. painting zones 2 and 4 in fibonacci fills zone 5 via zone 3).
+QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& seedZones)
 {
     if (!layout || seedZones.isEmpty()) {
         return seedZones;
@@ -127,24 +120,27 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
 
     const auto& allZones = layout->zones();
 
-    // Build selected set and seed set from seed zones (skip nulls)
+    // Build initial bounding rect and selected set from seed zones (skip nulls)
+    QRectF boundingRect;
     QSet<Zone*> selectedZones;
-    QSet<Zone*> seedSet;
 
     for (auto* zone : seedZones) {
         if (!zone) {
             continue;
         }
+        if (boundingRect.isEmpty()) {
+            boundingRect = zone->geometry();
+        } else {
+            boundingRect = boundingRect.united(zone->geometry());
+        }
         selectedZones.insert(zone);
-        seedSet.insert(zone);
     }
 
     if (selectedZones.isEmpty()) {
         return QVector<Zone*>();
     }
 
-    // Flood-fill: add zones that share an edge with already-selected zones
-    // but do NOT spatially overlap any seed zone
+    // Iteratively expand to include all zones that intersect the bounding rect
     bool foundNew = true;
     int iterations = 0;
     const int maxIterations = 100;
@@ -152,34 +148,15 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
     while (foundNew && iterations < maxIterations) {
         foundNew = false;
         iterations++;
+        QRectF currentRect = boundingRect;
 
-        for (auto* candidate : allZones) {
-            if (!candidate || selectedZones.contains(candidate)) {
+        for (auto* zone : allZones) {
+            if (!zone || selectedZones.contains(zone)) {
                 continue;
             }
-
-            // Skip candidates that spatially overlap any seed zone
-            bool overlapsASeed = false;
-            for (auto* seed : seedSet) {
-                if (spatiallyOverlaps(candidate->geometry(), seed->geometry(), edgeTolerance)) {
-                    overlapsASeed = true;
-                    break;
-                }
-            }
-            if (overlapsASeed) {
-                continue;
-            }
-
-            // Check if candidate shares an edge with any already-selected zone
-            bool shouldAdd = false;
-            for (auto* selected : selectedZones) {
-                if (sharesEdge(candidate->geometry(), selected->geometry(), edgeTolerance)) {
-                    shouldAdd = true;
-                    break;
-                }
-            }
-            if (shouldAdd) {
-                selectedZones.insert(candidate);
+            if (zone->geometry().intersects(currentRect)) {
+                selectedZones.insert(zone);
+                boundingRect = boundingRect.united(zone->geometry());
                 foundNew = true;
             }
         }
@@ -239,15 +216,18 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
 
     // Multi-zone ONLY if there are edge-adjacent zones (cursor near a boundary between zones)
     if (!edgeAdjacentZones.isEmpty()) {
-        // Combine primary (if any) + edge-adjacent zones as seeds for expansion
+        // Combine primary (if any) + edge-adjacent zones directly.
+        // Do NOT flood-fill expand: in tiling layouts every zone shares an edge
+        // with its neighbor, so expandZonesByIntersection() cascades to ALL zones.
+        // The seed zones already capture the zones the cursor is between.
+        // (expandZonesByIntersection is still used by expandPaintedZonesToRect
+        // for paint-to-span mode where rectangular gap-filling is needed.)
         QVector<Zone*> seedZones = edgeAdjacentZones;
         if (primaryZone && !seedZones.contains(primaryZone)) {
             seedZones.prepend(primaryZone);
         }
 
-        QVector<Zone*> expanded = expandZonesByIntersection(m_layout, seedZones, adjacentThreshold);
-
-        if (expanded.size() > 1) {
+        if (seedZones.size() > 1) {
             if (!primaryZone) {
                 // No containing zone — pick closest edge-adjacent as primary
                 qreal minDistance = std::numeric_limits<qreal>::max();
@@ -261,9 +241,9 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
             }
 
             result.primaryZone = primaryZone;
-            result.adjacentZones = expanded;
+            result.adjacentZones = seedZones;
             result.isMultiZone = true;
-            result.snapGeometry = combineZoneGeometries(expanded);
+            result.snapGeometry = combineZoneGeometries(seedZones);
             result.distance = 0;
             return result;
         }
@@ -277,7 +257,7 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
 
 QVector<Zone*> ZoneDetector::expandPaintedZonesToRect(const QVector<Zone*>& seedZones) const
 {
-    return expandZonesByIntersection(m_layout, seedZones, m_settings->adjacentThreshold());
+    return expandZonesByIntersection(m_layout, seedZones);
 }
 
 Zone* ZoneDetector::zoneAtPoint(const QPointF& point) const
