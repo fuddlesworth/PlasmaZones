@@ -128,7 +128,7 @@ RowLayout {
     // View switcher — only visible when autotiling is enabled
     ComboBox {
         visible: root.kcm.autotileEnabled
-        model: [i18n("Snapping Layouts"), i18n("Auto Tile")]
+        model: [i18n("Snapping"), i18n("Tiling")]
         currentIndex: root.viewMode
         onActivated: (index) => root.viewModeRequested(index)
     }
