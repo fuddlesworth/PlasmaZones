@@ -216,6 +216,11 @@ bool KCMPlasmaZones::toggleActivation() const
     return m_settings->toggleActivation();
 }
 
+bool KCMPlasmaZones::snappingEnabled() const
+{
+    return m_settings->snappingEnabled();
+}
+
 // Display getters
 bool KCMPlasmaZones::showZonesOnAllMonitors() const
 {
@@ -688,6 +693,15 @@ void KCMPlasmaZones::setToggleActivation(bool enable)
     if (m_settings->toggleActivation() != enable) {
         m_settings->setToggleActivation(enable);
         Q_EMIT toggleActivationChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setSnappingEnabled(bool enabled)
+{
+    if (m_settings->snappingEnabled() != enabled) {
+        m_settings->setSnappingEnabled(enabled);
+        Q_EMIT snappingEnabledChanged();
         setNeedsSave(true);
     }
 }
@@ -2109,6 +2123,7 @@ void KCMPlasmaZones::load()
     m_settings->load();
     // Emit Settings-backed property signals so UI bindings re-evaluate (e.g. after external config change)
     Q_EMIT alwaysActivateOnDragChanged();
+    Q_EMIT snappingEnabledChanged();
     Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT snapAssistFeatureEnabledChanged();
     Q_EMIT snapAssistEnabledChanged();
@@ -2406,6 +2421,7 @@ void KCMPlasmaZones::defaults()
     Q_EMIT zoneSpanEnabledChanged();
     Q_EMIT zoneSpanTriggersChanged();
     Q_EMIT toggleActivationChanged();
+    Q_EMIT snappingEnabledChanged();
     Q_EMIT showZonesOnAllMonitorsChanged();
     Q_EMIT disabledMonitorsChanged();
     Q_EMIT showZoneNumbersChanged();
@@ -3269,6 +3285,7 @@ void KCMPlasmaZones::onSettingsChanged()
         Q_EMIT zoneSpanEnabledChanged();
         Q_EMIT zoneSpanTriggersChanged();
         Q_EMIT toggleActivationChanged();
+        Q_EMIT snappingEnabledChanged();
         Q_EMIT showZonesOnAllMonitorsChanged();
         Q_EMIT disabledMonitorsChanged();
         Q_EMIT showZoneNumbersChanged();

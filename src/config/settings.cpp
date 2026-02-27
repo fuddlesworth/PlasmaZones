@@ -485,6 +485,7 @@ void Settings::setZoneSpanModifierInt(int modifier)
 
 SETTINGS_SETTER(bool, ZoneSpanEnabled, m_zoneSpanEnabled, zoneSpanEnabledChanged)
 SETTINGS_SETTER(bool, ToggleActivation, m_toggleActivation, toggleActivationChanged)
+SETTINGS_SETTER(bool, SnappingEnabled, m_snappingEnabled, snappingEnabledChanged)
 
 // Simple bool setters
 SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
@@ -1134,6 +1135,8 @@ void Settings::load()
                                           legacySpanMod, 0);
 
     m_toggleActivation = activation.readEntry(QLatin1String("ToggleActivation"), ConfigDefaults::toggleActivation());
+    const bool oldSnappingEnabled = m_snappingEnabled;
+    m_snappingEnabled = activation.readEntry(QLatin1String("SnappingEnabled"), ConfigDefaults::snappingEnabled());
 
     // Display (defaults from .kcfg via ConfigDefaults)
     m_showZonesOnAllMonitors = display.readEntry(QLatin1String("ShowOnAllMonitors"), ConfigDefaults::showOnAllMonitors());
@@ -1543,6 +1546,8 @@ void Settings::load()
         Q_EMIT audioSpectrumBarCountChanged();
     if (m_defaultLayoutId != oldDefaultLayoutId)
         Q_EMIT defaultLayoutIdChanged();
+    if (m_snappingEnabled != oldSnappingEnabled)
+        Q_EMIT snappingEnabledChanged();
     if (m_autotileEnabled != oldAutotileEnabled)
         Q_EMIT autotileEnabledChanged();
     if (m_autotileAlgorithm != oldAutotileAlgorithm)
@@ -1592,6 +1597,7 @@ void Settings::save()
     saveTriggerList(activation, QLatin1String("ZoneSpanTriggers"), m_zoneSpanTriggers);
     activation.deleteEntry(QLatin1String("ZoneSpanMouseButton"));
     activation.writeEntry(QLatin1String("ToggleActivation"), m_toggleActivation);
+    activation.writeEntry(QLatin1String("SnappingEnabled"), m_snappingEnabled);
 
     // Display
     display.writeEntry(QLatin1String("ShowOnAllMonitors"), m_showZonesOnAllMonitors);

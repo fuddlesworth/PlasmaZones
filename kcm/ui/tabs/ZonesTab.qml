@@ -76,6 +76,17 @@ ScrollView {
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
+        // Enable toggle - prominent at top
+        CheckBox {
+            id: snappingEnabledCheck
+            Layout.fillWidth: true
+            text: i18n("Enable zone snapping")
+            checked: kcm.snappingEnabled
+            onToggled: kcm.snappingEnabled = checked
+            font.bold: true
+            Accessible.name: i18n("Enable snapping")
+        }
+
         // ═══════════════════════════════════════════════════════════════════════
         // APPEARANCE CARD
         // ═══════════════════════════════════════════════════════════════════════
@@ -86,6 +97,7 @@ ScrollView {
             Kirigami.Card {
                 id: appearanceCard
                 anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
                 header: Kirigami.Heading {
                     level: 3
@@ -347,6 +359,7 @@ ScrollView {
             Kirigami.Card {
                 id: effectsCard
                 anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
                 header: Kirigami.Heading {
                     level: 3
@@ -475,6 +488,7 @@ ScrollView {
             Kirigami.Card {
                 id: activationCard
                 anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
                 header: Kirigami.Heading {
                     level: 3
@@ -640,6 +654,7 @@ ScrollView {
             Kirigami.Card {
                 id: snappingBehaviorCard
                 anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
                 header: Kirigami.Heading {
                     level: 3
@@ -732,6 +747,7 @@ ScrollView {
             Kirigami.Card {
                 id: gapsCard
                 anchors.fill: parent
+                enabled: kcm.snappingEnabled
 
                 header: Kirigami.Heading {
                     level: 3

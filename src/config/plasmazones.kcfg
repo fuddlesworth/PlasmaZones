@@ -46,6 +46,10 @@
       <label>Toggle overlay on/off instead of requiring hold</label>
       <default>false</default>
     </entry>
+    <entry name="SnappingEnabled" type="Bool">
+      <label>Enable manual zone snapping (drag-to-snap)</label>
+      <default>true</default>
+    </entry>
     <entry name="SnapAssistFeatureEnabled" type="Bool">
       <label>Master toggle for snap assist (window picker after snapping)</label>
       <default>true</default>

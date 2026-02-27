@@ -876,6 +876,52 @@ void Daemon::start()
         updateLayoutFilter();
     });
 
+    // Symmetric handler: when snapping is disabled, switch to autotile mode
+    // (mirrors the autotileEnabledChanged handler above)
+    connect(m_settings.get(), &Settings::snappingEnabledChanged, this, [this]() {
+        if (!m_settings) {
+            return;
+        }
+
+        if (!m_settings->snappingEnabled()) {
+            // Snapping disabled: switch to autotile if the feature is available
+            if (m_settings->autotileEnabled() && m_modeTracker
+                && m_unifiedLayoutController && m_layoutManager && m_screenManager) {
+
+                QString algoId = m_modeTracker->lastAutotileAlgorithm();
+                if (algoId.isEmpty()) {
+                    algoId = QStringLiteral("master-stack");
+                }
+                const QString autotileLayoutId = LayoutId::makeAutotileId(algoId);
+
+                // Set the algorithm on the engine
+                if (m_autotileEngine) {
+                    m_autotileEngine->setAlgorithm(algoId);
+                }
+
+                // Assign autotile layout to ALL screens (this is a global KCM toggle).
+                // Block signals during batch to avoid N intermediate updateAutotileScreens()
+                // calls from the layoutAssigned handler — one final call is sufficient.
+                const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+                const QString activity = (m_activityManager && ActivityManager::isAvailable())
+                                         ? m_activityManager->currentActivity() : QString();
+                {
+                    QSignalBlocker blocker(m_layoutManager.get());
+                    for (QScreen* screen : m_screenManager->screens()) {
+                        QString screenId = Utils::screenIdentifier(screen);
+                        m_layoutManager->assignLayoutById(screenId, desktop, activity, autotileLayoutId);
+                    }
+                }
+                updateAutotileScreens();
+
+                // Set mode to Autotile so updateLayoutFilter shows the right layouts
+                m_modeTracker->setCurrentMode(TilingMode::Autotile);
+            }
+        }
+
+        updateLayoutFilter();
+    });
+
     // Re-derive autotile screens when assignments change
     connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this, [this]() {
         updateAutotileScreens();

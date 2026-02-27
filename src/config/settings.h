@@ -42,6 +42,7 @@ public:
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
     Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY toggleActivationChanged)
+    Q_PROPERTY(bool snappingEnabled READ snappingEnabled WRITE setSnappingEnabled NOTIFY snappingEnabledChanged)
 
     // Display settings
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -333,6 +334,8 @@ public:
         return m_toggleActivation;
     }
     void setToggleActivation(bool enable) override;
+    bool snappingEnabled() const override { return m_snappingEnabled; }
+    void setSnappingEnabled(bool enabled) override;
     int zoneSpanModifierInt() const
     {
         return static_cast<int>(m_zoneSpanModifier);
@@ -1173,6 +1176,7 @@ private:
     DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
     QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
     bool m_toggleActivation = false;
+    bool m_snappingEnabled = true;
 
     // Display
     bool m_showZonesOnAllMonitors = false;

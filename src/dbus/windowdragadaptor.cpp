@@ -125,6 +125,14 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                                     const QString& appName, const QString& windowClass, int mouseButtons)
 {
     Q_UNUSED(mouseButtons); // Only used in dragMoved for dynamic activation
+    // Check if snapping is enabled
+    if (m_settings && !m_settings->snappingEnabled()) {
+        qCInfo(lcDbusWindow) << "Snapping disabled in settings, ignoring drag";
+        m_snapCancelled = true;
+        m_draggedWindowId.clear();
+        return;
+    }
+
     // Check exclusion list - if window is excluded, don't allow snapping
     if (m_settings->isWindowExcluded(appName, windowClass)) {
         qCInfo(lcDbusWindow) << "Window excluded from snapping - appName:" << appName << "windowClass:" << windowClass;

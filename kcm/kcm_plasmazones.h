@@ -50,6 +50,7 @@ class KCMPlasmaZones : public KQuickConfigModule
                    alwaysActivateOnDragChanged)
     Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
                    toggleActivationChanged)
+    Q_PROPERTY(bool snappingEnabled READ snappingEnabled WRITE setSnappingEnabled NOTIFY snappingEnabledChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
                    zoneSpanTriggersChanged)
@@ -282,6 +283,7 @@ public:
     QVariantList dragActivationTriggers() const;
     bool alwaysActivateOnDrag() const;
     bool toggleActivation() const;
+    bool snappingEnabled() const;
     bool zoneSpanEnabled() const;
     QVariantList zoneSpanTriggers() const;
     bool showZonesOnAllMonitors() const;
@@ -434,6 +436,7 @@ public:
     void setDragActivationTriggers(const QVariantList& triggers);
     void setAlwaysActivateOnDrag(bool enabled);
     void setToggleActivation(bool enable);
+    void setSnappingEnabled(bool enabled);
     void setZoneSpanEnabled(bool enabled);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setShowZonesOnAllMonitors(bool show);
@@ -658,6 +661,7 @@ Q_SIGNALS:
     void dragActivationTriggersChanged();
     void alwaysActivateOnDragChanged();
     void toggleActivationChanged();
+    void snappingEnabledChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanTriggersChanged();
     void showZonesOnAllMonitorsChanged();

@@ -83,6 +83,8 @@ public:
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
     virtual bool toggleActivation() const = 0;
     virtual void setToggleActivation(bool enable) = 0;
+    virtual bool snappingEnabled() const = 0;
+    virtual void setSnappingEnabled(bool enabled) = 0;
 };
 
 /**

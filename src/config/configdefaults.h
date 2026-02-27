@@ -48,6 +48,7 @@ public:
         return {trigger};
     }
     static bool toggleActivation() { return instance().defaultToggleActivationValue(); }
+    static bool snappingEnabled() { return instance().defaultSnappingEnabledValue(); }
     static bool zoneSpanEnabled() { return instance().defaultZoneSpanEnabledValue(); }
     static int zoneSpanModifier() { return instance().defaultZoneSpanModifierValue(); }
     static QVariantList zoneSpanTriggers() {

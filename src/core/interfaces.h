@@ -166,6 +166,7 @@ Q_SIGNALS:
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();
     void toggleActivationChanged();
+    void snappingEnabledChanged();
     void showZonesOnAllMonitorsChanged();
     void disabledMonitorsChanged();
     void showZoneNumbersChanged();
