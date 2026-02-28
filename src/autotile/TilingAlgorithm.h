@@ -269,6 +269,43 @@ protected:
         int areaX, int contentWidth, int innerGap, qreal splitRatio,
         int minLeftWidth, int minCenterWidth, int minRightWidth);
 
+    /**
+     * @brief Result of precomputing cumulative min dimensions for alternating V/H splits
+     */
+    struct CumulativeMinDims {
+        QVector<int> minW;  ///< Per-window cumulative minimum width (size = windowCount + 1)
+        QVector<int> minH;  ///< Per-window cumulative minimum height (size = windowCount + 1)
+    };
+
+    /**
+     * @brief Precompute direction-aware cumulative min dimensions for alternating splits
+     *
+     * Shared by Dwindle and Spiral algorithms. Both alternate V/H splits where
+     * splitV = (i % 2 == 0). Accumulates along the split axis and takes max
+     * for the orthogonal axis.
+     */
+    static CumulativeMinDims computeAlternatingCumulativeMinDims(
+        int windowCount, const QVector<QSize>& minSizes, int innerGap);
+
+    /**
+     * @brief Append graceful degradation zones when remaining area is too small
+     *
+     * Shared by Dwindle and Spiral. Distributes leftover windows evenly within
+     * the remaining rectangle. zones.last() is resized to the first sub-zone.
+     */
+    static void appendGracefulDegradation(QVector<QRect>& zones, const QRect& remaining,
+                                           int leftover, int innerGap);
+
+    /**
+     * @brief Clamp split ratio to min/max range, or fall back to proportional split
+     *
+     * Shared by BSP for both H and V branches. When minFirstRatio <= maxFirstRatio,
+     * clamps ratio. Otherwise distributes proportionally by minimum weight.
+     */
+    static qreal clampOrProportionalFallback(qreal ratio, qreal minFirstRatio,
+                                              qreal maxFirstRatio,
+                                              int firstDim, int secondDim);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when algorithm parameters change

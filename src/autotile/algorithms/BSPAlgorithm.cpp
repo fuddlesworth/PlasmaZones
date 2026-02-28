@@ -247,9 +247,8 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
                     ? 1.0 - static_cast<qreal>(secondMin.height()) / contentHeight : MaxSplitRatio;
                 minFirstRatio = std::clamp(minFirstRatio, MinSplitRatio, MaxSplitRatio);
                 maxFirstRatio = std::clamp(maxFirstRatio, MinSplitRatio, MaxSplitRatio);
-                if (minFirstRatio <= maxFirstRatio) {
-                    ratio = std::clamp(ratio, minFirstRatio, maxFirstRatio);
-                }
+                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
+                                                     firstMin.height(), secondMin.height());
             }
         } else {
             const int contentWidth = rect.width() - innerGap;
@@ -260,9 +259,8 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
                     ? 1.0 - static_cast<qreal>(secondMin.width()) / contentWidth : MaxSplitRatio;
                 minFirstRatio = std::clamp(minFirstRatio, MinSplitRatio, MaxSplitRatio);
                 maxFirstRatio = std::clamp(maxFirstRatio, MinSplitRatio, MaxSplitRatio);
-                if (minFirstRatio <= maxFirstRatio) {
-                    ratio = std::clamp(ratio, minFirstRatio, maxFirstRatio);
-                }
+                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
+                                                     firstMin.width(), secondMin.width());
             }
         }
     }

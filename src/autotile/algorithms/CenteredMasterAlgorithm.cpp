@@ -131,34 +131,37 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
         return zones;
     }
 
+    // Precompute stack-to-side mapping (used for width, height, and zone assignment)
+    QVector<bool> stackIsLeft(stackCount);
+    {
+        int li = 0, ri = 0;
+        for (int i = 0; i < stackCount; ++i) {
+            if (i % 2 == 0 && li < leftCount) {
+                stackIsLeft[i] = true; ++li;
+            } else if (ri < rightCount) {
+                stackIsLeft[i] = false; ++ri;
+            } else {
+                stackIsLeft[i] = true; ++li;
+            }
+        }
+    }
+
     // Compute per-column minimum widths
     int minCenterWidth = 0;
     int minLeftWidth = 0;
     int minRightWidth = 0;
     if (!minSizes.isEmpty()) {
-        // Masters are zones 0..masterCount-1
         for (int i = 0; i < masterCount && i < minSizes.size(); ++i) {
             minCenterWidth = std::max(minCenterWidth, minSizes[i].width());
         }
-        // Stack interleaving: zone masterCount+0→left, +1→right, +2→left, ...
-        int li = 0, ri = 0;
         for (int i = 0; i < stackCount; ++i) {
             int zoneIdx = masterCount + i;
-            if (i % 2 == 0 && li < leftCount) {
-                if (zoneIdx < minSizes.size()) {
+            if (zoneIdx < minSizes.size()) {
+                if (stackIsLeft[i]) {
                     minLeftWidth = std::max(minLeftWidth, minSizes[zoneIdx].width());
-                }
-                ++li;
-            } else if (ri < rightCount) {
-                if (zoneIdx < minSizes.size()) {
+                } else {
                     minRightWidth = std::max(minRightWidth, minSizes[zoneIdx].width());
                 }
-                ++ri;
-            } else if (li < leftCount) {
-                if (zoneIdx < minSizes.size()) {
-                    minLeftWidth = std::max(minLeftWidth, minSizes[zoneIdx].width());
-                }
-                ++li;
             }
         }
     }
@@ -174,12 +177,32 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
     const int centerX = cols.centerX;
     const int rightX = cols.rightX;
 
-    // Calculate heights for each column
-    const QVector<int> masterHeights = distributeWithGaps(area.height(), masterCount, innerGap);
-    const QVector<int> leftHeights = distributeWithGaps(area.height(), leftCount, innerGap);
+    // Calculate heights for each column, respecting per-window minHeight
+    QVector<int> masterMinH, leftMinH, rightMinH;
+    if (!minSizes.isEmpty()) {
+        for (int i = 0; i < masterCount; ++i) {
+            masterMinH.append(minHeightAt(minSizes, i));
+        }
+        for (int i = 0; i < stackCount; ++i) {
+            int mh = minHeightAt(minSizes, masterCount + i);
+            if (stackIsLeft[i]) {
+                leftMinH.append(mh);
+            } else {
+                rightMinH.append(mh);
+            }
+        }
+    }
+    const QVector<int> masterHeights = masterMinH.isEmpty()
+        ? distributeWithGaps(area.height(), masterCount, innerGap)
+        : distributeWithMinSizes(area.height(), masterCount, innerGap, masterMinH);
+    const QVector<int> leftHeights = leftMinH.isEmpty()
+        ? distributeWithGaps(area.height(), leftCount, innerGap)
+        : distributeWithMinSizes(area.height(), leftCount, innerGap, leftMinH);
     QVector<int> rightHeights;
     if (rightCount > 0) {
-        rightHeights = distributeWithGaps(area.height(), rightCount, innerGap);
+        rightHeights = rightMinH.isEmpty()
+            ? distributeWithGaps(area.height(), rightCount, innerGap)
+            : distributeWithMinSizes(area.height(), rightCount, innerGap, rightMinH);
     }
 
     // Masters in center column (stacked vertically)
@@ -189,25 +212,21 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
         currentY += masterHeights[i] + innerGap;
     }
 
-    // Interleave left and right stack windows
+    // Assign stack windows using precomputed side mapping
     int leftIdx = 0;
     int rightIdx = 0;
     int leftY = area.y();
     int rightY = area.y();
 
     for (int i = 0; i < stackCount; ++i) {
-        if (i % 2 == 0 && leftIdx < leftCount) {
+        if (stackIsLeft[i]) {
             zones.append(QRect(leftX, leftY, leftWidth, leftHeights[leftIdx]));
             leftY += leftHeights[leftIdx] + innerGap;
             ++leftIdx;
-        } else if (rightIdx < rightCount) {
+        } else {
             zones.append(QRect(rightX, rightY, rightWidth, rightHeights[rightIdx]));
             rightY += rightHeights[rightIdx] + innerGap;
             ++rightIdx;
-        } else if (leftIdx < leftCount) {
-            zones.append(QRect(leftX, leftY, leftWidth, leftHeights[leftIdx]));
-            leftY += leftHeights[leftIdx] + innerGap;
-            ++leftIdx;
         }
     }
 

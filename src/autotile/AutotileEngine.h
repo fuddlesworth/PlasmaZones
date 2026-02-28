@@ -499,6 +499,18 @@ public:
     void windowOpened(const QString& windowId, const QString& screenName, int minWidth = 0, int minHeight = 0);
 
     /**
+     * @brief Update a window's minimum size at runtime
+     *
+     * Called when a window's minimum size changes after initial windowOpened.
+     * Triggers retiling if the new minimum differs from the stored value.
+     *
+     * @param windowId Window identifier from KWin
+     * @param minWidth New minimum width in pixels (0 if unconstrained)
+     * @param minHeight New minimum height in pixels (0 if unconstrained)
+     */
+    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight);
+
+    /**
      * @brief Notify the engine that a window was closed
      *
      * Called by Daemon when KWin reports a window closed. Triggers retiling
@@ -672,6 +684,20 @@ private:
     void backfillWindows();
 
     /**
+     * @brief Unfloat overflow windows when room becomes available
+     *
+     * Checks if there are overflow-floated windows on the screen and unfloats
+     * them when tiled window count is below maxWindows. Called before
+     * recalculateLayout to re-integrate previously overflowed windows.
+     *
+     * @param screenName Screen to check for overflow recovery
+     */
+    void unfloatOverflowIfRoom(const QString& screenName);
+
+    /** @brief Clear overflow tracking for a window (user action or removal) */
+    void clearOverflowStatus(const QString& windowId);
+
+    /**
      * @brief Helper to get tiled windows and state for focus operations
      *
      * Gets the focused window, validates screen, retrieves state and windows.
@@ -782,6 +808,11 @@ private:
     // When autotile is deactivated, floated windows are saved here so that
     // re-enabling autotile restores them as floating regardless of screen.
     QSet<QString> m_savedFloatingWindows;
+
+    // Overflow windows: auto-floated when tiled window count exceeds maxWindows.
+    // Distinguished from user-floated windows so they can be auto-unfloated when
+    // room becomes available (e.g., window closed, maxWindows increased).
+    QSet<QString> m_overflowWindows;
 
     // Settings synchronization
     QPointer<Settings> m_settings; // QPointer for safe access if Settings destroyed

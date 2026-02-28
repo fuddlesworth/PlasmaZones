@@ -342,7 +342,20 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     }
     qCDebug(lcDbusAutotile) << "D-Bus windowOpened:" << windowId << "on screen:" << screenName << "minSize:" << minWidth
                             << "x" << minHeight;
-    m_engine->windowOpened(windowId, screenName, minWidth, minHeight);
+    m_engine->windowOpened(windowId, screenName, qMax(0, minWidth), qMax(0, minHeight));
+}
+
+void AutotileAdaptor::windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
+{
+    if (!ensureEngine("windowMinSizeUpdated")) {
+        return;
+    }
+    if (windowId.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "windowMinSizeUpdated: empty window ID";
+        return;
+    }
+    qCDebug(lcDbusAutotile) << "D-Bus windowMinSizeUpdated:" << windowId << "minSize:" << minWidth << "x" << minHeight;
+    m_engine->windowMinSizeUpdated(windowId, qMax(0, minWidth), qMax(0, minHeight));
 }
 
 void AutotileAdaptor::windowClosed(const QString& windowId)
@@ -506,7 +519,7 @@ QString AutotileAdaptor::algorithmInfo(const QString& algorithmId)
     }
 
     QJsonObject info;
-    info[QLatin1String("id")] = algorithmId;
+    info[QLatin1String("id")] = algorithmId; // Validated by successful lookup above
     info[QLatin1String("name")] = algo->name();
     info[QLatin1String("description")] = algo->description();
     info[QLatin1String("icon")] = algo->icon();

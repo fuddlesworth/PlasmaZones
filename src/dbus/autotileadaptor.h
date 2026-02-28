@@ -153,6 +153,18 @@ public Q_SLOTS:
     void windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight);
 
     /**
+     * @brief Update a window's minimum size at runtime
+     *
+     * Called by KWin effect when a window's minimum size changes after
+     * initial windowOpened. Triggers retiling if the value differs.
+     *
+     * @param windowId Window identifier from KWin
+     * @param minWidth New minimum width in pixels (0 if unconstrained)
+     * @param minHeight New minimum height in pixels (0 if unconstrained)
+     */
+    void windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight);
+
+    /**
      * @brief Notify the engine that a window was closed
      *
      * Called by KWin effect when a window is closed. Removes the window

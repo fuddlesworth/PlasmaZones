@@ -26,6 +26,7 @@
 #include <QPointer>
 
 #include <window.h>
+#include <workspace.h>
 #include <core/output.h> // For Output::name() for multi-monitor support
 
 #include "navigationhandler.h"
@@ -3196,17 +3197,32 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenName});
     }
 
-    // Restore borders for borderless windows no longer in this tile request.
-    // windowsTileRequested is per-screen, so scope to windows on the same screen
-    // to avoid restoring borders on other screens' still-tiled windows.
-    // Using onComplete ensures this fires even if the last window is destroyed before its timer.
-    auto restoreBorders = [this, tiledWindowIds, tileScreenName]() {
+    // onComplete: restore borders for borderless windows no longer tiled, then
+    // raise all tiled windows above floating/untiled windows in the stacking order.
+    // Using onComplete ensures this fires after all stagger steps complete.
+    auto onComplete = [this, toApply, tiledWindowIds, tileScreenName]() {
         if (m_autotileHideTitleBars && !m_borderlessWindows.isEmpty()) {
             const QSet<QString> toRestore = m_borderlessWindows - tiledWindowIds;
             for (const QString& wid : toRestore) {
                 KWin::EffectWindow* win = findWindowById(wid);
                 if (win && getWindowScreenName(win) == tileScreenName && !win->isMinimized()) {
                     setWindowBorderless(win, wid, false);
+                }
+            }
+        }
+        // Raise tiled windows above floating/untiled windows. Raise in reverse
+        // tiling order so the first window (master) ends up on top of the stacking
+        // order — matching user expectation that the master area is primary.
+        auto* ws = KWin::Workspace::self();
+        if (ws) {
+            for (int i = toApply.size() - 1; i >= 0; --i) {
+                const TileSnap& snap = toApply[i];
+                if (!snap.window) {
+                    continue;
+                }
+                KWin::Window* kw = snap.window->window();
+                if (kw) {
+                    ws->raiseWindow(kw);
                 }
             }
         }
@@ -3234,7 +3250,7 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
             setWindowBorderless(snap.window, snap.windowId, true);
         }
         applySnapGeometry(snap.window, snap.geometry);
-    }, restoreBorders);
+    }, onComplete);
 }
 
 void PlasmaZonesEffect::slotAutotileFocusWindowRequested(const QString& windowId)

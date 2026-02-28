@@ -63,17 +63,11 @@ QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
     const qreal splitRatio = std::clamp(params.state->splitRatio(),
                                         MinSplitRatio, MaxSplitRatio);
 
-    // Precompute cumulative min dimensions for remaining windows at each split.
-    QVector<int> remainingMinW(windowCount + 1, 0);
-    QVector<int> remainingMinH(windowCount + 1, 0);
-    if (!minSizes.isEmpty()) {
-        for (int i = windowCount - 1; i >= 0; --i) {
-            int mw = (i < minSizes.size()) ? std::max(0, minSizes[i].width()) : 0;
-            int mh = (i < minSizes.size()) ? std::max(0, minSizes[i].height()) : 0;
-            remainingMinW[i] = mw + ((i < windowCount - 1 && remainingMinW[i + 1] > 0) ? innerGap + remainingMinW[i + 1] : 0);
-            remainingMinH[i] = mh + ((i < windowCount - 1 && remainingMinH[i + 1] > 0) ? innerGap + remainingMinH[i + 1] : 0);
-        }
-    }
+    // Precompute direction-aware cumulative min dimensions for remaining windows.
+    // Spiral rotates through 4 directions but splitV = (i%2==0), same as Dwindle.
+    const auto cumMinDims = computeAlternatingCumulativeMinDims(windowCount, minSizes, innerGap);
+    const auto &remainingMinW = cumMinDims.minW;
+    const auto &remainingMinH = cumMinDims.minH;
 
     // Spiral pattern: rotates through 4 directions.
     //   0: Right  — split vertical,   window=left,   remaining=right
@@ -87,37 +81,7 @@ QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
         if (i == windowCount - 1
             || remaining.width() < MinZoneSizePx || remaining.height() < MinZoneSizePx) {
             zones.append(remaining);
-            // Graceful degradation: distribute remaining windows evenly
-            const int leftover = windowCount - i - 1;
-            if (leftover > 0) {
-                if (remaining.width() >= remaining.height()) {
-                    const int maxFit = std::max(1, remaining.width() / MinZoneSizePx);
-                    const int fitCount = std::min(leftover + 1, maxFit);
-                    QVector<int> widths = distributeWithGaps(remaining.width(), fitCount, innerGap);
-                    zones.last() = QRect(remaining.x(), remaining.y(), widths[0], remaining.height());
-                    int x = remaining.x() + widths[0] + innerGap;
-                    for (int j = 1; j < fitCount; ++j) {
-                        zones.append(QRect(x, remaining.y(), widths[j], remaining.height()));
-                        x += widths[j] + innerGap;
-                    }
-                    for (int j = fitCount; j <= leftover; ++j) {
-                        zones.append(zones.last());
-                    }
-                } else {
-                    const int maxFit = std::max(1, remaining.height() / MinZoneSizePx);
-                    const int fitCount = std::min(leftover + 1, maxFit);
-                    QVector<int> heights = distributeWithGaps(remaining.height(), fitCount, innerGap);
-                    zones.last() = QRect(remaining.x(), remaining.y(), remaining.width(), heights[0]);
-                    int y = remaining.y() + heights[0] + innerGap;
-                    for (int j = 1; j < fitCount; ++j) {
-                        zones.append(QRect(remaining.x(), y, remaining.width(), heights[j]));
-                        y += heights[j] + innerGap;
-                    }
-                    for (int j = fitCount; j <= leftover; ++j) {
-                        zones.append(zones.last());
-                    }
-                }
-            }
+            appendGracefulDegradation(zones, remaining, windowCount - i - 1, innerGap);
             break;
         }
 

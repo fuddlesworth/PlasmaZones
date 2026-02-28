@@ -245,6 +245,19 @@
             </arg>
         </method>
 
+        <method name="windowMinSizeUpdated">
+            <annotation name="org.gtk.GDBus.DocString" value="Update a window's minimum size at runtime. Called by KWin effect when a window's minimum size changes after initial windowOpened. Triggers retiling if the value differs."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window ID from KWin."/>
+            </arg>
+            <arg name="minWidth" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New minimum width in pixels (0 if unconstrained)."/>
+            </arg>
+            <arg name="minHeight" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="New minimum height in pixels (0 if unconstrained)."/>
+            </arg>
+        </method>
+
         <method name="windowClosed">
             <annotation name="org.gtk.GDBus.DocString" value="Notify the daemon that a window was closed (called from KWin effect)."/>
             <arg name="windowId" type="s" direction="in">
