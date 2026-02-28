@@ -62,8 +62,8 @@ jobs:
             libkf6config-dev libkf6configwidgets-dev libkf6coreaddons-dev \
             libkf6dbusaddons-dev libkf6i18n-dev libkf6kcmutils-dev \
             libkf6windowsystem-dev libkf6globalaccel-dev \
-            libkf6notifications-dev libkf6colorscheme-dev \
-            liblayershellqtinterface-dev libplasmaactivities-dev
+            libkf6notifications-dev kf6-kcolorscheme-dev \
+            liblayershellqtinterface-dev plasma-activities-dev
 
       - name: Generate Debian changelog from CHANGELOG.md
         run: bash packaging/generate-changelog.sh debian
