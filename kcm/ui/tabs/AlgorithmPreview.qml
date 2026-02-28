@@ -22,7 +22,7 @@ Item {
     required property var kcm
 
     // Algorithm configuration
-    property string algorithmId: "master-stack"
+    property string algorithmId: ""
     property int windowCount: 4
     property real splitRatio: 0.6
     property int masterCount: 1
@@ -35,11 +35,16 @@ Item {
     // when multiple properties change in the same frame
     property var zones: []
 
+    function recalcZones() {
+        if (root.algorithmId !== "")
+            root.zones = root.kcm.generateAlgorithmPreview(
+                root.algorithmId, root.windowCount, root.splitRatio, root.masterCount)
+    }
+
     Timer {
         id: recalcTimer
         interval: 16  // ~60fps cap
-        onTriggered: root.zones = root.kcm.generateAlgorithmPreview(
-            root.algorithmId, root.windowCount, root.splitRatio, root.masterCount)
+        onTriggered: root.recalcZones()
     }
 
     onAlgorithmIdChanged: recalcTimer.restart()

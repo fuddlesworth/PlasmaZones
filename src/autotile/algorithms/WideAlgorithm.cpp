@@ -12,9 +12,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Wide is a MasterStack variant (priority 15)
+// Self-registration: Wide is a MasterStack variant (alphabetical priority 110)
 namespace {
-AlgorithmRegistrar<WideAlgorithm> s_wideRegistrar(DBus::AutotileAlgorithm::Wide, 15);
+AlgorithmRegistrar<WideAlgorithm> s_wideRegistrar(DBus::AutotileAlgorithm::Wide, 110);
 }
 
 WideAlgorithm::WideAlgorithm(QObject *parent)

@@ -701,8 +701,8 @@ void Settings::setAutotileAlgorithm(const QString& algorithm)
     QString validatedAlgorithm = algorithm;
     if (!AlgorithmRegistry::instance()->algorithm(algorithm)) {
         qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
-                            << "- falling back to master-stack";
-        validatedAlgorithm = DBus::AutotileAlgorithm::MasterStack;
+                            << "- falling back to default";
+        validatedAlgorithm = AlgorithmRegistry::defaultAlgorithmId();
     }
 
     if (m_autotileAlgorithm != validatedAlgorithm) {

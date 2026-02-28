@@ -12,9 +12,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: BSP provides balanced recursive splitting (priority 30)
+// Self-registration: BSP provides balanced recursive splitting (alphabetical priority 10)
 namespace {
-AlgorithmRegistrar<BSPAlgorithm> s_bspRegistrar(DBus::AutotileAlgorithm::BSP, 30);
+AlgorithmRegistrar<BSPAlgorithm> s_bspRegistrar(DBus::AutotileAlgorithm::BSP, 10);
 }
 
 BSPAlgorithm::BSPAlgorithm(QObject *parent)

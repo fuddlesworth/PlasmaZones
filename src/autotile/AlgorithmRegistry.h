@@ -114,11 +114,9 @@ public:
     bool hasAlgorithm(const QString &id) const noexcept;
 
     /**
-     * @brief Get the default algorithm ID
-     *
-     * @return "master-stack" (the traditional tiling WM default)
+     * @brief Get the default algorithm ID from KCM configuration defaults
      */
-    static QString defaultAlgorithmId() noexcept;
+    static QString defaultAlgorithmId();
 
     /**
      * @brief Get the default algorithm instance

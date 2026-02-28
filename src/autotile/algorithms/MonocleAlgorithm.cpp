@@ -9,10 +9,9 @@
 
 namespace PlasmaZones {
 
-// Self-registration: Monocle provides focused single-window workflow (priority 40)
-// Higher priority = registered later in the list, appearing after core layouts
+// Self-registration: Monocle provides focused single-window workflow (alphabetical priority 70)
 namespace {
-AlgorithmRegistrar<MonocleAlgorithm> s_monocleRegistrar(DBus::AutotileAlgorithm::Monocle, 40);
+AlgorithmRegistrar<MonocleAlgorithm> s_monocleRegistrar(DBus::AutotileAlgorithm::Monocle, 70);
 }
 
 MonocleAlgorithm::MonocleAlgorithm(QObject *parent)

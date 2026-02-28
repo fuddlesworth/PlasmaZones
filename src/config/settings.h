@@ -1266,7 +1266,7 @@ private:
 
     // Autotiling Settings
     bool m_autotileEnabled = false;
-    QString m_autotileAlgorithm = QStringLiteral("master-stack");
+    QString m_autotileAlgorithm = QString(DBus::AutotileAlgorithm::MasterStack);
     qreal m_autotileSplitRatio = 0.6;
     int m_autotileMasterCount = 1;
     int m_autotileInnerGap = 8;

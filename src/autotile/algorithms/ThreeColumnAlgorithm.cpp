@@ -12,9 +12,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Three Column provides centered master layout (priority 45)
+// Self-registration: Three Column provides centered master layout (alphabetical priority 100)
 namespace {
-AlgorithmRegistrar<ThreeColumnAlgorithm> s_threeColumnRegistrar(DBus::AutotileAlgorithm::ThreeColumn, 45);
+AlgorithmRegistrar<ThreeColumnAlgorithm> s_threeColumnRegistrar(DBus::AutotileAlgorithm::ThreeColumn, 100);
 }
 
 ThreeColumnAlgorithm::ThreeColumnAlgorithm(QObject *parent)

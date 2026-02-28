@@ -9,7 +9,7 @@
 
 namespace PlasmaZones {
 
-// Self-registration: Grid layout (priority 50)
+// Self-registration: Grid layout (alphabetical priority 50)
 namespace {
 AlgorithmRegistrar<GridAlgorithm> s_gridRegistrar(DBus::AutotileAlgorithm::Grid, 50);
 }

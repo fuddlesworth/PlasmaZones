@@ -13,9 +13,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Centered Master (priority 55, after Grid=50)
+// Self-registration: Centered Master (alphabetical priority 20)
 namespace {
-AlgorithmRegistrar<CenteredMasterAlgorithm> s_centeredMasterRegistrar(DBus::AutotileAlgorithm::CenteredMaster, 55);
+AlgorithmRegistrar<CenteredMasterAlgorithm> s_centeredMasterRegistrar(DBus::AutotileAlgorithm::CenteredMaster, 20);
 }
 
 CenteredMasterAlgorithm::CenteredMasterAlgorithm(QObject *parent)

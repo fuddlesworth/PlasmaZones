@@ -4,6 +4,7 @@
 #include "AlgorithmRegistry.h"
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
+#include "config/configdefaults.h"
 #include "core/constants.h"
 #include "core/layout.h"
 #include "core/logging.h"
@@ -152,9 +153,9 @@ bool AlgorithmRegistry::hasAlgorithm(const QString &id) const noexcept
     return m_algorithms.contains(id);
 }
 
-QString AlgorithmRegistry::defaultAlgorithmId() noexcept
+QString AlgorithmRegistry::defaultAlgorithmId()
 {
-    return MasterStack;
+    return ConfigDefaults::autotileAlgorithm();
 }
 
 TilingAlgorithm *AlgorithmRegistry::defaultAlgorithm() const

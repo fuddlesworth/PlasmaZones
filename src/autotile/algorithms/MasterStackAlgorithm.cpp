@@ -12,9 +12,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: MasterStack is the default algorithm (priority 10)
+// Self-registration: MasterStack is the default algorithm (alphabetical priority 60)
 namespace {
-AlgorithmRegistrar<MasterStackAlgorithm> s_masterStackRegistrar(DBus::AutotileAlgorithm::MasterStack, 10);
+AlgorithmRegistrar<MasterStackAlgorithm> s_masterStackRegistrar(DBus::AutotileAlgorithm::MasterStack, 60);
 }
 
 MasterStackAlgorithm::MasterStackAlgorithm(QObject *parent)

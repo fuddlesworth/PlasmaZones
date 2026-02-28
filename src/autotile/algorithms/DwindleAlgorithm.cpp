@@ -12,9 +12,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Dwindle provides alternating V/H subdivision (priority 35)
+// Self-registration: Dwindle provides alternating V/H subdivision (alphabetical priority 40)
 namespace {
-AlgorithmRegistrar<DwindleAlgorithm> s_dwindleRegistrar(DBus::AutotileAlgorithm::Dwindle, 35);
+AlgorithmRegistrar<DwindleAlgorithm> s_dwindleRegistrar(DBus::AutotileAlgorithm::Dwindle, 40);
 }
 
 DwindleAlgorithm::DwindleAlgorithm(QObject *parent)

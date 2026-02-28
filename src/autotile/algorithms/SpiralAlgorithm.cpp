@@ -12,9 +12,9 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-// Self-registration: Spiral provides 4-direction rotation (priority 36, between Dwindle=35 and Monocle=40)
+// Self-registration: Spiral provides 4-direction rotation (alphabetical priority 90)
 namespace {
-AlgorithmRegistrar<SpiralAlgorithm> s_spiralRegistrar(DBus::AutotileAlgorithm::Spiral, 36);
+AlgorithmRegistrar<SpiralAlgorithm> s_spiralRegistrar(DBus::AutotileAlgorithm::Spiral, 90);
 }
 
 SpiralAlgorithm::SpiralAlgorithm(QObject *parent)

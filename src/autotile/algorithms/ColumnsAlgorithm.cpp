@@ -9,9 +9,9 @@
 
 namespace PlasmaZones {
 
-// Self-registration: Columns is the simplest layout (priority 20)
+// Self-registration: Columns is the simplest layout (alphabetical priority 30)
 namespace {
-AlgorithmRegistrar<ColumnsAlgorithm> s_columnsRegistrar(DBus::AutotileAlgorithm::Columns, 20);
+AlgorithmRegistrar<ColumnsAlgorithm> s_columnsRegistrar(DBus::AutotileAlgorithm::Columns, 30);
 }
 
 ColumnsAlgorithm::ColumnsAlgorithm(QObject *parent)

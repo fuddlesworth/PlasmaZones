@@ -9,9 +9,9 @@
 
 namespace PlasmaZones {
 
-// Self-registration: Rows provides simple horizontal stacking (priority 25)
+// Self-registration: Rows provides simple horizontal stacking (alphabetical priority 80)
 namespace {
-AlgorithmRegistrar<RowsAlgorithm> s_rowsRegistrar(DBus::AutotileAlgorithm::Rows, 25);
+AlgorithmRegistrar<RowsAlgorithm> s_rowsRegistrar(DBus::AutotileAlgorithm::Rows, 80);
 }
 
 RowsAlgorithm::RowsAlgorithm(QObject *parent)

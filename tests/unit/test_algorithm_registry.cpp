@@ -239,6 +239,8 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
+        // defaultAlgorithmId() reads from ConfigDefaults (kcfg single source of truth);
+        // the kcfg default is "master-stack"
         QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(),
                  DBus::AutotileAlgorithm::MasterStack);
     }
@@ -459,21 +461,21 @@ private Q_SLOTS:
         auto *registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
-        // Built-in registration order by priority:
-        // MasterStack(10), Wide(15), Columns(20), Rows(25), BSP(30), Dwindle(35),
-        // Spiral(36), Monocle(40), ThreeColumn(45), Grid(50), CenteredMaster(55)
+        // Built-in registration order by priority (alphabetical by display name):
+        // BSP(10), CenteredMaster(20), Columns(30), Dwindle(40), Grid(50),
+        // MasterStack(60), Monocle(70), Rows(80), Spiral(90), ThreeColumn(100), Wide(110)
         QCOMPARE(available.size(), 11);
-        QCOMPARE(available[0], DBus::AutotileAlgorithm::MasterStack);
-        QCOMPARE(available[1], DBus::AutotileAlgorithm::Wide);
+        QCOMPARE(available[0], DBus::AutotileAlgorithm::BSP);
+        QCOMPARE(available[1], DBus::AutotileAlgorithm::CenteredMaster);
         QCOMPARE(available[2], DBus::AutotileAlgorithm::Columns);
-        QCOMPARE(available[3], DBus::AutotileAlgorithm::Rows);
-        QCOMPARE(available[4], DBus::AutotileAlgorithm::BSP);
-        QCOMPARE(available[5], DBus::AutotileAlgorithm::Dwindle);
-        QCOMPARE(available[6], DBus::AutotileAlgorithm::Spiral);
-        QCOMPARE(available[7], DBus::AutotileAlgorithm::Monocle);
-        QCOMPARE(available[8], DBus::AutotileAlgorithm::ThreeColumn);
-        QCOMPARE(available[9], DBus::AutotileAlgorithm::Grid);
-        QCOMPARE(available[10], DBus::AutotileAlgorithm::CenteredMaster);
+        QCOMPARE(available[3], DBus::AutotileAlgorithm::Dwindle);
+        QCOMPARE(available[4], DBus::AutotileAlgorithm::Grid);
+        QCOMPARE(available[5], DBus::AutotileAlgorithm::MasterStack);
+        QCOMPARE(available[6], DBus::AutotileAlgorithm::Monocle);
+        QCOMPARE(available[7], DBus::AutotileAlgorithm::Rows);
+        QCOMPARE(available[8], DBus::AutotileAlgorithm::Spiral);
+        QCOMPARE(available[9], DBus::AutotileAlgorithm::ThreeColumn);
+        QCOMPARE(available[10], DBus::AutotileAlgorithm::Wide);
     }
 
     void testOrder_matchesAllAlgorithms()

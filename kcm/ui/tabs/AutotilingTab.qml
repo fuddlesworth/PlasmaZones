@@ -373,7 +373,20 @@ ScrollView {
                             textRole: "name"
                             valueRole: "id"
                             model: kcm.availableAlgorithms()
-                            currentIndex: Math.max(0, indexOfValue(root.effectiveAlgorithm))
+
+                            // indexOfValue is unreliable during initial model population;
+                            // defer to Component.onCompleted so the model is fully ready.
+                            Component.onCompleted: currentIndex = Math.max(0, indexOfValue(root.effectiveAlgorithm))
+
+                            // Re-sync when the effective algorithm changes externally
+                            // (e.g. per-screen override selection)
+                            Connections {
+                                target: root
+                                function onEffectiveAlgorithmChanged() {
+                                    algorithmCombo.currentIndex = Math.max(0, algorithmCombo.indexOfValue(root.effectiveAlgorithm))
+                                }
+                            }
+
                             onActivated: {
                                 root.writeSetting("Algorithm", currentValue, function(v) { kcm.autotileAlgorithm = v })
                                 // Reset max windows to the new algorithm's default
