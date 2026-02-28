@@ -24,11 +24,11 @@ Build-Depends:
  libkf6windowsystem-dev (>= 6.6.0),
  libkf6globalaccel-dev (>= 6.6.0),
  libkf6notifications-dev (>= 6.6.0),
- libkf6colorscheme-dev (>= 6.6.0),
+ kf6-kcolorscheme-dev (>= 6.6.0),
  kwin-dev (>= 6.6.0),
  libxkbcommon-dev,
  liblayershellqtinterface-dev (>= 6.4.0),
- libplasmaactivities-dev,
+ plasma-activities-dev,
 Standards-Version: 4.6.2
 Homepage: https://github.com/fuddlesworth/PlasmaZones
 Vcs-Git: https://github.com/fuddlesworth/PlasmaZones.git
