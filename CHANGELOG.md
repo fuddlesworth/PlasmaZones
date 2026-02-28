@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.6] - 2026-02-28
+
+### Fixed
+- **Debian package build**: Re-enabled .deb creation using KDE Neon container (`kdeneon/all:dev-stable`) which ships Plasma/KF6 6.6+, replacing the disabled Ubuntu 25.10 build.
+
 ## [1.15.5] - 2026-02-27
 
 ### Fixed
