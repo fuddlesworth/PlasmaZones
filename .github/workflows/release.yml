@@ -39,7 +39,7 @@ jobs:
     needs: version
     runs-on: ubuntu-latest
     container:
-      image: kdeneon/all:user
+      image: invent-registry.kde.org/neon/docker-images/plasma:user
       options: --user root
 
     steps:
