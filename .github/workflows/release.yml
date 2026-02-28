@@ -32,16 +32,14 @@ jobs:
           echo "Version: $VERSION"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # Build Debian Package (Ubuntu 25.10 - has KF6)
-  # Disabled until Plasma/LayerShellQt 6.6 is in Ubuntu repos (e.g. 26.04).
+  # Build Debian Package (KDE Neon - ships Plasma/KF6 6.6+)
   # ═══════════════════════════════════════════════════════════════════════════
   build-deb:
-    name: Build .deb (Ubuntu 25.10)
-    if: false
+    name: Build .deb (KDE Neon)
     needs: version
     runs-on: ubuntu-latest
     container:
-      image: ubuntu:questing
+      image: kdeneon/all:dev-stable
 
     steps:
       - name: Install prerequisites
@@ -51,12 +49,6 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Enable universe (Plasma/KF6)
-        run: |
-          # On Ubuntu, Plasma/KF6 packages are in the community-maintained universe repository
-          sed -i 's/^deb \(.*\) main$/deb \1 main universe/' /etc/apt/sources.list
-          apt-get update
 
       - name: Install build dependencies
         run: |
@@ -88,7 +80,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: deb-ubuntu-25.10
+          name: deb-kde-neon
           path: dist/*.*deb
           retention-days: 30
 
@@ -442,7 +434,7 @@ jobs:
   # ═══════════════════════════════════════════════════════════════════════════
   release:
     name: Create GitHub Release
-    needs: [version, build-rpm, build-arch, build-generic, build-nix]
+    needs: [version, build-deb, build-rpm, build-arch, build-generic, build-nix]
     runs-on: ubuntu-latest
 
     steps:
@@ -479,7 +471,7 @@ jobs:
             echo "sudo pacman -U plasmazones-${VERSION}-1-x86_64.pkg.tar.zst"
             echo '```'
             echo ""
-            echo "**Ubuntu/Debian (25.10+):**"
+            echo "**KDE Neon / Debian-based:**"
             echo '```bash'
             echo "sudo dpkg -i plasmazones_${VERSION}-1_amd64.deb"
             echo "sudo apt-get install -f  # Install dependencies if needed"

@@ -1,4 +1,4 @@
-# Requires Plasma 6.4+ (KF6 6.6, Qt 6.6, LayerShellQt 6.4+, KWin 6.6). LayerShellQt >= 6.4 for Ubuntu 25.10.
+# Requires Plasma 6.4+ (KF6 6.6, Qt 6.6, LayerShellQt 6.4+, KWin 6.6). Built on KDE Neon.
 Source: plasmazones
 Section: kde
 Priority: optional
