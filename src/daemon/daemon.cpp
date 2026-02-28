@@ -890,7 +890,10 @@ void Daemon::start()
 
                 QString algoId = m_modeTracker->lastAutotileAlgorithm();
                 if (algoId.isEmpty()) {
-                    algoId = QStringLiteral("master-stack");
+                    algoId = m_settings->autotileAlgorithm();
+                    if (algoId.isEmpty()) {
+                        algoId = AlgorithmRegistry::defaultAlgorithmId();
+                    }
                 }
                 const QString autotileLayoutId = LayoutId::makeAutotileId(algoId);
 
@@ -1574,7 +1577,33 @@ void Daemon::updateAutotileScreens()
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
             // Inject algorithm from layout assignment (authoritative source)
             if (screenAlgorithms.contains(screen->name())) {
-                overrides[QStringLiteral("Algorithm")] = screenAlgorithms.value(screen->name());
+                const QString screenAlgo = screenAlgorithms.value(screen->name());
+                overrides[QStringLiteral("Algorithm")] = screenAlgo;
+
+                // When the per-screen algorithm differs from the global setting
+                // and there's no explicit MaxWindows override, inject the
+                // per-screen algorithm's default — but only if the global
+                // maxWindows is still at the global algorithm's default.
+                // If the user customized maxWindows, respect their choice.
+                if (screenAlgo != m_settings->autotileAlgorithm()
+                    && !overrides.contains(QLatin1String("MaxWindows"))) {
+                    auto* screenAlgoPtr = AlgorithmRegistry::instance()->algorithm(screenAlgo);
+                    auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(m_settings->autotileAlgorithm());
+                    if (screenAlgoPtr) {
+                        if (!globalAlgoPtr) {
+                            qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm"
+                                              << m_settings->autotileAlgorithm()
+                                              << "not found - injecting per-screen default MaxWindows";
+                        }
+                        if (!globalAlgoPtr
+                            || m_settings->autotileMaxWindows() == globalAlgoPtr->defaultMaxWindows()) {
+                            overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
+                        }
+                    } else {
+                        qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm"
+                                            << screenAlgo << "for screen" << screen->name();
+                    }
+                }
             }
             // Compare against currently applied overrides to avoid redundant retiles
             QVariantMap current = m_autotileEngine->perScreenOverrides(screen->name());

@@ -810,6 +810,9 @@ private:
     // Get screen name from the focused KCM window (for editor targeting on Wayland)
     QString currentScreenName() const;
     void notifyDaemon();
+    QString resolveAutotileAlgorithm(const QString& key, bool isScreenAssignment) const;
+    bool syncAutotileAssignmentIds(QVariantMap& assignments, bool isScreenAssignment);
+    bool syncAutotileAssignmentIds(QMap<QString, QString>& assignments, bool isScreenAssignment);
     void refreshDaemonEnabledState(); // Async refresh of systemd enabled state
     void setDaemonAutostart(bool enabled);
 

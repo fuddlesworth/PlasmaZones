@@ -1804,6 +1804,44 @@ void KCMPlasmaZones::save()
     for (auto it = m_screenAssignments.begin(); it != m_screenAssignments.end(); ++it) {
         screenAssignments[it.key()] = it.value().toString();
     }
+    // Auto-populate tiling assignments when autotiling is enabled but no
+    // assignments exist. This happens when the user enables autotiling and
+    // selects an algorithm in AutotilingTab without visiting MonitorAssignmentsCard.
+    bool screenAssignmentsMutated = false;
+    if (m_settings->autotileEnabled() && m_tilingScreenAssignments.isEmpty()) {
+        if (m_screens.isEmpty()) {
+            qCWarning(lcKcm) << "Auto-populate: no screens available, cannot create tiling assignments";
+        } else {
+            QString algo = m_settings->autotileAlgorithm();
+            if (algo.isEmpty()) {
+                algo = AlgorithmRegistry::defaultAlgorithmId();
+            }
+            const QString autotileId = LayoutId::makeAutotileId(algo);
+            for (const QVariant& screenVar : std::as_const(m_screens)) {
+                const QVariantMap screenInfo = screenVar.toMap();
+                const QString name = screenInfo.value(QStringLiteral("name")).toString();
+                if (!name.isEmpty()) {
+                    m_tilingScreenAssignments[name] = autotileId;
+                    screenAssignmentsMutated = true;
+                }
+            }
+            if (!screenAssignmentsMutated) {
+                qCWarning(lcKcm) << "Auto-populate: all screen names were empty, no assignments created";
+            }
+        }
+    }
+
+    // Sync autotile assignment IDs with the current effective algorithm.
+    // The user can change the algorithm via the AutotilingTab combo without
+    // touching MonitorAssignmentsCard, leaving the encoded algorithm in the
+    // assignment ID stale (e.g. "autotile:master-stack" when BSP is selected).
+    screenAssignmentsMutated |= syncAutotileAssignmentIds(m_tilingScreenAssignments, /*isScreenAssignment=*/true);
+
+    // Only emit when auto-populate or sync actually changed something
+    if (screenAssignmentsMutated) {
+        Q_EMIT tilingScreenAssignmentsChanged();
+    }
+
     // Merge tiling screen assignments — autotile per-screen layouts need to reach the
     // daemon just like snapping assignments. These override any snapping assignment for
     // the same screen (a screen is either snapping with a manual layout or tiling with
@@ -1918,6 +1956,10 @@ void KCMPlasmaZones::save()
     // Per-Desktop Assignments (batch)
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Always sync desktop tiling assignment IDs unconditionally (H4 fix) —
+    // the algorithm can change without the desktop dirty flag being set.
+    syncAutotileAssignmentIds(m_tilingDesktopAssignments, /*isScreenAssignment=*/false);
+
     // Query current state, merge with pending changes, send as batch
     if (!m_pendingDesktopAssignments.isEmpty() || !m_clearedDesktopAssignments.isEmpty()
         || m_tilingDesktopAssignmentsDirty) {
@@ -1962,6 +2004,9 @@ void KCMPlasmaZones::save()
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-Activity Assignments (batch)
     // ═══════════════════════════════════════════════════════════════════════════
+
+    // Always sync activity tiling assignment IDs unconditionally (H4 fix)
+    syncAutotileAssignmentIds(m_tilingActivityAssignments, /*isScreenAssignment=*/false);
 
     // Query current state, merge with pending changes, send as batch
     if (!m_pendingActivityAssignments.isEmpty() || !m_clearedActivityAssignments.isEmpty()
@@ -2082,7 +2127,11 @@ void KCMPlasmaZones::save()
                          << "- some settings may not have been saved to daemon";
     }
 
+    // Notify daemon to reload settings after all D-Bus operations complete.
+    // Daemon-side effectiveMaxWindows() and MaxWindows injection handle
+    // per-screen algorithm differences without needing synchronous ordering.
     notifyDaemon();
+
     setNeedsSave(false);
     m_saveInProgress = false;
 }
@@ -3413,13 +3462,72 @@ QString KCMPlasmaZones::currentScreenName() const
     return QString();
 }
 
+QString KCMPlasmaZones::resolveAutotileAlgorithm(const QString& key, bool isScreenAssignment) const
+{
+    QString screenName;
+    if (isScreenAssignment) {
+        screenName = key;
+    } else {
+        const int sepIdx = key.lastIndexOf(QLatin1Char('|'));
+        if (sepIdx <= 0) {
+            qCWarning(lcKcm) << "resolveAutotileAlgorithm: malformed composite key" << key;
+            return {};
+        }
+        screenName = key.left(sepIdx);
+    }
+
+    const QVariantMap perScreen = m_settings->getPerScreenAutotileSettings(screenName);
+    QString algo = perScreen.value(QLatin1String("Algorithm")).toString();
+    if (algo.isEmpty()) {
+        algo = m_settings->autotileAlgorithm();
+    }
+    if (algo.isEmpty()) {
+        algo = AlgorithmRegistry::defaultAlgorithmId();
+    }
+    return LayoutId::makeAutotileId(algo);
+}
+
+bool KCMPlasmaZones::syncAutotileAssignmentIds(QVariantMap& assignments, bool isScreenAssignment)
+{
+    bool changed = false;
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        if (!LayoutId::isAutotile(it.value().toString())) continue;
+        const QString resolved = resolveAutotileAlgorithm(it.key(), isScreenAssignment);
+        if (resolved.isEmpty()) continue;
+        if (it.value().toString() != resolved) {
+            it.value() = resolved;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
+bool KCMPlasmaZones::syncAutotileAssignmentIds(QMap<QString, QString>& assignments, bool isScreenAssignment)
+{
+    bool changed = false;
+    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
+        if (!LayoutId::isAutotile(it.value())) continue;
+        const QString resolved = resolveAutotileAlgorithm(it.key(), isScreenAssignment);
+        if (resolved.isEmpty()) continue;
+        if (it.value() != resolved) {
+            it.value() = resolved;
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 void KCMPlasmaZones::notifyDaemon()
 {
-    // Notify daemon to reload settings via the SettingsAdaptor interface
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::Settings), QStringLiteral("reloadSettings"));
-    QDBusConnection::sessionBus().asyncCall(msg);
+    // Notify daemon to reload settings via the SettingsAdaptor interface.
+    // Async: the daemon-side effectiveMaxWindows() and MaxWindows injection
+    // in updateAutotileScreens() handle per-screen algorithm differences,
+    // so strict ordering before assignment D-Bus calls is not required.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString(DBus::ServiceName), QString(DBus::ObjectPath),
+        QString(DBus::Interface::Settings), QStringLiteral("reloadSettings"));
+    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg),
+                       QStringLiteral("notifyDaemon(reloadSettings)"));
 }
 
 void KCMPlasmaZones::refreshScreens()

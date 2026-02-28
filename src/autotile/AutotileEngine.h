@@ -640,6 +640,28 @@ private:
     void retileAfterOperation(const QString& screenName, bool operationSucceeded);
 
     /**
+     * @brief Reset maxWindows when switching algorithms (DRY helper)
+     *
+     * If the current maxWindows matches the old algorithm's default, reset
+     * it to the new algorithm's default. Shared by setAlgorithm() and
+     * syncFromSettings().
+     */
+    void resetMaxWindowsForAlgorithmSwitch(TilingAlgorithm* oldAlgo, TilingAlgorithm* newAlgo);
+
+    /**
+     * @brief Backfill windows on screens where tiledWindowCount < maxWindows
+     *
+     * When maxWindows increases, windows previously rejected by onWindowAdded()'s
+     * gate check remain untiled. This method iterates autotile screens and inserts
+     * tracked-but-untiled windows up to the per-screen effective limit.
+     *
+     * Note: Iteration order over m_windowToScreen (QHash) is non-deterministic.
+     * Backfill order may differ between runs; this is acceptable since all
+     * candidates are equally valid.
+     */
+    void backfillWindows();
+
+    /**
      * @brief Helper to get tiled windows and state for focus operations
      *
      * Gets the focused window, validates screen, retrieves state and windows.

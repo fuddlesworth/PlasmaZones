@@ -200,6 +200,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // If the user has customized the ratio, it's preserved across switches.
     TilingAlgorithm* oldAlgo = registry->algorithm(m_algorithmId);
     TilingAlgorithm* newAlgo = registry->algorithm(newId);
+    const int oldMaxWindows = m_config->maxWindows;
     if (oldAlgo && newAlgo) {
         const qreal oldDefault = oldAlgo->defaultSplitRatio();
         if (qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + oldDefault)) {
@@ -207,18 +208,34 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
             m_config->splitRatio = newDefault;
             // Only reset split ratio for screens without per-screen overrides
             for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-                if (it.value() && !hasPerScreenOverride(it.key(), QStringLiteral("SplitRatio"))) {
+                if (it.value() && !hasPerScreenOverride(it.key(), QLatin1String("SplitRatio"))) {
                     it.value()->setSplitRatio(newDefault);
                 }
             }
+        }
+
+        // Same pattern for maxWindows: if the user hasn't customized it away
+        // from the old algorithm's default, reset to the new algorithm's default.
+        // Without this, switching from MasterStack (4) to BSP (5) keeps maxWindows=4.
+        resetMaxWindowsForAlgorithmSwitch(oldAlgo, newAlgo);
+
+        // Persist maxWindows change back to settings to avoid desync between
+        // the engine's runtime m_config and the Settings object.
+        if (m_settings && m_config->maxWindows != oldMaxWindows) {
+            m_settings->setAutotileMaxWindows(m_config->maxWindows);
         }
     }
 
     m_algorithmId = newId;
     Q_EMIT algorithmChanged(m_algorithmId);
 
-    // Retile with new algorithm if enabled
+    // Backfill windows when the new algorithm's maxWindows is higher, then retile.
+    // Guard with maxWindows-increased check to avoid wasted iteration when the
+    // new algorithm has a lower or equal limit.
     if (isEnabled()) {
+        if (m_config->maxWindows > oldMaxWindows) {
+            backfillWindows();
+        }
         retile();
     }
 }
@@ -277,6 +294,9 @@ void AutotileEngine::syncFromSettings(Settings* settings)
 
     m_settings = settings;
 
+    // Capture old maxWindows before updating — used for backfill below
+    const int oldMaxWindows = m_config->maxWindows;
+
     // Temporarily clear autotile screens to prevent double-retile during configuration.
     // setAlgorithm() triggers retile() if enabled, so we configure everything first.
     const QSet<QString> savedScreens = m_autotileScreens;
@@ -304,7 +324,8 @@ void AutotileEngine::syncFromSettings(Settings* settings)
     m_config->monocleShowTabs = settings->autotileMonocleShowTabs();
     m_config->maxWindows = settings->autotileMaxWindows();
 
-    // Set algorithm on engine (won't retile since m_enabled is false)
+    // Set algorithm on engine (won't retile since m_autotileScreens is cleared)
+    const QString oldAlgorithmId = m_algorithmId;
     m_algorithmId = settings->autotileAlgorithm();
     // Validate algorithm exists
     auto* registry = AlgorithmRegistry::instance();
@@ -313,16 +334,45 @@ void AutotileEngine::syncFromSettings(Settings* settings)
         m_algorithmId = AlgorithmRegistry::defaultAlgorithmId();
     }
 
-    // Propagate split ratio and master count to existing per-screen states
-    applyToAllStates([this](TilingState* state) {
-        state->setSplitRatio(m_config->splitRatio);
-        state->setMasterCount(m_config->masterCount);
-    });
+    // When the algorithm changed, reset maxWindows if it's still at the old
+    // algorithm's default. Without this, a stale AutotileMaxWindows=4 from a
+    // previous MasterStack session persists when BSP (default 5) is active.
+    if (m_algorithmId != oldAlgorithmId) {
+        TilingAlgorithm* oldAlgo = registry->algorithm(oldAlgorithmId);
+        TilingAlgorithm* newAlgo = registry->algorithm(m_algorithmId);
+        if (oldAlgo && newAlgo) {
+            resetMaxWindowsForAlgorithmSwitch(oldAlgo, newAlgo);
+        }
+    }
+
+    // Propagate split ratio and master count to screens WITHOUT per-screen overrides.
+    // Screens with per-screen overrides are handled by updateAutotileScreens() via
+    // the perScreenAutotileSettingsChanged signal (emitted after settingsChanged).
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (!it.value()) continue;
+        if (!hasPerScreenOverride(it.key(), QLatin1String("SplitRatio"))) {
+            it.value()->setSplitRatio(m_config->splitRatio);
+        }
+        if (!hasPerScreenOverride(it.key(), QLatin1String("MasterCount"))) {
+            it.value()->setMasterCount(m_config->masterCount);
+        }
+    }
 
     // Restore autotile screens and retile once
     // Note: enabled state is derived from layout assignments, not settings.
     // The autotileEnabled setting is a feature gate handled by the daemon.
     m_autotileScreens = savedScreens;
+
+    // Backfill windows when maxWindows increased: windows rejected by the old
+    // gate check in onWindowAdded() stay untiled unless we add them here.
+    // This runs before the autotileMaxWindowsChanged signal handler (which also
+    // calls backfillWindows), but since syncFromSettings already updated
+    // m_config->maxWindows, the handler's oldMax == newMax check prevents
+    // double-backfill.
+    if (m_config->maxWindows > oldMaxWindows) {
+        backfillWindows();
+    }
+
     if (isEnabled()) {
         retile();
     }
@@ -435,31 +485,7 @@ void AutotileEngine::connectToSettings(Settings* settings)
         // When max increases, try to add windows that exist on autotile screens
         // but were rejected when the previous limit was reached.
         if (m_config->maxWindows > oldMax) {
-            for (const QString& screenName : m_autotileScreens) {
-                TilingState* state = stateForScreen(screenName);
-                if (!state) {
-                    continue;
-                }
-                const int newMax = effectiveMaxWindows(screenName);
-                if (state->tiledWindowCount() >= newMax) {
-                    continue; // Already at or above the new limit
-                }
-                // Collect candidates first to avoid modifying m_windowToScreen during iteration
-                // (insertWindow calls m_windowToScreen.insert which is unsafe during const iteration)
-                QStringList candidates;
-                for (auto it = m_windowToScreen.constBegin(); it != m_windowToScreen.constEnd(); ++it) {
-                    if (it.value() == screenName && !state->containsWindow(it.key())
-                        && shouldTileWindow(it.key())) {
-                        candidates.append(it.key());
-                    }
-                }
-                for (const QString& windowId : candidates) {
-                    insertWindow(windowId, screenName);
-                    if (state->tiledWindowCount() >= newMax) {
-                        break;
-                    }
-                }
-            }
+            backfillWindows();
         }
         scheduleSettingsRetile();
     });
@@ -638,14 +664,40 @@ bool AutotileEngine::effectiveRespectMinimumSize(const QString& screenName) cons
 
 int AutotileEngine::effectiveMaxWindows(const QString& screenName) const
 {
-    if (auto v = perScreenOverride(screenName, QStringLiteral("MaxWindows")))
+    // 1. Explicit per-screen MaxWindows override — highest priority
+    if (auto v = perScreenOverride(screenName, QLatin1String("MaxWindows")))
         return qBound(AutotileDefaults::MinMaxWindows, v->toInt(), AutotileDefaults::MaxMaxWindows);
+
+    // 2. When the per-screen algorithm differs from the global algorithm,
+    //    the global m_config->maxWindows may be for the WRONG algorithm.
+    //    E.g. global=master-stack(maxWindows=4) but per-screen=bsp(default=5).
+    //    Use the per-screen algorithm's default — but only if the user hasn't
+    //    explicitly customized global maxWindows away from the global algo's default.
+    const QString screenAlgo = effectiveAlgorithmId(screenName);
+    if (screenAlgo != m_algorithmId) {
+        auto* registry = AlgorithmRegistry::instance();
+        auto* screenAlgoPtr = registry->algorithm(screenAlgo);
+        auto* globalAlgoPtr = registry->algorithm(m_algorithmId);
+        if (screenAlgoPtr) {
+            // Only override with per-screen default if global is still at its algo's default
+            if (!globalAlgoPtr || m_config->maxWindows == globalAlgoPtr->defaultMaxWindows()) {
+                return screenAlgoPtr->defaultMaxWindows();
+            }
+            // User explicitly customized global maxWindows — honor it
+            return m_config->maxWindows;
+        }
+        qCWarning(lcAutotile) << "effectiveMaxWindows: unknown per-screen algorithm"
+                               << screenAlgo << "for screen" << screenName
+                               << "- falling back to global maxWindows";
+    }
+
+    // 3. Same algorithm globally and per-screen — use the global setting
     return m_config->maxWindows;
 }
 
 QString AutotileEngine::effectiveAlgorithmId(const QString& screenName) const
 {
-    if (auto v = perScreenOverride(screenName, QStringLiteral("Algorithm")))
+    if (auto v = perScreenOverride(screenName, QLatin1String("Algorithm")))
         return v->toString();
     return m_algorithmId;
 }
@@ -1714,6 +1766,43 @@ QRect AutotileEngine::screenGeometry(const QString& screenName) const
     }
 
     return ScreenManager::actualAvailableGeometry(screen);
+}
+
+void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(TilingAlgorithm* oldAlgo, TilingAlgorithm* newAlgo)
+{
+    if (!oldAlgo || !newAlgo) return;
+    if (m_config->maxWindows == oldAlgo->defaultMaxWindows()) {
+        m_config->maxWindows = newAlgo->defaultMaxWindows();
+    }
+}
+
+void AutotileEngine::backfillWindows()
+{
+    for (const QString& screenName : m_autotileScreens) {
+        TilingState* state = stateForScreen(screenName);
+        if (!state) {
+            continue;
+        }
+        const int maxWin = effectiveMaxWindows(screenName);
+        if (state->tiledWindowCount() >= maxWin) {
+            continue;
+        }
+        // Collect candidates to avoid modifying m_windowToScreen during iteration
+        // (insertWindow calls m_windowToScreen.insert which is unsafe during const iteration)
+        QStringList candidates;
+        for (auto it = m_windowToScreen.constBegin(); it != m_windowToScreen.constEnd(); ++it) {
+            if (it.value() == screenName && !state->containsWindow(it.key())
+                && shouldTileWindow(it.key())) {
+                candidates.append(it.key());
+            }
+        }
+        for (const QString& windowId : candidates) {
+            insertWindow(windowId, screenName);
+            if (state->tiledWindowCount() >= maxWin) {
+                break;
+            }
+        }
+    }
 }
 
 void AutotileEngine::retileAfterOperation(const QString& screenName, bool operationSucceeded)

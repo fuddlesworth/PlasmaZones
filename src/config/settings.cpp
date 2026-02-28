@@ -1309,6 +1309,10 @@ void Settings::load()
     migrateConnectorNames(m_perScreenZoneSelectorSettings);
 
     // Per-screen autotile overrides (groups matching AutotileScreen:*)
+    // Take a mutable snapshot so we can apply migration to BOTH sides before
+    // comparison. Without this, a connector rename triggers a spurious
+    // perScreenAutotileSettingsChanged even when the actual settings are the same.
+    auto oldPerScreenAutotile = m_perScreenAutotileSettings;
     m_perScreenAutotileSettings.clear();
     const QLatin1String autotileScreenPrefix("AutotileScreen:");
     for (const QString& groupName : allGroups) {
@@ -1339,6 +1343,9 @@ void Settings::load()
     }
 
     migrateConnectorNames(m_perScreenAutotileSettings);
+    // Apply the same migration to the old snapshot so the comparison at the
+    // end uses the same key namespace (M5 fix: avoids spurious signal).
+    migrateConnectorNames(oldPerScreenAutotile);
 
     // Per-screen snapping overrides (groups matching SnappingScreen:*)
     m_perScreenSnappingSettings.clear();
@@ -1456,6 +1463,7 @@ void Settings::load()
     const int oldOuterGapBottom = m_autotileOuterGapBottom;
     const int oldOuterGapLeft = m_autotileOuterGapLeft;
     const int oldOuterGapRight = m_autotileOuterGapRight;
+    const int oldMaxWindows = m_autotileMaxWindows;
     m_autotileEnabled = autotiling.readEntry(QLatin1String("AutotileEnabled"), ConfigDefaults::autotileEnabled());
     m_autotileAlgorithm = autotiling.readEntry(QLatin1String("AutotileAlgorithm"), ConfigDefaults::autotileAlgorithm());
 
@@ -1570,6 +1578,14 @@ void Settings::load()
         Q_EMIT autotileOuterGapLeftChanged();
     if (m_autotileOuterGapRight != oldOuterGapRight)
         Q_EMIT autotileOuterGapRightChanged();
+    // Ordering matters: autotileMaxWindowsChanged triggers backfillWindows()
+    // which reads per-screen overrides (already updated above). Emit it before
+    // perScreenAutotileSettingsChanged, which triggers updateAutotileScreens()
+    // that may re-derive MaxWindows from the per-screen algorithm.
+    if (m_autotileMaxWindows != oldMaxWindows)
+        Q_EMIT autotileMaxWindowsChanged();
+    if (m_perScreenAutotileSettings != oldPerScreenAutotile)
+        Q_EMIT perScreenAutotileSettingsChanged();
 }
 
 void Settings::save()
