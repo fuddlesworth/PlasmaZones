@@ -260,6 +260,7 @@ void WindowTrackingService::storePreAutotileGeometry(const QString& windowId, co
     if (stableId != windowId) {
         m_preAutotileGeometries[stableId] = geometry;
     }
+    scheduleSaveState();
 }
 
 void WindowTrackingService::clearPreAutotileGeometry(const QString& windowId)
@@ -267,10 +268,13 @@ void WindowTrackingService::clearPreAutotileGeometry(const QString& windowId)
     if (windowId.isEmpty()) {
         return;
     }
-    m_preAutotileGeometries.remove(windowId);
+    bool removed = m_preAutotileGeometries.remove(windowId) > 0;
     QString stableId = Utils::extractStableId(windowId);
     if (stableId != windowId) {
-        m_preAutotileGeometries.remove(stableId);
+        removed |= (m_preAutotileGeometries.remove(stableId) > 0);
+    }
+    if (removed) {
+        scheduleSaveState();
     }
 }
 
@@ -1558,6 +1562,12 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     // can still be found via stableId fallback
     if (m_preSnapGeometries.contains(windowId) && stableId != windowId) {
         m_preSnapGeometries[stableId] = m_preSnapGeometries.take(windowId);
+    }
+    // Convert pre-autotile geometry: remove full-windowId entry, keep stableId.
+    // storePreAutotileGeometry writes both keys, so the stableId entry already
+    // exists — just clean up the stale full-windowId entry.
+    if (m_preAutotileGeometries.contains(windowId) && stableId != windowId) {
+        m_preAutotileGeometries.remove(windowId);
     }
     // Convert floating state from full windowId to stableId for persistence
     if (m_floatingWindows.contains(windowId) && stableId != windowId) {

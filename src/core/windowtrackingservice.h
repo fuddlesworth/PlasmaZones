@@ -506,6 +506,11 @@ public:
     const QHash<QString, QRect>& preSnapGeometries() const { return m_preSnapGeometries; }
 
     /**
+     * @brief Get all pre-autotile geometries for persistence
+     */
+    const QHash<QString, QRect>& preAutotileGeometries() const { return m_preAutotileGeometries; }
+
+    /**
      * @brief Get pending zone assignments (for session restore)
      */
     const QHash<QString, QStringList>& pendingZoneAssignments() const { return m_pendingZoneAssignments; }
@@ -564,6 +569,11 @@ public:
      * @brief Set pre-snap geometries (loaded from KConfig by adaptor)
      */
     void setPreSnapGeometries(const QHash<QString, QRect>& geometries) { m_preSnapGeometries = geometries; }
+
+    /**
+     * @brief Set pre-autotile geometries (loaded from KConfig by adaptor)
+     */
+    void setPreAutotileGeometries(const QHash<QString, QRect>& geometries) { m_preAutotileGeometries = geometries; }
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)

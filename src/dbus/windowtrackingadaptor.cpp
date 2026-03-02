@@ -65,6 +65,25 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
     return result;
 }
 
+static QJsonObject rectToJsonObject(const QRect& rect)
+{
+    QJsonObject obj;
+    obj[QLatin1String("x")] = rect.x();
+    obj[QLatin1String("y")] = rect.y();
+    obj[QLatin1String("width")] = rect.width();
+    obj[QLatin1String("height")] = rect.height();
+    return obj;
+}
+
+static QString serializeGeometryMap(const QHash<QString, QRect>& map)
+{
+    QJsonObject result;
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        result[Utils::extractStableId(it.key())] = rectToJsonObject(it.value());
+    }
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
 static QString serializeRotationEntries(const QVector<RotationEntry>& entries)
 {
     if (entries.isEmpty()) {
@@ -442,6 +461,11 @@ void WindowTrackingAdaptor::recordPreAutotileGeometry(const QString& windowId, c
     QRect geo(x, y, width, height);
     m_service->storePreAutotileGeometry(windowId, geo);
     qCDebug(lcDbusWindow) << "Recorded pre-autotile geometry for" << windowId << geo;
+}
+
+QString WindowTrackingAdaptor::getPreAutotileGeometriesJson()
+{
+    return serializeGeometryMap(m_service->preAutotileGeometries());
 }
 
 bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId, int& x, int& y, int& width, int& height)
@@ -1792,18 +1816,12 @@ void WindowTrackingAdaptor::saveState()
                         QString::fromUtf8(QJsonDocument(pendingZoneNumbersObj).toJson(QJsonDocument::Compact)));
 
     // Save pre-snap geometries (convert to stableId for cross-restart persistence)
-    QJsonObject geometriesObj;
-    for (auto it = m_service->preSnapGeometries().constBegin(); it != m_service->preSnapGeometries().constEnd(); ++it) {
-        QString key = Utils::extractStableId(it.key());
-        QJsonObject geomObj;
-        geomObj[QLatin1String("x")] = it.value().x();
-        geomObj[QLatin1String("y")] = it.value().y();
-        geomObj[QLatin1String("width")] = it.value().width();
-        geomObj[QLatin1String("height")] = it.value().height();
-        geometriesObj[key] = geomObj;
-    }
     tracking.writeEntry(QStringLiteral("PreSnapGeometries"),
-                        QString::fromUtf8(QJsonDocument(geometriesObj).toJson(QJsonDocument::Compact)));
+                        serializeGeometryMap(m_service->preSnapGeometries()));
+
+    // Save pre-autotile geometries (convert to stableId for cross-restart persistence)
+    tracking.writeEntry(QStringLiteral("PreAutotileGeometries"),
+                        serializeGeometryMap(m_service->preAutotileGeometries()));
 
     // Save last used zone info (from service)
     tracking.writeEntry(QStringLiteral("LastUsedZoneId"), m_service->lastUsedZoneId());
@@ -2030,6 +2048,27 @@ void WindowTrackingAdaptor::loadState()
     }
     m_service->setPreSnapGeometries(preSnapGeometries);
 
+    // Load pre-autotile geometries
+    QHash<QString, QRect> preAutotileGeometries;
+    QString autotileGeometriesJson = tracking.readEntry(QStringLiteral("PreAutotileGeometries"), QString());
+    if (!autotileGeometriesJson.isEmpty()) {
+        QJsonDocument doc = QJsonDocument::fromJson(autotileGeometriesJson.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject obj = doc.object();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isObject()) {
+                    QJsonObject geomObj = it.value().toObject();
+                    QRect geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
+                               geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
+                    if (geom.width() > 0 && geom.height() > 0) {
+                        preAutotileGeometries[it.key()] = geom;
+                    }
+                }
+            }
+        }
+    }
+    m_service->setPreAutotileGeometries(preAutotileGeometries);
+
     // Load last used zone info
     QString lastZoneId = tracking.readEntry(QStringLiteral("LastUsedZoneId"), QString());
     QString lastScreenName = tracking.readEntry(QStringLiteral("LastUsedScreenName"), QString());
@@ -2244,12 +2283,7 @@ void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId)
 
 QString WindowTrackingAdaptor::rectToJson(const QRect& rect) const
 {
-    QJsonObject geomObj;
-    geomObj[QLatin1String("x")] = rect.x();
-    geomObj[QLatin1String("y")] = rect.y();
-    geomObj[QLatin1String("width")] = rect.width();
-    geomObj[QLatin1String("height")] = rect.height();
-    return QString::fromUtf8(QJsonDocument(geomObj).toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(QJsonDocument(rectToJsonObject(rect)).toJson(QJsonDocument::Compact));
 }
 
 } // namespace PlasmaZones

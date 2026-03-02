@@ -3184,6 +3184,50 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
 
     // Save pre-autotile geometries for windows on newly added screens
     if (!added.isEmpty()) {
+        // Pre-populate from daemon's persisted pre-autotile geometries.
+        // After session restart, the daemon has the correct pre-autotile
+        // geometries (loaded from KConfig) but the effect lost them.
+        // By pre-populating here, the hasSavedGeometryForWindow guard in
+        // saveAndRecordPreAutotileGeometry prevents the current (autotiled)
+        // positions from overwriting the correct data.
+        QDBusMessage fetchMsg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath,
+            DBus::Interface::WindowTracking, QStringLiteral("getPreAutotileGeometriesJson"));
+        QDBusMessage fetchReply = QDBusConnection::sessionBus().call(fetchMsg, QDBus::Block, 500);
+        if (fetchReply.type() == QDBusMessage::ReplyMessage && !fetchReply.arguments().isEmpty()) {
+            const QString json = fetchReply.arguments().first().toString();
+            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+            if (doc.isObject()) {
+                QJsonObject obj = doc.object();
+                for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                    const QString stableId = it.key();
+                    if (!it.value().isObject()) continue;
+                    QJsonObject geomObj = it.value().toObject();
+                    QRectF geom(geomObj[QLatin1String("x")].toInt(),
+                                geomObj[QLatin1String("y")].toInt(),
+                                geomObj[QLatin1String("width")].toInt(),
+                                geomObj[QLatin1String("height")].toInt());
+                    if (geom.width() <= 0 || geom.height() <= 0) continue;
+                    // Resolve screen for this window by finding it in the stacking order
+                    for (KWin::EffectWindow* w : windows) {
+                        if (!w || !shouldHandleWindow(w)) continue;
+                        if (extractStableId(getWindowId(w)) == stableId) {
+                            const QString scr = getWindowScreenName(w);
+                            if (added.contains(scr)) {
+                                auto& screenGeometries = m_preAutotileGeometries[scr];
+                                if (!hasSavedGeometryForWindow(screenGeometries, getWindowId(w))) {
+                                    screenGeometries[getWindowId(w)] = geom;
+                                    qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for"
+                                                      << stableId << "on" << scr << ":" << geom;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         for (KWin::EffectWindow* w : windows) {
             if (!w || !shouldHandleWindow(w) || w->isMinimized()) {
                 continue;

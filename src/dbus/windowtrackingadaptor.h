@@ -161,6 +161,12 @@ public Q_SLOTS:
                                    int x, int y, int width, int height);
 
     /**
+     * Get all pre-autotile geometries as JSON (for effect pre-population on restart)
+     * @return JSON object: {"stableId": {"x":N, "y":N, "width":N, "height":N}, ...}
+     */
+    QString getPreAutotileGeometriesJson();
+
+    /**
      * Clean up all tracking data for a closed window
      * @param windowId Window ID that was closed
      * @note Call this when KWin reports a window has been closed to prevent memory leaks
