@@ -3064,6 +3064,19 @@ void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowI
     //   The engine retiles via windowsTileRequested → slotAutotileWindowsTileRequested.
     m_navigationHandler->setWindowFloating(windowId, isFloating);
 
+    if (!isFloating) {
+        // Unfloat: the window is about to be retiled. Set it as the pending
+        // focus window so onComplete's raise loop re-raises it last, keeping
+        // it on top of the other tiled windows. Without this, the window
+        // drops below everything because the raise loop orders by tiling
+        // position, and the unfloated window has no priority.
+        KWin::EffectWindow* unfloatWin = findWindowById(windowId);
+        if (unfloatWin && unfloatWin == KWin::effects->activeWindow()) {
+            m_pendingAutotileFocusWindowId = windowId;
+            KWin::effects->activateWindow(unfloatWin);
+        }
+    }
+
     // Restore title bar and unmaximize when window becomes floating
     if (isFloating) {
         if (m_borderlessWindows.contains(windowId)) {
@@ -3074,6 +3087,29 @@ void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowI
         }
         // Unmaximize monocle-maximized windows when floated
         unmaximizeMonocleWindow(windowId);
+
+        // Raise and re-focus the floated window so it stays on top.
+        // The retile's onComplete raises all tiled windows, which buries the
+        // just-floated window. Only do this for user-initiated floats (where
+        // the floated window is the active window). Overflow-floated windows
+        // should not steal focus or clobber a pending new-window focus ID.
+        KWin::EffectWindow* floatWin = findWindowById(windowId);
+        if (!floatWin) {
+            qCDebug(lcEffect) << "Autotile: window not found for float raise:" << windowId;
+        } else if (floatWin == KWin::effects->activeWindow()) {
+            // Two mechanisms cover both timing scenarios:
+            // 1. Set pending focus ID for stagger mode (onComplete hasn't fired yet)
+            // 2. Raise + activate directly for immediate mode (onComplete already ran)
+            m_pendingAutotileFocusWindowId = windowId;
+            auto* ws = KWin::Workspace::self();
+            if (ws) {
+                KWin::Window* kw = floatWin->window();
+                if (kw) {
+                    ws->raiseWindow(kw);
+                }
+            }
+            KWin::effects->activateWindow(floatWin);
+        }
     }
 }
 
