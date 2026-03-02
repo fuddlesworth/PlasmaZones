@@ -15,12 +15,16 @@
 #include <QDBusReply>
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
+#include <QDBusConnectionInterface>
+#include <QDBusServiceWatcher>
 #include <QRegularExpression>
 
 #include <LayerShellQt/Window>
 #include <LayerShellQt/Shell>
 
 namespace PlasmaZones {
+
+static const QString s_plasmaShellService = QStringLiteral("org.kde.plasmashell");
 
 // Global cache for available geometry (screen name -> geometry)
 // Updated by sensor windows, read by actualAvailableGeometry()
@@ -63,6 +67,18 @@ void ScreenManager::start()
     // Connect to QGuiApplication signals
     connect(qApp, &QGuiApplication::screenAdded, this, &ScreenManager::onScreenAdded);
     connect(qApp, &QGuiApplication::screenRemoved, this, &ScreenManager::onScreenRemoved);
+
+    // Watch for org.kde.plasmashell registration so we can query panels as soon as
+    // Plasma Shell is available, instead of guessing with arbitrary timer delays.
+    // If plasmashell is already registered, scheduleDbusQuery (called from
+    // createGeometrySensor) handles it immediately.
+    m_plasmaShellWatcher = new QDBusServiceWatcher(
+        s_plasmaShellService, QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration, this);
+    connect(m_plasmaShellWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+        qCInfo(lcScreen) << "org.kde.plasmashell registered — querying panels";
+        queryKdePlasmaPanels();
+    });
 
     // Connect to existing screens and create geometry sensors
     for (auto* screen : QGuiApplication::screens()) {
@@ -212,11 +228,19 @@ void ScreenManager::scheduleDbusQuery()
     }
 
     m_dbusQueryPending = true;
-    // Use a longer delay during startup to allow Plasma Shell to fully initialize
-    // This prevents blocking calls when Plasma isn't ready yet
-    QTimer::singleShot(250, this, [this]() {
+
+    // Defer to next event loop pass to coalesce multiple createGeometrySensor
+    // calls during start() into a single query.
+    //
+    // If org.kde.plasmashell is registered, the async D-Bus call in
+    // queryKdePlasmaPanels succeeds and we get panel data.
+    // If it's NOT registered, queryKdePlasmaPanels's !isValid() fallback
+    // still runs calculateAvailableGeometry and emits panelGeometryReady —
+    // essential for non-Plasma desktops and late-starting plasmashell.
+    // The QDBusServiceWatcher (set up in start()) will re-query when
+    // plasmashell eventually appears.
+    QTimer::singleShot(0, this, [this]() {
         m_dbusQueryPending = false;
-        // queryKdePlasmaPanels now handles recalculation in its async callback
         queryKdePlasmaPanels();
     });
 }
@@ -352,7 +376,7 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
 {
     // Query KDE Plasma via D-Bus for panel information (ASYNC to avoid blocking)
     QDBusInterface* plasmaShell =
-        new QDBusInterface(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/PlasmaShell"),
+        new QDBusInterface(s_plasmaShellService, QStringLiteral("/PlasmaShell"),
                            QStringLiteral("org.kde.PlasmaShell"), QDBusConnection::sessionBus(), this);
 
     if (!plasmaShell->isValid()) {

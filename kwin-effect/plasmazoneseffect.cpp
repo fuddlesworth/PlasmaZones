@@ -468,18 +468,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Seed m_lastCursorScreenName with the compositor's active screen. This ensures
     // the daemon has a valid cursor screen even if no mouse movement occurs after login.
     // slotMouseChanged will overwrite this as soon as the cursor moves.
+    //
+    // Two startup paths:
+    //   1. Daemon already running: m_daemonServiceRegistered is true (set above),
+    //      so push the cursor screen immediately. slotDaemonReady won't fire
+    //      (daemonReady was already emitted before the effect loaded).
+    //   2. Daemon starts later: slotDaemonReady handles the push when the daemon
+    //      signals readiness.
     auto* initialScreen = KWin::effects->activeScreen();
     if (initialScreen) {
         m_lastCursorScreenName = initialScreen->name();
-        // Defer the D-Bus call so the daemon has time to register its service
-        QTimer::singleShot(500, this, [this, initialName = m_lastCursorScreenName]() {
-            // Only send if no mouse movement has already updated the screen
-            if (m_lastCursorScreenName == initialName && !initialName.isEmpty()
-                && ensureWindowTrackingReady("initial cursor screen")) {
-                m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), initialName);
-                qCDebug(lcEffect) << "Sent initial cursor screen:" << initialName;
-            }
-        });
+        if (m_daemonServiceRegistered && ensureWindowTrackingReady("initial cursor screen")) {
+            m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
+            qCDebug(lcEffect) << "Sent initial cursor screen:" << m_lastCursorScreenName;
+        }
     }
 
     qCInfo(lcEffect) << "Initialized - C++ effect with D-Bus support and mouseChanged connection";

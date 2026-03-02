@@ -12,6 +12,7 @@
 #include <QTimer>
 
 class QWindow;
+class QDBusServiceWatcher;
 
 namespace PlasmaZones {
 
@@ -221,6 +222,9 @@ private:
 
     // Delayed panel re-query (e.g. after panel editor close) to pick up settled state
     QTimer m_delayedPanelRequeryTimer;
+
+    // Watch for org.kde.plasmashell registration to query panels on arrival
+    QDBusServiceWatcher* m_plasmaShellWatcher = nullptr;
 };
 
 } // namespace PlasmaZones
