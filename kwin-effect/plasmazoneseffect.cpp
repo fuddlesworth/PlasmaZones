@@ -56,10 +56,10 @@ Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
  *
  * IMPORTANT: QDBusInterface's constructor performs synchronous D-Bus introspection,
  * blocking the calling thread until the target service responds. To prevent compositor
- * hangs during login (when the daemon may be registered but not yet processing messages),
- * we first check if the service name is registered on the bus. This is a fast call to
- * the D-Bus daemon itself (always responsive, <1ms). If the service isn't registered,
- * we skip interface creation entirely, avoiding the blocking introspection.
+ * hangs during login, the serviceRegistered flag is kept false until the daemon emits
+ * its daemonReady D-Bus signal (end of Daemon::start()), confirming it can process
+ * messages. This ensures all calls during the startup window bail out here, avoiding
+ * synchronous introspection while the daemon is still initializing.
  */
 template<typename InterfacePtr>
 static void ensureInterface(InterfacePtr& interface, const QString& interfaceName, const char* logName,
@@ -368,21 +368,25 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     loadAutotileSettings();
 
     // Cache daemon service availability to avoid synchronous isServiceRegistered()
-    // calls on the compositor thread. The initial value is set here; subsequent
-    // updates come from QDBusServiceWatcher signals (registration/unregistration).
+    // calls on the compositor thread. This initial check is safe: if the daemon is
+    // already registered at this point, it's fully operational (event loop running),
+    // so QDBusInterface introspection won't block.
     {
         auto* busIface = QDBusConnection::sessionBus().interface();
         m_daemonServiceRegistered = busIface && busIface->isServiceRegistered(DBus::ServiceName).value();
     }
+
+    // Connect to daemon's daemonReady signal — emitted at the end of Daemon::start()
+    // after all initialization is complete and the daemon can process D-Bus messages.
+    // This is the safe point to set m_daemonServiceRegistered and create QDBusInterfaces.
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutManager,
+                                          QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
 
     // Watch for daemon D-Bus service registration and unregistration.
     // After a daemon restart, m_lastCursorScreenName is still valid in the effect
     // but the daemon's lastCursorScreenName/lastActiveScreenName are empty.
     // Without this, keyboard shortcuts (rotate, etc.) operate on all screens
     // because resolveShortcutScreen returns nullptr.
-    //
-    // Also updates m_daemonServiceRegistered so that ensureInterface() and
-    // saveAndRecordPreAutotileGeometry() can skip synchronous D-Bus checks.
     //
     // On Wayland, this watcher uses D-Bus monitoring (not X11 selection),
     // which works reliably across both sessions.
@@ -399,58 +403,40 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         KWin::effects->addRepaintFull();
     });
     connect(serviceWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
-        qCInfo(lcEffect) << "Daemon service registered — scheduling state re-push";
-        m_daemonServiceRegistered = true;
+        qCInfo(lcEffect) << "Daemon service registered — waiting for daemonReady signal";
 
-        // Reset stale D-Bus interfaces so ensureInterface recreates them on next use
-        // Note: WindowDrag interface uses QDBusMessage (no QDBusInterface to reset)
+        // DO NOT set m_daemonServiceRegistered = true here.
+        // The daemon registers its D-Bus service name in init(), BEFORE start()
+        // runs heavy initialization and BEFORE the event loop begins. If we set
+        // the flag now, window lifecycle events (slotWindowAdded → updateWindowStickyState,
+        // slotWindowActivated, slotMouseChanged, etc.) would call ensureInterface()
+        // which creates QDBusInterface synchronously — its constructor performs D-Bus
+        // introspection that blocks until the daemon responds. Since the daemon can't
+        // process messages yet, KWin freezes until D-Bus timeout (~25s).
+        //
+        // Instead, keep m_daemonServiceRegistered false until the daemon's own
+        // daemonReady signal fires (end of Daemon::start()), confirming it can
+        // handle D-Bus requests. slotDaemonReady() sets the flag and re-pushes state.
+
+        // Reset stale D-Bus interfaces from the previous daemon instance.
+        // Since m_daemonServiceRegistered remains false, ensureInterface() will
+        // skip recreation, preventing synchronous introspection during startup.
         m_windowTrackingInterface.reset();
         m_overlayInterface.reset();
         m_settingsInterface.reset();
 
-        // Defer re-push by 2s to avoid blocking the compositor.
-        // QDBusInterface constructor performs synchronous introspection. If we call
-        // ensureWindowTrackingReady() immediately, the daemon may still be in its
-        // start() method (event loop not yet running) and unable to respond,
-        // causing KWin to freeze until the D-Bus timeout expires.
-        QTimer::singleShot(2000, this, [this]() {
-            qCInfo(lcEffect) << "Re-pushing state after daemon registration";
-
-            // Re-push cursor screen
-            if (!m_lastCursorScreenName.isEmpty() && ensureWindowTrackingReady("daemon re-register cursor screen")) {
-                m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
-                qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastCursorScreenName;
-            }
-
-            // Re-notify active window (gives daemon lastActiveScreenName)
-            KWin::EffectWindow* activeWindow = getActiveWindow();
-            if (activeWindow) {
-                notifyWindowActivated(activeWindow);
-            }
-
-            // Re-sync floating state and settings from daemon
-            syncFloatingWindowsFromDaemon();
-            loadCachedSettings();
-            loadAutotileSettings();
-
-            // Reconnect D-Bus signal subscriptions — Qt may cache the old daemon's
-            // unique bus name in match rules, causing signals from the restarted daemon
-            // to not be delivered. Re-calling connect() refreshes the match rules.
-            connectNavigationSignals();
-            connectAutotileSignals();
-
-            // Clear stale window tracking — the new daemon has no knowledge of our windows
-            m_notifiedWindows.clear();
-            m_pendingCloses.clear();
-
-            // Re-announce all existing windows on autotile screens
-            const auto windows = KWin::effects->stackingOrder();
-            for (KWin::EffectWindow* w : windows) {
-                if (w && shouldHandleWindow(w)) {
-                    notifyWindowAdded(w);
-                }
-            }
-        });
+        // Reconnect daemonReady signal — Qt may cache the old daemon's unique bus
+        // name in match rules, so refresh for the new daemon instance.
+        // Disconnect first to prevent duplicate match rules (Qt doesn't deduplicate),
+        // which would cause slotDaemonReady to fire twice on the same signal.
+        QDBusConnection::sessionBus().disconnect(DBus::ServiceName, DBus::ObjectPath,
+                                                 DBus::Interface::LayoutManager,
+                                                 QStringLiteral("daemonReady"), this,
+                                                 SLOT(slotDaemonReady()));
+        QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath,
+                                              DBus::Interface::LayoutManager,
+                                              QStringLiteral("daemonReady"), this,
+                                              SLOT(slotDaemonReady()));
     });
 
     // Sync floating window state from daemon's persisted state
@@ -649,6 +635,10 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // M1: Track when a monocle-maximized window goes fullscreen
     connect(w, &KWin::EffectWindow::windowFullScreenChanged, this,
             &PlasmaZonesEffect::slotWindowFullScreenChanged);
+
+    // Autotile: track minimize/unminimize to remove/re-add windows from tiling
+    connect(w, &KWin::EffectWindow::minimizedChanged, this,
+            &PlasmaZonesEffect::slotWindowMinimizedChanged);
 }
 
 void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
@@ -959,11 +949,62 @@ void PlasmaZonesEffect::applyStaggeredOrImmediate(
     }
 }
 
+void PlasmaZonesEffect::slotDaemonReady()
+{
+    if (m_daemonServiceRegistered) {
+        return; // Already ready — idempotent guard
+    }
+
+    m_daemonServiceRegistered = true;
+    qCInfo(lcEffect) << "Daemon ready — re-pushing state";
+
+    // Re-push cursor screen
+    if (!m_lastCursorScreenName.isEmpty() && ensureWindowTrackingReady("daemon ready cursor screen")) {
+        m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), m_lastCursorScreenName);
+        qCDebug(lcEffect) << "Re-sent cursor screen:" << m_lastCursorScreenName;
+    }
+
+    // Re-notify active window (gives daemon lastActiveScreenName)
+    KWin::EffectWindow* activeWindow = getActiveWindow();
+    if (activeWindow) {
+        notifyWindowActivated(activeWindow);
+    }
+
+    // Re-sync floating state and settings from daemon
+    syncFloatingWindowsFromDaemon();
+    loadCachedSettings();
+    loadAutotileSettings();
+
+    // Reconnect D-Bus signal subscriptions — Qt may cache the old daemon's
+    // unique bus name in match rules, causing signals from the restarted daemon
+    // to not be delivered. Re-calling connect() refreshes the match rules.
+    connectNavigationSignals();
+    connectAutotileSignals();
+
+    // Clear stale window tracking — the new daemon has no knowledge of our windows
+    m_notifiedWindows.clear();
+    m_pendingCloses.clear();
+
+    // Re-announce all existing windows on autotile screens
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        if (w && shouldHandleWindow(w)) {
+            notifyWindowAdded(w);
+        }
+    }
+}
+
 void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "Daemon signaled settingsChanged - reloading settings";
     loadCachedSettings();
-    loadAutotileSettings();
+    // Note: loadAutotileSettings() is intentionally NOT called here.
+    // Autotile screen changes are tracked via the dedicated autotileScreensChanged
+    // D-Bus signal (→ slotAutotileScreensChanged), which is authoritative.
+    // Calling loadAutotileSettings on every settingsChanged causes redundant
+    // full window re-notification (N D-Bus windowOpened calls + retile round)
+    // on every algorithm/gap/setting change — the daemon already retiles and
+    // emits windowsTiled directly for those changes.
 }
 
 QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
@@ -2706,6 +2747,7 @@ void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)
     // Remove from autotile tracking sets so re-opened windows get re-notified.
     // This must happen regardless of whether the WindowTracking interface is up.
     m_notifiedWindows.remove(windowId);
+    m_minimizeFloatedWindows.remove(windowId);
 
     // Notify autotile daemon (uses its own D-Bus path, independent of WindowTracking)
     if (m_autotileScreens.contains(screenName)) {
@@ -2777,6 +2819,10 @@ void PlasmaZonesEffect::notifyWindowAdded(KWin::EffectWindow* w)
     }
 
     if (!isTileableWindow(w)) {
+        return;
+    }
+
+    if (w->isMinimized()) {
         return;
     }
 
@@ -2880,7 +2926,7 @@ void PlasmaZonesEffect::loadAutotileSettings()
             if (!added.isEmpty()) {
                 const auto windows = KWin::effects->stackingOrder();
                 for (KWin::EffectWindow* win : windows) {
-                    if (win && shouldHandleWindow(win)) {
+                    if (win && shouldHandleWindow(win) && !win->isMinimized()) {
                         const QString screenName = getWindowScreenName(win);
                         if (added.contains(screenName)) {
                             const QString windowId = getWindowId(win);
@@ -3008,7 +3054,15 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
             }
             m_preAutotileGeometries.remove(screenName);
         }
-        applyStaggeredOrImmediate(toRestore.size(), [this, toRestore](int i) {
+        // Invalidate stale stagger timers from previous tile/restore batches
+        // before scheduling restore. Prevents rapid mode-switching from causing
+        // stale tile timers to overwrite the restore positions.
+        ++m_autotileStaggerGeneration;
+        const uint64_t gen = m_autotileStaggerGeneration;
+        applyStaggeredOrImmediate(toRestore.size(), [this, toRestore, gen](int i) {
+            if (m_autotileStaggerGeneration != gen) {
+                return; // Stale batch superseded by newer operation
+            }
             const RestoreEntry& e = toRestore[i];
             if (e.window && shouldHandleWindow(e.window)) {
                 qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << getWindowId(e.window) << "to" << e.geometry;
@@ -3026,7 +3080,7 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
     // Save pre-autotile geometries for windows on newly added screens
     if (!added.isEmpty()) {
         for (KWin::EffectWindow* w : windows) {
-            if (!w || !shouldHandleWindow(w)) {
+            if (!w || !shouldHandleWindow(w) || w->isMinimized()) {
                 continue;
             }
             const QString screenName = getWindowScreenName(w);
@@ -3110,6 +3164,69 @@ void PlasmaZonesEffect::slotAutotileWindowFloatingChanged(const QString& windowI
             }
             KWin::effects->activateWindow(floatWin);
         }
+    }
+}
+
+void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
+{
+    if (!w || !shouldHandleWindow(w) || !isTileableWindow(w)) {
+        return;
+    }
+    const QString windowId = getWindowId(w);
+    const QString screenName = getWindowScreenName(w);
+
+    // Only act for windows on autotile screens
+    if (!m_autotileScreens.contains(screenName)) {
+        return;
+    }
+
+    const bool minimized = w->isMinimized();
+
+    if (minimized) {
+        // Only float if the window isn't already user-floated — otherwise
+        // unminimize would undo the user's explicit float decision.
+        if (isWindowFloating(windowId)) {
+            qCDebug(lcEffect) << "Autotile: minimized already-floating window, skipping floatWindow:" << windowId;
+            return;
+        }
+        m_minimizeFloatedWindows.insert(windowId);
+    } else {
+        // Unminimize: only unfloat if WE caused the float on minimize
+        if (!m_minimizeFloatedWindows.remove(windowId)) {
+            qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:" << windowId;
+            // Still ensure the window is registered with the daemon (covers
+            // daemon restart while minimized, or minimized before autotile enabled)
+            notifyWindowAdded(w);
+            return;
+        }
+        // Save pre-autotile geometry before daemon re-tiles (covers windows
+        // that were minimized when their screen was added to autotile)
+        saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
+    }
+
+    const QString method = minimized ? QStringLiteral("floatWindow") : QStringLiteral("unfloatWindow");
+    qCInfo(lcEffect) << "Autotile: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:")
+                     << windowId << "on" << screenName;
+
+    if (m_daemonServiceRegistered) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, method);
+        msg << windowId;
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [method](QDBusPendingCallWatcher* w) {
+            if (w->isError()) {
+                qCWarning(lcEffect) << "Autotile" << method << "D-Bus call failed:" << w->error().message();
+            }
+            w->deleteLater();
+        });
+    }
+
+    // On unminimize, ensure the window is registered with the daemon
+    // (covers daemon restart while minimized, or minimized before autotile enabled).
+    // notifyWindowAdded guards against duplicates via m_notifiedWindows.
+    if (!minimized) {
+        notifyWindowAdded(w);
     }
 }
 
@@ -3203,6 +3320,11 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
     if (tileRequestsJson.isEmpty()) {
         return;
     }
+
+    // Invalidate any in-flight stagger timers from previous tile requests or
+    // mode-transition restores. Without this, rapid algorithm switching causes
+    // stale timers to apply wrong geometries (overlapping windows, wrong sizes).
+    ++m_autotileStaggerGeneration;
 
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(tileRequestsJson.toUtf8(), &parseError);
@@ -3330,10 +3452,17 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenName, e.isMonocle});
     }
 
+    // Capture generation AFTER increment (at top of this method) so stale
+    // stagger timers from previous tile requests or mode transitions bail out.
+    const uint64_t gen = m_autotileStaggerGeneration;
+
     // onComplete: restore borders for borderless windows no longer tiled, then
     // raise all tiled windows above floating/untiled windows in the stacking order.
     // Using onComplete ensures this fires after all stagger steps complete.
-    auto onComplete = [this, toApply, tiledWindowIds, tileScreenName]() {
+    auto onComplete = [this, toApply, tiledWindowIds, tileScreenName, gen]() {
+        if (m_autotileStaggerGeneration != gen) {
+            return; // Stale batch superseded by newer tile request or mode change
+        }
         if (m_autotileHideTitleBars && !m_borderlessWindows.isEmpty()) {
             const QSet<QString> toRestore = m_borderlessWindows - tiledWindowIds;
             for (const QString& wid : toRestore) {
@@ -3376,7 +3505,10 @@ void PlasmaZonesEffect::slotAutotileWindowsTileRequested(const QString& tileRequ
         }
     };
 
-    applyStaggeredOrImmediate(toApply.size(), [this, toApply](int i) {
+    applyStaggeredOrImmediate(toApply.size(), [this, toApply, gen](int i) {
+        if (m_autotileStaggerGeneration != gen) {
+            return; // Stale batch superseded by newer tile request or mode change
+        }
         const TileSnap& snap = toApply[i];
         if (!snap.window) {
             return;

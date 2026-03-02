@@ -184,11 +184,15 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
     if (entry.isAutotile) {
         if (m_autotileEngine && m_layoutManager) {
             QString algoId = LayoutId::extractAlgorithmId(entry.id);
-            m_autotileEngine->setAlgorithm(algoId);
+            // Assign layout FIRST so that layoutAssigned → updateAutotileScreens()
+            // updates per-screen overrides before setAlgorithm's deferred retile.
+            // Without this ordering, setAlgorithm's retile uses stale per-screen
+            // overrides (old algorithm), producing wrong zone geometries.
             if (!m_currentScreenName.isEmpty()) {
                 m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop,
                                                   m_currentActivity, entry.id);
             }
+            m_autotileEngine->setAlgorithm(algoId);
             setCurrentLayoutId(entry.id);
             qCInfo(lcDaemon) << "Applied autotile algorithm:" << entry.name;
             Q_EMIT autotileApplied(entry.name, 0);

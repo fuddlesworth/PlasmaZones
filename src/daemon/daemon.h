@@ -167,6 +167,9 @@ private:
      */
     void updateAutotileScreens();
 
+    /** @brief Resnap windows to current layout zones (only in manual/snap mode) */
+    void resnapIfManualMode();
+
     /**
      * @brief Update layout filter on overlay service and unified layout controller
      *

@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QSignalBlocker>
 
 // KDE headers
 #include <KSharedConfig>
@@ -221,45 +222,80 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
         return;
     }
 
-    // When switching algorithms, reset split ratio to new algorithm's default
-    // if the current ratio is still at the old algorithm's default.
-    // This ensures BSP starts at 0.5 (balanced) and MasterStack at 0.6 (60/40).
-    // If the user has customized the ratio, it's preserved across switches.
+    // Always reset split ratio to the new algorithm's default when switching.
+    // Different algorithms interpret the same ratio value differently:
+    //   MasterStack 0.6 = 60% master width
+    //   BSP 0.5 = balanced 50/50 first split
+    //   Columns: ignores ratio entirely
+    // Preserving a ratio across algorithm switches produces wrong geometries
+    // (e.g., Firefox too wide when switching from MasterStack 0.6 to BSP).
     TilingAlgorithm* oldAlgo = registry->algorithm(m_algorithmId);
     TilingAlgorithm* newAlgo = registry->algorithm(newId);
     const int oldMaxWindows = m_config->maxWindows;
     if (oldAlgo && newAlgo) {
-        const qreal oldDefault = oldAlgo->defaultSplitRatio();
-        if (qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + oldDefault)) {
-            const qreal newDefault = newAlgo->defaultSplitRatio();
+        const qreal newDefault = newAlgo->defaultSplitRatio();
+        if (!qFuzzyCompare(1.0 + m_config->splitRatio, 1.0 + newDefault)) {
             m_config->splitRatio = newDefault;
-            propagateGlobalSplitRatio();
         }
+        propagateGlobalSplitRatio();
 
         // Same pattern for maxWindows: if the user hasn't customized it away
         // from the old algorithm's default, reset to the new algorithm's default.
         // Without this, switching from MasterStack (4) to BSP (5) keeps maxWindows=4.
         resetMaxWindowsForAlgorithmSwitch(oldAlgo, newAlgo);
+    } else if (newAlgo) {
+        // oldAlgo is nullptr (first-ever call or corrupted m_algorithmId).
+        // Initialize config from the new algorithm's defaults.
+        m_config->splitRatio = newAlgo->defaultSplitRatio();
+        m_config->maxWindows = newAlgo->defaultMaxWindows();
+        propagateGlobalSplitRatio();
+    }
 
-        // Persist maxWindows change back to settings to avoid desync between
-        // the engine's runtime m_config and the Settings object.
-        if (m_settings && m_config->maxWindows != oldMaxWindows) {
+    // Persist ALL changed fields back to settings to avoid desync between
+    // the engine's runtime state and the Settings object. During layout
+    // cycling, several daemon/engine paths read from Settings (e.g.,
+    // updateAutotileScreens reads autotileMaxWindows, syncFromSettings reads
+    // autotileAlgorithm and splitRatio). Stale Settings values cause wrong
+    // per-screen overrides, recursive setAlgorithm calls with the old KCM
+    // algorithm, and splitRatio corruption.
+    //
+    // Block ALL signals from m_settings during these writes. Each setter
+    // macro emits both its specific signal AND settingsChanged, which would
+    // trigger the daemon's settingsChanged handler → syncFromSettings() →
+    // setAlgorithm(stale KCM algo), producing a recursive corruption loop.
+    // setAlgorithm() schedules its own deferred retile below.
+    //
+    // This runs outside the oldAlgo&&newAlgo guard so that Settings is always
+    // synced — even on first-ever call when m_algorithmId was empty.
+    if (m_settings) {
+        const QSignalBlocker blocker(m_settings);
+        if (m_config->maxWindows != oldMaxWindows) {
             m_settings->setAutotileMaxWindows(m_config->maxWindows);
         }
+        m_settings->setAutotileAlgorithm(newId);
+        m_settings->setAutotileSplitRatio(m_config->splitRatio);
     }
 
     m_algorithmId = newId;
     m_config->algorithmId = newId;
     Q_EMIT algorithmChanged(m_algorithmId);
 
-    // Backfill windows when the new algorithm's maxWindows is higher, then retile.
+    // Backfill windows when the new algorithm's maxWindows is higher.
     // Guard with maxWindows-increased check to avoid wasted iteration when the
     // new algorithm has a lower or equal limit.
     if (isEnabled()) {
         if (m_config->maxWindows > oldMaxWindows) {
             backfillWindows();
         }
-        retile();
+        // Defer retile instead of running immediately. When setAlgorithm is called
+        // from applyEntry() or connectToSettings(), the per-screen overrides haven't
+        // been updated yet (updateAutotileScreens runs after). An immediate retile
+        // would use effectiveAlgorithm() with the stale per-screen override (OLD algo),
+        // producing wrong geometries and emitting a bad windowsTiled signal to KWin.
+        // Deferring to the next event loop pass ensures per-screen overrides are current.
+        for (const QString& screen : m_autotileScreens) {
+            scheduleRetileForScreen(screen);
+        }
     }
 }
 
@@ -422,6 +458,11 @@ void AutotileEngine::syncFromSettings(Settings* settings)
         // Cancel any pending debounced retile — we are doing a full resync
         m_settingsRetileTimer.stop();
         m_pendingSettingsRetile = false;
+        // Cancel deferred retiles from setAlgorithm() — the immediate retile()
+        // below covers all screens. Without this, the deferred retile fires on
+        // the next event loop pass and emits a redundant windowsTiled D-Bus
+        // signal with identical geometry data.
+        m_pendingRetileScreens.clear();
         retile();
     }
 
@@ -588,6 +629,16 @@ void AutotileEngine::applyPerScreenConfig(const QString& screenName, const QVari
     // Gap overrides (InnerGap, OuterGap, SmartGaps) and RespectMinimumSize are
     // resolved at retile time via effective*() helpers in recalculateLayout().
 
+    // Schedule a deferred retile so the new config takes effect. Deferred (not
+    // immediate) to coalesce with other pending retiles — e.g., when applyEntry()
+    // triggers both updateAutotileScreens() → applyPerScreenConfig() and
+    // setAlgorithm() → scheduleRetileForScreen(), a single retile fires with
+    // all state consistent, avoiding the double-D-Bus-signal problem that caused
+    // stagger generation conflicts and window overlap during algorithm switches.
+    if (isAutotileScreen(screenName)) {
+        scheduleRetileForScreen(screenName);
+    }
+
     qCDebug(lcAutotile) << "Applied per-screen config for" << screenName
                         << "keys:" << overrides.keys();
 }
@@ -603,6 +654,12 @@ void AutotileEngine::clearPerScreenConfig(const QString& screenName)
         state->setSplitRatio(m_config->splitRatio);
         state->setMasterCount(m_config->masterCount);
     }
+
+    // Schedule deferred retile (same rationale as applyPerScreenConfig)
+    if (isAutotileScreen(screenName)) {
+        scheduleRetileForScreen(screenName);
+    }
+
     qCDebug(lcAutotile) << "Cleared per-screen config for" << screenName;
 }
 
@@ -1511,8 +1568,15 @@ void AutotileEngine::windowFocused(const QString& windowId, const QString& scree
     // TilingState remain consistent. This handles both overflow-floated windows
     // and windows that were previously migrated (preventing the Screen1->2->1
     // rapid-migration desync where the second hop was silently skipped).
+    //
+    // Only update m_windowToScreen for windows already tracked via windowOpened().
+    // The KWin effect sends focus events for ALL handleable windows (including
+    // transients and non-tileable windows that pass shouldHandleWindow but fail
+    // isTileableWindow). Creating entries for these phantom windows causes
+    // backfillWindows() to insert them on algorithm switches, inflating the
+    // tiled window count.
     const QString oldScreen = m_windowToScreen.value(windowId);
-    if (!screenName.isEmpty()) {
+    if (!screenName.isEmpty() && m_windowToScreen.contains(windowId)) {
         m_windowToScreen[windowId] = screenName;
     }
 

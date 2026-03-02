@@ -104,12 +104,17 @@ private Q_SLOTS:
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
                                                 const QString& geometryJson);
 
+    // Daemon lifecycle
+    void slotDaemonReady();
+
     // Autotile D-Bus signal handlers
     void slotAutotileWindowsTileRequested(const QString& tileRequestsJson);
     void slotAutotileFocusWindowRequested(const QString& windowId);
     void slotAutotileEnabledChanged(bool enabled);
     void slotAutotileScreensChanged(const QStringList& screenNames);
     void slotAutotileWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
+    // Minimize/unminimize tracking for autotile
+    void slotWindowMinimizedChanged(KWin::EffectWindow* w);
     // Monocle maximize state tracking
     void slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical);
     void slotWindowFullScreenChanged(KWin::EffectWindow* w);
@@ -439,6 +444,10 @@ private:
     // Autotile: track windows already notified to daemon to avoid duplicate notifications
     QSet<QString> m_notifiedWindows;
 
+    // Autotile: windows we floated due to minimize (not user-initiated).
+    // On unminimize we only send unfloatWindow for these, preserving user-initiated floats.
+    QSet<QString> m_minimizeFloatedWindows;
+
     // Autotile: track windows closed before open was sent (D-Bus ordering race guard)
     QSet<QString> m_pendingCloses;
 
@@ -492,6 +501,14 @@ private:
     // raise loop fires AFTER focusWindowRequested, burying the new window.
     // slotAutotileFocusWindowRequested stores the ID here; onComplete re-raises it.
     QString m_pendingAutotileFocusWindowId;
+
+    // Stagger generation counter: incremented at the start of each autotile
+    // stagger batch (tile request or geometry restore). Stale stagger timers
+    // (from rapid algorithm switching or mode transitions) check this counter
+    // and bail out if their captured generation doesn't match the current one.
+    // Fixes: overlapping windows on rapid algorithm switch, broken float/unfloat
+    // across mode transitions when stale timers overwrite correct geometries.
+    uint64_t m_autotileStaggerGeneration = 0;
 
     // Guard to suppress our own maximize() calls from triggering
     // slotWindowMaximizedStateChanged (avoids feedback loop).

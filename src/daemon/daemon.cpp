@@ -51,6 +51,7 @@
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/AutotileConfig.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/TilingAlgorithm.h"
 
@@ -618,10 +619,7 @@ void Daemon::start()
         if (!m_unifiedLayoutController->applyLayoutByNumber(number)) {
             return;
         }
-        if (m_windowTrackingAdaptor) {
-            m_suppressResnapOsd = true;
-            m_windowTrackingAdaptor->resnapToNewLayout();
-        }
+        resnapIfManualMode();
     });
 
     // Cycle layout shortcuts (Meta+[/])
@@ -637,10 +635,7 @@ void Daemon::start()
             return;
         }
         m_unifiedLayoutController->cyclePrevious();
-        if (m_windowTrackingAdaptor) {
-            m_suppressResnapOsd = true;
-            m_windowTrackingAdaptor->resnapToNewLayout();
-        }
+        resnapIfManualMode();
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
         if (!m_unifiedLayoutController) {
@@ -654,10 +649,7 @@ void Daemon::start()
             return;
         }
         m_unifiedLayoutController->cycleNext();
-        if (m_windowTrackingAdaptor) {
-            m_suppressResnapOsd = true;
-            m_windowTrackingAdaptor->resnapToNewLayout();
-        }
+        resnapIfManualMode();
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -1531,6 +1523,17 @@ void Daemon::connectToKWinScript()
     // The script will call getActiveLayout() on startup
 }
 
+void Daemon::resnapIfManualMode()
+{
+    // Only resnap for manual layouts — autotile handles its own retile.
+    // Resnapping during autotile uses a stale buffer from the old snap-mode
+    // layout, sending competing geometry D-Bus signals to the effect.
+    if (m_windowTrackingAdaptor && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
+        m_suppressResnapOsd = true;
+        m_windowTrackingAdaptor->resnapToNewLayout();
+    }
+}
+
 void Daemon::updateLayoutFilter()
 {
     if (!m_settings) {
@@ -1716,7 +1719,6 @@ void Daemon::updateAutotileScreens()
     // screens are retiled with the correct per-screen algorithm (not the global
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
     // stateForScreen(), which setAutotileScreens reuses for added screens.
-    bool overridesChanged = false;
     if (m_settings) {
         for (QScreen* screen : m_screenManager->screens()) {
             if (!autotileScreens.contains(screen->name())) continue;
@@ -1727,23 +1729,43 @@ void Daemon::updateAutotileScreens()
                 const QString screenAlgo = screenAlgorithms.value(screen->name());
                 overrides[QStringLiteral("Algorithm")] = screenAlgo;
 
-                // When the per-screen algorithm differs from the global setting
-                // and there's no explicit MaxWindows override, inject the
-                // per-screen algorithm's default — but only if the global
-                // maxWindows is still at the global algorithm's default.
-                // If the user customized maxWindows, respect their choice.
-                if (screenAlgo != m_settings->autotileAlgorithm()
+                // When the per-screen algorithm differs from the engine's
+                // current global algorithm and there's no explicit MaxWindows
+                // override, inject the per-screen algorithm's default — but
+                // only if the global maxWindows is still at the global
+                // algorithm's default.  If the user customized maxWindows,
+                // respect their choice.
+                //
+                // Use the engine's runtime algorithm (m_autotileEngine->algorithm())
+                // instead of m_settings->autotileAlgorithm(). During layout cycling,
+                // the settings algorithm retains the initial KCM value while the
+                // engine's algorithm changes with each cycle. Using the stale settings
+                // value caused incorrect MaxWindows injection and unpredictable
+                // per-screen overrides.
+                //
+                // Note: in applyEntry(), this runs BEFORE setAlgorithm() updates
+                // the global ID, so globalAlgo is the OLD algorithm. This is safe:
+                // effectiveMaxWindows() has identical fallback logic (step 2) that
+                // dynamically derives the correct MaxWindows at retile time even
+                // without a per-screen override. The override here is an optimization.
+                const QString globalAlgo = m_autotileEngine->algorithm();
+                if (screenAlgo != globalAlgo
                     && !overrides.contains(QLatin1String("MaxWindows"))) {
                     auto* screenAlgoPtr = AlgorithmRegistry::instance()->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(m_settings->autotileAlgorithm());
+                    auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm"
-                                              << m_settings->autotileAlgorithm()
+                                              << globalAlgo
                                               << "not found - injecting per-screen default MaxWindows";
                         }
+                        // Use the engine's runtime maxWindows (not m_settings->
+                        // autotileMaxWindows()) — during cycling, settings may
+                        // be stale if updateAutotileScreens runs before
+                        // setAlgorithm syncs settings via QSignalBlocker.
+                        const int runtimeMaxWindows = m_autotileEngine->config()->maxWindows;
                         if (!globalAlgoPtr
-                            || m_settings->autotileMaxWindows() == globalAlgoPtr->defaultMaxWindows()) {
+                            || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
                             overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
                         }
                     } else {
@@ -1760,7 +1782,6 @@ void Daemon::updateAutotileScreens()
                 } else {
                     m_autotileEngine->clearPerScreenConfig(screen->name());
                 }
-                overridesChanged = true;
             }
         }
     }
@@ -1771,11 +1792,15 @@ void Daemon::updateAutotileScreens()
     // setAutotileScreens uses effectiveAlgorithm() with the correct per-screen algo.
     m_autotileEngine->setAutotileScreens(autotileScreens);
 
-    // Force retile for existing screens whose overrides changed (newly added
-    // screens were already retiled by setAutotileScreens above).
-    if (overridesChanged) {
-        m_autotileEngine->retile();
-    }
+    // Retile for existing screens whose overrides changed is handled by the
+    // deferred retile scheduled inside applyPerScreenConfig()/clearPerScreenConfig().
+    // This coalesces with deferred retiles from setAlgorithm() (called by
+    // applyEntry() after updateAutotileScreens), producing a SINGLE retile pass
+    // with fully consistent state. An immediate retile() here would fire BEFORE
+    // setAlgorithm() updates the global algorithm/splitRatio, causing a second
+    // windowsTiled D-Bus signal whose stagger generation increment invalidates
+    // the first signal's pending stagger timers — leaving windows at old
+    // positions and producing the left-overlapping-right bug.
 
     // Propagate to overlay service so initializeOverlay() skips autotile screens
     if (m_overlayService) {
