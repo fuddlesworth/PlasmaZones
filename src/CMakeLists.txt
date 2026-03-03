@@ -255,11 +255,17 @@ install(TARGETS plasmazones_core
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshadercommon.h
+    daemon/rendering/rendering_macros.h
     daemon/rendering/zoneshadernodebase.h
+    daemon/rendering/zoneshadernoderhi_internal.h
     daemon/rendering/zoneshadernoderhi.h
     daemon/rendering/zoneshadernoderhi.cpp
+    daemon/rendering/zoneshadernoderhi_setters.cpp
+    daemon/rendering/zoneshadernoderhi_pipeline.cpp
+    daemon/rendering/zoneshadernoderhi_uniforms.cpp
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
+    daemon/rendering/zoneshaderitem_setters.cpp
     daemon/rendering/zonelabeltexturebuilder.h
     daemon/rendering/zonelabeltexturebuilder.cpp
 )

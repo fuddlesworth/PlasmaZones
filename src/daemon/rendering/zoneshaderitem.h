@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "zoneshadercommon.h"
+
 #include <plasmazones_rendering_export.h>
 #include <QQuickItem>
 #include <QUrl>
@@ -15,7 +17,6 @@
 #include <QColor>
 #include <QMutex>
 #include <QStringList>
-#include <QVariantList>
 #include <QVector>
 #include <array>
 #include <atomic>
@@ -25,73 +26,6 @@ class QSGNode;
 QT_END_NAMESPACE
 
 namespace PlasmaZones {
-
-/**
- * @brief Parsed zone rectangle data for shader rendering
- *
- * Stores zone geometry normalized to [0,1] coordinates for GPU processing.
- * Safe to copy between threads.
- */
-struct ZoneRect
-{
-    float x = 0.0f; ///< Left edge (0-1)
-    float y = 0.0f; ///< Top edge (0-1)
-    float width = 0.0f; ///< Width (0-1)
-    float height = 0.0f; ///< Height (0-1)
-    int zoneNumber = 0; ///< Zone number for display
-    bool highlighted = false; ///< Whether this zone is highlighted
-    float borderRadius = 8.0f; ///< Corner radius in pixels (for shader)
-    float borderWidth = 2.0f; ///< Border width in pixels (for shader)
-};
-
-/**
- * @brief Parsed zone color data for shader rendering
- *
- * Stores RGBA colors normalized to [0,1] for GPU processing.
- */
-struct ZoneColor
-{
-    float r = 0.0f; ///< Red component (0-1)
-    float g = 0.0f; ///< Green component (0-1)
-    float b = 0.0f; ///< Blue component (0-1)
-    float a = 1.0f; ///< Alpha component (0-1)
-
-    ZoneColor() = default;
-    ZoneColor(float red, float green, float blue, float alpha = 1.0f)
-        : r(red)
-        , g(green)
-        , b(blue)
-        , a(alpha)
-    {
-    }
-
-    static ZoneColor fromQColor(const QColor& color)
-    {
-        return ZoneColor(static_cast<float>(color.redF()), static_cast<float>(color.greenF()),
-                         static_cast<float>(color.blueF()), static_cast<float>(color.alphaF()));
-    }
-
-    QVector4D toVector4D() const
-    {
-        return QVector4D(r, g, b, a);
-    }
-};
-
-/**
- * @brief Thread-safe zone data snapshot for render thread
- *
- * This structure holds a complete copy of zone state that can be
- * safely read by the render thread while the main thread updates.
- */
-struct ZoneDataSnapshot
-{
-    QVector<ZoneRect> rects;
-    QVector<ZoneColor> fillColors;
-    QVector<ZoneColor> borderColors;
-    int zoneCount = 0;
-    int highlightedCount = 0;
-    int version = 0; ///< Incremented on each update for change detection
-};
 
 /**
  * @brief QQuickItem for rendering zone overlays with custom shaders
@@ -194,71 +128,38 @@ public:
     ~ZoneShaderItem() override;
 
     // Animation getters/setters
-    qreal iTime() const
-    {
-        return m_iTime;
-    }
+    qreal iTime() const { return m_iTime; }
     void setITime(qreal time);
 
-    qreal iTimeDelta() const
-    {
-        return m_iTimeDelta;
-    }
+    qreal iTimeDelta() const { return m_iTimeDelta; }
     void setITimeDelta(qreal delta);
 
-    int iFrame() const
-    {
-        return m_iFrame;
-    }
+    int iFrame() const { return m_iFrame; }
     void setIFrame(int frame);
 
     // Resolution getter/setter
-    QSizeF iResolution() const
-    {
-        return m_iResolution;
-    }
+    QSizeF iResolution() const { return m_iResolution; }
     void setIResolution(const QSizeF& resolution);
 
     // Mouse position getter/setter
-    QPointF iMouse() const
-    {
-        return m_iMouse;
-    }
+    QPointF iMouse() const { return m_iMouse; }
     void setIMouse(const QPointF& mouse);
 
     // Zone data getters/setters
-    const QVariantList& zones() const
-    {
-        return m_zones;
-    }
+    const QVariantList& zones() const { return m_zones; }
     void setZones(const QVariantList& zones);
 
-    int zoneCount() const
-    {
-        return m_zoneCount;
-    }
-    int highlightedCount() const
-    {
-        return m_highlightedCount;
-    }
+    int zoneCount() const { return m_zoneCount; }
+    int highlightedCount() const { return m_highlightedCount; }
 
-    int hoveredZoneIndex() const
-    {
-        return m_hoveredZoneIndex;
-    }
+    int hoveredZoneIndex() const { return m_hoveredZoneIndex; }
     void setHoveredZoneIndex(int index);
 
     // Shader source getter/setter
-    QUrl shaderSource() const
-    {
-        return m_shaderSource;
-    }
+    QUrl shaderSource() const { return m_shaderSource; }
     void setShaderSource(const QUrl& source);
 
-    QString bufferShaderPath() const
-    {
-        return m_bufferShaderPath;
-    }
+    QString bufferShaderPath() const { return m_bufferShaderPath; }
     void setBufferShaderPath(const QString& path);
 
     QStringList bufferShaderPaths() const { return m_bufferShaderPaths; }
@@ -273,84 +174,45 @@ public:
     QString bufferWrap() const { return m_bufferWrap; }
     void setBufferWrap(const QString& wrap);
 
-    QVariantMap shaderParams() const
-    {
-        return m_shaderParams;
-    }
+    QVariantMap shaderParams() const { return m_shaderParams; }
     void setShaderParams(const QVariantMap& params);
 
     // Custom parameters getters/setters (16 floats in 4 vec4s)
-    QVector4D customParams1() const
-    {
-        return m_customParams1;
-    }
+    QVector4D customParams1() const { return m_customParams1; }
     void setCustomParams1(const QVector4D& params);
 
-    QVector4D customParams2() const
-    {
-        return m_customParams2;
-    }
+    QVector4D customParams2() const { return m_customParams2; }
     void setCustomParams2(const QVector4D& params);
 
-    QVector4D customParams3() const
-    {
-        return m_customParams3;
-    }
+    QVector4D customParams3() const { return m_customParams3; }
     void setCustomParams3(const QVector4D& params);
 
-    QVector4D customParams4() const
-    {
-        return m_customParams4;
-    }
+    QVector4D customParams4() const { return m_customParams4; }
     void setCustomParams4(const QVector4D& params);
 
     // Custom color getters/setters (8 colors)
-    QVector4D customColor1() const
-    {
-        return m_customColor1;
-    }
+    QVector4D customColor1() const { return m_customColor1; }
     void setCustomColor1(const QVector4D& color);
 
-    QVector4D customColor2() const
-    {
-        return m_customColor2;
-    }
+    QVector4D customColor2() const { return m_customColor2; }
     void setCustomColor2(const QVector4D& color);
 
-    QVector4D customColor3() const
-    {
-        return m_customColor3;
-    }
+    QVector4D customColor3() const { return m_customColor3; }
     void setCustomColor3(const QVector4D& color);
 
-    QVector4D customColor4() const
-    {
-        return m_customColor4;
-    }
+    QVector4D customColor4() const { return m_customColor4; }
     void setCustomColor4(const QVector4D& color);
 
-    QVector4D customColor5() const
-    {
-        return m_customColor5;
-    }
+    QVector4D customColor5() const { return m_customColor5; }
     void setCustomColor5(const QVector4D& color);
 
-    QVector4D customColor6() const
-    {
-        return m_customColor6;
-    }
+    QVector4D customColor6() const { return m_customColor6; }
     void setCustomColor6(const QVector4D& color);
 
-    QVector4D customColor7() const
-    {
-        return m_customColor7;
-    }
+    QVector4D customColor7() const { return m_customColor7; }
     void setCustomColor7(const QVector4D& color);
 
-    QVector4D customColor8() const
-    {
-        return m_customColor8;
-    }
+    QVector4D customColor8() const { return m_customColor8; }
     void setCustomColor8(const QVector4D& color);
 
     // Labels texture getter/setter
@@ -363,14 +225,8 @@ public:
     void setAudioSpectrumRaw(const QVector<float>& spectrum);
 
     // Status getters
-    Status status() const
-    {
-        return m_status;
-    }
-    QString errorLog() const
-    {
-        return m_errorLog;
-    }
+    Status status() const { return m_status; }
+    QString errorLog() const { return m_errorLog; }
 
     /**
      * @brief Get a thread-safe copy of zone data for rendering

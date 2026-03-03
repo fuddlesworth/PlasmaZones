@@ -85,9 +85,11 @@ private:
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
     void syncUniformsFromData();
+    void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void resetAllSrbs();
+    void bakeBufferShaders();
 
     QQuickItem* m_item = nullptr;
 
