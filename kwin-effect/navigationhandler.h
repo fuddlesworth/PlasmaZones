@@ -4,9 +4,14 @@
 #pragma once
 
 #include <QObject>
-#include <QString>
+#include <QPointer>
 #include <QRect>
+#include <QRectF>
 #include <QSet>
+#include <QString>
+
+class QDBusInterface;
+class QDBusPendingCallWatcher;
 
 namespace KWin {
 class EffectWindow;
@@ -76,9 +81,45 @@ private:
                                            bool filterCurrentDesktop = false,
                                            bool resolveFullWindowId = false);
 
-    // Internal helper for float toggle - called after daemon state is synced
+    // Move-to-zone directive handlers (decomposed from handleMoveWindowToZone)
+    void handleNavigateMove(KWin::EffectWindow* activeWindow, const QString& windowId,
+                            const QString& screenName, const QString& direction);
+    void handlePushMove(KWin::EffectWindow* activeWindow, const QString& windowId,
+                        const QString& screenName, const QString& pushScreenName);
+    void handleSnapByNumber(KWin::EffectWindow* activeWindow, const QString& windowId,
+                            const QString& screenName, int zoneNumber, const QString& snapScreenName);
+    void handleDirectZoneSnap(KWin::EffectWindow* activeWindow, const QString& windowId,
+                              const QString& screenName, const QString& targetZoneId,
+                              const QString& zoneGeometry);
+
+    // Float toggle helpers (decomposed from executeFloatToggle)
     void executeFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
                             const QString& screenName, bool newFloatState);
+    void executeFloatOn(KWin::EffectWindow* activeWindow, const QString& windowId,
+                        const QString& screenName);
+    void executeFloatOff(KWin::EffectWindow* activeWindow, const QString& windowId,
+                         const QString& screenName);
+
+    /**
+     * @brief Get valid WindowTracking interface or emit navigation feedback on failure.
+     * @return Valid QDBusInterface* or nullptr (feedback already emitted)
+     */
+    QDBusInterface* requireInterface(const QString& action, const QString& screenName);
+
+    /**
+     * @brief Shared callback body for daemon-driven snap replies (navigate/push/snap).
+     *
+     * Parses the JSON reply, validates geometry, stores pre-snap geometry if needed,
+     * applies snap, and calls windowSnapped + recordSnapIntent.
+     */
+    void applyDaemonSnapReply(QDBusPendingCallWatcher* watcher, QPointer<KWin::EffectWindow> safeWindow,
+                              const QString& windowId, const QString& screenName,
+                              const QRectF& preSnapGeom, const QString& action);
+
+    /**
+     * @brief Emit navigation feedback for a BatchSnapResult.
+     */
+    void emitBatchFeedback(const BatchSnapResult& result, const QString& action, const QString& screenName);
 
     PlasmaZonesEffect* m_effect;
     QSet<QString> m_floatingWindows;

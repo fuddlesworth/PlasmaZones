@@ -40,8 +40,14 @@ list(APPEND CMAKE_AUTOMOC_MACRO_NAMES "KWIN_EFFECT_FACTORY_SUPPORTED")
 set(plasmazones_effect_SRCS
     plasmazoneseffect.cpp
     plasmazoneseffect.h
+    autotilehandler.cpp
+    autotilehandler.h
     navigationhandler.cpp
     navigationhandler.h
+    screenchangehandler.cpp
+    screenchangehandler.h
+    snapassisthandler.cpp
+    snapassisthandler.h
     windowanimator.cpp
     windowanimator.h
     dragtracker.cpp

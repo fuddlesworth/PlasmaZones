@@ -22,7 +22,10 @@
 namespace PlasmaZones {
 
 // Forward declarations for helper classes
+class AutotileHandler;
 class NavigationHandler;
+class ScreenChangeHandler;
+class SnapAssistHandler;
 class WindowAnimator;
 class DragTracker;
 
@@ -80,7 +83,6 @@ private Q_SLOTS:
     void slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
                           Qt::MouseButtons oldbuttons, Qt::KeyboardModifiers modifiers,
                           Qt::KeyboardModifiers oldmodifiers);
-    void slotScreenGeometryChanged();
     void slotSettingsChanged();
 
     // Keyboard Navigation handlers
@@ -97,7 +99,6 @@ private Q_SLOTS:
     void slotSnapAllWindowsRequested(const QString& screenName);
     void slotCycleWindowsInZoneRequested(const QString& directive, const QString& unused);
     void slotPendingRestoresAvailable();
-    void slotReapplyWindowGeometriesRequested();
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
@@ -107,17 +108,6 @@ private Q_SLOTS:
     // Daemon lifecycle
     void slotDaemonReady();
 
-    // Autotile D-Bus signal handlers
-    void slotAutotileWindowsTileRequested(const QString& tileRequestsJson);
-    void slotAutotileFocusWindowRequested(const QString& windowId);
-    void slotAutotileEnabledChanged(bool enabled);
-    void slotAutotileScreensChanged(const QStringList& screenNames);
-    void slotAutotileWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName);
-    // Minimize/unminimize tracking for autotile
-    void slotWindowMinimizedChanged(KWin::EffectWindow* w);
-    // Monocle maximize state tracking
-    void slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical);
-    void slotWindowFullScreenChanged(KWin::EffectWindow* w);
 
 private:
     // Window management
@@ -133,6 +123,21 @@ private:
     void updateWindowStickyState(KWin::EffectWindow* w);
 
     // D-Bus communication
+
+    /**
+     * @brief Fire-and-forget async D-Bus call with error logging.
+     *
+     * Creates a QDBusMessage, sends it asynchronously, and attaches a
+     * watcher that logs warnings on failure. No reply data is used.
+     *
+     * @param interface  D-Bus interface (e.g., DBus::Interface::Autotile)
+     * @param method     D-Bus method name
+     * @param args       Method arguments
+     * @param logContext Human-readable label for the warning log
+     */
+    void fireAndForgetDBusCall(const QString& interface, const QString& method,
+                               const QVariantList& args, const QString& logContext = {});
+
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
@@ -150,30 +155,6 @@ private:
      */
     bool ensureWindowTrackingReady(const char* methodName);
     bool ensureOverlayInterface(const char* methodName);
-
-    /**
-     * @brief Build candidate windows for Snap Assist (excluding just-snapped and already-snapped)
-     * @param excludeWindowId Window ID to exclude (the one just snapped)
-     * @param screenName Screen where snap occurred (filter by same screen)
-     * @param snappedWindowIds Set of full window IDs already snapped to zones (excluded).
-     *        Uses full ID matching with stable ID fallback for single-instance apps.
-     * @return JSON array of {windowId, kwinHandle, icon, caption}
-     */
-    QJsonArray buildSnapAssistCandidates(const QString& excludeWindowId, const QString& screenName,
-                                          const QSet<QString>& snappedWindowIds = QSet<QString>()) const;
-
-    /**
-     * @brief Async D-Bus chain: getSnappedWindows → buildCandidates → showSnapAssist
-     *
-     * Shared by callDragStopped and showSnapAssistContinuationIfNeeded.
-     * All D-Bus calls are async to prevent compositor freeze (see discussion #158).
-     *
-     * @param excludeWindowId Window to exclude from candidates (empty for continuation)
-     * @param screenName Target screen name
-     * @param emptyZonesJson JSON string of empty zones from daemon
-     */
-    void asyncShowSnapAssist(const QString& excludeWindowId, const QString& screenName,
-                             const QString& emptyZonesJson);
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
@@ -223,12 +204,6 @@ private:
 
     void notifyWindowClosed(KWin::EffectWindow* w);
     void notifyWindowActivated(KWin::EffectWindow* w);
-
-    // Autotile integration
-    void notifyWindowAdded(KWin::EffectWindow* w);
-    void connectAutotileSignals();
-    void loadAutotileSettings();
-    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
     KWin::EffectWindow* findWindowById(const QString& windowId) const;
 
     /**
@@ -271,41 +246,11 @@ private:
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
                           bool skipAnimation = false);
 
-    /**
-     * If there are empty zones and unsnapped candidates, show Snap Assist.
-     * Used to continue Snap Assist after each snap until all zones filled or no candidates.
-     */
-    void showSnapAssistContinuationIfNeeded(const QString& screenName);
-
     // Extract stable ID from full window ID (strips pointer address)
     // Stable ID = windowClass:resourceName (without pointer address)
     // This allows matching windows across KWin restarts
     static QString extractStableId(const QString& windowId);
 
-    /**
-     * @brief Find key in saved geometries map for a window (exact or stable ID match)
-     * @param savedGeometries Map of windowId -> geometry
-     * @param windowId Full window ID to look up
-     * @return Key if exactly one match (exact or unique stable ID), empty string otherwise.
-     *         Returns empty when multiple windows share the same stable ID (ambiguous).
-     */
-    static QString findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries,
-                                        const QString& windowId);
-
-    /**
-     * @brief Check if we already have saved geometry for this window (exact or stable ID)
-     */
-    static bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries,
-                                         const QString& windowId);
-
-    /**
-     * @brief Save pre-autotile geometry locally and record it on the daemon via D-Bus.
-     * Validates the frame, checks hasSavedGeometryForWindow guard, and sends the
-     * recordPreAutotileGeometry async call. No-op if geometry is already saved or invalid.
-     * @return true if geometry was saved, false if skipped (already saved or invalid).
-     */
-    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
-                                          const QRectF& frame);
 
     /**
      * @brief Derive short name from window class for icon/app display
@@ -355,14 +300,20 @@ public:
 
 private:
     // Friend classes for helpers
+    friend class AutotileHandler;
     friend class NavigationHandler;
+    friend class ScreenChangeHandler;
+    friend class SnapAssistHandler;
     friend class WindowAnimator;
     friend class DragTracker;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
+    std::unique_ptr<AutotileHandler> m_autotileHandler;
     std::unique_ptr<NavigationHandler> m_navigationHandler;
+    std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
+    std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
     std::unique_ptr<DragTracker> m_dragTracker;
 
@@ -381,26 +332,20 @@ private:
     std::unique_ptr<QDBusInterface> m_overlayInterface; // Overlay interface (Snap Assist)
     std::unique_ptr<QDBusInterface> m_settingsInterface; // Settings interface
 
-    // Screen geometry change debouncing
-    // The virtualScreenGeometryChanged signal can fire rapidly (monitor connect/disconnect,
-    // arrangement changes, etc.) which causes windows to be unnecessarily resnapped.
-    // We debounce to only apply changes after 500ms of no further signals.
-    QTimer m_screenChangeDebounce;
-    bool m_pendingScreenChange = false;
-    QRect m_lastVirtualScreenGeometry;
-
-    // Apply debounced screen geometry change
-    void applyScreenGeometryChange();
-    // Fetch getUpdatedWindowGeometries from daemon and apply (used by resolution change and reapply request)
-    void fetchAndApplyWindowGeometries();
-    void applyWindowGeometriesFromJson(const QString& geometriesJson);
-
-    // Reapply guard: avoid overlapping async reapply runs; pending request runs once after current finishes
-    bool m_reapplyInProgress = false;
-    bool m_reapplyPending = false;
+    // Screen change debouncing and reapply handled by ScreenChangeHandler
 
     // Load cached settings from daemon (exclusions, activation triggers, etc.)
     void loadCachedSettings();
+
+    /**
+     * @brief Async helper for loading a single daemon setting.
+     *
+     * Sends getSetting(name) via raw QDBusMessage (no QDBusInterface), unwraps
+     * the QDBusVariant, and calls onValue with the extracted QVariant.
+     * Used by loadCachedSettings() to eliminate 13 identical watcher blocks.
+     */
+    template<typename Fn>
+    void loadSettingAsync(const QString& name, Fn&& onValue);
 
     /**
      * @brief Check if any activation trigger is currently held locally
@@ -443,26 +388,7 @@ private:
     bool m_excludeTransientWindows = true;
     int m_minimumWindowWidth = 200;
     int m_minimumWindowHeight = 150;
-    bool m_snapAssistEnabled = false; // false until loaded from D-Bus (avoids race at startup)
-    bool m_autotileHideTitleBars = false;
-    QSet<QString> m_borderlessWindows; // window IDs we've forced borderless
 
-    // Autotile: track windows already notified to daemon to avoid duplicate notifications
-    QSet<QString> m_notifiedWindows;
-
-    // Autotile: windows we floated due to minimize (not user-initiated).
-    // On unminimize we only send unfloatWindow for these, preserving user-initiated floats.
-    QSet<QString> m_minimizeFloatedWindows;
-
-    // Autotile: track windows closed before open was sent (D-Bus ordering race guard)
-    QSet<QString> m_pendingCloses;
-
-    // Autotile: set of screens using autotile (gating drag/snap/overlay behavior per-screen)
-    QSet<QString> m_autotileScreens;
-
-    // Autotile: saved pre-autotile window geometries per screen, for restoring
-    // when a screen leaves autotile mode. Key = screen name, value = (windowId → geometry).
-    QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end
@@ -499,54 +425,7 @@ private:
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
 
-    // Windows we've set KWin-maximized for monocle mode (so Plasma panels unfloat).
-    // Tracked for cleanup when leaving monocle / autotile.
-    QSet<QString> m_monocleMaximizedWindows;
-
-    // Deferred focus for monocle: when stagger animation is active, onComplete's
-    // raise loop fires AFTER focusWindowRequested, burying the new window.
-    // slotAutotileFocusWindowRequested stores the ID here; onComplete re-raises it.
-    QString m_pendingAutotileFocusWindowId;
-
-    // Stagger generation counter: incremented at the start of each autotile
-    // stagger batch (tile request or geometry restore). Stale stagger timers
-    // (from rapid algorithm switching or mode transitions) check this counter
-    // and bail out if their captured generation doesn't match the current one.
-    // Fixes: overlapping windows on rapid algorithm switch, broken float/unfloat
-    // across mode transitions when stale timers overwrite correct geometries.
-    uint64_t m_autotileStaggerGeneration = 0;
-
-    // Autotile: target zone geometry per window, used for deferred centering of
-    // windows that render smaller than their zone (terminals with char-cell grid).
-    // Populated during tile application, consumed by centerUndersizedAutotileWindows().
-    QHash<QString, QRect> m_autotileTargetZones;
-
-    /**
-     * @brief Deferred check for autotile windows that rendered smaller than their zone.
-     *
-     * Terminals (Ghostty, Kitty, etc.) snap their size to a character-cell grid,
-     * so the client buffer may be shorter/narrower than the requested zone geometry.
-     * This method detects the mismatch and repositions the window to center it in
-     * its zone, distributing the gap evenly rather than leaving it all at one edge.
-     */
-    void centerUndersizedAutotileWindows();
-
-    // Guard to suppress our own maximize() calls from triggering
-    // slotWindowMaximizedStateChanged (avoids feedback loop).
-    // Counter instead of bool to handle concurrent stagger batches correctly.
-    int m_suppressMaximizeChanged = 0;
-
-    /**
-     * @brief Unmaximize a single monocle-maximized window and remove from tracking.
-     * No-op if the window is not tracked or not found. Uses m_suppressMaximizeChanged guard.
-     */
-    void unmaximizeMonocleWindow(const QString& windowId);
-
-    /**
-     * @brief Unmaximize all monocle-maximized windows and clear tracking set.
-     * Uses m_suppressMaximizeChanged guard.
-     */
-    void restoreAllMonocleMaximized();
+    // Autotile: true when the current drag was started on an autotile screen
 
     /**
      * @brief Encode a QIcon as a data:image/png;base64 URL string.
