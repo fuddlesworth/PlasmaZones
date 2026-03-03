@@ -149,6 +149,12 @@
             <arg name="width" type="i" direction="in"/>
             <arg name="height" type="i" direction="in"/>
         </method>
+        <method name="clearPreAutotileGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Clear stored pre-autotile geometry for a window. Called when autotile is disabled on a screen so the next enable saves fresh data."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+        </method>
         <method name="setWindowFloating">
             <annotation name="org.gtk.GDBus.DocString" value="Set whether a window is floating (not snapped)."/>
             <arg name="windowId" type="s" direction="in">

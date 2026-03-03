@@ -3030,15 +3030,17 @@ void PlasmaZonesEffect::loadAutotileSettings()
             if (!added.isEmpty()) {
                 const auto windows = KWin::effects->stackingOrder();
                 for (KWin::EffectWindow* win : windows) {
-                    if (win && shouldHandleWindow(win) && !win->isMinimized()) {
+                    if (win && shouldHandleWindow(win)) {
                         const QString screenName = getWindowScreenName(win);
                         if (added.contains(screenName)) {
                             const QString windowId = getWindowId(win);
-                            // Only save if not already recorded (tile requests
-                            // may have already saved the correct pre-tile geometry)
+                            // Save pre-autotile geometry (including minimized windows
+                            // whose frameGeometry is still valid and must be preserved).
                             saveAndRecordPreAutotileGeometry(windowId, screenName, win->frameGeometry());
-                            m_notifiedWindows.remove(windowId); // Allow re-notification
-                            notifyWindowAdded(win);
+                            if (!win->isMinimized()) {
+                                m_notifiedWindows.remove(windowId); // Allow re-notification
+                                notifyWindowAdded(win);
+                            }
                         }
                     }
                 }
@@ -3121,6 +3123,8 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
         // Restore pre-autotile geometries for windows on removed screens.
         // This covers windows that weren't snapped to zones before autotile
         // (the daemon's resnapCurrentAssignments handles zone-snapped windows).
+        // Skip windows that are currently floating in autotile — they were manually
+        // repositioned by the user and should keep their current geometry.
         struct RestoreEntry {
             QPointer<KWin::EffectWindow> window;
             QRect geometry;
@@ -3138,6 +3142,13 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
                 }
                 const QString windowId = getWindowId(w);
 
+                // Skip floating windows — they were manually repositioned by the user
+                // and should retain their current geometry when switching modes.
+                if (m_navigationHandler->isWindowFloating(windowId)) {
+                    qCDebug(lcEffect) << "Skipping pre-autotile restore for floating window:" << windowId;
+                    continue;
+                }
+
                 // Unmaximize monocle-maximized windows before restoring geometry
                 unmaximizeMonocleWindow(windowId);
 
@@ -3154,6 +3165,23 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
                     const int r = qRound(savedGeo.x() + savedGeo.width());
                     const int b = qRound(savedGeo.y() + savedGeo.height());
                     toRestore.append({QPointer<KWin::EffectWindow>(w), QRect(l, t, std::max(0, r - l), std::max(0, b - t))});
+                }
+            }
+            // Clear daemon-side pre-autotile geometries for windows on this screen.
+            // Without this, the next autotile enable would fetch stale daemon data
+            // and the hasSavedGeometryForWindow guard would prevent saving fresh
+            // positions, causing windows to restore to wrong locations.
+            if (m_daemonServiceRegistered) {
+                for (KWin::EffectWindow* w : windows) {
+                    if (!w || !shouldHandleWindow(w) || getWindowScreenName(w) != screenName) {
+                        continue;
+                    }
+                    const QString windowId = getWindowId(w);
+                    QDBusMessage clearMsg = QDBusMessage::createMethodCall(
+                        DBus::ServiceName, DBus::ObjectPath,
+                        DBus::Interface::WindowTracking, QStringLiteral("clearPreAutotileGeometry"));
+                    clearMsg << windowId;
+                    QDBusConnection::sessionBus().asyncCall(clearMsg);
                 }
             }
             m_preAutotileGeometries.remove(screenName);
@@ -3229,7 +3257,7 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
         }
 
         for (KWin::EffectWindow* w : windows) {
-            if (!w || !shouldHandleWindow(w) || w->isMinimized()) {
+            if (!w || !shouldHandleWindow(w)) {
                 continue;
             }
             const QString screenName = getWindowScreenName(w);
@@ -3241,12 +3269,18 @@ void PlasmaZonesEffect::slotAutotileScreensChanged(const QStringList& screenName
             // slotAutotileWindowsTileRequested saves the correct pre-tile
             // geometry BEFORE applying the tiled geometry, and that signal
             // arrives before autotileScreensChanged on the D-Bus wire.
+            // Include minimized windows: their frameGeometry is still valid
+            // and must be preserved so disabling autotile restores them correctly.
             saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
 
             // Re-notify windows on added screens (they may have been skipped
-            // because m_autotileScreens was empty at startup)
-            m_notifiedWindows.remove(windowId);
-            notifyWindowAdded(w);
+            // because m_autotileScreens was empty at startup).
+            // Skip minimized windows for notification — the autotile engine
+            // handles them when they are unminimized.
+            if (!w->isMinimized()) {
+                m_notifiedWindows.remove(windowId);
+                notifyWindowAdded(w);
+            }
         }
         qCInfo(lcEffect) << "Saved pre-autotile geometries for screens:" << added;
     }

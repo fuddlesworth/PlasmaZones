@@ -765,12 +765,12 @@ void Daemon::start()
             // returning to manual mode. Zone assignments are preserved so
             // switching back to manual restores the snapped state.
 
-            // Restore geometry: applyGeometryForFloat uses validatedPreSnapOrAutotileGeometry
-            // which prefers pre-snap (original free geometry) over pre-autotile (zone position).
-            // On first float: restores to pre-snap, clears it so subsequent floats use pre-autotile.
-            // On subsequent floats: pre-snap exhausted, falls through to pre-autotile (which the
-            // effect updates to the last floating position on each unfloat).
-            // The effect does NOT apply geometry on float — the daemon is the single source.
+            // Restore geometry: applyGeometryForFloat prefers pre-autotile (the window's
+            // original position before autotile tiled it) over pre-snap (manual zone snap).
+            // Pre-autotile persists across float/unfloat cycles (the hasSavedGeometryForWindow
+            // guard in the effect prevents overwriting), so every float restores to the same
+            // original position. The effect does NOT apply geometry on float — the daemon is
+            // the single source.
             if (floating && m_windowTrackingAdaptor) {
                 m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
             }

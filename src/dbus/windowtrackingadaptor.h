@@ -161,6 +161,13 @@ public Q_SLOTS:
                                    int x, int y, int width, int height);
 
     /**
+     * Clear stored pre-autotile geometry for a window.
+     * Called when autotile is disabled on a screen, so the next enable saves fresh data.
+     * @param windowId Window ID
+     */
+    void clearPreAutotileGeometry(const QString& windowId);
+
+    /**
      * Get all pre-autotile geometries as JSON (for effect pre-population on restart)
      * @return JSON object: {"stableId": {"x":N, "y":N, "width":N, "height":N}, ...}
      */

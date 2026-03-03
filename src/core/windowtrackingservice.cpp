@@ -284,6 +284,11 @@ std::optional<QRect> WindowTrackingService::validatedPreSnapOrAutotileGeometry(c
     if (geo) {
         return geo;
     }
+    return validatedPreAutotileGeometry(windowId);
+}
+
+std::optional<QRect> WindowTrackingService::validatedPreAutotileGeometry(const QString& windowId) const
+{
     if (windowId.isEmpty()) {
         return std::nullopt;
     }

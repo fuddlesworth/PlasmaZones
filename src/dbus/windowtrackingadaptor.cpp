@@ -463,6 +463,15 @@ void WindowTrackingAdaptor::recordPreAutotileGeometry(const QString& windowId, c
     qCDebug(lcDbusWindow) << "Recorded pre-autotile geometry for" << windowId << geo;
 }
 
+void WindowTrackingAdaptor::clearPreAutotileGeometry(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_service->clearPreAutotileGeometry(windowId);
+    qCDebug(lcDbusWindow) << "Cleared pre-autotile geometry for" << windowId;
+}
+
 QString WindowTrackingAdaptor::getPreAutotileGeometriesJson()
 {
     return serializeGeometryMap(m_service->preAutotileGeometries());
@@ -476,7 +485,9 @@ bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId,
         return false;
     }
 
-    // Delegate to service (checks pre-snap first, then pre-autotile for autotile float restore)
+    // Delegate to service (checks pre-snap first, then pre-autotile).
+    // Used by manual float (toggleFloatForWindow) and restoreWindowSize — NOT autotile float
+    // (which uses applyGeometryForFloat with the opposite priority).
     auto geo = m_service->validatedPreSnapOrAutotileGeometry(windowId);
     if (!geo) {
         return false;
@@ -1014,7 +1025,8 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
         Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("unfloated"),
                                 QString(), QString(), restoreScreen);
     } else {
-        // Float: restore to pre-snap geometry
+        // Float (manual path): restore to pre-snap geometry (prefers pre-snap over
+        // pre-autotile — opposite of applyGeometryForFloat which is the autotile path).
         int x, y, w, h;
         if (!getValidatedPreSnapGeometry(windowId, x, y, w, h) || w <= 0 || h <= 0) {
             // Snapped but no pre-snap geometry — still mark as floating, no geometry restore
@@ -1039,20 +1051,32 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenName)
 {
-    int x, y, w, h;
-    if (!getValidatedPreSnapGeometry(windowId, x, y, w, h) || w <= 0 || h <= 0) {
-        return false;
+    // This method is called exclusively from the autotile engine's float path.
+    // Prefer pre-autotile geometry (the window's position before autotile first
+    // tiled it) over pre-snap geometry (from manual zone snapping). Pre-snap may
+    // contain stale data from a previous manual snap session or from a misrouted
+    // float toggle, and would incorrectly take priority in the combined lookup.
+    auto autotileGeo = m_service->validatedPreAutotileGeometry(windowId);
+    if (autotileGeo) {
+        QRect geo = *autotileGeo;
+        Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
+        qCDebug(lcDbusWindow) << "Applied pre-autotile geometry for float:" << windowId << geo;
+        return true;
     }
-    m_service->clearPreSnapGeometry(windowId);
-    // NOTE: Do NOT clear pre-autotile geometry here. It represents the window's
-    // original geometry before autotile first took over and must persist across
-    // float/unfloat cycles. The effect-side hasSavedGeometryForWindow guard
-    // prevents re-recording on the daemon after unfloat+retile, so clearing here
-    // would leave the daemon with no pre-autotile geometry on the next float.
-    QRect geo(x, y, w, h);
-    Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
-    qCDebug(lcDbusWindow) << "Applied geometry for float:" << windowId << geo;
-    return true;
+
+    // Fallback to pre-snap geometry (covers windows that were snapped to a zone
+    // in manual mode before autotile was activated — their original free geometry
+    // is stored as pre-snap, not pre-autotile).
+    auto snapGeo = m_service->validatedPreSnapGeometry(windowId);
+    if (snapGeo) {
+        QRect geo = *snapGeo;
+        Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
+        qCDebug(lcDbusWindow) << "Applied pre-snap geometry for float:" << windowId << geo;
+        return true;
+    }
+
+    qCDebug(lcDbusWindow) << "No geometry found for float:" << windowId;
+    return false;
 }
 
 void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)

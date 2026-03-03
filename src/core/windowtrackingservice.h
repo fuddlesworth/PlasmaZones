@@ -169,6 +169,13 @@ public:
      */
     std::optional<QRect> validatedPreSnapOrAutotileGeometry(const QString& windowId) const;
 
+    /**
+     * @brief Get validated pre-autotile geometry only (for autotile float restore)
+     * Unlike validatedPreSnapOrAutotileGeometry, skips pre-snap to avoid using
+     * stale manual-snap data when floating from autotile mode.
+     */
+    std::optional<QRect> validatedPreAutotileGeometry(const QString& windowId) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
     // ═══════════════════════════════════════════════════════════════════════════
