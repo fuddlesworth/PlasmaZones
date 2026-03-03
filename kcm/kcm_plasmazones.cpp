@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "kcm_plasmazones.h"
+#include "assignmentmanager.h"
+#include "daemoncontroller.h"
+#include "layoutmanager.h"
 #include <algorithm>
 #include <QDBusArgument>
 #include <QDBusConnection>
@@ -56,43 +59,41 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
     : KQuickConfigModule(parent, data)
 {
     m_settings = new Settings(this);
-    loadLayoutsSync();
+
+    // Layout management (CRUD, async loading, filtering, pending states)
+    m_layoutManager = std::make_unique<LayoutManager>(this, m_settings, this);
+    connect(m_layoutManager.get(), &LayoutManager::layoutsChanged, this, &KCMPlasmaZones::layoutsChanged);
+    connect(m_layoutManager.get(), &LayoutManager::layoutToSelectChanged, this, &KCMPlasmaZones::layoutToSelectChanged);
+    connect(m_layoutManager.get(), &LayoutManager::needsSave, this, [this]() { setNeedsSave(true); });
+
+    // Assignment management (screen/desktop/activity, quick layout slots, app rules)
+    m_assignmentManager = std::make_unique<AssignmentManager>(this, m_settings, this);
+    connect(m_assignmentManager.get(), &AssignmentManager::screenAssignmentsChanged, this, &KCMPlasmaZones::screenAssignmentsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::tilingScreenAssignmentsChanged, this, &KCMPlasmaZones::tilingScreenAssignmentsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::tilingActivityAssignmentsChanged, this, &KCMPlasmaZones::tilingActivityAssignmentsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::tilingDesktopAssignmentsChanged, this, &KCMPlasmaZones::tilingDesktopAssignmentsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::assignmentViewModeChanged, this, &KCMPlasmaZones::assignmentViewModeChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::quickLayoutSlotsChanged, this, &KCMPlasmaZones::quickLayoutSlotsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::tilingQuickLayoutSlotsChanged, this, &KCMPlasmaZones::tilingQuickLayoutSlotsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::activityAssignmentsChanged, this, &KCMPlasmaZones::activityAssignmentsChanged);
+    connect(m_assignmentManager.get(), &AssignmentManager::appRulesRefreshed, this, &KCMPlasmaZones::appRulesRefreshed);
+    connect(m_assignmentManager.get(), &AssignmentManager::needsSave, this, [this]() { setNeedsSave(true); });
+    connect(m_assignmentManager.get(), &AssignmentManager::refreshScreensRequested, this, &KCMPlasmaZones::refreshScreens);
+
+    m_layoutManager->loadSync();
     refreshScreens();
 
-    // Set up daemon status polling (fallback for edge cases the watcher might miss)
-    m_daemonCheckTimer = new QTimer(this);
-    m_daemonCheckTimer->setInterval(KCMConstants::DaemonStatusPollIntervalMs);
-    connect(m_daemonCheckTimer, &QTimer::timeout, this, &KCMPlasmaZones::checkDaemonStatus);
-    m_daemonCheckTimer->start();
-
-    // Set up D-Bus service watcher for immediate daemon start/stop notification
-    m_daemonWatcher = new QDBusServiceWatcher(
-        QString(DBus::ServiceName),
-        QDBusConnection::sessionBus(),
-        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration,
-        this);
-
-    connect(m_daemonWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
-        if (!m_lastDaemonState) {
-            m_lastDaemonState = true;
-            Q_EMIT daemonRunningChanged();
-            // Refresh data from the newly-started daemon (debounced — daemonReady signal may also fire)
+    // Daemon lifecycle management (status polling, D-Bus watcher, systemd control)
+    m_daemonController = std::make_unique<DaemonController>(this, this);
+    connect(m_daemonController.get(), &DaemonController::runningChanged, this, [this]() {
+        Q_EMIT daemonRunningChanged();
+        if (m_daemonController->isRunning()) {
             scheduleLoadLayouts();
             refreshScreens();
         }
     });
-
-    connect(m_daemonWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
-        if (m_lastDaemonState) {
-            m_lastDaemonState = false;
-            Q_EMIT daemonRunningChanged();
-        }
-    });
-
-    // Load daemon enabled state from systemd (async)
-    m_lastDaemonState = isDaemonRunning();
-    m_daemonEnabled = m_lastDaemonState; // Assume enabled if running, will be corrected async
-    refreshDaemonEnabledState();
+    connect(m_daemonController.get(), &DaemonController::enabledChanged,
+            this, &KCMPlasmaZones::daemonEnabledChanged);
 
     // Set up update checker
     m_updateChecker = new UpdateChecker(this);
@@ -111,12 +112,6 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
 
     // Debounce timer for coalescing rapid D-Bus layout signals into a single loadLayouts() call.
     // Without this, editing a layout (name, zones, etc.) can trigger multiple D-Bus signals
-    // (layoutChanged, layoutListChanged) that each cause a full D-Bus round trip.
-    m_loadLayoutsTimer = new QTimer(this);
-    m_loadLayoutsTimer->setSingleShot(true);
-    m_loadLayoutsTimer->setInterval(50); // 50ms coalescing window
-    connect(m_loadLayoutsTimer, &QTimer::timeout, this, &KCMPlasmaZones::loadLayouts);
-
     // Listen for layout changes from the daemon — all routed through debounce timer
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
@@ -140,16 +135,17 @@ KCMPlasmaZones::KCMPlasmaZones(QObject* parent, const KPluginMetaData& data)
                                           QString(DBus::Interface::Screen), QStringLiteral("screenRemoved"), this,
                                           SLOT(refreshScreens()));
 
-    // Listen for screen layout assignment changes
+    // Listen for screen layout assignment changes (routed to AssignmentManager)
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("screenLayoutChanged"), this, SLOT(onScreenLayoutChanged(QString, QString)));
+        QStringLiteral("screenLayoutChanged"), m_assignmentManager.get(),
+        SLOT(onScreenLayoutChanged(QString, QString)));
 
-
-    // Listen for quick layout slot changes (e.g., when slots are modified externally)
+    // Listen for quick layout slot changes (routed to AssignmentManager)
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
-        QStringLiteral("quickLayoutSlotsChanged"), this, SLOT(onQuickLayoutSlotsChanged()));
+        QStringLiteral("quickLayoutSlotsChanged"), m_assignmentManager.get(),
+        SLOT(onQuickLayoutSlotsChanged()));
 
     // Listen for settings changes from daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
@@ -581,13 +577,13 @@ QString KCMPlasmaZones::defaultEditorFillShortcut() const
 // Layouts getter
 QVariantList KCMPlasmaZones::layouts() const
 {
-    return m_layouts;
+    return m_layoutManager->layouts();
 }
 
 // Layout to select getter
 QString KCMPlasmaZones::layoutToSelect() const
 {
-    return m_layoutToSelect;
+    return m_layoutManager->layoutToSelect();
 }
 
 // Screens and assignments getters
@@ -595,34 +591,10 @@ QVariantList KCMPlasmaZones::screens() const
 {
     return m_screens;
 }
-QVariantMap KCMPlasmaZones::screenAssignments() const
-{
-    return m_screenAssignments;
-}
-
-int KCMPlasmaZones::assignmentViewMode() const
-{
-    return m_assignmentViewMode;
-}
-
-void KCMPlasmaZones::setAssignmentViewMode(int mode)
-{
-    int clamped = qBound(0, mode, 1);
-    if (m_assignmentViewMode != clamped) {
-        m_assignmentViewMode = clamped;
-        // Persist to KConfig so it survives KCM restart (UI preference — saves immediately)
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        KConfigGroup general = config->group(QStringLiteral("General"));
-        general.writeEntry(QStringLiteral("AssignmentViewMode"), m_assignmentViewMode);
-        config->sync();
-        Q_EMIT assignmentViewModeChanged();
-    }
-}
-
-QVariantMap KCMPlasmaZones::tilingScreenAssignments() const
-{
-    return m_tilingScreenAssignments;
-}
+QVariantMap KCMPlasmaZones::screenAssignments() const { return m_assignmentManager->screenAssignments(); }
+int KCMPlasmaZones::assignmentViewMode() const { return m_assignmentManager->assignmentViewMode(); }
+void KCMPlasmaZones::setAssignmentViewMode(int mode) { m_assignmentManager->setAssignmentViewMode(mode); }
+QVariantMap KCMPlasmaZones::tilingScreenAssignments() const { return m_assignmentManager->tilingScreenAssignments(); }
 
 // Virtual desktop getters
 int KCMPlasmaZones::virtualDesktopCount() const
@@ -1402,7 +1374,7 @@ void KCMPlasmaZones::setAutotileEnabled(bool enabled)
         // Re-filter cached layouts to show/hide autotile entries without D-Bus re-fetch.
         // This avoids a synchronous D-Bus round-trip that blocks the UI thread and
         // causes scroll position resets in the Assignments tab.
-        applyLayoutFilter();
+        m_layoutManager->applyLayoutFilter();
     }
 }
 
@@ -1763,338 +1735,17 @@ void KCMPlasmaZones::save()
         return;
     }
     m_saveInProgress = true;
+    m_layoutManager->setSaveInProgress(true);
 
     m_settings->save();
 
-    // Screen assignments and quick layout slots are owned by the daemon.
-    // We only send changes via D-Bus; the daemon persists to assignments.json.
-
     QStringList failedOperations;
-    const QString layoutInterface = QString(DBus::Interface::LayoutManager);
 
-    // Apply screen assignments to daemon via D-Bus (batch - saves only once on daemon)
-    // Convert m_screenAssignments to QVariantMap for D-Bus
-    QVariantMap screenAssignments;
-    for (auto it = m_screenAssignments.begin(); it != m_screenAssignments.end(); ++it) {
-        screenAssignments[it.key()] = it.value().toString();
-    }
-    // Auto-populate tiling assignments when autotiling is enabled but no
-    // assignments exist. This happens when the user enables autotiling and
-    // selects an algorithm in AutotilingTab without visiting MonitorAssignmentsCard.
-    bool screenAssignmentsMutated = false;
-    if (m_settings->autotileEnabled() && m_tilingScreenAssignments.isEmpty()) {
-        if (m_screens.isEmpty()) {
-            qCWarning(lcKcm) << "Auto-populate: no screens available, cannot create tiling assignments";
-        } else {
-            QString algo = m_settings->autotileAlgorithm();
-            if (algo.isEmpty()) {
-                algo = AlgorithmRegistry::defaultAlgorithmId();
-            }
-            const QString autotileId = LayoutId::makeAutotileId(algo);
-            for (const QVariant& screenVar : std::as_const(m_screens)) {
-                const QVariantMap screenInfo = screenVar.toMap();
-                const QString name = screenInfo.value(QStringLiteral("name")).toString();
-                if (!name.isEmpty()) {
-                    m_tilingScreenAssignments[name] = autotileId;
-                    screenAssignmentsMutated = true;
-                }
-            }
-            if (!screenAssignmentsMutated) {
-                qCWarning(lcKcm) << "Auto-populate: all screen names were empty, no assignments created";
-            }
-        }
-    }
+    // All assignment-related saves (screen, desktop, activity, quick slots, KConfig, app rules)
+    m_assignmentManager->save(failedOperations);
 
-    // Sync autotile assignment IDs with the current effective algorithm.
-    // The user can change the algorithm via the AutotilingTab combo without
-    // touching MonitorAssignmentsCard, leaving the encoded algorithm in the
-    // assignment ID stale (e.g. "autotile:master-stack" when BSP is selected).
-    screenAssignmentsMutated |= syncAutotileAssignmentIds(m_tilingScreenAssignments, /*isScreenAssignment=*/true);
-
-    // Only emit when auto-populate or sync actually changed something
-    if (screenAssignmentsMutated) {
-        Q_EMIT tilingScreenAssignmentsChanged();
-    }
-
-    // Merge tiling screen assignments — autotile per-screen layouts need to reach the
-    // daemon just like snapping assignments. These override any snapping assignment for
-    // the same screen (a screen is either snapping with a manual layout or tiling with
-    // an autotile algorithm; autotile IDs take precedence).
-    for (auto it = m_tilingScreenAssignments.constBegin(); it != m_tilingScreenAssignments.constEnd(); ++it) {
-        QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty()) {
-            screenAssignments[it.key()] = layoutId;
-        }
-    }
-    QDBusMessage screenReply = callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
-    if (screenReply.type() == QDBusMessage::ErrorMessage) {
-        failedOperations.append(QStringLiteral("Screen assignments"));
-    }
-
-    // Apply quick layout slots to daemon via D-Bus (batch - saves only once on daemon)
-    QVariantMap quickSlots;
-    for (int slot = 1; slot <= 9; ++slot) {
-        quickSlots[QString::number(slot)] = m_quickLayoutSlots.value(slot, QString());
-    }
-    QDBusMessage quickReply = callDaemon(layoutInterface, QStringLiteral("setAllQuickLayoutSlots"), {quickSlots});
-    if (quickReply.type() == QDBusMessage::ErrorMessage) {
-        failedOperations.append(QStringLiteral("Quick layout slots"));
-    }
-
-    // Shadow-save all per-screen assignments to KConfig in a single config open/sync.
-    // Uses EDID-based screen IDs in group names to persist across connector name changes.
-    // Tiling screen assignments are also pushed via D-Bus above (merged into
-    // setAllScreenAssignments); these KConfig groups serve as a persistent shadow copy
-    // so the KCM can restore the dual-mode (snapping/tiling) state on next load.
-    {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        const QStringList allGroups = config->groupList();
-
-        // Helper: resolve connector name to EDID-based screen ID, with warning on fallback.
-        // When a screen is disconnected, screenIdForName returns the connector name verbatim.
-        auto safeScreenId = [](const QString& connectorName) -> QString {
-            QString screenId = Utils::screenIdForName(connectorName);
-            if (screenId == connectorName && !connectorName.contains(QLatin1Char(':'))) {
-                qCWarning(lcKcm) << "Screen" << connectorName
-                                 << "not found - saving with connector name (may not survive port changes)";
-            }
-            return screenId;
-        };
-
-        // Delete old per-screen groups (all types in one pass)
-        for (const QString& groupName : allGroups) {
-            if (groupName.startsWith(QLatin1String("SnappingScreen:")) ||
-                groupName.startsWith(QLatin1String("TilingScreen:")) ||
-                groupName.startsWith(QLatin1String("TilingActivity:")) ||
-                groupName.startsWith(QLatin1String("TilingDesktop:"))) {
-                config->deleteGroup(groupName);
-            }
-        }
-
-        // Clean up legacy flat-key groups if present
-        for (const auto& legacyName : {QStringLiteral("SnappingScreenAssignments"),
-                                        QStringLiteral("TilingScreenAssignments")}) {
-            KConfigGroup legacy = config->group(legacyName);
-            if (legacy.exists()) {
-                legacy.deleteGroup();
-            }
-        }
-
-        // Write snapping per-screen groups
-        for (auto it = m_screenAssignments.constBegin(); it != m_screenAssignments.constEnd(); ++it) {
-            QString screenId = safeScreenId(it.key());
-            KConfigGroup screenGroup = config->group(QStringLiteral("SnappingScreen:") + screenId);
-            screenGroup.writeEntry(QStringLiteral("Assignment"), it.value().toString());
-        }
-
-        // Write tiling per-screen groups
-        for (auto it = m_tilingScreenAssignments.constBegin(); it != m_tilingScreenAssignments.constEnd(); ++it) {
-            QString screenId = safeScreenId(it.key());
-            KConfigGroup screenGroup = config->group(QStringLiteral("TilingScreen:") + screenId);
-            screenGroup.writeEntry(QStringLiteral("Assignment"), it.value().toString());
-        }
-
-        // Write tiling activity assignments ([TilingActivity:edidId|activityId])
-        for (auto it = m_tilingActivityAssignments.constBegin(); it != m_tilingActivityAssignments.constEnd(); ++it) {
-            int sepIdx = it.key().lastIndexOf(QLatin1Char('|'));
-            if (sepIdx <= 0) continue;
-            QString connectorName = it.key().left(sepIdx);
-            QString activityId = it.key().mid(sepIdx + 1);
-            QString screenId = safeScreenId(connectorName);
-            KConfigGroup actGroup = config->group(QStringLiteral("TilingActivity:%1|%2").arg(screenId, activityId));
-            actGroup.writeEntry(QStringLiteral("Assignment"), it.value());
-        }
-
-        // Write tiling per-desktop assignments ([TilingDesktop:edidId|desktopNumber])
-        for (auto it = m_tilingDesktopAssignments.constBegin(); it != m_tilingDesktopAssignments.constEnd(); ++it) {
-            int sepIdx = it.key().lastIndexOf(QLatin1Char('|'));
-            if (sepIdx <= 0) continue;
-            QString connectorName = it.key().left(sepIdx);
-            QString desktopNum = it.key().mid(sepIdx + 1);
-            QString screenId = safeScreenId(connectorName);
-            KConfigGroup deskGroup = config->group(QStringLiteral("TilingDesktop:%1|%2").arg(screenId, desktopNum));
-            deskGroup.writeEntry(QStringLiteral("Assignment"), it.value());
-        }
-
-        // Tiling quick layout slots (simple integer keys, no screen ID issues)
-        KConfigGroup tilingSlots = config->group(QStringLiteral("TilingQuickLayoutSlots"));
-        tilingSlots.deleteGroup();
-        for (auto it = m_tilingQuickLayoutSlots.constBegin(); it != m_tilingQuickLayoutSlots.constEnd(); ++it) {
-            tilingSlots.writeEntry(QString::number(it.key()), it.value());
-        }
-
-        config->sync();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Per-Desktop Assignments (batch)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Always sync desktop tiling assignment IDs unconditionally (H4 fix) —
-    // the algorithm can change without the desktop dirty flag being set.
-    syncAutotileAssignmentIds(m_tilingDesktopAssignments, /*isScreenAssignment=*/false);
-
-    // Query current state, merge with pending changes, send as batch
-    if (!m_pendingDesktopAssignments.isEmpty() || !m_clearedDesktopAssignments.isEmpty()
-        || m_tilingDesktopAssignmentsDirty) {
-        QVariantMap desktopAssignments;
-
-        // Get current state from daemon
-        QDBusMessage currentReply = callDaemon(layoutInterface, QStringLiteral("getAllDesktopAssignments"));
-        if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
-            desktopAssignments = qdbus_cast<QVariantMap>(currentReply.arguments().first());
-        }
-
-        // Apply cleared assignments (remove from map)
-        for (const QString& key : std::as_const(m_clearedDesktopAssignments)) {
-            desktopAssignments.remove(key);
-        }
-
-        // Apply pending assignments (add/update in map)
-        for (auto it = m_pendingDesktopAssignments.begin(); it != m_pendingDesktopAssignments.end(); ++it) {
-            desktopAssignments[it.key()] = it.value();
-        }
-
-        // Merge tiling per-desktop assignments (autotile layouts per screen per desktop).
-        // IMPORTANT: This loop MUST run after the snapping merge above so that autotile
-        // IDs take precedence over any snapping assignment for the same key.
-        for (auto it = m_tilingDesktopAssignments.constBegin(); it != m_tilingDesktopAssignments.constEnd(); ++it) {
-            if (!it.value().isEmpty()) {
-                desktopAssignments[it.key()] = it.value();
-            }
-        }
-
-        // Send full state as batch
-        QDBusMessage desktopReply = callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
-        if (desktopReply.type() == QDBusMessage::ErrorMessage) {
-            failedOperations.append(QStringLiteral("Per-desktop assignments"));
-        }
-
-        m_clearedDesktopAssignments.clear();
-        m_pendingDesktopAssignments.clear();
-        m_tilingDesktopAssignmentsDirty = false;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Per-Activity Assignments (batch)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Always sync activity tiling assignment IDs unconditionally (H4 fix)
-    syncAutotileAssignmentIds(m_tilingActivityAssignments, /*isScreenAssignment=*/false);
-
-    // Query current state, merge with pending changes, send as batch
-    if (!m_pendingActivityAssignments.isEmpty() || !m_clearedActivityAssignments.isEmpty()
-        || m_tilingActivityAssignmentsDirty) {
-        QVariantMap activityAssignments;
-
-        // Get current state from daemon
-        QDBusMessage currentReply = callDaemon(layoutInterface, QStringLiteral("getAllActivityAssignments"));
-        if (currentReply.type() == QDBusMessage::ReplyMessage && !currentReply.arguments().isEmpty()) {
-            activityAssignments = qdbus_cast<QVariantMap>(currentReply.arguments().first());
-        }
-
-        // Apply cleared assignments (remove from map)
-        for (const QString& key : std::as_const(m_clearedActivityAssignments)) {
-            activityAssignments.remove(key);
-        }
-
-        // Apply pending assignments (add/update in map)
-        for (auto it = m_pendingActivityAssignments.begin(); it != m_pendingActivityAssignments.end(); ++it) {
-            activityAssignments[it.key()] = it.value();
-        }
-
-        // Merge tiling per-activity assignments (autotile layouts per screen per activity).
-        // IMPORTANT: This loop MUST run after the snapping merge above so that autotile
-        // IDs take precedence over any snapping assignment for the same key.
-        for (auto it = m_tilingActivityAssignments.constBegin(); it != m_tilingActivityAssignments.constEnd(); ++it) {
-            if (!it.value().isEmpty()) {
-                activityAssignments[it.key()] = it.value();
-            }
-        }
-
-        // Send full state as batch
-        QDBusMessage activityReply = callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
-        if (activityReply.type() == QDBusMessage::ErrorMessage) {
-            failedOperations.append(QStringLiteral("Per-activity assignments"));
-        }
-
-        m_clearedActivityAssignments.clear();
-        m_pendingActivityAssignments.clear();
-        m_tilingActivityAssignmentsDirty = false;
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layout visibility (hiddenFromSelector)
-    // ═══════════════════════════════════════════════════════════════════════════
-    if (!m_pendingHiddenStates.isEmpty()) {
-        for (auto it = m_pendingHiddenStates.cbegin(); it != m_pendingHiddenStates.cend(); ++it) {
-            QDBusMessage hiddenReply = callDaemon(layoutInterface, QStringLiteral("setLayoutHidden"),
-                                                  {it.key(), it.value()});
-            if (hiddenReply.type() == QDBusMessage::ErrorMessage) {
-                failedOperations.append(QStringLiteral("Layout visibility (%1)").arg(it.key()));
-            }
-        }
-        m_pendingHiddenStates.clear();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Layout auto-assign (autoAssign)
-    // ═══════════════════════════════════════════════════════════════════════════
-    if (!m_pendingAutoAssignStates.isEmpty()) {
-        for (auto it = m_pendingAutoAssignStates.cbegin(); it != m_pendingAutoAssignStates.cend(); ++it) {
-            QDBusMessage autoAssignReply = callDaemon(layoutInterface, QStringLiteral("setLayoutAutoAssign"),
-                                                       {it.key(), it.value()});
-            if (autoAssignReply.type() == QDBusMessage::ErrorMessage) {
-                failedOperations.append(QStringLiteral("Layout auto-assign (%1)").arg(it.key()));
-            }
-        }
-        m_pendingAutoAssignStates.clear();
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // App-to-zone rules (per-layout)
-    // ═══════════════════════════════════════════════════════════════════════════
-    if (!m_pendingAppRules.isEmpty()) {
-        for (auto it = m_pendingAppRules.cbegin(); it != m_pendingAppRules.cend(); ++it) {
-            const QString& layoutId = it.key();
-            const QVariantList& rules = it.value();
-
-            // Get current layout JSON from daemon
-            QDBusMessage layoutReply = callDaemon(layoutInterface, QStringLiteral("getLayout"), {layoutId});
-            if (layoutReply.type() != QDBusMessage::ReplyMessage || layoutReply.arguments().isEmpty()) {
-                failedOperations.append(QStringLiteral("App rules (get %1)").arg(layoutId));
-                continue;
-            }
-
-            QString json = layoutReply.arguments().first().toString();
-            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-            if (doc.isNull() || !doc.isObject()) {
-                failedOperations.append(QStringLiteral("App rules (parse %1)").arg(layoutId));
-                continue;
-            }
-
-            // Build appRules JSON array from pending rules
-            QJsonArray rulesArray;
-            for (const auto& ruleVar : rules) {
-                QVariantMap ruleMap = ruleVar.toMap();
-                PlasmaZones::AppRule rule;
-                rule.pattern = ruleMap[QStringLiteral("pattern")].toString();
-                rule.zoneNumber = ruleMap[QStringLiteral("zoneNumber")].toInt();
-                rule.targetScreen = ruleMap[QStringLiteral("targetScreen")].toString();
-                rulesArray.append(rule.toJson());
-            }
-
-            // Patch the layout JSON and send back
-            QJsonObject obj = doc.object();
-            obj[JsonKeys::AppRules] = rulesArray;
-            QString updatedJson = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-            QDBusMessage updateReply = callDaemon(layoutInterface, QStringLiteral("updateLayout"), {updatedJson});
-            if (updateReply.type() == QDBusMessage::ErrorMessage) {
-                failedOperations.append(QStringLiteral("App rules (save %1)").arg(layoutId));
-            }
-        }
-        m_pendingAppRules.clear();
-    }
+    // Layout visibility + auto-assign
+    m_layoutManager->savePendingStates(failedOperations);
 
     if (!failedOperations.isEmpty()) {
         qCWarning(lcKcm) << "Save: D-Bus operations failed:" << failedOperations.join(QStringLiteral(", "))
@@ -2108,6 +1759,7 @@ void KCMPlasmaZones::save()
 
     setNeedsSave(false);
     m_saveInProgress = false;
+    m_layoutManager->setSaveInProgress(false);
 }
 
 QVariantList KCMPlasmaZones::convertTriggersForQml(const QVariantList& triggers)
@@ -2150,195 +1802,12 @@ void KCMPlasmaZones::load()
     Q_EMIT snapAssistTriggersChanged();
     Q_EMIT animationSequenceModeChanged();
     Q_EMIT animationStaggerIntervalChanged();
-    loadLayoutsSync();
+    m_layoutManager->loadSync();
     refreshScreens();
 
-    const QString layoutInterface = QString(DBus::Interface::LayoutManager);
-
-    // Load all per-screen assignments from KConfig in a single config open.
-    // Uses EDID-based screen IDs in group names and converts back to connector names.
-    m_screenAssignments.clear();
-    m_tilingScreenAssignments.clear();
-    m_tilingActivityAssignments.clear();
-    m_tilingDesktopAssignments.clear();
-    m_tilingQuickLayoutSlots.clear();
-    m_tilingDesktopAssignmentsDirty = false;
-    m_tilingActivityAssignmentsDirty = false;
-    {
-        auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-        const QStringList allGroups = config->groupList();
-
-        // Helper: resolve EDID-based screen ID or legacy connector name to current connector
-        auto resolveScreenId = [](const QString& screenId) -> QString {
-            if (Utils::isConnectorName(screenId)) {
-                return screenId; // Legacy: stored with connector name (pre-migration)
-            }
-            return Utils::screenNameForId(screenId);
-        };
-
-        // Helper: load assignments from per-screen groups with a given prefix
-        auto loadPerScreenAssignments = [&](const QLatin1String& prefix, QVariantMap& target) {
-            for (const QString& groupName : allGroups) {
-                if (groupName.startsWith(prefix)) {
-                    QString screenId = groupName.mid(prefix.size());
-                    if (screenId.isEmpty()) continue;
-                    KConfigGroup screenGroup = config->group(groupName);
-                    QString layoutId = screenGroup.readEntry(QStringLiteral("Assignment"), QString());
-                    if (!layoutId.isEmpty()) {
-                        QString connectorName = resolveScreenId(screenId);
-                        if (!connectorName.isEmpty()) {
-                            target[connectorName] = layoutId;
-                        }
-                    }
-                }
-            }
-        };
-
-        // Helper: load compound-key assignments (screenId|suffix) from per-screen groups
-        auto loadCompoundAssignments = [&](const QLatin1String& prefix, QMap<QString, QString>& target) {
-            for (const QString& groupName : allGroups) {
-                if (groupName.startsWith(prefix)) {
-                    QString compoundKey = groupName.mid(prefix.size());
-                    int sepIdx = compoundKey.lastIndexOf(QLatin1Char('|'));
-                    if (sepIdx <= 0) continue;
-                    QString screenId = compoundKey.left(sepIdx);
-                    QString suffix = compoundKey.mid(sepIdx + 1);
-                    if (screenId.isEmpty() || suffix.isEmpty()) continue;
-                    KConfigGroup group = config->group(groupName);
-                    QString layoutId = group.readEntry(QStringLiteral("Assignment"), QString());
-                    if (!layoutId.isEmpty()) {
-                        QString connectorName = resolveScreenId(screenId);
-                        if (!connectorName.isEmpty()) {
-                            target[QStringLiteral("%1|%2").arg(connectorName, suffix)] = layoutId;
-                        }
-                    }
-                }
-            }
-        };
-
-        // Snapping screen assignments
-        const QLatin1String snappingPrefix("SnappingScreen:");
-        bool foundSnappingGroups = false;
-        for (const QString& groupName : allGroups) {
-            if (groupName.startsWith(snappingPrefix)) {
-                foundSnappingGroups = true;
-                break;
-            }
-        }
-        if (foundSnappingGroups) {
-            loadPerScreenAssignments(snappingPrefix, m_screenAssignments);
-        } else {
-            // Try legacy flat-key group
-            KConfigGroup legacySnapping = config->group(QStringLiteral("SnappingScreenAssignments"));
-            if (legacySnapping.exists()) {
-                const QStringList keys = legacySnapping.keyList();
-                for (const QString& key : keys) {
-                    QString layoutId = legacySnapping.readEntry(key, QString());
-                    if (!layoutId.isEmpty()) {
-                        m_screenAssignments[key] = layoutId;
-                    }
-                }
-            } else {
-                // Fallback: load from daemon for first run (no shadow yet).
-                // Splits autotile IDs into m_tilingScreenAssignments and manual
-                // layout UUIDs into m_screenAssignments from the same D-Bus response.
-                QDBusMessage assignmentsReply = callDaemon(layoutInterface, QStringLiteral("getAllScreenAssignments"));
-                if (assignmentsReply.type() == QDBusMessage::ReplyMessage && !assignmentsReply.arguments().isEmpty()) {
-                    QString assignmentsJson = assignmentsReply.arguments().first().toString();
-                    QJsonDocument doc = QJsonDocument::fromJson(assignmentsJson.toUtf8());
-                    if (doc.isObject()) {
-                        QJsonObject root = doc.object();
-                        for (auto it = root.begin(); it != root.end(); ++it) {
-                            QString screenName = it.key();
-                            QJsonObject screenObj = it.value().toObject();
-                            if (screenObj.contains(QStringLiteral("default"))) {
-                                QString layoutId = screenObj.value(QStringLiteral("default")).toString();
-                                if (!layoutId.isEmpty()) {
-                                    if (layoutId.startsWith(QLatin1String("autotile:"))) {
-                                        m_tilingScreenAssignments[screenName] = layoutId;
-                                    } else {
-                                        m_screenAssignments[screenName] = layoutId;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Tiling screen assignments
-        const QLatin1String tilingPrefix("TilingScreen:");
-        loadPerScreenAssignments(tilingPrefix, m_tilingScreenAssignments);
-        if (m_tilingScreenAssignments.isEmpty()) {
-            KConfigGroup legacyTiling = config->group(QStringLiteral("TilingScreenAssignments"));
-            if (legacyTiling.exists()) {
-                const QStringList keys = legacyTiling.keyList();
-                for (const QString& key : keys) {
-                    QString layoutId = legacyTiling.readEntry(key, QString());
-                    if (!layoutId.isEmpty()) {
-                        m_tilingScreenAssignments[key] = layoutId;
-                    }
-                }
-            }
-            // No separate D-Bus fallback needed here: the snapping D-Bus fallback
-            // above already splits autotile IDs into m_tilingScreenAssignments when
-            // both KConfig groups are absent (first-run case).
-        }
-
-        // Tiling activity assignments
-        loadCompoundAssignments(QLatin1String("TilingActivity:"), m_tilingActivityAssignments);
-
-        // Tiling desktop assignments
-        loadCompoundAssignments(QLatin1String("TilingDesktop:"), m_tilingDesktopAssignments);
-
-        // Tiling quick layout slots
-        KConfigGroup tilingSlots = config->group(QStringLiteral("TilingQuickLayoutSlots"));
-        for (int slot = 1; slot <= 9; ++slot) {
-            QString layoutId = tilingSlots.readEntry(QString::number(slot), QString());
-            if (!layoutId.isEmpty()) {
-                m_tilingQuickLayoutSlots[slot] = layoutId;
-            }
-        }
-
-        // Assignment view mode
-        KConfigGroup general = config->group(QStringLiteral("General"));
-        m_assignmentViewMode = qBound(0, general.readEntry(QStringLiteral("AssignmentViewMode"), 0), 1);
-    }
-
-    // Load quick layout slots from daemon (single source of truth)
-    // No fallback to local config - daemon owns this data via assignments.json
-    m_quickLayoutSlots.clear();
-    QDBusMessage slotsReply = callDaemon(layoutInterface, QStringLiteral("getAllQuickLayoutSlots"));
-    if (slotsReply.type() == QDBusMessage::ReplyMessage && !slotsReply.arguments().isEmpty()) {
-        QVariantMap slotsMap = qdbus_cast<QVariantMap>(slotsReply.arguments().first());
-        for (auto it = slotsMap.begin(); it != slotsMap.end(); ++it) {
-            bool ok;
-            int slotNum = it.key().toInt(&ok);
-            if (ok && slotNum >= 1 && slotNum <= 9) {
-                QString layoutId = it.value().toString();
-                if (!layoutId.isEmpty()) {
-                    m_quickLayoutSlots[slotNum] = layoutId;
-                }
-            }
-        }
-    }
-    // If daemon not available, m_quickLayoutSlots stays empty (correct behavior)
-
-    // Clear pending per-desktop and per-activity assignments (discard unsaved changes)
-    m_pendingDesktopAssignments.clear();
-    m_clearedDesktopAssignments.clear();
-    m_pendingActivityAssignments.clear();
-    m_clearedActivityAssignments.clear();
-
-    // Clear pending layout visibility changes (discard unsaved changes)
-    m_pendingHiddenStates.clear();
-
-    // Clear pending auto-assign changes (discard unsaved changes)
-    m_pendingAutoAssignStates.clear();
-
-    // Clear pending app rules (discard unsaved changes)
-    m_pendingAppRules.clear();
+    // Load all assignments (screen, desktop, activity, quick slots, view mode)
+    m_assignmentManager->load();
+    m_layoutManager->clearPendingStates();
 
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT tilingScreenAssignmentsChanged();
@@ -2357,7 +1826,7 @@ void KCMPlasmaZones::defaults()
     // Set default layout: pick the layout with the lowest defaultOrder (Columns (2) has 0)
     int bestOrder = 999;
     QString bestId;
-    for (const QVariant& layoutVar : m_layouts) {
+    for (const QVariant& layoutVar : m_layoutManager->layouts()) {
         const QVariantMap layout = layoutVar.toMap();
         int order = layout.value(QStringLiteral("defaultOrder"), 999).toInt();
         if (order < bestOrder) {
@@ -2369,164 +1838,25 @@ void KCMPlasmaZones::defaults()
         m_settings->setDefaultLayoutId(bestId);
     }
 
-    // Clear screen assignments
-    m_screenAssignments.clear();
-
-    // Clear quick layout slots
-    m_quickLayoutSlots.clear();
-
-    // Clear tiling-mode assignments and view mode
-    m_tilingScreenAssignments.clear();
-    m_tilingActivityAssignments.clear();
-    m_tilingDesktopAssignments.clear();
-    m_tilingQuickLayoutSlots.clear();
-    m_tilingDesktopAssignmentsDirty = false;
-    m_tilingActivityAssignmentsDirty = false;
-    m_assignmentViewMode = 0;
-    // Note: quickLayoutSlotsChanged / tilingQuickLayoutSlotsChanged are emitted
-    // in the bulk "emit all" block below — no need to duplicate them here.
-    Q_EMIT tilingScreenAssignmentsChanged();
-    Q_EMIT tilingActivityAssignmentsChanged();
-    Q_EMIT tilingDesktopAssignmentsChanged();
-    Q_EMIT assignmentViewModeChanged();
-
-    // Clear pending per-desktop and per-activity assignments
-    m_pendingDesktopAssignments.clear();
-    m_clearedDesktopAssignments.clear();
-    m_pendingActivityAssignments.clear();
-    m_clearedActivityAssignments.clear();
-
-    // Reset all layouts to visible (clear hidden states)
-    m_pendingHiddenStates.clear();
-
-    // Reset all layouts to manual (clear auto-assign states)
-    m_pendingAutoAssignStates.clear();
+    // Reset all assignments (screen, desktop, activity, quick slots, view mode, pending state)
+    m_assignmentManager->resetToDefaults();
+    m_layoutManager->resetAllToDefaults();
 
     // Stage empty app rules for all layouts (clears any daemon-side rules on Apply)
-    m_pendingAppRules.clear();
-    for (int i = 0; i < m_layouts.size(); ++i) {
-        QVariantMap layout = m_layouts[i].toMap();
-        QString layoutId = layout[QStringLiteral("id")].toString();
+    for (const QVariant& v : m_layoutManager->layouts()) {
+        QString layoutId = v.toMap().value(QStringLiteral("id")).toString();
         if (!layoutId.isEmpty()) {
-            m_pendingAppRules[layoutId] = QVariantList();
+            m_assignmentManager->setAppRulesForLayout(layoutId, QVariantList());
         }
     }
     Q_EMIT appRulesRefreshed();
-    for (int i = 0; i < m_layouts.size(); ++i) {
-        QVariantMap layout = m_layouts[i].toMap();
-        bool changed = false;
-        if (layout[QStringLiteral("hiddenFromSelector")].toBool()) {
-            layout[QStringLiteral("hiddenFromSelector")] = false;
-            m_pendingHiddenStates[layout[QStringLiteral("id")].toString()] = false;
-            changed = true;
-        }
-        if (layout[QStringLiteral("autoAssign")].toBool()) {
-            layout[QStringLiteral("autoAssign")] = false;
-            m_pendingAutoAssignStates[layout[QStringLiteral("id")].toString()] = false;
-            changed = true;
-        }
-        if (changed) {
-            m_layouts[i] = layout;
-        }
-    }
-    Q_EMIT layoutsChanged();
 
     // Emit all property change signals so UI updates
     Q_EMIT screenAssignmentsChanged();
     Q_EMIT quickLayoutSlotsChanged();
     Q_EMIT tilingQuickLayoutSlotsChanged();
     Q_EMIT activityAssignmentsChanged();
-    Q_EMIT dragActivationTriggersChanged();
-    Q_EMIT alwaysActivateOnDragChanged();
-    Q_EMIT zoneSpanEnabledChanged();
-    Q_EMIT zoneSpanTriggersChanged();
-    Q_EMIT toggleActivationChanged();
-    Q_EMIT snappingEnabledChanged();
-    Q_EMIT showZonesOnAllMonitorsChanged();
-    Q_EMIT disabledMonitorsChanged();
-    Q_EMIT showZoneNumbersChanged();
-    Q_EMIT flashZonesOnSwitchChanged();
-    Q_EMIT showOsdOnLayoutSwitchChanged();
-    Q_EMIT showNavigationOsdChanged();
-    Q_EMIT osdStyleChanged();
-    Q_EMIT useSystemColorsChanged();
-    Q_EMIT highlightColorChanged();
-    Q_EMIT inactiveColorChanged();
-    Q_EMIT borderColorChanged();
-    Q_EMIT labelFontColorChanged();
-    Q_EMIT activeOpacityChanged();
-    Q_EMIT inactiveOpacityChanged();
-    Q_EMIT borderWidthChanged();
-    Q_EMIT borderRadiusChanged();
-    Q_EMIT enableBlurChanged();
-    Q_EMIT labelFontFamilyChanged();
-    Q_EMIT labelFontSizeScaleChanged();
-    Q_EMIT labelFontWeightChanged();
-    Q_EMIT labelFontItalicChanged();
-    Q_EMIT labelFontUnderlineChanged();
-    Q_EMIT labelFontStrikeoutChanged();
-    Q_EMIT enableShaderEffectsChanged();
-    Q_EMIT shaderFrameRateChanged();
-    Q_EMIT enableAudioVisualizerChanged();
-    Q_EMIT audioSpectrumBarCountChanged();
-    Q_EMIT zonePaddingChanged();
-    Q_EMIT outerGapChanged();
-    Q_EMIT usePerSideOuterGapChanged();
-    Q_EMIT outerGapTopChanged();
-    Q_EMIT outerGapBottomChanged();
-    Q_EMIT outerGapLeftChanged();
-    Q_EMIT outerGapRightChanged();
-    Q_EMIT adjacentThresholdChanged();
-    Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
-    Q_EMIT moveNewWindowsToLastZoneChanged();
-    Q_EMIT restoreOriginalSizeOnUnsnapChanged();
-    Q_EMIT stickyWindowHandlingChanged();
-    Q_EMIT restoreWindowsToZonesOnLoginChanged();
-    Q_EMIT snapAssistFeatureEnabledChanged();
-    Q_EMIT snapAssistEnabledChanged();
-    Q_EMIT snapAssistTriggersChanged();
-    Q_EMIT defaultLayoutIdChanged();
-    Q_EMIT excludedApplicationsChanged();
-    Q_EMIT excludedWindowClassesChanged();
-    Q_EMIT excludeTransientWindowsChanged();
-    Q_EMIT minimumWindowWidthChanged();
-    Q_EMIT minimumWindowHeightChanged();
-    Q_EMIT zoneSelectorEnabledChanged();
-    Q_EMIT zoneSelectorTriggerDistanceChanged();
-    Q_EMIT zoneSelectorPositionChanged();
-    Q_EMIT zoneSelectorLayoutModeChanged();
-    Q_EMIT zoneSelectorPreviewWidthChanged();
-    Q_EMIT zoneSelectorPreviewHeightChanged();
-    Q_EMIT zoneSelectorPreviewLockAspectChanged();
-    Q_EMIT zoneSelectorGridColumnsChanged();
-    Q_EMIT zoneSelectorSizeModeChanged();
-    Q_EMIT zoneSelectorMaxRowsChanged();
-
-    // Autotiling
-    Q_EMIT autotileEnabledChanged();
-    Q_EMIT autotileAlgorithmChanged();
-    Q_EMIT autotileSplitRatioChanged();
-    Q_EMIT autotileMasterCountChanged();
-    Q_EMIT autotileInnerGapChanged();
-    Q_EMIT autotileOuterGapChanged();
-    Q_EMIT autotileFocusNewWindowsChanged();
-    Q_EMIT autotileSmartGapsChanged();
-    Q_EMIT autotileMaxWindowsChanged();
-    Q_EMIT autotileInsertPositionChanged();
-    Q_EMIT animationsEnabledChanged();
-    Q_EMIT animationDurationChanged();
-    Q_EMIT animationEasingCurveChanged();
-    Q_EMIT animationMinDistanceChanged();
-    Q_EMIT animationSequenceModeChanged();
-    Q_EMIT animationStaggerIntervalChanged();
-    Q_EMIT autotileFocusFollowsMouseChanged();
-    Q_EMIT autotileRespectMinimumSizeChanged();
-    Q_EMIT autotileHideTitleBarsChanged();
-    Q_EMIT autotileUsePerSideOuterGapChanged();
-    Q_EMIT autotileOuterGapTopChanged();
-    Q_EMIT autotileOuterGapBottomChanged();
-    Q_EMIT autotileOuterGapLeftChanged();
-    Q_EMIT autotileOuterGapRightChanged();
+    emitAllSettingsPropertyChanged();
 
     // Reset editor shortcuts, assignment view mode, and legacy config groups in one config open
     {
@@ -2582,150 +1912,16 @@ void KCMPlasmaZones::defaults()
     setNeedsSave(true);
 }
 
-void KCMPlasmaZones::createNewLayout()
-{
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("createLayout"),
-                                    {QStringLiteral("New Layout"), QStringLiteral("custom")});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString newLayoutId = reply.arguments().first().toString();
-        if (!newLayoutId.isEmpty()) {
-            m_layoutToSelect = newLayoutId;
-            // Open the editor for the new blank layout
-            editLayout(newLayoutId);
-        }
-    }
-    // The daemon emits layoutListChanged after creation, which triggers scheduleLoadLayouts()
-}
-
-void KCMPlasmaZones::deleteLayout(const QString& layoutId)
-{
-    QDBusMessage reply =
-        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("deleteLayout"), {layoutId});
-    if (reply.type() == QDBusMessage::ErrorMessage) {
-        qCWarning(lcKcm) << "deleteLayout failed:" << reply.errorMessage();
-        return;
-    }
-    // The daemon emits layoutListChanged after deletion, which triggers scheduleLoadLayouts()
-}
-
-void KCMPlasmaZones::duplicateLayout(const QString& layoutId)
-{
-    QDBusMessage reply =
-        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("duplicateLayout"), {layoutId});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString newLayoutId = reply.arguments().first().toString();
-        if (!newLayoutId.isEmpty()) {
-            m_layoutToSelect = newLayoutId;
-            // Don't emit here - wait for loadLayouts() to complete first
-        }
-    }
-    // The daemon emits layoutListChanged after duplication, which triggers scheduleLoadLayouts()
-}
-
-void KCMPlasmaZones::importLayout(const QString& filePath)
-{
-    QDBusMessage reply =
-        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("importLayout"), {filePath});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QString newLayoutId = reply.arguments().first().toString();
-        if (!newLayoutId.isEmpty()) {
-            m_layoutToSelect = newLayoutId;
-            // Don't emit here - wait for loadLayouts() to complete first
-        }
-    }
-    // The daemon emits layoutListChanged after import, which triggers scheduleLoadLayouts()
-}
-
-void KCMPlasmaZones::exportLayout(const QString& layoutId, const QString& filePath)
-{
-    QDBusMessage msg =
-        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                       QString(DBus::Interface::LayoutManager), QStringLiteral("exportLayout"));
-    msg << layoutId << filePath;
-    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("exportLayout"));
-}
-
-void KCMPlasmaZones::editLayout(const QString& layoutId)
-{
-    QString screenName = currentScreenName();
-
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath),
-        QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForLayoutOnScreen"));
-    msg << layoutId << screenName;
-    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("editLayout"));
-}
-
-void KCMPlasmaZones::openEditor()
-{
-    QString screenName = currentScreenName();
-
-    QDBusMessage msg;
-    if (!screenName.isEmpty()) {
-        msg = QDBusMessage::createMethodCall(
-            QString(DBus::ServiceName), QString(DBus::ObjectPath),
-            QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForScreen"));
-        msg << screenName;
-    } else {
-        msg = QDBusMessage::createMethodCall(
-            QString(DBus::ServiceName), QString(DBus::ObjectPath),
-            QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
-    }
-    watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("openEditor"));
-}
-
-void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden)
-{
-    // Stage the change locally (applied on save)
-    m_pendingHiddenStates[layoutId] = hidden;
-
-    // Update local model so the UI reflects the change immediately
-    bool changed = false;
-    for (int i = 0; i < m_layouts.size(); ++i) {
-        QVariantMap layout = m_layouts[i].toMap();
-        if (layout[QStringLiteral("id")].toString() == layoutId) {
-            if (layout[QStringLiteral("hiddenFromSelector")].toBool() != hidden) {
-                layout[QStringLiteral("hiddenFromSelector")] = hidden;
-                m_layouts[i] = layout;
-                changed = true;
-            }
-            break;
-        }
-    }
-
-    if (changed) {
-        Q_EMIT layoutsChanged();
-        setNeedsSave(true);
-    }
-}
-
-void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled)
-{
-    // Stage the change locally (applied on save)
-    m_pendingAutoAssignStates[layoutId] = enabled;
-
-    // Update local model so the UI reflects the change immediately
-    bool changed = false;
-    for (int i = 0; i < m_layouts.size(); ++i) {
-        QVariantMap layout = m_layouts[i].toMap();
-        if (layout[QStringLiteral("id")].toString() == layoutId) {
-            if (layout[QStringLiteral("autoAssign")].toBool() != enabled) {
-                layout[QStringLiteral("autoAssign")] = enabled;
-                m_layouts[i] = layout;
-                changed = true;
-            }
-            break;
-        }
-    }
-
-    if (changed) {
-        Q_EMIT layoutsChanged();
-        setNeedsSave(true);
-    }
-}
+// Layout CRUD delegates (implementation in LayoutManager)
+void KCMPlasmaZones::createNewLayout() { m_layoutManager->createNewLayout(); }
+void KCMPlasmaZones::deleteLayout(const QString& layoutId) { m_layoutManager->deleteLayout(layoutId); }
+void KCMPlasmaZones::duplicateLayout(const QString& layoutId) { m_layoutManager->duplicateLayout(layoutId); }
+void KCMPlasmaZones::importLayout(const QString& filePath) { m_layoutManager->importLayout(filePath); }
+void KCMPlasmaZones::exportLayout(const QString& layoutId, const QString& filePath) { m_layoutManager->exportLayout(layoutId, filePath); }
+void KCMPlasmaZones::editLayout(const QString& layoutId) { m_layoutManager->editLayout(layoutId); }
+void KCMPlasmaZones::openEditor() { m_layoutManager->openEditor(); }
+void KCMPlasmaZones::setLayoutHidden(const QString& layoutId, bool hidden) { m_layoutManager->setLayoutHidden(layoutId, hidden); }
+void KCMPlasmaZones::setLayoutAutoAssign(const QString& layoutId, bool enabled) { m_layoutManager->setLayoutAutoAssign(layoutId, enabled); }
 
 void KCMPlasmaZones::addExcludedApp(const QString& app)
 {
@@ -2878,107 +2074,30 @@ void KCMPlasmaZones::resetEditorShortcuts()
     setNeedsSave(true);
 }
 
-// Daemon status methods
+// Daemon status delegates (implementation in DaemonController)
 bool KCMPlasmaZones::isDaemonRunning() const
 {
-    return QDBusConnection::sessionBus().interface()->isServiceRegistered(QString(DBus::ServiceName));
+    return m_daemonController->isRunning();
 }
 
 bool KCMPlasmaZones::isDaemonEnabled() const
 {
-    return m_daemonEnabled;
+    return m_daemonController->isEnabled();
 }
 
 void KCMPlasmaZones::setDaemonEnabled(bool enabled)
 {
-    if (m_daemonEnabled == enabled) {
-        return;
-    }
-    m_daemonEnabled = enabled;
-
-    // Update systemd service enabled state
-    setDaemonAutostart(enabled);
-
-    // Start or stop daemon immediately
-    if (enabled) {
-        startDaemon();
-    } else {
-        stopDaemon();
-    }
-
-    Q_EMIT daemonEnabledChanged();
-}
-
-void KCMPlasmaZones::runSystemctl(const QStringList& args, SystemctlCallback callback)
-{
-    auto* proc = new QProcess(this);
-    connect(proc, &QProcess::finished, this, [proc, callback, args](int exitCode, QProcess::ExitStatus status) {
-        bool success = (status == QProcess::NormalExit && exitCode == 0);
-        QString output = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
-        if (!success) {
-            QString errorOutput = QString::fromUtf8(proc->readAllStandardError()).trimmed();
-            qCWarning(lcKcm) << "systemctl" << args << "failed:" << errorOutput;
-        }
-        if (callback) {
-            callback(success, output);
-        }
-        proc->deleteLater();
-    });
-    proc->start(QStringLiteral("systemctl"), args);
+    m_daemonController->setEnabled(enabled);
 }
 
 void KCMPlasmaZones::startDaemon()
 {
-    if (isDaemonRunning()) {
-        return;
-    }
-    runSystemctl({QStringLiteral("--user"), QStringLiteral("start"), QLatin1String(KCMConstants::SystemdServiceName)});
-    // Layouts will be loaded when daemonReady D-Bus signal is received
+    m_daemonController->setEnabled(true);
 }
 
 void KCMPlasmaZones::stopDaemon()
 {
-    if (!isDaemonRunning()) {
-        return;
-    }
-    runSystemctl({QStringLiteral("--user"), QStringLiteral("stop"), QLatin1String(KCMConstants::SystemdServiceName)});
-}
-
-void KCMPlasmaZones::refreshDaemonEnabledState()
-{
-    runSystemctl(
-        {QStringLiteral("--user"), QStringLiteral("is-enabled"), QLatin1String(KCMConstants::SystemdServiceName)},
-        [this](bool /*success*/, const QString& output) {
-            bool enabled = (output == QLatin1String("enabled"));
-            if (m_daemonEnabled != enabled) {
-                m_daemonEnabled = enabled;
-                Q_EMIT daemonEnabledChanged();
-            }
-        });
-}
-
-void KCMPlasmaZones::setDaemonAutostart(bool enabled)
-{
-    QString action = enabled ? QStringLiteral("enable") : QStringLiteral("disable");
-    runSystemctl({QStringLiteral("--user"), action, QLatin1String(KCMConstants::SystemdServiceName)},
-                 [this](bool success, const QString& /*output*/) {
-                     if (success) {
-                         // Refresh the enabled state to confirm the change
-                         refreshDaemonEnabledState();
-                     }
-                 });
-}
-
-void KCMPlasmaZones::checkDaemonStatus()
-{
-    bool currentState = isDaemonRunning();
-    if (currentState != m_lastDaemonState) {
-        m_lastDaemonState = currentState;
-        Q_EMIT daemonRunningChanged();
-
-        // Note: When daemon starts, we rely on the daemonReady D-Bus signal
-        // to trigger loadLayouts(). No polling needed here.
-    }
+    m_daemonController->setEnabled(false);
 }
 
 // Update checker methods
@@ -3047,245 +2166,115 @@ void KCMPlasmaZones::openReleaseUrl()
 
 void KCMPlasmaZones::scheduleLoadLayouts()
 {
-    if (m_saveInProgress) return; // Don't reload layouts while a save is in progress
-    // Restart the debounce timer — coalesces rapid signals into one loadLayouts() call
-    m_loadLayoutsTimer->start();
+    m_layoutManager->scheduleLoad();
 }
 
-void KCMPlasmaZones::loadLayouts()
+void KCMPlasmaZones::emitAllSettingsPropertyChanged()
 {
-    // Async variant — used by the debounce timer so D-Bus round-trips don't
-    // block the UI thread during user interaction (scrolling, popup browsing).
-    // Bump generation so any in-flight response from a previous call is discarded.
-    const int generation = ++m_layoutLoadGeneration;
+    // Activation
+    Q_EMIT dragActivationTriggersChanged();
+    Q_EMIT alwaysActivateOnDragChanged();
+    Q_EMIT zoneSpanEnabledChanged();
+    Q_EMIT zoneSpanTriggersChanged();
+    Q_EMIT toggleActivationChanged();
+    Q_EMIT snappingEnabledChanged();
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath),
-        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
+    // Display
+    Q_EMIT showZonesOnAllMonitorsChanged();
+    Q_EMIT disabledMonitorsChanged();
+    Q_EMIT showZoneNumbersChanged();
+    Q_EMIT flashZonesOnSwitchChanged();
+    Q_EMIT showOsdOnLayoutSwitchChanged();
+    Q_EMIT showNavigationOsdChanged();
+    Q_EMIT osdStyleChanged();
 
-    auto* watcher = new QDBusPendingCallWatcher(
-        QDBusConnection::sessionBus().asyncCall(msg), this);
+    // Appearance
+    Q_EMIT useSystemColorsChanged();
+    Q_EMIT highlightColorChanged();
+    Q_EMIT inactiveColorChanged();
+    Q_EMIT borderColorChanged();
+    Q_EMIT labelFontColorChanged();
+    Q_EMIT activeOpacityChanged();
+    Q_EMIT inactiveOpacityChanged();
+    Q_EMIT borderWidthChanged();
+    Q_EMIT borderRadiusChanged();
+    Q_EMIT enableBlurChanged();
+    Q_EMIT labelFontFamilyChanged();
+    Q_EMIT labelFontSizeScaleChanged();
+    Q_EMIT labelFontWeightChanged();
+    Q_EMIT labelFontItalicChanged();
+    Q_EMIT labelFontUnderlineChanged();
+    Q_EMIT labelFontStrikeoutChanged();
+    Q_EMIT enableShaderEffectsChanged();
+    Q_EMIT shaderFrameRateChanged();
+    Q_EMIT enableAudioVisualizerChanged();
+    Q_EMIT audioSpectrumBarCountChanged();
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-        [this, generation](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
+    // Zones
+    Q_EMIT zonePaddingChanged();
+    Q_EMIT outerGapChanged();
+    Q_EMIT usePerSideOuterGapChanged();
+    Q_EMIT outerGapTopChanged();
+    Q_EMIT outerGapBottomChanged();
+    Q_EMIT outerGapLeftChanged();
+    Q_EMIT outerGapRightChanged();
+    Q_EMIT adjacentThresholdChanged();
 
-            // A newer loadLayouts() was issued while this one was in flight — discard.
-            if (generation != m_layoutLoadGeneration) return;
+    // Behavior
+    Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
+    Q_EMIT moveNewWindowsToLastZoneChanged();
+    Q_EMIT restoreOriginalSizeOnUnsnapChanged();
+    Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT restoreWindowsToZonesOnLoginChanged();
+    Q_EMIT snapAssistFeatureEnabledChanged();
+    Q_EMIT snapAssistEnabledChanged();
+    Q_EMIT snapAssistTriggersChanged();
+    Q_EMIT defaultLayoutIdChanged();
 
-            QVariantList newLayouts;
-            QDBusPendingReply<QStringList> reply = *w;
+    // Exclusions
+    Q_EMIT excludedApplicationsChanged();
+    Q_EMIT excludedWindowClassesChanged();
+    Q_EMIT excludeTransientWindowsChanged();
+    Q_EMIT minimumWindowWidthChanged();
+    Q_EMIT minimumWindowHeightChanged();
 
-            if (!reply.isError()) {
-                const QStringList layoutJsonList = reply.value();
-                for (const QString& layoutJson : layoutJsonList) {
-                    QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
-                    if (!doc.isNull() && doc.isObject()) {
-                        newLayouts.append(doc.object().toVariantMap());
-                    }
-                }
-            } else {
-                qCWarning(lcKcm) << "Failed to load layouts:" << reply.error().message();
-            }
+    // Zone Selector
+    Q_EMIT zoneSelectorEnabledChanged();
+    Q_EMIT zoneSelectorTriggerDistanceChanged();
+    Q_EMIT zoneSelectorPositionChanged();
+    Q_EMIT zoneSelectorLayoutModeChanged();
+    Q_EMIT zoneSelectorPreviewWidthChanged();
+    Q_EMIT zoneSelectorPreviewHeightChanged();
+    Q_EMIT zoneSelectorPreviewLockAspectChanged();
+    Q_EMIT zoneSelectorGridColumnsChanged();
+    Q_EMIT zoneSelectorSizeModeChanged();
+    Q_EMIT zoneSelectorMaxRowsChanged();
 
-            // No fallback layouts - if daemon isn't running, show empty list.
-            // The QML UI handles this with a "Enable daemon to see layouts" message.
-            m_unfilteredLayouts = newLayouts;
-            applyLayoutFilter();
-        });
-}
-
-void KCMPlasmaZones::loadLayoutsSync()
-{
-    // Synchronous variant — used during init and load() when the KCM is not
-    // yet visible, so blocking is acceptable and layouts must be available
-    // before QML components run their Component.onCompleted handlers.
-    ++m_layoutLoadGeneration; // invalidate any in-flight async calls
-
-    QVariantList newLayouts;
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        QStringList layoutJsonList = reply.arguments().first().toStringList();
-        for (const QString& layoutJson : layoutJsonList) {
-            QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
-            if (!doc.isNull() && doc.isObject()) {
-                newLayouts.append(doc.object().toVariantMap());
-            }
-        }
-    }
-
-    m_unfilteredLayouts = newLayouts;
-    applyLayoutFilter();
-}
-
-void KCMPlasmaZones::applyLayoutFilter()
-{
-    QVariantList newLayouts = m_unfilteredLayouts;
-
-    // Filter out autotile entries when the feature is disabled
-    if (!m_settings->autotileEnabled()) {
-        newLayouts.erase(
-            std::remove_if(newLayouts.begin(), newLayouts.end(), [](const QVariant& v) {
-                return v.toMap().value(QStringLiteral("isAutotile")).toBool();
-            }),
-            newLayouts.end());
-    }
-
-    // Sort: manual layouts first (alphabetical), then autotile (alphabetical)
-    // Matches the zone selector popup ordering
-    std::sort(newLayouts.begin(), newLayouts.end(), [](const QVariant& a, const QVariant& b) {
-        const QVariantMap mapA = a.toMap();
-        const QVariantMap mapB = b.toMap();
-        const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
-        const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
-        if (aIsAutotile != bIsAutotile) {
-            return !aIsAutotile; // manual before autotile
-        }
-        return mapA.value(QStringLiteral("name")).toString().toLower()
-             < mapB.value(QStringLiteral("name")).toString().toLower();
-    });
-
-    // Only update if the list actually changed (prevents scroll position reset).
-    // Compare by ID list — QVariantMap equality is unreliable across D-Bus round-trips
-    // due to type coercion differences (int vs double, etc.).
-    auto extractIds = [](const QVariantList& list) {
-        QStringList ids;
-        ids.reserve(list.size());
-        for (const auto& v : list) {
-            ids.append(v.toMap().value(QStringLiteral("id")).toString());
-        }
-        return ids;
-    };
-    if (extractIds(m_layouts) == extractIds(newLayouts)) {
-        return;
-    }
-
-    // Track whether layoutToSelect was set externally (create/import/duplicate)
-    // before we emit layoutsChanged, so we know to emit layoutToSelectChanged later.
-    const bool hasExternalSelect = !m_layoutToSelect.isEmpty();
-
-    m_layouts = newLayouts;
-    Q_EMIT layoutsChanged();
-
-    // Only auto-select the default layout on the very first successful load.
-    // On refreshes (D-Bus signals, autotile toggle), preserve the user's scroll position.
-    if (!m_initialLayoutLoadDone && !newLayouts.isEmpty()) {
-        m_initialLayoutLoadDone = true;
-
-        QString defaultId = defaultLayoutId();
-        if (defaultId.isEmpty()) {
-            // No explicit default set (fresh install / reset) — resolve the implicit
-            // default by defaultOrder (lowest wins, matching daemon's LayoutManager logic).
-            // This ensures the star badge appears on Columns (2) out of the box.
-            int bestOrder = 999;
-            for (const QVariant& v : newLayouts) {
-                const QVariantMap layoutMap = v.toMap();
-                int order = layoutMap.value(QStringLiteral("defaultOrder"), 999).toInt();
-                if (order < bestOrder) {
-                    bestOrder = order;
-                    defaultId = layoutMap.value(QStringLiteral("id")).toString();
-                }
-            }
-            if (!defaultId.isEmpty()) {
-                m_settings->setDefaultLayoutId(defaultId);
-                Q_EMIT defaultLayoutIdChanged();
-            }
-        }
-        if (!defaultId.isEmpty()) {
-            m_layoutToSelect = defaultId;
-        }
-    }
-
-    // Emit layoutToSelectChanged for initial load or externally-triggered selection
-    // (create/import/duplicate set m_layoutToSelect before calling loadLayouts).
-    // For plain refreshes neither branch is true, so scroll position is preserved.
-    if (hasExternalSelect || !m_layoutToSelect.isEmpty()) {
-        if (!m_layoutToSelect.isEmpty()) {
-            Q_EMIT layoutToSelectChanged();
-            // Clear after emission — one-shot value. QML signal handlers capture
-            // the value synchronously before any deferred Qt.callLater callbacks.
-            m_layoutToSelect.clear();
-        }
-    }
-}
-
-void KCMPlasmaZones::onScreenLayoutChanged(const QString& screenName, const QString& layoutId)
-{
-    // When screen layout assignment changes externally, update our local state.
-    // The signal carries a screen ID (EDID-based) from LayoutManager, but our
-    // local m_screenAssignments cache is keyed by connector names. Resolve back.
-    if (screenName.isEmpty()) {
-        return;
-    }
-
-    QString connectorName;
-    QScreen* screen = Utils::findScreenByIdOrName(screenName);
-    if (screen) {
-        connectorName = screen->name();
-    } else {
-        // Screen not connected — fall back to original value
-        connectorName = screenName;
-    }
-
-    const bool isAutotile = layoutId.startsWith(QLatin1String("autotile:"));
-
-    if (layoutId.isEmpty()) {
-        // Empty means the daemon's active assignment was cleared (e.g., autotile
-        // disabled). Only clear the tiling preference — the snapping preference
-        // is the user's chosen zone layout and should survive mode switches.
-        m_tilingScreenAssignments.remove(connectorName);
-        Q_EMIT tilingScreenAssignmentsChanged();
-    } else if (isAutotile) {
-        // Autotile IDs go to tiling assignments; keep snapping preference
-        // so the user's zone layout choice survives mode switches.
-        m_tilingScreenAssignments[connectorName] = layoutId;
-        Q_EMIT tilingScreenAssignmentsChanged();
-    } else {
-        // Manual layout UUIDs go to snapping assignments; keep the tiling
-        // algorithm preference so the user's choice survives mode switches.
-        m_screenAssignments[connectorName] = layoutId;
-        Q_EMIT screenAssignmentsChanged();
-    }
-
-    // Also refresh screens to update any screen-related UI
-    refreshScreens();
-}
-
-void KCMPlasmaZones::onQuickLayoutSlotsChanged()
-{
-    // When quick layout slots change externally, reload them from daemon asynchronously
-    // Using asyncCall to avoid blocking the UI thread
-    QDBusMessage msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                                                      QString(DBus::Interface::LayoutManager),
-                                                      QStringLiteral("getAllQuickLayoutSlots"));
-
-    QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(msg);
-    QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* watcher) {
-        watcher->deleteLater();
-
-        QDBusPendingReply<QVariantMap> reply = *watcher;
-        if (reply.isError()) {
-            qCWarning(lcKcm) << "Failed to get quick layout slots:" << reply.error().message();
-            return;
-        }
-
-        m_quickLayoutSlots.clear();
-        QVariantMap slots = reply.value();
-        for (auto it = slots.begin(); it != slots.end(); ++it) {
-            bool ok;
-            int slotNum = it.key().toInt(&ok);
-            if (ok && slotNum >= 1 && slotNum <= 9) {
-                QString layoutId = it.value().toString();
-                if (!layoutId.isEmpty()) {
-                    m_quickLayoutSlots[slotNum] = layoutId;
-                }
-            }
-        }
-
-    });
+    // Autotiling
+    Q_EMIT autotileEnabledChanged();
+    Q_EMIT autotileAlgorithmChanged();
+    Q_EMIT autotileSplitRatioChanged();
+    Q_EMIT autotileMasterCountChanged();
+    Q_EMIT autotileInnerGapChanged();
+    Q_EMIT autotileOuterGapChanged();
+    Q_EMIT autotileFocusNewWindowsChanged();
+    Q_EMIT autotileSmartGapsChanged();
+    Q_EMIT autotileMaxWindowsChanged();
+    Q_EMIT autotileInsertPositionChanged();
+    Q_EMIT animationsEnabledChanged();
+    Q_EMIT animationDurationChanged();
+    Q_EMIT animationEasingCurveChanged();
+    Q_EMIT animationMinDistanceChanged();
+    Q_EMIT animationSequenceModeChanged();
+    Q_EMIT animationStaggerIntervalChanged();
+    Q_EMIT autotileFocusFollowsMouseChanged();
+    Q_EMIT autotileRespectMinimumSizeChanged();
+    Q_EMIT autotileHideTitleBarsChanged();
+    Q_EMIT autotileUsePerSideOuterGapChanged();
+    Q_EMIT autotileOuterGapTopChanged();
+    Q_EMIT autotileOuterGapBottomChanged();
+    Q_EMIT autotileOuterGapLeftChanged();
+    Q_EMIT autotileOuterGapRightChanged();
 }
 
 void KCMPlasmaZones::onSettingsChanged()
@@ -3294,99 +2283,7 @@ void KCMPlasmaZones::onSettingsChanged()
     // reload settings from the config file
     if (m_settings) {
         m_settings->load();
-
-        // Emit signals for all properties that might have changed. Not tracking which
-        // ones actually changed since external changes are rare, signal emission is cheap,
-        // and QML only updates when values differ.
-        Q_EMIT dragActivationTriggersChanged();
-        Q_EMIT alwaysActivateOnDragChanged();
-        Q_EMIT zoneSpanEnabledChanged();
-        Q_EMIT zoneSpanTriggersChanged();
-        Q_EMIT toggleActivationChanged();
-        Q_EMIT snappingEnabledChanged();
-        Q_EMIT showZonesOnAllMonitorsChanged();
-        Q_EMIT disabledMonitorsChanged();
-        Q_EMIT showZoneNumbersChanged();
-        Q_EMIT flashZonesOnSwitchChanged();
-        Q_EMIT showOsdOnLayoutSwitchChanged();
-        Q_EMIT showNavigationOsdChanged();
-        Q_EMIT osdStyleChanged();
-        Q_EMIT useSystemColorsChanged();
-        Q_EMIT highlightColorChanged();
-        Q_EMIT inactiveColorChanged();
-        Q_EMIT borderColorChanged();
-        Q_EMIT labelFontColorChanged();
-        Q_EMIT activeOpacityChanged();
-        Q_EMIT inactiveOpacityChanged();
-        Q_EMIT borderWidthChanged();
-        Q_EMIT borderRadiusChanged();
-        Q_EMIT enableBlurChanged();
-        Q_EMIT labelFontFamilyChanged();
-        Q_EMIT labelFontSizeScaleChanged();
-        Q_EMIT labelFontWeightChanged();
-        Q_EMIT labelFontItalicChanged();
-        Q_EMIT labelFontUnderlineChanged();
-        Q_EMIT labelFontStrikeoutChanged();
-        Q_EMIT enableShaderEffectsChanged();
-        Q_EMIT shaderFrameRateChanged();
-        Q_EMIT enableAudioVisualizerChanged();
-        Q_EMIT audioSpectrumBarCountChanged();
-        Q_EMIT zonePaddingChanged();
-        Q_EMIT outerGapChanged();
-        Q_EMIT usePerSideOuterGapChanged();
-        Q_EMIT outerGapTopChanged();
-        Q_EMIT outerGapBottomChanged();
-        Q_EMIT outerGapLeftChanged();
-        Q_EMIT outerGapRightChanged();
-        Q_EMIT adjacentThresholdChanged();
-        Q_EMIT keepWindowsInZonesOnResolutionChangeChanged();
-        Q_EMIT moveNewWindowsToLastZoneChanged();
-        Q_EMIT restoreOriginalSizeOnUnsnapChanged();
-        Q_EMIT stickyWindowHandlingChanged();
-        Q_EMIT restoreWindowsToZonesOnLoginChanged();
-        Q_EMIT snapAssistFeatureEnabledChanged();
-        Q_EMIT snapAssistEnabledChanged();
-        Q_EMIT snapAssistTriggersChanged();
-        Q_EMIT defaultLayoutIdChanged();
-        Q_EMIT excludedApplicationsChanged();
-        Q_EMIT excludedWindowClassesChanged();
-        Q_EMIT excludeTransientWindowsChanged();
-        Q_EMIT minimumWindowWidthChanged();
-        Q_EMIT minimumWindowHeightChanged();
-        Q_EMIT zoneSelectorEnabledChanged();
-        Q_EMIT zoneSelectorTriggerDistanceChanged();
-        Q_EMIT zoneSelectorPositionChanged();
-        Q_EMIT zoneSelectorLayoutModeChanged();
-        Q_EMIT zoneSelectorPreviewWidthChanged();
-        Q_EMIT zoneSelectorPreviewHeightChanged();
-        Q_EMIT zoneSelectorPreviewLockAspectChanged();
-        Q_EMIT zoneSelectorGridColumnsChanged();
-        Q_EMIT zoneSelectorSizeModeChanged();
-        Q_EMIT zoneSelectorMaxRowsChanged();
-
-        // Autotiling
-        Q_EMIT autotileEnabledChanged();
-        Q_EMIT autotileAlgorithmChanged();
-        Q_EMIT autotileSplitRatioChanged();
-        Q_EMIT autotileMasterCountChanged();
-        Q_EMIT autotileInnerGapChanged();
-        Q_EMIT autotileOuterGapChanged();
-        Q_EMIT autotileFocusNewWindowsChanged();
-        Q_EMIT autotileSmartGapsChanged();
-        Q_EMIT autotileMaxWindowsChanged();
-        Q_EMIT autotileInsertPositionChanged();
-        Q_EMIT animationsEnabledChanged();
-        Q_EMIT animationDurationChanged();
-        Q_EMIT animationEasingCurveChanged();
-        Q_EMIT animationMinDistanceChanged();
-        Q_EMIT autotileFocusFollowsMouseChanged();
-        Q_EMIT autotileRespectMinimumSizeChanged();
-        Q_EMIT autotileHideTitleBarsChanged();
-        Q_EMIT autotileUsePerSideOuterGapChanged();
-        Q_EMIT autotileOuterGapTopChanged();
-        Q_EMIT autotileOuterGapBottomChanged();
-        Q_EMIT autotileOuterGapLeftChanged();
-        Q_EMIT autotileOuterGapRightChanged();
+        emitAllSettingsPropertyChanged();
     }
 }
 
@@ -3430,61 +2327,6 @@ QString KCMPlasmaZones::currentScreenName() const
         }
     }
     return QString();
-}
-
-QString KCMPlasmaZones::resolveAutotileAlgorithm(const QString& key, bool isScreenAssignment) const
-{
-    QString screenName;
-    if (isScreenAssignment) {
-        screenName = key;
-    } else {
-        const int sepIdx = key.lastIndexOf(QLatin1Char('|'));
-        if (sepIdx <= 0) {
-            qCWarning(lcKcm) << "resolveAutotileAlgorithm: malformed composite key" << key;
-            return {};
-        }
-        screenName = key.left(sepIdx);
-    }
-
-    const QVariantMap perScreen = m_settings->getPerScreenAutotileSettings(screenName);
-    QString algo = perScreen.value(QLatin1String("Algorithm")).toString();
-    if (algo.isEmpty()) {
-        algo = m_settings->autotileAlgorithm();
-    }
-    if (algo.isEmpty()) {
-        algo = AlgorithmRegistry::defaultAlgorithmId();
-    }
-    return LayoutId::makeAutotileId(algo);
-}
-
-bool KCMPlasmaZones::syncAutotileAssignmentIds(QVariantMap& assignments, bool isScreenAssignment)
-{
-    bool changed = false;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        if (!LayoutId::isAutotile(it.value().toString())) continue;
-        const QString resolved = resolveAutotileAlgorithm(it.key(), isScreenAssignment);
-        if (resolved.isEmpty()) continue;
-        if (it.value().toString() != resolved) {
-            it.value() = resolved;
-            changed = true;
-        }
-    }
-    return changed;
-}
-
-bool KCMPlasmaZones::syncAutotileAssignmentIds(QMap<QString, QString>& assignments, bool isScreenAssignment)
-{
-    bool changed = false;
-    for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        if (!LayoutId::isAutotile(it.value())) continue;
-        const QString resolved = resolveAutotileAlgorithm(it.key(), isScreenAssignment);
-        if (resolved.isEmpty()) continue;
-        if (it.value() != resolved) {
-            it.value() = resolved;
-            changed = true;
-        }
-    }
-    return changed;
 }
 
 void KCMPlasmaZones::notifyDaemon()
@@ -3737,231 +2579,104 @@ void KCMPlasmaZones::onActivitiesChanged()
 void KCMPlasmaZones::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                    const QString& layoutId)
 {
-    if (screenName.isEmpty() || activityId.isEmpty()) {
-        qCWarning(lcKcm) << "Cannot assign layout - empty screen name or activity ID";
-        return;
-    }
-
-    // Use screenId|activity format to match daemon's getAllActivityAssignments() key format
-    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-
-    // Track this assignment in pending cache
-    if (layoutId.isEmpty()) {
-        // Clearing assignment
-        m_pendingActivityAssignments.remove(key);
-        m_clearedActivityAssignments.insert(key);
-    } else {
-        m_pendingActivityAssignments[key] = layoutId;
-        m_clearedActivityAssignments.remove(key);
-    }
-
-    Q_EMIT activityAssignmentsChanged();
-    Q_EMIT screenAssignmentsChanged();
-    setNeedsSave(true);
+    m_assignmentManager->assignLayoutToScreenActivity(screenName, activityId, layoutId);
 }
 
 void KCMPlasmaZones::clearScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    assignLayoutToScreenActivity(screenName, activityId, QString());
+    m_assignmentManager->clearScreenActivityAssignment(screenName, activityId);
 }
 
 QString KCMPlasmaZones::getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
-    // Check pending cache first (unsaved changes)
-    // Use screenId|activity format to match daemon's key format
-    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    if (m_pendingActivityAssignments.contains(key)) {
-        return m_pendingActivityAssignments.value(key);
-    }
-
-    // Check if explicitly cleared
-    if (m_clearedActivityAssignments.contains(key)) {
-        return QString();
-    }
-
-    // Query daemon for the layout assigned to this screen/activity combination
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
-                                    QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toString();
-    }
-
-    return QString();
+    return m_assignmentManager->getLayoutForScreenActivity(screenName, activityId);
 }
 
 bool KCMPlasmaZones::hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const
 {
-    // Check pending cache first
-    // Use screenId|activity format to match daemon's key format
-    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    if (m_pendingActivityAssignments.contains(key)) {
-        return true;
-    }
-    if (m_clearedActivityAssignments.contains(key)) {
-        return false;
-    }
-
-    // Query daemon
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
-                                    QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toBool();
-    }
-
-    return false;
+    return m_assignmentManager->hasExplicitAssignmentForScreenActivity(screenName, activityId);
 }
 
 void KCMPlasmaZones::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
                                                          const QString& layoutId)
 {
-    if (screenName.isEmpty() || activityId.isEmpty()) {
-        qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name or activity ID";
-        return;
-    }
-    QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
-    if (layoutId.isEmpty()) {
-        m_tilingActivityAssignments.remove(key);
-    } else {
-        m_tilingActivityAssignments[key] = layoutId;
-    }
-    m_tilingActivityAssignmentsDirty = true;
-    Q_EMIT tilingActivityAssignmentsChanged();
-    setNeedsSave(true);
+    m_assignmentManager->assignTilingLayoutToScreenActivity(screenName, activityId, layoutId);
 }
 
 void KCMPlasmaZones::clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId)
 {
-    assignTilingLayoutToScreenActivity(screenName, activityId, QString());
+    m_assignmentManager->clearTilingScreenActivityAssignment(screenName, activityId);
 }
 
 QString KCMPlasmaZones::getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const
 {
-    QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
-    return m_tilingActivityAssignments.value(key);
+    return m_assignmentManager->getTilingLayoutForScreenActivity(screenName, activityId);
 }
 
 bool KCMPlasmaZones::hasExplicitTilingAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const
 {
-    QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
-    return m_tilingActivityAssignments.contains(key);
+    return m_assignmentManager->hasExplicitTilingAssignmentForScreenActivity(screenName, activityId);
 }
 
 void KCMPlasmaZones::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
                                                         const QString& layoutId)
 {
-    if (screenName.isEmpty()) {
-        qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name";
-        return;
-    }
-    if (virtualDesktop < 1) {
-        qCWarning(lcKcm) << "Cannot assign tiling layout - invalid desktop number:" << virtualDesktop;
-        return;
-    }
-    QString key = QStringLiteral("%1|%2").arg(screenName).arg(virtualDesktop);
-    if (layoutId.isEmpty()) {
-        m_tilingDesktopAssignments.remove(key);
-    } else {
-        m_tilingDesktopAssignments[key] = layoutId;
-    }
-    m_tilingDesktopAssignmentsDirty = true;
-    Q_EMIT tilingDesktopAssignmentsChanged();
-    setNeedsSave(true);
+    m_assignmentManager->assignTilingLayoutToScreenDesktop(screenName, virtualDesktop, layoutId);
 }
 
 void KCMPlasmaZones::clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    assignTilingLayoutToScreenDesktop(screenName, virtualDesktop, QString());
+    m_assignmentManager->clearTilingScreenDesktopAssignment(screenName, virtualDesktop);
 }
 
 QString KCMPlasmaZones::getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
-    QString key = QStringLiteral("%1|%2").arg(screenName).arg(virtualDesktop);
-    return m_tilingDesktopAssignments.value(key);
+    return m_assignmentManager->getTilingLayoutForScreenDesktop(screenName, virtualDesktop);
 }
 
 bool KCMPlasmaZones::hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
-    QString key = QStringLiteral("%1|%2").arg(screenName).arg(virtualDesktop);
-    return m_tilingDesktopAssignments.contains(key);
+    return m_assignmentManager->hasExplicitTilingAssignmentForScreenDesktop(screenName, virtualDesktop);
 }
 
 void KCMPlasmaZones::assignLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    // Store the assignment locally - it will be persisted on save()
-    QString oldLayoutId = m_screenAssignments.value(screenName).toString();
-    if (oldLayoutId != layoutId) {
-        if (layoutId.isEmpty()) {
-            m_screenAssignments.remove(screenName);
-        } else {
-            m_screenAssignments[screenName] = layoutId;
-        }
-        Q_EMIT screenAssignmentsChanged();
-        setNeedsSave(true);
-    }
+    m_assignmentManager->assignLayoutToScreen(screenName, layoutId);
 }
 
 void KCMPlasmaZones::clearScreenAssignment(const QString& screenName)
 {
-    // Store locally - it will be persisted on save()
-    if (m_screenAssignments.contains(screenName)) {
-        m_screenAssignments.remove(screenName);
-        Q_EMIT screenAssignmentsChanged();
-        setNeedsSave(true);
-    }
+    m_assignmentManager->clearScreenAssignment(screenName);
 }
 
 QString KCMPlasmaZones::getLayoutForScreen(const QString& screenName) const
 {
-    return m_screenAssignments.value(screenName).toString();
+    return m_assignmentManager->getLayoutForScreen(screenName);
 }
 
 void KCMPlasmaZones::assignTilingLayoutToScreen(const QString& screenName, const QString& layoutId)
 {
-    QString oldLayoutId = m_tilingScreenAssignments.value(screenName).toString();
-    if (oldLayoutId != layoutId) {
-        if (layoutId.isEmpty()) {
-            m_tilingScreenAssignments.remove(screenName);
-        } else {
-            m_tilingScreenAssignments[screenName] = layoutId;
-        }
-        Q_EMIT tilingScreenAssignmentsChanged();
-        setNeedsSave(true);
-    }
+    m_assignmentManager->assignTilingLayoutToScreen(screenName, layoutId);
 }
 
 void KCMPlasmaZones::clearTilingScreenAssignment(const QString& screenName)
 {
-    if (m_tilingScreenAssignments.contains(screenName)) {
-        m_tilingScreenAssignments.remove(screenName);
-        Q_EMIT tilingScreenAssignmentsChanged();
-        setNeedsSave(true);
-    }
+    m_assignmentManager->clearTilingScreenAssignment(screenName);
 }
 
 QString KCMPlasmaZones::getTilingLayoutForScreen(const QString& screenName) const
 {
-    return m_tilingScreenAssignments.value(screenName).toString();
+    return m_assignmentManager->getTilingLayoutForScreen(screenName);
 }
 
 QString KCMPlasmaZones::getTilingQuickLayoutSlot(int slotNumber) const
 {
-    return m_tilingQuickLayoutSlots.value(slotNumber, QString());
+    return m_assignmentManager->getTilingQuickLayoutSlot(slotNumber);
 }
 
 void KCMPlasmaZones::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9) return;
-    if (m_tilingQuickLayoutSlots.value(slotNumber) != layoutId) {
-        if (layoutId.isEmpty()) {
-            m_tilingQuickLayoutSlots.remove(slotNumber);
-        } else {
-            m_tilingQuickLayoutSlots[slotNumber] = layoutId;
-        }
-        Q_EMIT tilingQuickLayoutSlotsChanged();
-        setNeedsSave(true);
-    }
+    m_assignmentManager->setTilingQuickLayoutSlot(slotNumber, layoutId);
 }
 
 bool KCMPlasmaZones::isMonitorDisabled(const QString& screenName) const
@@ -3998,253 +2713,130 @@ void KCMPlasmaZones::setMonitorDisabled(const QString& screenName, bool disabled
     }
 }
 
+// Per-screen settings helpers (DRY: 4 helpers replace 12 near-identical methods)
+QVariantMap KCMPlasmaZones::getPerScreenSettingsImpl(const QString& screenName, PerScreenGetter getter) const
+{
+    return m_settings ? (m_settings->*getter)(Utils::screenIdForName(screenName)) : QVariantMap();
+}
+
+void KCMPlasmaZones::setPerScreenSettingImpl(const QString& screenName, const QString& key,
+                                              const QVariant& value, PerScreenSetter setter)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    (m_settings->*setter)(Utils::screenIdForName(screenName), key, value);
+    setNeedsSave(true);
+}
+
+void KCMPlasmaZones::clearPerScreenSettingsImpl(const QString& screenName, PerScreenClearer clearer)
+{
+    if (!m_settings || screenName.isEmpty()) {
+        return;
+    }
+    (m_settings->*clearer)(Utils::screenIdForName(screenName));
+    setNeedsSave(true);
+}
+
+bool KCMPlasmaZones::hasPerScreenSettingsImpl(const QString& screenName, PerScreenChecker checker) const
+{
+    return m_settings ? (m_settings->*checker)(Utils::screenIdForName(screenName)) : false;
+}
+
 // Per-screen zone selector settings
 QVariantMap KCMPlasmaZones::getPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->getPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : QVariantMap();
+    return getPerScreenSettingsImpl(screenName, &Settings::getPerScreenZoneSelectorSettings);
 }
-
 void KCMPlasmaZones::setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value)
 {
-    if (!m_settings || screenName.isEmpty()) {
-        return;
-    }
-    // Translate connector name to stable EDID-based screen ID for storage
-    m_settings->setPerScreenZoneSelectorSetting(Utils::screenIdForName(screenName), key, value);
-    setNeedsSave(true);
+    setPerScreenSettingImpl(screenName, key, value, &Settings::setPerScreenZoneSelectorSetting);
 }
-
 void KCMPlasmaZones::clearPerScreenZoneSelectorSettings(const QString& screenName)
 {
-    if (!m_settings || screenName.isEmpty()) {
-        return;
-    }
-    m_settings->clearPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName));
-    setNeedsSave(true);
+    clearPerScreenSettingsImpl(screenName, &Settings::clearPerScreenZoneSelectorSettings);
 }
-
 bool KCMPlasmaZones::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->hasPerScreenZoneSelectorSettings(Utils::screenIdForName(screenName)) : false;
+    return hasPerScreenSettingsImpl(screenName, &Settings::hasPerScreenZoneSelectorSettings);
 }
 
 // Per-screen autotile settings
 QVariantMap KCMPlasmaZones::getPerScreenAutotileSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->getPerScreenAutotileSettings(Utils::screenIdForName(screenName)) : QVariantMap();
+    return getPerScreenSettingsImpl(screenName, &Settings::getPerScreenAutotileSettings);
 }
-
 void KCMPlasmaZones::setPerScreenAutotileSetting(const QString& screenName, const QString& key, const QVariant& value)
 {
-    if (!m_settings || screenName.isEmpty()) {
-        return;
-    }
-    m_settings->setPerScreenAutotileSetting(Utils::screenIdForName(screenName), key, value);
-    setNeedsSave(true);
+    setPerScreenSettingImpl(screenName, key, value, &Settings::setPerScreenAutotileSetting);
 }
-
 void KCMPlasmaZones::clearPerScreenAutotileSettings(const QString& screenName)
 {
-    if (!m_settings || screenName.isEmpty()) {
-        return;
-    }
-    m_settings->clearPerScreenAutotileSettings(Utils::screenIdForName(screenName));
-    setNeedsSave(true);
+    clearPerScreenSettingsImpl(screenName, &Settings::clearPerScreenAutotileSettings);
 }
-
 bool KCMPlasmaZones::hasPerScreenAutotileSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->hasPerScreenAutotileSettings(Utils::screenIdForName(screenName)) : false;
+    return hasPerScreenSettingsImpl(screenName, &Settings::hasPerScreenAutotileSettings);
 }
 
 // Per-screen snapping settings
 QVariantMap KCMPlasmaZones::getPerScreenSnappingSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->getPerScreenSnappingSettings(Utils::screenIdForName(screenName)) : QVariantMap();
+    return getPerScreenSettingsImpl(screenName, &Settings::getPerScreenSnappingSettings);
 }
-
 void KCMPlasmaZones::setPerScreenSnappingSetting(const QString& screenName, const QString& key, const QVariant& value)
 {
-    if (!m_settings || screenName.isEmpty()) {
-        return;
-    }
-    m_settings->setPerScreenSnappingSetting(Utils::screenIdForName(screenName), key, value);
-    setNeedsSave(true);
+    setPerScreenSettingImpl(screenName, key, value, &Settings::setPerScreenSnappingSetting);
 }
-
 void KCMPlasmaZones::clearPerScreenSnappingSettings(const QString& screenName)
 {
-    if (!m_settings || screenName.isEmpty()) {
-        return;
-    }
-    m_settings->clearPerScreenSnappingSettings(Utils::screenIdForName(screenName));
-    setNeedsSave(true);
+    clearPerScreenSettingsImpl(screenName, &Settings::clearPerScreenSnappingSettings);
 }
-
 bool KCMPlasmaZones::hasPerScreenSnappingSettings(const QString& screenName) const
 {
-    return m_settings ? m_settings->hasPerScreenSnappingSettings(Utils::screenIdForName(screenName)) : false;
+    return hasPerScreenSettingsImpl(screenName, &Settings::hasPerScreenSnappingSettings);
 }
 
 // Returns whether this screen has a tiling assignment in the KCM's in-memory state.
 // This reflects KCM state only — not live daemon state.
 bool KCMPlasmaZones::isScreenInTilingMode(const QString& screenName) const
 {
-    return m_tilingScreenAssignments.contains(screenName);
+    return m_assignmentManager->tilingScreenAssignments().contains(screenName);
 }
 
 void KCMPlasmaZones::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop, const QString& layoutId)
 {
-    if (screenName.isEmpty()) {
-        qCWarning(lcKcm) << "Cannot assign layout - empty screen name";
-        return;
-    }
-
-    // Cache the assignment locally - will be sent to daemon on Apply
-    // Use screenId|desktop format to match daemon's getAllDesktopAssignments() key format
-    QString screenId = Utils::screenIdForName(screenName);
-    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
-
-    if (layoutId.isEmpty()) {
-        // Empty layoutId means clear - but we handle that in clearScreenDesktopAssignment
-        m_pendingDesktopAssignments.remove(key);
-        m_clearedDesktopAssignments.insert(key);
-    } else {
-        m_pendingDesktopAssignments[key] = layoutId;
-        m_clearedDesktopAssignments.remove(key);
-    }
-
-    // If this is for "all desktops" (virtualDesktop=0), also update local display cache
-    if (virtualDesktop == 0) {
-        if (layoutId.isEmpty()) {
-            m_screenAssignments.remove(screenName);
-        } else {
-            m_screenAssignments[screenName] = layoutId;
-        }
-    }
-
-    Q_EMIT screenAssignmentsChanged();
-    setNeedsSave(true);
+    m_assignmentManager->assignLayoutToScreenDesktop(screenName, virtualDesktop, layoutId);
 }
 
 void KCMPlasmaZones::clearScreenDesktopAssignment(const QString& screenName, int virtualDesktop)
 {
-    if (screenName.isEmpty()) {
-        qCWarning(lcKcm) << "Cannot clear assignment - empty screen name";
-        return;
-    }
-
-    // Cache the clear locally - will be sent to daemon on Apply
-    // Use screenId|desktop format to match daemon's getAllDesktopAssignments() key format
-    QString screenId = Utils::screenIdForName(screenName);
-    QString key = QStringLiteral("%1|%2").arg(screenId).arg(virtualDesktop);
-    m_pendingDesktopAssignments.remove(key);
-    m_clearedDesktopAssignments.insert(key);
-
-    // If this is for "all desktops" (virtualDesktop=0), also update local display cache
-    if (virtualDesktop == 0 && m_screenAssignments.contains(screenName)) {
-        m_screenAssignments.remove(screenName);
-    }
-
-    Q_EMIT screenAssignmentsChanged();
-    setNeedsSave(true);
+    m_assignmentManager->clearScreenDesktopAssignment(screenName, virtualDesktop);
 }
 
 QString KCMPlasmaZones::getLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
-    // Check pending cache first (unsaved changes)
-    // Use screenId|desktop format to match daemon's key format
-    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    if (m_pendingDesktopAssignments.contains(key)) {
-        return m_pendingDesktopAssignments.value(key);
-    }
-    // Check if it was cleared but not yet saved
-    if (m_clearedDesktopAssignments.contains(key)) {
-        return QString();
-    }
-
-    // Query daemon for the layout assigned to this screen/desktop combination
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
-                                    QStringLiteral("getLayoutForScreenDesktop"), {screenName, virtualDesktop});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toString();
-    }
-
-    return QString();
+    return m_assignmentManager->getLayoutForScreenDesktop(screenName, virtualDesktop);
 }
 
 bool KCMPlasmaZones::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
-    // Check pending cache first (unsaved changes)
-    // Use screenId|desktop format to match daemon's key format
-    QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    if (m_pendingDesktopAssignments.contains(key)) {
-        return true; // Has pending assignment
-    }
-    // Check if it was cleared but not yet saved
-    if (m_clearedDesktopAssignments.contains(key)) {
-        return false; // Pending clear means no explicit assignment
-    }
-
-    // Query daemon for whether there's an explicit assignment (not inherited from fallback)
-    QDBusMessage reply =
-        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("hasExplicitAssignmentForScreenDesktop"),
-                   {screenName, virtualDesktop});
-
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        return reply.arguments().first().toBool();
-    }
-
-    return false;
+    return m_assignmentManager->hasExplicitAssignmentForScreenDesktop(screenName, virtualDesktop);
 }
 
 QString KCMPlasmaZones::getQuickLayoutSlot(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9) {
-        return QString();
-    }
-    return m_quickLayoutSlots.value(slotNumber, QString());
+    return m_assignmentManager->getQuickLayoutSlot(slotNumber);
 }
 
 void KCMPlasmaZones::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9) {
-        return;
-    }
-
-    // Store locally - it will be persisted on save()
-    QString oldLayoutId = m_quickLayoutSlots.value(slotNumber, QString());
-    if (oldLayoutId != layoutId) {
-        if (layoutId.isEmpty()) {
-            m_quickLayoutSlots.remove(slotNumber);
-        } else {
-            m_quickLayoutSlots[slotNumber] = layoutId;
-        }
-        Q_EMIT quickLayoutSlotsChanged();
-        setNeedsSave(true);
-    }
+    m_assignmentManager->setQuickLayoutSlot(slotNumber, layoutId);
 }
 
 QString KCMPlasmaZones::getQuickLayoutShortcut(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9) {
-        return QString();
-    }
-
-    // Query KGlobalAccel for the actual registered shortcut
-    // This reflects what's actually in the system, including user changes via System Settings
-    const QString componentName = QStringLiteral("plasmazonesd");
-    const QString actionId = QStringLiteral("quick_layout_%1").arg(slotNumber);
-    QList<QKeySequence> shortcuts = KGlobalAccel::self()->globalShortcut(componentName, actionId);
-
-    if (!shortcuts.isEmpty() && !shortcuts.first().isEmpty()) {
-        return shortcuts.first().toString(QKeySequence::NativeText);
-    }
-
-    // If KGlobalAccel returns empty, the shortcut is not assigned
-    // Don't fall back to settings defaults as that would be misleading
-    return QString();
+    return m_assignmentManager->getQuickLayoutShortcut(slotNumber);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -4253,84 +2845,23 @@ QString KCMPlasmaZones::getQuickLayoutShortcut(int slotNumber) const
 
 QVariantList KCMPlasmaZones::getAppRulesForLayout(const QString& layoutId) const
 {
-    // Check pending cache first (unsaved changes)
-    if (m_pendingAppRules.contains(layoutId)) {
-        return m_pendingAppRules.value(layoutId);
-    }
-
-    // Fall back to daemon
-    QDBusMessage reply =
-        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
-
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) {
-        return {};
-    }
-
-    QString json = reply.arguments().first().toString();
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (doc.isNull() || !doc.isObject()) {
-        return {};
-    }
-
-    QJsonArray rulesArray = doc.object()[QLatin1String("appRules")].toArray();
-    QVariantList result;
-    for (const auto& ruleVal : rulesArray) {
-        QJsonObject ruleObj = ruleVal.toObject();
-        QVariantMap rule;
-        rule[QStringLiteral("pattern")] = ruleObj[QLatin1String("pattern")].toString();
-        rule[QStringLiteral("zoneNumber")] = ruleObj[QLatin1String("zoneNumber")].toInt();
-        QString ts = ruleObj[QLatin1String("targetScreen")].toString();
-        if (!ts.isEmpty()) {
-            rule[QStringLiteral("targetScreen")] = ts;
-        }
-        result.append(rule);
-    }
-    return result;
+    return m_assignmentManager->getAppRulesForLayout(layoutId);
 }
 
 void KCMPlasmaZones::setAppRulesForLayout(const QString& layoutId, const QVariantList& rules)
 {
-    m_pendingAppRules[layoutId] = rules;
-    setNeedsSave(true);
+    m_assignmentManager->setAppRulesForLayout(layoutId, rules);
 }
 
 void KCMPlasmaZones::addAppRuleToLayout(const QString& layoutId, const QString& pattern,
                                          int zoneNumber, const QString& targetScreen)
 {
-    QString trimmed = pattern.trimmed();
-    if (trimmed.isEmpty() || zoneNumber < 1) {
-        return;
-    }
-
-    QVariantList rules = getAppRulesForLayout(layoutId);
-
-    // Check for duplicate: same pattern AND same targetScreen
-    for (const auto& ruleVar : rules) {
-        QVariantMap existing = ruleVar.toMap();
-        if (existing[QStringLiteral("pattern")].toString().compare(trimmed, Qt::CaseInsensitive) == 0
-            && existing[QStringLiteral("targetScreen")].toString() == targetScreen) {
-            return;
-        }
-    }
-
-    QVariantMap newRule;
-    newRule[QStringLiteral("pattern")] = trimmed;
-    newRule[QStringLiteral("zoneNumber")] = zoneNumber;
-    if (!targetScreen.isEmpty()) {
-        newRule[QStringLiteral("targetScreen")] = targetScreen;
-    }
-    rules.append(newRule);
-    setAppRulesForLayout(layoutId, rules);
+    m_assignmentManager->addAppRuleToLayout(layoutId, pattern, zoneNumber, targetScreen);
 }
 
 void KCMPlasmaZones::removeAppRuleFromLayout(const QString& layoutId, int index)
 {
-    QVariantList rules = getAppRulesForLayout(layoutId);
-    if (index < 0 || index >= rules.size()) {
-        return;
-    }
-    rules.removeAt(index);
-    setAppRulesForLayout(layoutId, rules);
+    m_assignmentManager->removeAppRuleFromLayout(layoutId, index);
 }
 
 } // namespace PlasmaZones

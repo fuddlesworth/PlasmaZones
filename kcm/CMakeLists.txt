@@ -14,6 +14,12 @@ kconfig_add_kcfg_files(kcm_plasmazones_kcfg_SRCS
 set(kcm_plasmazones_SRCS
     kcm_plasmazones.cpp
     kcm_plasmazones.h
+    assignmentmanager.cpp
+    assignmentmanager.h
+    daemoncontroller.cpp
+    daemoncontroller.h
+    layoutmanager.cpp
+    layoutmanager.h
     ${kcm_plasmazones_kcfg_SRCS}
 )
 

@@ -7,12 +7,11 @@
 #include <KConfigGroup>
 #include <QObject>
 #include <QColor>
-#include <QMap>
-#include <QSet>
 #include <QDBusMessage>
 #include <QDBusPendingCall>
 #include <QDBusServiceWatcher>
 #include <functional>
+#include <memory>
 
 class QTimer;
 class QProcess;
@@ -27,6 +26,9 @@ constexpr int DaemonStatusPollIntervalMs = 2000;
 constexpr const char* SystemdServiceName = "plasmazones.service";
 }
 
+class AssignmentManager;
+class DaemonController;
+class LayoutManager;
 class Settings;
 class UpdateChecker;
 
@@ -782,33 +784,33 @@ Q_SIGNALS:
     void colorImportSuccess(); // Emitted when color import succeeds
 
 private Q_SLOTS:
-    void loadLayouts();       // Async — used by debounce timer (non-blocking during interaction)
-    void loadLayoutsSync();   // Synchronous — used by constructor/load() (before QML is visible)
-    void applyLayoutFilter(); // Re-filter cached layouts without D-Bus re-fetch
-    void scheduleLoadLayouts(); // Coalesces rapid D-Bus signals into a single loadLayouts() call
+    void scheduleLoadLayouts(); // Delegates to LayoutManager::scheduleLoad()
     void refreshScreens();
-    void checkDaemonStatus();
     void refreshVirtualDesktops();
     void refreshActivities();
-    void onScreenLayoutChanged(const QString& screenName, const QString& layoutId);
-    void onQuickLayoutSlotsChanged();
     void onSettingsChanged();
     void onCurrentActivityChanged(const QString& activityId);
     void onActivitiesChanged();
 
-private:
+public:
     // Get screen name from the focused KCM window (for editor targeting on Wayland)
+    // Public: LayoutManager needs this for editor launch targeting.
     QString currentScreenName() const;
-    void notifyDaemon();
-    QString resolveAutotileAlgorithm(const QString& key, bool isScreenAssignment) const;
-    bool syncAutotileAssignmentIds(QVariantMap& assignments, bool isScreenAssignment);
-    bool syncAutotileAssignmentIds(QMap<QString, QString>& assignments, bool isScreenAssignment);
-    void refreshDaemonEnabledState(); // Async refresh of systemd enabled state
-    void setDaemonAutostart(bool enabled);
 
-    // Async systemctl helper - runs command and calls callback with (success, output)
-    using SystemctlCallback = std::function<void(bool success, const QString& output)>;
-    void runSystemctl(const QStringList& args, SystemctlCallback callback = nullptr);
+private:
+    void notifyDaemon();
+    void emitAllSettingsPropertyChanged(); // Batch-emit all Settings-backed Q_PROPERTY signals
+
+    // Per-screen settings helpers (DRY for ZoneSelector/Autotile/Snapping)
+    using PerScreenGetter = QVariantMap (Settings::*)(const QString&) const;
+    using PerScreenSetter = void (Settings::*)(const QString&, const QString&, const QVariant&);
+    using PerScreenClearer = void (Settings::*)(const QString&);
+    using PerScreenChecker = bool (Settings::*)(const QString&) const;
+    QVariantMap getPerScreenSettingsImpl(const QString& screenName, PerScreenGetter getter) const;
+    void setPerScreenSettingImpl(const QString& screenName, const QString& key,
+                                 const QVariant& value, PerScreenSetter setter);
+    void clearPerScreenSettingsImpl(const QString& screenName, PerScreenClearer clearer);
+    bool hasPerScreenSettingsImpl(const QString& screenName, PerScreenChecker checker) const;
 
     // D-Bus helper for calls with timeout and error handling
     // Returns the reply message; check reply.type() == QDBusMessage::ErrorMessage for errors
@@ -831,26 +833,12 @@ private:
     Settings* m_settings = nullptr;
     UpdateChecker* m_updateChecker = nullptr;
     QString m_dismissedUpdateVersion;  // Cached to avoid repeated config reads
-    QTimer* m_daemonCheckTimer = nullptr;
-    QDBusServiceWatcher* m_daemonWatcher = nullptr; // Immediate notification of daemon start/stop
-    QTimer* m_loadLayoutsTimer = nullptr; // Debounce timer for coalescing D-Bus layout signals
-    int m_layoutLoadGeneration = 0; // Monotonic counter to discard stale async responses
-    bool m_daemonEnabled = true;
-    bool m_lastDaemonState = false;
-    QVariantList m_layouts;
-    QVariantList m_unfilteredLayouts; // Raw D-Bus layout data before autotile filter
-    QString m_layoutToSelect; // Layout ID to select after layouts are reloaded (one-shot)
-    bool m_initialLayoutLoadDone = false; // Tracks first successful load for auto-selecting default
+    std::unique_ptr<AssignmentManager> m_assignmentManager;
+    std::unique_ptr<DaemonController> m_daemonController;
+    std::unique_ptr<LayoutManager> m_layoutManager;
 
-    // Screens and assignments
+    // Screens
     QVariantList m_screens;
-    QVariantMap m_screenAssignments; // screenName -> layoutId (for virtualDesktop=0, all desktops)
-    QMap<int, QString> m_quickLayoutSlots; // slotNumber (1-9) -> layoutId
-    QVariantMap m_tilingScreenAssignments; // screenName -> autotile layoutId (for tiling mode)
-    QMap<int, QString> m_tilingQuickLayoutSlots; // slotNumber (1-9) -> autotile layoutId
-    QMap<QString, QString> m_tilingActivityAssignments; // "connectorName|activityId" -> autotile layoutId
-    QMap<QString, QString> m_tilingDesktopAssignments; // "connectorName|desktopNumber" -> autotile layoutId
-    int m_assignmentViewMode = 0; // 0 = snapping, 1 = tiling
 
     // Virtual desktop support
     int m_virtualDesktopCount = 1;
@@ -860,33 +848,6 @@ private:
     bool m_activitiesAvailable = false;
     QVariantList m_activities;
     QString m_currentActivity;
-
-    // Pending per-activity assignments (not yet applied)
-    // Key format: "screenName:activityId" -> layoutId (empty string means cleared)
-    QMap<QString, QString> m_pendingActivityAssignments;
-    QSet<QString> m_clearedActivityAssignments; // Keys that should be cleared on save
-
-    // Pending per-desktop assignments (not yet applied)
-    // Key format: "screenName:desktopNumber" -> layoutId (empty string means cleared)
-    QMap<QString, QString> m_pendingDesktopAssignments;
-    QSet<QString> m_clearedDesktopAssignments; // Keys that should be cleared on save
-
-    // Dirty flags for tiling per-desktop/per-activity assignments (need D-Bus push on save)
-    bool m_tilingDesktopAssignmentsDirty = false;
-    bool m_tilingActivityAssignmentsDirty = false;
-
-    // Pending layout visibility changes (staged until Apply)
-    // Key: layoutId, Value: hiddenFromSelector state
-    QHash<QString, bool> m_pendingHiddenStates;
-
-    // Pending auto-assign changes (staged until Apply)
-    // Key: layoutId, Value: autoAssign state
-    QHash<QString, bool> m_pendingAutoAssignStates;
-
-    // Pending app-to-zone rules (staged until Apply)
-    // Key: layoutId, Value: rules list (QVariantList of {pattern, zoneNumber})
-    // Only layouts that have been modified are stored here.
-    QHash<QString, QVariantList> m_pendingAppRules;
 
     // Fill on drop settings (stored separately in Editor group)
     bool m_fillOnDropEnabled = true;
