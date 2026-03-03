@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "enums.h"
 #include <QString>
 #include <QStringList>
 #include <QColor>
@@ -11,14 +12,6 @@
 #include <QVariantMap>
 
 namespace PlasmaZones {
-
-// Forward declarations for enums defined in interfaces.h
-enum class DragModifier;
-enum class ZoneSelectorPosition;
-enum class ZoneSelectorLayoutMode;
-enum class ZoneSelectorSizeMode;
-enum class StickyWindowHandling;
-enum class OsdStyle;
 
 /**
  * @brief Per-screen zone selector configuration

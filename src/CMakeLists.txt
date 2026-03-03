@@ -24,30 +24,44 @@ set(plasmazones_core_SRCS
     core/constants.h
     core/logging.h
     core/logging.cpp
+    core/enums.h
     core/interfaces.h
     core/interfaces.cpp
     core/settings_interfaces.h
     core/types.h
     core/utils.h
+    core/utils.cpp
     core/layoutfactory.h
     core/layoutfactory.cpp
     core/windowtrackingservice.h
     core/windowtrackingservice.cpp
+    core/wts_snap.cpp
+    core/wts_navigation.cpp
+    core/wts_resnap.cpp
+    core/wts_lifecycle.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp
+    core/geometryutils_constraints.cpp
+    core/geometryutils_overlaps.cpp
     core/geometryutils.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
     core/zone.cpp
     core/zone.h
     core/layout.cpp
+    core/layout_serialization.cpp
+    core/layout_factories.cpp
     core/layout.h
     core/layoutmanager.cpp
+    core/layoutmanager_persistence.cpp
+    core/layoutmanager_assignments.cpp
     core/layoutmanager.h
     core/layoututils.cpp
     core/layoututils.h
+    core/shaderregistry_params.cpp
     core/screenmanager.cpp
+    core/screenmanager_panels.cpp
     core/screenmanager.h
     core/virtualdesktopmanager.cpp
     core/virtualdesktopmanager.h
