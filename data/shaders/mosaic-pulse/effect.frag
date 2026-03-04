@@ -402,13 +402,12 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
         color.a = max(color.a, leadBorder * 0.5);
     }
 
-    // Tile fill: complementary hue, posterized to match stained-glass look
+    // Tile fill: brightened hue center, posterized to match stained-glass look
     if (labels.a > 0.01) {
-        vec3 compHue = vec3(1.0) - hueCenter;
-        compHue = mix(compHue, shapeTint, 0.3);
-        compHue = floor(compHue * posterLevels) / posterLevels;
+        vec3 labelHue = mix(hueCenter, shapeTint, 0.5) * 1.4;
+        labelHue = floor(labelHue * posterLevels) / posterLevels;
         float flashIntensity = 1.0 + (hasAudio ? bass * 0.8 * labelAudioMul : 0.0);
-        vec3 tileCol = compHue * flashIntensity;
+        vec3 tileCol = labelHue * flashIntensity;
         color.rgb = mix(color.rgb, tileCol, labels.a * labelBright);
         color.a = max(color.a, labels.a);
     }
