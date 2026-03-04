@@ -42,6 +42,7 @@ ColumnLayout {
                 root.viewMode = 0
                 layoutGrid.currentIndex = -1
                 layoutGrid.rebuildModel()
+                layoutGrid.selectDefaultLayout(0)
             }
         }
     }
@@ -57,6 +58,7 @@ ColumnLayout {
             root.viewMode = mode
             layoutGrid.currentIndex = -1
             layoutGrid.rebuildModel()
+            layoutGrid.selectDefaultLayout(mode)
         }
         onRequestDeleteLayout: (layout) => root.requestDeleteLayout(layout)
         onRequestImportLayout: root.requestImportLayout()
@@ -149,6 +151,16 @@ ColumnLayout {
             radius: Kirigami.Units.smallSpacing
         }
 
+        // Select the default layout for the given view mode
+        function selectDefaultLayout(mode) {
+            let defaultId = (mode === 1)
+                ? ("autotile:" + root.kcm.autotileAlgorithm)
+                : root.kcm.defaultLayoutId
+            if (defaultId) {
+                Qt.callLater(() => selectLayoutById(defaultId))
+            }
+        }
+
         // Selection by ID helper
         function selectLayoutById(layoutId) {
             if (!layoutId || !model) return false
@@ -178,11 +190,15 @@ ColumnLayout {
             rebuildModel()
             // Capture value — may be cleared by the time Qt.callLater runs
             let layoutId = kcm.layoutToSelect
-            Qt.callLater(() => {
-                if (layoutId && count > 0) {
-                    selectLayoutById(layoutId)
-                }
-            })
+            if (layoutId) {
+                Qt.callLater(() => {
+                    if (count > 0) {
+                        selectLayoutById(layoutId)
+                    }
+                })
+            } else {
+                selectDefaultLayout(root.viewMode)
+            }
         }
 
         // Delegate using extracted component

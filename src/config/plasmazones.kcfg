@@ -824,7 +824,7 @@
     </entry>
     <entry name="AnimationSequenceMode" type="Int">
       <label>When moving multiple windows (resnap, snap all, autotile, etc.): 0=Animate all at once, 1=Animate one by one in zone order</label>
-      <default>0</default>
+      <default>1</default>
       <min>0</min>
       <max>1</max>
     </entry>
