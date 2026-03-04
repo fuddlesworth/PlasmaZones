@@ -1108,7 +1108,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationDuration = d;
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
-        m_windowAnimator->setEasingCurve(CubicBezierCurve::fromString(v.toString()));
+        m_windowAnimator->setEasingCurve(EasingCurve::fromString(v.toString()));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));

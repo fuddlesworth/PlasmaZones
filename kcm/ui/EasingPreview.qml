@@ -7,11 +7,11 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
- * @brief Cubic bezier curve editor with draggable control points
+ * @brief Easing curve editor with draggable control points and named curve support
  *
- * Provides an interactive canvas for editing a cubic bezier easing curve
- * defined by two control points P1 and P2, plus an animated preview box
- * that demonstrates the curve. Click the canvas to replay the animation.
+ * Supports cubic bezier (interactive drag handles), elastic, and bounce curves.
+ * Bezier: "x1,y1,x2,y2", Named: "elastic-out:1.0,0.3" or "bounce-out".
+ * Detection: if string contains a letter -> named curve; otherwise -> bezier.
  */
 Item {
     id: root
@@ -42,26 +42,111 @@ Item {
     // Default curve string (Ease Out Cubic) — matches plasmazones.kcfg
     readonly property string defaultCurve: "0.33,1.00,0.68,1.00"
 
-    // Parsed control point values (internal state)
+    // Parsed control point values (internal state, bezier only)
     property real cp1x: 0.33
     property real cp1y: 1.00
     property real cp2x: 0.68
     property real cp2y: 1.00
 
-    // Parse the curve string into control point properties; reset to default on failure
+    // Named curve state — set imperatively by parseCurve(), not via binding,
+    // to avoid reading stale _parsedCurveType before parseCurve() runs.
+    property string curveType: "bezier"
+    property real elasticAmplitude: 1.0
+    property real elasticPeriod: 0.3
+    property int bouncesCount: 3
+
+    // Detect whether a string contains curve-name letters (not just 'e'/'E'
+    // from scientific notation like "1e-1,0.5,0.8,1.0").
+    function _hasLetter(str) {
+        for (var i = 0; i < str.length; i++) {
+            var c = str.charAt(i)
+            if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+                if (c !== 'e' && c !== 'E') return true
+            }
+        }
+        return false
+    }
+
+    // Known named curve types for validation
+    readonly property var _knownCurveTypes: [
+        "elastic-in", "elastic-out", "elastic-in-out",
+        "bounce-in", "bounce-out", "bounce-in-out"
+    ]
+
+    // Parse the curve string into control point properties or named curve state
     function parseCurve() {
-        var parts = root.curve.split(",")
-        if (parts.length === 4) {
-            var x1 = parseFloat(parts[0])
-            var y1 = parseFloat(parts[1])
-            var x2 = parseFloat(parts[2])
-            var y2 = parseFloat(parts[3])
+        var str = root.curve
+        if (!str || str === "") {
+            _resetToDefault()
+            return
+        }
+
+        if (_hasLetter(str)) {
+            var colonIdx = str.indexOf(':')
+            var name = colonIdx >= 0 ? str.substring(0, colonIdx).trim() : str.trim()
+            var params = colonIdx >= 0 ? str.substring(colonIdx + 1).trim() : ""
+
+            // Validate curve name; unknown names fall back to bezier defaults
+            if (_knownCurveTypes.indexOf(name) < 0) {
+                _resetToDefault()
+                return
+            }
+
+            var isElastic = (name === "elastic-in" || name === "elastic-out" || name === "elastic-in-out")
+            var isBounce = (name === "bounce-in" || name === "bounce-out" || name === "bounce-in-out")
+
+            // Reset to defaults before applying params to avoid stale values
+            // from a previous curve type leaking through
+            elasticAmplitude = 1.0
+            elasticPeriod = 0.3
+            bouncesCount = 3
+
+            if (params) {
+                var parts = params.split(",")
+                if (parts.length >= 1) {
+                    var a = parseFloat(parts[0])
+                    if (isFinite(a)) elasticAmplitude = Math.max(0.5, Math.min(3.0, a))
+                }
+                if (parts.length >= 2) {
+                    if (isElastic) {
+                        var p = parseFloat(parts[1])
+                        if (isFinite(p)) elasticPeriod = Math.max(0.1, Math.min(1.0, p))
+                    } else if (isBounce) {
+                        var b = Math.round(parseFloat(parts[1]))
+                        if (isFinite(b)) bouncesCount = Math.max(1, Math.min(8, b))
+                    }
+                }
+            }
+
+            curveType = name
+            return
+        }
+
+        // Bezier: "x1,y1,x2,y2"
+        curveType = "bezier"
+        var bparts = str.split(",")
+        if (bparts.length === 4) {
+            var x1 = parseFloat(bparts[0])
+            var y1 = parseFloat(bparts[1])
+            var x2 = parseFloat(bparts[2])
+            var y2 = parseFloat(bparts[3])
             if (isFinite(x1) && isFinite(y1) && isFinite(x2) && isFinite(y2)) {
-                cp1x = x1; cp1y = y1; cp2x = x2; cp2y = y2
+                // Clamp X to [0,1] and Y to [-1,2] matching C++ fromString bounds
+                cp1x = Math.max(0, Math.min(1, x1))
+                cp1y = Math.max(-1, Math.min(2, y1))
+                cp2x = Math.max(0, Math.min(1, x2))
+                cp2y = Math.max(-1, Math.min(2, y2))
                 return
             }
         }
-        // Reset to default on malformed input; emit to fix stored config
+        _resetToDefault()
+    }
+
+    function _resetToDefault() {
+        curveType = "bezier"
+        elasticAmplitude = 1.0
+        elasticPeriod = 0.3
+        bouncesCount = 3
         var def = root.defaultCurve.split(",")
         if (def.length === 4) {
             cp1x = parseFloat(def[0]); cp1y = parseFloat(def[1])
@@ -96,10 +181,75 @@ Item {
         return t
     }
 
+    // Elastic Out: a * 2^(-10t) * sin((t - s) * 2pi/p) + 1
+    function evaluateElasticOut(t, amp, per) {
+        if (t <= 0) return 0
+        if (t >= 1) return 1
+        var a = Math.max(1.0, amp)
+        var s = per / (2 * Math.PI) * Math.asin(1.0 / a)
+        return a * Math.pow(2, -10 * t) * Math.sin((t - s) * 2 * Math.PI / per) + 1
+    }
+
+    // Generalized Bounce Out: n bounce arcs, amplitude-scaled dip heights
+    function evaluateBounceOut(t, amp, n) {
+        if (t <= 0) return 0
+        if (t >= 1) return 1
+        var r = 0.5 // restitution coefficient
+        n = Math.max(1, Math.min(8, n))
+
+        // Base arc duration so all arcs fit in [0, 1]
+        var S = (1.0 - Math.pow(r, n)) / (1.0 - r)
+        var d = 1.0 / (1.0 + S)
+
+        // First half-arc: parabolic rise from 0 to 1
+        if (t < d) {
+            var u0 = t / d
+            return u0 * u0
+        }
+
+        // Subsequent full arcs
+        var tAccum = d
+        for (var k = 0; k < n; k++) {
+            var dk = d * Math.pow(r, k)
+            if (t < tAccum + dk || k === n - 1) {
+                var u = (t - tAccum) / dk
+                var height = Math.pow(r, 2 * (k + 1))
+                var dip = 1.0 - 4.0 * (u - 0.5) * (u - 0.5)
+                return 1.0 - height * amp * dip
+            }
+            tAccum += dk
+        }
+        return 1.0
+    }
+
     // Evaluate the easing for a given progress x in [0,1]
     function evaluateEasing(x) {
         if (x <= 0) return 0
         if (x >= 1) return 1
+
+        var ct = root.curveType
+        switch (ct) {
+        case "elastic-out":
+            return evaluateElasticOut(x, root.elasticAmplitude, root.elasticPeriod)
+        case "elastic-in":
+            return 1.0 - evaluateElasticOut(1.0 - x, root.elasticAmplitude, root.elasticPeriod)
+        case "elastic-in-out":
+            if (x < 0.5)
+                return (1.0 - evaluateElasticOut(1.0 - 2.0 * x, root.elasticAmplitude, root.elasticPeriod)) * 0.5
+            return evaluateElasticOut(2.0 * x - 1.0, root.elasticAmplitude, root.elasticPeriod) * 0.5 + 0.5
+        case "bounce-out":
+            return evaluateBounceOut(x, root.elasticAmplitude, root.bouncesCount)
+        case "bounce-in":
+            return 1.0 - evaluateBounceOut(1.0 - x, root.elasticAmplitude, root.bouncesCount)
+        case "bounce-in-out":
+            if (x < 0.5)
+                return (1.0 - evaluateBounceOut(1.0 - 2.0 * x, root.elasticAmplitude, root.bouncesCount)) * 0.5
+            return evaluateBounceOut(2.0 * x - 1.0, root.elasticAmplitude, root.bouncesCount) * 0.5 + 0.5
+        default:
+            break
+        }
+
+        // Bezier
         var t = solveBezierX(cp1x, cp2x, x)
         return cubicBezier(cp1y, cp2y, t)
     }
@@ -125,6 +275,24 @@ Item {
         if (gw <= 0) return 0.5
         return (px - canvasPad) / gw
     }
+
+    // Label text for current curve (amplitude at 2 decimals matching C++ toString)
+    function curveLabel() {
+        var ct = root.curveType
+        if (ct === "bezier") {
+            return "cubic-bezier(" + cp1x.toFixed(2) + ", " + cp1y.toFixed(2) + ", " + cp2x.toFixed(2) + ", " + cp2y.toFixed(2) + ")"
+        }
+        if (_knownCurveTypes.indexOf(ct) >= 0) {
+            var isElastic = (ct === "elastic-in" || ct === "elastic-out" || ct === "elastic-in-out")
+            if (isElastic) {
+                return ct + "(" + root.elasticAmplitude.toFixed(2) + ", " + root.elasticPeriod.toFixed(2) + ")"
+            }
+            return ct + "(" + root.elasticAmplitude.toFixed(2) + ", " + root.bouncesCount + ")"
+        }
+        return ct
+    }
+
+    readonly property bool isBezier: curveType === "bezier"
 
     onCurveChanged: {
         if (!dragArea.activeHandle) {
@@ -189,13 +357,15 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // Interactive bezier curve canvas
+        // Interactive curve canvas
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: root.canvasHeight
 
             ToolTip.visible: dragArea.containsMouse
-            ToolTip.text: i18n("Drag control points to customize the animation curve. Click to replay.")
+            ToolTip.text: root.isBezier
+                ? i18n("Drag control points to customize the animation curve. Click to replay.")
+                : i18n("Click to replay the animation preview.")
             ToolTip.delay: 500
 
             Canvas {
@@ -250,54 +420,78 @@ Item {
                     ctx.lineTo(pad + gw, yOne)
                     ctx.stroke()
 
-                    // Control point positions in canvas coords
-                    var p0x = pad, p0y = yZero
-                    var p3x = pad + gw, p3y = yOne
-                    var h1x = root.xToCanvas(root.cp1x, gw)
-                    var h1y = root.yToCanvas(root.cp1y, gh)
-                    var h2x = root.xToCanvas(root.cp2x, gw)
-                    var h2y = root.yToCanvas(root.cp2y, gh)
+                    if (root.isBezier) {
+                        // === BEZIER: control point handles + native bezierCurveTo ===
+                        var p0x = pad, p0y = yZero
+                        var p3x = pad + gw, p3y = yOne
+                        var h1x = root.xToCanvas(root.cp1x, gw)
+                        var h1y = root.yToCanvas(root.cp1y, gh)
+                        var h2x = root.xToCanvas(root.cp2x, gw)
+                        var h2y = root.yToCanvas(root.cp2y, gh)
 
-                    // Handle connection lines (dashed): P0->P1 and P3->P2
-                    ctx.strokeStyle = Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                              Kirigami.Theme.highlightColor.g,
-                                              Kirigami.Theme.highlightColor.b, 0.5)
-                    ctx.lineWidth = 1.5
-                    ctx.setLineDash([4, 3])
-                    ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(h1x, h1y); ctx.stroke()
-                    ctx.beginPath(); ctx.moveTo(p3x, p3y); ctx.lineTo(h2x, h2y); ctx.stroke()
-                    ctx.setLineDash([])
+                        // Handle connection lines (dashed): P0->P1 and P3->P2
+                        ctx.strokeStyle = Qt.rgba(Kirigami.Theme.highlightColor.r,
+                                                  Kirigami.Theme.highlightColor.g,
+                                                  Kirigami.Theme.highlightColor.b, 0.5)
+                        ctx.lineWidth = 1.5
+                        ctx.setLineDash([4, 3])
+                        ctx.beginPath(); ctx.moveTo(p0x, p0y); ctx.lineTo(h1x, h1y); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(p3x, p3y); ctx.lineTo(h2x, h2y); ctx.stroke()
+                        ctx.setLineDash([])
 
-                    // Cubic bezier curve (highlighted)
-                    ctx.strokeStyle = Kirigami.Theme.highlightColor
-                    ctx.lineWidth = 2.5
-                    ctx.beginPath()
-                    ctx.moveTo(p0x, p0y)
-                    ctx.bezierCurveTo(h1x, h1y, h2x, h2y, p3x, p3y)
-                    ctx.stroke()
-
-                    // Control point handles (inactive = dimmer for visual feedback)
-                    function drawHandle(cx, cy, active) {
+                        // Cubic bezier curve (highlighted)
+                        ctx.strokeStyle = Kirigami.Theme.highlightColor
+                        ctx.lineWidth = 2.5
                         ctx.beginPath()
-                        ctx.arc(cx, cy, root.handleRadius, 0, 2 * Math.PI)
-                        ctx.fillStyle = active ? Kirigami.Theme.highlightColor
-                            : Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
-                                      Kirigami.Theme.highlightColor.b, 0.6)
-                        ctx.fill()
-                        ctx.strokeStyle = Qt.rgba(Kirigami.Theme.highlightedTextColor.r,
-                                                  Kirigami.Theme.highlightedTextColor.g,
-                                                  Kirigami.Theme.highlightedTextColor.b, 0.8)
-                        ctx.lineWidth = active ? 2.5 : 1.5
+                        ctx.moveTo(p0x, p0y)
+                        ctx.bezierCurveTo(h1x, h1y, h2x, h2y, p3x, p3y)
                         ctx.stroke()
+
+                        // Control point handles
+                        function drawHandle(cx, cy, active) {
+                            ctx.beginPath()
+                            ctx.arc(cx, cy, root.handleRadius, 0, 2 * Math.PI)
+                            ctx.fillStyle = active ? Kirigami.Theme.highlightColor
+                                : Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
+                                          Kirigami.Theme.highlightColor.b, 0.6)
+                            ctx.fill()
+                            ctx.strokeStyle = Qt.rgba(Kirigami.Theme.highlightedTextColor.r,
+                                                      Kirigami.Theme.highlightedTextColor.g,
+                                                      Kirigami.Theme.highlightedTextColor.b, 0.8)
+                            ctx.lineWidth = active ? 2.5 : 1.5
+                            ctx.stroke()
+                        }
+
+                        drawHandle(h1x, h1y, dragArea.activeHandle === 1)
+                        drawHandle(h2x, h2y, dragArea.activeHandle === 2)
+
+                        // Anchor dots at P0 and P3
+                        ctx.fillStyle = Kirigami.Theme.disabledTextColor
+                        ctx.beginPath(); ctx.arc(p0x, p0y, 3, 0, 2 * Math.PI); ctx.fill()
+                        ctx.beginPath(); ctx.arc(p3x, p3y, 3, 0, 2 * Math.PI); ctx.fill()
+                    } else {
+                        // === NON-BEZIER: polyline sampled from evaluateEasing ===
+                        var nSamples = 200
+                        ctx.strokeStyle = Kirigami.Theme.highlightColor
+                        ctx.lineWidth = 2.5
+                        ctx.beginPath()
+                        for (var si = 0; si <= nSamples; si++) {
+                            var sx = si / nSamples
+                            var sy = root.evaluateEasing(sx)
+                            var px = root.xToCanvas(sx, gw)
+                            var py = root.yToCanvas(sy, gh)
+                            if (si === 0)
+                                ctx.moveTo(px, py)
+                            else
+                                ctx.lineTo(px, py)
+                        }
+                        ctx.stroke()
+
+                        // Anchor dots at endpoints
+                        ctx.fillStyle = Kirigami.Theme.disabledTextColor
+                        ctx.beginPath(); ctx.arc(pad, yZero, 3, 0, 2 * Math.PI); ctx.fill()
+                        ctx.beginPath(); ctx.arc(pad + gw, yOne, 3, 0, 2 * Math.PI); ctx.fill()
                     }
-
-                    drawHandle(h1x, h1y, dragArea.activeHandle === 1)
-                    drawHandle(h2x, h2y, dragArea.activeHandle === 2)
-
-                    // Anchor dots at P0 and P3
-                    ctx.fillStyle = Kirigami.Theme.disabledTextColor
-                    ctx.beginPath(); ctx.arc(p0x, p0y, 3, 0, 2 * Math.PI); ctx.fill()
-                    ctx.beginPath(); ctx.arc(p3x, p3y, 3, 0, 2 * Math.PI); ctx.fill()
 
                     // Axis labels
                     ctx.fillStyle = Qt.rgba(Kirigami.Theme.textColor.r,
@@ -316,8 +510,10 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 preventStealing: true // Crucial: prevents parent ScrollView from stealing vertical drag
-                cursorShape: activeHandle ? Qt.ClosedHandCursor
-                           : (hoveredHandle ? Qt.OpenHandCursor : Qt.ArrowCursor)
+                cursorShape: root.isBezier
+                    ? (activeHandle ? Qt.ClosedHandCursor
+                       : (hoveredHandle ? Qt.OpenHandCursor : Qt.ArrowCursor))
+                    : Qt.ArrowCursor
 
                 // 0 = none, 1 = P1, 2 = P2
                 property int activeHandle: 0
@@ -335,6 +531,7 @@ Item {
                 }
 
                 function nearestHandle(mx, my) {
+                    if (!root.isBezier) return 0
                     var d1 = handleDist(mx, my, root.cp1x, root.cp1y)
                     var d2 = handleDist(mx, my, root.cp2x, root.cp2y)
                     var hitRadius = root.handleHitRadius
@@ -359,7 +556,7 @@ Item {
                             if (gw <= 0 || gh <= 0) return
                             var nx = Math.max(0, Math.min(1, root.canvasToX(mouse.x, gw)))
                             var ny = Math.max(root.yMin, Math.min(root.yMax, root.canvasToY(mouse.y, gh)))
-                            
+
                             // High-precision update during drag for smoothness
                             if (activeHandle === 1) {
                                 root.cp1x = nx; root.cp1y = ny
@@ -387,7 +584,7 @@ Item {
                         root.cp1y = Math.round(root.cp1y * 100) / 100
                         root.cp2x = Math.round(root.cp2x * 100) / 100
                         root.cp2y = Math.round(root.cp2y * 100) / 100
-                        
+
                         activeHandle = 0
                         root.replay()
                         // Emit the update only once at the end of the drag to ensure stability
@@ -409,13 +606,12 @@ Item {
             }
         }
 
-        // Bezier value display
+        // Curve value display
         Label {
             Layout.fillWidth: true
             Layout.leftMargin: root.canvasPad
             Layout.rightMargin: root.canvasPad
-            text: i18n("cubic-bezier(%1, %2, %3, %4)",
-                root.cp1x.toFixed(2), root.cp1y.toFixed(2), root.cp2x.toFixed(2), root.cp2y.toFixed(2))
+            text: root.curveLabel()
             font: Kirigami.Theme.fixedWidthFont
             color: Kirigami.Theme.disabledTextColor
             horizontalAlignment: Text.AlignHCenter
