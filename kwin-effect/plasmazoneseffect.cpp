@@ -890,6 +890,11 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
         return false;
     }
 
+    // Exclude XDG desktop portal windows (file dialogs, color pickers, etc.)
+    if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+        return false;
+    }
+
     // Skip special windows
     if (w->isSpecialWindow()) {
         return false;
