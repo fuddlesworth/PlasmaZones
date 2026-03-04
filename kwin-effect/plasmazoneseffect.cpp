@@ -29,6 +29,7 @@
 #include <core/output.h> // For Output::name() for multi-monitor support
 
 #include "autotilehandler.h"
+#include "autotileborderrenderer.h"
 #include "screenchangehandler.h"
 #include "snapassisthandler.h"
 #include "navigationhandler.h"
@@ -217,6 +218,7 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
 PlasmaZonesEffect::PlasmaZonesEffect()
     : Effect()
     , m_autotileHandler(std::make_unique<AutotileHandler>(this))
+    , m_borderRenderer(std::make_unique<AutotileBorderRenderer>())
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
@@ -402,8 +404,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
 
-        // Unmaximize monocle-maximized windows — daemon state is gone
+        // Restore borderless and monocle-maximized windows — daemon state is gone
+        m_autotileHandler->restoreAllBorderless();
         m_autotileHandler->restoreAllMonocleMaximized();
+        m_lastBorderRect = QRect();
 
         KWin::effects->addRepaintFull();
     });
@@ -477,10 +481,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
 PlasmaZonesEffect::~PlasmaZonesEffect()
 {
-    // Unmaximize any monocle-maximized windows so they restore properly.
+    // Restore borderless and monocle-maximized windows so they recover properly.
     // Guard against compositor teardown — effects may outlive the stacking order.
     if (KWin::effects) {
+        m_autotileHandler->restoreAllBorderless();
         m_autotileHandler->restoreAllMonocleMaximized();
+        m_lastBorderRect = QRect();
     }
 
     if (m_keyboardGrabbed) {
@@ -512,7 +518,9 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
 
 bool PlasmaZonesEffect::isActive() const
 {
-    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations();
+    return m_dragTracker->isDragging()
+        || m_windowAnimator->hasActiveAnimations()
+        || !m_lastBorderRect.isEmpty();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
@@ -591,6 +599,16 @@ void PlasmaZonesEffect::slotWindowActivated(KWin::EffectWindow* w)
 {
     // Filtering (e.g. shouldHandleWindow) is done inside notifyWindowActivated
     notifyWindowActivated(w);
+
+    // Repaint so the active-only border moves with focus.
+    // Only repaint when the old or new active window is borderless.
+    if (m_autotileHandler->borderWidth() > 0 && m_autotileHandler->borderColor().alpha() > 0) {
+        const bool hadBorder = !m_lastBorderRect.isEmpty();
+        const bool newBorderless = w && m_autotileHandler->isBorderlessWindow(getWindowId(w));
+        if (hadBorder || newBorderless) {
+            KWin::effects->addRepaintFull();
+        }
+    }
 }
 
 void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
@@ -1111,6 +1129,27 @@ void PlasmaZonesEffect::loadCachedSettings()
     // autotileHideTitleBars needs extra logic when toggled off — delegate to handler
     loadSettingAsync(QStringLiteral("autotileHideTitleBars"), [this](const QVariant& v) {
         m_autotileHandler->updateHideTitleBarsSetting(v.toBool());
+        if (!v.toBool()) {
+            m_lastBorderRect = QRect();
+        }
+    });
+
+    loadSettingAsync(QStringLiteral("autotileBorderWidth"), [this](const QVariant& v) {
+        int bw = qBound(0, v.toInt(), 10);
+        if (m_autotileHandler->borderWidth() != bw) {
+            m_autotileHandler->setBorderWidth(bw);
+            if (bw == 0) {
+                m_lastBorderRect = QRect();
+            }
+            // Invalidate pending stagger timers that would use the old border width
+            m_autotileHandler->invalidateStaggerGeneration();
+            fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("retileAllScreens"),
+                                  {}, QStringLiteral("border width change retile"));
+        }
+    });
+
+    loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
+        m_autotileHandler->setBorderColor(QColor(v.toString()));
     });
 
     // dragActivationTriggers has complex QDBusArgument deserialization — keep as special case
@@ -2301,7 +2340,41 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
         // frame geometry bounds — force full compositing mode.
         data.mask |= PAINT_SCREEN_WITH_TRANSFORMED_WINDOWS;
     }
+
     KWin::effects->prePaintScreen(data, presentTime);
+}
+
+void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                    int mask, const KWin::Region& deviceRegion, KWin::LogicalOutput* screen)
+{
+    KWin::effects->paintScreen(renderTarget, viewport, mask, deviceRegion, screen);
+
+    // Draw colored border around the active borderless autotiled window only.
+    // Uses live frameGeometry expanded by borderWidth so centered/undersized
+    // windows get a correctly-sized border.
+    const int bw = m_autotileHandler->borderWidth();
+    const QColor bc = m_autotileHandler->borderColor();
+    QRect borderRect;
+    if (bw > 0 && bc.isValid() && bc.alpha() > 0) {
+        KWin::EffectWindow* active = KWin::effects->activeWindow();
+        if (active && !active->isMinimized() && !active->isFullScreen()
+            && active->isOnCurrentDesktop() && active->screen() == screen) {
+            const QString wid = getWindowId(active);
+            if (m_autotileHandler->isBorderlessWindow(wid)) {
+                const QRectF frame = active->frameGeometry();
+                borderRect = frame.toAlignedRect().adjusted(-bw, -bw, bw, bw);
+                m_borderRenderer->drawBorders(renderTarget, viewport, {borderRect}, bw, bc);
+            }
+        }
+    }
+    // Track current border rect for damage scheduling in postPaintScreen.
+    // If the border moved or disappeared, schedule repaint of the old region too.
+    if (m_lastBorderRect != borderRect) {
+        if (!m_lastBorderRect.isEmpty()) {
+            KWin::effects->addRepaint(m_lastBorderRect);
+        }
+        m_lastBorderRect = borderRect;
+    }
 }
 
 void PlasmaZonesEffect::postPaintScreen()

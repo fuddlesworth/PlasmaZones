@@ -174,6 +174,9 @@ public:
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY autotileFocusFollowsMouseChanged)
     Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY autotileRespectMinimumSizeChanged)
     Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY autotileHideTitleBarsChanged)
+    Q_PROPERTY(int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
+    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY autotileBorderColorChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
     // Autotile Shortcuts
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
     Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut NOTIFY autotileFocusMasterShortcutChanged)
@@ -826,6 +829,15 @@ public:
     bool autotileHideTitleBars() const override { return m_autotileHideTitleBars; }
     void setAutotileHideTitleBars(bool hide) override;
 
+    int autotileBorderWidth() const override { return m_autotileBorderWidth; }
+    void setAutotileBorderWidth(int width) override;
+
+    QColor autotileBorderColor() const override { return m_autotileBorderColor; }
+    void setAutotileBorderColor(const QColor& color) override;
+
+    bool autotileUseSystemBorderColors() const override { return m_autotileUseSystemBorderColors; }
+    void setAutotileUseSystemBorderColors(bool use) override;
+
     // Shader Effects
     bool enableShaderEffects() const override
     {
@@ -1094,6 +1106,7 @@ public:
     Q_INVOKABLE bool isWindowExcluded(const QString& appName, const QString& windowClass) const override;
     Q_INVOKABLE QString loadColorsFromFile(const QString& filePath);
     Q_INVOKABLE void applySystemColorScheme();
+    void applyAutotileBorderSystemColor();
 
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1316,6 +1329,9 @@ private:
     bool m_autotileFocusFollowsMouse = false;
     bool m_autotileRespectMinimumSize = true;
     bool m_autotileHideTitleBars = true;
+    int m_autotileBorderWidth = 2;
+    QColor m_autotileBorderColor = QColor(255, 255, 255, 200); // #C8FFFFFF
+    bool m_autotileUseSystemBorderColors = true;
     // Autotile Shortcuts (must match plasmazones.kcfg GlobalShortcuts defaults)
     QString m_autotileToggleShortcut = QStringLiteral("Meta+Shift+T");
     QString m_autotileFocusMasterShortcut = QStringLiteral("Meta+Shift+M");

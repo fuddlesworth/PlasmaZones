@@ -23,6 +23,8 @@ ScrollView {
     // Whether this tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
 
+    signal requestAutotileBorderColorDialog()
+
     // Per-screen override helper (applies to Algorithm card only)
     property alias selectedScreenName: psHelper.selectedScreenName
     readonly property alias isPerScreen: psHelper.isPerScreen
@@ -121,6 +123,7 @@ ScrollView {
                     }
 
                     CheckBox {
+                        id: hideTitleBarsCheck
                         Kirigami.FormData.label: i18n("Decorations:")
                         text: i18n("Hide title bars on tiled windows")
                         checked: kcm.autotileHideTitleBars
@@ -128,6 +131,52 @@ ScrollView {
 
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Remove window title bars while autotiled. Restored when floating or leaving autotile mode.")
+                    }
+
+                    // ── Border settings (visible when title bars hidden) ──
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Border width:")
+                        visible: hideTitleBarsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
+
+                        SpinBox {
+                            from: 0
+                            to: 10
+                            value: kcm.autotileBorderWidth
+                            onValueModified: kcm.autotileBorderWidth = value
+
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("Colored border drawn around borderless tiled windows (0 to disable)")
+                        }
+
+                        Label {
+                            text: i18n("px")
+                        }
+                    }
+
+                    CheckBox {
+                        id: useSystemBorderColorsCheck
+                        Kirigami.FormData.label: i18n("Color scheme:")
+                        visible: hideTitleBarsCheck.checked
+                        text: i18n("Use system accent color")
+                        checked: kcm.autotileUseSystemBorderColors
+                        onToggled: kcm.autotileUseSystemBorderColors = checked
+                    }
+
+                    RowLayout {
+                        Kirigami.FormData.label: i18n("Border:")
+                        visible: hideTitleBarsCheck.checked && !useSystemBorderColorsCheck.checked
+                        spacing: Kirigami.Units.smallSpacing
+
+                        ColorButton {
+                            color: kcm.autotileBorderColor
+                            onClicked: root.requestAutotileBorderColorDialog()
+                        }
+
+                        Label {
+                            text: kcm.autotileBorderColor.toString().toUpperCase()
+                            font: Kirigami.Theme.fixedWidthFont
+                        }
                     }
 
                 }

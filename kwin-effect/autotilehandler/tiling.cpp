@@ -156,8 +156,8 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         if (m_autotileStaggerGeneration != gen) {
             return;
         }
-        if (m_autotileHideTitleBars && !m_borderlessWindows.isEmpty()) {
-            const QSet<QString> toRestore = m_borderlessWindows - tiledWindowIds;
+        if (m_border.hideTitleBars && !m_border.borderlessWindows.isEmpty()) {
+            const QSet<QString> toRestore = m_border.borderlessWindows - tiledWindowIds;
             for (const QString& wid : toRestore) {
                 KWin::EffectWindow* win = m_effect->findWindowById(wid);
                 if (win && m_effect->getWindowScreenName(win) == tileScreenName && !win->isMinimized()) {
@@ -211,7 +211,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         }
         saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenName, snap.window->frameGeometry());
         qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
-        if (m_autotileHideTitleBars) {
+        if (m_border.hideTitleBars) {
             setWindowBorderless(snap.window, snap.windowId, true);
         }
 
@@ -229,11 +229,24 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             }
         } else {
             unmaximizeMonocleWindow(snap.windowId);
-            m_effect->applySnapGeometry(snap.window, snap.geometry);
+            // Store original zone geometry for border rendering, then apply inset
+            QRect geo = snap.geometry;
+            if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
+                m_border.zoneGeometries[snap.windowId] = snap.geometry;
+                geo = applyBorderInset(geo);
+            } else {
+                m_border.zoneGeometries.remove(snap.windowId);
+            }
+            m_effect->applySnapGeometry(snap.window, geo);
         }
 
         if (!snap.isMonocle && snap.window->isWaylandClient()) {
-            m_autotileTargetZones[snap.windowId] = snap.geometry;
+            // Use inset geometry for centering target so it matches actual window target
+            QRect targetGeo = snap.geometry;
+            if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
+                targetGeo = applyBorderInset(targetGeo);
+            }
+            m_autotileTargetZones[snap.windowId] = targetGeo;
         }
     }, onComplete);
 }
@@ -293,6 +306,18 @@ void AutotileHandler::slotFocusWindowRequested(const QString& windowId)
 
     m_pendingAutotileFocusWindowId = windowId;
     KWin::effects->activateWindow(w);
+}
+
+QRect AutotileHandler::applyBorderInset(const QRect& geo) const
+{
+    return geo.adjusted(m_border.width, m_border.width, -m_border.width, -m_border.width);
+}
+
+bool AutotileHandler::shouldInsetForBorder(const QString& windowId, const QRect& geo) const
+{
+    return shouldApplyBorderInset(windowId)
+        && geo.width() > 2 * m_border.width
+        && geo.height() > 2 * m_border.width;
 }
 
 } // namespace PlasmaZones

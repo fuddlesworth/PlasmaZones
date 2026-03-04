@@ -192,6 +192,9 @@ void Settings::load()
     if (m_useSystemColors) {
         applySystemColorScheme();
     }
+    if (m_autotileUseSystemBorderColors) {
+        applyAutotileBorderSystemColor();
+    }
 
     qCInfo(lcConfig) << "Settings loaded successfully";
     Q_EMIT settingsChanged();
@@ -315,6 +318,15 @@ void Settings::applySystemColorScheme()
     Q_EMIT inactiveColorChanged();
     Q_EMIT borderColorChanged();
     Q_EMIT labelFontColorChanged();
+}
+
+void Settings::applyAutotileBorderSystemColor()
+{
+    KColorScheme scheme(QPalette::Active, KColorScheme::Selection);
+    QColor border = scheme.foreground(KColorScheme::NormalText).color();
+    border.setAlpha(Defaults::BorderAlpha);
+    m_autotileBorderColor = border;
+    Q_EMIT autotileBorderColorChanged();
 }
 
 } // namespace PlasmaZones

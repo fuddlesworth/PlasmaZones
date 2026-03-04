@@ -194,6 +194,12 @@ class KCMPlasmaZones : public KQuickConfigModule
                    autotileRespectMinimumSizeChanged)
     Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
                    autotileHideTitleBarsChanged)
+    Q_PROPERTY(int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY
+                   autotileBorderWidthChanged)
+    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
+                   autotileBorderColorChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE setAutotileUseSystemBorderColors NOTIFY
+                   autotileUseSystemBorderColorsChanged)
     Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap NOTIFY
                    autotileUsePerSideOuterGapChanged)
     Q_PROPERTY(int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY
@@ -367,6 +373,9 @@ public:
     bool autotileFocusFollowsMouse() const;
     bool autotileRespectMinimumSize() const;
     bool autotileHideTitleBars() const;
+    int autotileBorderWidth() const;
+    QColor autotileBorderColor() const;
+    bool autotileUseSystemBorderColors() const;
     bool autotileUsePerSideOuterGap() const;
     int autotileOuterGapTop() const;
     int autotileOuterGapBottom() const;
@@ -514,6 +523,9 @@ public:
     void setAutotileFocusFollowsMouse(bool focus);
     void setAutotileRespectMinimumSize(bool respect);
     void setAutotileHideTitleBars(bool hide);
+    void setAutotileBorderWidth(int width);
+    void setAutotileBorderColor(const QColor& color);
+    void setAutotileUseSystemBorderColors(bool use);
     void setAutotileUsePerSideOuterGap(bool enabled);
     void setAutotileOuterGapTop(int gap);
     void setAutotileOuterGapBottom(int gap);
@@ -738,6 +750,9 @@ Q_SIGNALS:
     void autotileFocusFollowsMouseChanged();
     void autotileRespectMinimumSizeChanged();
     void autotileHideTitleBarsChanged();
+    void autotileBorderWidthChanged();
+    void autotileBorderColorChanged();
+    void autotileUseSystemBorderColorsChanged();
     void autotileUsePerSideOuterGapChanged();
     void autotileOuterGapTopChanged();
     void autotileOuterGapBottomChanged();

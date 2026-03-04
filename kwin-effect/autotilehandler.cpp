@@ -104,12 +104,55 @@ void AutotileHandler::restoreAllMonocleMaximized()
     m_monocleMaximizedWindows.clear();
 }
 
+void AutotileHandler::restoreAllBorderless()
+{
+    if (m_border.borderlessWindows.isEmpty()) {
+        return;
+    }
+    const QSet<QString> toRestore = m_border.borderlessWindows;
+    for (const QString& windowId : toRestore) {
+        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+        if (w) {
+            setWindowBorderless(w, windowId, false);
+        }
+    }
+    // Clear any orphan entries where findWindowById returned null
+    m_border.borderlessWindows.clear();
+    m_border.zoneGeometries.clear();
+}
+
+std::optional<QRect> AutotileHandler::borderZoneGeometry(const QString& windowId) const
+{
+    auto it = m_border.zoneGeometries.constFind(windowId);
+    if (it != m_border.zoneGeometries.constEnd()) {
+        return it.value();
+    }
+    return std::nullopt;
+}
+
+QVector<QRect> AutotileHandler::allBorderZoneGeometries() const
+{
+    QVector<QRect> result;
+    result.reserve(m_border.zoneGeometries.size());
+    for (auto it = m_border.zoneGeometries.constBegin(); it != m_border.zoneGeometries.constEnd(); ++it) {
+        result.append(it.value());
+    }
+    return result;
+}
+
+bool AutotileHandler::shouldApplyBorderInset(const QString& windowId) const
+{
+    return m_border.hideTitleBars && m_border.width > 0
+           && m_border.borderlessWindows.contains(windowId);
+}
+
 void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
 {
-    const bool wasEnabled = m_autotileHideTitleBars;
-    m_autotileHideTitleBars = enabled;
+    const bool wasEnabled = m_border.hideTitleBars;
+    m_border.hideTitleBars = enabled;
     if (wasEnabled && !enabled) {
-        const QSet<QString> toRestore = m_borderlessWindows;
+        m_border.zoneGeometries.clear();
+        const QSet<QString> toRestore = m_border.borderlessWindows;
         for (const QString& windowId : toRestore) {
             KWin::EffectWindow* win = m_effect->findWindowById(windowId);
             if (win) {
@@ -171,13 +214,14 @@ void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& 
         if (!w->hasDecoration()) {
             return;
         }
-        if (!m_borderlessWindows.contains(windowId)) {
+        if (!m_border.borderlessWindows.contains(windowId)) {
             kw->setNoBorder(true);
-            m_borderlessWindows.insert(windowId);
+            m_border.borderlessWindows.insert(windowId);
             qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId;
         }
     } else {
-        if (m_borderlessWindows.remove(windowId)) {
+        if (m_border.borderlessWindows.remove(windowId)) {
+            m_border.zoneGeometries.remove(windowId);
             kw->setNoBorder(false);
             qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId;
         }
@@ -271,10 +315,14 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     m_notifiedWindows.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
 
-    // Clean up borderless, monocle-maximize, and deferred-centering tracking
-    m_borderlessWindows.remove(windowId);
+    // Clean up borderless, monocle-maximize, deferred-centering, border zone, and pre-autotile tracking
+    m_border.borderlessWindows.remove(windowId);
+    m_border.zoneGeometries.remove(windowId);
     m_monocleMaximizedWindows.remove(windowId);
     m_autotileTargetZones.remove(windowId);
+    if (m_preAutotileGeometries.contains(screenName)) {
+        m_preAutotileGeometries[screenName].remove(windowId);
+    }
 
     // Notify autotile daemon
     if (m_autotileScreens.contains(screenName)) {

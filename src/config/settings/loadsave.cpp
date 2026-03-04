@@ -281,6 +281,9 @@ void Settings::loadAutotilingConfig(const KConfigGroup& autotiling, const KConfi
     m_autotileFocusFollowsMouse = autotiling.readEntry(QLatin1String("AutotileFocusFollowsMouse"), ConfigDefaults::autotileFocusFollowsMouse());
     m_autotileRespectMinimumSize = autotiling.readEntry(QLatin1String("AutotileRespectMinimumSize"), ConfigDefaults::autotileRespectMinimumSize());
     m_autotileHideTitleBars = autotiling.readEntry(QLatin1String("AutotileHideTitleBars"), ConfigDefaults::autotileHideTitleBars());
+    m_autotileBorderWidth = readValidatedInt(autotiling, "AutotileBorderWidth", ConfigDefaults::autotileBorderWidth(), 0, 10, "autotile border width");
+    m_autotileBorderColor = readValidatedColor(autotiling, "AutotileBorderColor", ConfigDefaults::autotileBorderColor(), "autotile border");
+    m_autotileUseSystemBorderColors = autotiling.readEntry(QLatin1String("AutotileUseSystemBorderColors"), ConfigDefaults::autotileUseSystemBorderColors());
 
     // Autotile Shortcuts
     m_autotileToggleShortcut = autotileShortcuts.readEntry(QLatin1String("ToggleShortcut"), ConfigDefaults::autotileToggleShortcut());
@@ -449,6 +452,9 @@ void Settings::saveAutotilingConfig(KConfigGroup& autotiling, KConfigGroup& anim
     autotiling.writeEntry(QLatin1String("AutotileFocusFollowsMouse"), m_autotileFocusFollowsMouse);
     autotiling.writeEntry(QLatin1String("AutotileRespectMinimumSize"), m_autotileRespectMinimumSize);
     autotiling.writeEntry(QLatin1String("AutotileHideTitleBars"), m_autotileHideTitleBars);
+    autotiling.writeEntry(QLatin1String("AutotileBorderWidth"), m_autotileBorderWidth);
+    autotiling.writeEntry(QLatin1String("AutotileBorderColor"), m_autotileBorderColor);
+    autotiling.writeEntry(QLatin1String("AutotileUseSystemBorderColors"), m_autotileUseSystemBorderColors);
 
     animations.writeEntry(QLatin1String("AnimationsEnabled"), m_animationsEnabled);
     animations.writeEntry(QLatin1String("AnimationDuration"), m_animationDuration);

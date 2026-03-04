@@ -192,6 +192,9 @@ public:
     static bool autotileFocusFollowsMouse() { return instance().defaultAutotileFocusFollowsMouseValue(); }
     static bool autotileRespectMinimumSize() { return instance().defaultAutotileRespectMinimumSizeValue(); }
     static bool autotileHideTitleBars() { return instance().defaultAutotileHideTitleBarsValue(); }
+    static int autotileBorderWidth() { return instance().defaultAutotileBorderWidthValue(); }
+    static QColor autotileBorderColor() { return instance().defaultAutotileBorderColorValue(); }
+    static bool autotileUseSystemBorderColors() { return instance().defaultAutotileUseSystemBorderColorsValue(); }
     // ═══════════════════════════════════════════════════════════════════════════
     // Mode Tracking Settings
     // ═══════════════════════════════════════════════════════════════════════════

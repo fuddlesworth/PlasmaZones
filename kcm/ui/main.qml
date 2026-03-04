@@ -297,6 +297,10 @@ KCM.AbstractKCM {
             kcm: root.kcmModule
             constants: constants
             isCurrentTab: stackLayout.currentIndex === 4
+            onRequestAutotileBorderColorDialog: {
+                autotileBorderColorDialog.selectedColor = kcm.autotileBorderColor
+                autotileBorderColorDialog.open()
+            }
         }
 
         // TAB 6: GENERAL (OSD and global settings)
@@ -345,6 +349,12 @@ KCM.AbstractKCM {
         id: labelFontColorDialog
         title: i18n("Choose Label Color")
         onAccepted: kcm.labelFontColor = selectedColor
+    }
+
+    ColorDialog {
+        id: autotileBorderColorDialog
+        title: i18n("Choose Autotile Border Color")
+        onAccepted: kcm.autotileBorderColor = selectedColor
     }
 
     // Font dialog

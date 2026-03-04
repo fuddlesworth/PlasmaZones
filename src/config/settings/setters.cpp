@@ -315,6 +315,22 @@ SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, au
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
 SETTINGS_SETTER(bool, AutotileHideTitleBars, m_autotileHideTitleBars, autotileHideTitleBarsChanged)
 
+SETTINGS_SETTER_CLAMPED(AutotileBorderWidth, m_autotileBorderWidth, autotileBorderWidthChanged, 0, 10)
+
+SETTINGS_SETTER(const QColor&, AutotileBorderColor, m_autotileBorderColor, autotileBorderColorChanged)
+
+void Settings::setAutotileUseSystemBorderColors(bool use)
+{
+    if (m_autotileUseSystemBorderColors != use) {
+        m_autotileUseSystemBorderColors = use;
+        if (use) {
+            applyAutotileBorderSystemColor();
+        }
+        Q_EMIT autotileUseSystemBorderColorsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 // Shader Effects
 SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
 SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged, 30, 144)

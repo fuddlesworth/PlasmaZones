@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <QColor>
 #include <QHash>
 #include <QObject>
+#include <optional>
 #include <QPointer>
 #include <QRect>
 #include <QRectF>
@@ -63,12 +65,29 @@ public:
     // Cleanup: unmaximize all monocle-maximized windows (called on daemon loss / effect teardown)
     void restoreAllMonocleMaximized();
 
+    // Cleanup: restore title bars and clear border state for all borderless windows
+    void restoreAllBorderless();
+
     // Settings update: toggle hide-title-bars with border restore on disable
     void updateHideTitleBarsSetting(bool enabled);
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isAutotileScreen(const QString& screenName) const;
     const QSet<QString>& autotileScreens() const { return m_autotileScreens; }
+
+    // Border rendering accessors
+    bool isBorderlessWindow(const QString& windowId) const { return m_border.borderlessWindows.contains(windowId); }
+    int borderWidth() const { return m_border.width; }
+    void setBorderWidth(int w) { m_border.width = w; }
+    QColor borderColor() const { return m_border.color; }
+    void setBorderColor(const QColor& c) { m_border.color = c; }
+    QRect applyBorderInset(const QRect& geo) const;
+    bool shouldInsetForBorder(const QString& windowId, const QRect& geo) const;
+    std::optional<QRect> borderZoneGeometry(const QString& windowId) const;
+    QVector<QRect> allBorderZoneGeometries() const;
+
+    // Invalidate pending stagger timers (call before triggering retile)
+    void invalidateStaggerGeneration() { ++m_autotileStaggerGeneration; }
 
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
@@ -93,6 +112,7 @@ private:
     bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
                                           const QRectF& frame);
     void centerUndersizedAutotileWindows();
+    bool shouldApplyBorderInset(const QString& windowId) const;
 
     /**
      * @brief Find key in saved geometries map for a window (exact or stable ID match)
@@ -122,8 +142,14 @@ private:
     QString m_pendingAutotileFocusWindowId;
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
-    QSet<QString> m_borderlessWindows;
-    bool m_autotileHideTitleBars = false;
+    // ── Border state (logically grouped for SRP clarity) ──
+    struct BorderState {
+        QSet<QString> borderlessWindows;
+        QHash<QString, QRect> zoneGeometries;
+        bool hideTitleBars = false;
+        int width = 2;
+        QColor color;
+    } m_border;
 };
 
 } // namespace PlasmaZones

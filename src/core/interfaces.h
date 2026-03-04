@@ -78,6 +78,12 @@ public:
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileHideTitleBars() const = 0;
     virtual void setAutotileHideTitleBars(bool hide) = 0;
+    virtual int autotileBorderWidth() const = 0;
+    virtual void setAutotileBorderWidth(int width) = 0;
+    virtual QColor autotileBorderColor() const = 0;
+    virtual void setAutotileBorderColor(const QColor& color) = 0;
+    virtual bool autotileUseSystemBorderColors() const = 0;
+    virtual void setAutotileUseSystemBorderColors(bool use) = 0;
 
     // Persistence (unique to ISettings)
     virtual void load() = 0;
@@ -239,6 +245,9 @@ Q_SIGNALS:
     void autotileRespectMinimumSizeChanged();
     void autotileFocusFollowsMouseChanged();
     void autotileHideTitleBarsChanged();
+    void autotileBorderWidthChanged();
+    void autotileBorderColorChanged();
+    void autotileUseSystemBorderColorsChanged();
     // Animation settings (general)
     void animationsEnabledChanged();
     void animationDurationChanged();

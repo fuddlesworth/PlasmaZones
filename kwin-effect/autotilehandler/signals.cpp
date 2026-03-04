@@ -35,6 +35,7 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
 {
     qCInfo(lcEffect) << "Autotile enabled state changed:" << enabled;
     if (!enabled) {
+        restoreAllBorderless();
         restoreAllMonocleMaximized();
     }
 }
@@ -58,7 +59,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
 
         // Restore title bars for windows on removed screens
         for (const QString& windowId : std::as_const(windowsOnRemovedScreens)) {
-            if (m_borderlessWindows.contains(windowId)) {
+            if (m_border.borderlessWindows.contains(windowId)) {
                 KWin::EffectWindow* w = m_effect->findWindowById(windowId);
                 if (w) {
                     setWindowBorderless(w, windowId, false);
@@ -275,7 +276,7 @@ void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool is
     }
 
     if (isFloating) {
-        if (m_borderlessWindows.contains(windowId)) {
+        if (m_border.borderlessWindows.contains(windowId)) {
             KWin::EffectWindow* w = m_effect->findWindowById(windowId);
             if (w) {
                 setWindowBorderless(w, windowId, false);
@@ -369,6 +370,14 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
         return;
     }
     const QString windowId = m_effect->getWindowId(w);
+    // Clear border and borderless tracking so borders are not drawn over fullscreen content
+    m_border.zoneGeometries.remove(windowId);
+    if (m_border.borderlessWindows.remove(windowId)) {
+        KWin::Window* kw = w->window();
+        if (kw) {
+            kw->setNoBorder(false);
+        }
+    }
     if (m_monocleMaximizedWindows.remove(windowId)) {
         qCInfo(lcEffect) << "Monocle window went fullscreen:" << windowId << "— removed from tracking";
     }

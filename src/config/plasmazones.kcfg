@@ -790,6 +790,20 @@
       <label>Hide title bars on autotiled windows</label>
       <default>true</default>
     </entry>
+    <entry name="AutotileBorderWidth" type="Int">
+      <label>Border width for borderless autotiled windows</label>
+      <default>2</default>
+      <min>0</min>
+      <max>10</max>
+    </entry>
+    <entry name="AutotileBorderColor" type="Color">
+      <label>Border color for borderless autotiled windows</label>
+      <default>#C8FFFFFF</default>
+    </entry>
+    <entry name="AutotileUseSystemBorderColors" type="Bool">
+      <label>Derive autotile border color from system color scheme</label>
+      <default>true</default>
+    </entry>
     <entry name="AutotileMaxWindows" type="Int">
       <label>Maximum windows for autotiling algorithm (also controls preview and zone count)</label>
       <default>6</default>

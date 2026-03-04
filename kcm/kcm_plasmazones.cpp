@@ -1303,6 +1303,18 @@ bool KCMPlasmaZones::autotileHideTitleBars() const
 {
     return m_settings->autotileHideTitleBars();
 }
+int KCMPlasmaZones::autotileBorderWidth() const
+{
+    return m_settings->autotileBorderWidth();
+}
+QColor KCMPlasmaZones::autotileBorderColor() const
+{
+    return m_settings->autotileBorderColor();
+}
+bool KCMPlasmaZones::autotileUseSystemBorderColors() const
+{
+    return m_settings->autotileUseSystemBorderColors();
+}
 bool KCMPlasmaZones::autotileUsePerSideOuterGap() const
 {
     return m_settings->autotileUsePerSideOuterGap();
@@ -1547,6 +1559,33 @@ void KCMPlasmaZones::setAutotileHideTitleBars(bool hide)
     if (m_settings->autotileHideTitleBars() != hide) {
         m_settings->setAutotileHideTitleBars(hide);
         Q_EMIT autotileHideTitleBarsChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileBorderWidth(int width)
+{
+    if (m_settings->autotileBorderWidth() != width) {
+        m_settings->setAutotileBorderWidth(width);
+        Q_EMIT autotileBorderWidthChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileBorderColor(const QColor& color)
+{
+    if (m_settings->autotileBorderColor() != color) {
+        m_settings->setAutotileBorderColor(color);
+        Q_EMIT autotileBorderColorChanged();
+        setNeedsSave(true);
+    }
+}
+
+void KCMPlasmaZones::setAutotileUseSystemBorderColors(bool use)
+{
+    if (m_settings->autotileUseSystemBorderColors() != use) {
+        m_settings->setAutotileUseSystemBorderColors(use);
+        Q_EMIT autotileUseSystemBorderColorsChanged();
         setNeedsSave(true);
     }
 }
@@ -2270,6 +2309,9 @@ void KCMPlasmaZones::emitAllSettingsPropertyChanged()
     Q_EMIT autotileFocusFollowsMouseChanged();
     Q_EMIT autotileRespectMinimumSizeChanged();
     Q_EMIT autotileHideTitleBarsChanged();
+    Q_EMIT autotileBorderWidthChanged();
+    Q_EMIT autotileBorderColorChanged();
+    Q_EMIT autotileUseSystemBorderColorsChanged();
     Q_EMIT autotileUsePerSideOuterGapChanged();
     Q_EMIT autotileOuterGapTopChanged();
     Q_EMIT autotileOuterGapBottomChanged();
