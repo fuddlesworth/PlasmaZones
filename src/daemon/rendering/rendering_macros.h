@@ -26,6 +26,7 @@
 #define RHINODE_PARAMS_SETTER(name, member) \
     void ZoneShaderNodeRhi::set##name(const QVector4D& params) \
     { \
+        if (member == params) return; \
         member = params; \
         m_uniformsDirty = true; \
         m_zoneDataDirty = true; \
@@ -35,6 +36,7 @@
 #define RHINODE_COLOR_SETTER(name, member) \
     void ZoneShaderNodeRhi::set##name(const QColor& color) \
     { \
+        if (member == color) return; \
         member = color; \
         m_uniformsDirty = true; \
         m_zoneDataDirty = true; \

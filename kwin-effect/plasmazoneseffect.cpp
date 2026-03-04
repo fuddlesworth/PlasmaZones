@@ -829,6 +829,7 @@ void PlasmaZonesEffect::slotDaemonReady()
             m_autotileHandler->notifyWindowAdded(w);
         }
     }
+
 }
 
 void PlasmaZonesEffect::slotSettingsChanged()

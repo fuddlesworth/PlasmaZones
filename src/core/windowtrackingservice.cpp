@@ -336,8 +336,31 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
         if (stableId != windowId) {
             m_floatingWindows.remove(stableId);
         }
+        // Clear autotile-floated origin tracking for this specific instance only.
+        // No stableId removal — autotile-floated is per-instance, never shared.
+        m_autotileFloatedWindows.remove(windowId);
     }
     scheduleSaveState();
+}
+
+void WindowTrackingService::markAutotileFloated(const QString& windowId)
+{
+    m_autotileFloatedWindows.insert(windowId);
+}
+
+void WindowTrackingService::clearAutotileFloated(const QString& windowId)
+{
+    m_autotileFloatedWindows.remove(windowId);
+}
+
+bool WindowTrackingService::isAutotileFloated(const QString& windowId) const
+{
+    // Exact match only — NO stableId fallback.
+    // m_autotileFloatedWindows is ephemeral runtime state (not persisted).
+    // A stableId fallback would cross-contaminate multiple instances of the
+    // same app (e.g., 3 Dolphin windows share stableId "dolphin:dolphin",
+    // so floating one would incorrectly mark all three).
+    return m_autotileFloatedWindows.contains(windowId);
 }
 
 QStringList WindowTrackingService::floatingWindows() const

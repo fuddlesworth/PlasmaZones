@@ -114,6 +114,10 @@ RHINODE_PARAMS_SETTER(CustomParams1, m_customParams1)
 RHINODE_PARAMS_SETTER(CustomParams2, m_customParams2)
 RHINODE_PARAMS_SETTER(CustomParams3, m_customParams3)
 RHINODE_PARAMS_SETTER(CustomParams4, m_customParams4)
+RHINODE_PARAMS_SETTER(CustomParams5, m_customParams5)
+RHINODE_PARAMS_SETTER(CustomParams6, m_customParams6)
+RHINODE_PARAMS_SETTER(CustomParams7, m_customParams7)
+RHINODE_PARAMS_SETTER(CustomParams8, m_customParams8)
 
 // ============================================================================
 // Custom Colors (DRY macro — 8 invocations replace 48 lines)
@@ -127,6 +131,14 @@ RHINODE_COLOR_SETTER(CustomColor5, m_customColor5)
 RHINODE_COLOR_SETTER(CustomColor6, m_customColor6)
 RHINODE_COLOR_SETTER(CustomColor7, m_customColor7)
 RHINODE_COLOR_SETTER(CustomColor8, m_customColor8)
+RHINODE_COLOR_SETTER(CustomColor9, m_customColor9)
+RHINODE_COLOR_SETTER(CustomColor10, m_customColor10)
+RHINODE_COLOR_SETTER(CustomColor11, m_customColor11)
+RHINODE_COLOR_SETTER(CustomColor12, m_customColor12)
+RHINODE_COLOR_SETTER(CustomColor13, m_customColor13)
+RHINODE_COLOR_SETTER(CustomColor14, m_customColor14)
+RHINODE_COLOR_SETTER(CustomColor15, m_customColor15)
+RHINODE_COLOR_SETTER(CustomColor16, m_customColor16)
 
 // ============================================================================
 // Labels / Audio / User Texture Setters

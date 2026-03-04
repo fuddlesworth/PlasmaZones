@@ -62,4 +62,29 @@ float getOverall() {
     return sum / float(iAudioSpectrumSize);
 }
 
+// ─── Dampened band helpers (for non-audio-primary shaders) ───────────────────
+// Apply noise-floor gate + power curve to suppress jitter from weak signals
+// while keeping strong hits punchy. Use these instead of raw getBass()/etc.
+// in shaders where audio is an enhancement, not the core visual.
+
+float getBassSoft() {
+    float v = getBass();
+    return v * smoothstep(0.04, 0.25, v);
+}
+
+float getMidsSoft() {
+    float v = getMids();
+    return v * smoothstep(0.03, 0.20, v);
+}
+
+float getTrebleSoft() {
+    float v = getTreble();
+    return v * smoothstep(0.03, 0.20, v);
+}
+
+float getOverallSoft() {
+    float v = getOverall();
+    return v * smoothstep(0.03, 0.20, v);
+}
+
 #endif

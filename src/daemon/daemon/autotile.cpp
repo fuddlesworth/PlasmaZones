@@ -164,16 +164,43 @@ void Daemon::handleAutotileDisabled()
         QSignalBlocker blocker(m_layoutManager.get());
         m_layoutManager->clearAutotileAssignments();
     }
-    // Restore last manual layout so windows aren't stuck in tiled positions
-    if (m_modeTracker && m_layoutManager) {
+    // Restore last manual layout so windows aren't stuck in tiled positions.
+    // Assign per-screen (not just globally) so layoutForScreen() finds explicit
+    // assignments instead of falling through to the default layout.
+    if (m_modeTracker && m_layoutManager && m_screenManager) {
         m_modeTracker->setCurrentMode(TilingMode::Manual);
         const QString lastLayoutId = m_modeTracker->lastManualLayoutId();
-        if (!lastLayoutId.isEmpty()) {
-            Layout* layout = m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
-            if (layout) {
-                m_layoutManager->setActiveLayout(layout);
-            }
+        Layout* layout = lastLayoutId.isEmpty()
+            ? nullptr
+            : m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
+        // Fallback to active layout or first available layout
+        if (!layout) {
+            layout = m_layoutManager->activeLayout();
         }
+        if (!layout && !m_layoutManager->layouts().isEmpty()) {
+            layout = m_layoutManager->layouts().first();
+        }
+        if (layout) {
+            const int desktop = currentDesktop();
+            const QString activity = currentActivity();
+            // Block signals: per-screen assignments are batch-written here
+            // and the caller will call updateAutotileScreens() afterward.
+            {
+                QSignalBlocker blocker(m_layoutManager.get());
+                for (QScreen* screen : m_screenManager->screens()) {
+                    QString screenId = Utils::screenIdentifier(screen);
+                    m_layoutManager->assignLayout(screenId, desktop, activity, layout);
+                }
+            }
+            // Set active layout OUTSIDE blocker so activeLayoutChanged fires
+            // and UnifiedLayoutController syncs its internal state.
+            m_layoutManager->setActiveLayout(layout);
+        }
+    }
+    // Clear ALL saved floating state when autotile is disabled globally.
+    // Stale entries would incorrectly float windows on next activation.
+    if (m_autotileEngine) {
+        m_autotileEngine->clearAllSavedFloating();
     }
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleasedFromTiling clears floating state before windows are resnapped.
@@ -231,6 +258,12 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenName)
     }
     QStringList zoneOrder = wts->buildZoneOrderedWindowList(screenName);
     if (!zoneOrder.isEmpty()) {
+        // Clear saved-floating for windows that were re-snapped to zones.
+        // If the user floated a window in autotile then re-snapped it in manual
+        // mode, the re-snap shows intent to tile — don't restore as floating.
+        // Un-snapped windows (not in zoneOrder) keep their saved floating state
+        // so they stay floating when autotile is re-enabled.
+        m_autotileEngine->clearSavedFloatingForWindows(zoneOrder);
         m_autotileEngine->setInitialWindowOrder(screenName, zoneOrder);
     }
 }

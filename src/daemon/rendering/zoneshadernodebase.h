@@ -44,6 +44,10 @@ public:
     virtual void setCustomParams2(const QVector4D& params) = 0;
     virtual void setCustomParams3(const QVector4D& params) = 0;
     virtual void setCustomParams4(const QVector4D& params) = 0;
+    virtual void setCustomParams5(const QVector4D& params) = 0;
+    virtual void setCustomParams6(const QVector4D& params) = 0;
+    virtual void setCustomParams7(const QVector4D& params) = 0;
+    virtual void setCustomParams8(const QVector4D& params) = 0;
     virtual void setCustomColor1(const QColor& color) = 0;
     virtual void setCustomColor2(const QColor& color) = 0;
     virtual void setCustomColor3(const QColor& color) = 0;
@@ -52,6 +56,14 @@ public:
     virtual void setCustomColor6(const QColor& color) = 0;
     virtual void setCustomColor7(const QColor& color) = 0;
     virtual void setCustomColor8(const QColor& color) = 0;
+    virtual void setCustomColor9(const QColor& color) = 0;
+    virtual void setCustomColor10(const QColor& color) = 0;
+    virtual void setCustomColor11(const QColor& color) = 0;
+    virtual void setCustomColor12(const QColor& color) = 0;
+    virtual void setCustomColor13(const QColor& color) = 0;
+    virtual void setCustomColor14(const QColor& color) = 0;
+    virtual void setCustomColor15(const QColor& color) = 0;
+    virtual void setCustomColor16(const QColor& color) = 0;
 
     /** Labels texture (pre-rendered zone numbers). Default no-op for backends that don't support it. */
     virtual void setLabelsTexture(const QImage& image)

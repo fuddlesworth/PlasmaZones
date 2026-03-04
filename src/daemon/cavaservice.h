@@ -76,6 +76,7 @@ private:
     int m_framerate = 60;
     QString m_config;
     QVector<float> m_spectrum;
+    QVector<float> m_smoothedSpectrum; // EMA-filtered spectrum to reduce frame-to-frame jitter
     bool m_stopping = false; // suppress error reporting during intentional stop
     bool m_pendingRestart = false; // suppress error reporting during async restart
 };

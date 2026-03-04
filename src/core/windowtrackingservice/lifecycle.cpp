@@ -115,6 +115,11 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         m_floatingWindows.remove(windowId);
         m_floatingWindows.insert(stableId);
     }
+    // Remove autotile-floated tracking outright — do NOT migrate to stableId.
+    // This set is ephemeral (not persisted); migrating to stableId would create
+    // a shared key that matches ALL instances of the same app, causing
+    // cross-contamination when isAutotileFloated() is called for other instances.
+    m_autotileFloatedWindows.remove(windowId);
     m_windowStickyStates.remove(windowId);
     m_autoSnappedWindows.remove(windowId);
 
@@ -163,12 +168,18 @@ void WindowTrackingService::onLayoutChanged()
                 zoneIdToPosition[withoutBraces] = i + 1;
             }
         }
-        QSet<QString> addedStableIds; // avoid duplicates when window is in both live and pending
+        // Dedup: full windowId for live assignments (supports multi-instance apps),
+        // stableId for pending entries (avoids double-counting live + pending for same window)
+        QSet<QString> addedIds;
 
         auto addToBuffer = [&](const QString& windowIdOrStableId, const QStringList& zoneIdList,
                                const QString& screenName, int vd) {
-            QString stableId = Utils::extractStableId(windowIdOrStableId);
-            if (stableId.isEmpty() || isWindowFloating(windowIdOrStableId) || addedStableIds.contains(stableId)) {
+            // Skip ALL floating windows. Floating persists across mode toggles —
+            // floating windows should stay at their current position, not be resnapped.
+            if (windowIdOrStableId.isEmpty() || isWindowFloating(windowIdOrStableId)) {
+                return;
+            }
+            if (addedIds.contains(windowIdOrStableId)) {
                 return;
             }
             // Use primary zone for position mapping
@@ -190,10 +201,24 @@ void WindowTrackingService::onLayoutChanged()
             if (pos <= 0) {
                 return;
             }
-            addedStableIds.insert(stableId);
+            // Track by exact key (full windowId for live, stableId for pending)
+            addedIds.insert(windowIdOrStableId);
+            // Also track stableId so pending entries don't duplicate live ones
+            QString stableId = Utils::extractStableId(windowIdOrStableId);
+            if (stableId != windowIdOrStableId) {
+                addedIds.insert(stableId);
+            }
+            // Collect all zone positions for multi-zone resnap
+            QList<int> allPositions;
+            for (const QString& zid : zoneIdList) {
+                int p = zoneIdToPosition.value(zid, 0);
+                if (p > 0) allPositions.append(p);
+            }
+
             ResnapEntry entry;
-            entry.windowId = stableId; // KWin effect's buildWindowMap keys by stableId
+            entry.windowId = windowIdOrStableId;
             entry.zonePosition = pos;
+            entry.allZonePositions = allPositions;
             entry.screenId = screenName;
             entry.virtualDesktop = vd;
             newBuffer.append(entry);
@@ -201,10 +226,13 @@ void WindowTrackingService::onLayoutChanged()
 
         const QUuid prevLayoutId = prevLayout->id();
 
-        // Helper to check if a window's primary zone is valid in the active layout
-        auto primaryZoneInActiveLayout = [&](const QStringList& zoneIdList) {
-            if (zoneIdList.isEmpty()) return false;
-            return activeLayoutZoneIds.contains(zoneIdList.first());
+        // Helper to check if ANY of a window's zones exist in the active layout.
+        // Multi-zone windows are kept as long as at least one zone is valid.
+        auto anyZoneInActiveLayout = [&](const QStringList& zoneIdList) {
+            for (const QString& zid : zoneIdList) {
+                if (activeLayoutZoneIds.contains(zid)) return true;
+            }
+            return false;
         };
 
         // Helper: is a window on a screen that uses the global active layout?
@@ -226,7 +254,7 @@ void WindowTrackingService::onLayoutChanged()
                 if (!isAffectedByGlobalChange(windowScreen)) {
                     continue;
                 }
-                if (primaryZoneInActiveLayout(it.value())) {
+                if (anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
                 addToBuffer(it.key(), it.value(), windowScreen,
@@ -240,7 +268,7 @@ void WindowTrackingService::onLayoutChanged()
                 if (!isAffectedByGlobalChange(screenName)) {
                     continue;
                 }
-                if (primaryZoneInActiveLayout(it.value())) {
+                if (anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
                 QString savedLayoutId = m_pendingZoneLayouts.value(it.key());
@@ -259,7 +287,7 @@ void WindowTrackingService::onLayoutChanged()
             // 1. Live assignments in current layout
             for (auto it = m_windowZoneAssignments.constBegin();
                  it != m_windowZoneAssignments.constEnd(); ++it) {
-                if (!primaryZoneInActiveLayout(it.value())) {
+                if (!anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
                 addToBuffer(it.key(), it.value(),
@@ -270,7 +298,7 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments for current layout
             for (auto it = m_pendingZoneAssignments.constBegin();
                  it != m_pendingZoneAssignments.constEnd(); ++it) {
-                if (!primaryZoneInActiveLayout(it.value())) {
+                if (!anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
                 QString savedLayoutId = m_pendingZoneLayouts.value(it.key());
@@ -331,12 +359,20 @@ void WindowTrackingService::onLayoutChanged()
             toRemove.append(it.key());
             continue;
         }
+        // Check if ANY assigned zone exists in the effective layout (not just
+        // the primary). Multi-zone windows are kept as long as at least one
+        // zone is valid — matches calculateResnapFromCurrentAssignments which
+        // handles multi-zone via multiZoneGeometry.
         bool zoneFound = false;
         for (Zone* z : effectiveLayout->zones()) {
-            if (z->id().toString() == zoneIdList.first()) {
-                zoneFound = true;
-                break;
+            const QString zid = z->id().toString();
+            for (const QString& assignedZone : zoneIdList) {
+                if (zid == assignedZone) {
+                    zoneFound = true;
+                    break;
+                }
             }
+            if (zoneFound) break;
         }
         if (!zoneFound) {
             toRemove.append(it.key());

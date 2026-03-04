@@ -60,6 +60,22 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentY] = m_customParams4.y();
     m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentZ] = m_customParams4.z();
     m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentW] = m_customParams4.w();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentX] = m_customParams5.x();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentY] = m_customParams5.y();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentZ] = m_customParams5.z();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentW] = m_customParams5.w();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentX] = m_customParams6.x();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentY] = m_customParams6.y();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentZ] = m_customParams6.z();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentW] = m_customParams6.w();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentX] = m_customParams7.x();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentY] = m_customParams7.y();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentZ] = m_customParams7.z();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentW] = m_customParams7.w();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentX] = m_customParams8.x();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentY] = m_customParams8.y();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentZ] = m_customParams8.z();
+    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentW] = m_customParams8.w();
 
     auto setColor = [this](int idx, const QColor& c) {
         m_uniforms.customColors[idx][0] = static_cast<float>(c.redF());
@@ -75,6 +91,14 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     setColor(5, m_customColor6);
     setColor(6, m_customColor7);
     setColor(7, m_customColor8);
+    setColor(8, m_customColor9);
+    setColor(9, m_customColor10);
+    setColor(10, m_customColor11);
+    setColor(11, m_customColor12);
+    setColor(12, m_customColor13);
+    setColor(13, m_customColor14);
+    setColor(14, m_customColor15);
+    setColor(15, m_customColor16);
 
     for (int i = 0; i < MaxZones; ++i) {
         if (i < m_zones.size()) {

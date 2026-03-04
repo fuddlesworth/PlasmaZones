@@ -297,8 +297,10 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         layerWindow->setMargins(QMargins(localX, localY, 0, 0));
     }
 
-    // Shader properties
-    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("shaderSource"), info.shaderUrl);
+    // Shader properties — set all auxiliary props BEFORE shaderSource,
+    // because setShaderSource() emits statusChanged() which cascades
+    // through QML bindings and can trigger visibility changes before
+    // buffer paths / zones / params are ready.
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
     QVariantList pathList;
     for (const QString& p : info.bufferShaderPaths) {
@@ -317,6 +319,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     const QSize size(qMax(1, width), qMax(1, height));
     const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
+
+    // shaderSource LAST — triggers statusChanged() → QML binding cascade
+    writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("shaderSource"), info.shaderUrl);
 
     // Start iTime animation for preview (shared timer with main overlay)
     // Must start m_shaderTimer - updateShaderUniforms() uses it and returns early if invalid

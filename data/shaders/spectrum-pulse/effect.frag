@@ -61,6 +61,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float radialWaveStr = customParams[2].y >= 0.0 ? customParams[2].y : 1.0;
     float gridOpacity   = customParams[2].z >= 0.0 ? customParams[2].z : 0.15;
     float fillOpacity   = customParams[2].w >= 0.0 ? customParams[2].w : 0.85;
+    float gridRes       = customParams[3].w >= 0.0 ? customParams[3].w : 20.0;
 
     // Zone geometry (zone-local: used for SDF, border, glow)
     vec2 rectPos  = zoneRectPos(rect);
@@ -205,7 +206,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // ── Subtle grid / mesh for depth (screen-space) ──────
         {
             // Grid coordinates with slight noise distortion
-            vec2 gridUV = globalUV * vec2(20.0, 14.0);
+            vec2 gridUV = globalUV * vec2(gridRes, gridRes * 0.7);
             float t = iTime * 0.2;
             gridUV += vec2(
                 noise2D(globalUV * 3.0 + t) * 0.4,
@@ -292,6 +293,76 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     return result;
 }
 
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
+                         float bass, float treble, float overall, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 1.5;
+    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.0;
+    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
+
+    vec3 primary = colorWithFallback(customColors[0].rgb, vec3(0.0, 1.0, 1.0));
+    vec3 accent  = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.0, 1.0));
+    vec3 bassCol = colorWithFallback(customColors[2].rgb, vec3(1.0, 0.4, 0.0));
+    vec3 sparkCol = colorWithFallback(customColors[3].rgb, vec3(1.0, 1.0, 1.0));
+
+    // Dual-layer Gaussian halo: inner (tight) and outer (wide)
+    float innerHalo = 0.0;
+    float outerHalo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.3);
+            vec2 off = vec2(float(dx), float(dy));
+            innerHalo += texture(uZoneLabels, uv + off * px * labelGlowSpread).a * w;
+            outerHalo += texture(uZoneLabels, uv + off * px * labelGlowSpread * 2.6).a * w;
+        }
+    }
+    innerHalo /= 16.5;
+    outerHalo /= 16.5;
+
+    float innerOutline = innerHalo * (1.0 - labels.a);
+    float outerOutline = outerHalo * (1.0 - innerHalo);
+
+    // Outer glow: accent
+    if (outerOutline > 0.01) {
+        float pulse = hasAudio ? 0.6 + overall * 0.4 * labelAudioReact : 0.6;
+        color.rgb += accent * outerOutline * 0.5 * pulse;
+        color.a = max(color.a, outerOutline * 0.4);
+    }
+
+    // Inner glow: primary neon with treble sparks
+    if (innerOutline > 0.01) {
+        float pulse = hasAudio ? 0.8 + bass * 0.6 * labelAudioReact : 0.8;
+        color.rgb += primary * innerOutline * 0.7 * pulse;
+
+        // Treble sparks along the inner outline
+        if (hasAudio && treble > 0.1) {
+            float sparkSeed = hash11(floor(uv.x * iResolution.x * 0.5) +
+                                     floor(uv.y * iResolution.y * 0.5) * 137.0);
+            float sparkLife = fract(iTime * 12.0 + sparkSeed * 7.0);
+            float spark = step(0.9, sparkSeed) * (1.0 - sparkLife) * treble * labelAudioReact * 3.0;
+            color.rgb += sparkCol * innerOutline * spark;
+        }
+        color.a = max(color.a, innerOutline * 0.6);
+    }
+
+    // Core: flowing energy through the label
+    if (labels.a > 0.01) {
+        float flow = sin(uv.x * 40.0 - iTime * 3.0) * 0.5 + 0.5;
+        vec3 core = color.rgb * labelBrightness + mix(primary, accent, flow) * 0.4;
+        float energyPulse = hasAudio ? 1.0 + overall * 0.8 * labelAudioReact : 1.0;
+        core *= energyPulse;
+        color.rgb = mix(color.rgb, core, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────
 
 void main() {
@@ -321,6 +392,6 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeNeonLabels(color, fragCoord, bass, treble, overall, hasAudio);
     fragColor = clampFragColor(color);
 }

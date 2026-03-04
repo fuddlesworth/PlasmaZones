@@ -391,7 +391,7 @@ void Daemon::start()
     finalizeStartup();
 
     m_running = true;
-    Q_EMIT m_layoutAdaptor->daemonReady();
+    // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 }
 
 void Daemon::stop()
@@ -422,10 +422,13 @@ void Daemon::stop()
 
     m_reapplyGeometriesTimer.stop();
 
-    // Save autotile state and clear active screens
+    // Save autotile state (per-screen params, algorithm).
+    // Do NOT call setAutotileScreens({}) here — it emits windowsReleasedFromTiling
+    // which clears WTS floating state and restarts the save timer, potentially
+    // overwriting the correct WTS state saved above. The engine is destroyed
+    // immediately after, so cleanup is unnecessary.
     if (m_autotileEngine) {
         m_autotileEngine->saveState();
-        m_autotileEngine->setAutotileScreens({});
     }
 
     // Clear the adaptor's raw engine pointer BEFORE destroying the engine.

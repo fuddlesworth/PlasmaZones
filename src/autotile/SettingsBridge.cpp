@@ -266,9 +266,10 @@ void SettingsBridge::saveState()
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
     KConfigGroup group = config->group(QStringLiteral("AutoTileState"));
 
-    // Save global state
-    group.writeEntry("algorithm", m_engine->m_algorithmId);
-    group.writeEntry("autotileScreens", QStringList(m_engine->m_autotileScreens.begin(), m_engine->m_autotileScreens.end()));
+    // Save global state (algorithm only — autotile screens are derived from
+    // layout assignments at startup by updateAutotileScreens(), not persisted
+    // here, to avoid stale data overriding the authoritative layout assignments)
+    group.writeEntry(QStringLiteral("algorithm"), m_engine->m_algorithmId);
 
     // Save per-screen state as JSON array
     QJsonArray screensArray;
@@ -313,13 +314,13 @@ void SettingsBridge::loadState()
     // with the compositor if it's simultaneously performing synchronous D-Bus
     // introspection against this daemon (QDBusInterface constructor blocks the
     // compositor thread). See also: "Don't pre-create overlay windows at startup."
-    const QString savedAlgorithm = group.readEntry("algorithm", m_engine->m_algorithmId);
+    const QString savedAlgorithm = group.readEntry(QStringLiteral("algorithm"), m_engine->m_algorithmId);
     if (AlgorithmRegistry::instance()->hasAlgorithm(savedAlgorithm)) {
         m_engine->m_algorithmId = savedAlgorithm;
     }
 
     // Parse per-screen state
-    const QString statesJson = group.readEntry("screenStates", QString());
+    const QString statesJson = group.readEntry(QStringLiteral("screenStates"), QString());
     if (statesJson.isEmpty()) {
         return;
     }
@@ -350,19 +351,15 @@ void SettingsBridge::loadState()
         state->setSplitRatio(screenObj[QStringLiteral("splitRatio")].toDouble(m_engine->config()->splitRatio));
     }
 
-    // Restore autotile screens set
-    const QStringList savedScreensList = group.readEntry("autotileScreens", QStringList());
-    m_engine->m_autotileScreens = QSet<QString>(savedScreensList.begin(), savedScreensList.end());
-
-    // Emit enabledChanged so UI/D-Bus consumers update after session restore.
-    // The actual retiling is deferred until windows are announced by KWin effect.
-    if (!m_engine->m_autotileScreens.isEmpty()) {
-        Q_EMIT m_engine->enabledChanged(true);
-        Q_EMIT m_engine->autotileScreensChanged(QStringList(m_engine->m_autotileScreens.begin(), m_engine->m_autotileScreens.end()));
-    }
+    // Note: autotile screens are NOT restored here. The authoritative source is
+    // layout assignments (persisted by LayoutManager). Daemon::connectLayoutSignals()
+    // calls updateAutotileScreens() which derives the correct set from assignments
+    // BEFORE this loadState() runs. Restoring a saved set here would overwrite the
+    // correct value with stale data (e.g., screens from a previous autotile session
+    // that the user has since toggled back to manual mode).
 
     qCInfo(lcAutotile) << "Loaded autotile state: algorithm=" << m_engine->m_algorithmId
-                       << "autotileScreens=" << m_engine->m_autotileScreens.size() << "screenStates=" << screensArray.size();
+                       << "screenStates=" << screensArray.size();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

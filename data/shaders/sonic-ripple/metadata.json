@@ -15,6 +15,11 @@
         {"id": "idleAnimation", "name": "Idle Animation", "group": "Animation", "type": "float", "slot": 5, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "glowIntensity", "name": "Glow Intensity", "group": "Appearance", "type": "float", "slot": 6, "default": 2.0, "min": 0.5, "max": 4.0},
         {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 7, "default": 0.88, "min": 0.5, "max": 1.0},
+        {"id": "resonanceSpread", "name": "Resonance Ring Spread", "group": "Labels", "type": "float", "slot": 8, "default": 3.0, "min": 1.0, "max": 6.0},
+        {"id": "ringIntensity", "name": "Ring Core Intensity", "group": "Labels", "type": "float", "slot": 9, "default": 2.0, "min": 1.0, "max": 4.0},
+        {"id": "waveReact", "name": "Wave Reactivity", "group": "Labels", "type": "float", "slot": 10, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "shockwaveSlots", "name": "Shockwave Slots", "group": "Audio", "type": "float", "slot": 11, "default": 4.0, "min": 1.0, "max": 8.0},
+        {"id": "nebulaScale", "name": "Nebula Scale", "group": "Background", "type": "float", "slot": 12, "default": 8.0, "min": 3.0, "max": 16.0},
         {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#00ccff"},
         {"id": "accentColor", "name": "Accent Color", "group": "Colors", "type": "color", "slot": 1, "default": "#ff3399"},
         {"id": "bassColor", "name": "Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#ff6600"}

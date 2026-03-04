@@ -94,13 +94,15 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     float fillOpacity = customParams[2].x >= 0.0 ? customParams[2].x : 0.85;
     float borderGlow = customParams[2].y >= 0.0 ? customParams[2].y : 0.3;
-    float edgeFadeStart = customParams[2].z < 0.0 ? customParams[2].z : -30.0;
+    float edgeFadeStart = customParams[2].z >= 0.0 ? customParams[2].z : 30.0;
     float borderBrightness = customParams[2].w >= 0.0 ? customParams[2].w : 1.3;
 
     float audioReact = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
     float veinDetail = customParams[3].y >= 0.0 ? customParams[3].y : 0.25;
     float innerGlowStr = customParams[3].z >= 0.0 ? customParams[3].z : 0.25;
     float sparkleStr = customParams[3].w >= 0.0 ? customParams[3].w : 2.5;
+
+    int gwCount = int(customParams[5].x >= 0.0 ? customParams[5].x : 3.0);
 
     // Convert rect to pixel coordinates
     vec2 rectPos = zoneRectPos(rect);
@@ -148,26 +150,22 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     // ── Identity-native audio: cosmic / nebula ──────────────
 
-    // ** Cosmic Breath (overall energy) **
-    // Overall energy modulates noise scale: high energy zooms in (larger features),
-    // low energy zooms out (finer, denser patterns). Smooth and non-jittery.
-    float breathAmount = hasAudio ? mix(0.85, 1.35, smoothstep(0.0, 0.6, overall)) : 1.0;
-    centeredUV /= breathAmount; // dividing UV = zooming into noise
-    noiseScale /= breathAmount; // keep scale consistent for downstream use
+    // ** Nebula Breathing (bass) **
+    // Bass creates organic, non-uniform expansion/contraction of the flow field.
+    // Different parts of the nebula breathe at different rates via position-dependent noise.
+    if (hasAudio && bass > 0.02) {
+        float breathe = bass * 0.3 * (0.5 + 0.5 * noise2D(globalUV * 3.0 + iTime * 0.5));
+        centeredUV *= 1.0 - breathe; // local expansion where noise is high
+    }
 
-    // ** Color Temperature Shift (mids) **
-    // Mids shift the entire nebula color temperature via palA (brightness)
-    // and palB (saturation). Low mids = cool blue-shift, high mids = warm red-shift.
-    if (hasAudio) {
-        float tempShift = smoothstep(0.0, 0.5, mids * audioReact); // 0 = cool, 1 = warm
-        // Cool bias: slightly bluer brightness, more blue saturation
-        // Warm bias: slightly warmer brightness, more red saturation
-        vec3 coolA = palA * vec3(0.85, 0.9, 1.15);
-        vec3 warmA = palA * vec3(1.15, 0.95, 0.85);
-        vec3 coolB = palB * vec3(0.8, 0.95, 1.2);
-        vec3 warmB = palB * vec3(1.2, 0.95, 0.8);
-        palA = mix(coolA, warmA, tempShift);
-        palB = mix(coolB, warmB, tempShift);
+    // ** Flow Direction Shift (mids) **
+    // Mids gently rotate the overall flow direction rather than just shifting color.
+    // Higher mids = more rotation, creating a swirling response to mid-frequency energy.
+    if (hasAudio && mids > 0.02) {
+        float rotAngle = mids * audioReact * 0.4; // up to ~23 degrees at full mids
+        float cs = cos(rotAngle);
+        float sn = sin(rotAngle);
+        centeredUV = mat2(cs, -sn, sn, cs) * centeredUV;
     }
 
     // ** Gravity Wells / Shockwave Ripples (bass) **
@@ -176,7 +174,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     if (hasAudio && bass > 0.02) {
         float bassDecay = smoothstep(0.0, 0.15, bass); // smooth envelope
         float slowSeed = floor(iTime * 0.7); // changes seed ~every 1.4s
-        for (int gw = 0; gw < 3; gw++) {
+        for (int gw = 0; gw < gwCount && gw < 6; gw++) {
             // Seed point in centered UV space, varies with time
             vec2 wellCenter = (hash22(vec2(float(gw) * 31.7, slowSeed * 17.3)) * 2.0 - 1.0)
                               * noiseScale * 0.6;
@@ -248,7 +246,7 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float innerDist = -d; // positive distance from edge inward
 
         // Darken toward center for depth (original edge fade, improved)
-        float depthDarken = smoothstep(0.0, -edgeFadeStart, innerDist);
+        float depthDarken = smoothstep(0.0, edgeFadeStart, innerDist);
         col *= mix(0.65, 1.0, 1.0 - depthDarken * 0.3);
 
         // Bright inner glow near the border (exponential falloff from edge)
@@ -256,6 +254,9 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         vec3 glowColor = palette(r * contrast + 0.1, palA, palB, palC, palD);
         float glowStrength = innerGlowStr;
         col += glowColor * innerGlow * glowStrength;
+
+        // Zone fill color tint — let per-zone color influence the palette
+        col = mix(col, fillColor.rgb * dot(col, vec3(0.299, 0.587, 0.114)), 0.2);
 
         result.rgb = col;
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
@@ -269,6 +270,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         float angle = atan(p.y, p.x) * 2.0;
         float borderFlow = fbm(vec2(sin(angle), cos(angle)) * 2.0 + time * 0.5, 3);
         vec3 borderCol = palette(borderFlow * contrast, palA, palB, palC, palD);
+        // Zone border color tint — let per-zone color influence the palette
+        borderCol = mix(borderCol, borderColor.rgb * dot(borderCol, vec3(0.299, 0.587, 0.114)), 0.3);
         borderCol *= borderBrightness;
 
         // Highlighted border is brighter and pulses with cosmic breath
@@ -307,6 +310,72 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     return result;
 }
 
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeCosmicLabels(vec4 color, vec2 fragCoord,
+                           float bass, float treble, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    // Reconstruct IQ palette colors (same defaults as renderCosmicZone)
+    float brightness = customParams[1].z >= 0.0 ? customParams[1].z : 0.5;
+    float saturation = customParams[1].y >= 0.0 ? customParams[1].y : 0.5;
+    float colorShift = customParams[1].x >= 0.0 ? customParams[1].x : 0.0;
+    vec3 palA = colorWithFallback(customColors[0].rgb, vec3(brightness));
+    vec3 palB = colorWithFallback(customColors[1].rgb, vec3(saturation));
+    vec3 palC = colorWithFallback(customColors[2].rgb, vec3(1.0));
+    vec3 palD = colorWithFallback(customColors[3].rgb, vec3(0.0, 0.10, 0.20));
+    palD += vec3(colorShift);
+
+    float labelGlowSpread = customParams[4].x >= 0.0 ? customParams[4].x : 3.0;
+    float labelBrightness = customParams[4].y >= 0.0 ? customParams[4].y : 2.5;
+    float labelAudioReact = customParams[4].z >= 0.0 ? customParams[4].z : 1.0;
+
+    // Gaussian halo with nebula palette tint
+    float halo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.3);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+        }
+    }
+    halo /= 16.5;
+
+    if (halo > 0.003) {
+        float haloEdge = halo * (1.0 - labels.a);
+
+        // Palette-colored halo that drifts with time
+        float t = length(uv - 0.5) + iTime * 0.08;
+        vec3 haloCol = palette(t, palA, palB, palC, palD);
+        float haloBright = haloEdge * (0.5 + (hasAudio ? bass * 0.5 * labelAudioReact : 0.0));
+        color.rgb += haloCol * haloBright;
+
+        // Stellar sparks near labels on treble
+        if (hasAudio && treble > 0.1) {
+            float sparkNoise = noise2D(uv * 50.0 + iTime * 3.0);
+            float spark = smoothstep(0.7, 0.95, sparkNoise) * treble * 2.0 * labelAudioReact;
+            vec3 sparkCol = mix(vec3(1.0), palette(t + 0.3, palA, palB, palC, palD), 0.3);
+            color.rgb += sparkCol * haloEdge * spark;
+        }
+
+        color.a = max(color.a, haloEdge * 0.5);
+    }
+
+    // Core: amplified nebula lens
+    if (labels.a > 0.01) {
+        vec3 nebLens = color.rgb * labelBrightness;
+        float t = length(uv - 0.5) + iTime * 0.1;
+        nebLens += palette(t, palA, palB, palC, palD) * 0.2;
+        float bassPulse = hasAudio ? 1.0 + bass * 0.5 * labelAudioReact : 1.0;
+        nebLens *= bassPulse;
+        color.rgb = mix(color.rgb, nebLens, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 void main() {
     vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
@@ -318,10 +387,10 @@ void main() {
 
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
-    float overall = getOverall();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
+    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -333,7 +402,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeCosmicLabels(color, fragCoord, bass, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

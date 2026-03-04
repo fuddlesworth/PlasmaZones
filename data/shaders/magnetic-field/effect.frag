@@ -188,6 +188,9 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     float shockwaveStr     = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
     float fillOpacity      = customParams[2].w >= 0.0 ? customParams[2].w : 0.85;
 
+    float arcThick = customParams[3].w >= 0.0 ? customParams[3].w : 0.006;
+    float gridFreq = customParams[4].x >= 0.0 ? customParams[4].x : 20.0;
+
     // ── Identity-native audio: electromagnetic field behavior ─────
 
     // Bass = Field Polarity Reversal
@@ -210,7 +213,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
     // Overall = Field density/visibility (NOT a simple multiplier)
     // Affects rendering thresholds and particle visibility
-    float fieldDensity = hasAudio ? 0.3 + overall * 1.4 * audioReactivity : 1.0;
+    float fieldDensity = hasAudio ? 0.4 + overall * 0.9 * audioReactivity : 1.0;
     float visibleParticleCount = particleCount * fieldDensity;
     float fieldLineThreshold = mix(0.6, 0.15, fieldDensity); // lower = more lines visible
 
@@ -311,7 +314,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
                 float arcBulge = sin(h * PI) * pairDist * 0.3;
                 lineDist = max(lineDist - arcBulge, 0.0);
 
-                float arc = smoothstep(0.006, 0.0, lineDist);
+                float arc = smoothstep(arcThick, 0.0, lineDist);
                 float proximity = 1.0 - pairDist / 0.15;
                 connections += arc * proximity * 0.07;
             }
@@ -348,7 +351,7 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
 
         // Subtle grid for depth - distorted by vertex displacement
         vec2 gridUV = globalUV + vDisplacement * 2.0;
-        vec2 grid = abs(fract(gridUV * 20.0) - 0.5);
+        vec2 grid = abs(fract(gridUV * gridFreq) - 0.5);
         float gridLine = smoothstep(0.48, 0.5, max(grid.x, grid.y)) * 0.05;
         fx += fieldColor * gridLine * (1.0 - mouseDist) * fieldDensity;
 
@@ -473,6 +476,69 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     return result;
 }
 
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeMagneticLabels(vec4 color, vec2 fragCoord,
+                             float bass, float treble, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    vec3 fieldColor = customColors[0].rgb;
+    if (length(fieldColor) < 0.01) fieldColor = vec3(0.545, 0.361, 0.965);
+    vec3 highlightColor = customColors[1].rgb;
+    if (length(highlightColor) < 0.01) highlightColor = vec3(0.98, 0.8, 0.082);
+
+    float labelGlowSpread = customParams[3].x >= 0.0 ? customParams[3].x : 3.5;
+    float labelBrightness = customParams[3].y >= 0.0 ? customParams[3].y : 2.2;
+    float labelAudioReact = customParams[3].z >= 0.0 ? customParams[3].z : 1.0;
+
+    // Gaussian halo with EM field tint
+    float halo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.25);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+        }
+    }
+    halo /= 16.0;
+
+    if (halo > 0.003) {
+        float haloEdge = halo * (1.0 - labels.a);
+
+        // Corona arcs: angular noise creates spiky aura
+        float angle = atan(uv.y - 0.5, uv.x - 0.5);
+        float arc = angularNoise(angle, 8.0, iTime * 0.5);
+        arc = pow(arc, 2.0) * 1.5;
+
+        // Polarity shift: top/bottom of label gets different tint
+        float polarity = sin(angle) * 0.5 + 0.5;
+        vec3 coronaCol = mix(fieldColor, highlightColor, polarity);
+
+        float arcBright = haloEdge * (0.4 + arc * 0.6) * (hasAudio ? 1.0 + bass * 0.8 * labelAudioReact : 1.0);
+        color.rgb += coronaCol * arcBright;
+
+        // Mouse proximity: labels near cursor glow brighter
+        vec2 mouseUV = iMouse.xy / max(iResolution, vec2(1.0));
+        float mouseDist = length(uv - mouseUV);
+        float mouseBoost = exp(-mouseDist * 5.0) * 0.4;
+        color.rgb += fieldColor * haloEdge * mouseBoost;
+
+        color.a = max(color.a, haloEdge * 0.5);
+    }
+
+    // Core: amplified field view through the label
+    if (labels.a > 0.01) {
+        vec3 core = color.rgb * labelBrightness + fieldColor * 0.15;
+        float bassPulse = hasAudio ? 1.0 + bass * 0.6 : 1.0;
+        core *= bassPulse;
+        color.rgb = mix(color.rgb, core, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 void main() {
     vec2 fragCoord = vFragCoord;
     vec4 color = vec4(0.0);
@@ -484,10 +550,10 @@ void main() {
     
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
-    float overall = getOverall();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
+    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -499,7 +565,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

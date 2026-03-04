@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenchangehandler.h"
+#include "autotilehandler.h"
 #include "plasmazoneseffect.h"
 
 #include <effect/effecthandler.h>

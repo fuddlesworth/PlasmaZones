@@ -22,8 +22,8 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     int highlightedCount;
     vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
-    vec4 customParams[4];
-    vec4 customColors[8];
+    vec4 customParams[8];
+    vec4 customColors[16];
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];

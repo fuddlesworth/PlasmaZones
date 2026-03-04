@@ -31,30 +31,13 @@ class TilingState;
 class WindowTrackingService;
 
 /**
- * @brief Core engine for automatic window tiling
+ * @brief Core engine for automatic window tiling.
  *
- * AutotileEngine coordinates automatic window tiling by:
- * - Tracking window open/close/focus events
- * - Managing per-screen TilingState
- * - Invoking tiling algorithms to calculate zone geometries
- * - Applying calculated zones to window positions
+ * Coordinates per-screen TilingState, invokes tiling algorithms (Master-Stack,
+ * Columns, BSP), and applies calculated zone geometries to window positions.
+ * Only tiles windows on screens where autotiling is enabled.
  *
- * The engine supports multiple tiling algorithms (Master-Stack, Columns, BSP)
- * and allows per-screen configuration of tiling parameters.
- *
- * Usage:
- * @code
- * auto *engine = new AutotileEngine(layoutManager, windowTracker, screenManager, this);
- * engine->setEnabled(true);
- * engine->setAlgorithm("master-stack");
- * @endcode
- *
- * @note The engine only tiles windows on screens where autotiling is enabled.
- *       Use config() to access per-screen configuration.
- *
- * @see TilingAlgorithm for the algorithm interface
- * @see TilingState for per-screen tiling state
- * @see AlgorithmRegistry for algorithm discovery
+ * @see TilingAlgorithm, TilingState, AlgorithmRegistry
  */
 class PLASMAZONES_EXPORT AutotileEngine : public QObject
 {
@@ -67,14 +50,6 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject
     friend class SettingsBridge;
 
 public:
-    /**
-     * @brief Construct an AutotileEngine
-     *
-     * @param layoutManager Layout manager for zone access
-     * @param windowTracker Window tracking service for window events
-     * @param screenManager Screen manager for screen geometry
-     * @param parent Parent QObject
-     */
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
                             ScreenManager* screenManager, QObject* parent = nullptr);
     ~AutotileEngine() override;
@@ -480,6 +455,23 @@ public:
      * @param windowIds Window IDs in desired order (zone-number ascending)
      */
     void setInitialWindowOrder(const QString& screenName, const QStringList& windowIds);
+
+    /**
+     * @brief Clear saved floating state for windows that are actively zone-snapped.
+     *
+     * Called during snapping → autotile transitions so that windows the user
+     * re-snapped in manual mode aren't incorrectly restored as floating.
+     *
+     * @param windowIds Windows to remove from the saved floating set
+     */
+    void clearSavedFloatingForWindows(const QStringList& windowIds);
+
+    /**
+     * @brief Clear ALL saved floating state (used when autotile is disabled globally)
+     *
+     * Prevents stale entries from incorrectly floating windows on next activation.
+     */
+    void clearAllSavedFloating();
 
     /**
      * @brief Get the current tiled window order for a screen

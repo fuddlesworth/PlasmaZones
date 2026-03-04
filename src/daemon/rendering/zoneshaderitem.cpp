@@ -209,11 +209,15 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setResolution(static_cast<float>(width()), static_cast<float>(height()));
     node->setMousePosition(m_iMouse);
 
-    // Sync custom shader parameters (16 floats in 4 vec4s + 8 colors)
+    // Sync custom shader parameters (32 floats in 8 vec4s + 16 colors)
     node->setCustomParams1(m_customParams1);
     node->setCustomParams2(m_customParams2);
     node->setCustomParams3(m_customParams3);
     node->setCustomParams4(m_customParams4);
+    node->setCustomParams5(m_customParams5);
+    node->setCustomParams6(m_customParams6);
+    node->setCustomParams7(m_customParams7);
+    node->setCustomParams8(m_customParams8);
     node->setCustomColor1(vec4ToQColor(m_customColor1));
     node->setCustomColor2(vec4ToQColor(m_customColor2));
     node->setCustomColor3(vec4ToQColor(m_customColor3));
@@ -222,6 +226,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setCustomColor6(vec4ToQColor(m_customColor6));
     node->setCustomColor7(vec4ToQColor(m_customColor7));
     node->setCustomColor8(vec4ToQColor(m_customColor8));
+    node->setCustomColor9(vec4ToQColor(m_customColor9));
+    node->setCustomColor10(vec4ToQColor(m_customColor10));
+    node->setCustomColor11(vec4ToQColor(m_customColor11));
+    node->setCustomColor12(vec4ToQColor(m_customColor12));
+    node->setCustomColor13(vec4ToQColor(m_customColor13));
+    node->setCustomColor14(vec4ToQColor(m_customColor14));
+    node->setCustomColor15(vec4ToQColor(m_customColor15));
+    node->setCustomColor16(vec4ToQColor(m_customColor16));
 
     // Sync labels texture (pre-rendered zone numbers for shader pass)
     {

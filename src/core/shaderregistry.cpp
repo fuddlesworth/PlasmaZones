@@ -25,10 +25,13 @@ namespace PlasmaZones {
 static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d}"));
 
 // Uniform name components for slot mapping
-static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4"};
+static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4",
+                                              "customParams5", "customParams6", "customParams7", "customParams8"};
 static const char* const UniformComponents[] = {"_x", "_y", "_z", "_w"};
 static const char* const UniformColorNames[] = {"customColor1", "customColor2", "customColor3", "customColor4",
-                                                "customColor5", "customColor6", "customColor7", "customColor8"};
+                                                "customColor5", "customColor6", "customColor7", "customColor8",
+                                                "customColor9", "customColor10", "customColor11", "customColor12",
+                                                "customColor13", "customColor14", "customColor15", "customColor16"};
 
 QString ShaderRegistry::ParameterInfo::uniformName() const
 {
@@ -37,8 +40,8 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
     }
 
     if (type == QLatin1String("color")) {
-        // Color slots 0-7 → customColor1-8
-        if (slot >= 0 && slot < 8) {
+        // Color slots 0-15 → customColor1-16
+        if (slot >= 0 && slot < 16) {
             return QString::fromLatin1(UniformColorNames[slot]);
         }
         return QString();
@@ -52,8 +55,8 @@ QString ShaderRegistry::ParameterInfo::uniformName() const
         return QString();
     }
 
-    // Float/int/bool slots 0-15 → customParams1_x through customParams4_w
-    if (slot >= 0 && slot < 16) {
+    // Float/int/bool slots 0-31 → customParams1_x through customParams8_w
+    if (slot >= 0 && slot < 32) {
         const int vecIndex = slot / 4;
         const int compIndex = slot % 4;
         return QString::fromLatin1(UniformVecNames[vecIndex]) + QString::fromLatin1(UniformComponents[compIndex]);

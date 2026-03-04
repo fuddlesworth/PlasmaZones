@@ -133,7 +133,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     if (!window) {
         return;
     }
-    writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
+    // Set all auxiliary props BEFORE shaderSource — see shader.cpp comment
     writeQmlProperty(window, QStringLiteral("bufferShaderPath"), info.bufferShaderPath);
     QVariantList pathList;
     for (const QString& p : info.bufferShaderPaths) {
@@ -144,6 +144,8 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     writeQmlProperty(window, QStringLiteral("bufferScale"), info.bufferScale);
     writeQmlProperty(window, QStringLiteral("bufferWrap"), info.bufferWrap);
     writeQmlProperty(window, QStringLiteral("shaderParams"), QVariant::fromValue(params));
+    // shaderSource LAST — triggers statusChanged() → QML binding cascade
+    writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
 }
 
 // Initialize shader timer if not already running. Prevents large iTimeDelta jumps

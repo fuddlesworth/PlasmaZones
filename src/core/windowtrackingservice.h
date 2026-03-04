@@ -198,6 +198,25 @@ public:
     QStringList floatingWindows() const;
 
     /**
+     * @brief Mark a window's float as originating from autotile mode
+     *
+     * Used to distinguish autotile-originated floats from manual snapping-mode
+     * floats. Only autotile floats are cleared on autotile→snapping transitions;
+     * manual floats are preserved. Must be called AFTER setWindowFloating(true).
+     */
+    void markAutotileFloated(const QString& windowId);
+
+    /**
+     * @brief Clear autotile-floated origin for a window
+     */
+    void clearAutotileFloated(const QString& windowId);
+
+    /**
+     * @brief Check if a window was floated by the autotile engine (not manually in snapping mode)
+     */
+    bool isAutotileFloated(const QString& windowId) const;
+
+    /**
      * @brief Unsnap window for floating (saves zone for later restore)
      * @param windowId Full window ID
      */
@@ -662,6 +681,12 @@ private:
     // Converted from windowId to stableId on window close for persistence
     QSet<QString> m_floatingWindows;
 
+    // Subset of m_floatingWindows: windows whose float originated from autotile mode.
+    // NOT persisted — on session restore all floats are treated as manual-mode.
+    // Used to distinguish autotile floats from manual snapping-mode floats during
+    // mode transitions (only autotile floats are cleared on autotile→snapping).
+    QSet<QString> m_autotileFloatedWindows;
+
     // Session persistence
     QHash<QString, QStringList> m_pendingZoneAssignments;  // stableId -> zoneIds
     QHash<QString, QString> m_pendingZoneScreens;      // stableId -> screenName
@@ -688,8 +713,9 @@ private:
     // for windows that were in the previous layout, so resnapToNewLayout can map them
     struct ResnapEntry {
         QString windowId;
-        int zonePosition; // 1-based position in sorted-by-zoneNumber order
-        QString screenId;  // Stable EDID-based screen identifier (or connector name fallback)
+        int zonePosition;              // Primary zone: 1-based position in sorted-by-zoneNumber order
+        QList<int> allZonePositions;   // All zones (for multi-zone windows); empty = single-zone
+        QString screenId;              // Stable EDID-based screen identifier (or connector name fallback)
         int virtualDesktop = 0;
     };
     QVector<ResnapEntry> m_resnapBuffer;

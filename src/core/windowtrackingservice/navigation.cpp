@@ -26,6 +26,11 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
 {
     QSet<QUuid> occupiedZoneIds;
     for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
+        // Skip floating windows — they have preserved zone assignments (for resnap
+        // on mode switch) but should not make zones appear occupied.
+        if (isWindowFloating(it.key())) {
+            continue;
+        }
         // When screen filter is set, only count zones from windows on that screen.
         // This prevents windows on other screens (or desktops sharing the same layout)
         // from making zones appear occupied on the target screen.

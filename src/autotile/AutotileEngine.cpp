@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QTimer>
 
 // Project headers
 #include "AutotileEngine.h"
@@ -132,12 +133,17 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     // shortly after (via KWin effect re-notification) have a state ready.
     for (const QString& screenName : added) {
         stateForScreen(screenName);
-        // Defer retile via event-loop coalescing. On first activation, windows
-        // haven't been announced yet (KWin effect sends them after receiving
-        // autotileScreensChanged), so retiling an empty screen is wasted work.
-        // On subsequent screen additions, windows are already known — the
-        // one-event-loop-pass delay (~0ms) is negligible.
-        scheduleRetileForScreen(screenName);
+        // Skip retile if windows are expected to arrive shortly (pending initial
+        // order from seedAutotileOrderForScreen). The KWin effect sends windowOpened
+        // D-Bus calls after receiving autotileScreensChanged, and each insertWindow
+        // schedules its own retile. Retiling an empty screen here produces a wasted
+        // empty windowsTiled signal + stagger generation increment, which can interfere
+        // with the first real retile's animation timing.
+        // For screen hotplug (no pending order), windows are already in the TilingState
+        // and the retile is needed to reflow them on the new screen.
+        if (!m_pendingInitialOrders.contains(screenName)) {
+            scheduleRetileForScreen(screenName);
+        }
     }
 
     // Collect windows from removed screens before pruning, then prune
@@ -164,6 +170,14 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             it.remove();
         }
     }
+    // Clean up m_windowToScreen entries for released windows BEFORE emitting
+    // the signal. Signal handlers (signals.cpp windowsReleasedFromTiling) check
+    // zone assignments and floating state — stale m_windowToScreen mappings
+    // would cause them to see phantom candidates.
+    for (const QString& windowId : std::as_const(releasedWindows)) {
+        m_windowToScreen.remove(windowId);
+    }
+
     if (!releasedWindows.isEmpty()) {
         Q_EMIT windowsReleasedFromTiling(releasedWindows);
     }
@@ -336,6 +350,32 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenName, const QStr
     }
     m_pendingInitialOrders[screenName] = windowIds;
     qCInfo(lcAutotile) << "Pre-seeded window order for screen" << screenName << ":" << windowIds;
+
+    // Safety timeout: if the pending order is never fully consumed (e.g., windows
+    // failed to arrive via D-Bus), clean it up to avoid leaking state indefinitely.
+    QTimer::singleShot(10000, this, [this, screenName]() {
+        if (m_pendingInitialOrders.remove(screenName)) {
+            qCWarning(lcAutotile) << "Pending initial order for screen" << screenName
+                                  << "timed out after 10s — cleaning up stale entry";
+        }
+    });
+}
+
+void AutotileEngine::clearSavedFloatingForWindows(const QStringList& windowIds)
+{
+    for (const QString& id : windowIds) {
+        if (m_savedFloatingWindows.remove(id)) {
+            qCDebug(lcAutotile) << "Cleared stale saved-floating state for zone-snapped window" << id;
+        }
+    }
+}
+
+void AutotileEngine::clearAllSavedFloating()
+{
+    if (!m_savedFloatingWindows.isEmpty()) {
+        qCInfo(lcAutotile) << "Clearing all saved floating state (" << m_savedFloatingWindows.size() << "windows)";
+        m_savedFloatingWindows.clear();
+    }
 }
 
 QStringList AutotileEngine::tiledWindowOrder(const QString& screenName) const
@@ -1069,10 +1109,16 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         }
     }
 
-    // Restore floating state if this window was floating before autotile was deactivated
+    // Restore floating state from engine's saved set (populated when autotile was
+    // previously deactivated) OR from WTS (the canonical floating source shared
+    // between autotile and snapping modes). This ensures user-floated windows
+    // stay floating across autotile ↔ snapping mode toggles.
     if (m_savedFloatingWindows.remove(windowId)) {
         state->setFloating(windowId, true);
-        qCInfo(lcAutotile) << "Restored floating state for window" << windowId << "on screen" << screenName;
+        qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenName;
+    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
+        state->setFloating(windowId, true);
+        qCInfo(lcAutotile) << "Preserved WTS floating state for window" << windowId << "on screen" << screenName;
     }
 
     m_windowToScreen.insert(windowId, screenName);

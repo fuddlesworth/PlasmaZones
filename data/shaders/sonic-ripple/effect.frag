@@ -212,7 +212,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         if (hasAudio && bassShock > 0.01) {
             // Create shockwaves at regular intervals modulated by bass
             // Each slot fires when bass crosses a threshold
-            for (int s = 0; s < 4; s++) {
+            int swSlots = int(customParams[2].w >= 0.0 ? customParams[2].w : 4.0);
+            for (int s = 0; s < swSlots && s < 8; s++) {
                 float slot = float(s);
                 // Stagger birth times: each slot fires at a different phase
                 float period = 0.5 + slot * 0.15;
@@ -227,7 +228,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // Audio drives the warp intensity, color, and flow speed.
 
         // Warp the UV with audio-driven distortion (screen-space for continuity)
-        vec2 nebUV = globalUV * 2.5;
+        float nebScale = customParams[3].x >= 0.0 ? customParams[3].x : 8.0;
+        vec2 nebUV = globalUV * (nebScale / 3.2);
         float warpAmt = 0.4 + energy * 0.8 + idlePulse * 0.3;
         float n1 = noise2D(nebUV + iTime * 0.15);
         float n2 = noise2D(nebUV * 1.7 - iTime * 0.1 + 30.0);
@@ -361,43 +363,56 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float innerGlow = exp(d / mix(25.0, 12.0, vitality)) * mix(0.06, 0.2, vitality) * glowIntensity * (1.0 + energy);
         result.rgb += primary * innerGlow;
 
-        // ── Zone label integration ──────────────────────────
-        // The number becomes a bright window into an amplified version
-        // of the zone content underneath, with a matching glow bleed.
+        // ── Zone label: Resonance Lens ───────────────────────
         {
             vec2 labelUv = fragCoord / max(iResolution, vec2(0.001));
             vec2 texel = 1.0 / max(iResolution, vec2(1.0));
+            vec4 labelSample = texture(uZoneLabels, labelUv);
+            float labelAlpha = labelSample.a;
+            float labelGlowSpread = customParams[2].x >= 0.0 ? customParams[2].x : 3.0;
+            float labelBrightness = customParams[2].y >= 0.0 ? customParams[2].y : 2.0;
+            float labelAudioMul = customParams[2].z >= 0.0 ? customParams[2].z : 1.0;
 
-            // Sample a wider area for the glow halo (spread label alpha outward)
+            // Gaussian halo for ring emission zone
             float halo = 0.0;
-            float labelAlpha = texture(uZoneLabels, labelUv).a;
-            for (int dy = -3; dy <= 3; dy++) {
-                for (int dx = -3; dx <= 3; dx++) {
-                    vec2 off = vec2(float(dx), float(dy)) * texel * 2.5;
-                    halo += texture(uZoneLabels, labelUv + off).a;
+            for (int dy = -2; dy <= 2; dy++) {
+                for (int dx = -2; dx <= 2; dx++) {
+                    float w = exp(-float(dx * dx + dy * dy) * 0.3);
+                    halo += texture(uZoneLabels, labelUv + vec2(float(dx), float(dy)) * texel * labelGlowSpread).a * w;
                 }
             }
-            halo /= 49.0;
+            halo /= 16.5;
 
-            // Glow halo: tinted bleed around the number, pulsing with energy
-            if (halo > 0.005) {
-                float haloEdge = halo * (1.0 - labelAlpha); // only the bleed, not the glyph itself
-                vec3 haloColor = mix(primary, accent, 0.5 + 0.5 * sin(iTime * 0.7));
-                float haloBright = haloEdge * (0.4 + energy * 0.8 + bass * 0.6) * glowIntensity;
-                result.rgb += haloColor * haloBright;
+            if (halo > 0.003) {
+                float haloEdge = halo * (1.0 - labelAlpha);
+
+                // Mini concentric rings radiating from label edge
+                float ringDist = haloEdge * 20.0;
+                float rings = sin(ringDist * PI * 3.0 - iTime * 4.0) * 0.5 + 0.5;
+                rings *= haloEdge;
+
+                // Angular energy sweep
+                float sweep = pow(max(sin(angle * 2.0 + iTime * 1.5), 0.0), 4.0);
+                vec3 ringCol = mix(primary, accent, sweep);
+                float ringBright = rings * (0.5 + energy * 0.8) * glowIntensity;
+                result.rgb += ringCol * ringBright;
+
+                // Bass: chromatic split on the halo
+                if (hasAudio && bass > 0.05) {
+                    float rH = texture(uZoneLabels, labelUv + vec2(texel.x * bass * 8.0 * labelAudioMul, 0.0)).a;
+                    float bH = texture(uZoneLabels, labelUv - vec2(texel.x * bass * 8.0 * labelAudioMul, 0.0)).a;
+                    float chromaEdge = max(rH, bH) * (1.0 - labelAlpha);
+                    result.rgb += vec3(rH, 0.0, bH) * chromaEdge * primary * 0.3 * bass;
+                }
+
+                result.a = max(result.a, haloEdge * 0.5);
             }
 
-            // The number itself: amplify the zone content that's already been rendered
+            // Core: resonant amplification with chromatic tint
             if (labelAlpha > 0.01) {
-                // Boost what's underneath — the rings/nebula become vivid inside the number
-                vec3 boosted = result.rgb * (2.5 + energy * 2.0 + bass * 1.5);
-
-                // Add a bright tinted core so the number is always readable
-                vec3 labelTint = mix(primary, accent, 0.5 + 0.5 * sin(iTime * 0.5));
-                vec3 hotCore = labelTint * (0.6 + energy * 0.4) * glowIntensity;
-                boosted += hotCore;
-
-                // Blend into result using label alpha
+                vec3 boosted = result.rgb * (labelBrightness + energy * 1.5 + bass * labelAudioMul);
+                vec3 tint = mix(primary, bassCol, 0.3 + bass * 0.3);
+                boosted += tint * 0.2 * glowIntensity;
                 result.rgb = mix(result.rgb, boosted, labelAlpha);
                 result.a = max(result.a, labelAlpha);
             }

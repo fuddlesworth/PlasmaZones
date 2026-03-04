@@ -61,6 +61,7 @@ void CavaService::start()
 
     m_stdoutBuffer.clear();
     m_spectrum.clear();
+    m_smoothedSpectrum.clear();
 
     // Kurve-style: pass config via stdin, read raw output from stdout.
     // Use SeparateChannels so we can capture stderr for error diagnostics.
@@ -85,6 +86,7 @@ void CavaService::stop()
         m_stopping = false;
     }
     m_spectrum.clear();
+    m_smoothedSpectrum.clear();
 }
 
 bool CavaService::isRunning() const
@@ -199,7 +201,18 @@ void CavaService::onReadyReadStandardOutput()
             }
         }
         if (!spectrum.isEmpty()) {
-            m_spectrum = std::move(spectrum);
+            // Apply exponential moving average for temporal smoothing.
+            // Alpha=0.5 at 60fps gives ~33ms time constant — snappy but jitter-free.
+            static constexpr float kSmoothingAlpha = 0.5f;
+            if (m_smoothedSpectrum.size() == spectrum.size()) {
+                for (int i = 0; i < spectrum.size(); ++i) {
+                    m_smoothedSpectrum[i] = kSmoothingAlpha * spectrum[i]
+                                          + (1.0f - kSmoothingAlpha) * m_smoothedSpectrum[i];
+                }
+            } else {
+                m_smoothedSpectrum = spectrum;
+            }
+            m_spectrum = m_smoothedSpectrum;
             Q_EMIT spectrumUpdated(m_spectrum);
         }
     }

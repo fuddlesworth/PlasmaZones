@@ -242,27 +242,24 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
 
 bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const QString& screenName)
 {
-    // This method is called exclusively from the autotile engine's float path.
-    // Prefer pre-autotile geometry (the window's position before autotile first
-    // tiled it) over pre-snap geometry (from manual zone snapping). Pre-snap may
-    // contain stale data from a previous manual snap session or from a misrouted
-    // float toggle, and would incorrectly take priority in the combined lookup.
-    auto autotileGeo = m_service->validatedPreAutotileGeometry(windowId);
-    if (autotileGeo) {
-        QRect geo = *autotileGeo;
-        Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
-        qCDebug(lcDbusWindow) << "Applied pre-autotile geometry for float:" << windowId << geo;
-        return true;
-    }
-
-    // Fallback to pre-snap geometry (covers windows that were snapped to a zone
-    // in manual mode before autotile was activated — their original free geometry
-    // is stored as pre-snap, not pre-autotile).
+    // Floating geometry is shared between autotile and snapping modes.
+    // Prefer pre-snap geometry (the window's original position before any zone
+    // snapping) so that floating in autotile restores to the same position as
+    // floating in snapping mode. Fall back to pre-autotile geometry for windows
+    // that were opened during autotile (no pre-snap geometry exists).
     auto snapGeo = m_service->validatedPreSnapGeometry(windowId);
     if (snapGeo) {
         QRect geo = *snapGeo;
         Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
         qCDebug(lcDbusWindow) << "Applied pre-snap geometry for float:" << windowId << geo;
+        return true;
+    }
+
+    auto autotileGeo = m_service->validatedPreAutotileGeometry(windowId);
+    if (autotileGeo) {
+        QRect geo = *autotileGeo;
+        Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
+        qCDebug(lcDbusWindow) << "Applied pre-autotile geometry for float:" << windowId << geo;
         return true;
     }
 

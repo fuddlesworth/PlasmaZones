@@ -61,18 +61,25 @@ void main() {
 
     // Audio analysis
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
     // Base time for plasma animation (no bass speed hack)
     float t = iTime * speed;
 
-    // ── Mids = Swirl INTENSIFICATION ──────────────────────────────────
-    // Mids accelerate the swirl rotation, creating a vortex-tightening effect.
-    // At zero mids, normal rotation; at full mids, rotation rate triples.
-    float swirlAccel = 1.0 + (hasAudio ? mids * swirlSens * audioReact : 0.0);
-    float swirlA = t * 0.4 * swirlAccel;
-    float swirlB = t * -0.25 * swirlAccel;
+    // ── Mids = Cascade Branching Swirl ──────────────────────────────────
+    // Instead of uniformly accelerating swirl, mids create branching distortion
+    // that varies spatially — like network paths splitting and merging. The swirl
+    // angle is modulated by a position-dependent wave so different regions of the
+    // plasma rotate at different rates, producing visible branching flow patterns.
+    float baseSwirlA = t * 0.4;
+    float baseSwirlB = t * -0.25;
+    float branchWave = hasAudio
+        ? sin(centered.x * 8.0 + iTime * 1.5) * cos(centered.y * 6.0 - iTime * 1.2)
+          * mids * swirlSens * audioReact * 0.3
+        : 0.0;
+    float swirlA = baseSwirlA + branchWave;
+    float swirlB = baseSwirlB - branchWave * 0.6;
     vec2 uvPlasma = rotate2d(centered, swirlA) + 0.5;
     vec2 uvFlow = rotate2d(centered, swirlB) + 0.5;
 
@@ -124,11 +131,19 @@ void main() {
         }
     }
 
-    // ── Treble = Plasma Contrast Boost ──────────────────────────────
-    // High treble sharpens the plasma contrast, making patterns crisper.
+    // ── Treble = Network Grid Overlay ──────────────────────────────
+    // Treble reveals a subtle grid pattern in the plasma, like the underlying
+    // network topology becoming visible at high frequencies. The grid lines
+    // pulse at treble-driven intervals and shift position with time.
     if (hasAudio && treble > 0.08) {
-        float lum = dot(col, vec3(0.299, 0.587, 0.114));
-        col = mix(vec3(lum), col, 1.0 + treble * 0.6);
+        float gridScale = 12.0;
+        vec2 gridUV = uv * gridScale + iTime * 0.2;
+        float gridX = smoothstep(0.45, 0.5, abs(fract(gridUV.x) - 0.5));
+        float gridY = smoothstep(0.45, 0.5, abs(fract(gridUV.y) - 0.5));
+        float grid = max(gridX, gridY);
+        // Grid brightness pulses with treble and varies along the grid
+        float gridPulse = 0.5 + 0.5 * sin(iTime * 4.0 + gridUV.x * 2.0 + gridUV.y * 2.0);
+        col += col * grid * gridPulse * treble * 0.5;
     }
 
     fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);

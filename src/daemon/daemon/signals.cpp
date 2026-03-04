@@ -89,16 +89,24 @@ void Daemon::initializeAutotile()
                 this, [this](const QString& windowId, bool floating, const QString& screenName) {
             // Sync floating state to WindowTrackingService and propagate
             // to KWin effect's NavigationHandler::m_floatingWindows via D-Bus signal.
+            // Also track autotile origin so mode transitions can distinguish
+            // autotile-originated floats from manual snapping-mode floats.
             if (m_windowTrackingAdaptor) {
                 m_windowTrackingAdaptor->setWindowFloating(windowId, floating);
+                WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+                if (floating) {
+                    wts->markAutotileFloated(windowId);
+                } else {
+                    wts->clearAutotileFloated(windowId);
+                }
             }
             // NOTE: Do NOT call unsnapForFloat() here — it destroys the window's
             // zone assignment from manual mode, making it "not snapped" when
             // returning to manual mode. Zone assignments are preserved so
             // switching back to manual restores the snapped state.
 
-            // Restore geometry: applyGeometryForFloat prefers pre-autotile (the window's
-            // original position before autotile tiled it) over pre-snap (manual zone snap).
+            // Restore geometry: applyGeometryForFloat prefers pre-snap (the window's
+            // original position before any zone snapping) over pre-autotile (autotile tiling).
             // Pre-autotile persists across float/unfloat cycles (the hasSavedGeometryForWindow
             // guard in the effect prevents overwriting), so every float restores to the same
             // original position. The effect does NOT apply geometry on float — the daemon is
@@ -115,16 +123,24 @@ void Daemon::initializeAutotile()
             }
         });
 
-        // When windows are released from autotile, clear their floating state
-        // so they can be resnapped to manual-mode zones. The actual resnap is the
-        // caller's responsibility (toggle shortcut, layout picker, KCM disable).
+        // When windows are released from autotile, clear WTS floating state
+        // for autotile-originated floats (overflow + user-float-in-autotile).
+        // These were set by the engine, not the user in snapping mode:
+        //   - Overflow-floated: implementation detail, should not persist
+        //   - User-floated-in-autotile: preserved via m_savedFloatingWindows
+        //     on re-entry, so clearing WTS here is safe
+        // Manual snapping-mode floats (isAutotileFloated=false) are preserved
+        // so they stay floating across mode transitions.
+        // Must check isAutotileFloated BEFORE clearing the marker.
         connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling,
                 this, [this](const QStringList& windowIds) {
             if (m_windowTrackingAdaptor) {
+                WindowTrackingService* wts = m_windowTrackingAdaptor->service();
                 for (const QString& windowId : windowIds) {
-                    if (m_windowTrackingAdaptor->service()->isWindowFloating(windowId)) {
+                    if (wts->isAutotileFloated(windowId)) {
                         m_windowTrackingAdaptor->setWindowFloating(windowId, false);
                     }
+                    wts->clearAutotileFloated(windowId);
                 }
             }
         });
@@ -166,23 +182,33 @@ void Daemon::initializeAutotile()
             bool applied = false;
             const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
 
-            // Capture transition data BEFORE applying the new layout, since
-            // applyLayoutById destroys the source state.
-            QStringList autotileOrder; // autotile → snapping: capture tiled window order
-            QStringList zoneOrder;     // snapping → autotile: capture zone-ordered windows
-
             if (wasAutotile) {
-                // Autotile → Snapping: capture autotile window order before switch
-                if (m_autotileEngine) {
-                    autotileOrder = m_autotileEngine->tiledWindowOrder(screen->name());
-                }
+                // Autotile → Snapping: switch to last manual layout.
+                // WTS zone assignments from manual mode are preserved during autotile,
+                // so resnapCurrentAssignments() below restores the exact snap state.
                 QString layoutId = m_modeTracker->lastManualLayoutId();
                 if (!layoutId.isEmpty()) {
                     applied = m_unifiedLayoutController->applyLayoutById(layoutId);
                 }
+                // Fallback when lastManualLayoutId is empty (fresh install) or stale
+                // (layout was deleted). Use the active layout or first available layout.
+                if (!applied) {
+                    Layout* fallback = m_layoutManager->activeLayout();
+                    if (!fallback && !m_layoutManager->layouts().isEmpty()) {
+                        fallback = m_layoutManager->layouts().first();
+                    }
+                    if (fallback) {
+                        applied = m_unifiedLayoutController->applyLayoutById(fallback->id().toString());
+                    }
+                }
             } else {
                 // Snapping → Autotile: pre-seed autotile engine with zone-ordered windows
-                seedAutotileOrderForScreen(screen->name());
+                // Seed ALL screens (not just focused) for deterministic ordering on
+                // multi-monitor setups. Without this, non-focused screens get
+                // non-deterministic KWin stacking-order based insertion.
+                for (QScreen* s : m_screenManager->screens()) {
+                    seedAutotileOrderForScreen(s->name());
+                }
                 const QString algoId = resolveAlgorithmId();
                 if (!algoId.isEmpty()) {
                     applied = m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
@@ -194,18 +220,17 @@ void Daemon::initializeAutotile()
                 updateLayoutFilter();
             }
 
-            // Resnap windows back to zone positions using deterministic autotile order.
+            // Resnap windows to their original manual-mode zone positions.
+            // Uses WTS zone assignments (preserved during autotile) rather than
+            // autotile tiling order — the tiling order can differ from zone
+            // assignments when windows are floated/reordered in autotile, which
+            // would resnap the wrong windows to the wrong zones.
             // windowsReleasedFromTiling (fired by the assignLayout signal chain)
-            // clears floating state; we handle the actual resnap here.
+            // clears floating state before this runs, so all zone-assigned
+            // windows are resnapped; windows never zone-snapped are left alone.
             if (applied && wasAutotile && m_windowTrackingAdaptor) {
                 m_suppressResnapOsd = true;
-                if (!autotileOrder.isEmpty()) {
-                    // Deterministic resnap: map autotile positions to zone numbers
-                    m_windowTrackingAdaptor->resnapFromAutotileOrder(autotileOrder, screen->name());
-                } else {
-                    // Fallback: no autotile order available (empty state)
-                    m_windowTrackingAdaptor->resnapCurrentAssignments(screen->name());
-                }
+                m_windowTrackingAdaptor->resnapCurrentAssignments(screen->name());
             }
         });
 
