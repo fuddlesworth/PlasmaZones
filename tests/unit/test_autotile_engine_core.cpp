@@ -1,0 +1,313 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include <QTest>
+#include <QCoreApplication>
+#include <QSignalSpy>
+
+#include "autotile/AutotileEngine.h"
+#include "autotile/AutotileConfig.h"
+#include "autotile/TilingState.h"
+#include "autotile/TilingAlgorithm.h"
+#include "autotile/AlgorithmRegistry.h"
+#include "core/constants.h"
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
+using namespace PlasmaZones;
+
+/**
+ * @brief Core AutotileEngine tests: construction, enable/disable, algorithm
+ *        selection, state management, config access, and config round-trip.
+ */
+class TestAutotileEngineCore : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    void initTestCase()
+    {
+        AlgorithmRegistry::instance();
+    }
+
+    // =========================================================================
+    // Constructor tests
+    // =========================================================================
+
+    void testConstruction_defaultValues()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        QVERIFY(!engine.isEnabled());
+        QCOMPARE(engine.algorithm(), AlgorithmRegistry::defaultAlgorithmId());
+        QVERIFY(engine.config() != nullptr);
+    }
+
+    // =========================================================================
+    // Enable/disable tests
+    // =========================================================================
+
+    void testEnabled_initiallyFalse()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QVERIFY(!engine.isEnabled());
+    }
+
+    void testEnabled_setTrue()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
+
+        QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setAutotileScreens(screens);
+
+        QVERIFY(engine.isEnabled());
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toBool(), true);
+    }
+
+    void testEnabled_noChangeNoSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
+
+        engine.setAutotileScreens({});
+
+        QVERIFY(!engine.isEnabled());
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testEnabled_toggleBackAndForth()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
+
+        QSet<QString> screens{QStringLiteral("HDMI-1")};
+        engine.setAutotileScreens(screens);
+        engine.setAutotileScreens({});
+        engine.setAutotileScreens(screens);
+
+        QVERIFY(engine.isEnabled());
+        QCOMPARE(spy.count(), 3);
+    }
+
+    // =========================================================================
+    // Algorithm selection tests
+    // =========================================================================
+
+    void testAlgorithm_defaultIsMasterStack()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::MasterStack);
+    }
+
+    void testAlgorithm_setValid()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
+
+        engine.setAlgorithm(DBus::AutotileAlgorithm::Columns);
+
+        QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::Columns);
+        QCOMPARE(spy.count(), 1);
+        QCOMPARE(spy.first().first().toString(), DBus::AutotileAlgorithm::Columns);
+    }
+
+    void testAlgorithm_setInvalidFallsBackToDefault()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        engine.setAlgorithm(DBus::AutotileAlgorithm::BSP);
+        QCOMPARE(engine.algorithm(), DBus::AutotileAlgorithm::BSP);
+
+        QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
+        engine.setAlgorithm(QStringLiteral("nonexistent-algorithm"));
+
+        QCOMPARE(engine.algorithm(), AlgorithmRegistry::defaultAlgorithmId());
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testAlgorithm_sameValueNoSignal()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
+
+        engine.setAlgorithm(engine.algorithm());
+
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testAlgorithm_currentAlgorithmNotNull()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QVERIFY(engine.currentAlgorithm() != nullptr);
+    }
+
+    // =========================================================================
+    // State management tests
+    // =========================================================================
+
+    void testStateForScreen_createNew()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
+
+        QVERIFY(state != nullptr);
+        QCOMPARE(state->screenName(), QStringLiteral("TestScreen"));
+    }
+
+    void testStateForScreen_returnsSameInstance()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        TilingState* state1 = engine.stateForScreen(QStringLiteral("TestScreen"));
+        TilingState* state2 = engine.stateForScreen(QStringLiteral("TestScreen"));
+
+        QCOMPARE(state1, state2);
+    }
+
+    void testStateForScreen_differentScreensDifferentStates()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
+        TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
+
+        QVERIFY(state1 != state2);
+        QCOMPARE(state1->screenName(), QStringLiteral("Screen1"));
+        QCOMPARE(state2->screenName(), QStringLiteral("Screen2"));
+    }
+
+    void testStateForScreen_inheritsConfigDefaults()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileConfig* config = engine.config();
+        config->masterCount = 2;
+        config->splitRatio = 0.7;
+
+        TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
+
+        QCOMPARE(state->splitRatio(), 0.7);
+
+        state->addWindow(QStringLiteral("win1"));
+        state->addWindow(QStringLiteral("win2"));
+        state->setMasterCount(2);
+        QCOMPARE(state->masterCount(), 2);
+    }
+
+    // =========================================================================
+    // Config access tests
+    // =========================================================================
+
+    void testConfig_notNull()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QVERIFY(engine.config() != nullptr);
+    }
+
+    void testConfig_modifiable()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileConfig* config = engine.config();
+
+        config->innerGap = 20;
+        config->outerGap = 15;
+
+        QCOMPARE(engine.config()->innerGap, 20);
+        QCOMPARE(engine.config()->outerGap, 15);
+    }
+
+    // =========================================================================
+    // Config round-trip tests
+    // =========================================================================
+
+    void testConfigRoundTrip()
+    {
+        AutotileConfig original;
+        original.innerGap = 5;
+        original.outerGap = 10;
+        original.splitRatio = 0.65;
+        original.masterCount = 2;
+        original.algorithmId = QStringLiteral("bsp");
+        original.smartGaps = false;
+        original.focusNewWindows = false;
+        original.focusFollowsMouse = true;
+        original.respectMinimumSize = false;
+        original.insertPosition = AutotileConfig::InsertPosition::AfterFocused;
+
+        QJsonObject json = original.toJson();
+        AutotileConfig restored = AutotileConfig::fromJson(json);
+
+        QCOMPARE(restored.innerGap, original.innerGap);
+        QCOMPARE(restored.outerGap, original.outerGap);
+        QCOMPARE(restored.splitRatio, original.splitRatio);
+        QCOMPARE(restored.masterCount, original.masterCount);
+        QCOMPARE(restored.algorithmId, original.algorithmId);
+        QCOMPARE(restored.smartGaps, original.smartGaps);
+        QCOMPARE(restored.focusNewWindows, original.focusNewWindows);
+        QCOMPARE(restored.focusFollowsMouse, original.focusFollowsMouse);
+        QCOMPARE(restored.respectMinimumSize, original.respectMinimumSize);
+        QCOMPARE(restored.insertPosition, original.insertPosition);
+    }
+
+    // =========================================================================
+    // Retile tests (disabled engine)
+    // =========================================================================
+
+    void testRetile_disabledEngineNoOp()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QVERIFY(!engine.isEnabled());
+
+        engine.retile();
+        engine.retile(QStringLiteral("SomeScreen"));
+    }
+
+    // =========================================================================
+    // Window lifecycle tests
+    // =========================================================================
+
+    void testWindowLifecycle()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString screenName = QStringLiteral("TestScreen");
+        const QString windowId = QStringLiteral("win-lifecycle-1");
+
+        QSet<QString> screens{screenName};
+        engine.setAutotileScreens(screens);
+        QVERIFY(engine.isEnabled());
+
+        QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+
+        engine.windowOpened(windowId, screenName);
+
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(screenName);
+        QVERIFY(state != nullptr);
+        QVERIFY(state->containsWindow(windowId));
+        QCOMPARE(state->windowCount(), 1);
+
+        QVERIFY(tilingSpy.count() >= 1);
+        QCOMPARE(tilingSpy.last().first().toString(), screenName);
+
+        tilingSpy.clear();
+        engine.windowClosed(windowId);
+
+        QCoreApplication::processEvents();
+
+        QVERIFY(!state->containsWindow(windowId));
+        QCOMPARE(state->windowCount(), 0);
+
+        QVERIFY(tilingSpy.count() >= 1);
+        QCOMPARE(tilingSpy.last().first().toString(), screenName);
+    }
+};
+
+QTEST_MAIN(TestAutotileEngineCore)
+#include "test_autotile_engine_core.moc"

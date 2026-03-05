@@ -103,8 +103,12 @@ private Q_SLOTS:
         // win-2 is floating and in state
         QStringList recovered = mgr.recoverIfRoom(
             kScreen1, /*tiledCount=*/1, /*maxWindows=*/2,
-            [](const QString& wid) { return wid == kWin2; },  // isFloating
-            [](const QString&) { return true; });              // containsWindow
+            [](const QString& wid) {
+                return wid == kWin2;
+            }, // isFloating
+            [](const QString&) {
+                return true;
+            }); // containsWindow
 
         QCOMPARE(recovered.size(), 1);
         QCOMPARE(recovered.first(), kWin2);
@@ -119,8 +123,12 @@ private Q_SLOTS:
         // tiledCount=1, maxWindows=1 → no room
         QStringList recovered = mgr.recoverIfRoom(
             kScreen1, 1, 1,
-            [](const QString&) { return true; },
-            [](const QString&) { return true; });
+            [](const QString&) {
+                return true;
+            },
+            [](const QString&) {
+                return true;
+            });
 
         QCOMPARE(recovered.size(), 0);
         QVERIFY(mgr.isOverflow(kWin2));
@@ -135,10 +143,19 @@ private Q_SLOTS:
         // tiledCount=1, maxWindows=2 → room for 1 of 2
         QStringList recovered = mgr.recoverIfRoom(
             kScreen1, 1, 2,
-            [](const QString&) { return true; },
-            [](const QString&) { return true; });
+            [](const QString&) {
+                return true;
+            },
+            [](const QString&) {
+                return true;
+            });
 
         QCOMPARE(recovered.size(), 1);
+        // Verify the recovered window is one of the two overflow windows
+        QVERIFY2(recovered.first() == kWin2 || recovered.first() == kWin3,
+                 qPrintable(QStringLiteral("Recovered window '%1' is neither win-2 nor win-3").arg(recovered.first())));
+        // Verify exactly one window remains in overflow
+        QVERIFY(mgr.isOverflow(recovered.first() == kWin2 ? kWin3 : kWin2));
     }
 
     void testRecoverIfRoom_purgesStaleEntries()
@@ -150,8 +167,12 @@ private Q_SLOTS:
         // containsWindow returns false for win-2 — stale, should be purged
         QStringList recovered = mgr.recoverIfRoom(
             kScreen1, 1, 3,
-            [](const QString&) { return false; },
-            [](const QString&) { return false; });
+            [](const QString&) {
+                return false;
+            },
+            [](const QString&) {
+                return false;
+            });
 
         QCOMPARE(recovered.size(), 0);
         QVERIFY(!mgr.isOverflow(kWin2));
@@ -166,8 +187,12 @@ private Q_SLOTS:
 
         QStringList recovered = mgr.recoverIfRoom(
             kScreen1, 1, 3,
-            [](const QString&) { return false; },  // not floating
-            [](const QString&) { return true; });   // but in state
+            [](const QString&) {
+                return false;
+            }, // not floating
+            [](const QString&) {
+                return true;
+            }); // but in state
 
         // Should be purged as stale (tiled but still overflow-tracked)
         QCOMPARE(recovered.size(), 0);
@@ -190,16 +215,24 @@ private Q_SLOTS:
         QSet<QString> floatingSet = {kWin3, kWin4};
         QStringList recovered1 = mgr.recoverIfRoom(
             kScreen1, 2, 3,
-            [&floatingSet](const QString& wid) { return floatingSet.contains(wid); },
-            [](const QString&) { return true; });
+            [&floatingSet](const QString& wid) {
+                return floatingSet.contains(wid);
+            },
+            [](const QString&) {
+                return true;
+            });
         QCOMPARE(recovered1.size(), 1);
         floatingSet.remove(recovered1.first());
 
         // Recover with room for 1 more: should get the other
         QStringList recovered2 = mgr.recoverIfRoom(
             kScreen1, 3, 4,
-            [&floatingSet](const QString& wid) { return floatingSet.contains(wid); },
-            [](const QString&) { return true; });
+            [&floatingSet](const QString& wid) {
+                return floatingSet.contains(wid);
+            },
+            [](const QString&) {
+                return true;
+            });
         QCOMPARE(recovered2.size(), 1);
 
         QVERIFY(mgr.isEmpty());

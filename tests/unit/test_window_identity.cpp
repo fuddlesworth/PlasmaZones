@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2024 fuddlesworth
+// SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
@@ -26,45 +26,18 @@
 #include <QString>
 #include <QHash>
 
-/**
- * @brief Reimplementation of extractStableId for isolated testing
- *
- * This is copied from WindowTrackingAdaptor::extractStableId() to allow
- * testing without full daemon initialization. Any changes to the original
- * function must be reflected here.
- */
-static QString extractStableId(const QString& windowId)
-{
-    // Window ID format: "windowClass:resourceName:pointerAddress"
-    // Stable ID: "windowClass:resourceName" (without pointer address)
-    int lastColon = windowId.lastIndexOf(QLatin1Char(':'));
-    if (lastColon <= 0) {
-        return windowId;
-    }
+#include "../../src/core/utils.h"
 
-    QString potentialPointer = windowId.mid(lastColon + 1);
-    bool isPointer = !potentialPointer.isEmpty();
-    for (const QChar& c : potentialPointer) {
-        if (!c.isDigit()) {
-            isPointer = false;
-            break;
-        }
-    }
-
-    if (isPointer) {
-        return windowId.left(lastColon);
-    }
-    return windowId;
-}
+using PlasmaZones::Utils::extractStableId;
 
 class TestWindowIdentity : public QObject
 {
     Q_OBJECT
 
 private Q_SLOTS:
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
     // Basic extractStableId() tests
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
 
     void testExtractStableId_normalFormat()
     {
@@ -129,9 +102,9 @@ private Q_SLOTS:
         QCOMPARE(stableId, QStringLiteral(":resourceName"));
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
     // Window identity collision
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
 
     void testSameClassWindowsProduceIdenticalStableIds()
     {
@@ -142,8 +115,9 @@ private Q_SLOTS:
         QString stable1 = extractStableId(konsole1);
         QString stable2 = extractStableId(konsole2);
 
-        // This is the BUG: Both stable IDs are identical!
-        QCOMPARE(stable1, stable2);
+        // This is a known bug: Both stable IDs are identical
+        QEXPECT_FAIL("", "Known bug: identity collision - same-class windows produce identical stable IDs", Continue);
+        QVERIFY(stable1 != stable2);
         QCOMPARE(stable1, QStringLiteral("org.kde.konsole:konsole"));
     }
 
@@ -162,7 +136,8 @@ private Q_SLOTS:
         }
 
         // BUG: All 5 windows map to the same stable ID
-        QCOMPARE(stableIdCounts.size(), 1);
+        QEXPECT_FAIL("", "Known bug: identity collision - all same-class windows share one stable ID", Continue);
+        QVERIFY(stableIdCounts.size() == 5);
         QCOMPARE(stableIdCounts.value(QStringLiteral("org.kde.konsole:konsole")), 5);
     }
 
@@ -182,9 +157,9 @@ private Q_SLOTS:
         QVERIFY(stableKonsole != stableKate);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
     // Session Persistence Collision Simulation
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
 
     void testSessionRestoreCollisionScenario()
     {
@@ -202,8 +177,10 @@ private Q_SLOTS:
         QString session2Window = QStringLiteral("org.kde.konsole:konsole:67890");
         QString newStableId = extractStableId(session2Window);
 
-        // BUG: New window matches the old session's stable ID!
-        QVERIFY(persistedAssignments.contains(newStableId));
+        // BUG: New window matches the old session's stable ID
+        QEXPECT_FAIL("", "Known bug: identity collision causes wrong restore - new window matches old session",
+                     Continue);
+        QVERIFY(!persistedAssignments.contains(newStableId));
 
         // This causes the WRONG window to be auto-snapped to Zone A
         QString wronglyAssignedZone = persistedAssignments.value(newStableId).value(0);
@@ -231,13 +208,16 @@ private Q_SLOTS:
         persistedAssignments[stable3] = QStringList{QStringLiteral("zone-c")}; // Overwrites zone-b!
 
         // BUG: Only one assignment survives
-        QCOMPARE(persistedAssignments.size(), 1);
-        QCOMPARE(persistedAssignments.value(QStringLiteral("org.kde.konsole:konsole")).value(0), QStringLiteral("zone-c"));
+        QEXPECT_FAIL("", "Known bug: identity collision - only one assignment survives for same-class windows",
+                     Continue);
+        QVERIFY(persistedAssignments.size() == 3);
+        QCOMPARE(persistedAssignments.value(QStringLiteral("org.kde.konsole:konsole")).value(0),
+                 QStringLiteral("zone-c"));
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
     // Edge Cases in Window ID Format
-    // ═══════════════════════════════════════════════════════════════════════
+    // =====================================================================
 
     void testWindowIdWithOnlyDigitsInResourceName()
     {
@@ -283,34 +263,6 @@ private Q_SLOTS:
         QString stableId = extractStableId(windowId);
 
         QCOMPARE(stableId, QStringLiteral("org.kde.app:"));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // Proposed Fix Validation Tests (for future implementation)
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Proposed fix: Include instance counter or timestamp in stable ID
-     *
-     * The fix would change stable ID to: "windowClass:resourceName:instanceId"
-     * where instanceId is a session-stable counter (not the pointer address)
-     *
-     * These tests validate the expected behavior AFTER the fix is implemented.
-     */
-    void testProposedFix_instanceCounterMakesUniqueIds()
-    {
-        // Proposed stable ID format with instance counter
-        // This test documents the expected behavior after fix
-
-        // Session-stable instance tracking would give:
-        // Konsole #1: "org.kde.konsole:konsole:instance-1"
-        // Konsole #2: "org.kde.konsole:konsole:instance-2"
-
-        QString proposedStable1 = QStringLiteral("org.kde.konsole:konsole:instance-1");
-        QString proposedStable2 = QStringLiteral("org.kde.konsole:konsole:instance-2");
-
-        // These SHOULD be unique (unlike current behavior)
-        QVERIFY(proposedStable1 != proposedStable2);
     }
 };
 
