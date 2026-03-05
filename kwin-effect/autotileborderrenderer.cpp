@@ -20,7 +20,7 @@ namespace PlasmaZones {
 
 void AutotileBorderRenderer::drawBorders(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                                          const QVector<QRect>& zoneGeometries, int borderWidth,
-                                         const QColor& borderColor)
+                                         const QColor& borderColor, const QRegion& clipRegion)
 {
     if (borderWidth <= 0 || !borderColor.isValid() || borderColor.alpha() == 0 || zoneGeometries.isEmpty()) {
         return;
@@ -30,8 +30,26 @@ void AutotileBorderRenderer::drawBorders(const KWin::RenderTarget& renderTarget,
 
     // Build vertex data for all border rectangles across all zones.
     // Each zone produces up to 4 border strips (top, bottom, left, right).
+    // If a clipRegion is provided, each strip is intersected with it so that
+    // the border does not draw over windows above the active window (popups,
+    // menus, OSDs, overlapping windows).
     QList<QVector2D> verts;
     verts.reserve(zoneGeometries.size() * 4 * 6); // 4 strips × 6 verts (2 triangles)
+
+    const bool hasClip = !clipRegion.isEmpty();
+
+    auto emitRect = [&](const QRectF& r) {
+        const float x1 = r.left() * scale;
+        const float y1 = r.top() * scale;
+        const float x2 = r.right() * scale;
+        const float y2 = r.bottom() * scale;
+        verts.append(QVector2D(x1, y1));
+        verts.append(QVector2D(x2, y1));
+        verts.append(QVector2D(x1, y2));
+        verts.append(QVector2D(x2, y1));
+        verts.append(QVector2D(x2, y2));
+        verts.append(QVector2D(x1, y2));
+    };
 
     for (const QRect& zoneGeometry : zoneGeometries) {
         const QRectF zone(zoneGeometry);
@@ -53,19 +71,18 @@ void AutotileBorderRenderer::drawBorders(const KWin::RenderTarget& renderTarget,
             if (r.width() <= 0 || r.height() <= 0) {
                 continue;
             }
-            // Scale logical coordinates to device coordinates for the GPU
-            const float x1 = r.left() * scale;
-            const float y1 = r.top() * scale;
-            const float x2 = r.right() * scale;
-            const float y2 = r.bottom() * scale;
 
-            // Two triangles per rectangle
-            verts.append(QVector2D(x1, y1));
-            verts.append(QVector2D(x2, y1));
-            verts.append(QVector2D(x1, y2));
-            verts.append(QVector2D(x2, y1));
-            verts.append(QVector2D(x2, y2));
-            verts.append(QVector2D(x1, y2));
+            if (hasClip) {
+                // Intersect this strip with the clip region — only emit vertices
+                // for the parts of the strip not covered by higher windows.
+                const QRegion stripRegion(r.toAlignedRect());
+                const QRegion visible = stripRegion & clipRegion;
+                for (const QRect& visibleRect : visible) {
+                    emitRect(QRectF(visibleRect));
+                }
+            } else {
+                emitRect(r);
+            }
         }
     }
 

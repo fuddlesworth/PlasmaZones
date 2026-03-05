@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QRect>
+#include <QRegion>
 #include <QVector>
 
 namespace KWin {
@@ -39,7 +40,8 @@ public:
      * @param borderColor   Border color (alpha-blended)
      */
     void drawBorders(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
-                     const QVector<QRect>& zoneGeometries, int borderWidth, const QColor& borderColor);
+                     const QVector<QRect>& zoneGeometries, int borderWidth, const QColor& borderColor,
+                     const QRegion& clipRegion = QRegion());
 };
 
 } // namespace PlasmaZones

@@ -327,7 +327,6 @@ private:
     std::unique_ptr<AutotileHandler> m_autotileHandler;
     std::unique_ptr<AutotileBorderRenderer> m_borderRenderer;
     QRect m_lastBorderRect; // tracks previous border region for damage scheduling
-    KWin::LogicalOutput* m_currentRenderScreen = nullptr; // set by paintScreen for paintWindow guard
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;

@@ -36,8 +36,10 @@ QDBusInterface* DBusLayoutService::getInterface()
     }
 
     // Clean up invalid interface
-    m_interface->deleteLater();
-    m_interface = nullptr;
+    if (m_interface) {
+        m_interface->deleteLater();
+        m_interface = nullptr;
+    }
 
     // Create new interface
     m_interface = new QDBusInterface(m_serviceName, m_objectPath, m_interfaceName, QDBusConnection::sessionBus(), this);
