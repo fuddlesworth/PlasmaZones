@@ -10,54 +10,46 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.0.0] - 2026-03-05
 
 ### Added
-- **Autotiling engine**: Automatic window tiling with 10 layout algorithms — Master-Stack, Columns, BSP, Dwindle, Spiral, Grid, Wide, Centered Master, Monocle, and Three-Column
-- **Per-screen algorithm selection**: Each monitor can run a different autotile algorithm with independent settings
-- **Per-screen maxWindows**: Cap the number of tiled windows per screen; overflow windows are managed separately
-- **Overflow window management**: Windows beyond the per-screen cap are tracked and can be swapped in/out of the tiled set
-- **Deterministic zone-ordered window transitions**: Windows animate into their target zones in a predictable, staggered order
-- **Hide title bars on tiled windows**: Automatically remove title bars when windows are tiled, with configurable border rendering for borderless windows
-- **Configurable autotile borders**: Draw visible borders around borderless tiled windows so zone boundaries remain clear
-- **Read-only preview mode**: Autotile layouts open in a non-editable preview in the zone editor
-- **Dual-view layout picker**: KCM Layouts tab splits into Snapping and Tiling views with default autotile algorithm selector
-- **Snapping enable/disable toggle**: Master switch to fully enable or disable the zone snapping system
-- **Separate centered-master settings**: Split ratio and master count are now independent for Centered Master and Master-Stack algorithms
-- **Elastic and bounce easing curves**: New curve types with customizable parameters for window animations
-- **Cubic bezier easing curve editor**: Visual editor for custom animation curves with OSD improvements
-- **Staggered window animation**: Cascading overlap animation when multiple windows move simultaneously
-- **Per-side outer gaps for autotiling**: Independent top/bottom/left/right gap control for tiled layouts
-- **Per-monitor gap/padding overrides**: Each monitor can override global snapping gaps and zone padding
-- **Robust float toggle**: Explicit window IDs, cross-screen fallback, and geometry preservation for float/unfloat
-- **Desktop wallpaper texture for shaders**: Shader effects can sample the current desktop wallpaper as a texture
-- **Unified shader vitality system**: Separate highlight vs dormant rendering quality for GPU efficiency
-- **Persist pre-autotile geometries**: Window sizes before autotiling are saved across session restarts for accurate float restore
+
+#### Autotiling Engine
+- **Pluggable algorithm architecture** with 10 tiling layouts: Master+Stack, Centered Master, BSP, Dwindle, Spiral, Columns, Rows, Grid, Wide, Three-Column, and Monocle
+- **Per-screen algorithm selection** with independent settings per monitor
+- **Separate centered-master settings**: Split ratio and master count are independent from master+stack (defaults: 0.5 vs 0.6)
+- **Per-screen maxWindows cap** to limit tiled window count per monitor
+- **Per-side outer gaps** (top/bottom/left/right) for independent screen edge spacing
+- **Overflow window management**: Auto-float excess windows when maxWindows is reached, auto-recover when room opens
+- **Hide title bars** on tiled windows with configurable active-window border rendering (color, width)
+- **Deterministic zone-ordered window transitions** when switching between snapping and autotiling modes
+- **Float/unfloat toggle** with geometry preservation and cross-screen fallback
+- **Smart gaps**, insert position config, focus-follows-mouse, focus-new-windows
+- **Minimum window size** respect with algorithm-level constraint solving
+- **D-Bus interface** (`org.plasmazones.Autotile`) for runtime control
+- **Read-only preview mode** for autotile layouts in the editor
+- **Pre-autotile geometry persistence** across session restarts for accurate float restore
+
+#### Animation System
+- **Translate-only slide animations** that avoid Wayland buffer desync (no scale transforms)
+- **Staggered cascading window animations** with configurable overlap
+- **Cubic bezier easing curve editor** in KCM with live preview
+- **Elastic and bounce easing curve types** with customizable parameters (amplitude, period, overshoot)
+
+#### KCM Improvements
+- **Dual-view layout picker** with separate Snapping/Tiling modes and default autotile algorithm selection
+- **Dual-mode per-screen assignments** (snapping layouts + autotile algorithms per monitor)
+- **Snapping enable/disable toggle**
+- **Auto-select default layout** in Layout tab
+- **Live algorithm preview widget**
+- **Per-monitor snapping gap/padding overrides**
 
 ### Changed
 - **Renamed Zones tab to Snapping** in KCM for clarity alongside the new Tiling tab
-- **Animations promoted to general system**: Window animations with easing curves are now a first-class feature, window opacity animation removed
 - **BSP algorithm made deterministic**: Removed persistent tree state that caused non-reproducible layouts
-- **Translate-only slide animations**: Fix Wayland compositor desync by using translate-only transforms
 - **Major codebase refactoring**: Split 20+ oversized files (>500 lines) into DRY translation units organized in subdirectories
   - Extracted `OverflowManager`, `PerScreenConfigResolver`, `NavigationController`, `SettingsBridge` from `AutotileEngine`
   - Extracted `AssignmentManager`, `DaemonController`, `LayoutManager` from monolithic KCM
   - Extracted `AutotileHandler`, `ScreenChangeHandler`, `SnapAssistHandler` from KWin effect
   - Split `Settings`, `OverlayService`, `WindowTrackingService`, D-Bus adaptors, and editor into subdirectories
-- **Code quality audit**: 26 files updated for Qt6 string literal compliance, QUuid format, memory safety (`deleteLater`), QML typed properties, accessibility annotations, i18n coverage, and Kirigami.Units for DPI-aware sizing
-
-### Fixed
-- **Daemon SIGSEGV during shader preview**: Hovering over zones in the shader overlay caused a use-after-free crash — Repeater model churn from a computed property destroyed delegates mid-hover-event delivery
-- **Shader thread safety and GPU crash prevention**: Fixed race conditions and GLSL correctness issues across the rendering pipeline
-- **FBO Y-flip for multipass buffer sampling**: Corrected texture coordinate inversion on OpenGL multipass shaders
-- **29 issues across 10 shaders**: Comprehensive shader audit fixing visual artifacts, parameter handling, and edge cases
-- **Snap state restore after daemon restart**: Windows snapped to zones are now correctly re-registered when the daemon restarts
-- **Theme-harmonious label color in Mosaic Pulse**: Zone number labels use theme colors instead of hardcoded values
-- **Exclude xdg-desktop-portal windows**: Portal dialogs (file picker, screenshot) no longer trigger snapping or autotiling
-- **KCM update check**: Replaced label with InlineMessage, fixed dismiss persistence and race conditions
-- **Login freeze and SIGSEGV on deleted windows**: KWin effect no longer blocks at login or crashes when accessing destroyed window objects
-- **Autotile startup reliability**: Replaced timer-based startup hacks with D-Bus service watchers and `daemonReady` signal
-- **Remaining sync D-Bus calls in KWin effect**: Converted navigation and thumbnail D-Bus calls to async to prevent compositor thread blocking
-- **Autotile algorithm edge cases**: Null guards, i18n wrapping, minimize tracking, algorithm switch races, duplicate resnap OSD suppression
-- **Float/unfloat transitions**: Preserve focus and raise order, ignore float toggle for never-snapped windows, clear stale floating state on mode transition
-- **UUID collision on layout import**: Regenerate UUIDs when imported layout IDs collide with existing layouts
+- **Comprehensive unit tests** for all algorithms, engine, tiling state, overflow manager, geometry utils, and algorithm registry (11 test suites)
 
 ## [1.15.6] - 2026-02-28
 
