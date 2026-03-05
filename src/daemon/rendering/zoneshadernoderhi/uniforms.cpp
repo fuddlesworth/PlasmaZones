@@ -155,10 +155,9 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     }
     m_uniforms.iAudioSpectrumSize = m_audioSpectrum.size();
 
-    // Pad after iAudioSpectrumSize to match std140 layout
+    // iFlipBufferY set in uploadDirtyTextures() where rhi is available
     m_uniforms._pad_after_audioSpectrum[0] = 0;
     m_uniforms._pad_after_audioSpectrum[1] = 0;
-    m_uniforms._pad_after_audioSpectrum[2] = 0;
 
     // User texture resolutions (bindings 7-10)
     for (int i = 0; i < 4; ++i) {
@@ -209,6 +208,8 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 
     if (m_uniformsDirty) {
         syncUniformsFromData();
+        // Buffer textures rendered via FBO need Y-flip on OpenGL (Y-up framebuffer)
+        m_uniforms.iFlipBufferY = rhi->isYUpInFramebuffer() ? 1 : 0;
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
             if (!m_didFullUploadOnce) {

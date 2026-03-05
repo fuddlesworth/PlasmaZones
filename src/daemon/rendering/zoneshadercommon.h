@@ -75,8 +75,9 @@ struct alignas(16) ZoneShaderUniforms
     // Audio spectrum (CAVA): number of bars; 0 = disabled. Texture at binding 6.
     int iAudioSpectrumSize;
 
-    // Padding to 16-byte boundary after iAudioSpectrumSize (std140 alignment for following array)
-    int _pad_after_audioSpectrum[3];
+    // 1 when rhi->isYUpInFramebuffer() (OpenGL): buffer texture sampling needs Y-flip
+    int iFlipBufferY;
+    int _pad_after_audioSpectrum[2];
 
     // User texture resolutions (bindings 7-10): [i][0]=width, [i][1]=height, [i][2..3]=padding
     float iTextureResolution[4][4];
