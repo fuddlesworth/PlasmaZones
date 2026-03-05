@@ -22,7 +22,7 @@
 #include "core/layoutmanager.h"
 #include "core/interfaces.h"
 #include "core/utils.h"
-#include "helpers/StubSettings.h"
+#include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 

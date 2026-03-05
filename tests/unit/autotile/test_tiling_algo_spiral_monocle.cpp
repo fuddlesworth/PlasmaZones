@@ -13,7 +13,7 @@
 #include "autotile/algorithms/RowsAlgorithm.h"
 #include "core/constants.h"
 
-#include "helpers/TilingTestHelpers.h"
+#include "../helpers/TilingTestHelpers.h"
 
 using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;

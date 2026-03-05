@@ -14,7 +14,7 @@
 #include <QJsonArray>
 #include <QUuid>
 
-#include "../../src/core/utils.h"
+#include "../../../src/core/utils.h"
 
 /// Mock session persistence logic for isolated testing (no daemon/KConfig needed)
 class MockSessionPersistence : public QObject

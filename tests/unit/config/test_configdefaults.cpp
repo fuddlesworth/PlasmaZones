@@ -18,8 +18,8 @@
 
 #include <QTest>
 
-#include "../../src/config/configdefaults.h"
-#include "../../src/core/constants.h"
+#include "../../../src/config/configdefaults.h"
+#include "../../../src/core/constants.h"
 
 using namespace PlasmaZones;
 

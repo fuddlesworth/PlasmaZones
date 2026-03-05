@@ -22,10 +22,10 @@
 #include <KConfigGroup>
 #include <KSharedConfig>
 
-#include "../../src/config/settings.h"
-#include "../../src/config/configdefaults.h"
-#include "../../src/core/constants.h"
-#include "helpers/IsolatedConfigGuard.h"
+#include "../../../src/config/settings.h"
+#include "../../../src/config/configdefaults.h"
+#include "../../../src/core/constants.h"
+#include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;

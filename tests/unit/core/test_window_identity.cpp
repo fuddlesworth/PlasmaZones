@@ -26,7 +26,7 @@
 #include <QString>
 #include <QHash>
 
-#include "../../src/core/utils.h"
+#include "../../../src/core/utils.h"
 
 using PlasmaZones::Utils::extractStableId;
 

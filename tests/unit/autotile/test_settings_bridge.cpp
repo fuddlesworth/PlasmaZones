@@ -10,7 +10,7 @@
 #include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingState.h"
 #include "core/constants.h"
-#include "helpers/IsolatedConfigGuard.h"
+#include "../helpers/IsolatedConfigGuard.h"
 
 #include <KSharedConfig>
 #include <KConfigGroup>

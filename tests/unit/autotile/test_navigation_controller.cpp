@@ -10,7 +10,7 @@
 #include "autotile/TilingState.h"
 #include "core/constants.h"
 
-#include "helpers/AutotileTestHelpers.h"
+#include "../helpers/AutotileTestHelpers.h"
 
 using namespace PlasmaZones;
 

@@ -16,7 +16,7 @@
 #include "core/layoutmanager.h"
 #include "core/layout.h"
 #include "core/zone.h"
-#include "helpers/StubSettings.h"
+#include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;
 

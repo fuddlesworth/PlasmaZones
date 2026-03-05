@@ -20,7 +20,7 @@
 
 #include "core/logging.h"
 #include "core/enums.h"
-#include "helpers/TestHelpers.h"
+#include "../helpers/TestHelpers.h"
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Extracted inline functions from daemon/overlayservice/internal.h

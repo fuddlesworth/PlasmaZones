@@ -13,7 +13,7 @@
 #include "daemon/rendering/zoneshaderitem.h"
 #include "daemon/rendering/zoneshadercommon.h"
 #include "core/constants.h"
-#include "helpers/TestHelpers.h"
+#include "../helpers/TestHelpers.h"
 
 using namespace PlasmaZones;
 
