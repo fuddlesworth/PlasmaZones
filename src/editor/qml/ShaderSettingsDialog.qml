@@ -295,7 +295,8 @@ Kirigami.Dialog {
     }
 
     function firstEffectId() {
-        var shaders = editorController ? editorController.availableShaders : [];
+        // Use sortedShaders (alphabetical by name) so the pick is deterministic
+        var shaders = root.sortedShaders;
         for (var i = 0; i < shaders.length; i++) {
             if (shaders[i] && shaders[i].id && shaders[i].id !== noneShaderId)
                 return shaders[i].id;

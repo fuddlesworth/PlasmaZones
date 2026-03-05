@@ -152,18 +152,30 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     // ── Identity-native audio: cosmic / nebula ──────────────
 
     // ** Nebula Breathing (bass) **
-    // Bass creates organic, non-uniform expansion/contraction of the flow field.
-    // Different parts of the nebula breathe at different rates via position-dependent noise.
+    // Bass warps the flow field with organic, spatially-varying displacement.
+    // Two offset noise layers push fragments in different directions, creating
+    // a tidal pull effect rather than a flat zoom.
     if (hasAudio && bass > 0.02) {
-        float breathe = bass * 0.3 * (0.5 + 0.5 * noise2D(globalUV * 3.0 + iTime * 0.5));
-        centeredUV *= 1.0 - breathe; // local expansion where noise is high
+        float bassEnv = smoothstep(0.02, 0.3, bass) * audioReact;
+        // Two independent noise fields for X and Y displacement
+        float warpSeed = iTime * 0.4;
+        float nx = noise2D(globalUV * 4.0 + vec2(warpSeed, 0.0)) - 0.5;
+        float ny = noise2D(globalUV * 4.0 + vec2(0.0, warpSeed + 73.1)) - 0.5;
+        // Displacement magnitude varies across the field (stronger at noise peaks)
+        float localIntensity = 0.5 + 0.5 * noise2D(globalUV * 2.0 - warpSeed * 0.3);
+        vec2 warp = vec2(nx, ny) * bassEnv * localIntensity * 0.6;
+        centeredUV += warp;
     }
 
     // ** Flow Direction Shift (mids) **
-    // Mids gently rotate the overall flow direction rather than just shifting color.
-    // Higher mids = more rotation, creating a swirling response to mid-frequency energy.
+    // Mids create localized swirl vortices rather than a uniform rotation.
+    // Each fragment rotates by a different amount based on its position in
+    // the noise field, producing organic eddies that respond to mid energy.
     if (hasAudio && mids > 0.02) {
-        float rotAngle = mids * audioReact * 0.4; // up to ~23 degrees at full mids
+        float midsEnv = smoothstep(0.02, 0.4, mids) * audioReact;
+        // Spatially-varying rotation angle: some areas swirl more than others
+        float swirlNoise = noise2D(globalUV * 3.5 + iTime * 0.25) - 0.5;
+        float rotAngle = swirlNoise * midsEnv * 0.7; // ~±20 degrees at peaks
         float cs = cos(rotAngle);
         float sn = sin(rotAngle);
         centeredUV = mat2(cs, -sn, sn, cs) * centeredUV;
