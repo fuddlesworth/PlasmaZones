@@ -208,9 +208,18 @@ bool Daemon::init()
         m_prevSnappingEnabled = snappingNow;
         m_prevAutotileEnabled = autotileNow;
 
+        // Capture old preview params before sync to detect tiling parameter changes
+        const auto prevPreviewParams = AlgorithmRegistry::configuredPreviewParams();
+
         // Sync engine config (idempotent — skips retile if nothing changed)
         if (m_autotileEngine) {
             m_autotileEngine->syncFromSettings(m_settings.get());
+        }
+
+        // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
+        // notify layout list consumers to refetch with updated previews
+        if (AlgorithmRegistry::configuredPreviewParams() != prevPreviewParams && m_layoutAdaptor) {
+            m_layoutAdaptor->notifyLayoutListChanged();
         }
 
         // Handle autotile feature gate toggle

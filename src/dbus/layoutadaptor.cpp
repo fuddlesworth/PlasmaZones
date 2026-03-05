@@ -104,6 +104,12 @@ void LayoutAdaptor::invalidateCache()
     m_cachedLayoutJson.clear();
 }
 
+void LayoutAdaptor::notifyLayoutListChanged()
+{
+    invalidateCache();
+    Q_EMIT layoutListChanged();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Helper Methods
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -239,7 +245,7 @@ QString LayoutAdaptor::getLayout(const QString& id)
         entry.isAutotile = true;
         entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
-        entry.zoneCount = algo->defaultMaxWindows();
+        entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
         QJsonObject json = LayoutUtils::toJson(entry);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);

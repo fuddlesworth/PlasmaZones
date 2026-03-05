@@ -195,6 +195,14 @@ private Q_SLOTS:
 public:
     void invalidateCache();
 
+    /**
+     * @brief Notify consumers that the layout list data has changed
+     *
+     * Called by the Daemon when tiling parameters (e.g. maxWindows) change
+     * on Apply, so layout previews are regenerated.
+     */
+    void notifyLayoutListChanged();
+
 private:
     void connectLayoutManagerSignals();
     void connectVirtualDesktopSignals();

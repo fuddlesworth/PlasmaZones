@@ -20,6 +20,16 @@ constexpr int PreviewSize = 1000;
 
 namespace PlasmaZones {
 
+AlgorithmRegistry::PreviewParams AlgorithmRegistry::s_previewParams;
+
+bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) const
+{
+    return maxWindows == other.maxWindows && masterCount == other.masterCount
+        && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
+        && centeredMasterMasterCount == other.centeredMasterMasterCount
+        && qFuzzyCompare(1.0 + centeredMasterSplitRatio, 1.0 + other.centeredMasterSplitRatio);
+}
+
 using namespace DBus::AutotileAlgorithm;
 
 // Global pending registrations list - shared by all AlgorithmRegistrar instantiations
@@ -239,21 +249,60 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zo
     return result;
 }
 
-QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm)
+void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
+{
+    s_previewParams = params;
+}
+
+const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::configuredPreviewParams()
+{
+    return s_previewParams;
+}
+
+int AlgorithmRegistry::configuredMaxWindows()
+{
+    return s_previewParams.maxWindows;
+}
+
+int AlgorithmRegistry::effectiveMaxWindows(TilingAlgorithm* algorithm)
+{
+    if (!algorithm) {
+        return s_previewParams.maxWindows;
+    }
+    return (s_previewParams.maxWindows > 0) ? s_previewParams.maxWindows : algorithm->defaultMaxWindows();
+}
+
+QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm, int windowCount)
 {
     if (!algorithm) {
         return {};
     }
 
+    // Use explicit override, then configured setting, then algorithm default
+    int count = windowCount;
+    if (count <= 0) {
+        count = effectiveMaxWindows(algorithm);
+    }
+
+    // Use centered-master-specific params when generating preview for that algorithm
+    const bool isCenteredMaster = (algorithm == instance()->algorithm(CenteredMaster));
+
+    const int masterCount = isCenteredMaster
+        ? ((s_previewParams.centeredMasterMasterCount > 0) ? s_previewParams.centeredMasterMasterCount : 1)
+        : ((s_previewParams.masterCount > 0) ? s_previewParams.masterCount : 1);
+    const qreal splitRatio = isCenteredMaster
+        ? ((s_previewParams.centeredMasterSplitRatio > 0) ? s_previewParams.centeredMasterSplitRatio
+                                                          : algorithm->defaultSplitRatio())
+        : ((s_previewParams.splitRatio > 0) ? s_previewParams.splitRatio : algorithm->defaultSplitRatio());
+
     // Generate preview zones for a representative window count
     const QRect previewRect(0, 0, PreviewSize, PreviewSize);
 
     TilingState previewState(QStringLiteral("preview"));
-    previewState.setMasterCount(1);
-    previewState.setSplitRatio(AutotileDefaults::DefaultSplitRatio);
+    previewState.setMasterCount(masterCount);
+    previewState.setSplitRatio(splitRatio);
 
-    QVector<QRect> zones =
-        algorithm->calculateZones({algorithm->defaultMaxWindows(), previewRect, &previewState, 0, {}});
+    QVector<QRect> zones = algorithm->calculateZones({count, previewRect, &previewState, 0, {}});
 
     // Convert to relative geometry (handles monocle offset detection internally)
     QVariantList list = zonesToRelativeGeometry(zones, previewRect);
@@ -283,7 +332,7 @@ QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm,
     map[QLatin1String("name")] = algorithm->name();
     map[QLatin1String("description")] = algorithm->description();
     map[QLatin1String("type")] = -1; // Not a standard LayoutType
-    map[QLatin1String("zoneCount")] = algorithm->defaultMaxWindows();
+    map[QLatin1String("zoneCount")] = effectiveMaxWindows(algorithm);
     map[QLatin1String("zones")] = generatePreviewZones(algorithm);
     map[QLatin1String("category")] = static_cast<int>(LayoutCategory::Autotile);
 

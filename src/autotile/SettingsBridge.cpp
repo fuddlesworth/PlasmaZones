@@ -136,6 +136,14 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         m_engine->backfillWindows();
     }
 
+    // Update AlgorithmRegistry so preview generation uses the configured values.
+    // Use the settings getters for generic params (not cfg-> fields which may have
+    // been overwritten by the centered-master correction above). The centered-master
+    // fields in cfg are always the original values from their dedicated settings.
+    AlgorithmRegistry::setConfiguredPreviewParams({cfg->maxWindows, settings->autotileMasterCount(),
+                                                   settings->autotileSplitRatio(), cfg->centeredMasterMasterCount,
+                                                   cfg->centeredMasterSplitRatio});
+
     if (configChanged && m_engine->isEnabled()) {
         // Cancel any pending debounced retile — we are doing a full resync
         m_settingsRetileTimer.stop();

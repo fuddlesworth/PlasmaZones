@@ -152,13 +152,56 @@ public:
     /**
      * @brief Generate preview zones for an algorithm as QVariantList
      *
-     * Creates a representative preview with 3 windows showing how the algorithm
-     * arranges windows. Used by zone selector and layout OSD.
+     * Uses the configured max windows (setConfiguredMaxWindows) when set,
+     * otherwise falls back to the algorithm's defaultMaxWindows().
+     * Used by zone selector, layout OSD, and layout cards.
      *
      * @param algorithm The tiling algorithm to preview
+     * @param windowCount Explicit override (-1 = use configured or algorithm default)
      * @return QVariantList of zone maps with relativeGeometry (0.0-1.0)
      */
-    static QVariantList generatePreviewZones(TilingAlgorithm* algorithm);
+    static QVariantList generatePreviewZones(TilingAlgorithm* algorithm, int windowCount = -1);
+
+    /**
+     * @brief Tiling parameters that affect algorithm preview generation
+     */
+    struct PreviewParams
+    {
+        int maxWindows = -1; ///< -1 = use algorithm default
+        int masterCount = -1; ///< -1 = use default (1)
+        qreal splitRatio = -1.0; ///< -1 = use algorithm default
+        int centeredMasterMasterCount = -1; ///< centered-master override
+        qreal centeredMasterSplitRatio = -1.0; ///< centered-master override
+
+        bool operator==(const PreviewParams& other) const;
+        bool operator!=(const PreviewParams& other) const
+        {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief Get effective max windows for an algorithm, using configured or default
+     */
+    static int effectiveMaxWindows(TilingAlgorithm* algorithm);
+
+    /**
+     * @brief Set the user-configured tiling parameters for preview generation
+     *
+     * When set, generatePreviewZones() uses these values instead of
+     * hardcoded defaults. Call this when the user's tiling settings change.
+     */
+    static void setConfiguredPreviewParams(const PreviewParams& params);
+
+    /**
+     * @brief Get the configured preview parameters
+     */
+    static const PreviewParams& configuredPreviewParams();
+
+    /**
+     * @brief Get the configured max windows, or -1 if not set
+     */
+    static int configuredMaxWindows();
 
     /**
      * @brief Convert an algorithm to QVariantMap for QML consumption
@@ -217,6 +260,8 @@ private:
 
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
+
+    static PreviewParams s_previewParams; ///< User-configured tiling parameters for previews
 };
 
 /**

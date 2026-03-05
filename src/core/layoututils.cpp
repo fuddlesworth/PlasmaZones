@@ -175,7 +175,7 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.isAutotile = true;
         entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
-        entry.zoneCount = algo->defaultMaxWindows();
+        entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
         list.append(entry);
     }
 }

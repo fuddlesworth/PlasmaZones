@@ -293,7 +293,8 @@ void LayoutManager::applyLayoutFilter()
             < mapB.value(QStringLiteral("name")).toString().toLower();
     });
 
-    // Only update if the list actually changed (prevents scroll position reset)
+    // Compare by ID list — if order hasn't changed, update data in-place
+    // to avoid full model swap (which resets scroll position in QML GridView)
     auto extractIds = [](const QVariantList& list) {
         QStringList ids;
         ids.reserve(list.size());
@@ -303,6 +304,18 @@ void LayoutManager::applyLayoutFilter()
         return ids;
     };
     if (extractIds(m_layouts) == extractIds(newLayouts)) {
+        // IDs unchanged — update entries in-place (zone data may have changed,
+        // e.g. when autotile maxWindows changes preview zone count)
+        bool dataChanged = false;
+        for (int i = 0; i < newLayouts.size(); ++i) {
+            if (m_layouts[i] != newLayouts[i]) {
+                m_layouts[i] = newLayouts[i];
+                dataChanged = true;
+            }
+        }
+        if (dataChanged) {
+            Q_EMIT layoutsChanged();
+        }
         return;
     }
 
