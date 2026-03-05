@@ -23,8 +23,10 @@
 #include "core/interfaces.h"
 #include "core/utils.h"
 #include "../helpers/StubSettings.h"
+#include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Minimal Stub ZoneDetector
@@ -97,6 +99,7 @@ private Q_SLOTS:
 
     void testMultiZoneGeometry_someZonesInvalid()
     {
+        IsolatedConfigGuard guard;
         QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
@@ -128,6 +131,7 @@ private Q_SLOTS:
 
     void testCalculateRotation_uuidFormatMismatch()
     {
+        IsolatedConfigGuard guard;
         QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));

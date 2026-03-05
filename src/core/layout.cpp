@@ -285,8 +285,7 @@ bool Layout::isSystemLayout() const
     // System layouts are loaded from /usr/share or other system data directories
     // User layouts are in ~/.local/share
     // Check if source path is NOT under user's writable location
-    // Use static to cache the user data path (it doesn't change during runtime)
-    static const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+    const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     return !m_sourcePath.startsWith(userDataPath);
 }
 

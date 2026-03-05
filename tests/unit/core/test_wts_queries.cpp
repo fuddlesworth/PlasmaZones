@@ -24,6 +24,7 @@
 #include <QUuid>
 #include <QSignalSpy>
 #include <QRectF>
+#include <memory>
 
 #include "core/windowtrackingservice.h"
 #include "core/layoutmanager.h"
@@ -32,8 +33,10 @@
 #include "core/zone.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/utils.h"
+#include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 // =========================================================================
 // Stub Settings
@@ -703,6 +706,7 @@ class TestWtsQueries : public QObject
 private Q_SLOTS:
     void init()
     {
+        m_guard = std::make_unique<IsolatedConfigGuard>();
         m_layoutManager = new LayoutManager(nullptr);
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
@@ -730,6 +734,7 @@ private Q_SLOTS:
         m_layoutManager = nullptr;
         m_testLayout = nullptr;
         m_zoneIds.clear();
+        m_guard.reset();
     }
 
     // =====================================================================
@@ -849,6 +854,7 @@ private Q_SLOTS:
     }
 
 private:
+    std::unique_ptr<IsolatedConfigGuard> m_guard;
     LayoutManager* m_layoutManager = nullptr;
     StubSettingsQueries* m_settings = nullptr;
     StubZoneDetectorQueries* m_zoneDetector = nullptr;

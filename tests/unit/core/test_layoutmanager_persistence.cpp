@@ -8,21 +8,23 @@
 
 #include <QTest>
 #include <QSignalSpy>
-#include <QTemporaryDir>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QScopedPointer>
-#include <QStandardPaths>
 #include <QUuid>
+#include <memory>
+#include <vector>
 
 #include "core/layoutmanager.h"
 #include "core/layout.h"
 #include "core/zone.h"
 #include "../helpers/StubSettings.h"
+#include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
+using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
 class TestLayoutManagerPersistence : public QObject
 {
@@ -40,25 +42,23 @@ private:
 
     LayoutManager* createManager(QObject* parent = nullptr)
     {
+        m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
         auto* mgr = new LayoutManager(parent);
-        QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-            + QStringLiteral("/plasmazones/test-layouts-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
-        QDir().mkpath(userDataPath);
-        mgr->setLayoutDirectory(userDataPath);
-        m_testLayoutDirs.append(userDataPath);
+        // Override layout dir to a path under the guard's temp dir to avoid
+        // static-cache issues in Layout::isSystemLayout().
+        QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
+        QDir().mkpath(layoutDir);
+        mgr->setLayoutDirectory(layoutDir);
         return mgr;
     }
 
-    QStringList m_testLayoutDirs;
+    std::vector<std::unique_ptr<IsolatedConfigGuard>> m_guards;
 
 private Q_SLOTS:
 
     void cleanup()
     {
-        for (const QString& dir : m_testLayoutDirs) {
-            QDir(dir).removeRecursively();
-        }
-        m_testLayoutDirs.clear();
+        m_guards.clear();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

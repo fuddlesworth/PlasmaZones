@@ -12,10 +12,14 @@ namespace PlasmaZones {
 namespace TestHelpers {
 
 /**
- * @brief RAII guard that redirects KSharedConfig to a temporary directory.
+ * @brief RAII guard that isolates both config and data directories for tests.
  *
- * Sets XDG_CONFIG_HOME so that KSharedConfig::openConfig("plasmazonesrc") reads/writes
- * inside a temporary directory instead of the real user config at ~/.config.
+ * Sets XDG_CONFIG_HOME and XDG_DATA_HOME so that KSharedConfig and
+ * QStandardPaths::GenericDataLocation resolve inside a temporary directory
+ * instead of the real user directories (~/.config, ~/.local/share).
+ *
+ * This prevents tests from polluting the user's install with layout files,
+ * shader presets, or other data written via QStandardPaths.
  *
  * ## KSharedConfig caching limitation
  *
@@ -45,7 +49,9 @@ public:
     {
         QVERIFY2(m_tempDir.isValid(), "Failed to create temporary directory for isolated config");
         m_oldConfigHome = qEnvironmentVariable("XDG_CONFIG_HOME");
+        m_oldDataHome = qEnvironmentVariable("XDG_DATA_HOME");
         qputenv("XDG_CONFIG_HOME", m_tempDir.path().toUtf8());
+        qputenv("XDG_DATA_HOME", m_tempDir.path().toUtf8());
     }
 
     ~IsolatedConfigGuard()
@@ -55,10 +61,21 @@ public:
         } else {
             qputenv("XDG_CONFIG_HOME", m_oldConfigHome.toUtf8());
         }
+        if (m_oldDataHome.isEmpty()) {
+            qunsetenv("XDG_DATA_HOME");
+        } else {
+            qputenv("XDG_DATA_HOME", m_oldDataHome.toUtf8());
+        }
     }
 
     /// Path to the temporary XDG_CONFIG_HOME directory.
     QString configPath() const
+    {
+        return m_tempDir.path();
+    }
+
+    /// Path to the temporary XDG_DATA_HOME directory (same as configPath).
+    QString dataPath() const
     {
         return m_tempDir.path();
     }
@@ -84,6 +101,7 @@ public:
 private:
     QTemporaryDir m_tempDir;
     QString m_oldConfigHome;
+    QString m_oldDataHome;
     QString m_configFileName;
 };
 
