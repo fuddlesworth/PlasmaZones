@@ -70,9 +70,8 @@ void ScreenManager::start()
     // Plasma Shell is available, instead of guessing with arbitrary timer delays.
     // If plasmashell is already registered, scheduleDbusQuery (called from
     // createGeometrySensor) handles it immediately.
-    m_plasmaShellWatcher = new QDBusServiceWatcher(
-        QStringLiteral("org.kde.plasmashell"), QDBusConnection::sessionBus(),
-        QDBusServiceWatcher::WatchForRegistration, this);
+    m_plasmaShellWatcher = new QDBusServiceWatcher(QStringLiteral("org.kde.plasmashell"), QDBusConnection::sessionBus(),
+                                                   QDBusServiceWatcher::WatchForRegistration, this);
     connect(m_plasmaShellWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         qCInfo(lcScreen) << "org.kde.plasmashell registered — querying panels";
         queryKdePlasmaPanels();
@@ -228,8 +227,7 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     QRect screenGeom = screen->geometry();
     QString screenName = screen->name();
 
-    qCDebug(lcScreen) << "calculateAvailableGeometry screen=" << screenName
-                      << "geometry=" << screenGeom;
+    qCDebug(lcScreen) << "calculateAvailableGeometry screen=" << screenName << "geometry=" << screenGeom;
 
     int topOffset = 0;
     int bottomOffset = 0;
@@ -297,8 +295,8 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
             // yet sensor reports less than full screen. The sensor likely
             // landed on a different output (Wayland screen binding issue).
             qCDebug(lcScreen) << "Sensor for" << screenName << "reports" << sensorGeom.size()
-                                << "but D-Bus found no panels on this screen."
-                                << "Using full screen geometry instead.";
+                              << "but D-Bus found no panels on this screen."
+                              << "Using full screen geometry instead.";
             finalWidth = screenGeom.width();
             finalHeight = screenGeom.height();
         } else {
@@ -330,13 +328,12 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     QString source =
         hasSensorData ? QStringLiteral("sensor") : (hasDbusData ? QStringLiteral("D-Bus") : QStringLiteral("fallback"));
     qCInfo(lcScreen) << "calculateAvailableGeometry screen= " << screenKey << " screenGeom= " << screenGeom
-                      << " available= " << availGeom << " source= " << source;
+                     << " available= " << availGeom << " source= " << source;
 
     // Update cache and emit signal
     s_availableGeometryCache.insert(screenKey, availGeom);
     Q_EMIT availableGeometryChanged(screen, availGeom);
 }
-
 
 void ScreenManager::onSensorGeometryChanged(QScreen* screen)
 {
@@ -374,10 +371,8 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen)
     // Check cache first (populated by sensor windows)
     if (s_availableGeometryCache.contains(screenKey)) {
         QRect cached = s_availableGeometryCache.value(screenKey);
-        qCDebug(lcScreen) << "actualAvailableGeometry: screen=" << screenKey
-                          << "cached=" << cached
-                          << "fullScreen=" << screen->geometry()
-                          << "qtAvail=" << screen->availableGeometry();
+        qCDebug(lcScreen) << "actualAvailableGeometry: screen=" << screenKey << "cached=" << cached
+                          << "fullScreen=" << screen->geometry() << "qtAvail=" << screen->availableGeometry();
         return cached;
     }
 
@@ -386,8 +381,7 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen)
     QRect availGeom = screen->availableGeometry();
     QRect screenGeom = screen->geometry();
 
-    qCInfo(lcScreen) << "actualAvailableGeometry: screen=" << screenKey
-                     << "NO CACHE — fallback qtAvail=" << availGeom
+    qCInfo(lcScreen) << "actualAvailableGeometry: screen=" << screenKey << "NO CACHE — fallback qtAvail=" << availGeom
                      << "fullScreen=" << screenGeom
                      << "using=" << ((availGeom != screenGeom && availGeom.isValid()) ? "qtAvail" : "fullScreen");
 

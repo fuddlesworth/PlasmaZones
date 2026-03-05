@@ -75,8 +75,7 @@ OverlayService::OverlayService(QObject* parent)
     m_pendingShaderError.clear();
 
     m_cavaService = std::make_unique<CavaService>(this);
-    connect(m_cavaService.get(), &CavaService::spectrumUpdated,
-            this, &OverlayService::onAudioSpectrumUpdated);
+    connect(m_cavaService.get(), &CavaService::spectrumUpdated, this, &OverlayService::onAudioSpectrumUpdated);
 }
 
 bool OverlayService::isVisible() const
@@ -112,9 +111,7 @@ OverlayService::~OverlayService()
     // since all QML objects have been properly cleaned up
 }
 
-QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl,
-                                              QScreen* screen,
-                                              const char* windowType,
+QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
                                               const QVariantMap& initialProperties)
 {
     if (!screen) {
@@ -134,8 +131,8 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl,
         return nullptr;
     }
 
-    QObject* obj = initialProperties.isEmpty() ? component.create()
-                                               : component.createWithInitialProperties(initialProperties);
+    QObject* obj =
+        initialProperties.isEmpty() ? component.create() : component.createWithInitialProperties(initialProperties);
     if (!obj) {
         qCWarning(lcOverlay) << "Failed to create" << windowType << "window:" << component.errors();
         return nullptr;
@@ -312,8 +309,8 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 {
     Layout* screenLayout = nullptr;
     if (m_layoutManager && screen) {
-        screenLayout =
-            m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentVirtualDesktop, m_currentActivity);
+        screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                                        m_currentActivity);
         if (!screenLayout) {
             screenLayout = m_layoutManager->defaultLayout();
         }
@@ -413,9 +410,9 @@ void OverlayService::handleScreenRemoved(QScreen* screen)
 
 QVariantList OverlayService::buildLayoutsList(const QString& screenName) const
 {
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
-        m_includeManualLayouts, m_includeAutotileLayouts);
+    const auto entries =
+        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+                                            m_includeManualLayouts, m_includeAutotileLayouts);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -437,9 +434,9 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenNames)
 
 int OverlayService::visibleLayoutCount(const QString& screenName) const
 {
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
-        m_includeManualLayouts, m_includeAutotileLayouts);
+    const auto entries =
+        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+                                            m_includeManualLayouts, m_includeAutotileLayouts);
     return entries.size();
 }
 

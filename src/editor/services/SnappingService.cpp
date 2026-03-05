@@ -96,7 +96,7 @@ qreal SnappingService::snapValueToGrid(qreal value, qreal interval) const
 }
 
 SnappingService::EdgeLists SnappingService::collectZoneEdges(const QVariantList& allZones,
-                                                              const QString& excludeZoneId) const
+                                                             const QString& excludeZoneId) const
 {
     using namespace PlasmaZones::JsonKeys;
 

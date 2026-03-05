@@ -198,8 +198,7 @@ void ZoneShaderNodeRhi::setWallpaperTexture(const QImage& image)
     // with a different cacheKey() even for identical content, so cacheKey() is
     // unreliable. QImage uses implicit sharing, so constBits() identity + size
     // is a fast check for the same underlying data.
-    if (m_wallpaperImage.constBits() == image.constBits()
-        && m_wallpaperImage.size() == image.size()) {
+    if (m_wallpaperImage.constBits() == image.constBits() && m_wallpaperImage.size() == image.size()) {
         return;
     }
     m_wallpaperImage = image;
@@ -220,9 +219,9 @@ void ZoneShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBind
 {
     for (int t = 0; t < kMaxUserTextures; ++t) {
         if (m_userTextures[t] && m_userTextureSamplers[t]) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                7 + t, QRhiShaderResourceBinding::FragmentStage,
-                m_userTextures[t].get(), m_userTextureSamplers[t].get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(7 + t, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_userTextures[t].get(),
+                                                                      m_userTextureSamplers[t].get()));
         }
     }
 }
@@ -230,9 +229,8 @@ void ZoneShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBind
 void ZoneShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const
 {
     if (m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler) {
-        bindings.append(QRhiShaderResourceBinding::sampledTexture(
-            11, QRhiShaderResourceBinding::FragmentStage,
-            m_wallpaperTexture.get(), m_wallpaperSampler.get()));
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage,
+                                                                  m_wallpaperTexture.get(), m_wallpaperSampler.get()));
     }
 }
 
@@ -390,8 +388,8 @@ bool ZoneShaderNodeRhi::loadVertexShader(const QString& path)
     m_vertexShaderSource = detail::loadAndExpandShader(path, &err);
     if (m_vertexShaderSource.isEmpty()) {
         m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
-                ? QString(QStringLiteral("Failed to open vertex shader: ") + path)
-                : QString(QStringLiteral("Vertex shader include: ") + err);
+            ? QString(QStringLiteral("Failed to open vertex shader: ") + path)
+            : QString(QStringLiteral("Vertex shader include: ") + err);
         return false;
     }
     m_vertexPath = path;
@@ -406,8 +404,8 @@ bool ZoneShaderNodeRhi::loadFragmentShader(const QString& path)
     m_fragmentShaderSource = detail::loadAndExpandShader(path, &err);
     if (m_fragmentShaderSource.isEmpty()) {
         m_shaderError = err.startsWith(QStringLiteral("Failed to open:"))
-                ? QString(QStringLiteral("Failed to open fragment shader: ") + path)
-                : QString(QStringLiteral("Fragment shader include: ") + err);
+            ? QString(QStringLiteral("Failed to open fragment shader: ") + path)
+            : QString(QStringLiteral("Fragment shader include: ") + err);
         return false;
     }
     m_fragmentPath = path;

@@ -43,7 +43,7 @@ class PLASMAZONES_EXPORT ThreeColumnAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit ThreeColumnAlgorithm(QObject *parent = nullptr);
+    explicit ThreeColumnAlgorithm(QObject* parent = nullptr);
     ~ThreeColumnAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -51,19 +51,37 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
     // Master is in center (index 0 in our output, but conceptually center)
-    int masterZoneIndex() const noexcept override { return 0; }
+    int masterZoneIndex() const noexcept override
+    {
+        return 0;
+    }
 
     // Supports split ratio (center column width) but not master count
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; } // Center gets 50%
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    } // Center gets 50%
 
     // Need at least 3 windows for true three-column layout
-    int minimumWindows() const noexcept override { return 1; }
-    int defaultMaxWindows() const noexcept override { return 5; }
+    int minimumWindows() const noexcept override
+    {
+        return 1;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 5;
+    }
 };
 
 } // namespace PlasmaZones

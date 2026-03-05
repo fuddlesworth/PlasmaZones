@@ -9,16 +9,14 @@
 
 using namespace PlasmaZones;
 
-UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> editorController,
-                                                   GapType type, int oldValue, int newValue,
-                                                   const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty()
-                       ? (type == GapType::ZonePadding
-                              ? i18nc("@action", "Change Zone Padding")
-                              : (type == GapType::UsePerSideOuterGap
-                                     ? i18nc("@action", "Toggle Per-Side Edge Gap")
-                                     : i18nc("@action", "Change Edge Gap")))
-                       : text,
+UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> editorController, GapType type,
+                                                   int oldValue, int newValue, const QString& text,
+                                                   QUndoCommand* parent)
+    : QUndoCommand(text.isEmpty() ? (type == GapType::ZonePadding ? i18nc("@action", "Change Zone Padding")
+                                                                  : (type == GapType::UsePerSideOuterGap
+                                                                         ? i18nc("@action", "Toggle Per-Side Edge Gap")
+                                                                         : i18nc("@action", "Change Edge Gap")))
+                                  : text,
                    parent)
     , m_editorController(editorController)
     , m_type(type)

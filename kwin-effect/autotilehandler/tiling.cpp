@@ -128,7 +128,8 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     }
 
     // Build snapshot with QPointer for safe deferred access
-    struct TileSnap {
+    struct TileSnap
+    {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
         QString windowId;
@@ -201,54 +202,57 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         }
     };
 
-    m_effect->applyStaggeredOrImmediate(toApply.size(), [this, toApply, gen](int i) {
-        if (m_autotileStaggerGeneration != gen) {
-            return;
-        }
-        const TileSnap& snap = toApply[i];
-        if (!snap.window || snap.window->isDeleted()) {
-            return;
-        }
-        saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenName, snap.window->frameGeometry());
-        qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
-        if (m_border.hideTitleBars) {
-            setWindowBorderless(snap.window, snap.windowId, true);
-        }
+    m_effect->applyStaggeredOrImmediate(
+        toApply.size(),
+        [this, toApply, gen](int i) {
+            if (m_autotileStaggerGeneration != gen) {
+                return;
+            }
+            const TileSnap& snap = toApply[i];
+            if (!snap.window || snap.window->isDeleted()) {
+                return;
+            }
+            saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenName, snap.window->frameGeometry());
+            qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
+            if (m_border.hideTitleBars) {
+                setWindowBorderless(snap.window, snap.windowId, true);
+            }
 
-        if (snap.isMonocle) {
-            KWin::Window* kw = snap.window->window();
-            if (kw) {
-                const bool wasAlreadyMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
-                ++m_suppressMaximizeChanged;
-                kw->maximize(KWin::MaximizeFull);
-                if (!wasAlreadyMaximized) {
-                    m_monocleMaximizedWindows.insert(snap.windowId);
+            if (snap.isMonocle) {
+                KWin::Window* kw = snap.window->window();
+                if (kw) {
+                    const bool wasAlreadyMaximized = (kw->maximizeMode() == KWin::MaximizeFull);
+                    ++m_suppressMaximizeChanged;
+                    kw->maximize(KWin::MaximizeFull);
+                    if (!wasAlreadyMaximized) {
+                        m_monocleMaximizedWindows.insert(snap.windowId);
+                    }
+                    m_effect->applySnapGeometry(snap.window, snap.geometry);
+                    --m_suppressMaximizeChanged;
                 }
-                m_effect->applySnapGeometry(snap.window, snap.geometry);
-                --m_suppressMaximizeChanged;
-            }
-        } else {
-            unmaximizeMonocleWindow(snap.windowId);
-            // Store original zone geometry for border rendering, then apply inset
-            QRect geo = snap.geometry;
-            if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
-                m_border.zoneGeometries[snap.windowId] = snap.geometry;
-                geo = applyBorderInset(geo);
             } else {
-                m_border.zoneGeometries.remove(snap.windowId);
+                unmaximizeMonocleWindow(snap.windowId);
+                // Store original zone geometry for border rendering, then apply inset
+                QRect geo = snap.geometry;
+                if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
+                    m_border.zoneGeometries[snap.windowId] = snap.geometry;
+                    geo = applyBorderInset(geo);
+                } else {
+                    m_border.zoneGeometries.remove(snap.windowId);
+                }
+                m_effect->applySnapGeometry(snap.window, geo);
             }
-            m_effect->applySnapGeometry(snap.window, geo);
-        }
 
-        if (!snap.isMonocle && snap.window->isWaylandClient()) {
-            // Use inset geometry for centering target so it matches actual window target
-            QRect targetGeo = snap.geometry;
-            if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
-                targetGeo = applyBorderInset(targetGeo);
+            if (!snap.isMonocle && snap.window->isWaylandClient()) {
+                // Use inset geometry for centering target so it matches actual window target
+                QRect targetGeo = snap.geometry;
+                if (shouldInsetForBorder(snap.windowId, snap.geometry)) {
+                    targetGeo = applyBorderInset(targetGeo);
+                }
+                m_autotileTargetZones[snap.windowId] = targetGeo;
             }
-            m_autotileTargetZones[snap.windowId] = targetGeo;
-        }
-    }, onComplete);
+        },
+        onComplete);
 }
 
 void AutotileHandler::centerUndersizedAutotileWindows()
@@ -277,18 +281,16 @@ void AutotileHandler::centerUndersizedAutotileWindows()
             continue;
         }
 
-        if ((dw > MinCenteringDelta || dh > MinCenteringDelta)
-            && qAbs(dw) < MaxCenteringDelta && qAbs(dh) < MaxCenteringDelta) {
+        if ((dw > MinCenteringDelta || dh > MinCenteringDelta) && qAbs(dw) < MaxCenteringDelta
+            && qAbs(dh) < MaxCenteringDelta) {
             const qreal dx = qMax(0.0, dw) / 2.0;
             const qreal dy = qMax(0.0, dh) / 2.0;
-            const QRectF centered(targetZone.x() + dx, targetZone.y() + dy,
-                                  actual.width(), actual.height());
+            const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
             KWin::Window* kw = w->window();
             if (kw) {
-                qCInfo(lcEffect) << "Centering undersized autotile window" << windowId
-                                 << "actual=" << actual.size() << "zone=" << targetZone.size()
-                                 << "offset=(" << dx << "," << dy << ")";
+                qCInfo(lcEffect) << "Centering undersized autotile window" << windowId << "actual=" << actual.size()
+                                 << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
                 m_effect->m_windowAnimator->removeAnimation(w);
                 kw->moveResize(centered);
             }
@@ -315,9 +317,7 @@ QRect AutotileHandler::applyBorderInset(const QRect& geo) const
 
 bool AutotileHandler::shouldInsetForBorder(const QString& windowId, const QRect& geo) const
 {
-    return shouldApplyBorderInset(windowId)
-        && geo.width() > 2 * m_border.width
-        && geo.height() > 2 * m_border.width;
+    return shouldApplyBorderInset(windowId) && geo.width() > 2 * m_border.width && geo.height() > 2 * m_border.width;
 }
 
 } // namespace PlasmaZones

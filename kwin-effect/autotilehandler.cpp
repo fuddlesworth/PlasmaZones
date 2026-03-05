@@ -34,8 +34,7 @@ AutotileHandler::AutotileHandler(PlasmaZonesEffect* effect, QObject* parent)
 // Static utility methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString AutotileHandler::findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries,
-                                               const QString& windowId)
+QString AutotileHandler::findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
 {
     auto it = savedGeometries.constFind(windowId);
     if (it != savedGeometries.constEnd()) {
@@ -57,8 +56,7 @@ QString AutotileHandler::findSavedGeometryKey(const QHash<QString, QRectF>& save
     return matchKey;
 }
 
-bool AutotileHandler::hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries,
-                                                  const QString& windowId)
+bool AutotileHandler::hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
 {
     return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
 }
@@ -142,8 +140,7 @@ QVector<QRect> AutotileHandler::allBorderZoneGeometries() const
 
 bool AutotileHandler::shouldApplyBorderInset(const QString& windowId) const
 {
-    return m_border.hideTitleBars && m_border.width > 0
-           && m_border.borderlessWindows.contains(windowId);
+    return m_border.hideTitleBars && m_border.width > 0 && m_border.borderlessWindows.contains(windowId);
 }
 
 void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
@@ -167,7 +164,7 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
-                                                        const QRectF& frame)
+                                                       const QRectF& frame)
 {
     if (windowId.isEmpty() || screenName.isEmpty()) {
         return false;
@@ -326,8 +323,8 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
 
     // Notify autotile daemon
     if (m_autotileScreens.contains(screenName)) {
-        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowClosed"),
-                                        {windowId}, QStringLiteral("windowClosed"));
+        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowClosed"), {windowId},
+                                        QStringLiteral("windowClosed"));
         qCDebug(lcEffect) << "Notified autotile: windowClosed" << windowId << "on screen" << screenName;
     }
 }
@@ -340,8 +337,8 @@ void AutotileHandler::onDaemonReady()
     m_pendingCloses.clear();
 }
 
-bool AutotileHandler::handleAutotileFloatToggle(KWin::EffectWindow* activeWindow,
-                                                 const QString& windowId, const QString& screenName)
+bool AutotileHandler::handleAutotileFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
+                                                const QString& screenName)
 {
     // Check whether the window has pre-autotile geometry on ANY screen
     bool isAutotileWindow = false;
@@ -367,7 +364,8 @@ bool AutotileHandler::handleAutotileFloatToggle(KWin::EffectWindow* activeWindow
             const QString key = savedKey.isEmpty() ? windowId : savedKey;
             screenGeometries[key] = frame;
             qCDebug(lcEffect) << "Pre-saved floating geometry before unfloat:" << windowId << frame;
-            if (m_effect->ensureWindowTrackingReady("pre-save floating geometry") && m_effect->m_windowTrackingInterface) {
+            if (m_effect->ensureWindowTrackingReady("pre-save floating geometry")
+                && m_effect->m_windowTrackingInterface) {
                 m_effect->m_windowTrackingInterface->asyncCall(
                     QStringLiteral("recordPreAutotileGeometry"), windowId, screenName, static_cast<int>(frame.x()),
                     static_cast<int>(frame.y()), static_cast<int>(frame.width()), static_cast<int>(frame.height()));
@@ -400,7 +398,7 @@ void AutotileHandler::connectSignals()
                 QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList)));
 
     bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowFloatingChanged"),
-                this, SLOT(slotWindowFloatingChanged(QString,bool,QString)));
+                this, SLOT(slotWindowFloatingChanged(QString, bool, QString)));
 
     qCInfo(lcEffect) << "Connected to autotile D-Bus signals";
 }

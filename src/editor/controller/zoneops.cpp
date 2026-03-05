@@ -161,7 +161,8 @@ void EditorController::changeZOrderImpl(const QString& zoneId, ZOrderOp op, cons
     }
 
     QVariantList newZones = m_zoneManager->zones();
-    auto* command = new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones, actionName);
+    auto* command =
+        new ChangeZOrderCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldZones, newZones, actionName);
     m_undoController->push(command);
     markUnsaved();
 }

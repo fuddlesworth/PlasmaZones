@@ -148,15 +148,15 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
         original[JsonKeys::Height] = newH;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber,
-                            geom.x(), geom.y() + newH, geom.width(), newH);
+        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x(), geom.y() + newH,
+                             geom.width(), newH);
     } else {
         qreal newW = geom.width() / 2.0;
         original[JsonKeys::Width] = newW;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber,
-                            geom.x() + newW, geom.y(), newW, geom.height());
+        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x() + newW, geom.y(), newW,
+                             geom.height());
     }
 
     QString newZoneId = newZone[JsonKeys::Id].toString();

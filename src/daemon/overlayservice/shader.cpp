@@ -55,8 +55,7 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 // parseZonesJson is defined in overlayservice_internal.h (shared inline)
 
 // Build labels texture for shader preview zones. Uses settings for font when available.
-QImage buildLabelsImageForPreviewZones(const QVariantList& zones,
-                                       const QSize& size,
+QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& size,
                                        const IZoneVisualizationSettings* settings)
 {
     const QColor labelFontColor = settings ? settings->labelFontColor() : QColor(Qt::white);
@@ -71,9 +70,9 @@ QImage buildLabelsImageForPreviewZones(const QVariantList& zones,
     const bool fontItalic = settings ? settings->labelFontItalic() : false;
     const bool fontUnderline = settings ? settings->labelFontUnderline() : false;
     const bool fontStrikeout = settings ? settings->labelFontStrikeout() : false;
-    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor,
-                                                        fontFamily, fontSizeScale, fontWeight, fontItalic,
-                                                        fontUnderline, fontStrikeout);
+    QImage labelsImage =
+        ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor, fontFamily, fontSizeScale,
+                                       fontWeight, fontItalic, fontUnderline, fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
@@ -182,7 +181,8 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
         }
     }
     // Shader preview (editor dialog) when visible and audio viz enabled
-    if (m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible() && m_settings && m_settings->enableAudioVisualizer()) {
+    if (m_shaderPreviewWindow && m_shaderPreviewWindow->isVisible() && m_settings
+        && m_settings->enableAudioVisualizer()) {
         writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("audioSpectrum"), wrapped);
     }
 }
@@ -336,8 +336,8 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
                        << "shader=" << shaderId << "zones=" << zones.size();
 }
 
-void OverlayService::updateShaderPreview(int x, int y, int width, int height,
-                                         const QString& shaderParamsJson, const QString& zonesJson)
+void OverlayService::updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
+                                         const QString& zonesJson)
 {
     if (!m_shaderPreviewWindow) {
         return;
@@ -393,7 +393,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
     initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
 
     auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen,
-                                  "shader preview overlay", initProps);
+                                   "shader preview overlay", initProps);
     if (!window) {
         qCWarning(lcOverlay) << "Failed to create shader preview overlay window";
         return;

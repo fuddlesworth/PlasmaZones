@@ -31,9 +31,18 @@ public:
     explicit AssignmentManager(KCMPlasmaZones* kcm, Settings* settings, QObject* parent = nullptr);
 
     // ── Accessors ──────────────────────────────────────────────────────────
-    const QVariantMap& screenAssignments() const { return m_screenAssignments; }
-    const QVariantMap& tilingScreenAssignments() const { return m_tilingScreenAssignments; }
-    int assignmentViewMode() const { return m_assignmentViewMode; }
+    const QVariantMap& screenAssignments() const
+    {
+        return m_screenAssignments;
+    }
+    const QVariantMap& tilingScreenAssignments() const
+    {
+        return m_tilingScreenAssignments;
+    }
+    int assignmentViewMode() const
+    {
+        return m_assignmentViewMode;
+    }
 
     // ── Screen assignments (snapping) ──────────────────────────────────────
     void assignLayoutToScreen(const QString& screenName, const QString& layoutId);
@@ -64,7 +73,8 @@ public:
     bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
 
     // ── Tiling per-activity screen assignments ─────────────────────────────
-    void assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId, const QString& layoutId);
+    void assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
+                                            const QString& layoutId);
     void clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId);
     QString getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
     bool hasExplicitTilingAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
@@ -82,8 +92,8 @@ public:
     // ── App-to-zone rules ──────────────────────────────────────────────────
     QVariantList getAppRulesForLayout(const QString& layoutId) const;
     void setAppRulesForLayout(const QString& layoutId, const QVariantList& rules);
-    void addAppRuleToLayout(const QString& layoutId, const QString& pattern,
-                            int zoneNumber, const QString& targetScreen = QString());
+    void addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber,
+                            const QString& targetScreen = QString());
     void removeAppRuleFromLayout(const QString& layoutId, int index);
 
 public Q_SLOTS:
@@ -92,7 +102,6 @@ public Q_SLOTS:
     void onQuickLayoutSlotsChanged();
 
 public:
-
     // ── Save/load/defaults integration ─────────────────────────────────────
     void save(QStringList& failedOperations);
     void load();
@@ -118,8 +127,7 @@ Q_SIGNALS:
     void refreshScreensRequested();
 
 private:
-    QDBusMessage callDaemon(const QString& interface, const QString& method,
-                            const QVariantList& args = {}) const;
+    QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {}) const;
 
     KCMPlasmaZones* m_kcm = nullptr;
     Settings* m_settings = nullptr;

@@ -33,10 +33,8 @@ public:
      * @param outError If non-null, set on error (file not found, depth exceeded, read error)
      * @return Expanded source, or empty string on error (check outError)
      */
-    static QString expandIncludes(const QString& source,
-                                 const QString& currentFileDir,
-                                 const QStringList& includePaths,
-                                 QString* outError = nullptr);
+    static QString expandIncludes(const QString& source, const QString& currentFileDir, const QStringList& includePaths,
+                                  QString* outError = nullptr);
 };
 
 } // namespace PlasmaZones

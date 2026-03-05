@@ -44,10 +44,10 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     // Runtime null checks for release builds - log warning but don't crash
     if (!overlay || !detector || !layoutManager || !settings || !windowTracking) {
         qCWarning(lcDbusWindow) << "One or more required dependencies are null!"
-                                 << "overlay:" << (overlay != nullptr) << "detector:" << (detector != nullptr)
-                                 << "layoutManager:" << (layoutManager != nullptr)
-                                 << "settings:" << (settings != nullptr)
-                                 << "windowTracking:" << (windowTracking != nullptr);
+                                << "overlay:" << (overlay != nullptr) << "detector:" << (detector != nullptr)
+                                << "layoutManager:" << (layoutManager != nullptr)
+                                << "settings:" << (settings != nullptr)
+                                << "windowTracking:" << (windowTracking != nullptr);
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
@@ -105,8 +105,7 @@ bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers
     }
 }
 
-bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers,
-                                        Qt::KeyboardModifiers mods, int mouseButtons) const
+bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const
 {
     for (const auto& t : triggers) {
         const auto map = t.toMap();
@@ -122,7 +121,8 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers,
     return false;
 }
 
-QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout) const
+QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen,
+                                                      Layout* layout) const
 {
     if (zones.isEmpty()) {
         return QRectF();
@@ -133,7 +133,8 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zone
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
     for (int i = 1; i < zones.size(); ++i) {
-        combined = combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
+        combined =
+            combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
     }
     return combined;
 }
@@ -272,9 +273,8 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     const QRect screenGeom = screen->geometry();
     // Use filtered layout count (matches what the zone selector popup actually displays)
     // so the keep-visible zone matches the real popup dimensions
-    const int layoutCount = m_overlayService
-        ? m_overlayService->visibleLayoutCount(Utils::screenIdentifier(screen))
-        : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
+    const int layoutCount = m_overlayService ? m_overlayService->visibleLayoutCount(Utils::screenIdentifier(screen))
+                                             : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
 
     // Use shared layout computation (same code as OverlayService)
     const ZoneSelectorLayout selectorLayout = computeZoneSelectorLayout(config, screen, layoutCount);

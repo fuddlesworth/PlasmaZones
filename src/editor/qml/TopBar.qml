@@ -105,11 +105,13 @@ ToolBar {
 
                 Label {
                     id: previewLabel
+
                     anchors.centerIn: parent
                     text: i18nc("@info", "Preview")
                     color: Kirigami.Theme.neutralTextColor
                     font.weight: Font.Medium
                 }
+
             }
 
             // Layout name field with integrated character counter

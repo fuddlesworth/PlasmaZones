@@ -36,17 +36,17 @@ Window {
     property bool fullscreenMode: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
     readonly property real zoneSpacing: {
-        if (!editorWindow._editorController) return Kirigami.Units.gridUnit;
-        return editorWindow._editorController.hasZonePaddingOverride
-            ? editorWindow._editorController.zonePadding
-            : editorWindow._editorController.globalZonePadding;
+        if (!editorWindow._editorController)
+            return Kirigami.Units.gridUnit;
+
+        return editorWindow._editorController.hasZonePaddingOverride ? editorWindow._editorController.zonePadding : editorWindow._editorController.globalZonePadding;
     }
     // Edge gap (at screen boundaries) - separate from zone spacing
     readonly property real edgeGap: {
-        if (!editorWindow._editorController) return Kirigami.Units.gridUnit;
-        return editorWindow._editorController.hasOuterGapOverride
-            ? editorWindow._editorController.outerGap
-            : editorWindow._editorController.globalOuterGap;
+        if (!editorWindow._editorController)
+            return Kirigami.Units.gridUnit;
+
+        return editorWindow._editorController.hasOuterGapOverride ? editorWindow._editorController.outerGap : editorWindow._editorController.globalOuterGap;
     }
     property var _zonesRepeater: null
     // Helper to get selected zone data - reactive to both selectedZoneId AND zones changes
@@ -64,7 +64,6 @@ Window {
         // This avoids copying the entire QVariantList just to create a binding dependency.
         // zonesVersion is a lightweight integer that increments on any zone change.
         var _ = controller.zonesVersion;
-        
         // Use efficient C++ lookup instead of JavaScript loop
         try {
             var zone = controller.getZoneById(zoneId);
@@ -82,7 +81,8 @@ Window {
     // Move the editor window to the screen matching editorController.targetScreen
     function moveToTargetScreen() {
         if (!editorWindow._editorController)
-            return;
+            return ;
+
         // Use C++ method which applies the Wayland setGeometry() workaround
         // (QML Window.screen assignment is a no-op on Wayland for xdg-shell surfaces)
         editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
@@ -93,6 +93,7 @@ Window {
     function isZoneSelected(zoneId) {
         if (!zoneId || !editorWindow._editorController)
             return false;
+
         return editorWindow._editorController.isSelected(zoneId);
     }
 
@@ -292,7 +293,8 @@ Window {
                 objectName: "drawingArea" // Required for focus restoration from child components
                 anchors.fill: parent
                 // No margins here - zones apply their own gaps (edgeGap at screen edges, zoneSpacing/2 between zones)
-                focus: true // Enable keyboard focus for navigation
+                focus: true
+                // Enable keyboard focus for navigation
                 // Keyboard navigation - uses extracted KeyboardNavigation component
                 Keys.priority: Keys.AfterItem
                 // Allow standard Tab navigation first
@@ -479,7 +481,9 @@ Window {
                     property real width: 0
                     property real height: 0
                     property bool isFixedZone: {
-                        if (!active || !zoneId || !editorWindow._editorController) return false;
+                        if (!active || !zoneId || !editorWindow._editorController)
+                            return false;
+
                         var zoneData = editorWindow._editorController.getZoneById(zoneId);
                         return zoneData ? (zoneData.geometryMode === 1) : false;
                     }
@@ -669,12 +673,12 @@ Window {
 
     }
 
-
     // ═══════════════════════════════════════════════════════════════════
     // SHADER SETTINGS DIALOG
     // ═══════════════════════════════════════════════════════════════════
     ShaderSettingsDialog {
         id: shaderDialog
+
         editorController: editorWindow._editorController
         editorWindow: editorWindow
     }
@@ -684,6 +688,7 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     VisibilitySettingsDialog {
         id: visibilityDialog
+
         editorController: editorWindow._editorController
     }
 
@@ -692,9 +697,9 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     LayoutSettingsDialog {
         id: layoutSettingsDialog
+
         editorController: editorWindow._editorController
     }
-
 
     Connections {
         // Layout name changed - TopBar Connections should handle this

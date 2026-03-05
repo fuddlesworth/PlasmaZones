@@ -41,7 +41,7 @@ class PLASMAZONES_EXPORT MonocleAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit MonocleAlgorithm(QObject *parent = nullptr);
+    explicit MonocleAlgorithm(QObject* parent = nullptr);
     ~MonocleAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -49,12 +49,21 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
     // Monocle doesn't support master count or split ratio - all windows are fullscreen
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return false; }
-    int defaultMaxWindows() const noexcept override { return 4; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return false;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 4;
+    }
 };
 
 } // namespace PlasmaZones

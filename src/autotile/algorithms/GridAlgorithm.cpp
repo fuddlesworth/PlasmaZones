@@ -14,7 +14,7 @@ namespace {
 AlgorithmRegistrar<GridAlgorithm> s_gridRegistrar(DBus::AutotileAlgorithm::Grid, 50);
 }
 
-GridAlgorithm::GridAlgorithm(QObject *parent)
+GridAlgorithm::GridAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -34,12 +34,12 @@ QString GridAlgorithm::icon() const noexcept
     return QStringLiteral("view-grid");
 }
 
-QVector<QRect> GridAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> GridAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
+    const auto& outerGaps = params.outerGaps;
 
     QVector<QRect> zones;
 
@@ -59,7 +59,7 @@ QVector<QRect> GridAlgorithm::calculateZones(const TilingParams &params) const
     const int cols = static_cast<int>(std::ceil(std::sqrt(static_cast<double>(windowCount))));
     const int rows = static_cast<int>(std::ceil(static_cast<double>(windowCount) / cols));
 
-    const auto &minSizes = params.minSizes;
+    const auto& minSizes = params.minSizes;
 
     // Build per-column minimum widths (max of minWidth for all windows in each column)
     // and per-row minimum heights (max of minHeight for all windows in each row)
@@ -110,9 +110,7 @@ QVector<QRect> GridAlgorithm::calculateZones(const TilingParams &params) const
         const int col = i % cols;
 
         // Check if this is the last row and it has fewer windows
-        const int windowsInThisRow = (row == rows - 1)
-            ? (windowCount - row * cols)
-            : cols;
+        const int windowsInThisRow = (row == rows - 1) ? (windowCount - row * cols) : cols;
 
         if (windowsInThisRow < cols && col == 0) {
             // Last row with fewer windows: re-distribute width with per-window min sizes

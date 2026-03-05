@@ -147,10 +147,10 @@ public:
                            const QString& screenName = QString());
 
     // Shader preview overlay (editor Shader Settings dialog - dedicated window avoids multi-pass clear issues)
-    void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
-                          const QString& shaderId, const QString& shaderParamsJson, const QString& zonesJson) override;
-    void updateShaderPreview(int x, int y, int width, int height,
-                             const QString& shaderParamsJson, const QString& zonesJson) override;
+    void showShaderPreview(int x, int y, int width, int height, const QString& screenName, const QString& shaderId,
+                           const QString& shaderParamsJson, const QString& zonesJson) override;
+    void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
+                             const QString& zonesJson) override;
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
@@ -188,10 +188,8 @@ private:
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
-    void updateLabelsTextureForWindow(QQuickWindow* window,
-                                     const QVariantList& patched,
-                                     QScreen* screen,
-                                     Layout* screenLayout);
+    void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
+                                      Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList(const QString& screenName = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
@@ -301,9 +299,7 @@ private:
      * Handles common QML window creation: component loading, error checking,
      * QQuickWindow casting, ownership, and screen assignment.
      */
-    QQuickWindow* createQmlWindow(const QUrl& qmlUrl,
-                                  QScreen* screen,
-                                  const char* windowType,
+    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
                                   const QVariantMap& initialProperties = QVariantMap());
 
     // Audio viz: push spectrum to overlay windows

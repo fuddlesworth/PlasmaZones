@@ -22,9 +22,8 @@ namespace PlasmaZones {
 // Auto-Snap Logic
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId,
-                                                           const QString& windowScreenName,
-                                                           bool isSticky) const
+SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
+                                                         bool isSticky) const
 {
     // Check if window was floating - floating windows should NOT be auto-snapped
     if (isWindowFloating(windowId)) {
@@ -58,7 +57,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         if (!screen) {
             if (!match.targetScreen.isEmpty()) {
                 qCInfo(lcCore) << "App rule targetScreen" << match.targetScreen
-                                << "not found (disconnected?) - skipping rule";
+                               << "not found (disconnected?) - skipping rule";
             }
             return SnapResult::noSnap();
         }
@@ -80,8 +79,8 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
             return SnapResult::noSnap();
         }
 
-        qCInfo(lcCore) << "App rule matched:" << windowClass << "-> zone" << match.zoneNumber
-                       << "on screen" << effectiveScreen << "(" << zoneId << ")";
+        qCInfo(lcCore) << "App rule matched:" << windowClass << "-> zone" << match.zoneNumber << "on screen"
+                       << effectiveScreen << "(" << zoneId << ")";
 
         SnapResult result;
         result.shouldSnap = true;
@@ -136,9 +135,8 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
     return SnapResult::noSnap();
 }
 
-SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowId,
-                                                           const QString& windowScreenName,
-                                                           bool isSticky) const
+SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowId, const QString& windowScreenName,
+                                                          bool isSticky) const
 {
     // Check if feature is enabled
     if (!m_settings || !m_settings->moveNewWindowsToLastZone()) {
@@ -155,8 +153,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     // Check sticky window handling
     if (isSticky && m_settings) {
         auto handling = m_settings->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll ||
-            handling == StickyWindowHandling::RestoreOnly) {
+        if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
             return SnapResult::noSnap();
         }
     }
@@ -173,8 +170,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Don't cross-screen snap
-    if (!windowScreenName.isEmpty() && !m_lastUsedScreenName.isEmpty() &&
-        windowScreenName != m_lastUsedScreenName) {
+    if (!windowScreenName.isEmpty() && !m_lastUsedScreenName.isEmpty() && windowScreenName != m_lastUsedScreenName) {
         return SnapResult::noSnap();
     }
 
@@ -201,9 +197,8 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     return result;
 }
 
-SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& windowId,
-                                                            const QString& windowScreenName,
-                                                            bool isSticky) const
+SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenName,
+                                                           bool isSticky) const
 {
     // Do NOT skip floating windows here: this is called when the user explicitly dropped
     // a window on a monitor (dragStopped, no zone snap). If that monitor has auto-assign,
@@ -213,10 +208,9 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
     // Check sticky window handling (auto-assign is an auto-snap, not a restore)
     if (isSticky && m_settings) {
         auto handling = m_settings->stickyWindowHandling();
-        if (handling == StickyWindowHandling::IgnoreAll ||
-            handling == StickyWindowHandling::RestoreOnly) {
+        if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
             qCDebug(lcCore) << "snapToEmptyZone: no snap - window" << Utils::extractStableId(windowId)
-                           << "sticky handling" << static_cast<int>(handling);
+                            << "sticky handling" << static_cast<int>(handling);
             return SnapResult::noSnap();
         }
     }
@@ -248,9 +242,8 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
     return {true, geo, emptyZoneId, {emptyZoneId}, windowScreenName};
 }
 
-SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& windowId,
-                                                               const QString& screenName,
-                                                               bool isSticky) const
+SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& windowId, const QString& screenName,
+                                                              bool isSticky) const
 {
     QString stableId = Utils::extractStableId(windowId);
 
@@ -293,7 +286,8 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         int savedDesktop = m_pendingZoneDesktops.value(stableId, 0);
 
         // Get the layout for the saved screen/desktop context (not just activeLayout)
-        Layout* currentLayout = m_layoutManager->layoutForScreen(savedScreen, savedDesktop, m_layoutManager->currentActivity());
+        Layout* currentLayout =
+            m_layoutManager->layoutForScreen(savedScreen, savedDesktop, m_layoutManager->currentActivity());
         if (!currentLayout) {
             // Fallback to active layout if no screen-specific assignment
             currentLayout = m_layoutManager->activeLayout();
@@ -310,9 +304,8 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         QUuid savedUuid = QUuid::fromString(savedLayoutId);
         if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
             qCInfo(lcCore) << "Window" << stableId << "was saved with layout" << savedLayoutId
-                            << "but current layout for screen" << savedScreen << "desktop" << savedDesktop
-                            << "is" << currentLayout->id().toString()
-                            << "- skipping session restore";
+                           << "but current layout for screen" << savedScreen << "desktop" << savedDesktop << "is"
+                           << currentLayout->id().toString() << "- skipping session restore";
             return SnapResult::noSnap();
         }
     }
@@ -324,8 +317,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         int currentDesktop = m_virtualDesktopManager->currentDesktop();
         if (currentDesktop != savedDesktop) {
             qCDebug(lcCore) << "Window" << stableId << "was saved on desktop" << savedDesktop
-                            << "but current desktop is" << currentDesktop
-                            << "- skipping session restore";
+                            << "but current desktop is" << currentDesktop << "- skipping session restore";
             return SnapResult::noSnap();
         }
     }
@@ -343,27 +335,27 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     if (!geo.isValid() && !savedLayoutId.isEmpty()) {
         QList<int> savedNumbers = m_pendingZoneNumbers.value(stableId);
         if (!savedNumbers.isEmpty()) {
-            Layout* fallbackLayout = m_layoutManager
-                ? m_layoutManager->resolveLayoutForScreen(savedScreen) : nullptr;
+            Layout* fallbackLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(savedScreen) : nullptr;
             if (fallbackLayout) {
                 QStringList fallbackIds;
                 for (int num : savedNumbers) {
                     Zone* z = fallbackLayout->zoneByNumber(num);
-                    if (z) fallbackIds.append(z->id().toString());
+                    if (z)
+                        fallbackIds.append(z->id().toString());
                 }
                 if (!fallbackIds.isEmpty()) {
-                    geo = (fallbackIds.size() > 1)
-                        ? multiZoneGeometry(fallbackIds, savedScreen)
-                        : zoneGeometry(fallbackIds.first(), savedScreen);
+                    geo = (fallbackIds.size() > 1) ? multiZoneGeometry(fallbackIds, savedScreen)
+                                                   : zoneGeometry(fallbackIds.first(), savedScreen);
                     if (geo.isValid()) {
                         zoneId = fallbackIds.first();
                         zoneIds = fallbackIds;
                         if (fallbackIds.size() < savedNumbers.size()) {
-                            qCWarning(lcCore) << "Zone-number fallback partial match for" << stableId
-                                              << "- requested:" << savedNumbers.size() << "zones, matched:" << fallbackIds.size();
+                            qCWarning(lcCore)
+                                << "Zone-number fallback partial match for" << stableId
+                                << "- requested:" << savedNumbers.size() << "zones, matched:" << fallbackIds.size();
                         }
-                        qCInfo(lcCore) << "Zone-number fallback for" << stableId
-                                        << "numbers:" << savedNumbers << "->" << fallbackIds;
+                        qCInfo(lcCore) << "Zone-number fallback for" << stableId << "numbers:" << savedNumbers << "->"
+                                       << fallbackIds;
                     }
                 }
             }
@@ -395,7 +387,7 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
 }
 
 void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QString& screenName,
-                                                const QString& windowClass, int virtualDesktop)
+                                               const QString& windowClass, int virtualDesktop)
 {
     m_lastUsedZoneId = zoneId;
     m_lastUsedScreenName = screenName;
@@ -451,6 +443,5 @@ void WindowTrackingService::consumePendingAssignment(const QString& windowId)
         scheduleSaveState();
     }
 }
-
 
 } // namespace PlasmaZones

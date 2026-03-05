@@ -138,7 +138,9 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     QUuid layoutId = layout->id();
 
     layout->beginBatchModify();
-    auto batchGuard = qScopeGuard([layout]() { layout->endBatchModify(); });
+    auto batchGuard = qScopeGuard([layout]() {
+        layout->endBatchModify();
+    });
 
     // Update basic properties
     layout->setName(obj[JsonKeys::Name].toString());

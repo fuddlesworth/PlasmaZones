@@ -151,22 +151,26 @@ void EditorController::loadEditorSettings()
 
     // Load app-specific keyboard shortcuts with validation
     // Note: Standard shortcuts (Save, Delete, Close) use Qt StandardKey (system shortcuts)
-    loadShortcutSetting(editorGroup, QStringLiteral("EditorDuplicateShortcut"),
-                        QStringLiteral("Ctrl+D"), m_editorDuplicateShortcut,
-                        [this]() { Q_EMIT editorDuplicateShortcutChanged(); });
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorDuplicateShortcut"), QStringLiteral("Ctrl+D"),
+                        m_editorDuplicateShortcut, [this]() {
+                            Q_EMIT editorDuplicateShortcutChanged();
+                        });
 
-    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitHorizontalShortcut"),
-                        QStringLiteral("Ctrl+Shift+H"), m_editorSplitHorizontalShortcut,
-                        [this]() { Q_EMIT editorSplitHorizontalShortcutChanged(); });
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitHorizontalShortcut"), QStringLiteral("Ctrl+Shift+H"),
+                        m_editorSplitHorizontalShortcut, [this]() {
+                            Q_EMIT editorSplitHorizontalShortcutChanged();
+                        });
 
     // Note: Default changed from Ctrl+Shift+V to Ctrl+Alt+V to avoid conflict with Paste with Offset
-    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitVerticalShortcut"),
-                        QStringLiteral("Ctrl+Alt+V"), m_editorSplitVerticalShortcut,
-                        [this]() { Q_EMIT editorSplitVerticalShortcutChanged(); });
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorSplitVerticalShortcut"), QStringLiteral("Ctrl+Alt+V"),
+                        m_editorSplitVerticalShortcut, [this]() {
+                            Q_EMIT editorSplitVerticalShortcutChanged();
+                        });
 
-    loadShortcutSetting(editorGroup, QStringLiteral("EditorFillShortcut"),
-                        QStringLiteral("Ctrl+Shift+F"), m_editorFillShortcut,
-                        [this]() { Q_EMIT editorFillShortcutChanged(); });
+    loadShortcutSetting(editorGroup, QStringLiteral("EditorFillShortcut"), QStringLiteral("Ctrl+Shift+F"),
+                        m_editorFillShortcut, [this]() {
+                            Q_EMIT editorFillShortcutChanged();
+                        });
 
     // Load snap override modifier
     int snapOverrideMod = editorGroup.readEntry(QLatin1String("SnapOverrideModifier"), 0x02000000);

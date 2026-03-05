@@ -20,21 +20,14 @@ Window {
     property var candidates: []
     property int screenWidth: 1920
     property int screenHeight: 1080
-
     // Zone appearance defaults (set from C++ when available; fallback matches ZoneOverlay)
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
-        Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
-        Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
-        Kirigami.Theme.textColor.b, 0.9)
+    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
+    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
     property int borderWidth: Kirigami.Units.smallSpacing
     property int borderRadius: Kirigami.Units.gridUnit
-
-    signal windowSelected(string windowId, string zoneId, string geometryJson)
-
     // Layout constants (extracted from magic numbers for maintainability)
     readonly property real cardScaleBase: 0.35
     readonly property real cardWidthMultiplier: 2.2
@@ -44,6 +37,8 @@ Window {
     readonly property real zoneSizeRefForFont: 200
     readonly property real minFontScale: 0.4
     readonly property real minFontPx: 8
+
+    signal windowSelected(string windowId, string zoneId, string geometryJson)
 
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
@@ -58,12 +53,14 @@ Window {
     Rectangle {
         anchors.fill: parent
         color: Qt.rgba(0, 0, 0, 0.25)
+
         MouseArea {
             anchors.fill: parent
             onClicked: root.close()
             Accessible.name: i18n("Dismiss snap assist overlay")
             Accessible.role: Accessible.Button
         }
+
     }
 
     // Each zone shows all candidates; user picks any window to snap to any zone
@@ -79,31 +76,21 @@ Window {
             y: zone ? zone.y : 0
             width: zone ? zone.width : 0
             height: zone ? zone.height : 0
-
             visible: zone && zone.zoneId && root.candidates.length > 0
 
             // Zone background - matches main overlay colors/borders including zone overrides
             Rectangle {
                 id: zoneBg
-                anchors.fill: parent
+
                 // useCustomColors: zone override; else root (settings)
                 readonly property bool useCustom: zone && (zone.useCustomColors === true || zone.useCustomColors === 1)
-                readonly property color fillColor: useCustom && zone.inactiveColor
-                    ? zone.inactiveColor
-                    : root.inactiveColor
-                readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined
-                    ? zone.inactiveOpacity
-                    : root.inactiveOpacity
-                readonly property color strokeColor: useCustom && zone.borderColor
-                    ? zone.borderColor
-                    : root.borderColor
-                readonly property int strokeWidth: useCustom && zone.borderWidth !== undefined
-                    ? zone.borderWidth
-                    : root.borderWidth
-                readonly property int cornerRadius: useCustom && zone.borderRadius !== undefined
-                    ? zone.borderRadius
-                    : root.borderRadius
+                readonly property color fillColor: useCustom && zone.inactiveColor ? zone.inactiveColor : root.inactiveColor
+                readonly property real fillOpacity: useCustom && zone.inactiveOpacity !== undefined ? zone.inactiveOpacity : root.inactiveOpacity
+                readonly property color strokeColor: useCustom && zone.borderColor ? zone.borderColor : root.borderColor
+                readonly property int strokeWidth: useCustom && zone.borderWidth !== undefined ? zone.borderWidth : root.borderWidth
+                readonly property int cornerRadius: useCustom && zone.borderRadius !== undefined ? zone.borderRadius : root.borderRadius
 
+                anchors.fill: parent
                 radius: zoneBg.cornerRadius
                 color: Qt.rgba(zoneBg.fillColor.r, zoneBg.fillColor.g, zoneBg.fillColor.b, zoneBg.fillOpacity)
                 border.color: zoneBg.strokeColor
@@ -121,24 +108,25 @@ Window {
                 readonly property real cardWidth: Math.max(root.minCardWidth, cardBaseSize * root.cardWidthMultiplier)
                 // Scale font like ZoneItem zone name: base on theme, scale with zone size
                 readonly property real fontPixelSize: {
-                    var baseSize = Kirigami.Theme.defaultFont.pixelSize
-                    var scaleFactor = zoneSize / root.zoneSizeRefForFont
-                    var scaledSize = baseSize * Math.max(root.minFontScale, Math.min(1, scaleFactor))
-                    return Math.max(root.minFontPx, Math.round(scaledSize))
+                    var baseSize = Kirigami.Theme.defaultFont.pixelSize;
+                    var scaleFactor = zoneSize / root.zoneSizeRefForFont;
+                    var scaledSize = baseSize * Math.max(root.minFontScale, Math.min(1, scaleFactor));
+                    return Math.max(root.minFontPx, Math.round(scaledSize));
                 }
-
                 readonly property real flowWidth: zoneContainer.width - Kirigami.Units.smallSpacing * 2
                 readonly property real cardTotalWidth: cardWidth + Kirigami.Units.smallSpacing * 2
                 readonly property real flowSpacing: Math.max(2, Math.min(8, zoneSize * 0.02))
                 readonly property int itemsPerRow: Math.max(1, Math.floor((flowWidth + flowSpacing) / (cardTotalWidth + flowSpacing)))
                 readonly property real contentWidth: {
-                    var n = root.candidates.length
-                    if (n <= 0) return 0
-                    var perRow = itemsPerRow
-                    if (n <= perRow) {
-                        return n * cardTotalWidth + (n - 1) * flowSpacing
-                    }
-                    return perRow * cardTotalWidth + (perRow - 1) * flowSpacing
+                    var n = root.candidates.length;
+                    if (n <= 0)
+                        return 0;
+
+                    var perRow = itemsPerRow;
+                    if (n <= perRow)
+                        return n * cardTotalWidth + (n - 1) * flowSpacing;
+
+                    return perRow * cardTotalWidth + (perRow - 1) * flowSpacing;
                 }
                 readonly property real centerPadding: Math.max(0, (flowWidth - contentWidth) / 2)
 
@@ -146,8 +134,7 @@ Window {
                 leftPadding: centerPadding
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
-                anchors.topMargin: Math.max(Kirigami.Units.smallSpacing,
-                    (zoneContainer.height - candidateFlow.implicitHeight) / 2)
+                anchors.topMargin: Math.max(Kirigami.Units.smallSpacing, (zoneContainer.height - candidateFlow.implicitHeight) / 2)
                 spacing: flowSpacing
 
                 Repeater {
@@ -165,22 +152,29 @@ Window {
                         Rectangle {
                             anchors.fill: parent
                             radius: Math.max(2, candidateFlow.zoneSize * 0.01)
-                            color: candidateCard.hovered
-                                ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g,
-                                          Kirigami.Theme.highlightColor.b, 0.2)
-                                : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g,
-                                          Kirigami.Theme.backgroundColor.b, 0.5)
-                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor
-                                : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
-                                    Kirigami.Theme.textColor.b, 0.2)
+                            color: candidateCard.hovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                            border.color: candidateCard.hovered ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                             border.width: candidateCard.hovered ? 2 : 1
 
-                            Behavior on color { ColorAnimation { duration: 150 } }
-                            Behavior on border.color { ColorAnimation { duration: 150 } }
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: 150
+                                }
+
+                            }
+
+                            Behavior on border.color {
+                                ColorAnimation {
+                                    duration: 150
+                                }
+
+                            }
+
                         }
 
                         Row {
                             id: cardContent
+
                             anchors.centerIn: parent
                             width: candidateFlow.cardWidth
                             spacing: Kirigami.Units.smallSpacing
@@ -196,6 +190,7 @@ Window {
                                     source: (candidate && candidate.thumbnail) ? candidate.thumbnail : ""
                                     cache: false
                                 }
+
                                 Image {
                                     anchors.fill: parent
                                     visible: !(candidate && candidate.thumbnail) && !!(candidate && candidate.iconPng)
@@ -203,11 +198,13 @@ Window {
                                     source: (candidate && candidate.iconPng) ? candidate.iconPng : ""
                                     cache: false
                                 }
+
                                 Kirigami.Icon {
                                     anchors.fill: parent
                                     visible: !(candidate && candidate.thumbnail) && !(candidate && candidate.iconPng)
                                     source: candidate ? (candidate.icon || "application-x-executable") : "application-x-executable"
                                 }
+
                             }
 
                             Label {
@@ -222,41 +219,45 @@ Window {
                                 font.pixelSize: candidateFlow.fontPixelSize
                                 color: Kirigami.Theme.textColor
                             }
+
                         }
 
                         MouseArea {
                             id: cardMouse
+
                             anchors.fill: parent
                             hoverEnabled: root.visible
                             cursorShape: Qt.PointingHandCursor
-                            Accessible.name: candidate && candidate.caption
-                                ? i18n("Snap %1 to this zone", candidate.caption)
-                                : i18n("Snap window to this zone")
+                            Accessible.name: candidate && candidate.caption ? i18n("Snap %1 to this zone", candidate.caption) : i18n("Snap window to this zone")
                             // ToolTip disabled: Breeze ToolTip causes binding loop on contentWidth
                             // when used inside Repeater+Flow. Accessible.name provides screen reader info.
                             onClicked: {
-                                const wId = candidate ? candidate.windowId : ""
-                                const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : ""
+                                const wId = candidate ? candidate.windowId : "";
+                                const zoneId = zoneContainer.zone ? (zoneContainer.zone.zoneId || "") : "";
                                 if (!zoneContainer.zone || !wId || !zoneId) {
-                                    root.close()
-                                    return
+                                    root.close();
+                                    return ;
                                 }
-                                const z = zoneContainer.zone
-                                const geo = z && z.x !== undefined && z.y !== undefined
-                                    ? JSON.stringify({
-                                        x: z.x,
-                                        y: z.y,
-                                        width: z.width,
-                                        height: z.height
-                                    })
-                                    : "{}"
-                                root.windowSelected(wId, zoneId, geo)
-                                root.close()
+                                const z = zoneContainer.zone;
+                                const geo = z && z.x !== undefined && z.y !== undefined ? JSON.stringify({
+                                    "x": z.x,
+                                    "y": z.y,
+                                    "width": z.width,
+                                    "height": z.height
+                                }) : "{}";
+                                root.windowSelected(wId, zoneId, geo);
+                                root.close();
                             }
                         }
+
                     }
+
                 }
+
             }
+
         }
+
     }
+
 }

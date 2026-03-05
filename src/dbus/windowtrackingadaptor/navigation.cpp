@@ -91,12 +91,12 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 
 void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenName)
 {
-    qCInfo(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber
-                          << "screen:" << screenName;
+    qCInfo(lcDbusWindow) << "snapToZoneByNumber called with zone number:" << zoneNumber << "screen:" << screenName;
 
     if (zoneNumber < 1 || zoneNumber > 9) {
         qCWarning(lcDbusWindow) << "Invalid zone number:" << zoneNumber << "(must be 1-9)";
-        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"), QString(), QString(), QString());
+        Q_EMIT navigationFeedback(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"), QString(),
+                                  QString(), QString());
         return;
     }
 
@@ -105,8 +105,7 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
 
 void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "rotateWindowsInLayout called, clockwise:" << clockwise
-                          << "screen:" << screenName;
+    qCDebug(lcDbusWindow) << "rotateWindowsInLayout called, clockwise:" << clockwise << "screen:" << screenName;
 
     // Delegate rotation calculation to service, filtered to cursor screen
     QVector<RotationEntry> rotationEntries = m_service->calculateRotation(clockwise, screenName);
@@ -114,11 +113,14 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
     if (rotationEntries.isEmpty()) {
         auto* layout = getValidatedActiveLayout(QStringLiteral("rotateWindowsInLayout"));
         if (!layout) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"), QString(), QString(), QString());
+            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"), QString(),
+                                      QString(), QString());
         } else if (layout->zoneCount() < 2) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("single_zone"), QString(), QString(), QString());
+            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("single_zone"), QString(),
+                                      QString(), QString());
         } else {
-            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_snapped_windows"), QString(), QString(), QString());
+            Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_snapped_windows"), QString(),
+                                      QString(), QString());
         }
         return;
     }
@@ -150,11 +152,11 @@ void WindowTrackingAdaptor::resnapToNewLayout()
     if (resnapEntries.isEmpty()) {
         auto* layout = getValidatedActiveLayout(QStringLiteral("resnapToNewLayout"));
         if (!layout) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"),
-                                     QString(), QString(), QString());
+            Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),
+                                      QString(), QString());
         } else {
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"),
-                                     QString(), QString(), QString());
+                                      QString(), QString(), QString());
         }
         return;
     }
@@ -172,8 +174,8 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     QVector<RotationEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
     if (entries.isEmpty()) {
         qCDebug(lcDbusWindow) << "No windows to resnap from current assignments";
-        Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"),
-                                 QString(), QString(), QString());
+        Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
+                                  QString(), QString());
         return;
     }
 
@@ -182,14 +184,12 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
-void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                     const QString& screenName)
+void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenName)
 {
     qCDebug(lcDbusWindow) << "resnapFromAutotileOrder called with" << autotileWindowOrder.size()
                           << "windows for screen:" << screenName;
 
-    QVector<RotationEntry> entries = m_service->calculateResnapFromAutotileOrder(
-        autotileWindowOrder, screenName);
+    QVector<RotationEntry> entries = m_service->calculateResnapFromAutotileOrder(autotileWindowOrder, screenName);
 
     if (entries.isEmpty()) {
         qCDebug(lcDbusWindow) << "No resnap entries from autotile order, falling back to current assignments";
@@ -209,7 +209,7 @@ void WindowTrackingAdaptor::snapAllWindows(const QString& screenName)
 }
 
 void WindowTrackingAdaptor::requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId,
-                                                           const QString& geometryJson)
+                                                            const QString& geometryJson)
 {
     qCDebug(lcDbusWindow) << "requestMoveSpecificWindowToZone: window=" << windowId << "zone=" << zoneId;
     Q_EMIT moveSpecificWindowToZoneRequested(windowId, zoneId, geometryJson);
@@ -230,9 +230,8 @@ void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString
                                                      const QString& sourceZoneId, const QString& targetZoneId,
                                                      const QString& screenName)
 {
-    qCDebug(lcDbusWindow) << "Navigation feedback: success=" << success << "action=" << action
-                          << "reason=" << reason << "sourceZone=" << sourceZoneId << "targetZone=" << targetZoneId
-                          << "screen=" << screenName;
+    qCDebug(lcDbusWindow) << "Navigation feedback: success=" << success << "action=" << action << "reason=" << reason
+                          << "sourceZone=" << sourceZoneId << "targetZone=" << targetZoneId << "screen=" << screenName;
     Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenName);
 }
 

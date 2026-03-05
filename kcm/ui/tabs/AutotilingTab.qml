@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import ".."
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import ".."
 
 /**
  * @brief Autotiling tab - Settings for automatic window tiling
@@ -19,41 +19,49 @@ ScrollView {
 
     required property var kcm
     required property QtObject constants
-
     // Whether this tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
-
-    signal requestAutotileBorderColorDialog()
-
     // Per-screen override helper (applies to Algorithm card only)
     property alias selectedScreenName: psHelper.selectedScreenName
     readonly property alias isPerScreen: psHelper.isPerScreen
     readonly property alias hasOverrides: psHelper.hasOverrides
+    // Convenience property for algorithm-specific visibility
+    readonly property string effectiveAlgorithm: settingValue("Algorithm", kcm.autotileAlgorithm)
+
+    signal requestAutotileBorderColorDialog()
+
+    function settingValue(key, globalValue) {
+        return psHelper.settingValue(key, globalValue);
+    }
+
+    function writeSetting(key, value, globalSetter) {
+        psHelper.writeSetting(key, value, globalSetter);
+    }
+
+    clip: true
+    contentWidth: availableWidth
 
     PerScreenOverrideHelper {
         id: psHelper
+
         kcm: root.kcm
         getterMethod: "getPerScreenAutotileSettings"
         setterMethod: "setPerScreenAutotileSetting"
         clearerMethod: "clearPerScreenAutotileSettings"
     }
 
-    function settingValue(key, globalValue) { return psHelper.settingValue(key, globalValue) }
-    function writeSetting(key, value, globalSetter) { psHelper.writeSetting(key, value, globalSetter) }
-
-    // Convenience property for algorithm-specific visibility
-    readonly property string effectiveAlgorithm: settingValue("Algorithm", kcm.autotileAlgorithm)
-
-    clip: true
-    contentWidth: availableWidth
-
     ColumnLayout {
+        // ═══════════════════════════════════════════════════════════════════════
+        // PER-MONITOR SETTINGS (Algorithm only)
+        // ═══════════════════════════════════════════════════════════════════════
+
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
 
         // Enable toggle - prominent at top
         CheckBox {
             id: autotileEnabledCheck
+
             Layout.fillWidth: true
             text: i18n("Enable automatic window tiling")
             checked: kcm.autotileEnabled
@@ -71,6 +79,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: behaviorCard
+
                 anchors.fill: parent
                 enabled: kcm.autotileEnabled
 
@@ -83,14 +92,20 @@ ScrollView {
                 contentItem: Kirigami.FormLayout {
                     ComboBox {
                         id: insertPositionCombo
+
                         Kirigami.FormData.label: i18n("New windows:")
                         textRole: "text"
                         valueRole: "value"
-                        model: [
-                            { text: i18n("Add to end of stack"), value: 0 },
-                            { text: i18n("Insert after focused"), value: 1 },
-                            { text: i18n("Add as master"), value: 2 }
-                        ]
+                        model: [{
+                            "text": i18n("Add to end of stack"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Insert after focused"),
+                            "value": 1
+                        }, {
+                            "text": i18n("Add as master"),
+                            "value": 2
+                        }]
                         currentIndex: Math.max(0, indexOfValue(kcm.autotileInsertPosition))
                         onActivated: kcm.autotileInsertPosition = currentValue
                     }
@@ -107,7 +122,6 @@ ScrollView {
                         text: i18n("Focus follows mouse pointer")
                         checked: kcm.autotileFocusFollowsMouse
                         onToggled: kcm.autotileFocusFollowsMouse = checked
-
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("When enabled, moving mouse over a window focuses it")
                     }
@@ -117,18 +131,17 @@ ScrollView {
                         text: i18n("Respect window minimum size")
                         checked: kcm.autotileRespectMinimumSize
                         onToggled: kcm.autotileRespectMinimumSize = checked
-
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Windows won't be resized smaller than their minimum. May cause layout to not fill screen.")
                     }
 
                     CheckBox {
                         id: hideTitleBarsCheck
+
                         Kirigami.FormData.label: i18n("Decorations:")
                         text: i18n("Hide title bars on tiled windows")
                         checked: kcm.autotileHideTitleBars
                         onToggled: kcm.autotileHideTitleBars = checked
-
                         ToolTip.visible: hovered && root.isCurrentTab
                         ToolTip.text: i18n("Remove window title bars while autotiled. Restored when floating or leaving autotile mode.")
                     }
@@ -144,7 +157,6 @@ ScrollView {
                             to: 10
                             value: kcm.autotileBorderWidth
                             onValueModified: kcm.autotileBorderWidth = value
-
                             ToolTip.visible: hovered && root.isCurrentTab
                             ToolTip.text: i18n("Colored border drawn around borderless tiled windows (0 to disable)")
                         }
@@ -152,10 +164,12 @@ ScrollView {
                         Label {
                             text: i18n("px")
                         }
+
                     }
 
                     CheckBox {
                         id: useSystemBorderColorsCheck
+
                         Kirigami.FormData.label: i18n("Color scheme:")
                         visible: hideTitleBarsCheck.checked
                         text: i18n("Use system accent color")
@@ -177,15 +191,14 @@ ScrollView {
                             text: kcm.autotileBorderColor.toString().toUpperCase()
                             font: Kirigami.Theme.fixedWidthFont
                         }
+
                     }
 
                 }
-            }
-        }
 
-        // ═══════════════════════════════════════════════════════════════════════
-        // PER-MONITOR SETTINGS (Algorithm only)
-        // ═══════════════════════════════════════════════════════════════════════
+            }
+
+        }
 
         MonitorSelectorSection {
             Layout.fillWidth: true
@@ -206,6 +219,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: gapsCard
+
                 anchors.fill: parent
                 enabled: kcm.autotileEnabled
 
@@ -224,8 +238,9 @@ ScrollView {
                             from: 0
                             to: root.constants.autotileGapMax
                             value: root.settingValue("InnerGap", kcm.autotileInnerGap)
-                            onValueModified: root.writeSetting("InnerGap", value, function(v) { kcm.autotileInnerGap = v })
-
+                            onValueModified: root.writeSetting("InnerGap", value, function(v) {
+                                kcm.autotileInnerGap = v;
+                            })
                             ToolTip.visible: hovered && root.isCurrentTab
                             ToolTip.text: i18n("Gap between tiled windows")
                         }
@@ -233,6 +248,7 @@ ScrollView {
                         Label {
                             text: i18n("px")
                         }
+
                     }
 
                     RowLayout {
@@ -244,8 +260,9 @@ ScrollView {
                             to: root.constants.autotileGapMax
                             value: root.settingValue("OuterGap", kcm.autotileOuterGap)
                             enabled: !autotilePerSideCheck.checked
-                            onValueModified: root.writeSetting("OuterGap", value, function(v) { kcm.autotileOuterGap = v })
-
+                            onValueModified: root.writeSetting("OuterGap", value, function(v) {
+                                kcm.autotileOuterGap = v;
+                            })
                             ToolTip.visible: hovered && root.isCurrentTab
                             ToolTip.text: i18n("Gap from screen edges")
                         }
@@ -257,10 +274,14 @@ ScrollView {
 
                         CheckBox {
                             id: autotilePerSideCheck
+
                             text: i18n("Set per side")
                             checked: root.settingValue("UsePerSideOuterGap", kcm.autotileUsePerSideOuterGap)
-                            onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) { kcm.autotileUsePerSideOuterGap = v })
+                            onToggled: root.writeSetting("UsePerSideOuterGap", checked, function(v) {
+                                kcm.autotileUsePerSideOuterGap = v;
+                            })
                         }
+
                     }
 
                     GridLayout {
@@ -270,52 +291,93 @@ ScrollView {
                         columnSpacing: Kirigami.Units.smallSpacing
                         rowSpacing: Kirigami.Units.smallSpacing
 
-                        Label { text: i18n("Top:") }
+                        Label {
+                            text: i18n("Top:")
+                        }
+
                         SpinBox {
                             from: 0
                             to: root.constants.autotileGapMax
                             value: root.settingValue("OuterGapTop", kcm.autotileOuterGapTop)
-                            onValueModified: root.writeSetting("OuterGapTop", value, function(v) { kcm.autotileOuterGapTop = v })
+                            onValueModified: root.writeSetting("OuterGapTop", value, function(v) {
+                                kcm.autotileOuterGapTop = v;
+                            })
                             Accessible.name: i18nc("@label", "Top edge gap")
                         }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Bottom:") }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
+                        Label {
+                            text: i18n("Bottom:")
+                        }
+
                         SpinBox {
                             from: 0
                             to: root.constants.autotileGapMax
                             value: root.settingValue("OuterGapBottom", kcm.autotileOuterGapBottom)
-                            onValueModified: root.writeSetting("OuterGapBottom", value, function(v) { kcm.autotileOuterGapBottom = v })
+                            onValueModified: root.writeSetting("OuterGapBottom", value, function(v) {
+                                kcm.autotileOuterGapBottom = v;
+                            })
                             Accessible.name: i18nc("@label", "Bottom edge gap")
                         }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Left:") }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
+                        Label {
+                            text: i18n("Left:")
+                        }
+
                         SpinBox {
                             from: 0
                             to: root.constants.autotileGapMax
                             value: root.settingValue("OuterGapLeft", kcm.autotileOuterGapLeft)
-                            onValueModified: root.writeSetting("OuterGapLeft", value, function(v) { kcm.autotileOuterGapLeft = v })
+                            onValueModified: root.writeSetting("OuterGapLeft", value, function(v) {
+                                kcm.autotileOuterGapLeft = v;
+                            })
                             Accessible.name: i18nc("@label", "Left edge gap")
                         }
-                        Label { text: i18nc("@label", "px") }
-                        Label { text: i18n("Right:") }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
+                        Label {
+                            text: i18n("Right:")
+                        }
+
                         SpinBox {
                             from: 0
                             to: root.constants.autotileGapMax
                             value: root.settingValue("OuterGapRight", kcm.autotileOuterGapRight)
-                            onValueModified: root.writeSetting("OuterGapRight", value, function(v) { kcm.autotileOuterGapRight = v })
+                            onValueModified: root.writeSetting("OuterGapRight", value, function(v) {
+                                kcm.autotileOuterGapRight = v;
+                            })
                             Accessible.name: i18nc("@label", "Right edge gap")
                         }
-                        Label { text: i18nc("@label", "px") }
+
+                        Label {
+                            text: i18nc("@label", "px")
+                        }
+
                     }
 
                     CheckBox {
                         Kirigami.FormData.label: i18n("Smart gaps:")
                         text: i18n("Hide gaps when only one window is tiled")
                         checked: root.settingValue("SmartGaps", kcm.autotileSmartGaps)
-                        onToggled: root.writeSetting("SmartGaps", checked, function(v) { kcm.autotileSmartGaps = v })
+                        onToggled: root.writeSetting("SmartGaps", checked, function(v) {
+                            kcm.autotileSmartGaps = v;
+                        })
                     }
+
                 }
+
             }
+
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -327,6 +389,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: algorithmCard
+
                 anchors.fill: parent
                 enabled: kcm.autotileEnabled
 
@@ -347,6 +410,7 @@ ScrollView {
                         // Preview container
                         Item {
                             id: algorithmPreviewContainer
+
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.top
                             width: root.constants.algorithmPreviewWidth
@@ -366,13 +430,10 @@ ScrollView {
                                     showLabel: false
                                     algorithmId: root.effectiveAlgorithm
                                     windowCount: previewWindowSlider.value
-                                    splitRatio: root.effectiveAlgorithm === "centered-master"
-                                        ? root.settingValue("SplitRatio", root.kcm.autotileCenteredMasterSplitRatio)
-                                        : root.settingValue("SplitRatio", root.kcm.autotileSplitRatio)
-                                    masterCount: root.effectiveAlgorithm === "centered-master"
-                                        ? root.settingValue("MasterCount", root.kcm.autotileCenteredMasterMasterCount)
-                                        : root.settingValue("MasterCount", root.kcm.autotileMasterCount)
+                                    splitRatio: root.effectiveAlgorithm === "centered-master" ? root.settingValue("SplitRatio", root.kcm.autotileCenteredMasterSplitRatio) : root.settingValue("SplitRatio", root.kcm.autotileSplitRatio)
+                                    masterCount: root.effectiveAlgorithm === "centered-master" ? root.settingValue("MasterCount", root.kcm.autotileCenteredMasterMasterCount) : root.settingValue("MasterCount", root.kcm.autotileMasterCount)
                                 }
+
                             }
 
                             // Window count label below preview
@@ -384,7 +445,9 @@ ScrollView {
                                 font: Kirigami.Theme.fixedWidthFont
                                 opacity: 0.7
                             }
+
                         }
+
                     }
 
                     // Algorithm selection - centered
@@ -395,37 +458,41 @@ ScrollView {
 
                         ComboBox {
                             id: algorithmCombo
+
                             Layout.alignment: Qt.AlignHCenter
                             Layout.preferredWidth: Kirigami.Units.gridUnit * 15
                             Accessible.name: i18n("Tiling algorithm")
                             textRole: "name"
                             valueRole: "id"
                             model: kcm.availableAlgorithms()
-
                             // indexOfValue is unreliable during initial model population;
                             // defer to Component.onCompleted so the model is fully ready.
                             Component.onCompleted: currentIndex = Math.max(0, indexOfValue(root.effectiveAlgorithm))
+                            onActivated: {
+                                root.writeSetting("Algorithm", currentValue, function(v) {
+                                    kcm.autotileAlgorithm = v;
+                                });
+                                // Reset max windows to the new algorithm's default
+                                let algoData = model[currentIndex];
+                                if (algoData && algoData.defaultMaxWindows !== undefined)
+                                    root.writeSetting("MaxWindows", algoData.defaultMaxWindows, function(v) {
+                                    kcm.autotileMaxWindows = v;
+                                });
+
+                            }
+                            ToolTip.visible: hovered && root.isCurrentTab
+                            ToolTip.text: i18n("Select how windows are automatically arranged on screen")
 
                             // Re-sync when the effective algorithm changes externally
                             // (e.g. per-screen override selection)
                             Connections {
-                                target: root
                                 function onEffectiveAlgorithmChanged() {
-                                    algorithmCombo.currentIndex = Math.max(0, algorithmCombo.indexOfValue(root.effectiveAlgorithm))
+                                    algorithmCombo.currentIndex = Math.max(0, algorithmCombo.indexOfValue(root.effectiveAlgorithm));
                                 }
+
+                                target: root
                             }
 
-                            onActivated: {
-                                root.writeSetting("Algorithm", currentValue, function(v) { kcm.autotileAlgorithm = v })
-                                // Reset max windows to the new algorithm's default
-                                let algoData = model[currentIndex]
-                                if (algoData && algoData.defaultMaxWindows !== undefined) {
-                                    root.writeSetting("MaxWindows", algoData.defaultMaxWindows, function(v) { kcm.autotileMaxWindows = v })
-                                }
-                            }
-
-                            ToolTip.visible: hovered && root.isCurrentTab
-                            ToolTip.text: i18n("Select how windows are automatically arranged on screen")
                         }
 
                         Label {
@@ -433,16 +500,17 @@ ScrollView {
                             Layout.fillWidth: true
                             horizontalAlignment: Text.AlignHCenter
                             text: {
-                                const model = algorithmCombo.model
-                                const idx = algorithmCombo.currentIndex
-                                if (model && idx >= 0 && idx < model.length) {
-                                    return model[idx].description || ""
-                                }
-                                return ""
+                                const model = algorithmCombo.model;
+                                const idx = algorithmCombo.currentIndex;
+                                if (model && idx >= 0 && idx < model.length)
+                                    return model[idx].description || "";
+
+                                return "";
                             }
                             wrapMode: Text.WordWrap
                             opacity: 0.7
                         }
+
                     }
 
                     // Max windows slider - controls preview, zone count, and persisted setting
@@ -463,20 +531,24 @@ ScrollView {
 
                             Slider {
                                 id: previewWindowSlider
+
                                 Layout.fillWidth: true
                                 Accessible.name: i18n("Maximum windows preview")
                                 from: 1
                                 to: 12
                                 stepSize: 1
+                                onMoved: root.writeSetting("MaxWindows", Math.round(value), function(v) {
+                                    kcm.autotileMaxWindows = v;
+                                })
+                                ToolTip.visible: hovered && root.isCurrentTab
+                                ToolTip.text: i18n("Maximum number of windows to tile with this algorithm")
+
                                 Binding on value {
                                     value: root.settingValue("MaxWindows", kcm.autotileMaxWindows)
                                     when: !previewWindowSlider.pressed
                                     restoreMode: Binding.RestoreNone
                                 }
-                                onMoved: root.writeSetting("MaxWindows", Math.round(value), function(v) { kcm.autotileMaxWindows = v })
 
-                                ToolTip.visible: hovered && root.isCurrentTab
-                                ToolTip.text: i18n("Maximum number of windows to tile with this algorithm")
                             }
 
                             Label {
@@ -485,7 +557,9 @@ ScrollView {
                                 horizontalAlignment: Text.AlignRight
                                 font: Kirigami.Theme.fixedWidthFont
                             }
+
                         }
+
                     }
 
                     // ─────────────────────────────────────────────────────────────
@@ -496,9 +570,7 @@ ScrollView {
                         Layout.fillWidth: true
                         Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 20, parent.width)
                         spacing: Kirigami.Units.smallSpacing
-                        visible: root.effectiveAlgorithm === "master-stack"
-                             || root.effectiveAlgorithm === "three-column"
-                             || root.effectiveAlgorithm === "centered-master"
+                        visible: root.effectiveAlgorithm === "master-stack" || root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master"
 
                         Kirigami.Separator {
                             Layout.fillWidth: true
@@ -508,10 +580,7 @@ ScrollView {
                         // Master/Center ratio
                         Label {
                             Layout.alignment: Qt.AlignHCenter
-                            text: root.effectiveAlgorithm === "three-column"
-                                    || root.effectiveAlgorithm === "centered-master"
-                                ? i18n("Center Ratio")
-                                : i18n("Master Ratio")
+                            text: root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master" ? i18n("Center Ratio") : i18n("Master Ratio")
                             font.bold: true
                         }
 
@@ -521,30 +590,30 @@ ScrollView {
 
                             Slider {
                                 id: splitRatioSlider
+
                                 Layout.fillWidth: true
                                 from: 0.1
                                 to: 0.9
                                 stepSize: 0.05
+                                onMoved: {
+                                    if (root.effectiveAlgorithm === "centered-master")
+                                        root.writeSetting("SplitRatio", value, function(v) {
+                                        kcm.autotileCenteredMasterSplitRatio = v;
+                                    });
+                                    else
+                                        root.writeSetting("SplitRatio", value, function(v) {
+                                        kcm.autotileSplitRatio = v;
+                                    });
+                                }
+                                ToolTip.visible: hovered && root.isCurrentTab
+                                ToolTip.text: root.effectiveAlgorithm === "three-column" || root.effectiveAlgorithm === "centered-master" ? i18n("Proportion of screen width for the center column") : i18n("Proportion of screen width for the master area")
+
                                 Binding on value {
-                                    value: root.effectiveAlgorithm === "centered-master"
-                                        ? root.settingValue("SplitRatio", kcm.autotileCenteredMasterSplitRatio)
-                                        : root.settingValue("SplitRatio", kcm.autotileSplitRatio)
+                                    value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("SplitRatio", kcm.autotileCenteredMasterSplitRatio) : root.settingValue("SplitRatio", kcm.autotileSplitRatio)
                                     when: !splitRatioSlider.pressed
                                     restoreMode: Binding.RestoreNone
                                 }
-                                onMoved: {
-                                    if (root.effectiveAlgorithm === "centered-master") {
-                                        root.writeSetting("SplitRatio", value, function(v) { kcm.autotileCenteredMasterSplitRatio = v })
-                                    } else {
-                                        root.writeSetting("SplitRatio", value, function(v) { kcm.autotileSplitRatio = v })
-                                    }
-                                }
 
-                                ToolTip.visible: hovered && root.isCurrentTab
-                                ToolTip.text: root.effectiveAlgorithm === "three-column"
-                                        || root.effectiveAlgorithm === "centered-master"
-                                    ? i18n("Proportion of screen width for the center column")
-                                    : i18n("Proportion of screen width for the master area")
                             }
 
                             Label {
@@ -553,51 +622,55 @@ ScrollView {
                                 horizontalAlignment: Text.AlignRight
                                 font: Kirigami.Theme.fixedWidthFont
                             }
+
                         }
 
                         // Master count - for master-stack and centered-master
                         RowLayout {
                             Layout.alignment: Qt.AlignHCenter
                             spacing: Kirigami.Units.smallSpacing
-                            visible: root.effectiveAlgorithm === "master-stack"
-                                 || root.effectiveAlgorithm === "centered-master"
+                            visible: root.effectiveAlgorithm === "master-stack" || root.effectiveAlgorithm === "centered-master"
 
                             Label {
-                                text: root.effectiveAlgorithm === "centered-master"
-                                    ? i18n("Center count:")
-                                    : i18n("Master count:")
+                                text: root.effectiveAlgorithm === "centered-master" ? i18n("Center count:") : i18n("Master count:")
                             }
 
                             SpinBox {
                                 id: masterCountSpinBox
+
                                 from: 1
                                 to: 5
+                                onValueModified: {
+                                    if (root.effectiveAlgorithm === "centered-master")
+                                        root.writeSetting("MasterCount", value, function(v) {
+                                        kcm.autotileCenteredMasterMasterCount = v;
+                                    });
+                                    else
+                                        root.writeSetting("MasterCount", value, function(v) {
+                                        kcm.autotileMasterCount = v;
+                                    });
+                                }
+                                ToolTip.visible: hovered && root.isCurrentTab
+                                ToolTip.text: root.effectiveAlgorithm === "centered-master" ? i18n("Number of windows in the center area") : i18n("Number of windows in the master area")
+
                                 Binding on value {
-                                    value: root.effectiveAlgorithm === "centered-master"
-                                        ? root.settingValue("MasterCount", kcm.autotileCenteredMasterMasterCount)
-                                        : root.settingValue("MasterCount", kcm.autotileMasterCount)
+                                    value: root.effectiveAlgorithm === "centered-master" ? root.settingValue("MasterCount", kcm.autotileCenteredMasterMasterCount) : root.settingValue("MasterCount", kcm.autotileMasterCount)
                                     when: !masterCountSpinBox.activeFocus
                                     restoreMode: Binding.RestoreNone
                                 }
-                                onValueModified: {
-                                    if (root.effectiveAlgorithm === "centered-master") {
-                                        root.writeSetting("MasterCount", value, function(v) { kcm.autotileCenteredMasterMasterCount = v })
-                                    } else {
-                                        root.writeSetting("MasterCount", value, function(v) { kcm.autotileMasterCount = v })
-                                    }
-                                }
 
-                                ToolTip.visible: hovered && root.isCurrentTab
-                                ToolTip.text: root.effectiveAlgorithm === "centered-master"
-                                    ? i18n("Number of windows in the center area")
-                                    : i18n("Number of windows in the master area")
                             }
+
                         }
+
                     }
 
                 }
+
             }
+
         }
 
     }
+
 }

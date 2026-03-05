@@ -105,8 +105,7 @@ private:
      *
      * Uses showOsdOnLayoutSwitch and osdStyle settings, same as manual layout switch.
      */
-    void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
-                                   const QString& screenName);
+    void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenName);
     void clearHighlight();
 
     // ═══════════════════════════════════════════════════════════════════════════

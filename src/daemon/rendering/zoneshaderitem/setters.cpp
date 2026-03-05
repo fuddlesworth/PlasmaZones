@@ -113,7 +113,7 @@ void ZoneShaderItem::setHoveredZoneIndex(int index)
     }
     m_hoveredZoneIndex = clamped;
     if (!m_zones.isEmpty()) {
-        updateHoveredHighlightOnly();  // Lightweight: only update highlight flags, avoids full parse/sync
+        updateHoveredHighlightOnly(); // Lightweight: only update highlight flags, avoids full parse/sync
     }
     Q_EMIT hoveredZoneIndexChanged();
     update();
@@ -309,9 +309,8 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
     };
 
     static const char* const colorKeys[] = {
-        "customColor1", "customColor2", "customColor3", "customColor4",
-        "customColor5", "customColor6", "customColor7", "customColor8",
-        "customColor9", "customColor10", "customColor11", "customColor12",
+        "customColor1",  "customColor2",  "customColor3",  "customColor4",  "customColor5",  "customColor6",
+        "customColor7",  "customColor8",  "customColor9",  "customColor10", "customColor11", "customColor12",
         "customColor13", "customColor14", "customColor15", "customColor16",
     };
     for (int i = 0; i < 16; ++i) {
@@ -482,46 +481,96 @@ void ZoneShaderItem::setUseWallpaper(bool use)
 QVector4D ZoneShaderItem::customColorByIndex(int index) const
 {
     switch (index) {
-    case 1: return m_customColor1;
-    case 2: return m_customColor2;
-    case 3: return m_customColor3;
-    case 4: return m_customColor4;
-    case 5: return m_customColor5;
-    case 6: return m_customColor6;
-    case 7: return m_customColor7;
-    case 8: return m_customColor8;
-    case 9: return m_customColor9;
-    case 10: return m_customColor10;
-    case 11: return m_customColor11;
-    case 12: return m_customColor12;
-    case 13: return m_customColor13;
-    case 14: return m_customColor14;
-    case 15: return m_customColor15;
-    case 16: return m_customColor16;
-    default: return QVector4D();
+    case 1:
+        return m_customColor1;
+    case 2:
+        return m_customColor2;
+    case 3:
+        return m_customColor3;
+    case 4:
+        return m_customColor4;
+    case 5:
+        return m_customColor5;
+    case 6:
+        return m_customColor6;
+    case 7:
+        return m_customColor7;
+    case 8:
+        return m_customColor8;
+    case 9:
+        return m_customColor9;
+    case 10:
+        return m_customColor10;
+    case 11:
+        return m_customColor11;
+    case 12:
+        return m_customColor12;
+    case 13:
+        return m_customColor13;
+    case 14:
+        return m_customColor14;
+    case 15:
+        return m_customColor15;
+    case 16:
+        return m_customColor16;
+    default:
+        return QVector4D();
     }
 }
 
 void ZoneShaderItem::setCustomColorByIndex(int index, const QVector4D& color)
 {
     switch (index) {
-    case 1: setCustomColor1(color); break;
-    case 2: setCustomColor2(color); break;
-    case 3: setCustomColor3(color); break;
-    case 4: setCustomColor4(color); break;
-    case 5: setCustomColor5(color); break;
-    case 6: setCustomColor6(color); break;
-    case 7: setCustomColor7(color); break;
-    case 8: setCustomColor8(color); break;
-    case 9: setCustomColor9(color); break;
-    case 10: setCustomColor10(color); break;
-    case 11: setCustomColor11(color); break;
-    case 12: setCustomColor12(color); break;
-    case 13: setCustomColor13(color); break;
-    case 14: setCustomColor14(color); break;
-    case 15: setCustomColor15(color); break;
-    case 16: setCustomColor16(color); break;
-    default: break;
+    case 1:
+        setCustomColor1(color);
+        break;
+    case 2:
+        setCustomColor2(color);
+        break;
+    case 3:
+        setCustomColor3(color);
+        break;
+    case 4:
+        setCustomColor4(color);
+        break;
+    case 5:
+        setCustomColor5(color);
+        break;
+    case 6:
+        setCustomColor6(color);
+        break;
+    case 7:
+        setCustomColor7(color);
+        break;
+    case 8:
+        setCustomColor8(color);
+        break;
+    case 9:
+        setCustomColor9(color);
+        break;
+    case 10:
+        setCustomColor10(color);
+        break;
+    case 11:
+        setCustomColor11(color);
+        break;
+    case 12:
+        setCustomColor12(color);
+        break;
+    case 13:
+        setCustomColor13(color);
+        break;
+    case 14:
+        setCustomColor14(color);
+        break;
+    case 15:
+        setCustomColor15(color);
+        break;
+    case 16:
+        setCustomColor16(color);
+        break;
+    default:
+        break;
     }
 }
 

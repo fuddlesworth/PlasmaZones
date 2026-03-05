@@ -31,8 +31,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
         entriesByScreen[entry.screenId].append(&entry);
     }
 
-    for (auto screenIt = entriesByScreen.constBegin();
-         screenIt != entriesByScreen.constEnd(); ++screenIt) {
+    for (auto screenIt = entriesByScreen.constBegin(); screenIt != entriesByScreen.constEnd(); ++screenIt) {
         const QString& screenName = screenIt.key();
 
         // Get the layout assigned to this screen (not the global active layout)
@@ -54,12 +53,12 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
                 for (int pos : entry->allZonePositions) {
                     int targetPos = ((pos - 1) % newZoneCount) + 1;
                     Zone* z = newZones.value(targetPos - 1, nullptr);
-                    if (z) targetZoneIds.append(z->id().toString());
+                    if (z)
+                        targetZoneIds.append(z->id().toString());
                 }
                 if (!targetZoneIds.isEmpty()) {
-                    QRect geo = (targetZoneIds.size() > 1)
-                        ? multiZoneGeometry(targetZoneIds, screenName)
-                        : zoneGeometry(targetZoneIds.first(), screenName);
+                    QRect geo = (targetZoneIds.size() > 1) ? multiZoneGeometry(targetZoneIds, screenName)
+                                                           : zoneGeometry(targetZoneIds.first(), screenName);
                     if (geo.isValid()) {
                         RotationEntry rotEntry;
                         rotEntry.windowId = entry->windowId;
@@ -100,8 +99,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
 {
     QVector<RotationEntry> result;
 
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         const QString& windowId = it.key();
         const QStringList& zoneIds = it.value();
         if (zoneIds.isEmpty()) {
@@ -119,8 +117,8 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
             continue;
         }
 
-        QRect geo = (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName)
-                                          : zoneGeometry(zoneIds.first(), screenName);
+        QRect geo =
+            (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName) : zoneGeometry(zoneIds.first(), screenName);
         if (!geo.isValid()) {
             continue;
         }
@@ -134,12 +132,13 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromCurrentAssignme
     }
 
     qCInfo(lcCore) << "Resnap from current assignments:" << result.size() << "windows"
-                   << (screenFilter.isEmpty() ? QStringLiteral("(all screens)") : QStringLiteral("(screen: %1)").arg(screenFilter));
+                   << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
+                                              : QStringLiteral("(screen: %1)").arg(screenFilter));
     return result;
 }
 
-QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(
-    const QStringList& autotileWindowOrder, const QString& screenName) const
+QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                               const QString& screenName) const
 {
     QVector<RotationEntry> result;
 
@@ -157,14 +156,13 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(
     // deterministic ordering when multiple zones share the same number)
     QVector<Zone*> zones = layout->zones();
     std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber()) return a->zoneNumber() < b->zoneNumber();
+        if (a->zoneNumber() != b->zoneNumber())
+            return a->zoneNumber() < b->zoneNumber();
         return a->id() < b->id();
     });
 
     // Get screen and gap settings for geometry calculation
-    QScreen* screen = screenName.isEmpty()
-        ? Utils::primaryScreen()
-        : Utils::findScreenByIdOrName(screenName);
+    QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }
@@ -182,9 +180,9 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(
     // Cap at zoneCount: excess windows beyond available zones would stack on top of each
     // other with cycling. Instead, leave them unassigned (they stay where they are).
     if (windowCount > zoneCount) {
-        qCWarning(lcCore) << "calculateResnapFromAutotileOrder:" << windowCount
-                          << "windows but only" << zoneCount << "zones on screen" << screenName
-                          << "- excess" << (windowCount - zoneCount) << "windows will not be resnapped";
+        qCWarning(lcCore) << "calculateResnapFromAutotileOrder:" << windowCount << "windows but only" << zoneCount
+                          << "zones on screen" << screenName << "- excess" << (windowCount - zoneCount)
+                          << "windows will not be resnapped";
     }
 
     for (int i = 0; i < std::min(windowCount, zoneCount); ++i) {
@@ -195,8 +193,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(
         Zone* targetZone = zones.at(zoneIdx);
 
         bool useAvail = !layout->useFullScreenGeometry();
-        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-            targetZone, screen, zonePadding, outerGaps, useAvail);
+        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
@@ -258,17 +255,17 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
         if (numIt != zoneNumberMap.constEnd()) {
             windowsByZone.append({numIt.value(), insertionIdx++, windowId});
         } else {
-            qCWarning(lcCore) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first()
-                              << "for window" << windowId << "not found in layout — skipping";
+            qCWarning(lcCore) << "buildZoneOrderedWindowList: zone UUID" << zoneIds.first() << "for window" << windowId
+                              << "not found in layout — skipping";
         }
     }
 
     // Sort by zone number ascending, preserving iteration order as tie-breaker
-    std::stable_sort(windowsByZone.begin(), windowsByZone.end(),
-                     [](const auto& a, const auto& b) {
-                         if (std::get<0>(a) != std::get<0>(b)) return std::get<0>(a) < std::get<0>(b);
-                         return std::get<1>(a) < std::get<1>(b); // preserve iteration order
-                     });
+    std::stable_sort(windowsByZone.begin(), windowsByZone.end(), [](const auto& a, const auto& b) {
+        if (std::get<0>(a) != std::get<0>(b))
+            return std::get<0>(a) < std::get<0>(b);
+        return std::get<1>(a) < std::get<1>(b); // preserve iteration order
+    });
 
     QStringList result;
     result.reserve(windowsByZone.size());
@@ -294,16 +291,15 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
     // deterministic ordering when multiple zones share the same number)
     QVector<Zone*> zones = layout->zones();
     std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber()) return a->zoneNumber() < b->zoneNumber();
+        if (a->zoneNumber() != b->zoneNumber())
+            return a->zoneNumber() < b->zoneNumber();
         return a->id() < b->id();
     });
 
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenName);
 
     // Get screen and gap settings for geometry calculation
-    QScreen* screen = screenName.isEmpty()
-        ? Utils::primaryScreen()
-        : Utils::findScreenByIdOrName(screenName);
+    QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }
@@ -334,8 +330,7 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
         }
 
         bool useAvail = !(layout && layout->useFullScreenGeometry());
-        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-            targetZone, screen, zonePadding, outerGaps, useAvail);
+        QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
         QRect geo = GeometryUtils::snapToRect(geoF);
 
         if (geo.isValid()) {
@@ -366,8 +361,7 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         return result;
     }
 
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         QString windowId = it.key();
         const QStringList& zoneIds = it.value();
         if (zoneIds.isEmpty()) {
@@ -375,8 +369,8 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
         }
         QString screenName = m_windowScreenAssignments.value(windowId);
 
-        QRect geo = (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName)
-                                          : zoneGeometry(zoneIds.first(), screenName);
+        QRect geo =
+            (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenName) : zoneGeometry(zoneIds.first(), screenName);
         if (geo.isValid()) {
             result[windowId] = geo;
         }

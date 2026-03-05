@@ -9,11 +9,11 @@ pre-commit:
   commands:
     clang-format:
       glob: "*.{cpp,h,hpp,cc,cxx}"
-      run: clang-format -i {staged_files} && git add {staged_files}
+      run: clang-format -i {staged_files}
       stage_fixed: true
     qmlformat:
       glob: "*.qml"
-      run: qmlformat -i {staged_files} && git add {staged_files}
+      run: qmlformat -i {staged_files}
       stage_fixed: true
 
 commit-msg:

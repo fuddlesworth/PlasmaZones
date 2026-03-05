@@ -24,10 +24,9 @@ ColumnLayout {
     property bool featureEnabled: true
     property string selectedScreenName: ""
     property bool hasOverrides: false
+    readonly property bool isPerScreen: selectedScreenName !== ""
 
     signal resetClicked()
-
-    readonly property bool isPerScreen: selectedScreenName !== ""
 
     visible: kcm.screens.length > 1
     spacing: Kirigami.Units.largeSpacing
@@ -42,9 +41,7 @@ ColumnLayout {
         }
 
         Label {
-            text: root.isPerScreen
-                ? i18n("Per-Monitor Settings — %1", root.selectedScreenName)
-                : i18n("Per-Monitor Settings — All Monitors")
+            text: root.isPerScreen ? i18n("Per-Monitor Settings — %1", root.selectedScreenName) : i18n("Per-Monitor Settings — All Monitors")
             opacity: 0.6
             font.pixelSize: Kirigami.Theme.smallFont.pixelSize
         }
@@ -52,6 +49,7 @@ ColumnLayout {
         Kirigami.Separator {
             Layout.fillWidth: true
         }
+
     }
 
     // Monitor selector card
@@ -61,6 +59,7 @@ ColumnLayout {
 
         Kirigami.Card {
             id: monitorSelectorCard
+
             anchors.fill: parent
             enabled: root.featureEnabled
 
@@ -75,12 +74,13 @@ ColumnLayout {
 
                 ScreenComboBox {
                     id: monitorCombo
+
                     Layout.fillWidth: true
                     kcm: root.kcm
                     noneText: i18n("All Monitors (Default)")
                     Accessible.name: i18n("Monitor selection")
                     onActivated: {
-                        root.selectedScreenName = currentScreenName
+                        root.selectedScreenName = currentScreenName;
                     }
                 }
 
@@ -88,12 +88,13 @@ ColumnLayout {
                 // internally resets (screen disappears), currentValue changes
                 // and we propagate that to the parent.
                 Connections {
-                    target: monitorCombo
                     function onCurrentValueChanged() {
-                        if (monitorCombo.currentScreenName !== root.selectedScreenName) {
-                            root.selectedScreenName = monitorCombo.currentScreenName
-                        }
+                        if (monitorCombo.currentScreenName !== root.selectedScreenName)
+                            root.selectedScreenName = monitorCombo.currentScreenName;
+
                     }
+
+                    target: monitorCombo
                 }
 
                 // Per-screen info/reset row
@@ -105,12 +106,8 @@ ColumnLayout {
 
                     Kirigami.InlineMessage {
                         Layout.fillWidth: true
-                        type: root.hasOverrides
-                            ? Kirigami.MessageType.Positive
-                            : Kirigami.MessageType.Information
-                        text: root.hasOverrides
-                            ? i18n("Custom settings for this monitor")
-                            : i18n("Using default settings — changes below create an override")
+                        type: root.hasOverrides ? Kirigami.MessageType.Positive : Kirigami.MessageType.Information
+                        text: root.hasOverrides ? i18n("Custom settings for this monitor") : i18n("Using default settings — changes below create an override")
                         visible: true
                     }
 
@@ -120,8 +117,13 @@ ColumnLayout {
                         visible: root.hasOverrides
                         onClicked: root.resetClicked()
                     }
+
                 }
+
             }
+
         }
+
     }
+
 }

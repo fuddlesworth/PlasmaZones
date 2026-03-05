@@ -130,13 +130,12 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
 
     QRectF oldGeometry;
     if (isFixed) {
-        oldGeometry = QRectF(zone.value(JsonKeys::FixedX, 0.0).toReal(),
-                             zone.value(JsonKeys::FixedY, 0.0).toReal(),
-                             zone.value(JsonKeys::FixedWidth, 0.0).toReal(),
-                             zone.value(JsonKeys::FixedHeight, 0.0).toReal());
+        oldGeometry =
+            QRectF(zone.value(JsonKeys::FixedX, 0.0).toReal(), zone.value(JsonKeys::FixedY, 0.0).toReal(),
+                   zone.value(JsonKeys::FixedWidth, 0.0).toReal(), zone.value(JsonKeys::FixedHeight, 0.0).toReal());
     } else {
-        oldGeometry = QRectF(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(),
-                             zone[JsonKeys::Width].toReal(), zone[JsonKeys::Height].toReal());
+        oldGeometry = QRectF(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(), zone[JsonKeys::Width].toReal(),
+                             zone[JsonKeys::Height].toReal());
     }
 
     if (isFixed) {

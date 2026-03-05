@@ -24,7 +24,7 @@ ColumnLayout {
     id: root
 
     required property string title
-    property var groupParams: []  // Parameter array for this group (explicit, not closure-based)
+    property var groupParams: [] // Parameter array for this group (explicit, not closure-based)
     property int paramCount: groupParams ? groupParams.length : 0
     property bool expanded: true
     property alias contentComponent: contentLoader.sourceComponent
@@ -41,6 +41,10 @@ ColumnLayout {
 
         Layout.fillWidth: true
         Layout.preferredHeight: Kirigami.Units.gridUnit * 2.5
+        Accessible.name: root.title
+        Accessible.role: Accessible.Button
+        Accessible.description: i18nc("@info:tooltip", "%1 parameters. Click to %2.", root.paramCount, root.expanded ? i18nc("@action", "collapse") : i18nc("@action", "expand"))
+        onClicked: root.toggled()
 
         contentItem: RowLayout {
             spacing: Kirigami.Units.smallSpacing
@@ -50,15 +54,17 @@ ColumnLayout {
                 implicitWidth: Kirigami.Units.iconSizes.small
                 implicitHeight: Kirigami.Units.iconSizes.small
                 color: Kirigami.Theme.textColor
-
                 // Smooth rotation animation: 0° = collapsed, 90° = expanded
                 rotation: root.expanded ? 90 : 0
+
                 Behavior on rotation {
                     NumberAnimation {
                         duration: Kirigami.Units.longDuration
                         easing.type: Easing.OutCubic
                     }
+
                 }
+
             }
 
             QQC.Label {
@@ -72,18 +78,19 @@ ColumnLayout {
                 implicitWidth: countLabel.implicitWidth + Kirigami.Units.smallSpacing * 2
                 implicitHeight: Kirigami.Units.gridUnit
                 radius: height / 2
-                color: Qt.rgba(Kirigami.Theme.highlightColor.r,
-                               Kirigami.Theme.highlightColor.g,
-                               Kirigami.Theme.highlightColor.b, 0.2)
+                color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2)
 
                 QQC.Label {
                     id: countLabel
+
                     anchors.centerIn: parent
                     text: root.paramCount
                     font: Kirigami.Theme.smallFont
                     color: Kirigami.Theme.textColor
                 }
+
             }
+
         }
 
         background: Rectangle {
@@ -100,15 +107,9 @@ ColumnLayout {
                 visible: root.expanded
                 opacity: 0.5
             }
+
         }
 
-        Accessible.name: root.title
-        Accessible.role: Accessible.Button
-        Accessible.description: i18nc("@info:tooltip", "%1 parameters. Click to %2.",
-            root.paramCount,
-            root.expanded ? i18nc("@action", "collapse") : i18nc("@action", "expand"))
-
-        onClicked: root.toggled()
     }
 
     // Content area with smooth height animation
@@ -117,19 +118,10 @@ ColumnLayout {
 
         Layout.fillWidth: true
         Layout.leftMargin: Kirigami.Units.largeSpacing
-
         // Clip content during animation to hide overflow
         clip: true
-
         // Animate height between 0 and content's actual height
         implicitHeight: root.expanded ? contentLoader.implicitHeight : 0
-
-        Behavior on implicitHeight {
-            NumberAnimation {
-                duration: Kirigami.Units.longDuration
-                easing.type: Easing.OutCubic
-            }
-        }
 
         Loader {
             id: contentLoader
@@ -137,18 +129,29 @@ ColumnLayout {
             width: parent.width
             // Keep active during collapse animation so content is visible while shrinking
             active: root.expanded || contentContainer.implicitHeight > 0
-
             // Ensure Kirigami theme context propagates to loaded content
             Kirigami.Theme.inherit: true
-
             // Fade content along with height animation
-            opacity: root.expanded ? 1.0 : 0.0
+            opacity: root.expanded ? 1 : 0
+
             Behavior on opacity {
                 NumberAnimation {
                     duration: Kirigami.Units.longDuration
                     easing.type: Easing.OutCubic
                 }
+
             }
+
         }
+
+        Behavior on implicitHeight {
+            NumberAnimation {
+                duration: Kirigami.Units.longDuration
+                easing.type: Easing.OutCubic
+            }
+
+        }
+
     }
+
 }

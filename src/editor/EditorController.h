@@ -101,7 +101,8 @@ class EditorController : public QObject
     Q_PROPERTY(int globalOuterGapRight READ globalOuterGapRight NOTIFY globalOuterGapChanged)
 
     // Full screen geometry mode
-    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
+                   useFullScreenGeometryChanged)
 
     // Target screen size (for fixed geometry coordinate conversion)
     Q_PROPERTY(QSize targetScreenSize READ targetScreenSize NOTIFY targetScreenSizeChanged)
@@ -126,7 +127,8 @@ class EditorController : public QObject
     // Visibility filtering (Tier 2 per-context allow-lists)
     Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
     Q_PROPERTY(QVariantList allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
-    Q_PROPERTY(QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+    Q_PROPERTY(
+        QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
 
     // Context info for visibility UI
     Q_PROPERTY(QStringList availableScreenIds READ availableScreenIds NOTIFY availableScreenIdsChanged)
@@ -154,7 +156,10 @@ public:
     QString layoutId() const;
     QString layoutName() const;
     QVariantList zones() const; // Delegates to ZoneManager
-    int zonesVersion() const { return m_zonesVersion; } // Lightweight change counter
+    int zonesVersion() const
+    {
+        return m_zonesVersion;
+    } // Lightweight change counter
     QString selectedZoneId() const;
     QStringList selectedZoneIds() const;
     int selectionCount() const;
@@ -198,22 +203,61 @@ public:
     UndoController* undoController() const;
 
     // Font settings getters
-    QString labelFontFamily() const { return m_labelFontFamily; }
-    qreal labelFontSizeScale() const { return m_labelFontSizeScale; }
-    int labelFontWeight() const { return m_labelFontWeight; }
-    bool labelFontItalic() const { return m_labelFontItalic; }
-    bool labelFontUnderline() const { return m_labelFontUnderline; }
-    bool labelFontStrikeout() const { return m_labelFontStrikeout; }
+    QString labelFontFamily() const
+    {
+        return m_labelFontFamily;
+    }
+    qreal labelFontSizeScale() const
+    {
+        return m_labelFontSizeScale;
+    }
+    int labelFontWeight() const
+    {
+        return m_labelFontWeight;
+    }
+    bool labelFontItalic() const
+    {
+        return m_labelFontItalic;
+    }
+    bool labelFontUnderline() const
+    {
+        return m_labelFontUnderline;
+    }
+    bool labelFontStrikeout() const
+    {
+        return m_labelFontStrikeout;
+    }
 
     // Visibility filtering getters
-    QStringList allowedScreens() const { return m_allowedScreens; }
+    QStringList allowedScreens() const
+    {
+        return m_allowedScreens;
+    }
     QVariantList allowedDesktops() const;
-    QStringList allowedActivities() const { return m_allowedActivities; }
-    QStringList availableScreenIds() const { return m_availableScreenIds; }
-    int virtualDesktopCount() const { return m_virtualDesktopCount; }
-    QStringList virtualDesktopNames() const { return m_virtualDesktopNames; }
-    bool activitiesAvailable() const { return m_activitiesAvailable; }
-    QVariantList availableActivities() const { return m_availableActivities; }
+    QStringList allowedActivities() const
+    {
+        return m_allowedActivities;
+    }
+    QStringList availableScreenIds() const
+    {
+        return m_availableScreenIds;
+    }
+    int virtualDesktopCount() const
+    {
+        return m_virtualDesktopCount;
+    }
+    QStringList virtualDesktopNames() const
+    {
+        return m_virtualDesktopNames;
+    }
+    bool activitiesAvailable() const
+    {
+        return m_activitiesAvailable;
+    }
+    QVariantList availableActivities() const
+    {
+        return m_availableActivities;
+    }
 
     // Visibility filtering setters
     void setAllowedScreens(const QStringList& screens);
@@ -346,8 +390,8 @@ public:
     /**
      * @brief Update existing shader preview overlay geometry and/or params
      */
-    Q_INVOKABLE void updateShaderPreviewOverlay(int x, int y, int width, int height,
-                                                const QString& shaderParamsJson, const QString& zonesJson);
+    Q_INVOKABLE void updateShaderPreviewOverlay(int x, int y, int width, int height, const QString& shaderParamsJson,
+                                                const QString& zonesJson);
 
     /**
      * @brief Hide and destroy the shader preview overlay
@@ -431,7 +475,7 @@ public Q_SLOTS:
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
     Q_INVOKABLE bool isSelected(const QString& zoneId) const;
-    
+
     /**
      * @brief Check if all selected zones have useCustomColors enabled
      * @return true if all selected zones use custom colors, false otherwise
@@ -439,7 +483,7 @@ public Q_SLOTS:
      * Performance optimization: O(n) C++ lookup instead of O(n*m) JavaScript nested loops.
      */
     Q_INVOKABLE bool allSelectedUseCustomColors() const;
-    
+
     /**
      * @brief Select zones that intersect with a rectangle
      * @param x Rectangle X in relative coordinates (0.0-1.0)
@@ -658,7 +702,12 @@ private:
     /**
      * @brief Z-order operation types for changeZOrderImpl
      */
-    enum class ZOrderOp { BringToFront, SendToBack, BringForward, SendBackward };
+    enum class ZOrderOp {
+        BringToFront,
+        SendToBack,
+        BringForward,
+        SendBackward
+    };
 
     /**
      * @brief Internal implementation for all z-order operations
@@ -693,8 +742,8 @@ private:
      * @param emitSignal Lambda to emit the changed signal
      */
     template<typename F>
-    void loadShortcutSetting(KConfigGroup& group, const QString& key,
-                             const QString& defaultValue, QString& member, F emitSignal)
+    void loadShortcutSetting(KConfigGroup& group, const QString& key, const QString& defaultValue, QString& member,
+                             F emitSignal)
     {
         QString value = group.readEntry(key, defaultValue);
         if (value.isEmpty()) {

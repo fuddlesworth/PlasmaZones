@@ -238,19 +238,20 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         if (isFixedMode(zone)) {
             // Fixed mode: validate relative fallback is present and fixed pixel data is sane
             if (!qIsFinite(x) || !qIsFinite(y) || !qIsFinite(width) || !qIsFinite(height)) {
-                qCWarning(lcEditorZone) << "Invalid relative fallback in fixed zone restoreZones:" << x << y << width << height;
+                qCWarning(lcEditorZone) << "Invalid relative fallback in fixed zone restoreZones:" << x << y << width
+                                        << height;
                 return;
             }
             QRectF fixedGeo = extractFixedGeometry(zone);
-            if (!qIsFinite(fixedGeo.x()) || !qIsFinite(fixedGeo.y())
-                || !qIsFinite(fixedGeo.width()) || !qIsFinite(fixedGeo.height())
-                || fixedGeo.width() <= 0.0 || fixedGeo.height() <= 0.0) {
+            if (!qIsFinite(fixedGeo.x()) || !qIsFinite(fixedGeo.y()) || !qIsFinite(fixedGeo.width())
+                || !qIsFinite(fixedGeo.height()) || fixedGeo.width() <= 0.0 || fixedGeo.height() <= 0.0) {
                 qCWarning(lcEditorZone) << "Invalid fixed zone geometry in restoreZones:" << fixedGeo;
                 return;
             }
         } else {
             // Relative mode: validate 0-1 range
-            if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0 || height > 1.0) {
+            if (x < 0.0 || x > 1.0 || y < 0.0 || y > 1.0 || width <= 0.0 || width > 1.0 || height <= 0.0
+                || height > 1.0) {
                 qCWarning(lcEditorZone) << "Invalid zone geometry in restoreZones:" << x << y << width << height;
                 return; // Don't restore if invalid
             }

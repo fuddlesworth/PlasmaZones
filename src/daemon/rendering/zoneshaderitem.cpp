@@ -18,8 +18,8 @@ namespace PlasmaZones {
 // DRY helper: convert QVector4D color to QColor (eliminates 8 repeated 3-line blocks in updatePaintNode)
 static QColor vec4ToQColor(const QVector4D& v)
 {
-    return QColor::fromRgbF(static_cast<float>(v.x()), static_cast<float>(v.y()),
-                            static_cast<float>(v.z()), static_cast<float>(v.w()));
+    return QColor::fromRgbF(static_cast<float>(v.x()), static_cast<float>(v.y()), static_cast<float>(v.z()),
+                            static_cast<float>(v.w()));
 }
 
 // ============================================================================
@@ -129,7 +129,7 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
     // Precondition: m_zoneData must be populated by a prior setZones/parseZoneData call.
     if (m_zoneData.rects.size() != static_cast<qsizetype>(m_zones.size())) {
         qWarning(lcOverlay) << "updateHoveredHighlightOnly: zone data out of sync (rects=" << m_zoneData.rects.size()
-                           << "zones=" << m_zones.size() << ") - setZones must be called first";
+                            << "zones=" << m_zones.size() << ") - setZones must be called first";
         return;
     }
     int highlightedCount = 0;
@@ -272,7 +272,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // Sync shader source FIRST (must compile before zone data can be used)
     // Load when: item's m_shaderDirty, OR node not ready (e.g. after releaseResources)
-    const bool needLoad = m_shaderDirty.exchange(false) || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
+    const bool needLoad = m_shaderDirty.exchange(false)
+        || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
     if (needLoad) {
         if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
             QString fragPath = m_shaderSource.toLocalFile();
@@ -304,10 +305,12 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             } else {
                 // Vertex shader is required - fail if not found
                 if (vertPath.isEmpty()) {
-                    qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found (cannot derive path - fragment path is empty)";
+                    qCWarning(PlasmaZones::lcOverlay)
+                        << "Required vertex shader not found (cannot derive path - fragment path is empty)";
                 } else {
                     const QString dir = QFileInfo(fragPath).absolutePath();
-                    qCWarning(PlasmaZones::lcOverlay) << "Required vertex shader not found: expected zone.vert or zone.vert.glsl in" << dir;
+                    qCWarning(PlasmaZones::lcOverlay)
+                        << "Required vertex shader not found: expected zone.vert or zone.vert.glsl in" << dir;
                 }
                 loaded = false;
             }

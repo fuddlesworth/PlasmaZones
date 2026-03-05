@@ -17,7 +17,7 @@ namespace {
 AlgorithmRegistrar<DwindleAlgorithm> s_dwindleRegistrar(DBus::AutotileAlgorithm::Dwindle, 40);
 }
 
-DwindleAlgorithm::DwindleAlgorithm(QObject *parent)
+DwindleAlgorithm::DwindleAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -37,13 +37,13 @@ QString DwindleAlgorithm::icon() const noexcept
     return QStringLiteral("view-grid-symbolic");
 }
 
-QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -60,13 +60,12 @@ QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams &params) cons
     }
 
     // Read split ratio from TilingState (user-adjustable via slider)
-    const qreal splitRatio = std::clamp(params.state->splitRatio(),
-                                        MinSplitRatio, MaxSplitRatio);
+    const qreal splitRatio = std::clamp(params.state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
     // Precompute direction-aware cumulative min dimensions for remaining windows.
     const auto cumMinDims = computeAlternatingCumulativeMinDims(windowCount, minSizes, innerGap);
-    const auto &remainingMinW = cumMinDims.minW;
-    const auto &remainingMinH = cumMinDims.minH;
+    const auto& remainingMinW = cumMinDims.minW;
+    const auto& remainingMinH = cumMinDims.minH;
 
     // Dwindle pattern: alternates vertical/horizontal splits.
     // Current window always takes the left/top portion; remaining area
@@ -76,10 +75,8 @@ QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams &params) cons
 
     for (int i = 0; i < windowCount; ++i) {
         // Last window or remaining area too small — assign all of it
-        if (i == windowCount - 1
-            || remaining.width() < MinZoneSizePx || remaining.height() < MinZoneSizePx
-            || (splitVertical && remaining.width() <= innerGap)
-            || (!splitVertical && remaining.height() <= innerGap)) {
+        if (i == windowCount - 1 || remaining.width() < MinZoneSizePx || remaining.height() < MinZoneSizePx
+            || (splitVertical && remaining.width() <= innerGap) || (!splitVertical && remaining.height() <= innerGap)) {
             zones.append(remaining);
             appendGracefulDegradation(zones, remaining, windowCount - i - 1, innerGap);
             break;
@@ -101,10 +98,9 @@ QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams &params) cons
                 }
                 windowWidth = std::clamp(windowWidth, 1, contentWidth - 1);
 
-                windowZone = QRect(remaining.x(), remaining.y(),
-                                   windowWidth, remaining.height());
-                remaining = QRect(remaining.x() + windowWidth + innerGap, remaining.y(),
-                                  contentWidth - windowWidth, remaining.height());
+                windowZone = QRect(remaining.x(), remaining.y(), windowWidth, remaining.height());
+                remaining = QRect(remaining.x() + windowWidth + innerGap, remaining.y(), contentWidth - windowWidth,
+                                  remaining.height());
             } else {
                 // Split top/bottom — window gets top portion, gap in between
                 const int contentHeight = remaining.height() - innerGap;
@@ -120,10 +116,9 @@ QVector<QRect> DwindleAlgorithm::calculateZones(const TilingParams &params) cons
                 }
                 windowHeight = std::clamp(windowHeight, 1, contentHeight - 1);
 
-                windowZone = QRect(remaining.x(), remaining.y(),
-                                   remaining.width(), windowHeight);
-                remaining = QRect(remaining.x(), remaining.y() + windowHeight + innerGap,
-                                  remaining.width(), contentHeight - windowHeight);
+                windowZone = QRect(remaining.x(), remaining.y(), remaining.width(), windowHeight);
+                remaining = QRect(remaining.x(), remaining.y() + windowHeight + innerGap, remaining.width(),
+                                  contentHeight - windowHeight);
             }
 
             zones.append(windowZone);

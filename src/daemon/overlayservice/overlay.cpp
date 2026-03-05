@@ -73,10 +73,9 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen)
         }
         if (auto* window = m_overlayWindows.value(screen)) {
             assertWindowOnScreen(window, screen);
-            qCDebug(lcOverlay) << "initializeOverlay: screen=" << screen->name()
-                               << "screenGeom=" << screen->geometry()
-                               << "availGeom=" << ScreenManager::actualAvailableGeometry(screen)
-                               << "windowScreen=" << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
+            qCDebug(lcOverlay) << "initializeOverlay: screen=" << screen->name() << "screenGeom=" << screen->geometry()
+                               << "availGeom=" << ScreenManager::actualAvailableGeometry(screen) << "windowScreen="
+                               << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
             updateOverlayWindow(screen);
             window->show();
         }
@@ -262,10 +261,11 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         placeholder.fill(Qt::transparent);
         QVariantMap initProps;
         initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
-        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay",
-                                 initProps);
+        window =
+            createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay", initProps);
         if (window) {
-            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screen->name();
+            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen"
+                              << screen->name();
         } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
@@ -299,7 +299,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
             const QString shaderId = screenLayout->shaderId();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
-                              << "bufferPaths=" << info.bufferShaderPaths.size();
+                               << "bufferPaths=" << info.bufferShaderPaths.size();
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
             applyShaderInfoToWindow(window, info, translatedParams);
         }

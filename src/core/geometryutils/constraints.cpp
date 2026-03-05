@@ -19,8 +19,8 @@ namespace GeometryUtils {
 // Returns true if zones form a clean column/row grouping and were solved.
 static bool solveAxisBoundaries(QVector<QRect>& zones,
                                 const QVector<int>& minDims, // minWidth or minHeight per zone
-                                bool horizontal,             // true = width axis, false = height axis
-                                int gapThreshold)            // max gap width to treat as adjacent
+                                bool horizontal, // true = width axis, false = height axis
+                                int gapThreshold) // max gap width to treat as adjacent
 {
     const int n = zones.size();
     if (n == 0) {
@@ -142,9 +142,7 @@ static bool solveAxisBoundaries(QVector<QRect>& zones,
                     allocated = colMinDim[c];
                 } else {
                     // Distribute remaining space equally among unconstrained columns
-                    int share = (unconstrainedCount > 0)
-                                    ? qMax(1, remainder / unconstrainedCount)
-                                    : qMax(1, remainder);
+                    int share = (unconstrainedCount > 0) ? qMax(1, remainder / unconstrainedCount) : qMax(1, remainder);
                     allocated = qMin(share, remainder - unconstrainedAllocated);
                     allocated = qMax(1, allocated);
                     unconstrainedAllocated += allocated;
@@ -161,8 +159,7 @@ static bool solveAxisBoundaries(QVector<QRect>& zones,
             for (int c = 0; c < numColumns; ++c) {
                 int allocated;
                 if (remainingMin > 0) {
-                    allocated = static_cast<int>(
-                        static_cast<qint64>(remaining) * colMinDim[c] / remainingMin);
+                    allocated = static_cast<int>(static_cast<qint64>(remaining) * colMinDim[c] / remainingMin);
                 } else {
                     allocated = remaining;
                 }
@@ -221,9 +218,7 @@ static bool solveAxisBoundaries(QVector<QRect>& zones,
 
 // Pairwise fallback: steal space from adjacent neighbors for zones below minimum.
 // No hadDeficit guard — any zone with surplus can donate.
-static void pairwiseFallback(QVector<QRect>& zones,
-                             const QVector<int>& minDims,
-                             int gapThreshold,
+static void pairwiseFallback(QVector<QRect>& zones, const QVector<int>& minDims, int gapThreshold,
                              bool horizontal) // true = width axis, false = height axis
 {
     const int n = zones.size();
@@ -370,11 +365,15 @@ static void pairwiseFallback(QVector<QRect>& zones,
                     if (horizontal) {
                         // Would zone k be co-moved? (shares the moved boundary)
                         if (donorOnHighSide) {
-                            if (zones[k].right() == zones[i].right()) continue; // co-expanded
-                            if (zones[k].left() == zones[j].left()) continue;   // co-shrunk
+                            if (zones[k].right() == zones[i].right())
+                                continue; // co-expanded
+                            if (zones[k].left() == zones[j].left())
+                                continue; // co-shrunk
                         } else {
-                            if (zones[k].left() == zones[i].left()) continue;   // co-expanded
-                            if (zones[k].right() == zones[j].right()) continue; // co-shrunk
+                            if (zones[k].left() == zones[i].left())
+                                continue; // co-expanded
+                            if (zones[k].right() == zones[j].right())
+                                continue; // co-shrunk
                         }
                         if (donorOnHighSide) {
                             // Expanding right: clearance to zone k's left edge
@@ -392,11 +391,15 @@ static void pairwiseFallback(QVector<QRect>& zones,
                     } else {
                         // Would zone k be co-moved? (shares the moved boundary)
                         if (donorOnHighSide) {
-                            if (zones[k].bottom() == zones[i].bottom()) continue; // co-expanded
-                            if (zones[k].top() == zones[j].top()) continue;       // co-shrunk
+                            if (zones[k].bottom() == zones[i].bottom())
+                                continue; // co-expanded
+                            if (zones[k].top() == zones[j].top())
+                                continue; // co-shrunk
                         } else {
-                            if (zones[k].top() == zones[i].top()) continue;       // co-expanded
-                            if (zones[k].bottom() == zones[j].bottom()) continue; // co-shrunk
+                            if (zones[k].top() == zones[i].top())
+                                continue; // co-expanded
+                            if (zones[k].bottom() == zones[j].bottom())
+                                continue; // co-shrunk
                         }
                         if (donorOnHighSide) {
                             int clearance = zones[k].top() - (zones[i].top() + zones[i].height());
@@ -426,8 +429,7 @@ static void pairwiseFallback(QVector<QRect>& zones,
     }
 }
 
-void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes,
-                           int gapThreshold, int innerGap)
+void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold, int innerGap)
 {
     if (zones.size() != minSizes.size()) {
         return;

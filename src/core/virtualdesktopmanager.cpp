@@ -124,89 +124,91 @@ void VirtualDesktopManager::refreshFromKWin()
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(getDesktopsMsg);
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, currentId, thisGeneration](QDBusPendingCallWatcher* w) {
-        // Check if this callback is stale (a newer refresh was started)
-        if (thisGeneration != m_refreshGeneration) {
-            qCDebug(lcCore) << "Ignoring stale virtual desktop refresh callback";
-            w->deleteLater();
-            return;
-        }
-
-        QDBusPendingReply<QDBusVariant> reply = *w;
-
-        // Clear and prepare for new data
-        m_desktopNames.clear();
-        m_desktopIds.clear();
-
-        // Store (position, id, name) tuples for sorting
-        struct DesktopInfo
-        {
-            int position;
-            QString id;
-            QString name;
-        };
-        QList<DesktopInfo> desktops;
-
-        if (reply.isValid()) {
-            // The reply is a QDBusVariant containing the actual value
-            // We need to carefully extract without triggering type conversion issues
-            const QDBusVariant& dbusVariant = reply.value();
-            const QVariant& innerVariant = dbusVariant.variant();
-
-            if (innerVariant.userType() == qMetaTypeId<QDBusArgument>()) {
-                const QDBusArgument& arg = *static_cast<const QDBusArgument*>(innerVariant.constData());
-
-                // Parse array of structs manually using const reference
-                arg.beginArray();
-                while (!arg.atEnd()) {
-                    DesktopInfo info;
-                    arg.beginStructure();
-                    arg >> info.position >> info.id >> info.name;
-                    arg.endStructure();
-                    desktops.append(info);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, currentId, thisGeneration](QDBusPendingCallWatcher* w) {
+                // Check if this callback is stale (a newer refresh was started)
+                if (thisGeneration != m_refreshGeneration) {
+                    qCDebug(lcCore) << "Ignoring stale virtual desktop refresh callback";
+                    w->deleteLater();
+                    return;
                 }
-                arg.endArray();
 
-                // Sort by position
-                std::sort(desktops.begin(), desktops.end(), [](const DesktopInfo& a, const DesktopInfo& b) {
-                    return a.position < b.position;
-                });
+                QDBusPendingReply<QDBusVariant> reply = *w;
 
-                for (const auto& desktop : desktops) {
-                    m_desktopIds.append(desktop.id);
-                    QString name = desktop.name;
-                    if (name.isEmpty()) {
-                        name = QStringLiteral("Desktop %1").arg(desktop.position + 1);
+                // Clear and prepare for new data
+                m_desktopNames.clear();
+                m_desktopIds.clear();
+
+                // Store (position, id, name) tuples for sorting
+                struct DesktopInfo
+                {
+                    int position;
+                    QString id;
+                    QString name;
+                };
+                QList<DesktopInfo> desktops;
+
+                if (reply.isValid()) {
+                    // The reply is a QDBusVariant containing the actual value
+                    // We need to carefully extract without triggering type conversion issues
+                    const QDBusVariant& dbusVariant = reply.value();
+                    const QVariant& innerVariant = dbusVariant.variant();
+
+                    if (innerVariant.userType() == qMetaTypeId<QDBusArgument>()) {
+                        const QDBusArgument& arg = *static_cast<const QDBusArgument*>(innerVariant.constData());
+
+                        // Parse array of structs manually using const reference
+                        arg.beginArray();
+                        while (!arg.atEnd()) {
+                            DesktopInfo info;
+                            arg.beginStructure();
+                            arg >> info.position >> info.id >> info.name;
+                            arg.endStructure();
+                            desktops.append(info);
+                        }
+                        arg.endArray();
+
+                        // Sort by position
+                        std::sort(desktops.begin(), desktops.end(), [](const DesktopInfo& a, const DesktopInfo& b) {
+                            return a.position < b.position;
+                        });
+
+                        for (const auto& desktop : desktops) {
+                            m_desktopIds.append(desktop.id);
+                            QString name = desktop.name;
+                            if (name.isEmpty()) {
+                                name = QStringLiteral("Desktop %1").arg(desktop.position + 1);
+                            }
+                            m_desktopNames.append(name);
+                            qCDebug(lcCore)
+                                << "Desktop " << (desktop.position + 1) << " id= " << desktop.id << " name= " << name;
+                        }
                     }
-                    m_desktopNames.append(name);
-                    qCDebug(lcCore) << "Desktop " << (desktop.position + 1) << " id= " << desktop.id << " name= " << name;
+                } else {
+                    qCWarning(lcCore) << "Failed to get virtual desktops:" << reply.error().message();
                 }
-            }
-        } else {
-            qCWarning(lcCore) << "Failed to get virtual desktops:" << reply.error().message();
-        }
 
-        // Update count if desktops property gave us more accurate info
-        if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
-            m_desktopCount = m_desktopIds.size();
-        }
+                // Update count if desktops property gave us more accurate info
+                if (!m_desktopIds.isEmpty() && m_desktopIds.size() != m_desktopCount) {
+                    m_desktopCount = m_desktopIds.size();
+                }
 
-        // Convert current UUID to 1-based position
-        if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
-            int idx = m_desktopIds.indexOf(currentId);
-            if (idx >= 0) {
-                m_currentDesktop = idx + 1; // Convert to 1-based
-                qCDebug(lcCore) << "Current desktop= " << m_currentDesktop << " id= " << currentId;
-            }
-        }
+                // Convert current UUID to 1-based position
+                if (!currentId.isEmpty() && !m_desktopIds.isEmpty()) {
+                    int idx = m_desktopIds.indexOf(currentId);
+                    if (idx >= 0) {
+                        m_currentDesktop = idx + 1; // Convert to 1-based
+                        qCDebug(lcCore) << "Current desktop= " << m_currentDesktop << " id= " << currentId;
+                    }
+                }
 
-        // Fallback if we couldn't get names
-        while (m_desktopNames.size() < m_desktopCount) {
-            m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
-        }
+                // Fallback if we couldn't get names
+                while (m_desktopNames.size() < m_desktopCount) {
+                    m_desktopNames.append(QStringLiteral("Desktop %1").arg(m_desktopNames.size() + 1));
+                }
 
-        w->deleteLater();
-    });
+                w->deleteLater();
+            });
 }
 
 void VirtualDesktopManager::onKWinCurrentChanged(const QString& desktopId)
@@ -391,7 +393,7 @@ void VirtualDesktopManager::updateActiveLayout()
 
     if (layout && layout != m_layoutManager->activeLayout()) {
         qCInfo(lcCore) << "Switching to layout" << layout->name() << "for desktop" << m_currentDesktop << "on screen"
-                        << screen->name();
+                       << screen->name();
         m_layoutManager->setActiveLayout(layout);
     }
 }

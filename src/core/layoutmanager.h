@@ -165,7 +165,7 @@ public:
     Q_INVOKABLE Layout* layoutForShortcut(int number) const override;
     Q_INVOKABLE void applyQuickLayout(int number, const QString& screenId) override;
     void setQuickLayoutSlot(int number, const QString& layoutId) override;
-    void setAllQuickLayoutSlots(const QHash<int, QString>& slots) override;  // Batch set - saves once
+    void setAllQuickLayoutSlots(const QHash<int, QString>& slots) override; // Batch set - saves once
     QHash<int, QString> quickLayoutSlots() const override
     {
         return m_quickLayoutShortcuts;
@@ -176,10 +176,22 @@ public:
     Q_INVOKABLE void cycleToNextLayout(const QString& screenId);
 
     // Context for visibility-filtered cycling and per-screen layout lookups
-    int currentVirtualDesktop() const override { return m_currentVirtualDesktop; }
-    QString currentActivity() const override { return m_currentActivity; }
-    void setCurrentVirtualDesktop(int desktop) { m_currentVirtualDesktop = desktop; }
-    void setCurrentActivity(const QString& activity) { m_currentActivity = activity; }
+    int currentVirtualDesktop() const override
+    {
+        return m_currentVirtualDesktop;
+    }
+    QString currentActivity() const override
+    {
+        return m_currentActivity;
+    }
+    void setCurrentVirtualDesktop(int desktop)
+    {
+        m_currentVirtualDesktop = desktop;
+    }
+    void setCurrentActivity(const QString& activity)
+    {
+        m_currentActivity = activity;
+    }
 
     Q_INVOKABLE void createBuiltInLayouts() override;
     QVector<Layout*> builtInLayouts() const override;

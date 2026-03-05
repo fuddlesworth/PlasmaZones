@@ -98,7 +98,8 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                 bool useAvail = !(layout && layout->useFullScreenGeometry());
 
                 for (auto* zone : layout->zones()) {
-                    QRectF zoneGeom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+                    QRectF zoneGeom =
+                        GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
                     QRect zoneRect = GeometryUtils::snapToRect(zoneGeom);
 
                     // Use class constants for tolerances
@@ -157,8 +158,7 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     // avoiding redundant clearHighlights()/clearHighlight() calls (which may touch QML
     // objects) prevents daemon event-loop congestion and D-Bus back-pressure on the
     // compositor thread (see discussion #167).
-    if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode
-        && m_paintedZoneIds.isEmpty()) {
+    if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
         return;
     }
 
@@ -292,7 +292,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
                 }
             }
 
-            m_currentMultiZoneGeometry = GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout));
+            m_currentMultiZoneGeometry =
+                GeometryUtils::snapToRect(computeCombinedZoneGeometry(zonesToHighlight, screen, layout));
             m_zoneDetector->highlightZones(zonesToHighlight);
             m_overlayService->highlightZones(zoneIdsToStringList(m_currentAdjacentZoneIds));
         }
@@ -458,8 +459,8 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         }
     } else {
         // Cursor left all zones: restore pre-snap size immediately if window was snapped
-        if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_settings
-            && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
+        if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_settings && m_settings->restoreOriginalSizeOnUnsnap()
+            && m_windowTracking) {
             int origX, origY, origW, origH;
             if (m_windowTracking->getValidatedPreSnapGeometry(windowId, origX, origY, origW, origH)) {
                 m_restoreSizeEmittedDuringDrag = true;

@@ -129,7 +129,8 @@ private:
     /**
      * @brief Collected zone edge coordinates for snapping
      */
-    struct EdgeLists {
+    struct EdgeLists
+    {
         QList<qreal> vertical; // X coordinates (left/right edges)
         QList<qreal> horizontal; // Y coordinates (top/bottom edges)
     };

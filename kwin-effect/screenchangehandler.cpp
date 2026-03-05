@@ -171,7 +171,8 @@ void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometrie
         }
     }
 
-    struct ApplyEntry {
+    struct ApplyEntry
+    {
         QPointer<KWin::EffectWindow> window;
         QRect geometry;
     };
@@ -204,7 +205,8 @@ void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometrie
         if (window && m_effect->shouldHandleWindow(window)) {
             const QString winScreenName = m_effect->getWindowScreenName(window);
             if (m_effect->m_autotileHandler->isAutotileScreen(winScreenName)) {
-                qCDebug(lcScreenChange) << "Skipping autotile-managed window" << windowId << "on screen" << winScreenName;
+                qCDebug(lcScreenChange) << "Skipping autotile-managed window" << windowId << "on screen"
+                                        << winScreenName;
                 continue;
             }
             QRect newGeometry(x, y, width, height);

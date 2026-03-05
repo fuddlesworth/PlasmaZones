@@ -18,12 +18,16 @@ namespace PlasmaZones {
 namespace {
 
 // Result of OSD window preparation
-struct OsdWindowSetup {
+struct OsdWindowSetup
+{
     QQuickWindow* window = nullptr;
     QRect screenGeom;
     qreal aspectRatio = 16.0 / 9.0;
 
-    explicit operator bool() const { return window != nullptr; }
+    explicit operator bool() const
+    {
+        return window != nullptr;
+    }
 };
 
 // Center an OSD/layer window on screen using LayerShellQt margins
@@ -35,9 +39,9 @@ void centerLayerWindowOnScreen(QQuickWindow* window, const QRect& screenGeom, in
     if (auto* layerWindow = LayerShellQt::Window::get(window)) {
         const int hMargin = qMax(0, (screenGeom.width() - osdWidth) / 2);
         const int vMargin = qMax(0, (screenGeom.height() - osdHeight) / 2);
-        layerWindow->setAnchors(LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-            | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
         layerWindow->setMargins(QMargins(hMargin, vMargin, hMargin, vMargin));
     }
 }
@@ -86,9 +90,8 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screen
     assertWindowOnScreen(window, screen);
 
     screenGeom = screen->geometry();
-    aspectRatio = (screenGeom.height() > 0)
-        ? static_cast<qreal>(screenGeom.width()) / screenGeom.height()
-        : (16.0 / 9.0);
+    aspectRatio =
+        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
 
     return true;
@@ -267,17 +270,16 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones
-    static const QStringList noLayoutActions{QStringLiteral("float"), QStringLiteral("algorithm"),
-                                             QStringLiteral("rotate"), QStringLiteral("focus_master"),
-                                             QStringLiteral("swap_master"), QStringLiteral("master_ratio"),
+    static const QStringList noLayoutActions{QStringLiteral("float"),        QStringLiteral("algorithm"),
+                                             QStringLiteral("rotate"),       QStringLiteral("focus_master"),
+                                             QStringLiteral("swap_master"),  QStringLiteral("master_ratio"),
                                              QStringLiteral("master_count"), QStringLiteral("retile")};
     const bool needsLayout = !noLayoutActions.contains(action);
     Layout* screenLayout = resolveScreenLayout(screen);
     if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << screen->name()
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
-                           << "zones=" << (screenLayout ? screenLayout->zones().size() : 0)
-                           << "action=" << action;
+                           << "zones=" << (screenLayout ? screenLayout->zones().size() : 0) << "action=" << action;
         return;
     }
 
@@ -359,8 +361,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // Show with animation
     QMetaObject::invokeMethod(window, "show");
 
-    qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action
-                       << "reason=" << reason << "highlightedZones=" << highlightedZoneIds;
+    qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action << "reason=" << reason
+                      << "highlightedZones=" << highlightedZoneIds;
 }
 
 void OverlayService::hideNavigationOsd()

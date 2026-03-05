@@ -38,8 +38,8 @@ void EditorController::setAllowedDesktops(const QVariantList& desktops)
         intList.append(v.toInt());
     }
     if (m_allowedDesktopsInt != intList) {
-        auto* cmd = new UpdateVisibilityCommand(this, m_allowedScreens, m_allowedScreens, m_allowedDesktopsInt,
-                                                intList, m_allowedActivities, m_allowedActivities);
+        auto* cmd = new UpdateVisibilityCommand(this, m_allowedScreens, m_allowedScreens, m_allowedDesktopsInt, intList,
+                                                m_allowedActivities, m_allowedActivities);
         m_undoController->push(cmd);
     }
 }

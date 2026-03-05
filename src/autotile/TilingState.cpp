@@ -13,7 +13,7 @@ namespace PlasmaZones {
 using namespace AutotileJsonKeys;
 using namespace AutotileDefaults;
 
-TilingState::TilingState(const QString &screenName, QObject *parent)
+TilingState::TilingState(const QString& screenName, QObject* parent)
     : QObject(parent)
     , m_screenName(screenName)
 {
@@ -36,7 +36,7 @@ int TilingState::windowCount() const
 int TilingState::tiledWindowCount() const
 {
     int count = 0;
-    for (const QString &id : m_windowOrder) {
+    for (const QString& id : m_windowOrder) {
         if (!m_floatingWindows.contains(id)) {
             ++count;
         }
@@ -53,7 +53,7 @@ QStringList TilingState::tiledWindows() const
 {
     QStringList tiled;
     tiled.reserve(m_windowOrder.size());
-    for (const QString &id : m_windowOrder) {
+    for (const QString& id : m_windowOrder) {
         if (!m_floatingWindows.contains(id)) {
             tiled.append(id);
         }
@@ -61,7 +61,7 @@ QStringList TilingState::tiledWindows() const
     return tiled;
 }
 
-bool TilingState::addWindow(const QString &windowId, int position)
+bool TilingState::addWindow(const QString& windowId, int position)
 {
     if (windowId.isEmpty() || m_windowOrder.contains(windowId)) {
         return false; // Already tracked or invalid
@@ -78,7 +78,7 @@ bool TilingState::addWindow(const QString &windowId, int position)
     return true;
 }
 
-bool TilingState::removeWindow(const QString &windowId)
+bool TilingState::removeWindow(const QString& windowId)
 {
     const int index = m_windowOrder.indexOf(windowId);
     if (index < 0) {
@@ -139,7 +139,7 @@ bool TilingState::swapWindows(int index1, int index2)
     return true;
 }
 
-bool TilingState::swapWindowsById(const QString &windowId1, const QString &windowId2)
+bool TilingState::swapWindowsById(const QString& windowId1, const QString& windowId2)
 {
     const int index1 = m_windowOrder.indexOf(windowId1);
     const int index2 = m_windowOrder.indexOf(windowId2);
@@ -154,12 +154,12 @@ bool TilingState::swapWindowsById(const QString &windowId1, const QString &windo
     return swapWindows(index1, index2);
 }
 
-int TilingState::windowIndex(const QString &windowId) const
+int TilingState::windowIndex(const QString& windowId) const
 {
     return m_windowOrder.indexOf(windowId);
 }
 
-bool TilingState::containsWindow(const QString &windowId) const
+bool TilingState::containsWindow(const QString& windowId) const
 {
     return m_windowOrder.contains(windowId);
 }
@@ -188,7 +188,7 @@ void TilingState::setMasterCount(int count)
     }
 }
 
-bool TilingState::isMaster(const QString &windowId) const
+bool TilingState::isMaster(const QString& windowId) const
 {
     if (m_floatingWindows.contains(windowId)) {
         return false;
@@ -196,7 +196,7 @@ bool TilingState::isMaster(const QString &windowId) const
 
     // Get tiled index
     int tiledIndex = 0;
-    for (const QString &id : m_windowOrder) {
+    for (const QString& id : m_windowOrder) {
         if (m_floatingWindows.contains(id)) {
             continue;
         }
@@ -212,7 +212,7 @@ QStringList TilingState::masterWindows() const
 {
     QStringList masters;
     int tiledIndex = 0;
-    for (const QString &id : m_windowOrder) {
+    for (const QString& id : m_windowOrder) {
         if (m_floatingWindows.contains(id)) {
             continue;
         }
@@ -230,7 +230,7 @@ QStringList TilingState::stackWindows() const
 {
     QStringList stack;
     int tiledIndex = 0;
-    for (const QString &id : m_windowOrder) {
+    for (const QString& id : m_windowOrder) {
         if (m_floatingWindows.contains(id)) {
             continue;
         }
@@ -242,7 +242,7 @@ QStringList TilingState::stackWindows() const
     return stack;
 }
 
-bool TilingState::promoteToMaster(const QString &windowId)
+bool TilingState::promoteToMaster(const QString& windowId)
 {
     const int index = m_windowOrder.indexOf(windowId);
     if (index < 0) {
@@ -261,12 +261,12 @@ bool TilingState::promoteToMaster(const QString &windowId)
     return true;
 }
 
-bool TilingState::moveToFront(const QString &windowId)
+bool TilingState::moveToFront(const QString& windowId)
 {
     return promoteToMaster(windowId);
 }
 
-bool TilingState::insertAfterFocused(const QString &windowId)
+bool TilingState::insertAfterFocused(const QString& windowId)
 {
     if (windowId.isEmpty() || m_windowOrder.contains(windowId)) {
         return false; // Already tracked or invalid
@@ -284,7 +284,7 @@ bool TilingState::insertAfterFocused(const QString &windowId)
     return addWindow(windowId, insertPos);
 }
 
-bool TilingState::moveToPosition(const QString &windowId, int position)
+bool TilingState::moveToPosition(const QString& windowId, int position)
 {
     const int fromIndex = m_windowOrder.indexOf(windowId);
     if (fromIndex < 0) {
@@ -294,15 +294,15 @@ bool TilingState::moveToPosition(const QString &windowId, int position)
     return moveWindow(fromIndex, position);
 }
 
-int TilingState::windowPosition(const QString &windowId) const
+int TilingState::windowPosition(const QString& windowId) const
 {
     return windowIndex(windowId);
 }
 
-int TilingState::tiledWindowIndex(const QString &windowId) const
+int TilingState::tiledWindowIndex(const QString& windowId) const
 {
     int tiledIdx = 0;
-    for (const auto &id : m_windowOrder) {
+    for (const auto& id : m_windowOrder) {
         if (m_floatingWindows.contains(id)) {
             continue;
         }
@@ -314,7 +314,7 @@ int TilingState::tiledWindowIndex(const QString &windowId) const
     return -1;
 }
 
-bool TilingState::moveToTiledPosition(const QString &windowId, int tiledPosition)
+bool TilingState::moveToTiledPosition(const QString& windowId, int tiledPosition)
 {
     // Translate tiledPosition to raw m_windowOrder index
     int rawTarget = -1;
@@ -413,12 +413,12 @@ void TilingState::decreaseSplitRatio(qreal delta)
 // Per-Window Floating State
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool TilingState::isFloating(const QString &windowId) const
+bool TilingState::isFloating(const QString& windowId) const
 {
     return m_floatingWindows.contains(windowId);
 }
 
-void TilingState::setFloating(const QString &windowId, bool floating)
+void TilingState::setFloating(const QString& windowId, bool floating)
 {
     if (!m_windowOrder.contains(windowId)) {
         return;
@@ -440,7 +440,7 @@ void TilingState::setFloating(const QString &windowId, bool floating)
     notifyStateChanged();
 }
 
-bool TilingState::toggleFloating(const QString &windowId)
+bool TilingState::toggleFloating(const QString& windowId)
 {
     // Check if window is tracked first
     if (!m_windowOrder.contains(windowId)) {
@@ -467,7 +467,7 @@ QString TilingState::focusedWindow() const
     return m_focusedWindow;
 }
 
-void TilingState::setFocusedWindow(const QString &windowId)
+void TilingState::setFocusedWindow(const QString& windowId)
 {
     // Allow setting empty (no focus) or a tracked window
     if (!windowId.isEmpty() && !m_windowOrder.contains(windowId)) {
@@ -487,7 +487,7 @@ int TilingState::focusedTiledIndex() const
     }
 
     int tiledIndex = 0;
-    for (const QString &id : m_windowOrder) {
+    for (const QString& id : m_windowOrder) {
         if (m_floatingWindows.contains(id)) {
             continue;
         }
@@ -515,18 +515,18 @@ QJsonObject TilingState::toJson() const
     return json;
 }
 
-TilingState *TilingState::fromJson(const QJsonObject &json, QObject *parent)
+TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
 {
     const QString screenName = json[ScreenName].toString();
     if (screenName.isEmpty()) {
         return nullptr;
     }
 
-    auto *state = new TilingState(screenName, parent);
+    auto* state = new TilingState(screenName, parent);
 
     // Window order
     const QJsonArray orderArray = json[WindowOrder].toArray();
-    for (const QJsonValue &val : orderArray) {
+    for (const QJsonValue& val : orderArray) {
         const QString id = val.toString();
         if (!id.isEmpty()) {
             state->m_windowOrder.append(id);
@@ -535,7 +535,7 @@ TilingState *TilingState::fromJson(const QJsonObject &json, QObject *parent)
 
     // Floating windows (validate they exist in window order)
     const QJsonArray floatingArray = json[FloatingWindows].toArray();
-    for (const QJsonValue &val : floatingArray) {
+    for (const QJsonValue& val : floatingArray) {
         const QString id = val.toString();
         if (!id.isEmpty() && state->m_windowOrder.contains(id)) {
             state->m_floatingWindows.insert(id);
@@ -562,9 +562,8 @@ TilingState *TilingState::fromJson(const QJsonObject &json, QObject *parent)
 void TilingState::clear()
 {
     // Track if we need to emit signals
-    const bool hadData = !m_windowOrder.isEmpty() || !m_floatingWindows.isEmpty()
-                         || !m_focusedWindow.isEmpty() || m_masterCount != DefaultMasterCount
-                         || !qFuzzyCompare(1.0 + m_splitRatio, 1.0 + DefaultSplitRatio);
+    const bool hadData = !m_windowOrder.isEmpty() || !m_floatingWindows.isEmpty() || !m_focusedWindow.isEmpty()
+        || m_masterCount != DefaultMasterCount || !qFuzzyCompare(1.0 + m_splitRatio, 1.0 + DefaultSplitRatio);
 
     if (!hadData) {
         return; // Already at defaults, nothing to do
@@ -594,7 +593,7 @@ void TilingState::notifyStateChanged()
 // Calculated Zone Storage
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void TilingState::setCalculatedZones(const QVector<QRect> &zones)
+void TilingState::setCalculatedZones(const QVector<QRect>& zones)
 {
     m_calculatedZones = zones;
 }

@@ -19,103 +19,67 @@ Kirigami.Dialog {
 
     title: i18nc("@title:window", "Layout Settings")
     standardButtons: Kirigami.Dialog.NoButton
-
-    footer: Item {
-        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
-        implicitWidth: footerLayout.implicitWidth
-
-        RowLayout {
-            id: footerLayout
-            anchors.fill: parent
-            anchors.margins: Kirigami.Units.largeSpacing
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-                text: i18nc("@action:button", "Apply")
-                icon.name: "dialog-ok-apply"
-                onClicked: root.close()
-            }
-        }
-    }
     preferredWidth: Kirigami.Units.gridUnit * 22
     padding: Kirigami.Units.largeSpacing
-
     // Refresh checkbox/spinbox state every time the dialog opens,
     // so stale imperative assignments from Connections are overwritten.
     onOpened: {
-        if (!root.editorController) return
-        zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride
-        zonePaddingSpin.value = root.editorController.hasZonePaddingOverride
-            ? root.editorController.zonePadding
-            : root.editorController.globalZonePadding
-        outerGapOverrideCheck.checked = root.editorController.hasOuterGapOverride
-        outerGapSpin.value = root.editorController.hasOuterGapOverride
-            ? root.editorController.outerGap
-            : root.editorController.globalOuterGap
-        perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap
-        perSideTopSpin.value = root.editorController.outerGapTop >= 0
-            ? root.editorController.outerGapTop
-            : root.editorController.globalOuterGapTop
-        perSideBottomSpin.value = root.editorController.outerGapBottom >= 0
-            ? root.editorController.outerGapBottom
-            : root.editorController.globalOuterGapBottom
-        perSideLeftSpin.value = root.editorController.outerGapLeft >= 0
-            ? root.editorController.outerGapLeft
-            : root.editorController.globalOuterGapLeft
-        perSideRightSpin.value = root.editorController.outerGapRight >= 0
-            ? root.editorController.outerGapRight
-            : root.editorController.globalOuterGapRight
-        fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry
+        if (!root.editorController)
+            return ;
+
+        zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride;
+        zonePaddingSpin.value = root.editorController.hasZonePaddingOverride ? root.editorController.zonePadding : root.editorController.globalZonePadding;
+        outerGapOverrideCheck.checked = root.editorController.hasOuterGapOverride;
+        outerGapSpin.value = root.editorController.hasOuterGapOverride ? root.editorController.outerGap : root.editorController.globalOuterGap;
+        perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap;
+        perSideTopSpin.value = root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop;
+        perSideBottomSpin.value = root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom;
+        perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
+        perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
+        fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
     }
 
     // Sync UI state when values change externally (undo/redo, load layout)
     Connections {
-        target: root.editorController
-        enabled: root.editorController !== null && root.editorController !== undefined
-
         function onZonePaddingChanged() {
-            zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride
-            zonePaddingSpin.value = root.editorController.hasZonePaddingOverride
-                ? root.editorController.zonePadding
-                : root.editorController.globalZonePadding
+            zonePaddingOverrideCheck.checked = root.editorController.hasZonePaddingOverride;
+            zonePaddingSpin.value = root.editorController.hasZonePaddingOverride ? root.editorController.zonePadding : root.editorController.globalZonePadding;
         }
+
         function onOuterGapChanged() {
-            outerGapOverrideCheck.checked = root.editorController.hasOuterGapOverride
-            outerGapSpin.value = root.editorController.hasOuterGapOverride
-                ? root.editorController.outerGap
-                : root.editorController.globalOuterGap
-            perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap
-            perSideTopSpin.value = root.editorController.outerGapTop >= 0
-                ? root.editorController.outerGapTop
-                : root.editorController.globalOuterGapTop
-            perSideBottomSpin.value = root.editorController.outerGapBottom >= 0
-                ? root.editorController.outerGapBottom
-                : root.editorController.globalOuterGapBottom
-            perSideLeftSpin.value = root.editorController.outerGapLeft >= 0
-                ? root.editorController.outerGapLeft
-                : root.editorController.globalOuterGapLeft
-            perSideRightSpin.value = root.editorController.outerGapRight >= 0
-                ? root.editorController.outerGapRight
-                : root.editorController.globalOuterGapRight
+            outerGapOverrideCheck.checked = root.editorController.hasOuterGapOverride;
+            outerGapSpin.value = root.editorController.hasOuterGapOverride ? root.editorController.outerGap : root.editorController.globalOuterGap;
+            perSideOverrideCheck.checked = root.editorController.usePerSideOuterGap;
+            perSideTopSpin.value = root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop;
+            perSideBottomSpin.value = root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom;
+            perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
+            perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
         }
+
         function onGlobalZonePaddingChanged() {
             if (!root.editorController.hasZonePaddingOverride)
-                zonePaddingSpin.value = root.editorController.globalZonePadding
+                zonePaddingSpin.value = root.editorController.globalZonePadding;
+
         }
+
         function onGlobalOuterGapChanged() {
             if (!root.editorController.hasOuterGapOverride)
-                outerGapSpin.value = root.editorController.globalOuterGap
+                outerGapSpin.value = root.editorController.globalOuterGap;
+
             if (!root.editorController.hasPerSideOuterGapOverride) {
-                perSideTopSpin.value = root.editorController.globalOuterGapTop
-                perSideBottomSpin.value = root.editorController.globalOuterGapBottom
-                perSideLeftSpin.value = root.editorController.globalOuterGapLeft
-                perSideRightSpin.value = root.editorController.globalOuterGapRight
+                perSideTopSpin.value = root.editorController.globalOuterGapTop;
+                perSideBottomSpin.value = root.editorController.globalOuterGapBottom;
+                perSideLeftSpin.value = root.editorController.globalOuterGapLeft;
+                perSideRightSpin.value = root.editorController.globalOuterGapRight;
             }
         }
+
         function onUseFullScreenGeometryChanged() {
-            fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry
+            fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
         }
+
+        target: root.editorController
+        enabled: root.editorController !== null && root.editorController !== undefined
     }
 
     ColumnLayout {
@@ -137,6 +101,7 @@ Kirigami.Dialog {
         // ─── Spacing section ────────────────────────────────
         ColumnLayout {
             id: spacingSection
+
             spacing: Kirigami.Units.smallSpacing
             Layout.fillWidth: true
 
@@ -164,22 +129,23 @@ Kirigami.Dialog {
                 // Row 1: Zone Padding
                 CheckBox {
                     id: zonePaddingOverrideCheck
+
                     text: i18nc("@option:check", "Zone Padding")
                     checked: root.editorController ? root.editorController.hasZonePaddingOverride : false
                     Layout.fillWidth: true
                     onToggled: {
                         if (root.editorController) {
-                            if (checked) {
-                                root.editorController.zonePadding = root.editorController.globalZonePadding
-                            } else {
-                                root.editorController.clearZonePaddingOverride()
-                            }
+                            if (checked)
+                                root.editorController.zonePadding = root.editorController.globalZonePadding;
+                            else
+                                root.editorController.clearZonePaddingOverride();
                         }
                     }
                 }
 
                 SpinBox {
                     id: zonePaddingSpin
+
                     from: 0
                     to: 100
                     value: root.editorController ? root.editorController.globalZonePadding : 0
@@ -188,37 +154,37 @@ Kirigami.Dialog {
                     Accessible.name: i18nc("@label", "Zone padding value")
                     onValueModified: {
                         if (root.editorController && zonePaddingOverrideCheck.checked)
-                            root.editorController.zonePadding = value
+                            root.editorController.zonePadding = value;
+
                     }
                 }
 
                 Label {
-                    text: zonePaddingOverrideCheck.checked
-                        ? i18nc("@label", "px")
-                        : i18nc("@label showing global default", "px (global)")
-                    opacity: zonePaddingOverrideCheck.checked ? 1.0 : 0.6
+                    text: zonePaddingOverrideCheck.checked ? i18nc("@label", "px") : i18nc("@label showing global default", "px (global)")
+                    opacity: zonePaddingOverrideCheck.checked ? 1 : 0.6
                     Layout.preferredWidth: implicitWidth
                 }
 
                 // Row 2: Edge Gap
                 CheckBox {
                     id: outerGapOverrideCheck
+
                     text: i18nc("@option:check", "Edge Gap")
                     checked: root.editorController ? root.editorController.hasOuterGapOverride : false
                     Layout.fillWidth: true
                     onToggled: {
                         if (root.editorController) {
-                            if (checked) {
-                                root.editorController.outerGap = root.editorController.globalOuterGap
-                            } else {
-                                root.editorController.clearOuterGapOverride()
-                            }
+                            if (checked)
+                                root.editorController.outerGap = root.editorController.globalOuterGap;
+                            else
+                                root.editorController.clearOuterGapOverride();
                         }
                     }
                 }
 
                 SpinBox {
                     id: outerGapSpin
+
                     from: 0
                     to: 100
                     value: root.editorController ? root.editorController.globalOuterGap : 0
@@ -227,42 +193,45 @@ Kirigami.Dialog {
                     Accessible.name: i18nc("@label", "Edge gap value")
                     onValueModified: {
                         if (root.editorController && outerGapOverrideCheck.checked)
-                            root.editorController.outerGap = value
+                            root.editorController.outerGap = value;
+
                     }
                 }
 
                 Label {
-                    text: outerGapOverrideCheck.checked
-                        ? i18nc("@label", "px")
-                        : i18nc("@label showing global default", "px (global)")
-                    opacity: outerGapOverrideCheck.checked ? 1.0 : 0.6
+                    text: outerGapOverrideCheck.checked ? i18nc("@label", "px") : i18nc("@label showing global default", "px (global)")
+                    opacity: outerGapOverrideCheck.checked ? 1 : 0.6
                     Layout.preferredWidth: implicitWidth
                 }
+
             }
 
             // Per-side edge gap override
             CheckBox {
                 id: perSideOverrideCheck
+
                 text: i18nc("@option:check", "Set per side")
                 checked: root.editorController ? root.editorController.usePerSideOuterGap : false
                 enabled: outerGapOverrideCheck.checked
                 Layout.leftMargin: Kirigami.Units.largeSpacing * 2
                 onToggled: {
                     if (root.editorController) {
-                        root.editorController.usePerSideOuterGap = checked
+                        root.editorController.usePerSideOuterGap = checked;
                         if (checked) {
                             // Initialize per-side values from uniform gap if not set
-                            let uniformGap = root.editorController.outerGap >= 0
-                                ? root.editorController.outerGap
-                                : root.editorController.globalOuterGap
+                            let uniformGap = root.editorController.outerGap >= 0 ? root.editorController.outerGap : root.editorController.globalOuterGap;
                             if (root.editorController.outerGapTop < 0)
-                                root.editorController.outerGapTop = uniformGap
+                                root.editorController.outerGapTop = uniformGap;
+
                             if (root.editorController.outerGapBottom < 0)
-                                root.editorController.outerGapBottom = uniformGap
+                                root.editorController.outerGapBottom = uniformGap;
+
                             if (root.editorController.outerGapLeft < 0)
-                                root.editorController.outerGapLeft = uniformGap
+                                root.editorController.outerGapLeft = uniformGap;
+
                             if (root.editorController.outerGapRight < 0)
-                                root.editorController.outerGapRight = uniformGap
+                                root.editorController.outerGapRight = uniformGap;
+
                         }
                     }
                 }
@@ -275,75 +244,100 @@ Kirigami.Dialog {
                 visible: perSideOverrideCheck.checked && outerGapOverrideCheck.checked
                 Layout.leftMargin: Kirigami.Units.largeSpacing * 2
 
-                Label { text: i18nc("@label edge gap direction", "Top") }
+                Label {
+                    text: i18nc("@label edge gap direction", "Top")
+                }
+
                 SpinBox {
                     id: perSideTopSpin
-                    from: 0; to: 100
-                    value: root.editorController
-                        ? (root.editorController.outerGapTop >= 0
-                            ? root.editorController.outerGapTop
-                            : root.editorController.globalOuterGapTop)
-                        : 8
+
+                    from: 0
+                    to: 100
+                    value: root.editorController ? (root.editorController.outerGapTop >= 0 ? root.editorController.outerGapTop : root.editorController.globalOuterGapTop) : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Top edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapTop = value
+                            root.editorController.outerGapTop = value;
+
                     }
                 }
-                Label { text: i18nc("@label", "px") }
-                Label { text: i18nc("@label edge gap direction", "Bottom") }
+
+                Label {
+                    text: i18nc("@label", "px")
+                }
+
+                Label {
+                    text: i18nc("@label edge gap direction", "Bottom")
+                }
+
                 SpinBox {
                     id: perSideBottomSpin
-                    from: 0; to: 100
-                    value: root.editorController
-                        ? (root.editorController.outerGapBottom >= 0
-                            ? root.editorController.outerGapBottom
-                            : root.editorController.globalOuterGapBottom)
-                        : 8
+
+                    from: 0
+                    to: 100
+                    value: root.editorController ? (root.editorController.outerGapBottom >= 0 ? root.editorController.outerGapBottom : root.editorController.globalOuterGapBottom) : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Bottom edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapBottom = value
+                            root.editorController.outerGapBottom = value;
+
                     }
                 }
-                Label { text: i18nc("@label", "px") }
-                Label { text: i18nc("@label edge gap direction", "Left") }
+
+                Label {
+                    text: i18nc("@label", "px")
+                }
+
+                Label {
+                    text: i18nc("@label edge gap direction", "Left")
+                }
+
                 SpinBox {
                     id: perSideLeftSpin
-                    from: 0; to: 100
-                    value: root.editorController
-                        ? (root.editorController.outerGapLeft >= 0
-                            ? root.editorController.outerGapLeft
-                            : root.editorController.globalOuterGapLeft)
-                        : 8
+
+                    from: 0
+                    to: 100
+                    value: root.editorController ? (root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft) : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Left edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapLeft = value
+                            root.editorController.outerGapLeft = value;
+
                     }
                 }
-                Label { text: i18nc("@label", "px") }
-                Label { text: i18nc("@label edge gap direction", "Right") }
+
+                Label {
+                    text: i18nc("@label", "px")
+                }
+
+                Label {
+                    text: i18nc("@label edge gap direction", "Right")
+                }
+
                 SpinBox {
                     id: perSideRightSpin
-                    from: 0; to: 100
-                    value: root.editorController
-                        ? (root.editorController.outerGapRight >= 0
-                            ? root.editorController.outerGapRight
-                            : root.editorController.globalOuterGapRight)
-                        : 8
+
+                    from: 0
+                    to: 100
+                    value: root.editorController ? (root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight) : 8
                     Layout.preferredWidth: Kirigami.Units.gridUnit * 5
                     Accessible.name: i18nc("@label", "Right edge gap override")
                     onValueModified: {
                         if (root.editorController)
-                            root.editorController.outerGapRight = value
+                            root.editorController.outerGapRight = value;
+
                     }
                 }
-                Label { text: i18nc("@label", "px") }
+
+                Label {
+                    text: i18nc("@label", "px")
+                }
+
             }
+
         }
 
         Kirigami.Separator {
@@ -371,15 +365,43 @@ Kirigami.Dialog {
 
             CheckBox {
                 id: fullScreenGeomCheck
+
                 text: i18nc("@option:check", "Include area behind panels and taskbars")
                 checked: root.editorController ? root.editorController.useFullScreenGeometry : false
                 Layout.leftMargin: Kirigami.Units.largeSpacing
                 onToggled: {
                     if (root.editorController)
-                        root.editorController.useFullScreenGeometry = checked
+                        root.editorController.useFullScreenGeometry = checked;
+
                 }
             }
+
         }
+
+    }
+
+    footer: Item {
+        implicitHeight: footerLayout.implicitHeight + Kirigami.Units.largeSpacing * 2
+        implicitWidth: footerLayout.implicitWidth
+
+        RowLayout {
+            id: footerLayout
+
+            anchors.fill: parent
+            anchors.margins: Kirigami.Units.largeSpacing
+
+            Item {
+                Layout.fillWidth: true
+            }
+
+            Button {
+                text: i18nc("@action:button", "Apply")
+                icon.name: "dialog-ok-apply"
+                onClicked: root.close()
+            }
+
+        }
+
     }
 
 }

@@ -20,38 +20,38 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Simple setter: if changed, update member, emit specific signal and layoutModified
-#define LAYOUT_SETTER(Type, name, member, signal) \
-    void Layout::set##name(Type value) \
-    { \
-        if (member != value) { \
-            member = value; \
-            Q_EMIT signal(); \
-            emitModifiedIfNotBatched(); \
-        } \
+#define LAYOUT_SETTER(Type, name, member, signal)                                                                      \
+    void Layout::set##name(Type value)                                                                                 \
+    {                                                                                                                  \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+            emitModifiedIfNotBatched();                                                                                \
+        }                                                                                                              \
     }
 
 // Simple setter without layoutModified signal (for internal properties)
-#define LAYOUT_SETTER_NO_MODIFIED(Type, name, member, signal) \
-    void Layout::set##name(Type value) \
-    { \
-        if (member != value) { \
-            member = value; \
-            Q_EMIT signal(); \
-        } \
+#define LAYOUT_SETTER_NO_MODIFIED(Type, name, member, signal)                                                          \
+    void Layout::set##name(Type value)                                                                                 \
+    {                                                                                                                  \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+        }                                                                                                              \
     }
 
 // Setter that allows -1 (use global setting) or any non-negative value
-#define LAYOUT_SETTER_MIN_NEGATIVE_ONE(name, member, signal) \
-    void Layout::set##name(int value) \
-    { \
-        if (value < -1) { \
-            value = -1; \
-        } \
-        if (member != value) { \
-            member = value; \
-            Q_EMIT signal(); \
-            emitModifiedIfNotBatched(); \
-        } \
+#define LAYOUT_SETTER_MIN_NEGATIVE_ONE(name, member, signal)                                                           \
+    void Layout::set##name(int value)                                                                                  \
+    {                                                                                                                  \
+        if (value < -1) {                                                                                              \
+            value = -1;                                                                                                \
+        }                                                                                                              \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+            emitModifiedIfNotBatched();                                                                                \
+        }                                                                                                              \
     }
 
 Layout::Layout(QObject* parent)
@@ -155,13 +155,20 @@ Layout& Layout::operator=(const Layout& other)
         Q_EMIT zonesChanged();
 
         // Emit visibility signals for changed properties
-        if (hiddenChanged) Q_EMIT hiddenFromSelectorChanged();
-        if (screensChanged) Q_EMIT allowedScreensChanged();
-        if (desktopsChanged) Q_EMIT allowedDesktopsChanged();
-        if (activitiesChanged) Q_EMIT allowedActivitiesChanged();
-        if (rulesChanged) Q_EMIT appRulesChanged();
-        if (autoAssignDiff) Q_EMIT autoAssignChanged();
-        if (fullScreenGeomDiff) Q_EMIT useFullScreenGeometryChanged();
+        if (hiddenChanged)
+            Q_EMIT hiddenFromSelectorChanged();
+        if (screensChanged)
+            Q_EMIT allowedScreensChanged();
+        if (desktopsChanged)
+            Q_EMIT allowedDesktopsChanged();
+        if (activitiesChanged)
+            Q_EMIT allowedActivitiesChanged();
+        if (rulesChanged)
+            Q_EMIT appRulesChanged();
+        if (autoAssignDiff)
+            Q_EMIT autoAssignChanged();
+        if (fullScreenGeomDiff)
+            Q_EMIT useFullScreenGeometryChanged();
 
         m_dirty = true;
         endBatchModify();

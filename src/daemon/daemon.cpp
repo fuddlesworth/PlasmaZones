@@ -67,7 +67,6 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setSingleShot(true);
     m_geometryUpdateTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
-
 }
 
 Daemon::~Daemon()
@@ -82,39 +81,40 @@ bool Daemon::init()
     // The registry checks for Qt6::ShaderTools availability at compile time
     // and for qsb tool availability at runtime
     auto* shaderRegistry = new ShaderRegistry(this);
-    auto scheduleWarmForShader = [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
-        if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
-            return;
-        }
-        if (info.vertexShaderPath.isEmpty() || info.sourcePath.isEmpty()) {
-            return;
-        }
-        if (!QFile::exists(info.vertexShaderPath) || !QFile::exists(info.sourcePath)) {
-            return;
-        }
-        ShaderRegistry* reg = registryPtr.data();
-        if (!reg) {
-            return;
-        }
-        const QString shaderId = info.id;
-        auto* watcher = new QFutureWatcher<WarmShaderBakeResult>(this);
-        connect(watcher, &QFutureWatcher<WarmShaderBakeResult>::finished, this, [registryPtr, watcher, shaderId]() {
-            if (!registryPtr) {
-                watcher->deleteLater();
+    auto scheduleWarmForShader =
+        [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
+            if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
                 return;
             }
-            const WarmShaderBakeResult r = watcher->result();
-            if (!r.success) {
-                qCWarning(lcDaemon) << "Shader bake failed for" << shaderId << ":" << r.errorMessage;
+            if (info.vertexShaderPath.isEmpty() || info.sourcePath.isEmpty()) {
+                return;
             }
-            registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
-            watcher->deleteLater();
-        });
-        reg->reportShaderBakeStarted(shaderId);
-        watcher->setFuture(QtConcurrent::run([vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
-            return warmShaderBakeCacheForPaths(vertPath, fragPath);
-        }));
-    };
+            if (!QFile::exists(info.vertexShaderPath) || !QFile::exists(info.sourcePath)) {
+                return;
+            }
+            ShaderRegistry* reg = registryPtr.data();
+            if (!reg) {
+                return;
+            }
+            const QString shaderId = info.id;
+            auto* watcher = new QFutureWatcher<WarmShaderBakeResult>(this);
+            connect(watcher, &QFutureWatcher<WarmShaderBakeResult>::finished, this, [registryPtr, watcher, shaderId]() {
+                if (!registryPtr) {
+                    watcher->deleteLater();
+                    return;
+                }
+                const WarmShaderBakeResult r = watcher->result();
+                if (!r.success) {
+                    qCWarning(lcDaemon) << "Shader bake failed for" << shaderId << ":" << r.errorMessage;
+                }
+                registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
+                watcher->deleteLater();
+            });
+            reg->reportShaderBakeStarted(shaderId);
+            watcher->setFuture(QtConcurrent::run([vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
+                return warmShaderBakeCacheForPaths(vertPath, fragPath);
+            }));
+        };
     connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {
         const QList<ShaderRegistry::ShaderInfo> shaders = ShaderRegistry::instance()->availableShaders();
         for (const ShaderRegistry::ShaderInfo& info : shaders) {
@@ -135,8 +135,7 @@ bool Daemon::init()
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
         for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(
-                GeometryUtils::effectiveScreenGeometry(layout, primary));
+            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primary));
         }
     }
 
@@ -146,8 +145,7 @@ bool Daemon::init()
     if (auto* defLayout = m_layoutManager->defaultLayout()) {
         m_overlayService->setLayout(defLayout);
         m_zoneDetector->setLayout(defLayout);
-        qCInfo(lcDaemon) << "Overlay configured layout= " << defLayout->name()
-                         << " zones= " << defLayout->zoneCount();
+        qCInfo(lcDaemon) << "Overlay configured layout= " << defLayout->name() << " zones= " << defLayout->zoneCount();
     } else {
         qCWarning(lcDaemon) << "No default layout available for overlay";
     }
@@ -163,8 +161,7 @@ bool Daemon::init()
             // on the fly via GeometryUtils::getZoneGeometryWithGaps().
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
-                layout->recalculateZoneGeometries(
-                    GeometryUtils::effectiveScreenGeometry(layout, primary));
+                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -188,8 +185,7 @@ bool Daemon::init()
                 // Only recalculate for the specific screen
                 QScreen* screen = m_screenManager->screenByName(screenName);
                 if (screen) {
-                    layout->recalculateZoneGeometries(
-                        GeometryUtils::effectiveScreenGeometry(layout, screen));
+                    layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts
@@ -225,16 +221,14 @@ bool Daemon::init()
         // Handle autotile feature gate toggle ON:
         // When the KCM checkbox enables autotile, activate autotile on all screens
         // using the last algorithm (same logic as snapping-to-autotile transition).
-        if (autotileToggled && autotileNow
-            && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
+        if (autotileToggled && autotileNow && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
             handleSnappingToAutotile();
         }
 
         // Handle snapping toggle → autotile activation.
         // Guard: skip if already in autotile mode to avoid resetting per-screen
         // algorithm customizations with the global algorithm.
-        if (snappingToggled && !snappingNow && autotileNow
-            && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
+        if (snappingToggled && !snappingNow && autotileNow && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
             handleSnappingToAutotile();
         }
 
@@ -291,8 +285,8 @@ bool Daemon::init()
     // signals are for D-Bus, not Qt connections.
 
     // Initialize autotile engine
-    m_autotileEngine = std::make_unique<AutotileEngine>(
-        m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_screenManager.get(), this);
+    m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
+                                                        m_screenManager.get(), this);
     m_autotileEngine->syncFromSettings(m_settings.get());
     m_autotileEngine->connectToSettings(m_settings.get());
 

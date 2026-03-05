@@ -9,7 +9,7 @@ namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-TilingAlgorithm::TilingAlgorithm(QObject *parent)
+TilingAlgorithm::TilingAlgorithm(QObject* parent)
     : QObject(parent)
 {
 }
@@ -68,7 +68,7 @@ QVector<int> TilingAlgorithm::distributeEvenly(int total, int count)
     return sizes;
 }
 
-QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, int outerGap)
+QRect TilingAlgorithm::innerRect(const QRect& screenGeometry, int outerGap)
 {
     outerGap = std::max(0, outerGap);
     const int w = std::max(1, screenGeometry.width() - 2 * outerGap);
@@ -80,7 +80,7 @@ QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, int outerGap)
     return QRect(x, y, w, h);
 }
 
-QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, const EdgeGaps &gaps)
+QRect TilingAlgorithm::innerRect(const QRect& screenGeometry, const EdgeGaps& gaps)
 {
     const int l = std::max(0, gaps.left);
     const int r = std::max(0, gaps.right);
@@ -90,12 +90,10 @@ QRect TilingAlgorithm::innerRect(const QRect &screenGeometry, const EdgeGaps &ga
     const int h = std::max(1, screenGeometry.height() - t - b);
     // When gaps exceed screen dimension, center the result to avoid placing
     // the rect off-screen (same behavior as the uniform overload)
-    const int x = (l + r >= screenGeometry.width())
-        ? screenGeometry.left() + (screenGeometry.width() - w) / 2
-        : screenGeometry.left() + l;
-    const int y = (t + b >= screenGeometry.height())
-        ? screenGeometry.top() + (screenGeometry.height() - h) / 2
-        : screenGeometry.top() + t;
+    const int x = (l + r >= screenGeometry.width()) ? screenGeometry.left() + (screenGeometry.width() - w) / 2
+                                                    : screenGeometry.left() + l;
+    const int y = (t + b >= screenGeometry.height()) ? screenGeometry.top() + (screenGeometry.height() - h) / 2
+                                                     : screenGeometry.top() + t;
     return QRect(x, y, w, h);
 }
 
@@ -113,8 +111,7 @@ QVector<int> TilingAlgorithm::distributeWithGaps(int total, int count, int gap)
     return distributeEvenly(available, count);
 }
 
-QVector<int> TilingAlgorithm::distributeWithMinSizes(int total, int count, int gap,
-                                                     const QVector<int> &minDims)
+QVector<int> TilingAlgorithm::distributeWithMinSizes(int total, int count, int gap, const QVector<int>& minDims)
 {
     if (count <= 0 || total <= 0) {
         return {};
@@ -149,8 +146,7 @@ QVector<int> TilingAlgorithm::distributeWithMinSizes(int total, int count, int g
         for (int i = 0; i < count; ++i) {
             int allocated;
             if (remainingMin > 0) {
-                allocated = static_cast<int>(
-                    static_cast<qint64>(remaining) * mins[i] / remainingMin);
+                allocated = static_cast<int>(static_cast<qint64>(remaining) * mins[i] / remainingMin);
             } else {
                 allocated = remaining / std::max(1, count - i);
             }
@@ -223,19 +219,19 @@ QVector<int> TilingAlgorithm::distributeWithMinSizes(int total, int count, int g
     return sizes;
 }
 
-int TilingAlgorithm::minWidthAt(const QVector<QSize> &minSizes, int index)
+int TilingAlgorithm::minWidthAt(const QVector<QSize>& minSizes, int index)
 {
     return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].width()) : 0;
 }
 
-int TilingAlgorithm::minHeightAt(const QVector<QSize> &minSizes, int index)
+int TilingAlgorithm::minHeightAt(const QVector<QSize>& minSizes, int index)
 {
     return (index >= 0 && index < minSizes.size()) ? std::max(0, minSizes[index].height()) : 0;
 }
 
-TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(
-    int areaX, int contentWidth, int innerGap, qreal splitRatio,
-    int minLeftWidth, int minCenterWidth, int minRightWidth)
+TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(int areaX, int contentWidth, int innerGap,
+                                                                           qreal splitRatio, int minLeftWidth,
+                                                                           int minCenterWidth, int minRightWidth)
 {
     // Guard: degenerate content width (screen narrower than 2 * gap)
     if (contentWidth <= 0) {
@@ -247,9 +243,9 @@ TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(
     // to avoid over-constraining the center when only one side is constrained.
     const int effMinLeft = std::max(static_cast<int>(MinZoneSizePx), minLeftWidth);
     const int effMinRight = std::max(static_cast<int>(MinZoneSizePx), minRightWidth);
-    const qreal maxCenter = std::min(
-        static_cast<double>(MaxSplitRatio),
-        1.0 - (static_cast<double>(effMinLeft + effMinRight) / static_cast<double>(contentWidth)));
+    const qreal maxCenter =
+        std::min(static_cast<double>(MaxSplitRatio),
+                 1.0 - (static_cast<double>(effMinLeft + effMinRight) / static_cast<double>(contentWidth)));
     qreal centerRatio = std::clamp(splitRatio, MinSplitRatio, std::max(MinSplitRatio, maxCenter));
 
     // Ensure center satisfies its minimum
@@ -300,12 +296,14 @@ TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(
                 int take = std::min(deficit, leftWidth - 1);
                 leftWidth -= take;
                 deficit -= take;
-                if (deficit > 0) rightWidth -= deficit;
+                if (deficit > 0)
+                    rightWidth -= deficit;
             } else {
                 int take = std::min(deficit, rightWidth - 1);
                 rightWidth -= take;
                 deficit -= take;
-                if (deficit > 0) leftWidth -= deficit;
+                if (deficit > 0)
+                    leftWidth -= deficit;
             }
         }
     }
@@ -331,16 +329,16 @@ TilingAlgorithm::ThreeColumnWidths TilingAlgorithm::solveThreeColumnWidths(
         }
     }
 
-    return ThreeColumnWidths{
-        leftWidth, centerWidth, rightWidth,
-        areaX,
-        areaX + leftWidth + innerGap,
-        areaX + leftWidth + innerGap + centerWidth + innerGap
-    };
+    return ThreeColumnWidths{leftWidth,
+                             centerWidth,
+                             rightWidth,
+                             areaX,
+                             areaX + leftWidth + innerGap,
+                             areaX + leftWidth + innerGap + centerWidth + innerGap};
 }
 
-TilingAlgorithm::CumulativeMinDims TilingAlgorithm::computeAlternatingCumulativeMinDims(
-    int windowCount, const QVector<QSize>& minSizes, int innerGap)
+TilingAlgorithm::CumulativeMinDims
+TilingAlgorithm::computeAlternatingCumulativeMinDims(int windowCount, const QVector<QSize>& minSizes, int innerGap)
 {
     CumulativeMinDims result;
     result.minW.resize(windowCount + 1, 0);
@@ -366,8 +364,8 @@ TilingAlgorithm::CumulativeMinDims TilingAlgorithm::computeAlternatingCumulative
     return result;
 }
 
-void TilingAlgorithm::appendGracefulDegradation(QVector<QRect>& zones, const QRect& remaining,
-                                                  int leftover, int innerGap)
+void TilingAlgorithm::appendGracefulDegradation(QVector<QRect>& zones, const QRect& remaining, int leftover,
+                                                int innerGap)
 {
     if (leftover <= 0) {
         return;
@@ -401,9 +399,8 @@ void TilingAlgorithm::appendGracefulDegradation(QVector<QRect>& zones, const QRe
     }
 }
 
-qreal TilingAlgorithm::clampOrProportionalFallback(qreal ratio, qreal minFirstRatio,
-                                                     qreal maxFirstRatio,
-                                                     int firstDim, int secondDim)
+qreal TilingAlgorithm::clampOrProportionalFallback(qreal ratio, qreal minFirstRatio, qreal maxFirstRatio, int firstDim,
+                                                   int secondDim)
 {
     if (minFirstRatio <= maxFirstRatio) {
         return std::clamp(ratio, minFirstRatio, maxFirstRatio);

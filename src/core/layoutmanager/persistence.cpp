@@ -47,8 +47,7 @@ void LayoutManager::loadLayouts()
     if (!m_activeLayout && !m_layouts.isEmpty()) {
         Layout* initial = defaultLayout();
         if (initial) {
-            qCInfo(lcLayout) << "Active layout name= " << initial->name()
-                             << " id= " << initial->id().toString()
+            qCInfo(lcLayout) << "Active layout name= " << initial->name() << " id= " << initial->id().toString()
                              << " zones= " << initial->zoneCount();
         }
         setActiveLayout(initial);
@@ -74,8 +73,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
     const auto entries = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
 
     for (const auto& entry : entries) {
-        if (entry == QStringLiteral("assignments.json")
-            || entry == QStringLiteral("autotile-overrides.json")) {
+        if (entry == QStringLiteral("assignments.json") || entry == QStringLiteral("autotile-overrides.json")) {
             continue; // Skip non-layout files
         }
 
@@ -122,9 +120,12 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
             if (!existing) {
                 // No duplicate - add the layout
                 m_layouts.append(layout);
-                connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
+                connect(layout, &Layout::layoutModified, this, [this, layout]() {
+                    saveLayout(layout);
+                });
                 qCInfo(lcLayout) << "  Loaded layout name= " << layout->name() << " zones= " << layout->zoneCount()
-                                  << " source= " << (layout->isSystemLayout() ? "system" : "user") << " from= " << filePath;
+                                 << " source= " << (layout->isSystemLayout() ? "system" : "user")
+                                 << " from= " << filePath;
             } else {
                 // Duplicate ID found - user layouts (from .local) should override system layouts
                 if (!layout->isSystemLayout() && existing->isSystemLayout()) {
@@ -135,12 +136,16 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                     int index = m_layouts.indexOf(existing);
                     disconnect(existing, &Layout::layoutModified, this, nullptr);
                     m_layouts.replace(index, layout);
-                    connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
+                    connect(layout, &Layout::layoutModified, this, [this, layout]() {
+                        saveLayout(layout);
+                    });
                     delete existing;
-                    qCInfo(lcLayout) << "  User layout overrides system layout name= " << layout->name() << " from= " << filePath;
+                    qCInfo(lcLayout) << "  User layout overrides system layout name= " << layout->name()
+                                     << " from= " << filePath;
                 } else {
                     // Same source type or system trying to override user - skip
-                    qCInfo(lcLayout) << "  Skipping duplicate layout name= " << layout->name() << " id= " << layout->id();
+                    qCInfo(lcLayout) << "  Skipping duplicate layout name= " << layout->name()
+                                     << " id= " << layout->id();
                     delete layout;
                 }
             }
@@ -170,8 +175,7 @@ void LayoutManager::saveLayout(Layout* layout)
     QFile file(filePath);
 
     if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcLayout) << "Failed to open layout file for writing:" << filePath
-                            << "Error:" << file.errorString();
+        qCWarning(lcLayout) << "Failed to open layout file for writing:" << filePath << "Error:" << file.errorString();
         return;
     }
 
@@ -249,8 +253,7 @@ void LayoutManager::loadAssignments()
         if (sid.isEmpty()) {
             sid = obj[JsonKeys::Screen].toString();
         }
-        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(),
-                                obj[JsonKeys::Activity].toString()};
+        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(), obj[JsonKeys::Activity].toString()};
 
         const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
 
@@ -293,15 +296,16 @@ void LayoutManager::loadAssignments()
         }
     }
 
-    qCInfo(lcLayout) << "Loaded assignments= " << m_assignments.size() << " quickShortcuts= " << m_quickLayoutShortcuts.size();
+    qCInfo(lcLayout) << "Loaded assignments= " << m_assignments.size()
+                     << " quickShortcuts= " << m_quickLayoutShortcuts.size();
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         Layout* layout = LayoutId::isAutotile(it.value()) ? nullptr : layoutById(QUuid::fromString(it.value()));
-        QString layoutName = layout ? layout->name()
-                                    : (LayoutId::isAutotile(it.value()) ? it.value() : QStringLiteral("(unknown)"));
-        qCDebug(lcLayout) << "  Assignment screenId= " << it.key().screenId
-                         << " desktop= " << it.key().virtualDesktop
-                         << " activity= " << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
-                         << " layout= " << layoutName;
+        QString layoutName =
+            layout ? layout->name() : (LayoutId::isAutotile(it.value()) ? it.value() : QStringLiteral("(unknown)"));
+        qCDebug(lcLayout) << "  Assignment screenId= " << it.key().screenId << " desktop= " << it.key().virtualDesktop
+                          << " activity= "
+                          << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
+                          << " layout= " << layoutName;
     }
 }
 
@@ -474,7 +478,9 @@ Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& syste
 
     layout->setSourcePath(systemPath);
     m_layouts.append(layout);
-    connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
+    connect(layout, &Layout::layoutModified, this, [this, layout]() {
+        saveLayout(layout);
+    });
     Q_EMIT layoutAdded(layout);
     qCInfo(lcLayout) << "Restored system layout name=" << layout->name() << "from=" << systemPath;
     return layout;

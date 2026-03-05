@@ -35,7 +35,7 @@ class PLASMAZONES_EXPORT GridAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit GridAlgorithm(QObject *parent = nullptr);
+    explicit GridAlgorithm(QObject* parent = nullptr);
     ~GridAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -43,11 +43,20 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return false; }
-    int defaultMaxWindows() const noexcept override { return 9; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return false;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 9;
+    }
 };
 
 } // namespace PlasmaZones

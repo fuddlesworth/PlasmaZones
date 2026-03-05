@@ -15,9 +15,10 @@ namespace PlasmaZones {
  * Contains the extracted colors and success status.
  * All colors have appropriate alpha values pre-applied.
  */
-struct PLASMAZONES_EXPORT ColorImportResult {
+struct PLASMAZONES_EXPORT ColorImportResult
+{
     bool success = false;
-    QString errorMessage;  // Human-readable error if success=false
+    QString errorMessage; // Human-readable error if success=false
     QColor highlightColor;
     QColor inactiveColor;
     QColor borderColor;

@@ -105,12 +105,10 @@ void ModeTracker::load()
     m_lastManualLayoutId = group.readEntry(QStringLiteral("LastManualLayoutId"), QString());
     const int rawMode = group.readEntry(QStringLiteral("LastTilingMode"), 0);
     m_currentMode = (rawMode == 1) ? TilingMode::Autotile : TilingMode::Manual;
-    m_lastAutotileAlgorithm = group.readEntry(QStringLiteral("LastAutotileAlgorithm"),
-                                               QStringLiteral("master-stack"));
+    m_lastAutotileAlgorithm = group.readEntry(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("master-stack"));
 
     qCDebug(lcDaemon) << "ModeTracker loaded mode=" << static_cast<int>(m_currentMode)
-                       << "lastLayout=" << m_lastManualLayoutId
-                       << "lastAlgorithm=" << m_lastAutotileAlgorithm;
+                      << "lastLayout=" << m_lastManualLayoutId << "lastAlgorithm=" << m_lastAutotileAlgorithm;
 }
 
 void ModeTracker::save()

@@ -37,11 +37,10 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector
         Q_EMIT zoneHighlightChanged(QString());
     });
 
-    connect(m_overlayService, &IOverlayService::snapAssistShown, this, [this](const QString& screenName,
-                                                                              const QString& emptyZonesJson,
-                                                                              const QString& candidatesJson) {
-        Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
-    });
+    connect(m_overlayService, &IOverlayService::snapAssistShown, this,
+            [this](const QString& screenName, const QString& emptyZonesJson, const QString& candidatesJson) {
+                Q_EMIT snapAssistShown(screenName, emptyZonesJson, candidatesJson);
+            });
 }
 
 void OverlayAdaptor::showOverlay()
@@ -129,8 +128,8 @@ void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, cons
     m_overlayService->showShaderPreview(x, y, width, height, screenName, shaderId, shaderParamsJson, zonesJson);
 }
 
-void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height,
-                                        const QString& shaderParamsJson, const QString& zonesJson)
+void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
+                                         const QString& zonesJson)
 {
     m_overlayService->updateShaderPreview(x, y, width, height, shaderParamsJson, zonesJson);
 }
@@ -148,8 +147,8 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenName, const QString& em
         return false;
     }
     // Return false when we know overlay won't be shown (avoids misleading "success")
-    if (emptyZonesJson.isEmpty() || emptyZonesJson == QLatin1String("[]")
-        || candidatesJson.isEmpty() || candidatesJson == QLatin1String("[]")) {
+    if (emptyZonesJson.isEmpty() || emptyZonesJson == QLatin1String("[]") || candidatesJson.isEmpty()
+        || candidatesJson == QLatin1String("[]")) {
         return false;
     }
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus

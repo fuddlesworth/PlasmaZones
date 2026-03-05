@@ -98,10 +98,14 @@ QJsonObject Layout::toJson() const
     // Per-side outer gap overrides — serialize toggle whenever enabled so user intent is preserved
     if (m_usePerSideOuterGap) {
         json[JsonKeys::UsePerSideOuterGap] = true;
-        if (m_outerGapTop >= 0) json[JsonKeys::OuterGapTop] = m_outerGapTop;
-        if (m_outerGapBottom >= 0) json[JsonKeys::OuterGapBottom] = m_outerGapBottom;
-        if (m_outerGapLeft >= 0) json[JsonKeys::OuterGapLeft] = m_outerGapLeft;
-        if (m_outerGapRight >= 0) json[JsonKeys::OuterGapRight] = m_outerGapRight;
+        if (m_outerGapTop >= 0)
+            json[JsonKeys::OuterGapTop] = m_outerGapTop;
+        if (m_outerGapBottom >= 0)
+            json[JsonKeys::OuterGapBottom] = m_outerGapBottom;
+        if (m_outerGapLeft >= 0)
+            json[JsonKeys::OuterGapLeft] = m_outerGapLeft;
+        if (m_outerGapRight >= 0)
+            json[JsonKeys::OuterGapRight] = m_outerGapRight;
     }
     json[JsonKeys::ShowZoneNumbers] = m_showZoneNumbers;
     if (m_defaultOrder != 999) {
@@ -212,7 +216,8 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
 
     // Visibility filtering
     layout->m_hiddenFromSelector = json[JsonKeys::HiddenFromSelector].toBool(false);
-    LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops, layout->m_allowedActivities);
+    LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops,
+                                       layout->m_allowedActivities);
 
     // Migrate legacy connector names in allowedScreens to screen IDs
     for (int i = 0; i < layout->m_allowedScreens.size(); ++i) {
@@ -221,8 +226,7 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
             if (resolved != layout->m_allowedScreens[i]) {
                 layout->m_allowedScreens[i] = resolved;
             } else {
-                qCDebug(lcLayout) << "allowedScreens: could not resolve connector name"
-                                  << layout->m_allowedScreens[i]
+                qCDebug(lcLayout) << "allowedScreens: could not resolve connector name" << layout->m_allowedScreens[i]
                                   << "to screen ID (monitor may be disconnected)";
             }
         }

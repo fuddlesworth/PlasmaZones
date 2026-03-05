@@ -61,15 +61,13 @@ QString readEdidHeaderSerial(const QString& connectorName)
             }
             // Validate EDID magic header: bytes 0-7 must be 00 FF FF FF FF FF FF 00
             const auto* data = reinterpret_cast<const uint8_t*>(header.constData());
-            if (data[0] != 0x00 || data[1] != 0xFF || data[2] != 0xFF || data[3] != 0xFF
-                || data[4] != 0xFF || data[5] != 0xFF || data[6] != 0xFF || data[7] != 0x00) {
+            if (data[0] != 0x00 || data[1] != 0xFF || data[2] != 0xFF || data[3] != 0xFF || data[4] != 0xFF
+                || data[5] != 0xFF || data[6] != 0xFF || data[7] != 0x00) {
                 continue; // Not a valid EDID blob
             }
             // Bytes 12-15: serial number (little-endian uint32)
-            uint32_t serial = data[12]
-                | (static_cast<uint32_t>(data[13]) << 8)
-                | (static_cast<uint32_t>(data[14]) << 16)
-                | (static_cast<uint32_t>(data[15]) << 24);
+            uint32_t serial = data[12] | (static_cast<uint32_t>(data[13]) << 8)
+                | (static_cast<uint32_t>(data[14]) << 16) | (static_cast<uint32_t>(data[15]) << 24);
             if (serial != 0) {
                 result = QString::number(serial);
                 break; // Found valid EDID with non-zero serial
@@ -199,10 +197,10 @@ void warnDuplicateScreenIds()
     }
     for (auto it = idToConnectors.constBegin(); it != idToConnectors.constEnd(); ++it) {
         if (it.value().size() > 1) {
-            qWarning("PlasmaZones: duplicate screen ID \"%s\" for connectors: %s. "
-                     "Layout assignments may be shared between these monitors.",
-                     qPrintable(it.key()),
-                     qPrintable(it.value().join(QStringLiteral(", "))));
+            qWarning(
+                "PlasmaZones: duplicate screen ID \"%s\" for connectors: %s. "
+                "Layout assignments may be shared between these monitors.",
+                qPrintable(it.key()), qPrintable(it.value().join(QStringLiteral(", "))));
         }
     }
 }

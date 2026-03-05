@@ -49,14 +49,10 @@ void CavaService::start()
 
     if (!m_process) {
         m_process = new QProcess(this);
-        connect(m_process, &QProcess::readyReadStandardOutput,
-                this, &CavaService::onReadyReadStandardOutput);
-        connect(m_process, &QProcess::stateChanged,
-                this, &CavaService::onProcessStateChanged);
-        connect(m_process, &QProcess::finished,
-                this, &CavaService::onProcessFinished);
-        connect(m_process, &QProcess::errorOccurred,
-                this, &CavaService::onProcessError);
+        connect(m_process, &QProcess::readyReadStandardOutput, this, &CavaService::onReadyReadStandardOutput);
+        connect(m_process, &QProcess::stateChanged, this, &CavaService::onProcessStateChanged);
+        connect(m_process, &QProcess::finished, this, &CavaService::onProcessFinished);
+        connect(m_process, &QProcess::errorOccurred, this, &CavaService::onProcessError);
     }
 
     m_stdoutBuffer.clear();
@@ -66,8 +62,10 @@ void CavaService::start()
     // Kurve-style: pass config via stdin, read raw output from stdout.
     // Use SeparateChannels so we can capture stderr for error diagnostics.
     m_process->setProcessChannelMode(QProcess::SeparateChannels);
-    m_process->start(QStringLiteral("sh"), QStringList{QStringLiteral("-c"),
-        QStringLiteral("exec %1 -p /dev/stdin <<'CAVAEOF'\n%2\nCAVAEOF").arg(cavaPath, m_config)});
+    m_process->start(
+        QStringLiteral("sh"),
+        QStringList{QStringLiteral("-c"),
+                    QStringLiteral("exec %1 -p /dev/stdin <<'CAVAEOF'\n%2\nCAVAEOF").arg(cavaPath, m_config)});
 
     // Async start: errors reported via QProcess::errorOccurred signal (already connected).
     // No blocking waitForStarted() to avoid freezing the GUI thread.
@@ -142,27 +140,30 @@ void CavaService::buildConfig()
     const QString audioMethod = detectAudioMethod();
     // CAVA config: raw output, ascii format, auto-detected input
     m_config = QStringLiteral(
-        "[general]\n"
-        "framerate=%1\n"
-        "bars=%2\n"
-        "autosens=1\n"
-        "lower_cutoff_freq=50\n"
-        "higher_cutoff_freq=10000\n"
-        "[input]\n"
-        "method=%4\n"
-        "source=auto\n"
-        "[output]\n"
-        "method=raw\n"
-        "raw_target=/dev/stdout\n"
-        "data_format=ascii\n"
-        "ascii_max_range=%3\n"
-        "bar_delimiter=59\n"
-        "frame_delimiter=10\n"
-        "[smoothing]\n"
-        "noise_reduction=77\n"
-        "monstercat=0\n"
-        "waves=0\n"
-    ).arg(m_framerate).arg(m_barCount).arg(kAsciiMaxRange).arg(audioMethod);
+                   "[general]\n"
+                   "framerate=%1\n"
+                   "bars=%2\n"
+                   "autosens=1\n"
+                   "lower_cutoff_freq=50\n"
+                   "higher_cutoff_freq=10000\n"
+                   "[input]\n"
+                   "method=%4\n"
+                   "source=auto\n"
+                   "[output]\n"
+                   "method=raw\n"
+                   "raw_target=/dev/stdout\n"
+                   "data_format=ascii\n"
+                   "ascii_max_range=%3\n"
+                   "bar_delimiter=59\n"
+                   "frame_delimiter=10\n"
+                   "[smoothing]\n"
+                   "noise_reduction=77\n"
+                   "monstercat=0\n"
+                   "waves=0\n")
+                   .arg(m_framerate)
+                   .arg(m_barCount)
+                   .arg(kAsciiMaxRange)
+                   .arg(audioMethod);
 }
 
 void CavaService::onReadyReadStandardOutput()
@@ -206,8 +207,8 @@ void CavaService::onReadyReadStandardOutput()
             static constexpr float kSmoothingAlpha = 0.5f;
             if (m_smoothedSpectrum.size() == spectrum.size()) {
                 for (int i = 0; i < spectrum.size(); ++i) {
-                    m_smoothedSpectrum[i] = kSmoothingAlpha * spectrum[i]
-                                          + (1.0f - kSmoothingAlpha) * m_smoothedSpectrum[i];
+                    m_smoothedSpectrum[i] =
+                        kSmoothingAlpha * spectrum[i] + (1.0f - kSmoothingAlpha) * m_smoothedSpectrum[i];
                 }
             } else {
                 m_smoothedSpectrum = spectrum;
@@ -233,10 +234,8 @@ void CavaService::onProcessFinished(int exitCode, QProcess::ExitStatus /*exitSta
         return;
     }
     if (exitCode != 0) {
-        const QByteArray stderrOutput = m_process ? m_process->readAllStandardError().left(500)
-                                                  : QByteArray();
-        qCWarning(lcOverlay) << "CAVA exited with code" << exitCode
-                             << "stderr:" << stderrOutput;
+        const QByteArray stderrOutput = m_process ? m_process->readAllStandardError().left(500) : QByteArray();
+        qCWarning(lcOverlay) << "CAVA exited with code" << exitCode << "stderr:" << stderrOutput;
     }
 }
 
@@ -259,10 +258,13 @@ void CavaService::restartAsync()
     }
     m_pendingRestart = true;
     // One-shot: restart after the current process exits
-    connect(m_process, &QProcess::finished, this, [this]() {
-        m_pendingRestart = false;
-        start();
-    }, Qt::SingleShotConnection);
+    connect(
+        m_process, &QProcess::finished, this,
+        [this]() {
+            m_pendingRestart = false;
+            start();
+        },
+        Qt::SingleShotConnection);
     m_process->terminate();
 }
 

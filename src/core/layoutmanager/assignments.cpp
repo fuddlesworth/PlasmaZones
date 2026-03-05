@@ -45,7 +45,8 @@ Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDeskt
 {
     // Helper: resolve stored assignment string to Layout* (returns nullptr for autotile IDs)
     auto resolveAssignment = [this](const QString& id) -> Layout* {
-        if (id.isEmpty() || LayoutId::isAutotile(id)) return nullptr;
+        if (id.isEmpty() || LayoutId::isAutotile(id))
+            return nullptr;
         return layoutById(QUuid::fromString(id));
     };
 

@@ -96,7 +96,7 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     result.highlightColor = accent;
     result.inactiveColor = bg;
     result.borderColor = fg;
-    result.labelFontColor = fg;  // Same as border but without modified alpha
+    result.labelFontColor = fg; // Same as border but without modified alpha
     result.labelFontColor.setAlpha(255);
 
     return result;

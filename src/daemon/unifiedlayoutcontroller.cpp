@@ -12,7 +12,7 @@
 namespace PlasmaZones {
 
 UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
-                                                   AutotileEngine* autotileEngine, QObject* parent)
+                                                 AutotileEngine* autotileEngine, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
@@ -49,9 +49,9 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only)
-        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
-            m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
-            m_includeManualLayouts, m_includeAutotileLayouts);
+        m_cachedLayouts =
+            LayoutUtils::buildUnifiedLayoutList(m_layoutManager, m_currentScreenName, m_currentVirtualDesktop,
+                                                m_currentActivity, m_includeManualLayouts, m_includeAutotileLayouts);
 
         m_cacheValid = true;
     }
@@ -83,8 +83,8 @@ bool UnifiedLayoutController::applyLayoutByIndex(int index)
         return false;
     }
     if (index < 0 || index >= list.size()) {
-        qCWarning(lcDaemon) << "applyLayoutByIndex: invalid index" << index
-                            << "(valid: 0 to" << (list.size() - 1) << ")";
+        qCWarning(lcDaemon) << "applyLayoutByIndex: invalid index" << index << "(valid: 0 to" << (list.size() - 1)
+                            << ")";
         return false;
     }
     return applyEntry(list[index]);
@@ -141,8 +141,8 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenName)
         // Sync current layout ID to what's actually assigned to this screen
         // (not the global active layout, which may belong to a different screen)
         if (m_layoutManager && !screenName.isEmpty()) {
-            Layout* screenLayout = m_layoutManager->layoutForScreen(
-                screenName, m_currentVirtualDesktop, m_currentActivity);
+            Layout* screenLayout =
+                m_layoutManager->layoutForScreen(screenName, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 m_currentLayoutId = screenLayout->id().toString();
             }
@@ -189,8 +189,8 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
             // Without this ordering, setAlgorithm's retile uses stale per-screen
             // overrides (old algorithm), producing wrong zone geometries.
             if (!m_currentScreenName.isEmpty()) {
-                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop,
-                                                  m_currentActivity, entry.id);
+                m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+                                                  entry.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
             setCurrentLayoutId(entry.id);
@@ -210,14 +210,12 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
         Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
-                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop,
-                                              m_currentActivity, layout);
+                m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
             }
             // Always update global active layout (fires activeLayoutChanged)
             m_layoutManager->setActiveLayout(layout);
             setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied unified layout:" << entry.name
-                             << "to screen:" << m_currentScreenName;
+            qCInfo(lcDaemon) << "Applied unified layout:" << entry.name << "to screen:" << m_currentScreenName;
             Q_EMIT layoutApplied(layout);
             return true;
         }

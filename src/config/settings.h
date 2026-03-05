@@ -40,8 +40,8 @@ public:
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
     Q_PROPERTY(
         int zoneSpanModifier READ zoneSpanModifierInt WRITE setZoneSpanModifierInt NOTIFY zoneSpanModifierChanged)
-    Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
-                   zoneSpanTriggersChanged)
+    Q_PROPERTY(
+        QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
     Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY toggleActivationChanged)
     Q_PROPERTY(bool snappingEnabled READ snappingEnabled WRITE setSnappingEnabled NOTIFY snappingEnabledChanged)
 
@@ -55,8 +55,7 @@ public:
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
-    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY
-                   showNavigationOsdChanged)
+    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyleInt WRITE setOsdStyleInt NOTIFY osdStyleChanged)
 
     // Appearance (ricer-friendly)
@@ -71,16 +70,20 @@ public:
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
-    Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
+    Q_PROPERTY(
+        qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
     Q_PROPERTY(int labelFontWeight READ labelFontWeight WRITE setLabelFontWeight NOTIFY labelFontWeightChanged)
     Q_PROPERTY(bool labelFontItalic READ labelFontItalic WRITE setLabelFontItalic NOTIFY labelFontItalicChanged)
-    Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline WRITE setLabelFontUnderline NOTIFY labelFontUnderlineChanged)
-    Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
+    Q_PROPERTY(
+        bool labelFontUnderline READ labelFontUnderline WRITE setLabelFontUnderline NOTIFY labelFontUnderlineChanged)
+    Q_PROPERTY(
+        bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
     // Zone settings
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
-    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(
+        bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
     Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
     Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
@@ -104,9 +107,11 @@ public:
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
-    Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY snapAssistFeatureEnabledChanged)
+    Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
+                   snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
-    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY snapAssistTriggersChanged)
+    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
+                   snapAssistTriggersChanged)
 
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
@@ -118,10 +123,10 @@ public:
                    excludedWindowClassesChanged)
     Q_PROPERTY(bool excludeTransientWindows READ excludeTransientWindows WRITE setExcludeTransientWindows NOTIFY
                    excludeTransientWindowsChanged)
-    Q_PROPERTY(int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY
-                   minimumWindowWidthChanged)
-    Q_PROPERTY(int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY
-                   minimumWindowHeightChanged)
+    Q_PROPERTY(
+        int minimumWindowWidth READ minimumWindowWidth WRITE setMinimumWindowWidth NOTIFY minimumWindowWidthChanged)
+    Q_PROPERTY(
+        int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
     // Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
@@ -147,47 +152,78 @@ public:
 
     // Autotiling Settings
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
-    Q_PROPERTY(QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
-    Q_PROPERTY(qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
-    Q_PROPERTY(int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
-    Q_PROPERTY(qreal autotileCenteredMasterSplitRatio READ autotileCenteredMasterSplitRatio WRITE setAutotileCenteredMasterSplitRatio NOTIFY autotileCenteredMasterSplitRatioChanged)
-    Q_PROPERTY(int autotileCenteredMasterMasterCount READ autotileCenteredMasterMasterCount WRITE setAutotileCenteredMasterMasterCount NOTIFY autotileCenteredMasterMasterCountChanged)
+    Q_PROPERTY(
+        QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(
+        qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
+    Q_PROPERTY(
+        int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
+    Q_PROPERTY(qreal autotileCenteredMasterSplitRatio READ autotileCenteredMasterSplitRatio WRITE
+                   setAutotileCenteredMasterSplitRatio NOTIFY autotileCenteredMasterSplitRatioChanged)
+    Q_PROPERTY(int autotileCenteredMasterMasterCount READ autotileCenteredMasterMasterCount WRITE
+                   setAutotileCenteredMasterMasterCount NOTIFY autotileCenteredMasterMasterCountChanged)
     Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
     Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
-    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap NOTIFY autotileUsePerSideOuterGapChanged)
-    Q_PROPERTY(int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
-    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY autotileOuterGapBottomChanged)
-    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY autotileOuterGapLeftChanged)
-    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY autotileOuterGapRightChanged)
-    Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY autotileFocusNewWindowsChanged)
+    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap
+                   NOTIFY autotileUsePerSideOuterGapChanged)
+    Q_PROPERTY(
+        int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
+    Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY
+                   autotileOuterGapBottomChanged)
+    Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY
+                   autotileOuterGapLeftChanged)
+    Q_PROPERTY(int autotileOuterGapRight READ autotileOuterGapRight WRITE setAutotileOuterGapRight NOTIFY
+                   autotileOuterGapRightChanged)
+    Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
+                   autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
-    Q_PROPERTY(int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
-    Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY autotileInsertPositionChanged)
+    Q_PROPERTY(
+        int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
+    Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY
+                   autotileInsertPositionChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
     Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY animationDurationChanged)
-    Q_PROPERTY(QString animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY animationEasingCurveChanged)
-    Q_PROPERTY(int animationMinDistance READ animationMinDistance WRITE setAnimationMinDistance NOTIFY animationMinDistanceChanged)
-    Q_PROPERTY(int animationSequenceMode READ animationSequenceMode WRITE setAnimationSequenceMode NOTIFY animationSequenceModeChanged)
-    Q_PROPERTY(int animationStaggerInterval READ animationStaggerInterval WRITE setAnimationStaggerInterval NOTIFY animationStaggerIntervalChanged)
+    Q_PROPERTY(QString animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY
+                   animationEasingCurveChanged)
+    Q_PROPERTY(int animationMinDistance READ animationMinDistance WRITE setAnimationMinDistance NOTIFY
+                   animationMinDistanceChanged)
+    Q_PROPERTY(int animationSequenceMode READ animationSequenceMode WRITE setAnimationSequenceMode NOTIFY
+                   animationSequenceModeChanged)
+    Q_PROPERTY(int animationStaggerInterval READ animationStaggerInterval WRITE setAnimationStaggerInterval NOTIFY
+                   animationStaggerIntervalChanged)
 
     // Autotile Behavior and Visual Settings
-    Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY autotileFocusFollowsMouseChanged)
-    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY autotileRespectMinimumSizeChanged)
-    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY autotileHideTitleBarsChanged)
-    Q_PROPERTY(int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
-    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY autotileBorderColorChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
+    Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
+                   autotileFocusFollowsMouseChanged)
+    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
+                   NOTIFY autotileRespectMinimumSizeChanged)
+    Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
+                   autotileHideTitleBarsChanged)
+    Q_PROPERTY(
+        int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
+    Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
+                   autotileBorderColorChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
+                   setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
     // Autotile Shortcuts
-    Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY autotileToggleShortcutChanged)
-    Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut NOTIFY autotileFocusMasterShortcutChanged)
-    Q_PROPERTY(QString autotileSwapMasterShortcut READ autotileSwapMasterShortcut WRITE setAutotileSwapMasterShortcut NOTIFY autotileSwapMasterShortcutChanged)
-    Q_PROPERTY(QString autotileIncMasterRatioShortcut READ autotileIncMasterRatioShortcut WRITE setAutotileIncMasterRatioShortcut NOTIFY autotileIncMasterRatioShortcutChanged)
-    Q_PROPERTY(QString autotileDecMasterRatioShortcut READ autotileDecMasterRatioShortcut WRITE setAutotileDecMasterRatioShortcut NOTIFY autotileDecMasterRatioShortcutChanged)
-    Q_PROPERTY(QString autotileIncMasterCountShortcut READ autotileIncMasterCountShortcut WRITE setAutotileIncMasterCountShortcut NOTIFY autotileIncMasterCountShortcutChanged)
-    Q_PROPERTY(QString autotileDecMasterCountShortcut READ autotileDecMasterCountShortcut WRITE setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
-    Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY autotileRetileShortcutChanged)
+    Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY
+                   autotileToggleShortcutChanged)
+    Q_PROPERTY(QString autotileFocusMasterShortcut READ autotileFocusMasterShortcut WRITE setAutotileFocusMasterShortcut
+                   NOTIFY autotileFocusMasterShortcutChanged)
+    Q_PROPERTY(QString autotileSwapMasterShortcut READ autotileSwapMasterShortcut WRITE setAutotileSwapMasterShortcut
+                   NOTIFY autotileSwapMasterShortcutChanged)
+    Q_PROPERTY(QString autotileIncMasterRatioShortcut READ autotileIncMasterRatioShortcut WRITE
+                   setAutotileIncMasterRatioShortcut NOTIFY autotileIncMasterRatioShortcutChanged)
+    Q_PROPERTY(QString autotileDecMasterRatioShortcut READ autotileDecMasterRatioShortcut WRITE
+                   setAutotileDecMasterRatioShortcut NOTIFY autotileDecMasterRatioShortcutChanged)
+    Q_PROPERTY(QString autotileIncMasterCountShortcut READ autotileIncMasterCountShortcut WRITE
+                   setAutotileIncMasterCountShortcut NOTIFY autotileIncMasterCountShortcutChanged)
+    Q_PROPERTY(QString autotileDecMasterCountShortcut READ autotileDecMasterCountShortcut WRITE
+                   setAutotileDecMasterCountShortcut NOTIFY autotileDecMasterCountShortcutChanged)
+    Q_PROPERTY(QString autotileRetileShortcut READ autotileRetileShortcut WRITE setAutotileRetileShortcut NOTIFY
+                   autotileRetileShortcutChanged)
 
     // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
@@ -297,12 +333,12 @@ public:
                    NOTIFY resnapToNewLayoutShortcutChanged)
 
     // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
-    Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut
-                   NOTIFY snapAllWindowsShortcutChanged)
+    Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut NOTIFY
+                   snapAllWindowsShortcutChanged)
 
     // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
-    Q_PROPERTY(QString layoutPickerShortcut READ layoutPickerShortcut WRITE setLayoutPickerShortcut
-                   NOTIFY layoutPickerShortcutChanged)
+    Q_PROPERTY(QString layoutPickerShortcut READ layoutPickerShortcut WRITE setLayoutPickerShortcut NOTIFY
+                   layoutPickerShortcutChanged)
 
 public:
     explicit Settings(QObject* parent = nullptr);
@@ -317,7 +353,10 @@ public:
     }
     void setShiftDragToActivate(bool enable) override;
 
-    QVariantList dragActivationTriggers() const override { return m_dragActivationTriggers; }
+    QVariantList dragActivationTriggers() const override
+    {
+        return m_dragActivationTriggers;
+    }
     void setDragActivationTriggers(const QVariantList& triggers) override;
 
     bool zoneSpanEnabled() const override
@@ -330,14 +369,20 @@ public:
         return m_zoneSpanModifier;
     }
     void setZoneSpanModifier(DragModifier modifier) override;
-    QVariantList zoneSpanTriggers() const override { return m_zoneSpanTriggers; }
+    QVariantList zoneSpanTriggers() const override
+    {
+        return m_zoneSpanTriggers;
+    }
     void setZoneSpanTriggers(const QVariantList& triggers) override;
     bool toggleActivation() const override
     {
         return m_toggleActivation;
     }
     void setToggleActivation(bool enable) override;
-    bool snappingEnabled() const override { return m_snappingEnabled; }
+    bool snappingEnabled() const override
+    {
+        return m_snappingEnabled;
+    }
     void setSnappingEnabled(bool enabled) override;
     int zoneSpanModifierInt() const
     {
@@ -708,7 +753,8 @@ public:
     // Per-screen zone selector config (override > global fallback)
     ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenName) const override;
     Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
-    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                     const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
     Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
@@ -729,121 +775,239 @@ public:
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bool autotileEnabled() const { return m_autotileEnabled; }
+    bool autotileEnabled() const
+    {
+        return m_autotileEnabled;
+    }
     void setAutotileEnabled(bool enabled);
 
-    QString autotileAlgorithm() const { return m_autotileAlgorithm; }
+    QString autotileAlgorithm() const
+    {
+        return m_autotileAlgorithm;
+    }
     void setAutotileAlgorithm(const QString& algorithm);
 
-    qreal autotileSplitRatio() const { return m_autotileSplitRatio; }
+    qreal autotileSplitRatio() const
+    {
+        return m_autotileSplitRatio;
+    }
     void setAutotileSplitRatio(qreal ratio);
 
-    int autotileMasterCount() const { return m_autotileMasterCount; }
+    int autotileMasterCount() const
+    {
+        return m_autotileMasterCount;
+    }
     void setAutotileMasterCount(int count);
 
-    qreal autotileCenteredMasterSplitRatio() const { return m_autotileCenteredMasterSplitRatio; }
+    qreal autotileCenteredMasterSplitRatio() const
+    {
+        return m_autotileCenteredMasterSplitRatio;
+    }
     void setAutotileCenteredMasterSplitRatio(qreal ratio);
 
-    int autotileCenteredMasterMasterCount() const { return m_autotileCenteredMasterMasterCount; }
+    int autotileCenteredMasterMasterCount() const
+    {
+        return m_autotileCenteredMasterMasterCount;
+    }
     void setAutotileCenteredMasterMasterCount(int count);
 
-    int autotileInnerGap() const { return m_autotileInnerGap; }
+    int autotileInnerGap() const
+    {
+        return m_autotileInnerGap;
+    }
     void setAutotileInnerGap(int gap);
 
-    int autotileOuterGap() const { return m_autotileOuterGap; }
+    int autotileOuterGap() const
+    {
+        return m_autotileOuterGap;
+    }
     void setAutotileOuterGap(int gap);
 
-    bool autotileUsePerSideOuterGap() const { return m_autotileUsePerSideOuterGap; }
+    bool autotileUsePerSideOuterGap() const
+    {
+        return m_autotileUsePerSideOuterGap;
+    }
     void setAutotileUsePerSideOuterGap(bool enabled);
 
-    int autotileOuterGapTop() const { return m_autotileOuterGapTop; }
+    int autotileOuterGapTop() const
+    {
+        return m_autotileOuterGapTop;
+    }
     void setAutotileOuterGapTop(int gap);
 
-    int autotileOuterGapBottom() const { return m_autotileOuterGapBottom; }
+    int autotileOuterGapBottom() const
+    {
+        return m_autotileOuterGapBottom;
+    }
     void setAutotileOuterGapBottom(int gap);
 
-    int autotileOuterGapLeft() const { return m_autotileOuterGapLeft; }
+    int autotileOuterGapLeft() const
+    {
+        return m_autotileOuterGapLeft;
+    }
     void setAutotileOuterGapLeft(int gap);
 
-    int autotileOuterGapRight() const { return m_autotileOuterGapRight; }
+    int autotileOuterGapRight() const
+    {
+        return m_autotileOuterGapRight;
+    }
     void setAutotileOuterGapRight(int gap);
 
-    bool autotileFocusNewWindows() const { return m_autotileFocusNewWindows; }
+    bool autotileFocusNewWindows() const
+    {
+        return m_autotileFocusNewWindows;
+    }
     void setAutotileFocusNewWindows(bool focus);
 
-    bool autotileSmartGaps() const { return m_autotileSmartGaps; }
+    bool autotileSmartGaps() const
+    {
+        return m_autotileSmartGaps;
+    }
     void setAutotileSmartGaps(bool smart);
 
-    int autotileMaxWindows() const { return m_autotileMaxWindows; }
+    int autotileMaxWindows() const
+    {
+        return m_autotileMaxWindows;
+    }
     void setAutotileMaxWindows(int count);
 
-    enum class AutotileInsertPosition { End = 0, AfterFocused = 1, AsMaster = 2 };
-    AutotileInsertPosition autotileInsertPosition() const { return m_autotileInsertPosition; }
+    enum class AutotileInsertPosition {
+        End = 0,
+        AfterFocused = 1,
+        AsMaster = 2
+    };
+    AutotileInsertPosition autotileInsertPosition() const
+    {
+        return m_autotileInsertPosition;
+    }
     void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const { return static_cast<int>(m_autotileInsertPosition); }
+    int autotileInsertPositionInt() const
+    {
+        return static_cast<int>(m_autotileInsertPosition);
+    }
     void setAutotileInsertPositionInt(int position);
 
     // Autotile Shortcuts
-    QString autotileToggleShortcut() const { return m_autotileToggleShortcut; }
+    QString autotileToggleShortcut() const
+    {
+        return m_autotileToggleShortcut;
+    }
     void setAutotileToggleShortcut(const QString& shortcut);
 
-    QString autotileFocusMasterShortcut() const { return m_autotileFocusMasterShortcut; }
+    QString autotileFocusMasterShortcut() const
+    {
+        return m_autotileFocusMasterShortcut;
+    }
     void setAutotileFocusMasterShortcut(const QString& shortcut);
 
-    QString autotileSwapMasterShortcut() const { return m_autotileSwapMasterShortcut; }
+    QString autotileSwapMasterShortcut() const
+    {
+        return m_autotileSwapMasterShortcut;
+    }
     void setAutotileSwapMasterShortcut(const QString& shortcut);
 
-    QString autotileIncMasterRatioShortcut() const { return m_autotileIncMasterRatioShortcut; }
+    QString autotileIncMasterRatioShortcut() const
+    {
+        return m_autotileIncMasterRatioShortcut;
+    }
     void setAutotileIncMasterRatioShortcut(const QString& shortcut);
 
-    QString autotileDecMasterRatioShortcut() const { return m_autotileDecMasterRatioShortcut; }
+    QString autotileDecMasterRatioShortcut() const
+    {
+        return m_autotileDecMasterRatioShortcut;
+    }
     void setAutotileDecMasterRatioShortcut(const QString& shortcut);
 
-    QString autotileIncMasterCountShortcut() const { return m_autotileIncMasterCountShortcut; }
+    QString autotileIncMasterCountShortcut() const
+    {
+        return m_autotileIncMasterCountShortcut;
+    }
     void setAutotileIncMasterCountShortcut(const QString& shortcut);
 
-    QString autotileDecMasterCountShortcut() const { return m_autotileDecMasterCountShortcut; }
+    QString autotileDecMasterCountShortcut() const
+    {
+        return m_autotileDecMasterCountShortcut;
+    }
     void setAutotileDecMasterCountShortcut(const QString& shortcut);
 
-    QString autotileRetileShortcut() const { return m_autotileRetileShortcut; }
+    QString autotileRetileShortcut() const
+    {
+        return m_autotileRetileShortcut;
+    }
     void setAutotileRetileShortcut(const QString& shortcut);
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
-    bool animationsEnabled() const override { return m_animationsEnabled; }
+    bool animationsEnabled() const override
+    {
+        return m_animationsEnabled;
+    }
     void setAnimationsEnabled(bool enabled) override;
 
-    int animationDuration() const override { return m_animationDuration; }
+    int animationDuration() const override
+    {
+        return m_animationDuration;
+    }
     void setAnimationDuration(int duration) override;
 
-    QString animationEasingCurve() const override { return m_animationEasingCurve; }
+    QString animationEasingCurve() const override
+    {
+        return m_animationEasingCurve;
+    }
     void setAnimationEasingCurve(const QString& curve) override;
 
-    int animationMinDistance() const override { return m_animationMinDistance; }
+    int animationMinDistance() const override
+    {
+        return m_animationMinDistance;
+    }
     void setAnimationMinDistance(int distance) override;
 
-    int animationSequenceMode() const override { return m_animationSequenceMode; }
+    int animationSequenceMode() const override
+    {
+        return m_animationSequenceMode;
+    }
     void setAnimationSequenceMode(int mode) override;
 
-    int animationStaggerInterval() const override { return m_animationStaggerInterval; }
+    int animationStaggerInterval() const override
+    {
+        return m_animationStaggerInterval;
+    }
     void setAnimationStaggerInterval(int ms) override;
 
     // Additional Autotiling Settings
-    bool autotileFocusFollowsMouse() const { return m_autotileFocusFollowsMouse; }
+    bool autotileFocusFollowsMouse() const
+    {
+        return m_autotileFocusFollowsMouse;
+    }
     void setAutotileFocusFollowsMouse(bool focus);
 
-    bool autotileRespectMinimumSize() const { return m_autotileRespectMinimumSize; }
+    bool autotileRespectMinimumSize() const
+    {
+        return m_autotileRespectMinimumSize;
+    }
     void setAutotileRespectMinimumSize(bool respect);
 
-    bool autotileHideTitleBars() const override { return m_autotileHideTitleBars; }
+    bool autotileHideTitleBars() const override
+    {
+        return m_autotileHideTitleBars;
+    }
     void setAutotileHideTitleBars(bool hide) override;
 
-    int autotileBorderWidth() const override { return m_autotileBorderWidth; }
+    int autotileBorderWidth() const override
+    {
+        return m_autotileBorderWidth;
+    }
     void setAutotileBorderWidth(int width) override;
 
-    QColor autotileBorderColor() const override { return m_autotileBorderColor; }
+    QColor autotileBorderColor() const override
+    {
+        return m_autotileBorderColor;
+    }
     void setAutotileBorderColor(const QColor& color) override;
 
-    bool autotileUseSystemBorderColors() const override { return m_autotileUseSystemBorderColors; }
+    bool autotileUseSystemBorderColors() const override
+    {
+        return m_autotileUseSystemBorderColors;
+    }
     void setAutotileUseSystemBorderColors(bool use) override;
 
     // Shader Effects
@@ -1131,8 +1295,8 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated integer value
      */
-    int readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue,
-                         int min, int max, const char* settingName);
+    int readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue, int min, int max,
+                         const char* settingName);
 
     /**
      * @brief Read and validate a color from config
@@ -1142,8 +1306,8 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated QColor value
      */
-    QColor readValidatedColor(const KConfigGroup& group, const char* key,
-                              const QColor& defaultValue, const char* settingName);
+    QColor readValidatedColor(const KConfigGroup& group, const char* key, const QColor& defaultValue,
+                              const char* settingName);
 
     /**
      * @brief Load indexed shortcuts (1-9) from config group
@@ -1152,8 +1316,8 @@ private:
      * @param shortcuts Array of 9 QString to populate
      * @param defaults Array of 9 default values
      */
-    void loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern,
-                              QString (&shortcuts)[9], const QString (&defaults)[9]);
+    void loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+                              const QString (&defaults)[9]);
 
     /**
      * @brief Parse a trigger list from JSON string
@@ -1170,8 +1334,8 @@ private:
      * @param legacyMouseButton Fallback mouse button if no JSON exists
      * @return Parsed trigger list (capped at 4 entries)
      */
-    static QVariantList loadTriggerList(const KConfigGroup& group, const QString& key,
-                                        int legacyModifier, int legacyMouseButton);
+    static QVariantList loadTriggerList(const KConfigGroup& group, const QString& key, int legacyModifier,
+                                        int legacyMouseButton);
 
     /**
      * @brief Save a trigger list to config as compact JSON
@@ -1179,8 +1343,7 @@ private:
      * @param key Config key for the JSON trigger list
      * @param triggers The trigger list to serialize
      */
-    static void saveTriggerList(KConfigGroup& group, const QString& key,
-                                const QVariantList& triggers);
+    static void saveTriggerList(KConfigGroup& group, const QString& key, const QVariantList& triggers);
 
     /** @brief Shared dispatcher for indexed shortcut arrays (quick-layout, snap-to-zone) */
     using ShortcutSignalFn = void (Settings::*)();
@@ -1209,8 +1372,7 @@ private:
     void saveZoneSelectorConfig(KConfigGroup& zoneSelector);
     void saveAllPerScreenOverrides(KSharedConfigPtr config);
     void saveShortcutConfig(KConfigGroup& globalShortcuts);
-    void saveAutotilingConfig(KConfigGroup& autotiling, KConfigGroup& animations,
-                              KConfigGroup& autotileShortcuts);
+    void saveAutotilingConfig(KConfigGroup& autotiling, KConfigGroup& animations, KConfigGroup& autotileShortcuts);
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
@@ -1417,7 +1579,6 @@ private:
 
     // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
     QString m_layoutPickerShortcut = QStringLiteral("Meta+Alt+Space");
-
 };
 
 } // namespace PlasmaZones

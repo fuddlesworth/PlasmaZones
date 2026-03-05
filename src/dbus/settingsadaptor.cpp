@@ -257,7 +257,8 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
     REGISTER_INT_SETTING("autotileBorderWidth", autotileBorderWidth, setAutotileBorderWidth)
     REGISTER_COLOR_SETTING("autotileBorderColor", autotileBorderColor, setAutotileBorderColor)
-    REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors, setAutotileUseSystemBorderColors)
+    REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
+                          setAutotileUseSystemBorderColors)
 
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING

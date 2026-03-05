@@ -23,13 +23,13 @@ namespace PlasmaZones {
 using namespace DBus::AutotileAlgorithm;
 
 // Global pending registrations list - shared by all AlgorithmRegistrar instantiations
-QList<PendingAlgorithmRegistration> &pendingAlgorithmRegistrations()
+QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
 {
     static QList<PendingAlgorithmRegistration> s_pending;
     return s_pending;
 }
 
-AlgorithmRegistry::AlgorithmRegistry(QObject *parent)
+AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
     : QObject(parent)
 {
     registerBuiltInAlgorithms();
@@ -45,7 +45,7 @@ AlgorithmRegistry::~AlgorithmRegistry()
     m_registrationOrder.clear();
 }
 
-AlgorithmRegistry *AlgorithmRegistry::instance()
+AlgorithmRegistry* AlgorithmRegistry::instance()
 {
     // Meyer's singleton: C++11 guarantees thread-safe initialization
     // of static local variables (§6.7 [stmt.dcl] p4)
@@ -53,7 +53,7 @@ AlgorithmRegistry *AlgorithmRegistry::instance()
     return &s_instance;
 }
 
-void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *algorithm)
+void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
     // Validate inputs - take ownership and delete on failure to prevent leaks
     if (id.isEmpty()) {
@@ -68,15 +68,14 @@ void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *al
     // to prevent double-free issues. Don't delete - it's still owned under the original ID.
     const QString existingId = findAlgorithmId(algorithm);
     if (!existingId.isEmpty() && existingId != id) {
-        qCWarning(lcAutotile) << "AlgorithmRegistry: algorithm" << algorithm->name()
-                   << "is already registered as" << existingId
-                   << "- cannot register as" << id;
+        qCWarning(lcAutotile) << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as"
+                              << existingId << "- cannot register as" << id;
         // Note: NOT deleting because it's still registered under existingId
         return;
     }
 
     // Remove existing algorithm with same ID (replacement case)
-    auto *old = removeAlgorithmInternal(id);
+    auto* old = removeAlgorithmInternal(id);
     if (old && old != algorithm) {
         old->deleteLater();
     }
@@ -89,7 +88,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString &id, TilingAlgorithm *al
     Q_EMIT algorithmRegistered(id);
 }
 
-QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm *algorithm) const
+QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm* algorithm) const
 {
     for (auto it = m_algorithms.constBegin(); it != m_algorithms.constEnd(); ++it) {
         if (it.value() == algorithm) {
@@ -99,19 +98,19 @@ QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm *algorithm) const
     return QString();
 }
 
-TilingAlgorithm *AlgorithmRegistry::removeAlgorithmInternal(const QString &id)
+TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
 {
     if (!m_algorithms.contains(id)) {
         return nullptr;
     }
-    auto *algorithm = m_algorithms.take(id);
+    auto* algorithm = m_algorithms.take(id);
     m_registrationOrder.removeOne(id);
     return algorithm;
 }
 
-bool AlgorithmRegistry::unregisterAlgorithm(const QString &id)
+bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
 {
-    auto *algorithm = removeAlgorithmInternal(id);
+    auto* algorithm = removeAlgorithmInternal(id);
     if (!algorithm) {
         return false;
     }
@@ -121,7 +120,7 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString &id)
     return true;
 }
 
-TilingAlgorithm *AlgorithmRegistry::algorithm(const QString &id) const
+TilingAlgorithm* AlgorithmRegistry::algorithm(const QString& id) const
 {
     return m_algorithms.value(id, nullptr);
 }
@@ -131,12 +130,12 @@ QStringList AlgorithmRegistry::availableAlgorithms() const noexcept
     return m_registrationOrder;
 }
 
-QList<TilingAlgorithm *> AlgorithmRegistry::allAlgorithms() const
+QList<TilingAlgorithm*> AlgorithmRegistry::allAlgorithms() const
 {
-    QList<TilingAlgorithm *> result;
+    QList<TilingAlgorithm*> result;
     result.reserve(m_registrationOrder.size());
 
-    for (const QString &id : m_registrationOrder) {
+    for (const QString& id : m_registrationOrder) {
         if (auto* algo = m_algorithms.value(id)) {
             result.append(algo);
         } else {
@@ -148,7 +147,7 @@ QList<TilingAlgorithm *> AlgorithmRegistry::allAlgorithms() const
     return result;
 }
 
-bool AlgorithmRegistry::hasAlgorithm(const QString &id) const noexcept
+bool AlgorithmRegistry::hasAlgorithm(const QString& id) const noexcept
 {
     return m_algorithms.contains(id);
 }
@@ -158,7 +157,7 @@ QString AlgorithmRegistry::defaultAlgorithmId()
     return ConfigDefaults::autotileAlgorithm();
 }
 
-TilingAlgorithm *AlgorithmRegistry::defaultAlgorithm() const
+TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 {
     return algorithm(defaultAlgorithmId());
 }
@@ -167,13 +166,14 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
 {
     // Process all pending registrations from AlgorithmRegistrar instances
     // Each algorithm registers itself via static initialization in its .cpp file
-    auto &pending = pendingAlgorithmRegistrations();
+    auto& pending = pendingAlgorithmRegistrations();
 
     // Sort by priority (lower = first) for deterministic registration order
-    std::sort(pending.begin(), pending.end(),
-              [](const auto &a, const auto &b) { return a.priority < b.priority; });
+    std::sort(pending.begin(), pending.end(), [](const auto& a, const auto& b) {
+        return a.priority < b.priority;
+    });
 
-    for (const auto &reg : pending) {
+    for (const auto& reg : pending) {
         registerAlgorithm(reg.id, reg.factory());
     }
 
@@ -189,13 +189,13 @@ namespace {
  * zone numbers to stack on top of each other in preview. We detect this
  * and apply visual offsets.
  */
-bool areAllZonesIdentical(const QVector<QRect> &zones)
+bool areAllZonesIdentical(const QVector<QRect>& zones)
 {
     if (zones.size() <= 1) {
         return false; // Nothing to offset for single zone
     }
 
-    const QRect &first = zones.first();
+    const QRect& first = zones.first();
     for (int i = 1; i < zones.size(); ++i) {
         if (zones[i] != first) {
             return false;
@@ -205,7 +205,7 @@ bool areAllZonesIdentical(const QVector<QRect> &zones)
 }
 } // namespace
 
-QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect> &zones, const QRect &previewRect)
+QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zones, const QRect& previewRect)
 {
     if (!previewRect.isValid() || previewRect.width() == 0 || previewRect.height() == 0) {
         return {};
@@ -239,7 +239,7 @@ QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect> &zo
     return result;
 }
 
-QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
+QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm)
 {
     if (!algorithm) {
         return {};
@@ -252,7 +252,8 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
     previewState.setMasterCount(1);
     previewState.setSplitRatio(AutotileDefaults::DefaultSplitRatio);
 
-    QVector<QRect> zones = algorithm->calculateZones({algorithm->defaultMaxWindows(), previewRect, &previewState, 0, {}});
+    QVector<QRect> zones =
+        algorithm->calculateZones({algorithm->defaultMaxWindows(), previewRect, &previewState, 0, {}});
 
     // Convert to relative geometry (handles monocle offset detection internally)
     QVariantList list = zonesToRelativeGeometry(zones, previewRect);
@@ -269,7 +270,7 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm *algorithm)
     return list;
 }
 
-QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm *algorithm, const QString &algorithmId)
+QVariantMap AlgorithmRegistry::algorithmToVariantMap(TilingAlgorithm* algorithm, const QString& algorithmId)
 {
     QVariantMap map;
 

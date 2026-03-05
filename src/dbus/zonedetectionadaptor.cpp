@@ -116,11 +116,7 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     QRect snapped = GeometryUtils::snapToRect(geom);
 
     // Return as "x,y,width,height"
-    return QStringLiteral("%1,%2,%3,%4")
-        .arg(snapped.x())
-        .arg(snapped.y())
-        .arg(snapped.width())
-        .arg(snapped.height());
+    return QStringLiteral("%1,%2,%3,%4").arg(snapped.x()).arg(snapped.y()).arg(snapped.width()).arg(snapped.height());
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
@@ -199,7 +195,8 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
 
     // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
-    Zone* currentZone = DbusHelpers::findZoneInAnyLayout(m_layoutManager, currentZoneId, QStringLiteral("get adjacent zone"));
+    Zone* currentZone =
+        DbusHelpers::findZoneInAnyLayout(m_layoutManager, currentZoneId, QStringLiteral("get adjacent zone"));
     if (!currentZone) {
         return QString();
     }

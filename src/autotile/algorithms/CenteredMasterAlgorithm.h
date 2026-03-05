@@ -43,7 +43,7 @@ class PLASMAZONES_EXPORT CenteredMasterAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit CenteredMasterAlgorithm(QObject *parent = nullptr);
+    explicit CenteredMasterAlgorithm(QObject* parent = nullptr);
     ~CenteredMasterAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -51,13 +51,28 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
-    int masterZoneIndex() const noexcept override { return 0; }
-    bool supportsMasterCount() const noexcept override { return true; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; }
-    int defaultMaxWindows() const noexcept override { return 7; }
+    int masterZoneIndex() const noexcept override
+    {
+        return 0;
+    }
+    bool supportsMasterCount() const noexcept override
+    {
+        return true;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 7;
+    }
 };
 
 } // namespace PlasmaZones

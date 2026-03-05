@@ -20,7 +20,8 @@ namespace PlasmaZones {
 
 QString UnifiedLayoutEntry::algorithmId() const
 {
-    if (!isAutotile) return QString();
+    if (!isAutotile)
+        return QString();
     return LayoutId::extractAlgorithmId(id);
 }
 
@@ -157,13 +158,13 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
 
 static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
 {
-    auto *registry = AlgorithmRegistry::instance();
+    auto* registry = AlgorithmRegistry::instance();
     if (!registry) {
         return;
     }
     const QStringList algoIds = registry->availableAlgorithms();
     for (const QString& algoId : algoIds) {
-        TilingAlgorithm *algo = registry->algorithm(algoId);
+        TilingAlgorithm* algo = registry->algorithm(algoId);
         if (!algo) {
             continue;
         }
@@ -213,13 +214,9 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
     return list;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
-    ILayoutManager* layoutManager,
-    const QString& screenName,
-    int virtualDesktop,
-    const QString& activity,
-    bool includeManual,
-    bool includeAutotile)
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName,
+                                                   int virtualDesktop, const QString& activity, bool includeManual,
+                                                   bool includeAutotile)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -361,8 +358,8 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
 // Allow-list serialization
 // ═══════════════════════════════════════════════════════════════════════════
 
-void serializeAllowLists(QJsonObject& json, const QStringList& screens,
-                          const QList<int>& desktops, const QStringList& activities)
+void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QList<int>& desktops,
+                         const QStringList& activities)
 {
     using namespace JsonKeys;
 
@@ -381,8 +378,7 @@ void serializeAllowLists(QJsonObject& json, const QStringList& screens,
     }
 }
 
-void deserializeAllowLists(const QJsonObject& json, QStringList& screens,
-                            QList<int>& desktops, QStringList& activities)
+void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<int>& desktops, QStringList& activities)
 {
     using namespace JsonKeys;
 

@@ -22,7 +22,8 @@ namespace PlasmaZones {
 
 namespace {
 
-struct ShaderCacheEntry {
+struct ShaderCacheEntry
+{
     QShader vertex;
     QShader fragment;
 };
@@ -61,10 +62,10 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 const QList<QShaderBaker::GeneratedShader>& detail::bakeTargets()
 {
     static const QList<QShaderBaker::GeneratedShader> targets = {
-        { QShader::GlslShader, QShaderVersion(330) },
-        { QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs) },
-        { QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs) },
-        { QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs) },
+        {QShader::GlslShader, QShaderVersion(330)},
+        {QShader::GlslShader, QShaderVersion(300, QShaderVersion::GlslEs)},
+        {QShader::GlslShader, QShaderVersion(310, QShaderVersion::GlslEs)},
+        {QShader::GlslShader, QShaderVersion(320, QShaderVersion::GlslEs)},
     };
     return targets;
 }
@@ -81,9 +82,8 @@ QString detail::loadAndExpandShader(const QString& path, QString* outError)
     const QString raw = QTextStream(&file).readAll();
     const QString currentFileDir = QFileInfo(path).absolutePath();
     const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
-    const QString systemShaderDir = QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                                          QStringLiteral("plasmazones/shaders"),
-                                                          QStandardPaths::LocateDirectory);
+    const QString systemShaderDir = QStandardPaths::locate(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
     QStringList includePaths{currentFileDir};
     if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir) {
         includePaths.append(shadersRootDir);
@@ -127,8 +127,8 @@ QSGRenderNode::StateFlags ZoneShaderNodeRhi::changedStates() const
 
 QSGRenderNode::RenderingFlags ZoneShaderNodeRhi::flags() const
 {
-    return QSGRenderNode::BoundedRectRendering | QSGRenderNode::DepthAwareRendering
-           | QSGRenderNode::OpaqueRendering | QSGRenderNode::NoExternalRendering;
+    return QSGRenderNode::BoundedRectRendering | QSGRenderNode::DepthAwareRendering | QSGRenderNode::OpaqueRendering
+        | QSGRenderNode::NoExternalRendering;
 }
 
 QRectF ZoneShaderNodeRhi::rect() const
@@ -161,7 +161,8 @@ void ZoneShaderNodeRhi::prepare()
     if (!m_initialized) {
         m_initialized = true;
         // Create VBO (fullscreen quad)
-        m_vbo.reset(rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
+        m_vbo.reset(
+            rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
         if (!m_vbo->create()) {
             m_shaderError = QStringLiteral("Failed to create vertex buffer");
             return;
@@ -202,9 +203,8 @@ void ZoneShaderNodeRhi::prepare()
                 m_shaderError = QStringLiteral("Failed to create user texture ") + QString::number(i);
                 return;
             }
-            m_userTextureSamplers[i].reset(rhi->newSampler(
-                QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+            m_userTextureSamplers[i].reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                           QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_userTextureSamplers[i]->create()) {
                 m_shaderError = QStringLiteral("Failed to create user texture sampler ") + QString::number(i);
                 return;
@@ -218,7 +218,7 @@ void ZoneShaderNodeRhi::prepare()
             return;
         }
         m_wallpaperSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+                                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!m_wallpaperSampler->create()) {
             m_shaderError = QStringLiteral("Failed to create wallpaper sampler");
             return;
@@ -251,7 +251,7 @@ void ZoneShaderNodeRhi::prepare()
         if (!m_shaderReady) {
             const QList<QShaderBaker::GeneratedShader>& targets = detail::bakeTargets();
             QShaderBaker vertexBaker;
-            vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
             vertexBaker.setGeneratedShaders(targets);
             vertexBaker.setSourceString(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
             m_vertexShader = vertexBaker.bake();
@@ -262,7 +262,7 @@ void ZoneShaderNodeRhi::prepare()
                 return;
             }
             QShaderBaker fragmentBaker;
-            fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
             fragmentBaker.setSourceString(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
             m_fragmentShader = fragmentBaker.bake();
@@ -277,7 +277,7 @@ void ZoneShaderNodeRhi::prepare()
             m_srb.reset();
             if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
                 QMutexLocker lock(&s_shaderCacheMutex);
-                s_shaderCache[cacheKey] = ShaderCacheEntry{ m_vertexShader, m_fragmentShader };
+                s_shaderCache[cacheKey] = ShaderCacheEntry{m_vertexShader, m_fragmentShader};
             }
         }
     }
@@ -317,7 +317,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     // createImageSrbMulti() can bind iChannel0/1/2. If we called ensurePipeline() first,
     // the image SRB would be created with no channel textures bound -> effect samples black.
     if (!m_bufferPath.isEmpty() && bufferReady) {
-        if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor && !m_bufferRenderTarget->renderPassDescriptor()) {
+        if (!multiBufferMode && m_bufferRenderTarget && !m_bufferRenderPassDescriptor
+            && !m_bufferRenderTarget->renderPassDescriptor()) {
             m_bufferPipeline.reset();
             m_bufferSrb.reset();
             m_bufferSrbB.reset();
@@ -329,7 +330,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             m_bufferTextureB.reset();
             m_srb.reset();
             m_srbB.reset();
-        } else if (!multiBufferMode && m_bufferFeedback && m_bufferRenderTargetB && !m_bufferRenderPassDescriptorB && !m_bufferRenderTargetB->renderPassDescriptor()) {
+        } else if (!multiBufferMode && m_bufferFeedback && m_bufferRenderTargetB && !m_bufferRenderPassDescriptorB
+                   && !m_bufferRenderTargetB->renderPassDescriptor()) {
             m_bufferPipeline.reset();
             m_bufferSrb.reset();
             m_bufferSrbB.reset();
@@ -357,10 +359,10 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         return;
     }
 
-    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady
-        && m_bufferPipeline && m_bufferRenderTarget && m_bufferTexture;
-    const bool multipassMulti = multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0]
-        && m_multiBufferPipelines[0];
+    const bool multipassSingle = !multiBufferMode && !m_bufferPath.isEmpty() && m_bufferShaderReady && m_bufferPipeline
+        && m_bufferRenderTarget && m_bufferTexture;
+    const bool multipassMulti =
+        multiBufferMode && m_multiBufferShadersReady && m_multiBufferTextures[0] && m_multiBufferPipelines[0];
     const bool multipassActive = multipassSingle || multipassMulti;
 
     if (multipassActive) {
@@ -372,7 +374,7 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
                     continue;
                 }
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
-                cb->beginPass(m_multiBufferRenderTargets[i].get(), clearColor, { 1.0f, 0 });
+                cb->beginPass(m_multiBufferRenderTargets[i].get(), clearColor, {1.0f, 0});
                 cb->setViewport(QRhiViewport(0, 0, ps.width(), ps.height()));
                 cb->setGraphicsPipeline(m_multiBufferPipelines[i].get());
                 cb->setShaderResources(m_multiBufferSrbs[i].get());
@@ -383,21 +385,24 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
             }
         } else {
             if (m_bufferFeedback && !m_bufferFeedbackCleared && m_bufferRenderTarget && m_bufferRenderTargetB) {
-                cb->beginPass(m_bufferRenderTarget.get(), clearColor, { 1.0f, 0 });
+                cb->beginPass(m_bufferRenderTarget.get(), clearColor, {1.0f, 0});
                 cb->endPass();
-                cb->beginPass(m_bufferRenderTargetB.get(), clearColor, { 1.0f, 0 });
+                cb->beginPass(m_bufferRenderTargetB.get(), clearColor, {1.0f, 0});
                 cb->endPass();
                 m_bufferFeedbackCleared = true;
             }
             const int writeIndex = m_bufferFeedback ? (m_frame % 2) : 0;
             QRhiTextureRenderTarget* bufferRT = (m_bufferFeedback && writeIndex == 1 && m_bufferRenderTargetB)
-                ? m_bufferRenderTargetB.get() : m_bufferRenderTarget.get();
-            QRhiShaderResourceBindings* bufferSrb = (m_bufferFeedback && writeIndex == 1 && m_bufferSrbB)
-                ? m_bufferSrbB.get() : m_bufferSrb.get();
+                ? m_bufferRenderTargetB.get()
+                : m_bufferRenderTarget.get();
+            QRhiShaderResourceBindings* bufferSrb =
+                (m_bufferFeedback && writeIndex == 1 && m_bufferSrbB) ? m_bufferSrbB.get() : m_bufferSrb.get();
             QRhiTexture* writtenTexture = (m_bufferFeedback && writeIndex == 1 && m_bufferTextureB)
-                ? m_bufferTextureB.get() : m_bufferTexture.get();
-            cb->beginPass(bufferRT, clearColor, { 1.0f, 0 });
-            cb->setViewport(QRhiViewport(0, 0, writtenTexture->pixelSize().width(), writtenTexture->pixelSize().height()));
+                ? m_bufferTextureB.get()
+                : m_bufferTexture.get();
+            cb->beginPass(bufferRT, clearColor, {1.0f, 0});
+            cb->setViewport(
+                QRhiViewport(0, 0, writtenTexture->pixelSize().width(), writtenTexture->pixelSize().height()));
             cb->setGraphicsPipeline(m_bufferPipeline.get());
             cb->setShaderResources(bufferSrb);
             QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
@@ -410,7 +415,7 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
         // "Texture used with different accesses within the same pass". beginPass(rt)
         // starts a new pass with correct barriers.
         const QColor mainClear(0, 0, 0, 0);
-        cb->beginPass(rt, mainClear, { 1.0f, 0 });
+        cb->beginPass(rt, mainClear, {1.0f, 0});
     }
 
     // Use item's rect in render target (device pixels) so we render only within the item,
@@ -437,7 +442,8 @@ void ZoneShaderNodeRhi::render(const RenderState* state)
     cb->setViewport(QRhiViewport(vpX, vpY, vpW, vpH));
     cb->setGraphicsPipeline(m_pipeline.get());
     const int imageWriteIndex = multipassSingle && m_bufferFeedback ? (m_frame % 2) : 0;
-    QRhiShaderResourceBindings* imageSrb = (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
+    QRhiShaderResourceBindings* imageSrb =
+        (multipassSingle && m_bufferFeedback && imageWriteIndex == 1 && m_srbB) ? m_srbB.get() : m_srb.get();
     cb->setShaderResources(imageSrb);
     QRhiCommandBuffer::VertexInput vbufBinding(m_vbo.get(), 0);
     cb->setVertexInput(0, 1, &vbufBinding);
@@ -472,7 +478,7 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
 
     const QList<QShaderBaker::GeneratedShader>& targets = detail::bakeTargets();
     QShaderBaker vertexBaker;
-    vertexBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+    vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
     vertexBaker.setGeneratedShaders(targets);
     vertexBaker.setSourceString(vertSource.toUtf8(), QShader::VertexStage);
     const QShader vertexShader = vertexBaker.bake();
@@ -484,7 +490,7 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
         return result;
     }
     QShaderBaker fragmentBaker;
-    fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+    fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
     fragmentBaker.setGeneratedShaders(targets);
     fragmentBaker.setSourceString(fragSource.toUtf8(), QShader::FragmentStage);
     const QShader fragmentShader = fragmentBaker.bake();
@@ -501,7 +507,7 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     if (s_shaderCache.size() >= kShaderCacheMaxSize) {
         shaderCacheEvictOne();
     }
-    s_shaderCache[key] = ShaderCacheEntry{ vertexShader, fragmentShader };
+    s_shaderCache[key] = ShaderCacheEntry{vertexShader, fragmentShader};
     result.success = true;
     return result;
 }

@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import ".."
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import ".."
 
 /**
  * @brief Zone selector popup settings section with per-monitor overrides
@@ -16,34 +16,23 @@ import ".."
  * overrides when multiple monitors are detected.
  */
 ColumnLayout {
+    // ═══════════════════════════════════════════════════════════════════════
+    // PER-MONITOR SETTINGS
+    // ═══════════════════════════════════════════════════════════════════════
+
     id: root
 
     required property var kcm
     required property QtObject constants
-
     // Whether the parent tab is currently visible (for conditional tooltips)
     property bool isCurrentTab: false
-
     // Screen aspect ratio for preview calculations (with safety check)
-    property real screenAspectRatio: 16/9
-    readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16/9)
-
+    property real screenAspectRatio: 16 / 9
+    readonly property real safeAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : (16 / 9)
     // Per-screen override helper
     property alias selectedScreenName: psHelper.selectedScreenName
     readonly property alias isPerScreen: psHelper.isPerScreen
     readonly property alias hasOverrides: psHelper.hasOverrides
-
-    PerScreenOverrideHelper {
-        id: psHelper
-        kcm: root.kcm
-        getterMethod: "getPerScreenZoneSelectorSettings"
-        setterMethod: "setPerScreenZoneSelectorSetting"
-        clearerMethod: "clearPerScreenZoneSelectorSettings"
-    }
-
-    function settingValue(key, globalValue) { return psHelper.settingValue(key, globalValue) }
-    function writeSetting(key, value, globalSetter) { psHelper.writeSetting(key, value, globalSetter) }
-
     // Effective values that resolve per-screen > global
     readonly property int effectivePosition: settingValue("Position", kcm.zoneSelectorPosition)
     readonly property int effectiveLayoutMode: settingValue("LayoutMode", kcm.zoneSelectorLayoutMode)
@@ -51,22 +40,39 @@ ColumnLayout {
     readonly property int effectiveGridColumns: settingValue("GridColumns", kcm.zoneSelectorGridColumns)
     readonly property int effectiveMaxRows: settingValue("MaxRows", kcm.zoneSelectorMaxRows)
     readonly property int effectivePreviewWidth: {
-        var sm = effectiveSizeMode
-        if (sm === 0) {
-            return Math.round(180 * (safeAspectRatio / (16/9)))
-        }
-        return settingValue("PreviewWidth", kcm.zoneSelectorPreviewWidth)
+        var sm = effectiveSizeMode;
+        if (sm === 0)
+            return Math.round(180 * (safeAspectRatio / (16 / 9)));
+
+        return settingValue("PreviewWidth", kcm.zoneSelectorPreviewWidth);
     }
     readonly property int effectivePreviewHeight: {
-        var sm = effectiveSizeMode
-        if (sm === 0) {
-            return Math.round(effectivePreviewWidth / safeAspectRatio)
-        }
-        return settingValue("PreviewHeight", kcm.zoneSelectorPreviewHeight)
+        var sm = effectiveSizeMode;
+        if (sm === 0)
+            return Math.round(effectivePreviewWidth / safeAspectRatio);
+
+        return settingValue("PreviewHeight", kcm.zoneSelectorPreviewHeight);
     }
     readonly property int effectiveTriggerDistance: settingValue("TriggerDistance", kcm.zoneSelectorTriggerDistance)
 
+    function settingValue(key, globalValue) {
+        return psHelper.settingValue(key, globalValue);
+    }
+
+    function writeSetting(key, value, globalSetter) {
+        psHelper.writeSetting(key, value, globalSetter);
+    }
+
     spacing: Kirigami.Units.largeSpacing
+
+    PerScreenOverrideHelper {
+        id: psHelper
+
+        kcm: root.kcm
+        getterMethod: "getPerScreenZoneSelectorSettings"
+        setterMethod: "setPerScreenZoneSelectorSetting"
+        clearerMethod: "clearPerScreenZoneSelectorSettings"
+    }
 
     // Info message
     Kirigami.InlineMessage {
@@ -85,10 +91,6 @@ ColumnLayout {
         font.bold: true
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // PER-MONITOR SETTINGS
-    // ═══════════════════════════════════════════════════════════════════════
-
     MonitorSelectorSection {
         Layout.fillWidth: true
         kcm: root.kcm
@@ -106,6 +108,7 @@ ColumnLayout {
 
         Kirigami.Card {
             id: positionCard
+
             anchors.fill: parent
             enabled: kcm.zoneSelectorEnabled
 
@@ -125,17 +128,21 @@ ColumnLayout {
 
                     PositionPicker {
                         id: positionPicker
+
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         position: root.effectivePosition
                         enabled: kcm.zoneSelectorEnabled
                         onPositionSelected: function(newPosition) {
-                            root.writeSetting("Position", newPosition, function(v) { kcm.zoneSelectorPosition = v })
+                            root.writeSetting("Position", newPosition, function(v) {
+                                kcm.zoneSelectorPosition = v;
+                            });
                         }
                     }
 
                     Label {
                         id: positionDescription
+
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: positionPicker.bottom
                         anchors.topMargin: Kirigami.Units.smallSpacing
@@ -143,6 +150,7 @@ ColumnLayout {
                         opacity: 0.7
                         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     }
+
                 }
 
                 // Trigger distance - centered like position picker
@@ -152,6 +160,7 @@ ColumnLayout {
 
                     ColumnLayout {
                         id: triggerColumn
+
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         spacing: Kirigami.Units.smallSpacing
@@ -176,17 +185,22 @@ ColumnLayout {
 
                             Slider {
                                 id: triggerSlider
+
                                 Layout.fillWidth: true
                                 from: 10
                                 to: root.constants.zoneSelectorTriggerMax
                                 stepSize: 10
                                 Accessible.name: i18n("Trigger distance")
+                                onMoved: root.writeSetting("TriggerDistance", value, function(v) {
+                                    kcm.zoneSelectorTriggerDistance = v;
+                                })
+
                                 Binding on value {
                                     value: root.effectiveTriggerDistance
                                     when: !triggerSlider.pressed
                                     restoreMode: Binding.RestoreNone
                                 }
-                                onMoved: root.writeSetting("TriggerDistance", value, function(v) { kcm.zoneSelectorTriggerDistance = v })
+
                             }
 
                             Label {
@@ -195,11 +209,17 @@ ColumnLayout {
                                 horizontalAlignment: Text.AlignRight
                                 font: Kirigami.Theme.fixedWidthFont
                             }
+
                         }
+
                     }
+
                 }
+
             }
+
         }
+
     }
 
     // Layout Arrangement card - wrapped in Item for stable sizing
@@ -209,6 +229,7 @@ ColumnLayout {
 
         Kirigami.Card {
             id: layoutCard
+
             anchors.fill: parent
             enabled: kcm.zoneSelectorEnabled
 
@@ -221,16 +242,24 @@ ColumnLayout {
             contentItem: Kirigami.FormLayout {
                 ComboBox {
                     id: zoneSelectorLayoutModeCombo
+
                     Kirigami.FormData.label: i18n("Arrangement:")
                     textRole: "text"
                     valueRole: "value"
-                    model: [
-                        { text: i18n("Grid"), value: 0 },
-                        { text: i18n("Horizontal"), value: 1 },
-                        { text: i18n("Vertical"), value: 2 }
-                    ]
+                    model: [{
+                        "text": i18n("Grid"),
+                        "value": 0
+                    }, {
+                        "text": i18n("Horizontal"),
+                        "value": 1
+                    }, {
+                        "text": i18n("Vertical"),
+                        "value": 2
+                    }]
                     currentIndex: Math.max(0, indexOfValue(root.effectiveLayoutMode))
-                    onActivated: root.writeSetting("LayoutMode", currentValue, function(v) { kcm.zoneSelectorLayoutMode = v })
+                    onActivated: root.writeSetting("LayoutMode", currentValue, function(v) {
+                        kcm.zoneSelectorLayoutMode = v;
+                    })
                 }
 
                 SpinBox {
@@ -239,7 +268,9 @@ ColumnLayout {
                     to: root.constants.zoneSelectorGridColumnsMax
                     value: root.effectiveGridColumns
                     visible: root.effectiveLayoutMode === 0
-                    onValueModified: root.writeSetting("GridColumns", value, function(v) { kcm.zoneSelectorGridColumns = v })
+                    onValueModified: root.writeSetting("GridColumns", value, function(v) {
+                        kcm.zoneSelectorGridColumns = v;
+                    })
                 }
 
                 SpinBox {
@@ -247,14 +278,18 @@ ColumnLayout {
                     from: 1
                     to: 10
                     value: root.effectiveMaxRows
-                    visible: root.effectiveLayoutMode === 0  // Only applies to Grid mode
-                    onValueModified: root.writeSetting("MaxRows", value, function(v) { kcm.zoneSelectorMaxRows = v })
-
+                    visible: root.effectiveLayoutMode === 0 // Only applies to Grid mode
+                    onValueModified: root.writeSetting("MaxRows", value, function(v) {
+                        kcm.zoneSelectorMaxRows = v;
+                    })
                     ToolTip.visible: hovered && root.isCurrentTab
                     ToolTip.text: i18n("Scrolling enabled when more rows exist")
                 }
+
             }
+
         }
+
     }
 
     // Preview Size card - wrapped in Item for stable sizing
@@ -264,6 +299,7 @@ ColumnLayout {
 
         Kirigami.Card {
             id: previewCard
+
             anchors.fill: parent
             enabled: kcm.zoneSelectorEnabled
 
@@ -284,6 +320,7 @@ ColumnLayout {
                     // Preview container
                     Item {
                         id: sizePreviewContainer
+
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.top: parent.top
                         width: root.effectivePreviewWidth
@@ -304,6 +341,7 @@ ColumnLayout {
 
                                 Repeater {
                                     model: 3
+
                                     Rectangle {
                                         width: (parent.width - 2) / 3
                                         height: parent.height
@@ -321,9 +359,13 @@ ColumnLayout {
                                             opacity: 0.6
                                             visible: parent.width >= 20
                                         }
+
                                     }
+
                                 }
+
                             }
+
                         }
 
                         // Size label
@@ -335,39 +377,59 @@ ColumnLayout {
                             font: Kirigami.Theme.fixedWidthFont
                             opacity: 0.7
                         }
+
                     }
+
                 }
 
                 // Size selection - segmented button style
                 RowLayout {
+                    // Custom (width doesn't match preset)
+
                     id: sizeButtonRow
-                    Layout.alignment: Qt.AlignHCenter
-                    spacing: 0
 
                     // Track explicit Custom mode selection
                     property bool customModeActive: false
-
                     // Track which size is selected
                     // 0=Auto, 1=Small(120), 2=Medium(180), 3=Large(260), 4=Custom
                     property int selectedSize: {
-                        if (root.effectiveSizeMode === 0) return 0  // Auto
-                        if (customModeActive) return 4  // Explicit Custom selection
-                        var w = root.effectivePreviewWidth
-                        if (Math.abs(w - 120) <= 5) return 1  // Small
-                        if (Math.abs(w - 180) <= 5) return 2  // Medium
-                        if (Math.abs(w - 260) <= 5) return 3  // Large
-                        return 4  // Custom (width doesn't match preset)
+                        if (root.effectiveSizeMode === 0)
+                            return 0;
+
+                        // Auto
+                        if (customModeActive)
+                            return 4;
+
+                        // Explicit Custom selection
+                        var w = root.effectivePreviewWidth;
+                        if (Math.abs(w - 120) <= 5)
+                            return 1;
+
+                        // Small
+                        if (Math.abs(w - 180) <= 5)
+                            return 2;
+
+                        // Medium
+                        if (Math.abs(w - 260) <= 5)
+                            return 3;
+
+                        // Large
+                        return 4;
                     }
+
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 0
 
                     Button {
                         text: i18n("Auto")
                         flat: parent.selectedSize !== 0
                         highlighted: parent.selectedSize === 0
                         onClicked: {
-                            sizeButtonRow.customModeActive = false
-                            root.writeSetting("SizeMode", 0, function(v) { kcm.zoneSelectorSizeMode = v })
+                            sizeButtonRow.customModeActive = false;
+                            root.writeSetting("SizeMode", 0, function(v) {
+                                kcm.zoneSelectorSizeMode = v;
+                            });
                         }
-
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("Approximately 10% of screen width (120-280px)")
@@ -378,12 +440,17 @@ ColumnLayout {
                         flat: parent.selectedSize !== 1
                         highlighted: parent.selectedSize === 1
                         onClicked: {
-                            sizeButtonRow.customModeActive = false
-                            root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
-                            root.writeSetting("PreviewWidth", 120, function(v) { kcm.zoneSelectorPreviewWidth = v })
-                            root.writeSetting("PreviewHeight", Math.round(120 / root.safeAspectRatio), function(v) { kcm.zoneSelectorPreviewHeight = v })
+                            sizeButtonRow.customModeActive = false;
+                            root.writeSetting("SizeMode", 1, function(v) {
+                                kcm.zoneSelectorSizeMode = v;
+                            });
+                            root.writeSetting("PreviewWidth", 120, function(v) {
+                                kcm.zoneSelectorPreviewWidth = v;
+                            });
+                            root.writeSetting("PreviewHeight", Math.round(120 / root.safeAspectRatio), function(v) {
+                                kcm.zoneSelectorPreviewHeight = v;
+                            });
                         }
-
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("120px width")
@@ -394,12 +461,17 @@ ColumnLayout {
                         flat: parent.selectedSize !== 2
                         highlighted: parent.selectedSize === 2
                         onClicked: {
-                            sizeButtonRow.customModeActive = false
-                            root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
-                            root.writeSetting("PreviewWidth", 180, function(v) { kcm.zoneSelectorPreviewWidth = v })
-                            root.writeSetting("PreviewHeight", Math.round(180 / root.safeAspectRatio), function(v) { kcm.zoneSelectorPreviewHeight = v })
+                            sizeButtonRow.customModeActive = false;
+                            root.writeSetting("SizeMode", 1, function(v) {
+                                kcm.zoneSelectorSizeMode = v;
+                            });
+                            root.writeSetting("PreviewWidth", 180, function(v) {
+                                kcm.zoneSelectorPreviewWidth = v;
+                            });
+                            root.writeSetting("PreviewHeight", Math.round(180 / root.safeAspectRatio), function(v) {
+                                kcm.zoneSelectorPreviewHeight = v;
+                            });
                         }
-
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("180px width")
@@ -410,12 +482,17 @@ ColumnLayout {
                         flat: parent.selectedSize !== 3
                         highlighted: parent.selectedSize === 3
                         onClicked: {
-                            sizeButtonRow.customModeActive = false
-                            root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
-                            root.writeSetting("PreviewWidth", 260, function(v) { kcm.zoneSelectorPreviewWidth = v })
-                            root.writeSetting("PreviewHeight", Math.round(260 / root.safeAspectRatio), function(v) { kcm.zoneSelectorPreviewHeight = v })
+                            sizeButtonRow.customModeActive = false;
+                            root.writeSetting("SizeMode", 1, function(v) {
+                                kcm.zoneSelectorSizeMode = v;
+                            });
+                            root.writeSetting("PreviewWidth", 260, function(v) {
+                                kcm.zoneSelectorPreviewWidth = v;
+                            });
+                            root.writeSetting("PreviewHeight", Math.round(260 / root.safeAspectRatio), function(v) {
+                                kcm.zoneSelectorPreviewHeight = v;
+                            });
                         }
-
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("260px width")
@@ -426,14 +503,16 @@ ColumnLayout {
                         flat: parent.selectedSize !== 4
                         highlighted: parent.selectedSize === 4
                         onClicked: {
-                            sizeButtonRow.customModeActive = true
-                            root.writeSetting("SizeMode", 1, function(v) { kcm.zoneSelectorSizeMode = v })
+                            sizeButtonRow.customModeActive = true;
+                            root.writeSetting("SizeMode", 1, function(v) {
+                                kcm.zoneSelectorSizeMode = v;
+                            });
                         }
-
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("Custom size with slider")
                     }
+
                 }
 
                 // Custom size slider - only visible when Custom is selected
@@ -450,23 +529,30 @@ ColumnLayout {
 
                     Slider {
                         id: customSizeSlider
+
                         Layout.fillWidth: true
                         from: root.constants.zoneSelectorPreviewWidthMin
                         to: root.constants.zoneSelectorPreviewWidthMax
                         stepSize: 10
                         Accessible.name: i18n("Preview size")
+                        onMoved: {
+                            root.writeSetting("PreviewWidth", value, function(v) {
+                                kcm.zoneSelectorPreviewWidth = v;
+                            });
+                            // Always maintain aspect ratio
+                            var newHeight = Math.round(value / root.safeAspectRatio);
+                            newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight));
+                            root.writeSetting("PreviewHeight", newHeight, function(v) {
+                                kcm.zoneSelectorPreviewHeight = v;
+                            });
+                        }
+
                         Binding on value {
                             value: root.effectivePreviewWidth
                             when: !customSizeSlider.pressed
                             restoreMode: Binding.RestoreNone
                         }
-                        onMoved: {
-                            root.writeSetting("PreviewWidth", value, function(v) { kcm.zoneSelectorPreviewWidth = v })
-                            // Always maintain aspect ratio
-                            var newHeight = Math.round(value / root.safeAspectRatio)
-                            newHeight = Math.max(root.constants.zoneSelectorPreviewHeightMin, Math.min(root.constants.zoneSelectorPreviewHeightMax, newHeight))
-                            root.writeSetting("PreviewHeight", newHeight, function(v) { kcm.zoneSelectorPreviewHeight = v })
-                        }
+
                     }
 
                     Label {
@@ -475,6 +561,7 @@ ColumnLayout {
                         horizontalAlignment: Text.AlignRight
                         font: Kirigami.Theme.fixedWidthFont
                     }
+
                 }
 
                 // Info text for auto mode
@@ -487,8 +574,11 @@ ColumnLayout {
                     font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     horizontalAlignment: Text.AlignHCenter
                 }
+
             }
+
         }
+
     }
 
 }

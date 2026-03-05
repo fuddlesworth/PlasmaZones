@@ -111,7 +111,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName,
                                        const QString& screenName)
 {
-    auto *algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+    auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDaemon) << "Algorithm not found for OSD:" << algorithmId;
         return;
@@ -124,26 +124,23 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
         qCInfo(lcDaemon) << "OSD disabled, skipping for algorithm:" << displayName;
         return;
 
-    case OsdStyle::Text:
-        {
-            QDBusMessage msg = QDBusMessage::createMethodCall(
-                QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
-                QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
+    case OsdStyle::Text: {
+        QDBusMessage msg =
+            QDBusMessage::createMethodCall(QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
+                                           QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
 
-            QString displayText = i18n("Zone Layout: %1", displayName);
-            msg << QStringLiteral("plasmazones") << displayText;
+        QString displayText = i18n("Zone Layout: %1", displayName);
+        msg << QStringLiteral("plasmazones") << displayText;
 
-            QDBusConnection::sessionBus().asyncCall(msg);
-            qCInfo(lcDaemon) << "Showing text OSD for algorithm:" << displayName;
-        }
-        break;
+        QDBusConnection::sessionBus().asyncCall(msg);
+        qCInfo(lcDaemon) << "Showing text OSD for algorithm:" << displayName;
+    } break;
 
     case OsdStyle::Preview:
         if (m_overlayService) {
             QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo);
             QString layoutId = LayoutId::makeAutotileId(algorithmId);
-            m_overlayService->showLayoutOsd(layoutId, displayName, zones,
-                                            static_cast<int>(LayoutCategory::Autotile),
+            m_overlayService->showLayoutOsd(layoutId, displayName, zones, static_cast<int>(LayoutCategory::Autotile),
                                             false, screenName);
             qCInfo(lcDaemon) << "Showing preview OSD for algorithm:" << displayName << "on screen:" << screenName;
         } else {
@@ -165,7 +162,8 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenN
     });
 }
 
-void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName, const QString& screenName)
+void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString& algorithmName,
+                                      const QString& screenName)
 {
     QTimer::singleShot(0, this, [this, algorithmId, algorithmName, screenName]() {
         showLayoutOsdForAlgorithm(algorithmId, algorithmName, screenName);
@@ -190,8 +188,7 @@ void Daemon::updateLayoutFilter()
     // Exclusive mode based on runtime tiling mode, gated by the feature toggle.
     // autotileEnabled is the feature gate (can autotile be used at all?).
     // ModeTracker tracks what's actually active right now.
-    const bool autotileActive = m_settings->autotileEnabled()
-                                && m_modeTracker && m_modeTracker->isAutotileMode();
+    const bool autotileActive = m_settings->autotileEnabled() && m_modeTracker && m_modeTracker->isAutotileMode();
     const bool includeManual = !autotileActive;
     const bool includeAutotile = autotileActive;
 
@@ -202,8 +199,7 @@ void Daemon::updateLayoutFilter()
         m_unifiedLayoutController->setLayoutFilter(includeManual, includeAutotile);
     }
 
-    qCDebug(lcDaemon) << "Layout filter updated: manual=" << includeManual
-                       << "autotile=" << includeAutotile;
+    qCDebug(lcDaemon) << "Layout filter updated: manual=" << includeManual << "autotile=" << includeAutotile;
 }
 
 int Daemon::currentDesktop() const
@@ -213,8 +209,7 @@ int Daemon::currentDesktop() const
 
 QString Daemon::currentActivity() const
 {
-    return (m_activityManager && ActivityManager::isAvailable())
-           ? m_activityManager->currentActivity() : QString();
+    return (m_activityManager && ActivityManager::isAvailable()) ? m_activityManager->currentActivity() : QString();
 }
 
 } // namespace PlasmaZones

@@ -205,13 +205,13 @@ Item {
 
     // Fill available space shortcut (configurable)
     Shortcut {
+        // Fallback if zone not found in repeater
+
         id: fillShortcut
 
         sequence: editorController ? editorController.editorFillShortcut : "Ctrl+Shift+F"
         enabled: !shortcuts.previewMode && editorWindow.selectedZoneId !== "" && editorController !== null
         onActivated: {
-            // Fallback if zone not found in repeater
-
             if (editorController && editorWindow.selectedZoneId) {
                 // Find the selected zone in the repeater and trigger animated fill
                 var zoneItem = editorWindow.findZoneItemById(editorWindow.selectedZoneId);

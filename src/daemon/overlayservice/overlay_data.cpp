@@ -19,10 +19,8 @@
 
 namespace PlasmaZones {
 
-void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window,
-                                                 const QVariantList& patched,
-                                                 QScreen* screen,
-                                                 Layout* screenLayout)
+void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
+                                                  Layout* screenLayout)
 {
     Q_UNUSED(screen)
     if (!window) {
@@ -44,9 +42,8 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window,
     const bool fontStrikeout = m_settings ? m_settings->labelFontStrikeout() : false;
     const QSize size(qMax(1, static_cast<int>(window->width())), qMax(1, static_cast<int>(window->height())));
     QImage labelsImage =
-        ZoneLabelTextureBuilder::build(patched, size, labelFontColor, showNumbers, backgroundColor,
-                                       fontFamily, fontSizeScale, fontWeight, fontItalic,
-                                       fontUnderline, fontStrikeout);
+        ZoneLabelTextureBuilder::build(patched, size, labelFontColor, showNumbers, backgroundColor, fontFamily,
+                                       fontSizeScale, fontWeight, fontItalic, fontUnderline, fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
@@ -70,11 +67,9 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
         return zonesList;
     }
 
-    qCDebug(lcOverlay) << "buildZonesList: screen=" << screen->name()
-                       << "screenGeom=" << screen->geometry()
+    qCDebug(lcOverlay) << "buildZonesList: screen=" << screen->name() << "screenGeom=" << screen->geometry()
                        << "availGeom=" << ScreenManager::actualAvailableGeometry(screen)
-                       << "layout=" << screenLayout->name()
-                       << "zones=" << screenLayout->zones().size();
+                       << "layout=" << screenLayout->name() << "zones=" << screenLayout->zones().size();
 
     for (auto* zone : screenLayout->zones()) {
         if (zone) {

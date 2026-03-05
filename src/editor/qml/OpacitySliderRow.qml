@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
+import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
 /**
@@ -18,22 +18,18 @@ RowLayout {
      * @brief Current opacity value (0-1 scale, displayed as 0-100%)
      */
     property real opacityValue: 0.5
-
     /**
      * @brief Default opacity value (0-1 scale) used when opacityValue is undefined
      */
     property real defaultOpacity: 0.5
-
     /**
      * @brief Whether the slider is enabled
      */
     property bool sliderEnabled: true
-
     /**
      * @brief Accessibility name for the slider
      */
     property string accessibleName: ""
-
     /**
      * @brief Tooltip text for the slider
      */
@@ -60,7 +56,6 @@ RowLayout {
         Accessible.name: opacitySliderRow.accessibleName
         ToolTip.text: opacitySliderRow.toolTipText
         ToolTip.visible: hovered && opacitySliderRow.toolTipText !== ""
-
         onMoved: {
             Qt.callLater(function() {
                 opacitySliderRow.opacityEdited(slider.value / 100);
@@ -74,4 +69,5 @@ RowLayout {
         horizontalAlignment: Text.AlignRight
         font: Kirigami.Theme.fixedWidthFont
     }
+
 }

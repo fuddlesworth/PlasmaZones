@@ -33,12 +33,17 @@ public:
     void showContinuationIfNeeded(const QString& screenName);
 
     /// Full async snap assist: get snapped windows, build candidates, show overlay
-    void asyncShow(const QString& excludeWindowId, const QString& screenName,
-                   const QString& emptyZonesJson);
+    void asyncShow(const QString& excludeWindowId, const QString& screenName, const QString& emptyZonesJson);
 
     /// Update the enabled flag (from loadCachedSettings)
-    void setEnabled(bool enabled) { m_snapAssistEnabled = enabled; }
-    bool isEnabled() const { return m_snapAssistEnabled; }
+    void setEnabled(bool enabled)
+    {
+        m_snapAssistEnabled = enabled;
+    }
+    bool isEnabled() const
+    {
+        return m_snapAssistEnabled;
+    }
 
 private:
     QJsonArray buildCandidates(const QString& excludeWindowId, const QString& screenName,

@@ -38,7 +38,7 @@ class PLASMAZONES_EXPORT DwindleAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit DwindleAlgorithm(QObject *parent = nullptr);
+    explicit DwindleAlgorithm(QObject* parent = nullptr);
     ~DwindleAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -46,12 +46,24 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; }
-    int defaultMaxWindows() const noexcept override { return 5; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 5;
+    }
 };
 
 } // namespace PlasmaZones

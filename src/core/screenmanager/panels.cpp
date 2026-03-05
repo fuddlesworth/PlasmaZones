@@ -56,8 +56,8 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
 {
     // Query KDE Plasma via D-Bus for panel information (ASYNC to avoid blocking)
     QDBusInterface* plasmaShell =
-        new QDBusInterface(s_plasmaShellService, QStringLiteral("/PlasmaShell"),
-                           QStringLiteral("org.kde.PlasmaShell"), QDBusConnection::sessionBus(), this);
+        new QDBusInterface(s_plasmaShellService, QStringLiteral("/PlasmaShell"), QStringLiteral("org.kde.PlasmaShell"),
+                           QDBusConnection::sessionBus(), this);
 
     if (!plasmaShell->isValid()) {
         delete plasmaShell;
@@ -118,108 +118,111 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
     QDBusPendingCall pendingCall = plasmaShell->asyncCall(QStringLiteral("evaluateScript"), script);
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, plasmaShell, fromDelayedRequery](QDBusPendingCallWatcher* w) {
-        QDBusPendingReply<QString> reply = *w;
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, plasmaShell, fromDelayedRequery](QDBusPendingCallWatcher* w) {
+                QDBusPendingReply<QString> reply = *w;
 
-        // Clear existing panel offsets before parsing new data
-        m_panelOffsets.clear();
+                // Clear existing panel offsets before parsing new data
+                m_panelOffsets.clear();
 
-        if (reply.isValid()) {
-            QString output = reply.value();
-            qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply= " << output;
+                if (reply.isValid()) {
+                    QString output = reply.value();
+                    qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply= " << output;
 
-            // Parse: PANEL:plasmaIndex:location:hiding:offset:floating:x,y,w,h
-            // Match panels to Qt screens by geometry (Plasma and Qt can have different screen orderings)
-            static QRegularExpression panelRegex(
-                QStringLiteral("PANEL:(\\d+):(\\w+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
-            QRegularExpressionMatchIterator it = panelRegex.globalMatch(output);
+                    // Parse: PANEL:plasmaIndex:location:hiding:offset:floating:x,y,w,h
+                    // Match panels to Qt screens by geometry (Plasma and Qt can have different screen orderings)
+                    static QRegularExpression panelRegex(QStringLiteral(
+                        "PANEL:(\\d+):(\\w+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
+                    QRegularExpressionMatchIterator it = panelRegex.globalMatch(output);
 
-            const auto qtScreens = QGuiApplication::screens();
+                    const auto qtScreens = QGuiApplication::screens();
 
-            while (it.hasNext()) {
-                QRegularExpressionMatch match = it.next();
-                int plasmaIndex = match.captured(1).toInt();
-                QString location = match.captured(2);
-                QString hiding = match.captured(3);
-                int totalOffset = match.captured(4).toInt();
-                bool isFloating = !match.captured(5).isEmpty() && match.captured(5).toInt() != 0;
+                    while (it.hasNext()) {
+                        QRegularExpressionMatch match = it.next();
+                        int plasmaIndex = match.captured(1).toInt();
+                        QString location = match.captured(2);
+                        QString hiding = match.captured(3);
+                        int totalOffset = match.captured(4).toInt();
+                        bool isFloating = !match.captured(5).isEmpty() && match.captured(5).toInt() != 0;
 
-                // Find the Qt screen matching this Plasma screen's geometry
-                QString screenName;
-                if (!match.captured(6).isEmpty()) {
-                    QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
-                                     match.captured(8).toInt(), match.captured(9).toInt());
-                    for (auto* qs : qtScreens) {
-                        if (qs->geometry() == plasmaGeom) {
-                            screenName = qs->name();
-                            break;
+                        // Find the Qt screen matching this Plasma screen's geometry
+                        QString screenName;
+                        if (!match.captured(6).isEmpty()) {
+                            QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
+                                             match.captured(8).toInt(), match.captured(9).toInt());
+                            for (auto* qs : qtScreens) {
+                                if (qs->geometry() == plasmaGeom) {
+                                    screenName = qs->name();
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (screenName.isEmpty()) {
+                            qCWarning(lcScreen) << "  Could not match Plasma screen" << plasmaIndex
+                                                << "to any Qt screen by geometry — skipping panel";
+                            continue;
+                        }
+
+                        qCDebug(lcScreen)
+                            << "  Parsed panel screen=" << screenName << "(plasma idx" << plasmaIndex << ")"
+                            << " location=" << location << " offset=" << totalOffset << " floating=" << isFloating
+                            << " hiding=" << hiding;
+
+                        bool panelAutoHides =
+                            (hiding == QLatin1String("autohide") || hiding == QLatin1String("dodgewindows")
+                             || hiding == QLatin1String("windowsgobelow"));
+
+                        if (panelAutoHides) {
+                            totalOffset = 0;
+                        }
+
+                        if (!m_panelOffsets.contains(screenName)) {
+                            m_panelOffsets.insert(screenName, ScreenPanelOffsets{});
+                        }
+
+                        ScreenPanelOffsets& offsets = m_panelOffsets[screenName];
+                        if (location == QLatin1String("top")) {
+                            offsets.top = totalOffset;
+                        } else if (location == QLatin1String("bottom")) {
+                            offsets.bottom = totalOffset;
+                        } else if (location == QLatin1String("left")) {
+                            offsets.left = totalOffset;
+                        } else if (location == QLatin1String("right")) {
+                            offsets.right = totalOffset;
                         }
                     }
+                } else {
+                    qCWarning(lcScreen) << "queryKdePlasmaPanels D-Bus query failed:" << reply.error().message();
                 }
 
-                if (screenName.isEmpty()) {
-                    qCWarning(lcScreen) << "  Could not match Plasma screen" << plasmaIndex
-                                        << "to any Qt screen by geometry — skipping panel";
-                    continue;
+                // Log final panel offsets
+                for (auto it = m_panelOffsets.constBegin(); it != m_panelOffsets.constEnd(); ++it) {
+                    qCInfo(lcScreen) << "  Screen" << it.key() << "panel offsets T=" << it.value().top
+                                     << "B=" << it.value().bottom << "L=" << it.value().left
+                                     << "R=" << it.value().right;
                 }
 
-                qCDebug(lcScreen) << "  Parsed panel screen=" << screenName << "(plasma idx" << plasmaIndex << ")"
-                                  << " location=" << location << " offset=" << totalOffset
-                                  << " floating=" << isFloating << " hiding=" << hiding;
-
-                bool panelAutoHides = (hiding == QLatin1String("autohide")
-                    || hiding == QLatin1String("dodgewindows") || hiding == QLatin1String("windowsgobelow"));
-
-                if (panelAutoHides) {
-                    totalOffset = 0;
+                // Now recalculate geometry for all screens with updated panel data
+                for (auto* screen : m_trackedScreens) {
+                    calculateAvailableGeometry(screen);
                 }
 
-                if (!m_panelOffsets.contains(screenName)) {
-                    m_panelOffsets.insert(screenName, ScreenPanelOffsets{});
+                // Emit panelGeometryReady on first successful query
+                if (!m_panelGeometryReceived) {
+                    m_panelGeometryReceived = true;
+                    qCInfo(lcScreen) << "Panel geometry ready - emitting signal";
+                    Q_EMIT panelGeometryReady();
                 }
 
-                ScreenPanelOffsets& offsets = m_panelOffsets[screenName];
-                if (location == QLatin1String("top")) {
-                    offsets.top = totalOffset;
-                } else if (location == QLatin1String("bottom")) {
-                    offsets.bottom = totalOffset;
-                } else if (location == QLatin1String("left")) {
-                    offsets.left = totalOffset;
-                } else if (location == QLatin1String("right")) {
-                    offsets.right = totalOffset;
+                if (fromDelayedRequery) {
+                    Q_EMIT delayedPanelRequeryCompleted();
                 }
-            }
-        } else {
-            qCWarning(lcScreen) << "queryKdePlasmaPanels D-Bus query failed:" << reply.error().message();
-        }
 
-        // Log final panel offsets
-        for (auto it = m_panelOffsets.constBegin(); it != m_panelOffsets.constEnd(); ++it) {
-            qCInfo(lcScreen) << "  Screen" << it.key() << "panel offsets T=" << it.value().top
-                              << "B=" << it.value().bottom << "L=" << it.value().left
-                              << "R=" << it.value().right;
-        }
-
-        // Now recalculate geometry for all screens with updated panel data
-        for (auto* screen : m_trackedScreens) {
-            calculateAvailableGeometry(screen);
-        }
-
-        // Emit panelGeometryReady on first successful query
-        if (!m_panelGeometryReceived) {
-            m_panelGeometryReceived = true;
-            qCInfo(lcScreen) << "Panel geometry ready - emitting signal";
-            Q_EMIT panelGeometryReady();
-        }
-
-        if (fromDelayedRequery) {
-            Q_EMIT delayedPanelRequeryCompleted();
-        }
-
-        // Cleanup
-        plasmaShell->deleteLater();
-        w->deleteLater();
-    });
+                // Cleanup
+                plasmaShell->deleteLater();
+                w->deleteLater();
+            });
 }
 
 } // namespace PlasmaZones

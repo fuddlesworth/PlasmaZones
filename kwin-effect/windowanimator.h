@@ -47,9 +47,9 @@ struct EasingCurve
     qreal y2 = 1.0;
 
     // Parameters for elastic and bounce curves
-    qreal amplitude = 1.0;  // Elastic: overshoot intensity; Bounce: bounce height scale
-    qreal period = 0.3;     // Elastic only: oscillation period
-    int bounces = 3;        // Bounce only: number of bounces (1–8)
+    qreal amplitude = 1.0; // Elastic: overshoot intensity; Bounce: bounce height scale
+    qreal period = 0.3; // Elastic only: oscillation period
+    int bounces = 3; // Bounce only: number of bounces (1–8)
 
     /// Evaluate the easing curve at time x (0.0-1.0), returns eased value
     qreal evaluate(qreal x) const;
@@ -74,8 +74,7 @@ struct EasingCurve
                 && qFuzzyCompare(1.0 + period, 1.0 + other.period);
         }
         // Bounce types (BounceIn, BounceOut, BounceInOut): compare amplitude and bounce count
-        return qFuzzyCompare(1.0 + amplitude, 1.0 + other.amplitude)
-            && bounces == other.bounces;
+        return qFuzzyCompare(1.0 + amplitude, 1.0 + other.amplitude) && bounces == other.bounces;
     }
     bool operator!=(const EasingCurve& other) const
     {
@@ -97,11 +96,11 @@ private:
  */
 struct WindowAnimation
 {
-    QPointF startPosition;   ///< Visual top-left position before snap
-    QRect targetGeometry;    ///< Target geometry (for duplicate detection)
-    QElapsedTimer timer;     ///< Timer for animation progress
-    qreal duration = 150.0;  ///< Animation duration in milliseconds
-    EasingCurve easing;      ///< Easing curve for this animation
+    QPointF startPosition; ///< Visual top-left position before snap
+    QRect targetGeometry; ///< Target geometry (for duplicate detection)
+    QElapsedTimer timer; ///< Timer for animation progress
+    qreal duration = 150.0; ///< Animation duration in milliseconds
+    EasingCurve easing; ///< Easing curve for this animation
 
     /// Check if the animation timer has been started
     bool isValid() const

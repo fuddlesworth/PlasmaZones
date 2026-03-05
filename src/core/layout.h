@@ -22,17 +22,20 @@ namespace PlasmaZones {
  * Maps a window class pattern to a zone number within a layout.
  * Patterns are case-insensitive substring matches against the window class.
  */
-struct PLASMAZONES_EXPORT AppRule {
-    QString pattern;       // Window class or app name pattern (case-insensitive substring match)
-    int zoneNumber = 0;    // 1-based zone number to snap to
-    QString targetScreen;  // Optional: snap to zone on this screen instead of current
+struct PLASMAZONES_EXPORT AppRule
+{
+    QString pattern; // Window class or app name pattern (case-insensitive substring match)
+    int zoneNumber = 0; // 1-based zone number to snap to
+    QString targetScreen; // Optional: snap to zone on this screen instead of current
 
-    bool operator==(const AppRule& other) const {
-        return pattern == other.pattern
-            && zoneNumber == other.zoneNumber
-            && targetScreen == other.targetScreen;
+    bool operator==(const AppRule& other) const
+    {
+        return pattern == other.pattern && zoneNumber == other.zoneNumber && targetScreen == other.targetScreen;
     }
-    bool operator!=(const AppRule& other) const { return !(*this == other); }
+    bool operator!=(const AppRule& other) const
+    {
+        return !(*this == other);
+    }
 
     // Serialization helpers (centralized to avoid DRY violations)
     QJsonObject toJson() const;
@@ -43,10 +46,14 @@ struct PLASMAZONES_EXPORT AppRule {
 /**
  * @brief Result of matching a window class against app rules
  */
-struct PLASMAZONES_EXPORT AppRuleMatch {
+struct PLASMAZONES_EXPORT AppRuleMatch
+{
     int zoneNumber = 0;
     QString targetScreen;
-    bool matched() const { return zoneNumber > 0; }
+    bool matched() const
+    {
+        return zoneNumber > 0;
+    }
 };
 
 /**
@@ -67,8 +74,8 @@ enum class LayoutType {
  * QML Note: Passed as int to QML. Values: 0 = Manual, 1 = Autotile
  */
 enum class LayoutCategory {
-    Manual = 0,    ///< Traditional zone-based layout
-    Autotile = 1   ///< Dynamic auto-tiling algorithm
+    Manual = 0, ///< Traditional zone-based layout
+    Autotile = 1 ///< Dynamic auto-tiling algorithm
 };
 
 /**
@@ -110,13 +117,16 @@ class PLASMAZONES_EXPORT Layout : public QObject
     Q_PROPERTY(bool autoAssign READ autoAssign WRITE setAutoAssign NOTIFY autoAssignChanged)
 
     // Geometry mode: use full screen or available (panel-excluded) geometry
-    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY useFullScreenGeometryChanged)
+    Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
+                   useFullScreenGeometryChanged)
 
     // Visibility filtering
-    Q_PROPERTY(bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
+    Q_PROPERTY(
+        bool hiddenFromSelector READ hiddenFromSelector WRITE setHiddenFromSelector NOTIFY hiddenFromSelectorChanged)
     Q_PROPERTY(QStringList allowedScreens READ allowedScreens WRITE setAllowedScreens NOTIFY allowedScreensChanged)
     Q_PROPERTY(QList<int> allowedDesktops READ allowedDesktops WRITE setAllowedDesktops NOTIFY allowedDesktopsChanged)
-    Q_PROPERTY(QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
+    Q_PROPERTY(
+        QStringList allowedActivities READ allowedActivities WRITE setAllowedActivities NOTIFY allowedActivitiesChanged)
 
 public:
     explicit Layout(QObject* parent = nullptr);
@@ -200,7 +210,8 @@ public:
     void setOuterGapRight(int gap);
     bool hasPerSideOuterGapOverride() const
     {
-        return m_usePerSideOuterGap && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+        return m_usePerSideOuterGap
+            && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
     }
     /**
      * @brief Raw per-side gap overrides. Values may be -1 (use global).
@@ -231,9 +242,18 @@ public:
 
     // Original system layout path — set when a user override replaces a system layout.
     // Persisted in user JSON so deletion can restore the system original without scanning.
-    QString systemSourcePath() const { return m_systemSourcePath; }
-    void setSystemSourcePath(const QString& path) { m_systemSourcePath = path; }
-    bool hasSystemOrigin() const { return !m_systemSourcePath.isEmpty(); }
+    QString systemSourcePath() const
+    {
+        return m_systemSourcePath;
+    }
+    void setSystemSourcePath(const QString& path)
+    {
+        m_systemSourcePath = path;
+    }
+    bool hasSystemOrigin() const
+    {
+        return !m_systemSourcePath.isEmpty();
+    }
 
     // Shader support
     QString shaderId() const
@@ -270,18 +290,27 @@ public:
     void setAllowedActivities(const QStringList& activities);
 
     // App-to-zone rules
-    QVector<AppRule> appRules() const { return m_appRules; }
+    QVector<AppRule> appRules() const
+    {
+        return m_appRules;
+    }
     void setAppRules(const QVector<AppRule>& rules);
     QVariantList appRulesVariant() const;
     void setAppRulesVariant(const QVariantList& rules);
     AppRuleMatch matchAppRule(const QString& windowClass) const;
 
     // Auto-assign: new windows fill first empty zone
-    bool autoAssign() const { return m_autoAssign; }
+    bool autoAssign() const
+    {
+        return m_autoAssign;
+    }
     void setAutoAssign(bool enabled);
 
     // Geometry mode: when true, zones span the full screen including panel/taskbar areas
-    bool useFullScreenGeometry() const { return m_useFullScreenGeometry; }
+    bool useFullScreenGeometry() const
+    {
+        return m_useFullScreenGeometry;
+    }
     void setUseFullScreenGeometry(bool enabled);
 
     // Optional load order for "default" layout when defaultLayoutId is not set (lower = first)
@@ -318,7 +347,10 @@ public:
     // Geometry calculations
     Q_INVOKABLE void recalculateZoneGeometries(const QRectF& screenGeometry);
     Q_INVOKABLE void renumberZones();
-    QRectF lastRecalcGeometry() const { return m_lastRecalcGeometry; }
+    QRectF lastRecalcGeometry() const
+    {
+        return m_lastRecalcGeometry;
+    }
 
     // Serialization
     QJsonObject toJson() const;
@@ -332,9 +364,18 @@ public:
     static Layout* createFocusLayout(QObject* parent = nullptr);
 
     // Dirty tracking for copy-on-write saving
-    bool isDirty() const { return m_dirty; }
-    void markDirty() { m_dirty = true; }
-    void clearDirty() { m_dirty = false; }
+    bool isDirty() const
+    {
+        return m_dirty;
+    }
+    void markDirty()
+    {
+        m_dirty = true;
+    }
+    void clearDirty()
+    {
+        m_dirty = false;
+    }
     void beginBatchModify();
     void endBatchModify();
 
@@ -367,10 +408,10 @@ private:
     QString m_name;
     LayoutType m_type = LayoutType::Custom;
     QString m_description;
-    int m_zonePadding = -1;  // -1 = use global setting
-    int m_outerGap = -1;     // -1 = use global setting
+    int m_zonePadding = -1; // -1 = use global setting
+    int m_outerGap = -1; // -1 = use global setting
     bool m_usePerSideOuterGap = false;
-    int m_outerGapTop = -1;    // -1 = use global setting
+    int m_outerGapTop = -1; // -1 = use global setting
     int m_outerGapBottom = -1;
     int m_outerGapLeft = -1;
     int m_outerGapRight = -1;
@@ -395,8 +436,8 @@ private:
 
     // Visibility filtering
     bool m_hiddenFromSelector = false;
-    QStringList m_allowedScreens;    // empty = all screens
-    QList<int> m_allowedDesktops;    // empty = all desktops
+    QStringList m_allowedScreens; // empty = all screens
+    QList<int> m_allowedDesktops; // empty = all desktops
     QStringList m_allowedActivities; // empty = all activities
 
     // Cache last geometry used for recalculation to avoid redundant work

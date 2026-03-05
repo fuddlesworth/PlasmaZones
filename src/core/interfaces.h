@@ -334,8 +334,7 @@ public:
     // Layout assignments (screenId: stable EDID-based identifier or connector name fallback)
     virtual Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
                                     const QString& activity = QString()) const = 0;
-    virtual void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
-                              Layout* layout) = 0;
+    virtual void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity, Layout* layout) = 0;
     virtual void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const QString& layoutId) = 0;
     virtual void clearAssignment(const QString& screenId, int virtualDesktop = 0,

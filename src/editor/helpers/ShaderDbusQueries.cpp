@@ -18,11 +18,8 @@ namespace {
 
 QDBusInterface createSettingsInterface()
 {
-    return QDBusInterface(
-        QString::fromLatin1(DBus::ServiceName),
-        QString::fromLatin1(DBus::ObjectPath),
-        QString::fromLatin1(DBus::Interface::Settings),
-        QDBusConnection::sessionBus());
+    return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                          QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
 }
 
 } // anonymous namespace

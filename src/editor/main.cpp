@@ -46,8 +46,8 @@ int main(int argc, char* argv[])
     KLocalizedString::setApplicationDomain("plasmazones-editor");
 
     KAboutData aboutData(QStringLiteral("plasmazones-editor"), i18n("PlasmaZones Layout Editor"),
-                         PlasmaZones::VERSION_STRING, i18n("Visual layout editor for PlasmaZones"), KAboutLicense::GPL_V3,
-                         i18n("(c) 2026 fuddlesworth"));
+                         PlasmaZones::VERSION_STRING, i18n("Visual layout editor for PlasmaZones"),
+                         KAboutLicense::GPL_V3, i18n("(c) 2026 fuddlesworth"));
     aboutData.addAuthor(i18n("fuddlesworth"));
     aboutData.setDesktopFileName(QStringLiteral("org.plasmazones.editor"));
     KAboutData::setApplicationData(aboutData);
@@ -62,8 +62,7 @@ int main(int argc, char* argv[])
                                     i18n("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},
                                        i18n("Create new layout"));
-    QCommandLineOption previewOption(QStringLiteral("preview"),
-                                     i18n("Open in read-only preview mode"));
+    QCommandLineOption previewOption(QStringLiteral("preview"), i18n("Open in read-only preview mode"));
 
     parser.addOptions({layoutIdOption, screenOption, newLayoutOption, previewOption});
     parser.process(app);

@@ -93,8 +93,8 @@ static void ensureInterface(InterfacePtr& interface, const QString& interfaceNam
 // Helper Method Implementations
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void PlasmaZonesEffect::fireAndForgetDBusCall(const QString& interface, const QString& method,
-                                               const QVariantList& args, const QString& logContext)
+void PlasmaZonesEffect::fireAndForgetDBusCall(const QString& interface, const QString& method, const QVariantList& args,
+                                              const QString& logContext)
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, interface, method);
     for (const QVariant& arg : args) {
@@ -291,8 +291,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // to ensure consistent behavior even if autotile screens changed mid-drag.
                 if (m_dragBypassedForAutotile) {
                     if (!cancelled) {
-                        fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("floatWindow"),
-                                              {windowId}, QStringLiteral("floatWindow"));
+                        fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("floatWindow"), {windowId},
+                                              QStringLiteral("floatWindow"));
                         qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
                     }
                     return;
@@ -338,8 +338,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
     // Connect to screen geometry changes for keepWindowsInZonesOnResolutionChange feature
     // In KWin 6, use virtualScreenGeometryChanged (not per-screen signal)
-    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged,
-            m_screenChangeHandler.get(), &ScreenChangeHandler::slotScreenGeometryChanged);
+    connect(KWin::effects, &KWin::EffectsHandler::virtualScreenGeometryChanged, m_screenChangeHandler.get(),
+            &ScreenChangeHandler::slotScreenGeometryChanged);
 
     // Connect to daemon's settingsChanged D-Bus signal
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
@@ -366,12 +366,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // initializing), the call times out harmlessly and we wait for the
     // daemonReady D-Bus signal instead.
     {
-        QDBusMessage introspect = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            QStringLiteral("org.freedesktop.DBus.Introspectable"),
-            QStringLiteral("Introspect"));
-        auto* watcher = new QDBusPendingCallWatcher(
-            QDBusConnection::sessionBus().asyncCall(introspect, 3000), this);
+        QDBusMessage introspect = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
+                                                                 QStringLiteral("org.freedesktop.DBus.Introspectable"),
+                                                                 QStringLiteral("Introspect"));
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(introspect, 3000), this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QString> reply = *w;
@@ -397,9 +395,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     //
     // On Wayland, this watcher uses D-Bus monitoring (not X11 selection),
     // which works reliably across both sessions.
-    auto* serviceWatcher = new QDBusServiceWatcher(DBus::ServiceName, QDBusConnection::sessionBus(),
-                                                   QDBusServiceWatcher::WatchForRegistration
-                                                   | QDBusServiceWatcher::WatchForUnregistration, this);
+    auto* serviceWatcher = new QDBusServiceWatcher(
+        DBus::ServiceName, QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
     connect(serviceWatcher, &QDBusServiceWatcher::serviceUnregistered, this, [this]() {
         qCInfo(lcEffect) << "Daemon service unregistered";
         m_daemonServiceRegistered = false;
@@ -438,14 +436,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // name in match rules, so refresh for the new daemon instance.
         // Disconnect first to prevent duplicate match rules (Qt doesn't deduplicate),
         // which would cause slotDaemonReady to fire twice on the same signal.
-        QDBusConnection::sessionBus().disconnect(DBus::ServiceName, DBus::ObjectPath,
-                                                 DBus::Interface::LayoutManager,
-                                                 QStringLiteral("daemonReady"), this,
-                                                 SLOT(slotDaemonReady()));
-        QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath,
-                                              DBus::Interface::LayoutManager,
-                                              QStringLiteral("daemonReady"), this,
-                                              SLOT(slotDaemonReady()));
+        QDBusConnection::sessionBus().disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutManager,
+                                                 QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
+        QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutManager,
+                                              QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
     });
 
     // NOTE: syncFloatingWindowsFromDaemon() and loadCachedSettings() are NOT
@@ -518,9 +512,7 @@ void PlasmaZonesEffect::reconfigure(ReconfigureFlags flags)
 
 bool PlasmaZonesEffect::isActive() const
 {
-    return m_dragTracker->isDragging()
-        || m_windowAnimator->hasActiveAnimations()
-        || !m_lastBorderRect.isEmpty();
+    return m_dragTracker->isDragging() || m_windowAnimator->hasActiveAnimations() || !m_lastBorderRect.isEmpty();
 }
 
 void PlasmaZonesEffect::grabbedKeyboardEvent(QKeyEvent* e)
@@ -729,11 +721,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     }
 }
 
-
-void PlasmaZonesEffect::applyStaggeredOrImmediate(
-    int count,
-    const std::function<void(int)>& applyFn,
-    const std::function<void()>& onComplete)
+void PlasmaZonesEffect::applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
+                                                  const std::function<void()>& onComplete)
 {
     if (count <= 0) {
         if (onComplete) {
@@ -816,10 +805,8 @@ void PlasmaZonesEffect::slotDaemonReady()
     // Re-sync floating windows (async, no QDBusInterface needed)
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
-        auto* watcher = new QDBusPendingCallWatcher(
-            QDBusConnection::sessionBus().asyncCall(msg), this);
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
@@ -855,10 +842,8 @@ void PlasmaZonesEffect::slotDaemonReady()
     // QDBusMessage (no QDBusInterface) to avoid synchronous introspection.
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
-        auto* watcher = new QDBusPendingCallWatcher(
-            QDBusConnection::sessionBus().asyncCall(msg), this);
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
         connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
@@ -1010,8 +995,7 @@ bool PlasmaZonesEffect::isTileableWindow(KWin::EffectWindow* w) const
     // Electron apps (Vesktop, VS Code, Discord) create separate windows
     // for context menus and dropdowns that pass shouldHandleWindow() but
     // must never enter the autotile tree.
-    if (!w->isNormalWindow() || w->isModal() || w->isPopupWindow()
-        || w->isDropdownMenu() || w->isPopupMenu()
+    if (!w->isNormalWindow() || w->isModal() || w->isPopupWindow() || w->isDropdownMenu() || w->isPopupMenu()
         || w->isTooltip() || w->isMenu() || w->transientFor()) {
         return false;
     }
@@ -1095,8 +1079,7 @@ bool PlasmaZonesEffect::ensureWindowTrackingReady(const char* methodName)
 
 bool PlasmaZonesEffect::ensureOverlayInterface(const char* methodName)
 {
-    ensureInterface(m_overlayInterface, DBus::Interface::Overlay, "Overlay",
-                    m_daemonServiceRegistered);
+    ensureInterface(m_overlayInterface, DBus::Interface::Overlay, "Overlay", m_daemonServiceRegistered);
     if (!m_overlayInterface || !m_overlayInterface->isValid()) {
         qCDebug(lcEffect) << "Cannot" << methodName << "- Overlay interface not available";
         return false;
@@ -1115,8 +1098,8 @@ void PlasmaZonesEffect::syncFloatingWindowsFromDaemon()
 template<typename Fn>
 void PlasmaZonesEffect::loadSettingAsync(const QString& name, Fn&& onValue)
 {
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath,
-                                                      DBus::Interface::Settings, QStringLiteral("getSetting"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                                      QStringLiteral("getSetting"));
     msg << name;
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [name, onValue](QDBusPendingCallWatcher* w) {
@@ -1199,8 +1182,8 @@ void PlasmaZonesEffect::loadCachedSettings()
             }
             // Invalidate pending stagger timers that would use the old border width
             m_autotileHandler->invalidateStaggerGeneration();
-            fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("retileAllScreens"),
-                                  {}, QStringLiteral("border width change retile"));
+            fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("retileAllScreens"), {},
+                                  QStringLiteral("border width change retile"));
         }
     });
 
@@ -1260,8 +1243,10 @@ void PlasmaZonesEffect::loadCachedSettings()
             }
 
             qCDebug(lcEffect) << "Loaded dragActivationTriggers:" << m_parsedTriggers.size() << "triggers";
-            bool anyValid = std::any_of(m_parsedTriggers.cbegin(), m_parsedTriggers.cend(),
-                                        [](const ParsedTrigger& pt) { return pt.modifier != 0 || pt.mouseButton != 0; });
+            bool anyValid =
+                std::any_of(m_parsedTriggers.cbegin(), m_parsedTriggers.cend(), [](const ParsedTrigger& pt) {
+                    return pt.modifier != 0 || pt.mouseButton != 0;
+                });
             if (!m_parsedTriggers.isEmpty() && !anyValid) {
                 qCWarning(lcEffect) << "All triggers have modifier=0 mouseButton=0"
                                     << "— possible deserialization issue";
@@ -1394,8 +1379,7 @@ void PlasmaZonesEffect::connectNavigationSignals()
 
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
                                           QStringLiteral("reapplyWindowGeometriesRequested"),
-                                          m_screenChangeHandler.get(),
-                                          SLOT(slotReapplyWindowGeometriesRequested()));
+                                          m_screenChangeHandler.get(), SLOT(slotReapplyWindowGeometriesRequested()));
 
     // Connect to floating state changes to keep local cache in sync
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
@@ -1523,7 +1507,6 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
         m_snapAssistHandler->showContinuationIfNeeded(screenName);
     }
 }
-
 
 void PlasmaZonesEffect::slotFocusWindowInZoneRequested(const QString& targetZoneId, const QString& windowId)
 {
@@ -1827,8 +1810,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
     qCDebug(lcEffect) << "Providing" << windowArray.size() << "running windows to daemon";
 
     // Send result back to daemon via D-Bus
-    ensureInterface(m_settingsInterface, DBus::Interface::Settings, "Settings",
-                    m_daemonServiceRegistered);
+    ensureInterface(m_settingsInterface, DBus::Interface::Settings, "Settings", m_daemonServiceRegistered);
     if (m_settingsInterface && m_settingsInterface->isValid()) {
         m_settingsInterface->asyncCall(QStringLiteral("provideRunningWindows"), jsonString);
     } else {
@@ -1863,9 +1845,8 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window)
     // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain
     // skipAnimation=true: window is being restored to its snap position on startup/reopen,
     // so teleport directly instead of sliding from KWin's saved position.
-    tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("resolveWindowRestore"),
-                     {windowId, screenName, sticky}, safeWindow, windowId, true, nullptr,
-                     nullptr, true);
+    tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("resolveWindowRestore"), {windowId, screenName, sticky},
+                     safeWindow, windowId, true, nullptr, nullptr, true);
 }
 
 void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)
@@ -2064,7 +2045,8 @@ void PlasmaZonesEffect::tryAsyncSnapCall(QDBusAbstractInterface& iface, const QS
     QDBusPendingCall call = iface.asyncCallWithArgumentList(method, args);
     auto* watcher = new QDBusPendingCallWatcher(call, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args, skipAnimation](QDBusPendingCallWatcher* w) {
+            [this, window, windowId, storePreSnap, method, fallback, onSnapSuccess, args,
+             skipAnimation](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
                 QDBusPendingReply<int, int, int, int, bool> reply = *w;
                 if (reply.isError()) {
@@ -2143,8 +2125,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
                 const int dy = qMax(0, geo.height() - ch) / 2;
                 geo = QRect(geo.x() + dx, geo.y() + dy, cw, ch);
                 qCDebug(lcEffect) << "Pre-centered X11 window with size constraints:"
-                                  << "zone=" << geometry.size() << "constrained=" << constrained
-                                  << "adjusted=" << geo;
+                                  << "zone=" << geometry.size() << "constrained=" << constrained << "adjusted=" << geo;
             }
         }
     }
@@ -2335,8 +2316,8 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
     // R2 fix: Notify autotile engine of focus change with screen name so
     // m_windowToScreen is updated (also addresses R5: cross-screen detection)
     if (m_autotileHandler->isAutotileScreen(screenName)) {
-        fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("notifyWindowFocused"),
-                              {windowId, screenName}, QStringLiteral("notifyWindowFocused"));
+        fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("notifyWindowFocused"), {windowId, screenName},
+                              QStringLiteral("notifyWindowFocused"));
     }
 }
 
@@ -2417,8 +2398,8 @@ void PlasmaZonesEffect::paintScreen(const KWin::RenderTarget& renderTarget, cons
     const QColor bc = m_autotileHandler->borderColor();
     if (bw > 0 && bc.isValid() && bc.alpha() > 0) {
         KWin::EffectWindow* active = KWin::effects->activeWindow();
-        if (active && !active->isMinimized() && !active->isFullScreen()
-            && active->isOnCurrentDesktop() && active->screen() == screen) {
+        if (active && !active->isMinimized() && !active->isFullScreen() && active->isOnCurrentDesktop()
+            && active->screen() == screen) {
             const QString wid = getWindowId(active);
             if (m_autotileHandler->isBorderlessWindow(wid)) {
                 const QRectF frame = active->frameGeometry();
@@ -2466,12 +2447,11 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
     // This ensures windows above (OSDs, popups, panels) render on top of the border.
     // Guard: only draw on the output where the window actually lives to prevent
     // incorrect coordinate projection on other monitors in multi-monitor setups.
-    if (w && w == KWin::effects->activeWindow()
-        && w->screen() == m_currentRenderScreen) {
+    if (w && w == KWin::effects->activeWindow() && w->screen() == m_currentRenderScreen) {
         const int bw = m_autotileHandler->borderWidth();
         const QColor bc = m_autotileHandler->borderColor();
-        if (bw > 0 && bc.isValid() && bc.alpha() > 0
-            && !w->isMinimized() && !w->isFullScreen() && w->isOnCurrentDesktop()) {
+        if (bw > 0 && bc.isValid() && bc.alpha() > 0 && !w->isMinimized() && !w->isFullScreen()
+            && w->isOnCurrentDesktop()) {
             const QString wid = getWindowId(w);
             if (m_autotileHandler->isBorderlessWindow(wid)) {
                 const QRectF frame = w->frameGeometry();

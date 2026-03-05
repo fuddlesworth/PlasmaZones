@@ -34,7 +34,7 @@ class PLASMAZONES_EXPORT BSPAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit BSPAlgorithm(QObject *parent = nullptr);
+    explicit BSPAlgorithm(QObject* parent = nullptr);
     ~BSPAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -42,12 +42,24 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; }
-    int defaultMaxWindows() const noexcept override { return 5; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 5;
+    }
 
 private:
     /**
@@ -56,15 +68,19 @@ private:
      * Internal nodes have two children and define a split direction + ratio.
      * Leaf nodes represent individual windows and have no children.
      */
-    struct BSPNode {
-        qreal splitRatio = 0.5;       ///< How to divide this node's space
-        bool splitHorizontal = false;  ///< true = top/bottom, false = left/right
-        QRect geometry;                ///< Computed geometry (set during layout pass)
+    struct BSPNode
+    {
+        qreal splitRatio = 0.5; ///< How to divide this node's space
+        bool splitHorizontal = false; ///< true = top/bottom, false = left/right
+        QRect geometry; ///< Computed geometry (set during layout pass)
         std::unique_ptr<BSPNode> first;
         std::unique_ptr<BSPNode> second;
-        BSPNode *parent = nullptr;     ///< Non-owning back-pointer
+        BSPNode* parent = nullptr; ///< Non-owning back-pointer
 
-        bool isLeaf() const { return !first && !second; }
+        bool isLeaf() const
+        {
+            return !first && !second;
+        }
     };
 
     /**
@@ -77,14 +93,14 @@ private:
      * @param leafCount Output: receives the final leaf count
      * @param refRect Screen geometry for split direction heuristics
      */
-    static void buildTree(std::unique_ptr<BSPNode> &root, int &leafCount,
-                          int windowCount, qreal defaultRatio, const QRect &refRect);
+    static void buildTree(std::unique_ptr<BSPNode>& root, int& leafCount, int windowCount, qreal defaultRatio,
+                          const QRect& refRect);
 
     /**
      * @brief Split the largest leaf to add one more window slot
      * @return true if a leaf was split
      */
-    static bool growTree(BSPNode *root, int &leafCount, qreal defaultRatio);
+    static bool growTree(BSPNode* root, int& leafCount, qreal defaultRatio);
 
     /**
      * @brief Apply geometry to all nodes top-down from root
@@ -96,8 +112,8 @@ private:
      *
      * @param leafStartIdx Index of the first leaf in minSizes for this subtree
      */
-    static void applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
-                              const QVector<QSize> &minSizes, int leafStartIdx);
+    static void applyGeometry(BSPNode* node, const QRect& rect, int innerGap, const QVector<QSize>& minSizes,
+                              int leafStartIdx);
 
     /**
      * @brief Compute minimum width and height required by a subtree
@@ -109,18 +125,18 @@ private:
      * @param[out] leafCount Number of leaves in this subtree
      * @return Minimum QSize required by the subtree
      */
-    static QSize computeSubtreeMinDims(const BSPNode *node, const QVector<QSize> &minSizes,
-                                       int leafStartIdx, int innerGap, int &leafCount);
+    static QSize computeSubtreeMinDims(const BSPNode* node, const QVector<QSize>& minSizes, int leafStartIdx,
+                                       int innerGap, int& leafCount);
 
     /**
      * @brief Collect leaf geometries in tree order (left-to-right, top-to-bottom)
      */
-    static void collectLeaves(const BSPNode *node, QVector<QRect> &zones);
+    static void collectLeaves(const BSPNode* node, QVector<QRect>& zones);
 
     /**
      * @brief Count the number of leaf nodes in a subtree
      */
-    static int countLeaves(const BSPNode *node);
+    static int countLeaves(const BSPNode* node);
 
     /**
      * @brief Find the leaf with the largest area (best candidate to split)
@@ -130,14 +146,14 @@ private:
      * Falls back to deepest-rightmost when geometries haven't been
      * assigned yet (first build pass).
      */
-    static BSPNode *largestLeaf(BSPNode *node);
+    static BSPNode* largestLeaf(BSPNode* node);
 
     /**
      * @brief Choose split direction for a node based on its geometry
      *
      * Splits perpendicular to the longest axis (standard BSP heuristic).
      */
-    static bool chooseSplitDirection(const QRect &geometry);
+    static bool chooseSplitDirection(const QRect& geometry);
 };
 
 } // namespace PlasmaZones

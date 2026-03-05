@@ -50,12 +50,11 @@ class KCMPlasmaZones : public KQuickConfigModule
                    dragActivationTriggersChanged)
     Q_PROPERTY(bool alwaysActivateOnDrag READ alwaysActivateOnDrag WRITE setAlwaysActivateOnDrag NOTIFY
                    alwaysActivateOnDragChanged)
-    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY
-                   toggleActivationChanged)
+    Q_PROPERTY(bool toggleActivation READ toggleActivation WRITE setToggleActivation NOTIFY toggleActivationChanged)
     Q_PROPERTY(bool snappingEnabled READ snappingEnabled WRITE setSnappingEnabled NOTIFY snappingEnabledChanged)
     Q_PROPERTY(bool zoneSpanEnabled READ zoneSpanEnabled WRITE setZoneSpanEnabled NOTIFY zoneSpanEnabledChanged)
-    Q_PROPERTY(QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY
-                   zoneSpanTriggersChanged)
+    Q_PROPERTY(
+        QVariantList zoneSpanTriggers READ zoneSpanTriggers WRITE setZoneSpanTriggers NOTIFY zoneSpanTriggersChanged)
 
     // Display
     Q_PROPERTY(bool showZonesOnAllMonitors READ showZonesOnAllMonitors WRITE setShowZonesOnAllMonitors NOTIFY
@@ -66,8 +65,7 @@ class KCMPlasmaZones : public KQuickConfigModule
         bool flashZonesOnSwitch READ flashZonesOnSwitch WRITE setFlashZonesOnSwitch NOTIFY flashZonesOnSwitchChanged)
     Q_PROPERTY(bool showOsdOnLayoutSwitch READ showOsdOnLayoutSwitch WRITE setShowOsdOnLayoutSwitch NOTIFY
                    showOsdOnLayoutSwitchChanged)
-    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY
-                   showNavigationOsdChanged)
+    Q_PROPERTY(bool showNavigationOsd READ showNavigationOsd WRITE setShowNavigationOsd NOTIFY showNavigationOsdChanged)
     Q_PROPERTY(int osdStyle READ osdStyle WRITE setOsdStyle NOTIFY osdStyleChanged)
 
     // Appearance
@@ -82,11 +80,14 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int borderRadius READ borderRadius WRITE setBorderRadius NOTIFY borderRadiusChanged)
     Q_PROPERTY(bool enableBlur READ enableBlur WRITE setEnableBlur NOTIFY enableBlurChanged)
     Q_PROPERTY(QString labelFontFamily READ labelFontFamily WRITE setLabelFontFamily NOTIFY labelFontFamilyChanged)
-    Q_PROPERTY(qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
+    Q_PROPERTY(
+        qreal labelFontSizeScale READ labelFontSizeScale WRITE setLabelFontSizeScale NOTIFY labelFontSizeScaleChanged)
     Q_PROPERTY(int labelFontWeight READ labelFontWeight WRITE setLabelFontWeight NOTIFY labelFontWeightChanged)
     Q_PROPERTY(bool labelFontItalic READ labelFontItalic WRITE setLabelFontItalic NOTIFY labelFontItalicChanged)
-    Q_PROPERTY(bool labelFontUnderline READ labelFontUnderline WRITE setLabelFontUnderline NOTIFY labelFontUnderlineChanged)
-    Q_PROPERTY(bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
+    Q_PROPERTY(
+        bool labelFontUnderline READ labelFontUnderline WRITE setLabelFontUnderline NOTIFY labelFontUnderlineChanged)
+    Q_PROPERTY(
+        bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
     // Shader Effects
     Q_PROPERTY(bool enableShaderEffects READ enableShaderEffects WRITE setEnableShaderEffects NOTIFY
@@ -101,7 +102,8 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Zones
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
-    Q_PROPERTY(bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
+    Q_PROPERTY(
+        bool usePerSideOuterGap READ usePerSideOuterGap WRITE setUsePerSideOuterGap NOTIFY usePerSideOuterGapChanged)
     Q_PROPERTY(int outerGapTop READ outerGapTop WRITE setOuterGapTop NOTIFY outerGapTopChanged)
     Q_PROPERTY(int outerGapBottom READ outerGapBottom WRITE setOuterGapBottom NOTIFY outerGapBottomChanged)
     Q_PROPERTY(int outerGapLeft READ outerGapLeft WRITE setOuterGapLeft NOTIFY outerGapLeftChanged)
@@ -119,9 +121,11 @@ class KCMPlasmaZones : public KQuickConfigModule
                    stickyWindowHandlingChanged)
     Q_PROPERTY(bool restoreWindowsToZonesOnLogin READ restoreWindowsToZonesOnLogin WRITE setRestoreWindowsToZonesOnLogin
                    NOTIFY restoreWindowsToZonesOnLoginChanged)
-    Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY snapAssistFeatureEnabledChanged)
+    Q_PROPERTY(bool snapAssistFeatureEnabled READ snapAssistFeatureEnabled WRITE setSnapAssistFeatureEnabled NOTIFY
+                   snapAssistFeatureEnabledChanged)
     Q_PROPERTY(bool snapAssistEnabled READ snapAssistEnabled WRITE setSnapAssistEnabled NOTIFY snapAssistEnabledChanged)
-    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY snapAssistTriggersChanged)
+    Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
+                   snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
 
@@ -161,28 +165,27 @@ class KCMPlasmaZones : public KQuickConfigModule
 
     // Autotiling
     Q_PROPERTY(bool autotileEnabled READ autotileEnabled WRITE setAutotileEnabled NOTIFY autotileEnabledChanged)
-    Q_PROPERTY(QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY
-                   autotileAlgorithmChanged)
-    Q_PROPERTY(qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY
-                   autotileSplitRatioChanged)
+    Q_PROPERTY(
+        QString autotileAlgorithm READ autotileAlgorithm WRITE setAutotileAlgorithm NOTIFY autotileAlgorithmChanged)
+    Q_PROPERTY(
+        qreal autotileSplitRatio READ autotileSplitRatio WRITE setAutotileSplitRatio NOTIFY autotileSplitRatioChanged)
     Q_PROPERTY(
         int autotileMasterCount READ autotileMasterCount WRITE setAutotileMasterCount NOTIFY autotileMasterCountChanged)
-    Q_PROPERTY(qreal autotileCenteredMasterSplitRatio READ autotileCenteredMasterSplitRatio WRITE setAutotileCenteredMasterSplitRatio NOTIFY
-                   autotileCenteredMasterSplitRatioChanged)
-    Q_PROPERTY(int autotileCenteredMasterMasterCount READ autotileCenteredMasterMasterCount WRITE setAutotileCenteredMasterMasterCount NOTIFY
-                   autotileCenteredMasterMasterCountChanged)
+    Q_PROPERTY(qreal autotileCenteredMasterSplitRatio READ autotileCenteredMasterSplitRatio WRITE
+                   setAutotileCenteredMasterSplitRatio NOTIFY autotileCenteredMasterSplitRatioChanged)
+    Q_PROPERTY(int autotileCenteredMasterMasterCount READ autotileCenteredMasterMasterCount WRITE
+                   setAutotileCenteredMasterMasterCount NOTIFY autotileCenteredMasterMasterCountChanged)
     Q_PROPERTY(int autotileInnerGap READ autotileInnerGap WRITE setAutotileInnerGap NOTIFY autotileInnerGapChanged)
     Q_PROPERTY(int autotileOuterGap READ autotileOuterGap WRITE setAutotileOuterGap NOTIFY autotileOuterGapChanged)
     Q_PROPERTY(bool autotileFocusNewWindows READ autotileFocusNewWindows WRITE setAutotileFocusNewWindows NOTIFY
                    autotileFocusNewWindowsChanged)
     Q_PROPERTY(bool autotileSmartGaps READ autotileSmartGaps WRITE setAutotileSmartGaps NOTIFY autotileSmartGapsChanged)
-    Q_PROPERTY(int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
+    Q_PROPERTY(
+        int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
     Q_PROPERTY(int autotileInsertPosition READ autotileInsertPosition WRITE setAutotileInsertPosition NOTIFY
                    autotileInsertPositionChanged)
-    Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY
-                   animationsEnabledChanged)
-    Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY
-                   animationDurationChanged)
+    Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
+    Q_PROPERTY(int animationDuration READ animationDuration WRITE setAnimationDuration NOTIFY animationDurationChanged)
     Q_PROPERTY(QString animationEasingCurve READ animationEasingCurve WRITE setAnimationEasingCurve NOTIFY
                    animationEasingCurveChanged)
     Q_PROPERTY(int animationMinDistance READ animationMinDistance WRITE setAnimationMinDistance NOTIFY
@@ -194,20 +197,20 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
                    autotileFocusFollowsMouseChanged)
-    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize NOTIFY
-                   autotileRespectMinimumSizeChanged)
+    Q_PROPERTY(bool autotileRespectMinimumSize READ autotileRespectMinimumSize WRITE setAutotileRespectMinimumSize
+                   NOTIFY autotileRespectMinimumSizeChanged)
     Q_PROPERTY(bool autotileHideTitleBars READ autotileHideTitleBars WRITE setAutotileHideTitleBars NOTIFY
                    autotileHideTitleBarsChanged)
-    Q_PROPERTY(int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY
-                   autotileBorderWidthChanged)
+    Q_PROPERTY(
+        int autotileBorderWidth READ autotileBorderWidth WRITE setAutotileBorderWidth NOTIFY autotileBorderWidthChanged)
     Q_PROPERTY(QColor autotileBorderColor READ autotileBorderColor WRITE setAutotileBorderColor NOTIFY
                    autotileBorderColorChanged)
-    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE setAutotileUseSystemBorderColors NOTIFY
-                   autotileUseSystemBorderColorsChanged)
-    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap NOTIFY
-                   autotileUsePerSideOuterGapChanged)
-    Q_PROPERTY(int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY
-                   autotileOuterGapTopChanged)
+    Q_PROPERTY(bool autotileUseSystemBorderColors READ autotileUseSystemBorderColors WRITE
+                   setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
+    Q_PROPERTY(bool autotileUsePerSideOuterGap READ autotileUsePerSideOuterGap WRITE setAutotileUsePerSideOuterGap
+                   NOTIFY autotileUsePerSideOuterGapChanged)
+    Q_PROPERTY(
+        int autotileOuterGapTop READ autotileOuterGapTop WRITE setAutotileOuterGapTop NOTIFY autotileOuterGapTopChanged)
     Q_PROPERTY(int autotileOuterGapBottom READ autotileOuterGapBottom WRITE setAutotileOuterGapBottom NOTIFY
                    autotileOuterGapBottomChanged)
     Q_PROPERTY(int autotileOuterGapLeft READ autotileOuterGapLeft WRITE setAutotileOuterGapLeft NOTIFY
@@ -259,7 +262,8 @@ class KCMPlasmaZones : public KQuickConfigModule
     // Screens and assignments
     Q_PROPERTY(QVariantList screens READ screens NOTIFY screensChanged)
     Q_PROPERTY(QVariantMap screenAssignments READ screenAssignments NOTIFY screenAssignmentsChanged)
-    Q_PROPERTY(int assignmentViewMode READ assignmentViewMode WRITE setAssignmentViewMode NOTIFY assignmentViewModeChanged)
+    Q_PROPERTY(
+        int assignmentViewMode READ assignmentViewMode WRITE setAssignmentViewMode NOTIFY assignmentViewModeChanged)
     Q_PROPERTY(QVariantMap tilingScreenAssignments READ tilingScreenAssignments NOTIFY tilingScreenAssignmentsChanged)
 
     // Virtual desktop support
@@ -281,7 +285,8 @@ class KCMPlasmaZones : public KQuickConfigModule
     Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
     Q_PROPERTY(QString releaseUrl READ releaseUrl NOTIFY releaseUrlChanged)
     Q_PROPERTY(bool checkingForUpdates READ checkingForUpdates NOTIFY checkingForUpdatesChanged)
-    Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY dismissedUpdateVersionChanged)
+    Q_PROPERTY(QString dismissedUpdateVersion READ dismissedUpdateVersion WRITE setDismissedUpdateVersion NOTIFY
+                   dismissedUpdateVersionChanged)
 
 public:
     explicit KCMPlasmaZones(QObject* parent, const KPluginMetaData& data);
@@ -388,8 +393,8 @@ public:
     int autotileOuterGapLeft() const;
     int autotileOuterGapRight() const;
     Q_INVOKABLE QVariantList availableAlgorithms() const;
-    Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString &algorithmId, int windowCount,
-                                                      double splitRatio, int masterCount) const;
+    Q_INVOKABLE QVariantList generateAlgorithmPreview(const QString& algorithmId, int windowCount, double splitRatio,
+                                                      int masterCount) const;
 
     QString editorDuplicateShortcut() const;
     QString editorSplitHorizontalShortcut() const;
@@ -571,8 +576,8 @@ public Q_SLOTS:
     // App-to-zone rules management
     Q_INVOKABLE QVariantList getAppRulesForLayout(const QString& layoutId) const;
     Q_INVOKABLE void setAppRulesForLayout(const QString& layoutId, const QVariantList& rules);
-    Q_INVOKABLE void addAppRuleToLayout(const QString& layoutId, const QString& pattern,
-                                         int zoneNumber, const QString& targetScreen = QString());
+    Q_INVOKABLE void addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber,
+                                        const QString& targetScreen = QString());
     Q_INVOKABLE void removeAppRuleFromLayout(const QString& layoutId, int index);
 
     // Exclusion management
@@ -620,7 +625,8 @@ public Q_SLOTS:
 
     // Per-screen zone selector settings
     Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
-    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key, const QVariant& value);
+    Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
+                                                     const QVariant& value);
     Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenName) const;
 
@@ -644,21 +650,22 @@ public Q_SLOTS:
 
     // Per-activity screen assignments
     Q_INVOKABLE void assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                   const QString& layoutId);
+                                                  const QString& layoutId);
     Q_INVOKABLE void clearScreenActivityAssignment(const QString& screenName, const QString& activityId);
     Q_INVOKABLE QString getLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
     Q_INVOKABLE bool hasExplicitAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
 
     // Tiling-mode per-activity screen assignments (KCM-persisted, not daemon-owned)
     Q_INVOKABLE void assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                         const QString& layoutId);
+                                                        const QString& layoutId);
     Q_INVOKABLE void clearTilingScreenActivityAssignment(const QString& screenName, const QString& activityId);
     Q_INVOKABLE QString getTilingLayoutForScreenActivity(const QString& screenName, const QString& activityId) const;
-    Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenActivity(const QString& screenName, const QString& activityId) const;
+    Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenActivity(const QString& screenName,
+                                                                  const QString& activityId) const;
 
     // Tiling-mode per-virtual-desktop screen assignments (KCM-persisted, not daemon-owned)
     Q_INVOKABLE void assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                        const QString& layoutId);
+                                                       const QString& layoutId);
     Q_INVOKABLE void clearTilingScreenDesktopAssignment(const QString& screenName, int virtualDesktop);
     Q_INVOKABLE QString getTilingLayoutForScreenDesktop(const QString& screenName, int virtualDesktop) const;
     Q_INVOKABLE bool hasExplicitTilingAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const;
@@ -832,8 +839,8 @@ private:
     using PerScreenClearer = void (Settings::*)(const QString&);
     using PerScreenChecker = bool (Settings::*)(const QString&) const;
     QVariantMap getPerScreenSettingsImpl(const QString& screenName, PerScreenGetter getter) const;
-    void setPerScreenSettingImpl(const QString& screenName, const QString& key,
-                                 const QVariant& value, PerScreenSetter setter);
+    void setPerScreenSettingImpl(const QString& screenName, const QString& key, const QVariant& value,
+                                 PerScreenSetter setter);
     void clearPerScreenSettingsImpl(const QString& screenName, PerScreenClearer clearer);
     bool hasPerScreenSettingsImpl(const QString& screenName, PerScreenChecker checker) const;
 
@@ -857,7 +864,7 @@ private:
 
     Settings* m_settings = nullptr;
     UpdateChecker* m_updateChecker = nullptr;
-    QString m_dismissedUpdateVersion;  // Cached to avoid repeated config reads
+    QString m_dismissedUpdateVersion; // Cached to avoid repeated config reads
     std::unique_ptr<AssignmentManager> m_assignmentManager;
     std::unique_ptr<DaemonController> m_daemonController;
     std::unique_ptr<LayoutManager> m_layoutManager;

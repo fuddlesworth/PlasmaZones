@@ -17,8 +17,8 @@ class Settings;
  * @brief Tiling mode: manual zone layouts or automatic tiling algorithms
  */
 enum class TilingMode {
-    Manual = 0,    ///< Traditional zone-based layout
-    Autotile = 1   ///< Dynamic auto-tiling algorithm
+    Manual = 0, ///< Traditional zone-based layout
+    Autotile = 1 ///< Dynamic auto-tiling algorithm
 };
 
 /**
@@ -42,11 +42,20 @@ public:
     // Current mode
     // ═══════════════════════════════════════════════════════════════════════════
 
-    TilingMode currentMode() const { return m_currentMode; }
+    TilingMode currentMode() const
+    {
+        return m_currentMode;
+    }
     void setCurrentMode(TilingMode mode);
 
-    bool isAutotileMode() const { return m_currentMode == TilingMode::Autotile; }
-    bool isManualMode() const { return m_currentMode == TilingMode::Manual; }
+    bool isAutotileMode() const
+    {
+        return m_currentMode == TilingMode::Autotile;
+    }
+    bool isManualMode() const
+    {
+        return m_currentMode == TilingMode::Manual;
+    }
 
     /**
      * @brief Toggle between Manual and Autotile modes
@@ -58,11 +67,17 @@ public:
     // Layout tracking
     // ═══════════════════════════════════════════════════════════════════════════
 
-    QString lastManualLayoutId() const { return m_lastManualLayoutId; }
+    QString lastManualLayoutId() const
+    {
+        return m_lastManualLayoutId;
+    }
     void recordManualLayout(const QString& layoutId);
     void recordManualLayout(const QUuid& layoutId);
 
-    QString lastAutotileAlgorithm() const { return m_lastAutotileAlgorithm; }
+    QString lastAutotileAlgorithm() const
+    {
+        return m_lastAutotileAlgorithm;
+    }
     void recordAutotileAlgorithm(const QString& algorithmId);
 
     // ═══════════════════════════════════════════════════════════════════════════

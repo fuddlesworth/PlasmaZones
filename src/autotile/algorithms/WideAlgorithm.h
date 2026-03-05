@@ -36,7 +36,7 @@ class PLASMAZONES_EXPORT WideAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit WideAlgorithm(QObject *parent = nullptr);
+    explicit WideAlgorithm(QObject* parent = nullptr);
     ~WideAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -44,13 +44,28 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
-    int masterZoneIndex() const noexcept override { return 0; }
-    bool supportsMasterCount() const noexcept override { return true; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; }
-    int defaultMaxWindows() const noexcept override { return 5; }
+    int masterZoneIndex() const noexcept override
+    {
+        return 0;
+    }
+    bool supportsMasterCount() const noexcept override
+    {
+        return true;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 5;
+    }
 };
 
 } // namespace PlasmaZones

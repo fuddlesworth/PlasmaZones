@@ -17,7 +17,7 @@ namespace {
 AlgorithmRegistrar<WideAlgorithm> s_wideRegistrar(DBus::AutotileAlgorithm::Wide, 110);
 }
 
-WideAlgorithm::WideAlgorithm(QObject *parent)
+WideAlgorithm::WideAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -37,13 +37,13 @@ QString WideAlgorithm::icon() const noexcept
     return QStringLiteral("view-split-top-bottom");
 }
 
-QVector<QRect> WideAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> WideAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -51,7 +51,7 @@ QVector<QRect> WideAlgorithm::calculateZones(const TilingParams &params) const
         return zones;
     }
 
-    const auto &state = *params.state;
+    const auto& state = *params.state;
 
     const QRect area = innerRect(screenGeometry, outerGaps);
 
@@ -96,8 +96,8 @@ QVector<QRect> WideAlgorithm::calculateZones(const TilingParams &params) const
         const int totalMin = std::max(minMasterHeight, 0) + std::max(minStackHeight, 0);
         if (totalMin > contentHeight && totalMin > 0) {
             // Unsatisfiable: distribute proportionally by minimum weight
-            masterHeight = static_cast<int>(
-                static_cast<qint64>(contentHeight) * std::max(minMasterHeight, 1) / totalMin);
+            masterHeight =
+                static_cast<int>(static_cast<qint64>(contentHeight) * std::max(minMasterHeight, 1) / totalMin);
             stackHeight = contentHeight - masterHeight;
         } else {
             if (minMasterHeight > 0 && masterHeight < minMasterHeight) {

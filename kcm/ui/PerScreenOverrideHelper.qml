@@ -27,43 +27,43 @@ QtObject {
     required property string getterMethod
     required property string setterMethod
     required property string clearerMethod
-
     property string selectedScreenName: ""
     readonly property bool isPerScreen: selectedScreenName !== ""
     readonly property bool hasOverrides: isPerScreen && Object.keys(perScreenOverrides).length > 0
-
-    property var perScreenOverrides: ({})
-
-    onSelectedScreenNameChanged: reload()
+    property var perScreenOverrides: ({
+    })
 
     function reload() {
-        if (isPerScreen && selectedScreenName !== "") {
-            perScreenOverrides = kcm[getterMethod](selectedScreenName)
-        } else {
-            perScreenOverrides = {}
-        }
+        if (isPerScreen && selectedScreenName !== "")
+            perScreenOverrides = kcm[getterMethod](selectedScreenName);
+        else
+            perScreenOverrides = {
+        };
     }
 
     function settingValue(key, globalValue) {
-        if (isPerScreen && perScreenOverrides.hasOwnProperty(key)) {
-            return perScreenOverrides[key]
-        }
-        return globalValue
+        if (isPerScreen && perScreenOverrides.hasOwnProperty(key))
+            return perScreenOverrides[key];
+
+        return globalValue;
     }
 
     function writeSetting(key, value, globalSetter) {
         if (isPerScreen) {
-            kcm[setterMethod](selectedScreenName, key, value)
-            var updated = Object.assign({}, perScreenOverrides)
-            updated[key] = value
-            perScreenOverrides = updated
+            kcm[setterMethod](selectedScreenName, key, value);
+            var updated = Object.assign({
+            }, perScreenOverrides);
+            updated[key] = value;
+            perScreenOverrides = updated;
         } else {
-            globalSetter(value)
+            globalSetter(value);
         }
     }
 
     function clearOverrides() {
-        kcm[clearerMethod](selectedScreenName)
-        reload()
+        kcm[clearerMethod](selectedScreenName);
+        reload();
     }
+
+    onSelectedScreenNameChanged: reload()
 }

@@ -193,7 +193,9 @@ void LayoutManager::addLayout(Layout* layout)
         m_layouts.append(layout);
 
         // Connect to save on modification (per-layout copy-on-write)
-        connect(layout, &Layout::layoutModified, this, [this, layout]() { saveLayout(layout); });
+        connect(layout, &Layout::layoutModified, this, [this, layout]() {
+            saveLayout(layout);
+        });
 
         // New layouts need immediate persistence
         layout->markDirty();
@@ -315,7 +317,8 @@ Layout* LayoutManager::layoutForShortcut(int number) const
 {
     if (m_quickLayoutShortcuts.contains(number)) {
         const QString& id = m_quickLayoutShortcuts[number];
-        if (LayoutId::isAutotile(id)) return nullptr;
+        if (LayoutId::isAutotile(id))
+            return nullptr;
         return layoutById(QUuid::fromString(id));
     }
     return nullptr;
@@ -334,7 +337,7 @@ void LayoutManager::applyQuickLayout(int number, const QString& screenId)
     } else {
         // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
         qCInfo(lcLayout) << "No layout assigned to quick slot" << number << "- attempting fallback to layout index"
-                          << (number - 1);
+                         << (number - 1);
         if (number >= 1 && number <= m_layouts.size()) {
             layout = m_layouts.at(number - 1);
             if (layout) {

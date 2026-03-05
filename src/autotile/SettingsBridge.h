@@ -71,8 +71,7 @@ public:
      * @param maxWindows New max windows
      * @param oldMaxWindows Previous max windows (only written if changed)
      */
-    void syncAlgorithmToSettings(const QString& algoId, qreal splitRatio,
-                                 int maxWindows, int oldMaxWindows);
+    void syncAlgorithmToSettings(const QString& algoId, qreal splitRatio, int maxWindows, int oldMaxWindows);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Session persistence
@@ -95,7 +94,10 @@ public:
     /**
      * @brief Get the current Settings pointer (may be null)
      */
-    Settings* settings() const { return m_settings; }
+    Settings* settings() const
+    {
+        return m_settings;
+    }
 
 private:
     void scheduleSettingsRetile();

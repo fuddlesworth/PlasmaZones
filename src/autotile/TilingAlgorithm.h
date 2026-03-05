@@ -21,13 +21,14 @@ class TilingState;
  * Bundles all inputs to calculateZones() into a single struct so new
  * parameters can be added without changing the virtual interface.
  */
-struct TilingParams {
-    int windowCount = 0;                ///< Number of windows to tile
-    QRect screenGeometry;               ///< Available screen area in absolute pixels
-    const TilingState *state = nullptr; ///< Current tiling state (must be non-null)
-    int innerGap = 0;                   ///< Gap between adjacent zones in pixels
-    EdgeGaps outerGaps;                 ///< Gaps at screen edges in pixels (per-side)
-    QVector<QSize> minSizes = {};        ///< Per-window minimum sizes (may be empty)
+struct TilingParams
+{
+    int windowCount = 0; ///< Number of windows to tile
+    QRect screenGeometry; ///< Available screen area in absolute pixels
+    const TilingState* state = nullptr; ///< Current tiling state (must be non-null)
+    int innerGap = 0; ///< Gap between adjacent zones in pixels
+    EdgeGaps outerGaps; ///< Gaps at screen edges in pixels (per-side)
+    QVector<QSize> minSizes = {}; ///< Per-window minimum sizes (may be empty)
 };
 
 /**
@@ -64,12 +65,12 @@ class PLASMAZONES_EXPORT TilingAlgorithm : public QObject
     Q_PROPERTY(bool supportsSplitRatio READ supportsSplitRatio CONSTANT)
 
 public:
-    explicit TilingAlgorithm(QObject *parent = nullptr);
+    explicit TilingAlgorithm(QObject* parent = nullptr);
     ~TilingAlgorithm() override = default;
 
     // Prevent copying (QObject rule)
-    TilingAlgorithm(const TilingAlgorithm &) = delete;
-    TilingAlgorithm &operator=(const TilingAlgorithm &) = delete;
+    TilingAlgorithm(const TilingAlgorithm&) = delete;
+    TilingAlgorithm& operator=(const TilingAlgorithm&) = delete;
 
     /**
      * @brief Human-readable name of the algorithm
@@ -102,7 +103,7 @@ public:
      *       For windowCount == 0, return an empty vector.
      *       For windowCount == 1, typically return a single zone inset by outerGap.
      */
-    virtual QVector<QRect> calculateZones(const TilingParams &params) const = 0;
+    virtual QVector<QRect> calculateZones(const TilingParams& params) const = 0;
 
     /**
      * @brief Get the index of the "master" zone (if applicable)
@@ -184,7 +185,7 @@ protected:
      * @param outerGap Gap at each edge in pixels
      * @return Inset rectangle (clamped to at least 1x1)
      */
-    static QRect innerRect(const QRect &screenGeometry, int outerGap);
+    static QRect innerRect(const QRect& screenGeometry, int outerGap);
 
     /**
      * @brief Compute the usable area after subtracting per-side outer gaps from screen edges
@@ -193,7 +194,7 @@ protected:
      * @param gaps Per-side gap values
      * @return Inset rectangle (clamped to at least 1x1)
      */
-    static QRect innerRect(const QRect &screenGeometry, const EdgeGaps &gaps);
+    static QRect innerRect(const QRect& screenGeometry, const EdgeGaps& gaps);
 
     /**
      * @brief Distribute total space among count items with gaps between them
@@ -222,25 +223,25 @@ protected:
      * @param minDims Per-item minimum dimension (items beyond vector size default to 1px)
      * @return Vector of item sizes (caller positions them with gap spacing)
      */
-    static QVector<int> distributeWithMinSizes(int total, int count, int gap,
-                                               const QVector<int> &minDims);
+    static QVector<int> distributeWithMinSizes(int total, int count, int gap, const QVector<int>& minDims);
 
     /**
      * @brief Extract minimum width from minSizes at the given index
      * @return The minimum width (>= 0), or 0 if index is out of range
      */
-    static int minWidthAt(const QVector<QSize> &minSizes, int index);
+    static int minWidthAt(const QVector<QSize>& minSizes, int index);
 
     /**
      * @brief Extract minimum height from minSizes at the given index
      * @return The minimum height (>= 0), or 0 if index is out of range
      */
-    static int minHeightAt(const QVector<QSize> &minSizes, int index);
+    static int minHeightAt(const QVector<QSize>& minSizes, int index);
 
     /**
      * @brief Result of solving three-column width distribution
      */
-    struct ThreeColumnWidths {
+    struct ThreeColumnWidths
+    {
         int leftWidth;
         int centerWidth;
         int rightWidth;
@@ -265,16 +266,16 @@ protected:
      * @param minRightWidth Minimum width for right column (0 = unconstrained)
      * @return Solved widths and X positions
      */
-    static ThreeColumnWidths solveThreeColumnWidths(
-        int areaX, int contentWidth, int innerGap, qreal splitRatio,
-        int minLeftWidth, int minCenterWidth, int minRightWidth);
+    static ThreeColumnWidths solveThreeColumnWidths(int areaX, int contentWidth, int innerGap, qreal splitRatio,
+                                                    int minLeftWidth, int minCenterWidth, int minRightWidth);
 
     /**
      * @brief Result of precomputing cumulative min dimensions for alternating V/H splits
      */
-    struct CumulativeMinDims {
-        QVector<int> minW;  ///< Per-window cumulative minimum width (size = windowCount + 1)
-        QVector<int> minH;  ///< Per-window cumulative minimum height (size = windowCount + 1)
+    struct CumulativeMinDims
+    {
+        QVector<int> minW; ///< Per-window cumulative minimum width (size = windowCount + 1)
+        QVector<int> minH; ///< Per-window cumulative minimum height (size = windowCount + 1)
     };
 
     /**
@@ -284,8 +285,8 @@ protected:
      * splitV = (i % 2 == 0). Accumulates along the split axis and takes max
      * for the orthogonal axis.
      */
-    static CumulativeMinDims computeAlternatingCumulativeMinDims(
-        int windowCount, const QVector<QSize>& minSizes, int innerGap);
+    static CumulativeMinDims computeAlternatingCumulativeMinDims(int windowCount, const QVector<QSize>& minSizes,
+                                                                 int innerGap);
 
     /**
      * @brief Append graceful degradation zones when remaining area is too small
@@ -293,8 +294,7 @@ protected:
      * Shared by Dwindle and Spiral. Distributes leftover windows evenly within
      * the remaining rectangle. zones.last() is resized to the first sub-zone.
      */
-    static void appendGracefulDegradation(QVector<QRect>& zones, const QRect& remaining,
-                                           int leftover, int innerGap);
+    static void appendGracefulDegradation(QVector<QRect>& zones, const QRect& remaining, int leftover, int innerGap);
 
     /**
      * @brief Clamp split ratio to min/max range, or fall back to proportional split
@@ -302,9 +302,8 @@ protected:
      * Shared by BSP for both H and V branches. When minFirstRatio <= maxFirstRatio,
      * clamps ratio. Otherwise distributes proportionally by minimum weight.
      */
-    static qreal clampOrProportionalFallback(qreal ratio, qreal minFirstRatio,
-                                              qreal maxFirstRatio,
-                                              int firstDim, int secondDim);
+    static qreal clampOrProportionalFallback(qreal ratio, qreal minFirstRatio, qreal maxFirstRatio, int firstDim,
+                                             int secondDim);
 
 Q_SIGNALS:
     /**

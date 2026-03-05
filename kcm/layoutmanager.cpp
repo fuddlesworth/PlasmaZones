@@ -32,8 +32,7 @@ LayoutManager::LayoutManager(KCMPlasmaZones* kcm, Settings* settings, QObject* p
 // D-Bus helpers (local copies — avoid tight coupling to KCM's private API)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QDBusMessage LayoutManager::callDaemon(const QString& interface, const QString& method,
-                                        const QVariantList& args) const
+QDBusMessage LayoutManager::callDaemon(const QString& interface, const QString& method, const QVariantList& args) const
 {
     QDBusMessage msg =
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath), interface, method);
@@ -126,9 +125,9 @@ void LayoutManager::editLayout(const QString& layoutId)
 {
     QString screenName = m_kcm->currentScreenName();
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath),
-        QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForLayoutOnScreen"));
+    QDBusMessage msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                                      QString(DBus::Interface::LayoutManager),
+                                                      QStringLiteral("openEditorForLayoutOnScreen"));
     msg << layoutId << screenName;
     watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("editLayout"));
 }
@@ -139,14 +138,13 @@ void LayoutManager::openEditor()
 
     QDBusMessage msg;
     if (!screenName.isEmpty()) {
-        msg = QDBusMessage::createMethodCall(
-            QString(DBus::ServiceName), QString(DBus::ObjectPath),
-            QString(DBus::Interface::LayoutManager), QStringLiteral("openEditorForScreen"));
+        msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                             QString(DBus::Interface::LayoutManager),
+                                             QStringLiteral("openEditorForScreen"));
         msg << screenName;
     } else {
-        msg = QDBusMessage::createMethodCall(
-            QString(DBus::ServiceName), QString(DBus::ObjectPath),
-            QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
+        msg = QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                             QString(DBus::Interface::LayoutManager), QStringLiteral("openEditor"));
     }
     watchAsyncDbusCall(QDBusConnection::sessionBus().asyncCall(msg), QStringLiteral("openEditor"));
 }
@@ -207,7 +205,8 @@ void LayoutManager::setLayoutAutoAssign(const QString& layoutId, bool enabled)
 
 void LayoutManager::scheduleLoad()
 {
-    if (m_saveInProgress) return;
+    if (m_saveInProgress)
+        return;
     m_loadTimer->start();
 }
 
@@ -215,37 +214,36 @@ void LayoutManager::loadAsync()
 {
     const int generation = ++m_loadGeneration;
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString(DBus::ServiceName), QString(DBus::ObjectPath),
-        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
+    QDBusMessage msg =
+        QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                       QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
-    auto* watcher = new QDBusPendingCallWatcher(
-        QDBusConnection::sessionBus().asyncCall(msg), this);
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-        [this, generation](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, generation](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
 
-            if (generation != m_loadGeneration) return;
+        if (generation != m_loadGeneration)
+            return;
 
-            QVariantList newLayouts;
-            QDBusPendingReply<QStringList> reply = *w;
+        QVariantList newLayouts;
+        QDBusPendingReply<QStringList> reply = *w;
 
-            if (!reply.isError()) {
-                const QStringList layoutJsonList = reply.value();
-                for (const QString& layoutJson : layoutJsonList) {
-                    QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
-                    if (!doc.isNull() && doc.isObject()) {
-                        newLayouts.append(doc.object().toVariantMap());
-                    }
+        if (!reply.isError()) {
+            const QStringList layoutJsonList = reply.value();
+            for (const QString& layoutJson : layoutJsonList) {
+                QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
+                if (!doc.isNull() && doc.isObject()) {
+                    newLayouts.append(doc.object().toVariantMap());
                 }
-            } else {
-                qCWarning(lcKcm) << "Failed to load layouts:" << reply.error().message();
             }
+        } else {
+            qCWarning(lcKcm) << "Failed to load layouts:" << reply.error().message();
+        }
 
-            m_unfilteredLayouts = newLayouts;
-            applyLayoutFilter();
-        });
+        m_unfilteredLayouts = newLayouts;
+        applyLayoutFilter();
+    });
 }
 
 void LayoutManager::loadSync()
@@ -275,11 +273,11 @@ void LayoutManager::applyLayoutFilter()
 
     // Filter out autotile entries when the feature is disabled
     if (!m_settings->autotileEnabled()) {
-        newLayouts.erase(
-            std::remove_if(newLayouts.begin(), newLayouts.end(), [](const QVariant& v) {
-                return v.toMap().value(QStringLiteral("isAutotile")).toBool();
-            }),
-            newLayouts.end());
+        newLayouts.erase(std::remove_if(newLayouts.begin(), newLayouts.end(),
+                                        [](const QVariant& v) {
+                                            return v.toMap().value(QStringLiteral("isAutotile")).toBool();
+                                        }),
+                         newLayouts.end());
     }
 
     // Sort: manual layouts first (alphabetical), then autotile (alphabetical)
@@ -292,7 +290,7 @@ void LayoutManager::applyLayoutFilter()
             return !aIsAutotile;
         }
         return mapA.value(QStringLiteral("name")).toString().toLower()
-             < mapB.value(QStringLiteral("name")).toString().toLower();
+            < mapB.value(QStringLiteral("name")).toString().toLower();
     });
 
     // Only update if the list actually changed (prevents scroll position reset)
@@ -355,8 +353,7 @@ void LayoutManager::savePendingStates(QStringList& failedOperations)
 
     if (!m_pendingHiddenStates.isEmpty()) {
         for (auto it = m_pendingHiddenStates.cbegin(); it != m_pendingHiddenStates.cend(); ++it) {
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("setLayoutHidden"),
-                                            {it.key(), it.value()});
+            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("setLayoutHidden"), {it.key(), it.value()});
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 failedOperations.append(QStringLiteral("Layout visibility (%1)").arg(it.key()));
             }
@@ -366,8 +363,8 @@ void LayoutManager::savePendingStates(QStringList& failedOperations)
 
     if (!m_pendingAutoAssignStates.isEmpty()) {
         for (auto it = m_pendingAutoAssignStates.cbegin(); it != m_pendingAutoAssignStates.cend(); ++it) {
-            QDBusMessage reply = callDaemon(layoutInterface, QStringLiteral("setLayoutAutoAssign"),
-                                            {it.key(), it.value()});
+            QDBusMessage reply =
+                callDaemon(layoutInterface, QStringLiteral("setLayoutAutoAssign"), {it.key(), it.value()});
             if (reply.type() == QDBusMessage::ErrorMessage) {
                 failedOperations.append(QStringLiteral("Layout auto-assign (%1)").arg(it.key()));
             }

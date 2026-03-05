@@ -69,8 +69,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                     boundary = (overlapLeft + overlapRight) / 2;
                 } else {
                     // Shift boundary toward the zone with more surplus
-                    int leftShare = static_cast<int>(
-                        static_cast<qint64>(overlapAmount) * rightSurplus / (leftSurplus + rightSurplus));
+                    int leftShare = static_cast<int>(static_cast<qint64>(overlapAmount) * rightSurplus
+                                                     / (leftSurplus + rightSurplus));
                     boundary = overlapLeft + leftShare;
                 }
 
@@ -90,8 +90,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                     int candidateLeft = boundary - halfGap;
                     int candidateRight = boundary + (innerGap - halfGap);
                     // Only apply gap if both zones stay above their minimums
-                    if ((candidateLeft - zones[leftIdx].left()) >= leftMinW &&
-                        ((zones[rightIdx].left() + zones[rightIdx].width()) - candidateRight) >= rightMinW) {
+                    if ((candidateLeft - zones[leftIdx].left()) >= leftMinW
+                        && ((zones[rightIdx].left() + zones[rightIdx].width()) - candidateRight) >= rightMinW) {
                         leftBound = candidateLeft;
                         rightBound = candidateRight;
                     }
@@ -147,8 +147,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                 if (topSurplus + bottomSurplus <= 0) {
                     boundary = (overlapTop + overlapBottom) / 2;
                 } else {
-                    int topShare = static_cast<int>(
-                        static_cast<qint64>(overlapAmount) * bottomSurplus / (topSurplus + bottomSurplus));
+                    int topShare = static_cast<int>(static_cast<qint64>(overlapAmount) * bottomSurplus
+                                                    / (topSurplus + bottomSurplus));
                     boundary = overlapTop + topShare;
                 }
 
@@ -164,8 +164,8 @@ void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes, i
                     int halfGap = innerGap / 2;
                     int candidateTop = boundary - halfGap;
                     int candidateBottom = boundary + (innerGap - halfGap);
-                    if ((candidateTop - zones[topIdx].top()) >= topMinH &&
-                        ((zones[bottomIdx].top() + zones[bottomIdx].height()) - candidateBottom) >= bottomMinH) {
+                    if ((candidateTop - zones[topIdx].top()) >= topMinH
+                        && ((zones[bottomIdx].top() + zones[bottomIdx].height()) - candidateBottom) >= bottomMinH) {
                         topBound = candidateTop;
                         bottomBound = candidateBottom;
                     }

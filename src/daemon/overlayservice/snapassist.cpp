@@ -24,7 +24,7 @@ namespace PlasmaZones {
 // parseZonesJson is defined in overlayservice_internal.h (shared inline)
 
 void OverlayService::showSnapAssist(const QString& screenName, const QString& emptyZonesJson,
-                                     const QString& candidatesJson)
+                                    const QString& candidatesJson)
 {
     if (emptyZonesJson.isEmpty() || candidatesJson.isEmpty()) {
         qCDebug(lcOverlay) << "showSnapAssist: no empty zones or candidates";
@@ -90,7 +90,7 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
             m_snapAssistCandidates.append(cand);
         }
         qCDebug(lcOverlay) << "showSnapAssist: " << m_thumbnailCache.size() << "cached,"
-                          << m_thumbnailCaptureQueue.size() << "to capture";
+                           << m_thumbnailCaptureQueue.size() << "to capture";
         processNextThumbnailCapture();
     } else {
         m_snapAssistCandidates = candidatesList;
@@ -118,9 +118,9 @@ void OverlayService::showSnapAssist(const QString& screenName, const QString& em
         layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-            | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-snap-assist"));
     }
@@ -329,9 +329,8 @@ void OverlayService::showLayoutPicker(const QString& screenName)
 
     // Calculate screen aspect ratio
     const QRect screenGeom = screen->geometry();
-    qreal aspectRatio = (screenGeom.height() > 0)
-        ? static_cast<qreal>(screenGeom.width()) / screenGeom.height()
-        : (16.0 / 9.0);
+    qreal aspectRatio =
+        (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
 
     // Set properties
@@ -354,9 +353,9 @@ void OverlayService::showLayoutPicker(const QString& screenName)
         layerWindow->setScreen(screen);
         layerWindow->setLayer(LayerShellQt::Window::LayerTop);
         layerWindow->setKeyboardInteractivity(LayerShellQt::Window::KeyboardInteractivityExclusive);
-        layerWindow->setAnchors(LayerShellQt::Window::Anchors(
-            LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
-            | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
+        layerWindow->setAnchors(
+            LayerShellQt::Window::Anchors(LayerShellQt::Window::AnchorTop | LayerShellQt::Window::AnchorBottom
+                                          | LayerShellQt::Window::AnchorLeft | LayerShellQt::Window::AnchorRight));
         layerWindow->setExclusiveZone(-1);
         layerWindow->setScope(QStringLiteral("plasmazones-layout-picker"));
     }
@@ -366,8 +365,8 @@ void OverlayService::showLayoutPicker(const QString& screenName)
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
 
-    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << screen->name()
-                      << "layouts=" << layoutsList.size() << "active=" << activeId;
+    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << screen->name() << "layouts=" << layoutsList.size()
+                      << "active=" << activeId;
 }
 
 void OverlayService::hideLayoutPicker()

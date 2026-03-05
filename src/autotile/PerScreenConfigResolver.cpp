@@ -79,8 +79,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenName, co
         m_engine->scheduleRetileForScreen(screenName);
     }
 
-    qCDebug(lcAutotile) << "Applied per-screen config for" << screenName
-                        << "keys:" << overrides.keys();
+    qCDebug(lcAutotile) << "Applied per-screen config for" << screenName << "keys:" << overrides.keys();
 }
 
 void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenName)
@@ -161,12 +160,10 @@ EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenName) 
     if (topOv || bottomOv || leftOv || rightOv) {
         // Use per-screen uniform gap as base, then per-side overrides on top
         const int base = effectiveOuterGap(screenName);
-        return EdgeGaps{
-            topOv ? qBound(AutotileDefaults::MinGap, topOv->toInt(), AutotileDefaults::MaxGap) : base,
-            bottomOv ? qBound(AutotileDefaults::MinGap, bottomOv->toInt(), AutotileDefaults::MaxGap) : base,
-            leftOv ? qBound(AutotileDefaults::MinGap, leftOv->toInt(), AutotileDefaults::MaxGap) : base,
-            rightOv ? qBound(AutotileDefaults::MinGap, rightOv->toInt(), AutotileDefaults::MaxGap) : base
-        };
+        return EdgeGaps{topOv ? qBound(AutotileDefaults::MinGap, topOv->toInt(), AutotileDefaults::MaxGap) : base,
+                        bottomOv ? qBound(AutotileDefaults::MinGap, bottomOv->toInt(), AutotileDefaults::MaxGap) : base,
+                        leftOv ? qBound(AutotileDefaults::MinGap, leftOv->toInt(), AutotileDefaults::MaxGap) : base,
+                        rightOv ? qBound(AutotileDefaults::MinGap, rightOv->toInt(), AutotileDefaults::MaxGap) : base};
     }
 
     // Check per-screen uniform outer gap
@@ -178,8 +175,7 @@ EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenName) 
     // Fall back to global config
     const AutotileConfig* cfg = m_engine->config();
     if (cfg->usePerSideOuterGap) {
-        return EdgeGaps{cfg->outerGapTop, cfg->outerGapBottom,
-                        cfg->outerGapLeft, cfg->outerGapRight};
+        return EdgeGaps{cfg->outerGapTop, cfg->outerGapBottom, cfg->outerGapLeft, cfg->outerGapRight};
     }
     return EdgeGaps::uniform(cfg->outerGap);
 }
@@ -222,9 +218,8 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenName) cons
             // User explicitly customized global maxWindows — honor it
             return m_engine->config()->maxWindows;
         }
-        qCWarning(lcAutotile) << "effectiveMaxWindows: unknown per-screen algorithm"
-                               << screenAlgo << "for screen" << screenName
-                               << "- falling back to global maxWindows";
+        qCWarning(lcAutotile) << "effectiveMaxWindows: unknown per-screen algorithm" << screenAlgo << "for screen"
+                              << screenName << "- falling back to global maxWindows";
     }
 
     // 3. Same algorithm globally and per-screen — use the global setting

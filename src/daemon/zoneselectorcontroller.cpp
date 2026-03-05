@@ -15,8 +15,8 @@
 namespace PlasmaZones {
 
 namespace {
-constexpr int CollapseDelayMs = 300;    // Delay before collapsing selector after cursor leaves
-constexpr int ProximityCheckMs = 16;    // ~60fps polling; TODO: derive from screen refresh rate
+constexpr int CollapseDelayMs = 300; // Delay before collapsing selector after cursor leaves
+constexpr int ProximityCheckMs = 16; // ~60fps polling; TODO: derive from screen refresh rate
 } // namespace
 
 ZoneSelectorController::ZoneSelectorController(QObject* parent)
@@ -87,9 +87,9 @@ QVariantList ZoneSelectorController::layouts() const
     if (m_screen) {
         screenName = m_screen->name();
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
-        m_includeManualLayouts, m_includeAutotileLayouts);
+    const auto entries =
+        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+                                            m_includeManualLayouts, m_includeAutotileLayouts);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -175,8 +175,8 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
             // Pass current virtual desktop for per-desktop layout lookup
             Layout* effectiveLayout = nullptr;
             if (m_screen) {
-                effectiveLayout =
-                    m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
+                effectiveLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
+                                                                   m_currentVirtualDesktop, m_currentActivity);
             }
             if (!effectiveLayout) {
                 effectiveLayout = layout;
@@ -215,7 +215,8 @@ void ZoneSelectorController::setScreen(QScreen* screen)
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
+        Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
+                                                                m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -231,8 +232,8 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         m_currentVirtualDesktop = desktop;
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
-            Layout* screenLayout =
-                m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
+            Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
+                                                                    m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }

@@ -56,7 +56,7 @@ public:
      * @return true if handled (caller should return), false if not an autotile window
      */
     bool handleAutotileFloatToggle(KWin::EffectWindow* activeWindow, const QString& windowId,
-                                    const QString& screenName);
+                                   const QString& screenName);
 
     // D-Bus signal connections and settings
     void connectSignals();
@@ -73,21 +73,42 @@ public:
 
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isAutotileScreen(const QString& screenName) const;
-    const QSet<QString>& autotileScreens() const { return m_autotileScreens; }
+    const QSet<QString>& autotileScreens() const
+    {
+        return m_autotileScreens;
+    }
 
     // Border rendering accessors
-    bool isBorderlessWindow(const QString& windowId) const { return m_border.borderlessWindows.contains(windowId); }
-    int borderWidth() const { return m_border.width; }
-    void setBorderWidth(int w) { m_border.width = w; }
-    QColor borderColor() const { return m_border.color; }
-    void setBorderColor(const QColor& c) { m_border.color = c; }
+    bool isBorderlessWindow(const QString& windowId) const
+    {
+        return m_border.borderlessWindows.contains(windowId);
+    }
+    int borderWidth() const
+    {
+        return m_border.width;
+    }
+    void setBorderWidth(int w)
+    {
+        m_border.width = w;
+    }
+    QColor borderColor() const
+    {
+        return m_border.color;
+    }
+    void setBorderColor(const QColor& c)
+    {
+        m_border.color = c;
+    }
     QRect applyBorderInset(const QRect& geo) const;
     bool shouldInsetForBorder(const QString& windowId, const QRect& geo) const;
     std::optional<QRect> borderZoneGeometry(const QString& windowId) const;
     QVector<QRect> allBorderZoneGeometries() const;
 
     // Invalidate pending stagger timers (call before triggering retile)
-    void invalidateStaggerGeneration() { ++m_autotileStaggerGeneration; }
+    void invalidateStaggerGeneration()
+    {
+        ++m_autotileStaggerGeneration;
+    }
 
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
@@ -109,22 +130,19 @@ private:
 
     void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
     void unmaximizeMonocleWindow(const QString& windowId);
-    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName,
-                                          const QRectF& frame);
+    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName, const QRectF& frame);
     void centerUndersizedAutotileWindows();
     bool shouldApplyBorderInset(const QString& windowId) const;
 
     /**
      * @brief Find key in saved geometries map for a window (exact or stable ID match)
      */
-    static QString findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries,
-                                        const QString& windowId);
+    static QString findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries, const QString& windowId);
 
     /**
      * @brief Check if we already have saved geometry for this window (exact or stable ID)
      */
-    static bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries,
-                                          const QString& windowId);
+    static bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries, const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════
     // Member variables
@@ -143,7 +161,8 @@ private:
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
     // ── Border state (logically grouped for SRP clarity) ──
-    struct BorderState {
+    struct BorderState
+    {
         QSet<QString> borderlessWindows;
         QHash<QString, QRect> zoneGeometries;
         bool hideTitleBars = false;

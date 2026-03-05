@@ -68,7 +68,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
         }
 
         // Restore pre-autotile geometries for windows on removed screens.
-        struct RestoreEntry {
+        struct RestoreEntry
+        {
             QPointer<KWin::EffectWindow> window;
             QRect geometry;
         };
@@ -102,7 +103,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
                     const int t = qRound(savedGeo.y());
                     const int r = qRound(savedGeo.x() + savedGeo.width());
                     const int b = qRound(savedGeo.y() + savedGeo.height());
-                    toRestore.append({QPointer<KWin::EffectWindow>(w), QRect(l, t, std::max(0, r - l), std::max(0, b - t))});
+                    toRestore.append(
+                        {QPointer<KWin::EffectWindow>(w), QRect(l, t, std::max(0, r - l), std::max(0, b - t))});
                 }
             }
             // Clear daemon-side pre-autotile geometries for this screen
@@ -113,8 +115,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
                     }
                     const QString windowId = m_effect->getWindowId(w);
                     m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking,
-                                                    QStringLiteral("clearPreAutotileGeometry"),
-                                                    {windowId}, QStringLiteral("clearPreAutotileGeometry"));
+                                                    QStringLiteral("clearPreAutotileGeometry"), {windowId},
+                                                    QStringLiteral("clearPreAutotileGeometry"));
                 }
             }
             m_preAutotileGeometries.remove(screenName);
@@ -133,7 +135,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
         // no resnap) keep their pre-autotile positions.
         for (const RestoreEntry& e : toRestore) {
             if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)) {
-                qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << m_effect->getWindowId(e.window) << "to" << e.geometry;
+                qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << m_effect->getWindowId(e.window) << "to"
+                                 << e.geometry;
                 m_effect->applySnapGeometry(e.window, e.geometry);
             }
         }
@@ -170,96 +173,96 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
         // Non-blocking: the old synchronous QDBus::Block call (500ms timeout) froze the
         // compositor thread, causing jerky first-retile animations since QElapsedTimer
         // kept advancing while no frames were rendered.
-        QDBusMessage fetchMsg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath,
-            DBus::Interface::WindowTracking, QStringLiteral("getPreAutotileGeometriesJson"));
-        auto* watcher = new QDBusPendingCallWatcher(
-            QDBusConnection::sessionBus().asyncCall(fetchMsg), this);
+        QDBusMessage fetchMsg =
+            QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                           QStringLiteral("getPreAutotileGeometriesJson"));
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(fetchMsg), this);
         // Capture expected screen set for staleness detection — if the user
         // rapidly toggles autotile, a stale reply must not overwrite fresh data.
         const QSet<QString> expectedScreens = newScreens;
         connect(watcher, &QDBusPendingCallWatcher::finished, this,
                 [this, added, expectedScreens](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<QString> reply = *w;
-            if (!reply.isValid()) {
-                return;
-            }
-            // Bail if the autotile screen set changed while we were waiting
-            if (m_autotileScreens != expectedScreens) {
-                qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
-                return;
-            }
-            const QString json = reply.value();
-            QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-            if (!doc.isObject()) {
-                return;
-            }
-            const auto allWindows = KWin::effects->stackingOrder();
-            QJsonObject obj = doc.object();
-            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                const QString stableId = it.key();
-                if (!it.value().isObject()) continue;
-                QJsonObject geomObj = it.value().toObject();
-                QRectF geom(geomObj[QLatin1String("x")].toInt(),
-                            geomObj[QLatin1String("y")].toInt(),
-                            geomObj[QLatin1String("width")].toInt(),
-                            geomObj[QLatin1String("height")].toInt());
-                if (geom.width() <= 0 || geom.height() <= 0) continue;
-                // Find all windows on added screens matching this stableId.
-                // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
-                // the daemon's single geometry is ambiguous — skip the override entirely.
-                KWin::EffectWindow* matchedWindow = nullptr;
-                bool ambiguous = false;
-                for (KWin::EffectWindow* ew : allWindows) {
-                    if (!ew || !m_effect->shouldHandleWindow(ew)) continue;
-                    if (PlasmaZonesEffect::extractStableId(m_effect->getWindowId(ew)) != stableId) continue;
-                    if (!added.contains(m_effect->getWindowScreenName(ew))) continue;
-                    if (matchedWindow) {
-                        ambiguous = true;
-                        break;
+                    w->deleteLater();
+                    QDBusPendingReply<QString> reply = *w;
+                    if (!reply.isValid()) {
+                        return;
                     }
-                    matchedWindow = ew;
-                }
-                if (ambiguous || !matchedWindow) {
-                    if (ambiguous) {
-                        qCDebug(lcEffect) << "Skipping daemon geometry override for ambiguous stableId"
-                                          << stableId << "(multiple live windows match)";
+                    // Bail if the autotile screen set changed while we were waiting
+                    if (m_autotileScreens != expectedScreens) {
+                        qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
+                        return;
                     }
-                    continue;
-                }
-                {
-                    const QString scr = m_effect->getWindowScreenName(matchedWindow);
-                    auto& screenGeometries = m_preAutotileGeometries[scr];
-                    const QString wId = m_effect->getWindowId(matchedWindow);
-                    // Only pre-populate if no entry yet (saveAndRecordPreAutotileGeometry
-                    // already ran for windows on these screens). If the entry matches the
-                    // window's current frame (i.e., it was zone-snapped), prefer the daemon's
-                    // stored value which is the original pre-autotile position.
-                    auto existingIt = screenGeometries.find(wId);
-                    if (existingIt == screenGeometries.end()) {
-                        screenGeometries[wId] = geom;
-                        qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for"
-                                          << stableId << "on" << scr << ":" << geom;
-                    } else if (existingIt.value().toRect() != geom.toRect()) {
-                        // Daemon stored a different geometry (likely from before the window
-                        // was resnapped to a zone). Prefer the daemon's version as it's the
-                        // true pre-autotile position.
-                        qCDebug(lcEffect) << "Updated pre-autotile geometry from daemon for"
-                                          << stableId << "on" << scr << ":"
-                                          << existingIt.value() << "->" << geom;
-                        existingIt.value() = geom;
+                    const QString json = reply.value();
+                    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+                    if (!doc.isObject()) {
+                        return;
                     }
-                }
-            }
-        });
+                    const auto allWindows = KWin::effects->stackingOrder();
+                    QJsonObject obj = doc.object();
+                    for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                        const QString stableId = it.key();
+                        if (!it.value().isObject())
+                            continue;
+                        QJsonObject geomObj = it.value().toObject();
+                        QRectF geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
+                                    geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
+                        if (geom.width() <= 0 || geom.height() <= 0)
+                            continue;
+                        // Find all windows on added screens matching this stableId.
+                        // If multiple windows share the same stableId (e.g., 3 Dolphin instances),
+                        // the daemon's single geometry is ambiguous — skip the override entirely.
+                        KWin::EffectWindow* matchedWindow = nullptr;
+                        bool ambiguous = false;
+                        for (KWin::EffectWindow* ew : allWindows) {
+                            if (!ew || !m_effect->shouldHandleWindow(ew))
+                                continue;
+                            if (PlasmaZonesEffect::extractStableId(m_effect->getWindowId(ew)) != stableId)
+                                continue;
+                            if (!added.contains(m_effect->getWindowScreenName(ew)))
+                                continue;
+                            if (matchedWindow) {
+                                ambiguous = true;
+                                break;
+                            }
+                            matchedWindow = ew;
+                        }
+                        if (ambiguous || !matchedWindow) {
+                            if (ambiguous) {
+                                qCDebug(lcEffect) << "Skipping daemon geometry override for ambiguous stableId"
+                                                  << stableId << "(multiple live windows match)";
+                            }
+                            continue;
+                        }
+                        {
+                            const QString scr = m_effect->getWindowScreenName(matchedWindow);
+                            auto& screenGeometries = m_preAutotileGeometries[scr];
+                            const QString wId = m_effect->getWindowId(matchedWindow);
+                            // Only pre-populate if no entry yet (saveAndRecordPreAutotileGeometry
+                            // already ran for windows on these screens). If the entry matches the
+                            // window's current frame (i.e., it was zone-snapped), prefer the daemon's
+                            // stored value which is the original pre-autotile position.
+                            auto existingIt = screenGeometries.find(wId);
+                            if (existingIt == screenGeometries.end()) {
+                                screenGeometries[wId] = geom;
+                                qCDebug(lcEffect) << "Pre-populated pre-autotile geometry from daemon for" << stableId
+                                                  << "on" << scr << ":" << geom;
+                            } else if (existingIt.value().toRect() != geom.toRect()) {
+                                // Daemon stored a different geometry (likely from before the window
+                                // was resnapped to a zone). Prefer the daemon's version as it's the
+                                // true pre-autotile position.
+                                qCDebug(lcEffect) << "Updated pre-autotile geometry from daemon for" << stableId << "on"
+                                                  << scr << ":" << existingIt.value() << "->" << geom;
+                                existingIt.value() = geom;
+                            }
+                        }
+                    }
+                });
     }
 
     qCInfo(lcEffect) << "Autotile screens changed:" << m_autotileScreens;
 }
 
-void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool isFloating,
-                                                 const QString& screenName)
+void AutotileHandler::slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenName)
 {
     Q_UNUSED(screenName)
     qCInfo(lcEffect) << "Autotile floating changed:" << windowId << "isFloating:" << isFloating
@@ -323,7 +326,8 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         m_minimizeFloatedWindows.insert(windowId);
     } else {
         if (!m_minimizeFloatedWindows.remove(windowId)) {
-            qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:" << windowId;
+            qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
+                              << windowId;
             notifyWindowAdded(w);
             return;
         }
@@ -359,8 +363,8 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
     qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "— floating";
 
     if (m_effect->m_daemonServiceRegistered) {
-        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("floatWindow"),
-                                        {windowId}, QStringLiteral("floatWindow"));
+        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("floatWindow"), {windowId},
+                                        QStringLiteral("floatWindow"));
     }
 }
 

@@ -18,14 +18,11 @@
 
 namespace PlasmaZones {
 
-void AutotileBorderRenderer::drawBorders(const KWin::RenderTarget& renderTarget,
-                                         const KWin::RenderViewport& viewport,
-                                         const QVector<QRect>& zoneGeometries,
-                                         int borderWidth,
+void AutotileBorderRenderer::drawBorders(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                                         const QVector<QRect>& zoneGeometries, int borderWidth,
                                          const QColor& borderColor)
 {
-    if (borderWidth <= 0 || !borderColor.isValid() || borderColor.alpha() == 0
-        || zoneGeometries.isEmpty()) {
+    if (borderWidth <= 0 || !borderColor.isValid() || borderColor.alpha() == 0 || zoneGeometries.isEmpty()) {
         return;
     }
 
@@ -88,14 +85,11 @@ void AutotileBorderRenderer::drawBorders(const KWin::RenderTarget& renderTarget,
     glGetIntegerv(GL_BLEND_DST_ALPHA, &prevDstAlpha);
 
     glEnable(GL_BLEND);
-    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA,
-                        GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
     KWin::ShaderBinder binder(KWin::ShaderTrait::UniformColor | KWin::ShaderTrait::TransformColorspace);
-    binder.shader()->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix,
-                                viewport.projectionMatrix());
-    binder.shader()->setColorspaceUniforms(KWin::ColorDescription::sRGB,
-                                           renderTarget.colorDescription(),
+    binder.shader()->setUniform(KWin::GLShader::Mat4Uniform::ModelViewProjectionMatrix, viewport.projectionMatrix());
+    binder.shader()->setColorspaceUniforms(KWin::ColorDescription::sRGB, renderTarget.colorDescription(),
                                            KWin::RenderingIntent::Perceptual);
     binder.shader()->setUniform(KWin::GLShader::ColorUniform::Color, borderColor);
 

@@ -61,24 +61,22 @@ Item {
      */
     function selectZonesInRect(rect, additive) {
         if (!editorController || !drawingArea || rect.width < 1 || rect.height < 1)
-            return;
+            return ;
 
         // Guard against division by zero
         if (drawingArea.width <= 0 || drawingArea.height <= 0)
-            return;
+            return ;
 
         // Convert to relative coordinates and delegate to C++ for efficient iteration
         var relX = rect.x / drawingArea.width;
         var relY = rect.y / drawingArea.height;
         var relWidth = rect.width / drawingArea.width;
         var relHeight = rect.height / drawingArea.height;
-        
         var selectedIds = editorController.selectZonesInRect(relX, relY, relWidth, relHeight, additive);
-        
         // Update anchor for shift+click range selection
-        if (selectedIds.length > 0 && editorWindow) {
+        if (selectedIds.length > 0 && editorWindow)
             editorWindow.selectionAnchorId = selectedIds[selectedIds.length - 1];
-        }
+
     }
 
     anchors.fill: parent
@@ -241,6 +239,7 @@ Item {
         onDoubleClicked: function(mouse) {
             if (canvasHandler.previewMode)
                 return ;
+
             if (!canvasHandler.editorController || !canvasHandler.drawingArea)
                 return ;
 

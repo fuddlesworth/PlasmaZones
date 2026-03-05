@@ -13,12 +13,10 @@ import org.kde.kirigami as Kirigami
 Rectangle {
     id: root
 
-    property int category: 0  // 0=Manual, 1=Autotile (matches LayoutCategory in C++)
+    property int category: 0 // 0=Manual, 1=Autotile (matches LayoutCategory in C++)
     property bool autoAssign: false
-
     // Convenience: true when this entry is a dynamic tiling algorithm
     readonly property bool isDynamic: category === 1
-
     readonly property real heightScale: 0.9
     readonly property real backgroundOpacity: 0.15
     readonly property real textOpacity: 0.6
@@ -27,12 +25,13 @@ Rectangle {
     implicitWidth: categoryLabel.implicitWidth + Kirigami.Units.smallSpacing * 1.5
     implicitHeight: Kirigami.Units.gridUnit * heightScale
     radius: Kirigami.Units.smallSpacing / 2
-
     color: {
         if (root.isDynamic)
             return Qt.rgba(Kirigami.Theme.neutralTextColor.r, Kirigami.Theme.neutralTextColor.g, Kirigami.Theme.neutralTextColor.b, backgroundOpacity);
+
         if (root.autoAssign)
             return Qt.rgba(Kirigami.Theme.activeTextColor.r, Kirigami.Theme.activeTextColor.g, Kirigami.Theme.activeTextColor.b, backgroundOpacity);
+
         return Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, backgroundOpacity);
     }
 
@@ -43,6 +42,7 @@ Rectangle {
         text: {
             if (root.isDynamic)
                 return i18nc("@label:badge", "Dynamic");
+
             return root.autoAssign ? i18nc("@label:badge", "Auto") : i18nc("@label:badge", "Manual");
         }
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize * root.fontScale
@@ -50,10 +50,13 @@ Rectangle {
         color: {
             if (root.isDynamic)
                 return Kirigami.Theme.neutralTextColor;
+
             if (root.autoAssign)
                 return Kirigami.Theme.activeTextColor;
+
             return Kirigami.Theme.textColor;
         }
         opacity: (root.isDynamic || root.autoAssign) ? 0.8 : root.textOpacity
     }
+
 }

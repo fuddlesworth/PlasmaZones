@@ -70,8 +70,7 @@ public:
      * @param tileCount Number of available tile zones
      * @return Window IDs that should be newly auto-floated (caller mutates state)
      */
-    QStringList applyOverflow(const QString& screenName,
-                              const QStringList& windows, int tileCount);
+    QStringList applyOverflow(const QString& screenName, const QStringList& windows, int tileCount);
 
     /**
      * @brief Identify overflow windows that should be unfloated when room opens
@@ -126,8 +125,8 @@ public:
     bool isEmpty() const;
 
 private:
-    QHash<QString, QSet<QString>> m_overflow;     // screenName -> overflow window IDs
-    QHash<QString, QString> m_windowToScreen;      // windowId -> screenName (reverse index)
+    QHash<QString, QSet<QString>> m_overflow; // screenName -> overflow window IDs
+    QHash<QString, QString> m_windowToScreen; // windowId -> screenName (reverse index)
 };
 
 } // namespace PlasmaZones

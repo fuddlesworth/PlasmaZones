@@ -48,7 +48,7 @@ void OverlayService::setSettings(ISettings* settings)
                     // Only recreate if the overlay type actually needs to change
                     if (wasUsingShader != shouldUseShader) {
                         qCInfo(lcOverlay) << "Shader effects setting changed, recreating overlay windows"
-                                           << "(was:" << wasUsingShader << "now:" << shouldUseShader << ")";
+                                          << "(was:" << wasUsingShader << "now:" << shouldUseShader << ")";
 
                         // Stop shader animation if it was running
                         if (wasUsingShader) {
@@ -153,9 +153,10 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
             connect(manager, &LayoutManager::activeLayoutChanged, this, [this](Layout* /*layout*/) {
                 refreshVisibleWindows();
             });
-            connect(manager, &LayoutManager::layoutAssigned, this, [this](const QString& /*screenName*/, Layout* /*layout*/) {
-                refreshVisibleWindows();
-            });
+            connect(manager, &LayoutManager::layoutAssigned, this,
+                    [this](const QString& /*screenName*/, Layout* /*layout*/) {
+                        refreshVisibleWindows();
+                    });
         }
     }
 }

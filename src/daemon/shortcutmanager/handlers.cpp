@@ -17,11 +17,11 @@ namespace PlasmaZones {
  * @param actionMember Pointer to QAction* member variable
  * @param settingsGetter Settings method to get the shortcut string
  */
-#define UPDATE_SHORTCUT(actionMember, settingsGetter) \
-    do { \
-        if (actionMember) { \
-            KGlobalAccel::setGlobalShortcut(actionMember, QKeySequence(m_settings->settingsGetter())); \
-        } \
+#define UPDATE_SHORTCUT(actionMember, settingsGetter)                                                                  \
+    do {                                                                                                               \
+        if (actionMember) {                                                                                            \
+            KGlobalAccel::setGlobalShortcut(actionMember, QKeySequence(m_settings->settingsGetter()));                 \
+        }                                                                                                              \
     } while (0)
 
 /**
@@ -31,10 +31,11 @@ namespace PlasmaZones {
  * @param dirStr Direction string suffix (e.g., Left)
  * @param dir NavigationDirection enum value (e.g., Left)
  */
-#define DIRECTION_HANDLER(prefix, signal, dirStr, dir) \
-    void ShortcutManager::on##prefix##dirStr() { \
-        qCInfo(lcShortcuts) << #prefix " " #dirStr " triggered"; \
-        Q_EMIT signal(NavigationDirection::dir); \
+#define DIRECTION_HANDLER(prefix, signal, dirStr, dir)                                                                 \
+    void ShortcutManager::on##prefix##dirStr()                                                                         \
+    {                                                                                                                  \
+        qCInfo(lcShortcuts) << #prefix " " #dirStr " triggered";                                                       \
+        Q_EMIT signal(NavigationDirection::dir);                                                                       \
     }
 
 /**
@@ -44,9 +45,10 @@ namespace PlasmaZones {
  * @param member Action member variable (e.g., m_moveWindowLeftAction)
  * @param getter Settings getter method (e.g., moveWindowLeftShortcut)
  */
-#define DIRECTION_UPDATE(prefix, dirStr, member, getter) \
-    void ShortcutManager::update##prefix##dirStr##Shortcut() { \
-        UPDATE_SHORTCUT(member, getter); \
+#define DIRECTION_UPDATE(prefix, dirStr, member, getter)                                                               \
+    void ShortcutManager::update##prefix##dirStr##Shortcut()                                                           \
+    {                                                                                                                  \
+        UPDATE_SHORTCUT(member, getter);                                                                               \
     }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -290,27 +292,75 @@ void ShortcutManager::updateLayoutPickerShortcut()
 // Autotile Slot Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShortcutManager::onToggleAutotile() { Q_EMIT toggleAutotileRequested(); }
-void ShortcutManager::onFocusMaster() { Q_EMIT focusMasterRequested(); }
-void ShortcutManager::onSwapWithMaster() { Q_EMIT swapWithMasterRequested(); }
-void ShortcutManager::onIncreaseMasterRatio() { Q_EMIT increaseMasterRatioRequested(); }
-void ShortcutManager::onDecreaseMasterRatio() { Q_EMIT decreaseMasterRatioRequested(); }
-void ShortcutManager::onIncreaseMasterCount() { Q_EMIT increaseMasterCountRequested(); }
-void ShortcutManager::onDecreaseMasterCount() { Q_EMIT decreaseMasterCountRequested(); }
-void ShortcutManager::onRetile() { Q_EMIT retileRequested(); }
+void ShortcutManager::onToggleAutotile()
+{
+    Q_EMIT toggleAutotileRequested();
+}
+void ShortcutManager::onFocusMaster()
+{
+    Q_EMIT focusMasterRequested();
+}
+void ShortcutManager::onSwapWithMaster()
+{
+    Q_EMIT swapWithMasterRequested();
+}
+void ShortcutManager::onIncreaseMasterRatio()
+{
+    Q_EMIT increaseMasterRatioRequested();
+}
+void ShortcutManager::onDecreaseMasterRatio()
+{
+    Q_EMIT decreaseMasterRatioRequested();
+}
+void ShortcutManager::onIncreaseMasterCount()
+{
+    Q_EMIT increaseMasterCountRequested();
+}
+void ShortcutManager::onDecreaseMasterCount()
+{
+    Q_EMIT decreaseMasterCountRequested();
+}
+void ShortcutManager::onRetile()
+{
+    Q_EMIT retileRequested();
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Autotile Update Shortcut Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShortcutManager::updateToggleAutotileShortcut() { UPDATE_SHORTCUT(m_toggleAutotileAction, autotileToggleShortcut); }
-void ShortcutManager::updateFocusMasterShortcut() { UPDATE_SHORTCUT(m_focusMasterAction, autotileFocusMasterShortcut); }
-void ShortcutManager::updateSwapMasterShortcut() { UPDATE_SHORTCUT(m_swapMasterAction, autotileSwapMasterShortcut); }
-void ShortcutManager::updateIncMasterRatioShortcut() { UPDATE_SHORTCUT(m_incMasterRatioAction, autotileIncMasterRatioShortcut); }
-void ShortcutManager::updateDecMasterRatioShortcut() { UPDATE_SHORTCUT(m_decMasterRatioAction, autotileDecMasterRatioShortcut); }
-void ShortcutManager::updateIncMasterCountShortcut() { UPDATE_SHORTCUT(m_incMasterCountAction, autotileIncMasterCountShortcut); }
-void ShortcutManager::updateDecMasterCountShortcut() { UPDATE_SHORTCUT(m_decMasterCountAction, autotileDecMasterCountShortcut); }
-void ShortcutManager::updateRetileShortcut() { UPDATE_SHORTCUT(m_retileAction, autotileRetileShortcut); }
+void ShortcutManager::updateToggleAutotileShortcut()
+{
+    UPDATE_SHORTCUT(m_toggleAutotileAction, autotileToggleShortcut);
+}
+void ShortcutManager::updateFocusMasterShortcut()
+{
+    UPDATE_SHORTCUT(m_focusMasterAction, autotileFocusMasterShortcut);
+}
+void ShortcutManager::updateSwapMasterShortcut()
+{
+    UPDATE_SHORTCUT(m_swapMasterAction, autotileSwapMasterShortcut);
+}
+void ShortcutManager::updateIncMasterRatioShortcut()
+{
+    UPDATE_SHORTCUT(m_incMasterRatioAction, autotileIncMasterRatioShortcut);
+}
+void ShortcutManager::updateDecMasterRatioShortcut()
+{
+    UPDATE_SHORTCUT(m_decMasterRatioAction, autotileDecMasterRatioShortcut);
+}
+void ShortcutManager::updateIncMasterCountShortcut()
+{
+    UPDATE_SHORTCUT(m_incMasterCountAction, autotileIncMasterCountShortcut);
+}
+void ShortcutManager::updateDecMasterCountShortcut()
+{
+    UPDATE_SHORTCUT(m_decMasterCountAction, autotileDecMasterCountShortcut);
+}
+void ShortcutManager::updateRetileShortcut()
+{
+    UPDATE_SHORTCUT(m_retileAction, autotileRetileShortcut);
+}
 
 // Undefine macros to keep them local to this TU
 #undef UPDATE_SHORTCUT

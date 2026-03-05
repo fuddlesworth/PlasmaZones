@@ -57,8 +57,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             // Save the layout ID to ensure we only restore if the same layout is active
             // This prevents restoring windows to wrong zones when layouts have been changed
             // Use resolveLayoutForScreen() for proper multi-screen support
-            Layout* contextLayout = m_layoutManager
-                ? m_layoutManager->resolveLayoutForScreen(screenName) : nullptr;
+            Layout* contextLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(screenName) : nullptr;
             if (contextLayout) {
                 m_pendingZoneLayouts[stableId] = contextLayout->id().toString();
             } else {
@@ -69,7 +68,8 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             QList<int> zoneNumbers;
             for (const QString& zId : zoneIds) {
                 Zone* z = findZoneById(zId);
-                if (z) zoneNumbers.append(z->zoneNumber());
+                if (z)
+                    zoneNumbers.append(z->zoneNumber());
             }
             if (!zoneNumbers.isEmpty()) {
                 m_pendingZoneNumbers[stableId] = zoneNumbers;
@@ -77,10 +77,10 @@ void WindowTrackingService::windowClosed(const QString& windowId)
                 m_pendingZoneNumbers.remove(stableId);
             }
 
-            qCInfo(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId
-                            << "screen:" << screenName << "desktop:" << desktop
-                            << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"))
-                            << "zoneNumbers:" << zoneNumbers;
+            qCInfo(lcCore) << "Persisted zone" << zoneId << "for closed window" << stableId << "screen:" << screenName
+                           << "desktop:" << desktop
+                           << "layout:" << (contextLayout ? contextLayout->id().toString() : QStringLiteral("none"))
+                           << "zoneNumbers:" << zoneNumbers;
         }
     }
 
@@ -208,7 +208,8 @@ void WindowTrackingService::onLayoutChanged()
             QList<int> allPositions;
             for (const QString& zid : zoneIdList) {
                 int p = zoneIdToPosition.value(zid, 0);
-                if (p > 0) allPositions.append(p);
+                if (p > 0)
+                    allPositions.append(p);
             }
 
             ResnapEntry entry;
@@ -226,7 +227,8 @@ void WindowTrackingService::onLayoutChanged()
         // Multi-zone windows are kept as long as at least one zone is valid.
         auto anyZoneInActiveLayout = [&](const QStringList& zoneIdList) {
             for (const QString& zid : zoneIdList) {
-                if (activeLayoutZoneIds.contains(zid)) return true;
+                if (activeLayoutZoneIds.contains(zid))
+                    return true;
             }
             return false;
         };
@@ -235,7 +237,8 @@ void WindowTrackingService::onLayoutChanged()
         // Windows on screens with per-screen assignments that differ from the
         // new active layout are unaffected by this layout change.
         auto isAffectedByGlobalChange = [&](const QString& windowScreen) -> bool {
-            if (windowScreen.isEmpty()) return true;
+            if (windowScreen.isEmpty())
+                return true;
             Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
             return !effectiveLayout || effectiveLayout == newLayout;
         };
@@ -243,8 +246,7 @@ void WindowTrackingService::onLayoutChanged()
         if (layoutSwitched) {
             // User switched layouts: capture assignments to zones from the OLD layout (not in new)
             // 1. Live assignments (windows we've tracked via windowSnapped)
-            for (auto it = m_windowZoneAssignments.constBegin();
-                 it != m_windowZoneAssignments.constEnd(); ++it) {
+            for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
                 // Skip windows on screens with per-screen layouts unaffected by this change
                 QString windowScreen = m_windowScreenAssignments.value(it.key());
                 if (!isAffectedByGlobalChange(windowScreen)) {
@@ -253,13 +255,11 @@ void WindowTrackingService::onLayoutChanged()
                 if (anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
-                addToBuffer(it.key(), it.value(), windowScreen,
-                            m_windowDesktopAssignments.value(it.key(), 0));
+                addToBuffer(it.key(), it.value(), windowScreen, m_windowDesktopAssignments.value(it.key(), 0));
             }
 
             // 2. Pending assignments (session-restored windows)
-            for (auto it = m_pendingZoneAssignments.constBegin();
-                 it != m_pendingZoneAssignments.constEnd(); ++it) {
+            for (auto it = m_pendingZoneAssignments.constBegin(); it != m_pendingZoneAssignments.constEnd(); ++it) {
                 QString screenName = m_pendingZoneScreens.value(it.key());
                 if (!isAffectedByGlobalChange(screenName)) {
                     continue;
@@ -281,19 +281,16 @@ void WindowTrackingService::onLayoutChanged()
             // Same layout (startup): capture assignments that belong to the current layout.
             // This lets resnap re-apply zone geometries for restored/pending windows.
             // 1. Live assignments in current layout
-            for (auto it = m_windowZoneAssignments.constBegin();
-                 it != m_windowZoneAssignments.constEnd(); ++it) {
+            for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
                 if (!anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
-                addToBuffer(it.key(), it.value(),
-                            m_windowScreenAssignments.value(it.key()),
+                addToBuffer(it.key(), it.value(), m_windowScreenAssignments.value(it.key()),
                             m_windowDesktopAssignments.value(it.key(), 0));
             }
 
             // 2. Pending assignments for current layout
-            for (auto it = m_pendingZoneAssignments.constBegin();
-                 it != m_pendingZoneAssignments.constEnd(); ++it) {
+            for (auto it = m_pendingZoneAssignments.constBegin(); it != m_pendingZoneAssignments.constEnd(); ++it) {
                 if (!anyZoneInActiveLayout(it.value())) {
                     continue;
                 }
@@ -312,8 +309,7 @@ void WindowTrackingService::onLayoutChanged()
 
         if (!newBuffer.isEmpty()) {
             m_resnapBuffer = std::move(newBuffer);
-            qCInfo(lcCore) << "Resnap buffer:" << m_resnapBuffer.size()
-                          << "windows (zone position -> window)";
+            qCInfo(lcCore) << "Resnap buffer:" << m_resnapBuffer.size() << "windows (zone position -> window)";
             for (const ResnapEntry& e : m_resnapBuffer) {
                 qCDebug(lcCore) << "  Zone" << e.zonePosition << "<-" << e.windowId;
             }
@@ -331,8 +327,7 @@ void WindowTrackingService::onLayoutChanged()
     QHash<QString, bool> screenIsAutotile;
 
     QStringList toRemove;
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         const QStringList& zoneIdList = it.value();
         if (zoneIdList.isEmpty()) {
             toRemove.append(it.key());
@@ -343,7 +338,8 @@ void WindowTrackingService::onLayoutChanged()
         // If this screen's assignment is autotile, preserve zone assignments for resnap
         auto cached = screenIsAutotile.constFind(windowScreen);
         if (cached == screenIsAutotile.constEnd()) {
-            QString assignmentId = m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
+            QString assignmentId =
+                m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
             cached = screenIsAutotile.insert(windowScreen, LayoutId::isAutotile(assignmentId));
         }
         if (*cached) {
@@ -368,7 +364,8 @@ void WindowTrackingService::onLayoutChanged()
                     break;
                 }
             }
-            if (zoneFound) break;
+            if (zoneFound)
+                break;
         }
         if (!zoneFound) {
             toRemove.append(it.key());
@@ -391,8 +388,8 @@ void WindowTrackingService::scheduleSaveState()
     Q_EMIT stateChanged();
 }
 
-void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenName,
-                                             const QString& zoneClass, int desktop)
+void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenName, const QString& zoneClass,
+                                            int desktop)
 {
     m_lastUsedZoneId = zoneId;
     m_lastUsedScreenName = screenName;
@@ -408,8 +405,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 {
     for (QScreen* screen : Utils::allScreens()) {
         QRect intersection = geometry.intersected(screen->geometry());
-        if (intersection.width() >= MinVisibleWidth &&
-            intersection.height() >= MinVisibleHeight) {
+        if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
             return true;
         }
     }
@@ -460,6 +456,5 @@ Zone* WindowTrackingService::findZoneById(const QString& zoneId) const
     }
     return nullptr;
 }
-
 
 } // namespace PlasmaZones

@@ -55,7 +55,10 @@ public:
      * prepareHandlerContext() skips overlay display on them.
      * Pass nullptr during shutdown to prevent dangling pointer access.
      */
-    void setAutotileEngine(AutotileEngine* engine) { m_autotileEngine = engine; }
+    void setAutotileEngine(AutotileEngine* engine)
+    {
+        m_autotileEngine = engine;
+    }
 
 public Q_SLOTS:
     /**
@@ -70,8 +73,8 @@ public Q_SLOTS:
      * @param mouseButtons Qt::MouseButtons flags for the button(s) that started the drag (for activation-by-mouse)
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
      */
-    void dragStarted(const QString& windowId, double x, double y, double width, double height,
-                     const QString& appName, const QString& windowClass, int mouseButtons);
+    void dragStarted(const QString& windowId, double x, double y, double width, double height, const QString& appName,
+                     const QString& windowClass, int mouseButtons);
 
     /**
      * Called while window is being dragged (cursor moved)
@@ -79,7 +82,8 @@ public Q_SLOTS:
      * @param cursorX Cursor X position (int32 - matches KWin's QPoint)
      * @param cursorY Cursor Y position (int32 - matches KWin's QPoint)
      * @param modifiers Qt keyboard modifiers from KWin (int32 - Qt::KeyboardModifiers flags)
-     * @param mouseButtons Qt::MouseButtons currently held (int32). Enables activation-by-mouse: hold this button during drag to show overlay (same as modifier).
+     * @param mouseButtons Qt::MouseButtons currently held (int32). Enables activation-by-mouse: hold this button during
+     * drag to show overlay (same as modifier).
      */
     void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
 
@@ -96,10 +100,11 @@ public Q_SLOTS:
      * @param snapHeight Output: Height for window
      * @param shouldApplyGeometry Output: True if KWin should apply the geometry
      * @param releaseScreenName Output: Screen name where the drag was released, for auto-fill on drop
-     * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current position (drag-to-unsnap)
+     * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current
+     * position (drag-to-unsnap)
      */
-    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX, int& snapY,
-                     int& snapWidth, int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName,
+    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
+                     int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry, QString& releaseScreenName,
                      bool& restoreSizeOnly, bool& snapAssistRequested, QString& emptyZonesJson);
 
     /**
@@ -172,8 +177,8 @@ private:
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
     bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape
-    bool m_activationToggled = false;    // Current toggle state (on/off)
-    bool m_prevTriggerHeld = false;      // Previous frame's trigger state for edge detection
+    bool m_activationToggled = false; // Current toggle state (on/off)
+    bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
     bool m_zoneSelectorShown = false;

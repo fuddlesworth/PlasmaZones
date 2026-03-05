@@ -46,20 +46,20 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
     return uuid.toString();
 }
 
-int Settings::readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue,
-                               int min, int max, const char* settingName)
+int Settings::readValidatedInt(const KConfigGroup& group, const char* key, int defaultValue, int min, int max,
+                               const char* settingName)
 {
     int value = group.readEntry(QLatin1String(key), defaultValue);
     if (value < min || value > max) {
-        qCWarning(lcConfig) << "Invalid" << settingName << ":" << value
-                            << "using default (must be" << min << "-" << max << ")";
+        qCWarning(lcConfig) << "Invalid" << settingName << ":" << value << "using default (must be" << min << "-" << max
+                            << ")";
         value = defaultValue;
     }
     return value;
 }
 
-QColor Settings::readValidatedColor(const KConfigGroup& group, const char* key,
-                                    const QColor& defaultValue, const char* settingName)
+QColor Settings::readValidatedColor(const KConfigGroup& group, const char* key, const QColor& defaultValue,
+                                    const char* settingName)
 {
     QColor color = group.readEntry(QLatin1String(key), defaultValue);
     if (!color.isValid()) {
@@ -69,8 +69,8 @@ QColor Settings::readValidatedColor(const KConfigGroup& group, const char* key,
     return color;
 }
 
-void Settings::loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern,
-                                    QString (&shortcuts)[9], const QString (&defaults)[9])
+void Settings::loadIndexedShortcuts(const KConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+                                    const QString (&defaults)[9])
 {
     for (int i = 0; i < 9; ++i) {
         QString key = keyPattern.arg(i + 1);
@@ -105,11 +105,11 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
     if (result.size() > MaxTriggersPerAction) {
         result = result.mid(0, MaxTriggersPerAction);
     }
-    return result;  // May be empty (valid [] means no triggers)
+    return result; // May be empty (valid [] means no triggers)
 }
 
-QVariantList Settings::loadTriggerList(const KConfigGroup& group, const QString& key,
-                                        int legacyModifier, int legacyMouseButton)
+QVariantList Settings::loadTriggerList(const KConfigGroup& group, const QString& key, int legacyModifier,
+                                       int legacyMouseButton)
 {
     QString json = group.readEntry(key, QString());
     std::optional<QVariantList> parsed = parseTriggerListJson(json);
@@ -124,8 +124,7 @@ QVariantList Settings::loadTriggerList(const KConfigGroup& group, const QString&
     return {trigger};
 }
 
-void Settings::saveTriggerList(KConfigGroup& group, const QString& key,
-                                const QVariantList& triggers)
+void Settings::saveTriggerList(KConfigGroup& group, const QString& key, const QVariantList& triggers)
 {
     QJsonArray arr;
     for (const QVariant& t : triggers) {
@@ -172,21 +171,24 @@ void Settings::load()
     loadDisplayConfig(config->group(QStringLiteral("Display")));
     loadAppearanceConfig(config->group(QStringLiteral("Appearance")));
     loadZoneGeometryConfig(config->group(QStringLiteral("Zones")));
-    loadBehaviorConfig(config->group(QStringLiteral("Behavior")),
-                       config->group(QStringLiteral("Exclusions")), activation);
+    loadBehaviorConfig(config->group(QStringLiteral("Behavior")), config->group(QStringLiteral("Exclusions")),
+                       activation);
     loadZoneSelectorConfig(config->group(QStringLiteral("ZoneSelector")));
     loadPerScreenOverrides(config);
 
     // Shaders (small enough to stay inline)
     KConfigGroup shaders = config->group(QStringLiteral("Shaders"));
-    m_enableShaderEffects = shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
-    m_shaderFrameRate = qBound(30, shaders.readEntry(QLatin1String("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
-    m_enableAudioVisualizer = shaders.readEntry(QLatin1String("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
-    m_audioSpectrumBarCount = qBound(16, shaders.readEntry(QLatin1String("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()), 256);
+    m_enableShaderEffects =
+        shaders.readEntry(QLatin1String("EnableShaderEffects"), ConfigDefaults::enableShaderEffects());
+    m_shaderFrameRate =
+        qBound(30, shaders.readEntry(QLatin1String("ShaderFrameRate"), ConfigDefaults::shaderFrameRate()), 144);
+    m_enableAudioVisualizer =
+        shaders.readEntry(QLatin1String("EnableAudioVisualizer"), ConfigDefaults::enableAudioVisualizer());
+    m_audioSpectrumBarCount = qBound(
+        16, shaders.readEntry(QLatin1String("AudioSpectrumBarCount"), ConfigDefaults::audioSpectrumBarCount()), 256);
 
     loadShortcutConfig(config->group(QStringLiteral("GlobalShortcuts")));
-    loadAutotilingConfig(config->group(QStringLiteral("Autotiling")),
-                         config->group(QStringLiteral("Animations")),
+    loadAutotilingConfig(config->group(QStringLiteral("Autotiling")), config->group(QStringLiteral("Animations")),
                          config->group(QStringLiteral("AutotileShortcuts")));
 
     if (m_useSystemColors) {
@@ -200,11 +202,16 @@ void Settings::load()
     Q_EMIT settingsChanged();
 
     // Emit specific signals for settings with runtime side-effects
-    if (m_enableShaderEffects != oldEnableShaders) Q_EMIT enableShaderEffectsChanged();
-    if (m_shaderFrameRate != oldShaderFrameRate) Q_EMIT shaderFrameRateChanged();
-    if (m_enableAudioVisualizer != oldEnableAudioViz) Q_EMIT enableAudioVisualizerChanged();
-    if (m_audioSpectrumBarCount != oldBarCount) Q_EMIT audioSpectrumBarCountChanged();
-    if (m_defaultLayoutId != oldDefaultLayoutId) Q_EMIT defaultLayoutIdChanged();
+    if (m_enableShaderEffects != oldEnableShaders)
+        Q_EMIT enableShaderEffectsChanged();
+    if (m_shaderFrameRate != oldShaderFrameRate)
+        Q_EMIT shaderFrameRateChanged();
+    if (m_enableAudioVisualizer != oldEnableAudioViz)
+        Q_EMIT enableAudioVisualizerChanged();
+    if (m_audioSpectrumBarCount != oldBarCount)
+        Q_EMIT audioSpectrumBarCountChanged();
+    if (m_defaultLayoutId != oldDefaultLayoutId)
+        Q_EMIT defaultLayoutIdChanged();
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
@@ -249,22 +256,13 @@ void Settings::save()
 void Settings::reset()
 {
     auto config = KSharedConfig::openConfig(QStringLiteral("plasmazonesrc"));
-    const QStringList groups = {
-        QStringLiteral("Activation"),
-        QStringLiteral("Display"),
-        QStringLiteral("Appearance"),
-        QStringLiteral("Zones"),
-        QStringLiteral("Behavior"),
-        QStringLiteral("Exclusions"),
-        QStringLiteral("ZoneSelector"),
-        QStringLiteral("Shaders"),
-        QStringLiteral("GlobalShortcuts"),
-        QStringLiteral("Autotiling"),
-        QStringLiteral("AutotileShortcuts"),
-        QStringLiteral("Animations"),
-        QStringLiteral("ModeTracking"),
-        QStringLiteral("Updates")
-    };
+    const QStringList groups = {QStringLiteral("Activation"),        QStringLiteral("Display"),
+                                QStringLiteral("Appearance"),        QStringLiteral("Zones"),
+                                QStringLiteral("Behavior"),          QStringLiteral("Exclusions"),
+                                QStringLiteral("ZoneSelector"),      QStringLiteral("Shaders"),
+                                QStringLiteral("GlobalShortcuts"),   QStringLiteral("Autotiling"),
+                                QStringLiteral("AutotileShortcuts"), QStringLiteral("Animations"),
+                                QStringLiteral("ModeTracking"),      QStringLiteral("Updates")};
     for (const QString& groupName : groups) {
         config->deleteGroup(groupName);
     }

@@ -93,8 +93,8 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
     const auto windows = KWin::effects->stackingOrder();
 
     for (KWin::EffectWindow* w : windows) {
-        if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized()
-            || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
+        if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
             continue;
         }
 

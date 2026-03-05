@@ -42,7 +42,7 @@ class PLASMAZONES_EXPORT SpiralAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit SpiralAlgorithm(QObject *parent = nullptr);
+    explicit SpiralAlgorithm(QObject* parent = nullptr);
     ~SpiralAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -50,12 +50,24 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
-    bool supportsMasterCount() const noexcept override { return false; }
-    bool supportsSplitRatio() const noexcept override { return true; }
-    qreal defaultSplitRatio() const noexcept override { return 0.5; }
-    int defaultMaxWindows() const noexcept override { return 5; }
+    bool supportsMasterCount() const noexcept override
+    {
+        return false;
+    }
+    bool supportsSplitRatio() const noexcept override
+    {
+        return true;
+    }
+    qreal defaultSplitRatio() const noexcept override
+    {
+        return 0.5;
+    }
+    int defaultMaxWindows() const noexcept override
+    {
+        return 5;
+    }
 };
 
 } // namespace PlasmaZones

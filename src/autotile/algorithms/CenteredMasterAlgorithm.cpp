@@ -18,7 +18,7 @@ namespace {
 AlgorithmRegistrar<CenteredMasterAlgorithm> s_centeredMasterRegistrar(DBus::AutotileAlgorithm::CenteredMaster, 20);
 }
 
-CenteredMasterAlgorithm::CenteredMasterAlgorithm(QObject *parent)
+CenteredMasterAlgorithm::CenteredMasterAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -38,13 +38,13 @@ QString CenteredMasterAlgorithm::icon() const noexcept
     return QStringLiteral("view-split-left-right");
 }
 
-QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -52,7 +52,7 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
         return zones;
     }
 
-    const auto &state = *params.state;
+    const auto& state = *params.state;
 
     const QRect area = innerRect(screenGeometry, outerGaps);
 
@@ -89,8 +89,7 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
             const int minSW = minWidthAt(minSizes, masterCount);
             const int totalMin = std::max(minMW, 0) + std::max(minSW, 0);
             if (totalMin > contentWidth && totalMin > 0) {
-                masterWidth = static_cast<int>(
-                    static_cast<qint64>(contentWidth) * std::max(minMW, 1) / totalMin);
+                masterWidth = static_cast<int>(static_cast<qint64>(contentWidth) * std::max(minMW, 1) / totalMin);
                 stackWidth = contentWidth - masterWidth;
             } else {
                 if (minMW > 0 && masterWidth < minMW) {
@@ -137,11 +136,14 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
         int li = 0, ri = 0;
         for (int i = 0; i < stackCount; ++i) {
             if (i % 2 == 0 && li < leftCount) {
-                stackIsLeft[i] = true; ++li;
+                stackIsLeft[i] = true;
+                ++li;
             } else if (ri < rightCount) {
-                stackIsLeft[i] = false; ++ri;
+                stackIsLeft[i] = false;
+                ++ri;
             } else {
-                stackIsLeft[i] = true; ++li;
+                stackIsLeft[i] = true;
+                ++li;
             }
         }
     }
@@ -166,9 +168,8 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
         }
     }
 
-    const auto cols = solveThreeColumnWidths(
-        area.x(), contentWidth, innerGap, splitRatio,
-        minLeftWidth, minCenterWidth, minRightWidth);
+    const auto cols = solveThreeColumnWidths(area.x(), contentWidth, innerGap, splitRatio, minLeftWidth, minCenterWidth,
+                                             minRightWidth);
 
     const int leftWidth = cols.leftWidth;
     const int centerWidth = cols.centerWidth;
@@ -200,9 +201,8 @@ QVector<QRect> CenteredMasterAlgorithm::calculateZones(const TilingParams &param
         : distributeWithMinSizes(area.height(), leftCount, innerGap, leftMinH);
     QVector<int> rightHeights;
     if (rightCount > 0) {
-        rightHeights = rightMinH.isEmpty()
-            ? distributeWithGaps(area.height(), rightCount, innerGap)
-            : distributeWithMinSizes(area.height(), rightCount, innerGap, rightMinH);
+        rightHeights = rightMinH.isEmpty() ? distributeWithGaps(area.height(), rightCount, innerGap)
+                                           : distributeWithMinSizes(area.height(), rightCount, innerGap, rightMinH);
     }
 
     // Masters in center column (stacked vertically)

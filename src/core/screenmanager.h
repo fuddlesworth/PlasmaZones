@@ -212,7 +212,7 @@ private:
 
     bool m_running = false;
     bool m_dbusQueryPending = false;
-    bool m_panelGeometryReceived = false;  // True after first panel D-Bus query completes
+    bool m_panelGeometryReceived = false; // True after first panel D-Bus query completes
     QVector<QScreen*> m_trackedScreens;
     QMap<QString, ScreenPanelOffsets> m_panelOffsets; // Keyed by QScreen name
 

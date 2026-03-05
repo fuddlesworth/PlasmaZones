@@ -17,7 +17,7 @@ namespace {
 AlgorithmRegistrar<BSPAlgorithm> s_bspRegistrar(DBus::AutotileAlgorithm::BSP, 10);
 }
 
-BSPAlgorithm::BSPAlgorithm(QObject *parent)
+BSPAlgorithm::BSPAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -37,13 +37,13 @@ QString BSPAlgorithm::icon() const noexcept
     return QStringLiteral("view-grid-symbolic");
 }
 
-QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -60,8 +60,7 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
     }
 
     // Read the user's split ratio from TilingState as the default for new nodes.
-    const qreal defaultRatio = std::clamp(params.state->splitRatio(),
-                                          MinSplitRatio, MaxSplitRatio);
+    const qreal defaultRatio = std::clamp(params.state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
     // Build a fresh tree from scratch each time for deterministic output.
     // Uses the actual screen area so split direction heuristics match
@@ -82,7 +81,7 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
     // applyGeometry() returns early on degenerate splits, leaving child leaves
     // with default geometry from construction.
     bool hasInvalidZone = false;
-    for (const QRect &zone : zones) {
+    for (const QRect& zone : zones) {
         if (!zone.isValid() || zone.width() <= 0 || zone.height() <= 0) {
             hasInvalidZone = true;
             break;
@@ -106,8 +105,8 @@ QVector<QRect> BSPAlgorithm::calculateZones(const TilingParams &params) const
 // Tree construction
 // =============================================================================
 
-void BSPAlgorithm::buildTree(std::unique_ptr<BSPNode> &root, int &leafCount,
-                              int windowCount, qreal defaultRatio, const QRect &refRect)
+void BSPAlgorithm::buildTree(std::unique_ptr<BSPNode>& root, int& leafCount, int windowCount, qreal defaultRatio,
+                             const QRect& refRect)
 {
     root.reset();
     leafCount = 0;
@@ -136,14 +135,14 @@ void BSPAlgorithm::buildTree(std::unique_ptr<BSPNode> &root, int &leafCount,
     }
 }
 
-bool BSPAlgorithm::growTree(BSPNode *root, int &leafCount, qreal defaultRatio)
+bool BSPAlgorithm::growTree(BSPNode* root, int& leafCount, qreal defaultRatio)
 {
     if (!root) {
         return false;
     }
 
     // Find the largest leaf to split (produces balanced layouts)
-    BSPNode *leaf = largestLeaf(root);
+    BSPNode* leaf = largestLeaf(root);
     if (!leaf || !leaf->isLeaf()) {
         return false;
     }
@@ -161,7 +160,7 @@ bool BSPAlgorithm::growTree(BSPNode *root, int &leafCount, qreal defaultRatio)
     } else {
         // Estimate: count depth from root and alternate
         int depth = 0;
-        for (BSPNode *p = leaf->parent; p; p = p->parent) {
+        for (BSPNode* p = leaf->parent; p; p = p->parent) {
             ++depth;
         }
         leaf->splitHorizontal = (depth % 2 != 0);
@@ -176,8 +175,8 @@ bool BSPAlgorithm::growTree(BSPNode *root, int &leafCount, qreal defaultRatio)
 // Geometry computation (top-down)
 // =============================================================================
 
-QSize BSPAlgorithm::computeSubtreeMinDims(const BSPNode *node, const QVector<QSize> &minSizes,
-                                           int leafStartIdx, int innerGap, int &leafCount)
+QSize BSPAlgorithm::computeSubtreeMinDims(const BSPNode* node, const QVector<QSize>& minSizes, int leafStartIdx,
+                                          int innerGap, int& leafCount)
 {
     if (!node) {
         leafCount = 0;
@@ -187,7 +186,7 @@ QSize BSPAlgorithm::computeSubtreeMinDims(const BSPNode *node, const QVector<QSi
     if (node->isLeaf()) {
         leafCount = 1;
         if (leafStartIdx < minSizes.size()) {
-            const QSize &ms = minSizes[leafStartIdx];
+            const QSize& ms = minSizes[leafStartIdx];
             return QSize(std::max(ms.width(), 0), std::max(ms.height(), 0));
         }
         return QSize(0, 0);
@@ -195,25 +194,22 @@ QSize BSPAlgorithm::computeSubtreeMinDims(const BSPNode *node, const QVector<QSi
 
     int firstLeafCount = 0;
     int secondLeafCount = 0;
-    QSize firstMin = computeSubtreeMinDims(node->first.get(), minSizes,
-                                           leafStartIdx, innerGap, firstLeafCount);
-    QSize secondMin = computeSubtreeMinDims(node->second.get(), minSizes,
-                                            leafStartIdx + firstLeafCount, innerGap, secondLeafCount);
+    QSize firstMin = computeSubtreeMinDims(node->first.get(), minSizes, leafStartIdx, innerGap, firstLeafCount);
+    QSize secondMin =
+        computeSubtreeMinDims(node->second.get(), minSizes, leafStartIdx + firstLeafCount, innerGap, secondLeafCount);
     leafCount = firstLeafCount + secondLeafCount;
 
     if (node->splitHorizontal) {
         // Top/bottom split: width = max, height = sum + gap
-        return QSize(std::max(firstMin.width(), secondMin.width()),
-                     firstMin.height() + innerGap + secondMin.height());
+        return QSize(std::max(firstMin.width(), secondMin.width()), firstMin.height() + innerGap + secondMin.height());
     } else {
         // Left/right split: width = sum + gap, height = max
-        return QSize(firstMin.width() + innerGap + secondMin.width(),
-                     std::max(firstMin.height(), secondMin.height()));
+        return QSize(firstMin.width() + innerGap + secondMin.width(), std::max(firstMin.height(), secondMin.height()));
     }
 }
 
-void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
-                                  const QVector<QSize> &minSizes, int leafStartIdx)
+void BSPAlgorithm::applyGeometry(BSPNode* node, const QRect& rect, int innerGap, const QVector<QSize>& minSizes,
+                                 int leafStartIdx)
 {
     if (!node) {
         return;
@@ -233,34 +229,35 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
     if (!minSizes.isEmpty()) {
         int firstLeafCount = 0;
         int secondLeafCount = 0;
-        QSize firstMin = computeSubtreeMinDims(node->first.get(), minSizes,
-                                               leafStartIdx, innerGap, firstLeafCount);
-        QSize secondMin = computeSubtreeMinDims(node->second.get(), minSizes,
-                                                leafStartIdx + firstLeafCount, innerGap, secondLeafCount);
+        QSize firstMin = computeSubtreeMinDims(node->first.get(), minSizes, leafStartIdx, innerGap, firstLeafCount);
+        QSize secondMin = computeSubtreeMinDims(node->second.get(), minSizes, leafStartIdx + firstLeafCount, innerGap,
+                                                secondLeafCount);
 
         if (node->splitHorizontal) {
             const int contentHeight = rect.height() - innerGap;
             if (contentHeight > 0 && (firstMin.height() > 0 || secondMin.height() > 0)) {
-                qreal minFirstRatio = (firstMin.height() > 0)
-                    ? static_cast<qreal>(firstMin.height()) / contentHeight : MinSplitRatio;
+                qreal minFirstRatio =
+                    (firstMin.height() > 0) ? static_cast<qreal>(firstMin.height()) / contentHeight : MinSplitRatio;
                 qreal maxFirstRatio = (secondMin.height() > 0)
-                    ? 1.0 - static_cast<qreal>(secondMin.height()) / contentHeight : MaxSplitRatio;
+                    ? 1.0 - static_cast<qreal>(secondMin.height()) / contentHeight
+                    : MaxSplitRatio;
                 minFirstRatio = std::clamp(minFirstRatio, MinSplitRatio, MaxSplitRatio);
                 maxFirstRatio = std::clamp(maxFirstRatio, MinSplitRatio, MaxSplitRatio);
-                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
-                                                     firstMin.height(), secondMin.height());
+                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstMin.height(),
+                                                    secondMin.height());
             }
         } else {
             const int contentWidth = rect.width() - innerGap;
             if (contentWidth > 0 && (firstMin.width() > 0 || secondMin.width() > 0)) {
-                qreal minFirstRatio = (firstMin.width() > 0)
-                    ? static_cast<qreal>(firstMin.width()) / contentWidth : MinSplitRatio;
+                qreal minFirstRatio =
+                    (firstMin.width() > 0) ? static_cast<qreal>(firstMin.width()) / contentWidth : MinSplitRatio;
                 qreal maxFirstRatio = (secondMin.width() > 0)
-                    ? 1.0 - static_cast<qreal>(secondMin.width()) / contentWidth : MaxSplitRatio;
+                    ? 1.0 - static_cast<qreal>(secondMin.width()) / contentWidth
+                    : MaxSplitRatio;
                 minFirstRatio = std::clamp(minFirstRatio, MinSplitRatio, MaxSplitRatio);
                 maxFirstRatio = std::clamp(maxFirstRatio, MinSplitRatio, MaxSplitRatio);
-                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio,
-                                                     firstMin.width(), secondMin.width());
+                ratio = clampOrProportionalFallback(ratio, minFirstRatio, maxFirstRatio, firstMin.width(),
+                                                    secondMin.width());
             }
         }
     }
@@ -307,7 +304,7 @@ void BSPAlgorithm::applyGeometry(BSPNode *node, const QRect &rect, int innerGap,
     }
 }
 
-void BSPAlgorithm::collectLeaves(const BSPNode *node, QVector<QRect> &zones)
+void BSPAlgorithm::collectLeaves(const BSPNode* node, QVector<QRect>& zones)
 {
     if (!node) {
         return;
@@ -325,7 +322,7 @@ void BSPAlgorithm::collectLeaves(const BSPNode *node, QVector<QRect> &zones)
 // Tree traversal helpers
 // =============================================================================
 
-int BSPAlgorithm::countLeaves(const BSPNode *node)
+int BSPAlgorithm::countLeaves(const BSPNode* node)
 {
     if (!node) {
         return 0;
@@ -336,7 +333,7 @@ int BSPAlgorithm::countLeaves(const BSPNode *node)
     return countLeaves(node->first.get()) + countLeaves(node->second.get());
 }
 
-BSPAlgorithm::BSPNode *BSPAlgorithm::largestLeaf(BSPNode *node)
+BSPAlgorithm::BSPNode* BSPAlgorithm::largestLeaf(BSPNode* node)
 {
     if (!node) {
         return nullptr;
@@ -345,19 +342,19 @@ BSPAlgorithm::BSPNode *BSPAlgorithm::largestLeaf(BSPNode *node)
         return node;
     }
 
-    BSPNode *left = largestLeaf(node->first.get());
-    BSPNode *right = largestLeaf(node->second.get());
+    BSPNode* left = largestLeaf(node->first.get());
+    BSPNode* right = largestLeaf(node->second.get());
 
-    if (!left) return right;
-    if (!right) return left;
+    if (!left)
+        return right;
+    if (!right)
+        return left;
 
     // Compare areas when geometries are available
-    const qint64 leftArea = left->geometry.isValid()
-        ? static_cast<qint64>(left->geometry.width()) * left->geometry.height()
-        : 0;
-    const qint64 rightArea = right->geometry.isValid()
-        ? static_cast<qint64>(right->geometry.width()) * right->geometry.height()
-        : 0;
+    const qint64 leftArea =
+        left->geometry.isValid() ? static_cast<qint64>(left->geometry.width()) * left->geometry.height() : 0;
+    const qint64 rightArea =
+        right->geometry.isValid() ? static_cast<qint64>(right->geometry.width()) * right->geometry.height() : 0;
 
     // Fallback to right (deepest) when no geometry is available
     if (leftArea == 0 && rightArea == 0) {
@@ -367,7 +364,7 @@ BSPAlgorithm::BSPNode *BSPAlgorithm::largestLeaf(BSPNode *node)
     return (leftArea >= rightArea) ? left : right;
 }
 
-bool BSPAlgorithm::chooseSplitDirection(const QRect &geometry)
+bool BSPAlgorithm::chooseSplitDirection(const QRect& geometry)
 {
     // Split perpendicular to longest axis for balanced regions
     return geometry.height() > geometry.width();

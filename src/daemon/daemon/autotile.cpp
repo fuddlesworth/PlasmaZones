@@ -60,7 +60,8 @@ void Daemon::updateAutotileScreens()
     // stateForScreen(), which setAutotileScreens reuses for added screens.
     if (m_settings) {
         for (QScreen* screen : m_screenManager->screens()) {
-            if (!autotileScreens.contains(screen->name())) continue;
+            if (!autotileScreens.contains(screen->name()))
+                continue;
             QString screenId = Utils::screenIdentifier(screen);
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
             // Inject algorithm from layout assignment (authoritative source)
@@ -88,14 +89,12 @@ void Daemon::updateAutotileScreens()
                 // dynamically derives the correct MaxWindows at retile time even
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithm();
-                if (screenAlgo != globalAlgo
-                    && !overrides.contains(QLatin1String("MaxWindows"))) {
+                if (screenAlgo != globalAlgo && !overrides.contains(QLatin1String("MaxWindows"))) {
                     auto* screenAlgoPtr = AlgorithmRegistry::instance()->algorithm(screenAlgo);
                     auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
-                            qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm"
-                                              << globalAlgo
+                            qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo
                                               << "not found - injecting per-screen default MaxWindows";
                         }
                         // Use the engine's runtime maxWindows (not m_settings->
@@ -103,13 +102,12 @@ void Daemon::updateAutotileScreens()
                         // be stale if updateAutotileScreens runs before
                         // setAlgorithm syncs settings via QSignalBlocker.
                         const int runtimeMaxWindows = m_autotileEngine->config()->maxWindows;
-                        if (!globalAlgoPtr
-                            || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
+                        if (!globalAlgoPtr || runtimeMaxWindows == globalAlgoPtr->defaultMaxWindows()) {
                             overrides[QStringLiteral("MaxWindows")] = screenAlgoPtr->defaultMaxWindows();
                         }
                     } else {
-                        qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm"
-                                            << screenAlgo << "for screen" << screen->name();
+                        qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo
+                                            << "for screen" << screen->name();
                     }
                 }
             }
@@ -170,9 +168,8 @@ void Daemon::handleAutotileDisabled()
     if (m_modeTracker && m_layoutManager && m_screenManager) {
         m_modeTracker->setCurrentMode(TilingMode::Manual);
         const QString lastLayoutId = m_modeTracker->lastManualLayoutId();
-        Layout* layout = lastLayoutId.isEmpty()
-            ? nullptr
-            : m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
+        Layout* layout =
+            lastLayoutId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
         // Fallback to active layout or first available layout
         if (!layout) {
             layout = m_layoutManager->activeLayout();
@@ -280,8 +277,7 @@ void Daemon::processPendingGeometryUpdates()
     QScreen* primaryScreen = Utils::primaryScreen();
     if (primaryScreen) {
         for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(
-                GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
+            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
         }
     }
 

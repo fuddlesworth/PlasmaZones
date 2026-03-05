@@ -9,12 +9,11 @@
 
 using namespace PlasmaZones;
 
-ToggleGeometryModeCommand::ToggleGeometryModeCommand(QPointer<EditorController> editorController,
-                                                       const QString& zoneId,
-                                                       int oldMode, int newMode,
-                                                       const QRectF& oldRelativeGeo, const QRectF& newRelativeGeo,
-                                                       const QRectF& oldFixedGeo, const QRectF& newFixedGeo,
-                                                       const QString& text, QUndoCommand* parent)
+ToggleGeometryModeCommand::ToggleGeometryModeCommand(QPointer<EditorController> editorController, const QString& zoneId,
+                                                     int oldMode, int newMode, const QRectF& oldRelativeGeo,
+                                                     const QRectF& newRelativeGeo, const QRectF& oldFixedGeo,
+                                                     const QRectF& newFixedGeo, const QString& text,
+                                                     QUndoCommand* parent)
     : QUndoCommand(text.isEmpty() ? i18nc("@action", "Toggle Zone Geometry Mode") : text, parent)
     , m_editorController(editorController)
     , m_zoneId(zoneId)

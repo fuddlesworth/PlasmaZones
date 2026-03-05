@@ -67,17 +67,9 @@ inline void writeFontProperties(QObject* window, const IZoneVisualizationSetting
 // Uses ConfigDefaults to stay in sync with the .kcfg single source of truth.
 inline ZoneSelectorConfig defaultZoneSelectorConfig()
 {
-    return {
-        ConfigDefaults::position(),
-        ConfigDefaults::layoutMode(),
-        ConfigDefaults::sizeMode(),
-        ConfigDefaults::maxRows(),
-        ConfigDefaults::previewWidth(),
-        ConfigDefaults::previewHeight(),
-        ConfigDefaults::previewLockAspect(),
-        ConfigDefaults::gridColumns(),
-        ConfigDefaults::triggerDistance()
-    };
+    return {ConfigDefaults::position(),          ConfigDefaults::layoutMode(),   ConfigDefaults::sizeMode(),
+            ConfigDefaults::maxRows(),           ConfigDefaults::previewWidth(), ConfigDefaults::previewHeight(),
+            ConfigDefaults::previewLockAspect(), ConfigDefaults::gridColumns(),  ConfigDefaults::triggerDistance()};
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -88,8 +80,8 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 // Replaces 7 occurrences of get-LayerShellQt::Window + setScope + setLayer +
 // setKeyboardInteractivity + setAnchors + setExclusiveZone pattern.
 // Pass anchors = 0 to skip setAnchors (caller will set them separately).
-inline void configureLayerShell(QQuickWindow* window, QScreen* screen, int layer,
-                                int keyboardInteractivity, const QString& scope,
+inline void configureLayerShell(QQuickWindow* window, QScreen* screen, int layer, int keyboardInteractivity,
+                                const QString& scope,
                                 LayerShellQt::Window::Anchors anchors = LayerShellQt::Window::Anchors())
 {
     if (!window) {
@@ -127,8 +119,7 @@ inline QScreen* resolveTargetScreen(const QString& screenName)
 // Write shader properties (shaderSource, bufferShaderPath, bufferShaderPaths,
 // bufferFeedback, bufferScale, bufferWrap, shaderParams) from ShaderInfo to a QML window.
 // Replaces 3 occurrences of the shader-info-to-window property push pattern.
-inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::ShaderInfo& info,
-                                    const QVariantMap& params)
+inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::ShaderInfo& info, const QVariantMap& params)
 {
     if (!window) {
         return;
@@ -158,8 +149,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
 
 // Initialize shader timer if not already running. Prevents large iTimeDelta jumps
 // by only starting if invalid. Replaces 3 occurrences of mutex-guarded timer init.
-inline void ensureShaderTimerStarted(QElapsedTimer& timer, QMutex& mutex,
-                                     std::atomic<qint64>& lastFrame,
+inline void ensureShaderTimerStarted(QElapsedTimer& timer, QMutex& mutex, std::atomic<qint64>& lastFrame,
                                      std::atomic<int>& frameCount)
 {
     QMutexLocker locker(&mutex);

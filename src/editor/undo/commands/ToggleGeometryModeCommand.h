@@ -20,13 +20,10 @@ class EditorController;
 class ToggleGeometryModeCommand : public QUndoCommand
 {
 public:
-    explicit ToggleGeometryModeCommand(QPointer<EditorController> editorController,
-                                        const QString& zoneId,
-                                        int oldMode, int newMode,
-                                        const QRectF& oldRelativeGeo, const QRectF& newRelativeGeo,
-                                        const QRectF& oldFixedGeo, const QRectF& newFixedGeo,
-                                        const QString& text = QString(),
-                                        QUndoCommand* parent = nullptr);
+    explicit ToggleGeometryModeCommand(QPointer<EditorController> editorController, const QString& zoneId, int oldMode,
+                                       int newMode, const QRectF& oldRelativeGeo, const QRectF& newRelativeGeo,
+                                       const QRectF& oldFixedGeo, const QRectF& newFixedGeo,
+                                       const QString& text = QString(), QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;

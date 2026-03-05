@@ -33,7 +33,7 @@ AssignmentManager::AssignmentManager(KCMPlasmaZones* kcm, Settings* settings, QO
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QDBusMessage AssignmentManager::callDaemon(const QString& interface, const QString& method,
-                                            const QVariantList& args) const
+                                           const QVariantList& args) const
 {
     QDBusMessage msg =
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath), interface, method);
@@ -117,7 +117,7 @@ QString AssignmentManager::getTilingLayoutForScreen(const QString& screenName) c
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void AssignmentManager::assignLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                     const QString& layoutId)
+                                                    const QString& layoutId)
 {
     if (screenName.isEmpty()) {
         qCWarning(lcKcm) << "Cannot assign layout - empty screen name";
@@ -185,11 +185,13 @@ QString AssignmentManager::getLayoutForScreenDesktop(const QString& screenName, 
 bool AssignmentManager::hasExplicitAssignmentForScreenDesktop(const QString& screenName, int virtualDesktop) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName)).arg(virtualDesktop);
-    if (m_pendingDesktopAssignments.contains(key)) return true;
-    if (m_clearedDesktopAssignments.contains(key)) return false;
-    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
-                                    QStringLiteral("hasExplicitAssignmentForScreenDesktop"),
-                                    {screenName, virtualDesktop});
+    if (m_pendingDesktopAssignments.contains(key))
+        return true;
+    if (m_clearedDesktopAssignments.contains(key))
+        return false;
+    QDBusMessage reply =
+        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("hasExplicitAssignmentForScreenDesktop"),
+                   {screenName, virtualDesktop});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toBool();
     }
@@ -201,7 +203,7 @@ bool AssignmentManager::hasExplicitAssignmentForScreenDesktop(const QString& scr
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void AssignmentManager::assignTilingLayoutToScreenDesktop(const QString& screenName, int virtualDesktop,
-                                                           const QString& layoutId)
+                                                          const QString& layoutId)
 {
     if (screenName.isEmpty()) {
         qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name";
@@ -244,7 +246,7 @@ bool AssignmentManager::hasExplicitTilingAssignmentForScreenDesktop(const QStrin
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void AssignmentManager::assignLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                      const QString& layoutId)
+                                                     const QString& layoutId)
 {
     if (screenName.isEmpty() || activityId.isEmpty()) {
         qCWarning(lcKcm) << "Cannot assign layout - empty screen name or activity ID";
@@ -286,14 +288,15 @@ QString AssignmentManager::getLayoutForScreenActivity(const QString& screenName,
 }
 
 bool AssignmentManager::hasExplicitAssignmentForScreenActivity(const QString& screenName,
-                                                                const QString& activityId) const
+                                                               const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(Utils::screenIdForName(screenName), activityId);
-    if (m_pendingActivityAssignments.contains(key)) return true;
-    if (m_clearedActivityAssignments.contains(key)) return false;
+    if (m_pendingActivityAssignments.contains(key))
+        return true;
+    if (m_clearedActivityAssignments.contains(key))
+        return false;
     QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager),
-                                    QStringLiteral("hasExplicitAssignmentForScreenActivity"),
-                                    {screenName, activityId});
+                                    QStringLiteral("hasExplicitAssignmentForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         return reply.arguments().first().toBool();
     }
@@ -305,7 +308,7 @@ bool AssignmentManager::hasExplicitAssignmentForScreenActivity(const QString& sc
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void AssignmentManager::assignTilingLayoutToScreenActivity(const QString& screenName, const QString& activityId,
-                                                            const QString& layoutId)
+                                                           const QString& layoutId)
 {
     if (screenName.isEmpty() || activityId.isEmpty()) {
         qCWarning(lcKcm) << "Cannot assign tiling layout - empty screen name or activity ID";
@@ -334,7 +337,7 @@ QString AssignmentManager::getTilingLayoutForScreenActivity(const QString& scree
 }
 
 bool AssignmentManager::hasExplicitTilingAssignmentForScreenActivity(const QString& screenName,
-                                                                      const QString& activityId) const
+                                                                     const QString& activityId) const
 {
     QString key = QStringLiteral("%1|%2").arg(screenName, activityId);
     return m_tilingActivityAssignments.contains(key);
@@ -346,13 +349,15 @@ bool AssignmentManager::hasExplicitTilingAssignmentForScreenActivity(const QStri
 
 QString AssignmentManager::getQuickLayoutSlot(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9) return QString();
+    if (slotNumber < 1 || slotNumber > 9)
+        return QString();
     return m_quickLayoutSlots.value(slotNumber, QString());
 }
 
 void AssignmentManager::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9) return;
+    if (slotNumber < 1 || slotNumber > 9)
+        return;
     QString oldLayoutId = m_quickLayoutSlots.value(slotNumber, QString());
     if (oldLayoutId != layoutId) {
         if (layoutId.isEmpty()) {
@@ -367,7 +372,8 @@ void AssignmentManager::setQuickLayoutSlot(int slotNumber, const QString& layout
 
 QString AssignmentManager::getQuickLayoutShortcut(int slotNumber) const
 {
-    if (slotNumber < 1 || slotNumber > 9) return QString();
+    if (slotNumber < 1 || slotNumber > 9)
+        return QString();
     const QString componentName = QStringLiteral("plasmazonesd");
     const QString actionId = QStringLiteral("quick_layout_%1").arg(slotNumber);
     QList<QKeySequence> shortcuts = KGlobalAccel::self()->globalShortcut(componentName, actionId);
@@ -384,7 +390,8 @@ QString AssignmentManager::getTilingQuickLayoutSlot(int slotNumber) const
 
 void AssignmentManager::setTilingQuickLayoutSlot(int slotNumber, const QString& layoutId)
 {
-    if (slotNumber < 1 || slotNumber > 9) return;
+    if (slotNumber < 1 || slotNumber > 9)
+        return;
     if (m_tilingQuickLayoutSlots.value(slotNumber) != layoutId) {
         if (layoutId.isEmpty()) {
             m_tilingQuickLayoutSlots.remove(slotNumber);
@@ -422,13 +429,14 @@ QVariantList AssignmentManager::getAppRulesForLayout(const QString& layoutId) co
     if (m_pendingAppRules.contains(layoutId)) {
         return m_pendingAppRules.value(layoutId);
     }
-    QDBusMessage reply =
-        callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
-    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty()) return {};
+    QDBusMessage reply = callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("getLayout"), {layoutId});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return {};
 
     QString json = reply.arguments().first().toString();
     QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-    if (doc.isNull() || !doc.isObject()) return {};
+    if (doc.isNull() || !doc.isObject())
+        return {};
 
     QJsonArray rulesArray = doc.object()[QLatin1String("appRules")].toArray();
     QVariantList result;
@@ -452,11 +460,12 @@ void AssignmentManager::setAppRulesForLayout(const QString& layoutId, const QVar
     Q_EMIT needsSave();
 }
 
-void AssignmentManager::addAppRuleToLayout(const QString& layoutId, const QString& pattern,
-                                            int zoneNumber, const QString& targetScreen)
+void AssignmentManager::addAppRuleToLayout(const QString& layoutId, const QString& pattern, int zoneNumber,
+                                           const QString& targetScreen)
 {
     QString trimmed = pattern.trimmed();
-    if (trimmed.isEmpty() || zoneNumber < 1) return;
+    if (trimmed.isEmpty() || zoneNumber < 1)
+        return;
 
     QVariantList rules = getAppRulesForLayout(layoutId);
     for (const auto& ruleVar : rules) {
@@ -480,7 +489,8 @@ void AssignmentManager::addAppRuleToLayout(const QString& layoutId, const QStrin
 void AssignmentManager::removeAppRuleFromLayout(const QString& layoutId, int index)
 {
     QVariantList rules = getAppRulesForLayout(layoutId);
-    if (index < 0 || index >= rules.size()) return;
+    if (index < 0 || index >= rules.size())
+        return;
     rules.removeAt(index);
     setAppRulesForLayout(layoutId, rules);
 }
@@ -491,7 +501,8 @@ void AssignmentManager::removeAppRuleFromLayout(const QString& layoutId, int ind
 
 void AssignmentManager::onScreenLayoutChanged(const QString& screenName, const QString& layoutId)
 {
-    if (screenName.isEmpty()) return;
+    if (screenName.isEmpty())
+        return;
 
     QString connectorName;
     QScreen* screen = Utils::findScreenByIdOrName(screenName);
@@ -568,8 +579,10 @@ QString AssignmentManager::resolveAutotileAlgorithm(const QString& key, bool isS
     }
     const QVariantMap perScreen = m_settings->getPerScreenAutotileSettings(screenName);
     QString algo = perScreen.value(QLatin1String("Algorithm")).toString();
-    if (algo.isEmpty()) algo = m_settings->autotileAlgorithm();
-    if (algo.isEmpty()) algo = AlgorithmRegistry::defaultAlgorithmId();
+    if (algo.isEmpty())
+        algo = m_settings->autotileAlgorithm();
+    if (algo.isEmpty())
+        algo = AlgorithmRegistry::defaultAlgorithmId();
     return LayoutId::makeAutotileId(algo);
 }
 
@@ -577,9 +590,11 @@ bool AssignmentManager::syncAutotileAssignmentIds(QVariantMap& assignments, bool
 {
     bool changed = false;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        if (!LayoutId::isAutotile(it.value().toString())) continue;
+        if (!LayoutId::isAutotile(it.value().toString()))
+            continue;
         const QString resolved = resolveAutotileAlgorithm(it.key(), isScreenAssignment);
-        if (resolved.isEmpty()) continue;
+        if (resolved.isEmpty())
+            continue;
         if (it.value().toString() != resolved) {
             it.value() = resolved;
             changed = true;
@@ -592,9 +607,11 @@ bool AssignmentManager::syncAutotileAssignmentIds(QMap<QString, QString>& assign
 {
     bool changed = false;
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
-        if (!LayoutId::isAutotile(it.value())) continue;
+        if (!LayoutId::isAutotile(it.value()))
+            continue;
         const QString resolved = resolveAutotileAlgorithm(it.key(), isScreenAssignment);
-        if (resolved.isEmpty()) continue;
+        if (resolved.isEmpty())
+            continue;
         if (it.value() != resolved) {
             it.value() = resolved;
             changed = true;
@@ -625,7 +642,8 @@ void AssignmentManager::save(QStringList& failedOperations)
             qCWarning(lcKcm) << "Auto-populate: no screens available, cannot create tiling assignments";
         } else {
             QString algo = m_settings->autotileAlgorithm();
-            if (algo.isEmpty()) algo = AlgorithmRegistry::defaultAlgorithmId();
+            if (algo.isEmpty())
+                algo = AlgorithmRegistry::defaultAlgorithmId();
             const QString autotileId = LayoutId::makeAutotileId(algo);
             for (const QVariant& screenVar : std::as_const(screens)) {
                 const QVariantMap screenInfo = screenVar.toMap();
@@ -654,7 +672,8 @@ void AssignmentManager::save(QStringList& failedOperations)
             screenAssignments[it.key()] = layoutId;
         }
     }
-    QDBusMessage screenReply = callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
+    QDBusMessage screenReply =
+        callDaemon(layoutInterface, QStringLiteral("setAllScreenAssignments"), {screenAssignments});
     if (screenReply.type() == QDBusMessage::ErrorMessage) {
         failedOperations.append(QStringLiteral("Screen assignments"));
     }
@@ -685,19 +704,20 @@ void AssignmentManager::save(QStringList& failedOperations)
 
         // Delete old per-screen groups (all types in one pass)
         for (const QString& groupName : allGroups) {
-            if (groupName.startsWith(QLatin1String("SnappingScreen:")) ||
-                groupName.startsWith(QLatin1String("TilingScreen:")) ||
-                groupName.startsWith(QLatin1String("TilingActivity:")) ||
-                groupName.startsWith(QLatin1String("TilingDesktop:"))) {
+            if (groupName.startsWith(QLatin1String("SnappingScreen:"))
+                || groupName.startsWith(QLatin1String("TilingScreen:"))
+                || groupName.startsWith(QLatin1String("TilingActivity:"))
+                || groupName.startsWith(QLatin1String("TilingDesktop:"))) {
                 config->deleteGroup(groupName);
             }
         }
 
         // Clean up legacy flat-key groups
-        for (const auto& legacyName : {QStringLiteral("SnappingScreenAssignments"),
-                                        QStringLiteral("TilingScreenAssignments")}) {
+        for (const auto& legacyName :
+             {QStringLiteral("SnappingScreenAssignments"), QStringLiteral("TilingScreenAssignments")}) {
             KConfigGroup legacy = config->group(legacyName);
-            if (legacy.exists()) legacy.deleteGroup();
+            if (legacy.exists())
+                legacy.deleteGroup();
         }
 
         // Write snapping per-screen groups
@@ -717,7 +737,8 @@ void AssignmentManager::save(QStringList& failedOperations)
         // Write tiling activity assignments
         for (auto it = m_tilingActivityAssignments.constBegin(); it != m_tilingActivityAssignments.constEnd(); ++it) {
             int sepIdx = it.key().lastIndexOf(QLatin1Char('|'));
-            if (sepIdx <= 0) continue;
+            if (sepIdx <= 0)
+                continue;
             QString connectorName = it.key().left(sepIdx);
             QString activityId = it.key().mid(sepIdx + 1);
             QString screenId = safeScreenId(connectorName);
@@ -728,7 +749,8 @@ void AssignmentManager::save(QStringList& failedOperations)
         // Write tiling per-desktop assignments
         for (auto it = m_tilingDesktopAssignments.constBegin(); it != m_tilingDesktopAssignments.constEnd(); ++it) {
             int sepIdx = it.key().lastIndexOf(QLatin1Char('|'));
-            if (sepIdx <= 0) continue;
+            if (sepIdx <= 0)
+                continue;
             QString connectorName = it.key().left(sepIdx);
             QString desktopNum = it.key().mid(sepIdx + 1);
             QString screenId = safeScreenId(connectorName);
@@ -763,9 +785,11 @@ void AssignmentManager::save(QStringList& failedOperations)
             desktopAssignments[it.key()] = it.value();
         }
         for (auto it = m_tilingDesktopAssignments.constBegin(); it != m_tilingDesktopAssignments.constEnd(); ++it) {
-            if (!it.value().isEmpty()) desktopAssignments[it.key()] = it.value();
+            if (!it.value().isEmpty())
+                desktopAssignments[it.key()] = it.value();
         }
-        QDBusMessage desktopReply = callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
+        QDBusMessage desktopReply =
+            callDaemon(layoutInterface, QStringLiteral("setAllDesktopAssignments"), {desktopAssignments});
         if (desktopReply.type() == QDBusMessage::ErrorMessage) {
             failedOperations.append(QStringLiteral("Per-desktop assignments"));
         }
@@ -791,9 +815,11 @@ void AssignmentManager::save(QStringList& failedOperations)
             activityAssignments[it.key()] = it.value();
         }
         for (auto it = m_tilingActivityAssignments.constBegin(); it != m_tilingActivityAssignments.constEnd(); ++it) {
-            if (!it.value().isEmpty()) activityAssignments[it.key()] = it.value();
+            if (!it.value().isEmpty())
+                activityAssignments[it.key()] = it.value();
         }
-        QDBusMessage activityReply = callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
+        QDBusMessage activityReply =
+            callDaemon(layoutInterface, QStringLiteral("setAllActivityAssignments"), {activityAssignments});
         if (activityReply.type() == QDBusMessage::ErrorMessage) {
             failedOperations.append(QStringLiteral("Per-activity assignments"));
         }
@@ -863,7 +889,8 @@ void AssignmentManager::load()
         const QStringList allGroups = config->groupList();
 
         auto resolveScreenId = [](const QString& screenId) -> QString {
-            if (Utils::isConnectorName(screenId)) return screenId;
+            if (Utils::isConnectorName(screenId))
+                return screenId;
             return Utils::screenNameForId(screenId);
         };
 
@@ -871,12 +898,14 @@ void AssignmentManager::load()
             for (const QString& groupName : allGroups) {
                 if (groupName.startsWith(prefix)) {
                     QString screenId = groupName.mid(prefix.size());
-                    if (screenId.isEmpty()) continue;
+                    if (screenId.isEmpty())
+                        continue;
                     KConfigGroup screenGroup = config->group(groupName);
                     QString layoutId = screenGroup.readEntry(QStringLiteral("Assignment"), QString());
                     if (!layoutId.isEmpty()) {
                         QString connectorName = resolveScreenId(screenId);
-                        if (!connectorName.isEmpty()) target[connectorName] = layoutId;
+                        if (!connectorName.isEmpty())
+                            target[connectorName] = layoutId;
                     }
                 }
             }
@@ -887,10 +916,12 @@ void AssignmentManager::load()
                 if (groupName.startsWith(prefix)) {
                     QString compoundKey = groupName.mid(prefix.size());
                     int sepIdx = compoundKey.lastIndexOf(QLatin1Char('|'));
-                    if (sepIdx <= 0) continue;
+                    if (sepIdx <= 0)
+                        continue;
                     QString screenId = compoundKey.left(sepIdx);
                     QString suffix = compoundKey.mid(sepIdx + 1);
-                    if (screenId.isEmpty() || suffix.isEmpty()) continue;
+                    if (screenId.isEmpty() || suffix.isEmpty())
+                        continue;
                     KConfigGroup group = config->group(groupName);
                     QString layoutId = group.readEntry(QStringLiteral("Assignment"), QString());
                     if (!layoutId.isEmpty()) {
@@ -907,7 +938,10 @@ void AssignmentManager::load()
         const QLatin1String snappingPrefix("SnappingScreen:");
         bool foundSnappingGroups = false;
         for (const QString& groupName : allGroups) {
-            if (groupName.startsWith(snappingPrefix)) { foundSnappingGroups = true; break; }
+            if (groupName.startsWith(snappingPrefix)) {
+                foundSnappingGroups = true;
+                break;
+            }
         }
         if (foundSnappingGroups) {
             loadPerScreenAssignments(snappingPrefix, m_screenAssignments);
@@ -917,7 +951,8 @@ void AssignmentManager::load()
                 const QStringList keys = legacySnapping.keyList();
                 for (const QString& key : keys) {
                     QString layoutId = legacySnapping.readEntry(key, QString());
-                    if (!layoutId.isEmpty()) m_screenAssignments[key] = layoutId;
+                    if (!layoutId.isEmpty())
+                        m_screenAssignments[key] = layoutId;
                 }
             } else {
                 // Fallback: load from daemon for first run
@@ -955,7 +990,8 @@ void AssignmentManager::load()
                 const QStringList keys = legacyTiling.keyList();
                 for (const QString& key : keys) {
                     QString layoutId = legacyTiling.readEntry(key, QString());
-                    if (!layoutId.isEmpty()) m_tilingScreenAssignments[key] = layoutId;
+                    if (!layoutId.isEmpty())
+                        m_tilingScreenAssignments[key] = layoutId;
                 }
             }
         }
@@ -968,7 +1004,8 @@ void AssignmentManager::load()
         KConfigGroup tilingSlots = config->group(QStringLiteral("TilingQuickLayoutSlots"));
         for (int slot = 1; slot <= 9; ++slot) {
             QString layoutId = tilingSlots.readEntry(QString::number(slot), QString());
-            if (!layoutId.isEmpty()) m_tilingQuickLayoutSlots[slot] = layoutId;
+            if (!layoutId.isEmpty())
+                m_tilingQuickLayoutSlots[slot] = layoutId;
         }
 
         // Assignment view mode
@@ -986,7 +1023,8 @@ void AssignmentManager::load()
             int slotNum = it.key().toInt(&ok);
             if (ok && slotNum >= 1 && slotNum <= 9) {
                 QString layoutId = it.value().toString();
-                if (!layoutId.isEmpty()) m_quickLayoutSlots[slotNum] = layoutId;
+                if (!layoutId.isEmpty())
+                    m_quickLayoutSlots[slotNum] = layoutId;
             }
         }
     }

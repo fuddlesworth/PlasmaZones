@@ -57,8 +57,7 @@ void WindowTrackingAdaptor::saveState()
 
     // Save active layout ID so we can restore it after daemon restart.
     if (m_layoutManager && m_layoutManager->activeLayout()) {
-        tracking.writeEntry(QStringLiteral("ActiveLayoutId"),
-                            m_layoutManager->activeLayout()->id().toString());
+        tracking.writeEntry(QStringLiteral("ActiveLayoutId"), m_layoutManager->activeLayout()->id().toString());
     }
 
     // Save zone assignments as JSON arrays (from service state)
@@ -68,7 +67,8 @@ void WindowTrackingAdaptor::saveState()
         assignmentsObj[stableId] = toJsonArray(it.value());
     }
     // Include pending assignments
-    for (auto it = m_service->pendingZoneAssignments().constBegin(); it != m_service->pendingZoneAssignments().constEnd(); ++it) {
+    for (auto it = m_service->pendingZoneAssignments().constBegin();
+         it != m_service->pendingZoneAssignments().constEnd(); ++it) {
         if (!assignmentsObj.contains(it.key())) {
             assignmentsObj[it.key()] = toJsonArray(it.value());
         }
@@ -87,7 +87,8 @@ void WindowTrackingAdaptor::saveState()
 
     // Save pending screen assignments (translate to stable screen IDs)
     QJsonObject pendingScreenAssignmentsObj;
-    for (auto it = m_service->pendingScreenAssignments().constBegin(); it != m_service->pendingScreenAssignments().constEnd(); ++it) {
+    for (auto it = m_service->pendingScreenAssignments().constBegin();
+         it != m_service->pendingScreenAssignments().constEnd(); ++it) {
         if (!it.value().isEmpty()) {
             pendingScreenAssignmentsObj[it.key()] = Utils::screenIdForName(it.value());
         }
@@ -97,7 +98,8 @@ void WindowTrackingAdaptor::saveState()
 
     // Save active desktop assignments (for cross-restart persistence, same pattern as screens)
     QJsonObject desktopAssignmentsObj;
-    for (auto it = m_service->desktopAssignments().constBegin(); it != m_service->desktopAssignments().constEnd(); ++it) {
+    for (auto it = m_service->desktopAssignments().constBegin(); it != m_service->desktopAssignments().constEnd();
+         ++it) {
         if (it.value() > 0) {
             QString stableId = Utils::extractStableId(it.key());
             desktopAssignmentsObj[stableId] = it.value();
@@ -108,7 +110,8 @@ void WindowTrackingAdaptor::saveState()
 
     // Save pending desktop assignments
     QJsonObject pendingDesktopAssignmentsObj;
-    for (auto it = m_service->pendingDesktopAssignments().constBegin(); it != m_service->pendingDesktopAssignments().constEnd(); ++it) {
+    for (auto it = m_service->pendingDesktopAssignments().constBegin();
+         it != m_service->pendingDesktopAssignments().constEnd(); ++it) {
         if (it.value() > 0) {
             pendingDesktopAssignmentsObj[it.key()] = it.value();
         }
@@ -118,7 +121,8 @@ void WindowTrackingAdaptor::saveState()
 
     // Save pending layout assignments (for layout validation on restore)
     QJsonObject pendingLayoutAssignmentsObj;
-    for (auto it = m_service->pendingLayoutAssignments().constBegin(); it != m_service->pendingLayoutAssignments().constEnd(); ++it) {
+    for (auto it = m_service->pendingLayoutAssignments().constBegin();
+         it != m_service->pendingLayoutAssignments().constEnd(); ++it) {
         if (!it.value().isEmpty()) {
             pendingLayoutAssignmentsObj[it.key()] = it.value();
         }
@@ -128,7 +132,8 @@ void WindowTrackingAdaptor::saveState()
 
     // Save pending zone numbers (for zone-number fallback when UUIDs change)
     QJsonObject pendingZoneNumbersObj;
-    for (auto it = m_service->pendingZoneNumbers().constBegin(); it != m_service->pendingZoneNumbers().constEnd(); ++it) {
+    for (auto it = m_service->pendingZoneNumbers().constBegin(); it != m_service->pendingZoneNumbers().constEnd();
+         ++it) {
         QJsonArray numArray;
         for (int num : it.value()) {
             numArray.append(num);
@@ -139,8 +144,7 @@ void WindowTrackingAdaptor::saveState()
                         QString::fromUtf8(QJsonDocument(pendingZoneNumbersObj).toJson(QJsonDocument::Compact)));
 
     // Save pre-snap geometries (convert to stableId for cross-restart persistence)
-    tracking.writeEntry(QStringLiteral("PreSnapGeometries"),
-                        serializeGeometryMap(m_service->preSnapGeometries()));
+    tracking.writeEntry(QStringLiteral("PreSnapGeometries"), serializeGeometryMap(m_service->preSnapGeometries()));
 
     // Save pre-autotile geometries (convert to stableId for cross-restart persistence)
     tracking.writeEntry(QStringLiteral("PreAutotileGeometries"),
@@ -218,8 +222,8 @@ void WindowTrackingAdaptor::loadState()
 
     // Load zone assignments into pending (keyed by stable ID)
     // Supports both old format (string) and new format (JSON array) for backward compat
-    QHash<QString, QStringList> pendingZones = parseZoneListMap(
-        tracking.readEntry(QStringLiteral("WindowZoneAssignments"), QString()));
+    QHash<QString, QStringList> pendingZones =
+        parseZoneListMap(tracking.readEntry(QStringLiteral("WindowZoneAssignments"), QString()));
     m_service->setPendingZoneAssignments(pendingZones);
 
     // Load screen assignments: merge active (WindowScreenAssignments) into pending
@@ -417,8 +421,8 @@ void WindowTrackingAdaptor::loadState()
 
     // Load pre-float zone assignments (for unfloating after session restore)
     // Supports both old format (string) and new format (JSON array) for backward compat
-    QHash<QString, QStringList> preFloatZones = parseZoneListMap(
-        tracking.readEntry(QStringLiteral("PreFloatZoneAssignments"), QString()));
+    QHash<QString, QStringList> preFloatZones =
+        parseZoneListMap(tracking.readEntry(QStringLiteral("PreFloatZoneAssignments"), QString()));
     m_service->setPreFloatZoneAssignments(preFloatZones);
 
     // Load pre-float screen assignments (for unfloating to correct monitor)

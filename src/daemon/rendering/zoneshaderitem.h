@@ -67,15 +67,20 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zoneCountChanged FINAL)
     Q_PROPERTY(int highlightedCount READ highlightedCount NOTIFY highlightedCountChanged FINAL)
     /** Zone index under cursor for hover highlight (preview mode). -1 = none. Avoids full zones churn on mouse move. */
-    Q_PROPERTY(int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
+    Q_PROPERTY(
+        int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
 
     // Shader source
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
     /** Multi-pass: path to buffer pass fragment shader (e.g. buffer.frag). Empty for single-pass. */
-    Q_PROPERTY(QString bufferShaderPath READ bufferShaderPath WRITE setBufferShaderPath NOTIFY bufferShaderPathChanged FINAL)
-    /** Multi-pass: up to 4 buffer pass fragment shaders (A→B→C→D). When non-empty, overrides bufferShaderPath for multi-buffer. */
-    Q_PROPERTY(QStringList bufferShaderPaths READ bufferShaderPaths WRITE setBufferShaderPaths NOTIFY bufferShaderPathsChanged FINAL)
-    /** When true, buffer pass uses ping-pong (samples its own previous frame as iChannel0). Only when a single buffer pass. */
+    Q_PROPERTY(
+        QString bufferShaderPath READ bufferShaderPath WRITE setBufferShaderPath NOTIFY bufferShaderPathChanged FINAL)
+    /** Multi-pass: up to 4 buffer pass fragment shaders (A→B→C→D). When non-empty, overrides bufferShaderPath for
+     * multi-buffer. */
+    Q_PROPERTY(QStringList bufferShaderPaths READ bufferShaderPaths WRITE setBufferShaderPaths NOTIFY
+                   bufferShaderPathsChanged FINAL)
+    /** When true, buffer pass uses ping-pong (samples its own previous frame as iChannel0). Only when a single buffer
+     * pass. */
     Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
     /** Buffer resolution scale (e.g. 0.5 = half size); 0.125–1.0. */
     Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
@@ -118,10 +123,12 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
 
     /** Audio spectrum from CAVA (0-1 per bar). Empty = disabled. Set from C++ OverlayService.
      *  Accepts QVector<float> (fast C++ path) or QVariantList (QML path). */
-    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY audioSpectrumChanged FINAL)
+    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY
+                   audioSpectrumChanged FINAL)
 
     /** Desktop wallpaper image. Set from C++ OverlayService when shader subscribes via "wallpaper": true. */
-    Q_PROPERTY(QImage wallpaperTexture READ wallpaperTexture WRITE setWallpaperTexture NOTIFY wallpaperTextureChanged FINAL)
+    Q_PROPERTY(
+        QImage wallpaperTexture READ wallpaperTexture WRITE setWallpaperTexture NOTIFY wallpaperTextureChanged FINAL)
     /** Whether the current shader subscribes to the wallpaper texture. */
     Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
 
@@ -145,127 +152,247 @@ public:
     ~ZoneShaderItem() override;
 
     // Animation getters/setters
-    qreal iTime() const { return m_iTime; }
+    qreal iTime() const
+    {
+        return m_iTime;
+    }
     void setITime(qreal time);
 
-    qreal iTimeDelta() const { return m_iTimeDelta; }
+    qreal iTimeDelta() const
+    {
+        return m_iTimeDelta;
+    }
     void setITimeDelta(qreal delta);
 
-    int iFrame() const { return m_iFrame; }
+    int iFrame() const
+    {
+        return m_iFrame;
+    }
     void setIFrame(int frame);
 
     // Resolution getter/setter
-    QSizeF iResolution() const { return m_iResolution; }
+    QSizeF iResolution() const
+    {
+        return m_iResolution;
+    }
     void setIResolution(const QSizeF& resolution);
 
     // Mouse position getter/setter
-    QPointF iMouse() const { return m_iMouse; }
+    QPointF iMouse() const
+    {
+        return m_iMouse;
+    }
     void setIMouse(const QPointF& mouse);
 
     // Zone data getters/setters
-    const QVariantList& zones() const { return m_zones; }
+    const QVariantList& zones() const
+    {
+        return m_zones;
+    }
     void setZones(const QVariantList& zones);
 
-    int zoneCount() const { return m_zoneCount; }
-    int highlightedCount() const { return m_highlightedCount; }
+    int zoneCount() const
+    {
+        return m_zoneCount;
+    }
+    int highlightedCount() const
+    {
+        return m_highlightedCount;
+    }
 
-    int hoveredZoneIndex() const { return m_hoveredZoneIndex; }
+    int hoveredZoneIndex() const
+    {
+        return m_hoveredZoneIndex;
+    }
     void setHoveredZoneIndex(int index);
 
     // Shader source getter/setter
-    QUrl shaderSource() const { return m_shaderSource; }
+    QUrl shaderSource() const
+    {
+        return m_shaderSource;
+    }
     void setShaderSource(const QUrl& source);
 
-    QString bufferShaderPath() const { return m_bufferShaderPath; }
+    QString bufferShaderPath() const
+    {
+        return m_bufferShaderPath;
+    }
     void setBufferShaderPath(const QString& path);
 
-    QStringList bufferShaderPaths() const { return m_bufferShaderPaths; }
+    QStringList bufferShaderPaths() const
+    {
+        return m_bufferShaderPaths;
+    }
     void setBufferShaderPaths(const QStringList& paths);
 
-    bool bufferFeedback() const { return m_bufferFeedback; }
+    bool bufferFeedback() const
+    {
+        return m_bufferFeedback;
+    }
     void setBufferFeedback(bool enable);
 
-    qreal bufferScale() const { return m_bufferScale; }
+    qreal bufferScale() const
+    {
+        return m_bufferScale;
+    }
     void setBufferScale(qreal scale);
 
-    QString bufferWrap() const { return m_bufferWrap; }
+    QString bufferWrap() const
+    {
+        return m_bufferWrap;
+    }
     void setBufferWrap(const QString& wrap);
 
-    QVariantMap shaderParams() const { return m_shaderParams; }
+    QVariantMap shaderParams() const
+    {
+        return m_shaderParams;
+    }
     void setShaderParams(const QVariantMap& params);
 
     // Custom parameters getters/setters (32 floats in 8 vec4s)
-    QVector4D customParams1() const { return m_customParams1; }
+    QVector4D customParams1() const
+    {
+        return m_customParams1;
+    }
     void setCustomParams1(const QVector4D& params);
 
-    QVector4D customParams2() const { return m_customParams2; }
+    QVector4D customParams2() const
+    {
+        return m_customParams2;
+    }
     void setCustomParams2(const QVector4D& params);
 
-    QVector4D customParams3() const { return m_customParams3; }
+    QVector4D customParams3() const
+    {
+        return m_customParams3;
+    }
     void setCustomParams3(const QVector4D& params);
 
-    QVector4D customParams4() const { return m_customParams4; }
+    QVector4D customParams4() const
+    {
+        return m_customParams4;
+    }
     void setCustomParams4(const QVector4D& params);
 
-    QVector4D customParams5() const { return m_customParams5; }
+    QVector4D customParams5() const
+    {
+        return m_customParams5;
+    }
     void setCustomParams5(const QVector4D& params);
 
-    QVector4D customParams6() const { return m_customParams6; }
+    QVector4D customParams6() const
+    {
+        return m_customParams6;
+    }
     void setCustomParams6(const QVector4D& params);
 
-    QVector4D customParams7() const { return m_customParams7; }
+    QVector4D customParams7() const
+    {
+        return m_customParams7;
+    }
     void setCustomParams7(const QVector4D& params);
 
-    QVector4D customParams8() const { return m_customParams8; }
+    QVector4D customParams8() const
+    {
+        return m_customParams8;
+    }
     void setCustomParams8(const QVector4D& params);
 
     // Custom color getters/setters (16 colors)
-    QVector4D customColor1() const { return m_customColor1; }
+    QVector4D customColor1() const
+    {
+        return m_customColor1;
+    }
     void setCustomColor1(const QVector4D& color);
 
-    QVector4D customColor2() const { return m_customColor2; }
+    QVector4D customColor2() const
+    {
+        return m_customColor2;
+    }
     void setCustomColor2(const QVector4D& color);
 
-    QVector4D customColor3() const { return m_customColor3; }
+    QVector4D customColor3() const
+    {
+        return m_customColor3;
+    }
     void setCustomColor3(const QVector4D& color);
 
-    QVector4D customColor4() const { return m_customColor4; }
+    QVector4D customColor4() const
+    {
+        return m_customColor4;
+    }
     void setCustomColor4(const QVector4D& color);
 
-    QVector4D customColor5() const { return m_customColor5; }
+    QVector4D customColor5() const
+    {
+        return m_customColor5;
+    }
     void setCustomColor5(const QVector4D& color);
 
-    QVector4D customColor6() const { return m_customColor6; }
+    QVector4D customColor6() const
+    {
+        return m_customColor6;
+    }
     void setCustomColor6(const QVector4D& color);
 
-    QVector4D customColor7() const { return m_customColor7; }
+    QVector4D customColor7() const
+    {
+        return m_customColor7;
+    }
     void setCustomColor7(const QVector4D& color);
 
-    QVector4D customColor8() const { return m_customColor8; }
+    QVector4D customColor8() const
+    {
+        return m_customColor8;
+    }
     void setCustomColor8(const QVector4D& color);
 
-    QVector4D customColor9() const { return m_customColor9; }
+    QVector4D customColor9() const
+    {
+        return m_customColor9;
+    }
     void setCustomColor9(const QVector4D& color);
 
-    QVector4D customColor10() const { return m_customColor10; }
+    QVector4D customColor10() const
+    {
+        return m_customColor10;
+    }
     void setCustomColor10(const QVector4D& color);
 
-    QVector4D customColor11() const { return m_customColor11; }
+    QVector4D customColor11() const
+    {
+        return m_customColor11;
+    }
     void setCustomColor11(const QVector4D& color);
 
-    QVector4D customColor12() const { return m_customColor12; }
+    QVector4D customColor12() const
+    {
+        return m_customColor12;
+    }
     void setCustomColor12(const QVector4D& color);
 
-    QVector4D customColor13() const { return m_customColor13; }
+    QVector4D customColor13() const
+    {
+        return m_customColor13;
+    }
     void setCustomColor13(const QVector4D& color);
 
-    QVector4D customColor14() const { return m_customColor14; }
+    QVector4D customColor14() const
+    {
+        return m_customColor14;
+    }
     void setCustomColor14(const QVector4D& color);
 
-    QVector4D customColor15() const { return m_customColor15; }
+    QVector4D customColor15() const
+    {
+        return m_customColor15;
+    }
     void setCustomColor15(const QVector4D& color);
 
-    QVector4D customColor16() const { return m_customColor16; }
+    QVector4D customColor16() const
+    {
+        return m_customColor16;
+    }
     void setCustomColor16(const QVector4D& color);
 
     // Labels texture getter/setter
@@ -280,12 +407,21 @@ public:
     QImage wallpaperTexture() const;
     void setWallpaperTexture(const QImage& image);
 
-    bool useWallpaper() const { return m_useWallpaper; }
+    bool useWallpaper() const
+    {
+        return m_useWallpaper;
+    }
     void setUseWallpaper(bool use);
 
     // Status getters
-    Status status() const { return m_status; }
-    QString errorLog() const { return m_errorLog; }
+    Status status() const
+    {
+        return m_status;
+    }
+    QString errorLog() const
+    {
+        return m_errorLog;
+    }
 
     /**
      * @brief Get a thread-safe copy of zone data for rendering

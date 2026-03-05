@@ -14,6 +14,9 @@ import org.kde.kirigami as Kirigami
 Item {
     // Note: editorController is a required property, so it should always be set when component is created.
     // Initialization defers until drawingArea has valid dimensions (width/height > 0).
+    // Initialization gate: drawingArea onWidthChanged/onHeightChanged (below)
+    // retries tryUpdateDividers() when dimensions become valid, eliminating the
+    // need for a polling timer.
 
     id: dividerManager
 
@@ -34,8 +37,6 @@ Item {
 
     // Update dividers when zones change
     function updateDividers() {
-        var threshold = 0.01;
-
         // Round to threshold for grouping edges together
         // But keep track of exact positions to match against recent divider positions
         function roundToThreshold(val) {
@@ -54,6 +55,14 @@ Item {
             return recent[dividerKey] || null;
         }
 
+        // Recent position exists and is close enough - use it to preserve exact position
+        // Use exact position from edge (matching recent position)
+        // Use rounded position
+        // Recent position exists and is close enough - use it to preserve exact position
+        // Use exact position from edge (matching recent position)
+        // Use rounded position
+
+        var threshold = 0.01;
         // This function assumes editorController is already checked - use tryUpdateDividers() instead
         if (!editorController) {
             dividerManager.dividerCount = 0;
@@ -174,10 +183,6 @@ Item {
         }
         // Create vertical dividers (only where zones exist on BOTH sides)
         for (var xPos in verticalEdges) {
-            // Recent position exists and is close enough - use it to preserve exact position
-            // Use exact position from edge (matching recent position)
-            // Use rounded position
-
             var edge = verticalEdges[xPos];
             if (edge.leftZones.length > 0 && edge.rightZones.length > 0) {
                 var allZoneIds = [];
@@ -217,10 +222,6 @@ Item {
         }
         // Create horizontal dividers (only where zones exist on BOTH sides)
         for (var yPos in horizontalEdges) {
-            // Recent position exists and is close enough - use it to preserve exact position
-            // Use exact position from edge (matching recent position)
-            // Use rounded position
-
             var hEdge = horizontalEdges[yPos];
             if (hEdge.topZones.length > 0 && hEdge.bottomZones.length > 0) {
                 var allHZoneIds = [];
@@ -308,10 +309,6 @@ Item {
         }
     }
 
-    // Initialization gate: drawingArea onWidthChanged/onHeightChanged (below)
-    // retries tryUpdateDividers() when dimensions become valid, eliminating the
-    // need for a polling timer.
-
     // Watch for drawing area size changes - but only after editorController is set
     Connections {
         function onWidthChanged() {
@@ -362,14 +359,16 @@ Item {
 
         // Bind dividerData to dividers property for repeater updates
         property var dividerData: dividerManager.dividers
-
         // Track the currently dragging handle for validation after release
         property var currentDraggingHandle: null
-        property var zonesBefore: ({})
+        property var zonesBefore: ({
+        })
 
         model: dividerManager.dividerCount
 
         DividerHandle {
+            // Visual updates are handled by DividerHandle component
+
             id: dividerHandleItem
 
             // Required properties from DividerHandle component
@@ -380,66 +379,66 @@ Item {
             spacing: dividerManager.zoneSpacing
             drawingArea: dividerManager.drawingArea
             zonesRepeater: dividerManager.zonesRepeater
-
             // Hide other dividers while one is being dragged to avoid phantom appearance
             // Also hide all dividers in preview mode
             visible: {
                 if (dividerManager.previewMode)
                     return false;
+
                 if (!dividerInfo || dividerInfo === null || dividerInfo === undefined)
                     return false;
+
                 if (width <= 0 || height <= 0)
                     return false;
+
                 if (!dividerManager.drawingArea || dividerManager.drawingArea.width <= 0 || dividerManager.drawingArea.height <= 0)
                     return false;
+
                 if (dividerManager.isDragging && !isDragging)
                     return false;
+
                 return true;
             }
-
             onDragStarted: function(zoneStartPositions) {
                 dividerManager.isDragging = true;
                 dividerRepeater.currentDraggingHandle = dividerHandleItem;
-
                 // Set divider operation flag on all affected zones
                 // This prevents syncFromZoneData() from overwriting our visual updates
                 for (var j = 0; j < dividerManager.zonesRepeater.count; j++) {
                     var zoneItem = dividerManager.zonesRepeater.itemAt(j);
                     if (zoneItem && affectedZones.indexOf(zoneItem.zoneId) >= 0)
                         zoneItem.isDividerOperation = true;
+
                 }
             }
-
             onDragMoved: function(newPosition) {
-                // Visual updates are handled by DividerHandle component
             }
-
             onDragEnded: function(finalPosition, originalPosition) {
                 dividerManager.isDragging = false;
-
                 // Capture zone positions BEFORE the operation to compare later
-                var zonesBefore = {};
+                var zonesBefore = {
+                };
                 var zonesData = dividerManager.editorController.zones;
                 for (var k = 0; k < zonesData.length; k++) {
                     var zone = zonesData[k];
                     if (affectedZones.indexOf(zone.id) >= 0)
                         zonesBefore[zone.id] = {
-                            "x": zone.x,
-                            "y": zone.y,
-                            "width": zone.width,
-                            "height": zone.height
-                        };
+                        "x": zone.x,
+                        "y": zone.y,
+                        "width": zone.width,
+                        "height": zone.height
+                    };
+
                 }
                 dividerRepeater.zonesBefore = zonesBefore;
-
                 // Store the final position in recentDividerPositions so updateDividers() can preserve it
                 var key = isVertical ? "v" : "h";
                 if (!dividerManager.recentDividerPositions[key])
-                    dividerManager.recentDividerPositions[key] = {};
+                    dividerManager.recentDividerPositions[key] = {
+                };
 
                 var dividerKey = affectedZones.slice().sort().join(",");
                 dividerManager.recentDividerPositions[key][dividerKey] = finalPosition;
-
                 // Sync final state to C++
                 var info = dividerInfo;
                 if (dividerManager.editorController && info) {
@@ -450,6 +449,7 @@ Item {
                         var rightId = (rightZone && rightZone.id !== undefined) ? rightZone.id : (typeof rightZone === 'string' ? rightZone : '');
                         if (leftId && rightId)
                             dividerManager.editorController.resizeZonesAtDivider(leftId, rightId, finalPosition, 0, true);
+
                     } else if (!isVertical && info.topZones && info.bottomZones && info.topZones.length > 0 && info.bottomZones.length > 0) {
                         var topZone = info.topZones[0];
                         var bottomZone = info.bottomZones[0];
@@ -457,9 +457,9 @@ Item {
                         var bottomId = (bottomZone && bottomZone.id !== undefined) ? bottomZone.id : (typeof bottomZone === 'string' ? bottomZone : '');
                         if (topId && bottomId)
                             dividerManager.editorController.resizeZonesAtDivider(topId, bottomId, 0, finalPosition, false);
+
                     }
                 }
-
                 // Clear divider operation flag after C++ update propagates
                 var capturedAffectedZones = affectedZones.slice();
                 Qt.callLater(function() {
@@ -467,12 +467,11 @@ Item {
                         var zoneItem = dividerManager.zonesRepeater.itemAt(i);
                         if (zoneItem && capturedAffectedZones.indexOf(zoneItem.zoneId) >= 0)
                             zoneItem.isDividerOperation = false;
+
                     }
                 });
-
                 // Trigger divider recalculation
                 dividerManager.scheduleUpdate();
-
                 // Validate that the resize was actually applied.
                 // Single deferred call: C++ model updates synchronously on resizeZonesAtDivider,
                 // so one frame is enough for QML property bindings to propagate.
@@ -504,25 +503,25 @@ Item {
                         capturedHandle.resetDragPosition();
                         if (dividerManager.recentDividerPositions[capturedKey] && dividerManager.recentDividerPositions[capturedKey][capturedDividerKey])
                             delete dividerManager.recentDividerPositions[capturedKey][capturedDividerKey];
+
                         capturedHandle.restoreZoneVisuals();
                         dividerManager.scheduleUpdate();
                     }
                 });
             }
-
             onDragCancelled: {
                 dividerManager.isDragging = false;
-
                 // Clear divider operation flag on all affected zones
                 for (var i = 0; i < dividerManager.zonesRepeater.count; i++) {
                     var zoneItem = dividerManager.zonesRepeater.itemAt(i);
                     if (zoneItem && affectedZones.indexOf(zoneItem.zoneId) >= 0)
                         zoneItem.isDividerOperation = false;
-                }
 
+                }
                 dividerManager.scheduleUpdate();
             }
         }
+
     }
 
 }

@@ -14,7 +14,7 @@ namespace {
 AlgorithmRegistrar<MonocleAlgorithm> s_monocleRegistrar(DBus::AutotileAlgorithm::Monocle, 70);
 }
 
-MonocleAlgorithm::MonocleAlgorithm(QObject *parent)
+MonocleAlgorithm::MonocleAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -34,11 +34,11 @@ QString MonocleAlgorithm::icon() const noexcept
     return QStringLiteral("view-fullscreen");
 }
 
-QVector<QRect> MonocleAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> MonocleAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
-    const auto &outerGaps = params.outerGaps;
+    const auto& screenGeometry = params.screenGeometry;
+    const auto& outerGaps = params.outerGaps;
 
     QVector<QRect> zones;
 

@@ -28,9 +28,9 @@ static const QUuid ShaderNamespaceUuid = QUuid::fromString(QStringLiteral("{a1b2
 static const char* const UniformVecNames[] = {"customParams1", "customParams2", "customParams3", "customParams4",
                                               "customParams5", "customParams6", "customParams7", "customParams8"};
 static const char* const UniformComponents[] = {"_x", "_y", "_z", "_w"};
-static const char* const UniformColorNames[] = {"customColor1", "customColor2", "customColor3", "customColor4",
-                                                "customColor5", "customColor6", "customColor7", "customColor8",
-                                                "customColor9", "customColor10", "customColor11", "customColor12",
+static const char* const UniformColorNames[] = {"customColor1",  "customColor2",  "customColor3",  "customColor4",
+                                                "customColor5",  "customColor6",  "customColor7",  "customColor8",
+                                                "customColor9",  "customColor10", "customColor11", "customColor12",
                                                 "customColor13", "customColor14", "customColor15", "customColor16"};
 
 QString ShaderRegistry::ParameterInfo::uniformName() const
@@ -360,7 +360,8 @@ ShaderRegistry::ShaderInfo ShaderRegistry::loadShaderMetadata(const QString& sha
         }
     }
     if (info.bufferShaderPaths.isEmpty()) {
-        const QString bufferShaderName = root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
+        const QString bufferShaderName =
+            root.value(QLatin1String("bufferShader")).toString(QStringLiteral("buffer.frag"));
         info.bufferShaderPath = dir.filePath(bufferShaderName);
         info.bufferShaderPaths.append(info.bufferShaderPath);
     } else {
@@ -440,7 +441,6 @@ QVariantMap ShaderRegistry::shaderInfo(const QString& id) const
     return shaderInfoToVariantMap(m_shaders.value(id));
 }
 
-
 QUrl ShaderRegistry::shaderUrl(const QString& id) const
 {
     if (isNoneShader(id) || !m_shaders.contains(id)) {
@@ -470,6 +470,5 @@ void ShaderRegistry::openUserShaderDirectory() const
     ensureUserShaderDirExists();
     QDesktopServices::openUrl(QUrl::fromLocalFile(userShaderDir()));
 }
-
 
 } // namespace PlasmaZones

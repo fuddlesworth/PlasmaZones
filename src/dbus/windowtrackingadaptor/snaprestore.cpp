@@ -44,7 +44,7 @@ void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString
 }
 
 void WindowTrackingAdaptor::snapToEmptyZone(const QString& windowId, const QString& windowScreenName, bool sticky,
-                                             int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
+                                            int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -92,8 +92,8 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
 }
 
 void WindowTrackingAdaptor::resolveWindowRestore(const QString& windowId, const QString& screenName, bool sticky,
-                                                  int& snapX, int& snapY, int& snapWidth, int& snapHeight,
-                                                  bool& shouldSnap)
+                                                 int& snapX, int& snapY, int& snapWidth, int& snapHeight,
+                                                 bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
@@ -110,8 +110,7 @@ void WindowTrackingAdaptor::resolveWindowRestore(const QString& windowId, const 
         SnapResult result = m_service->calculateSnapToAppRule(windowId, screenName, sticky);
         if (result.shouldSnap) {
             applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
-            qCInfo(lcDbusWindow) << "resolveWindowRestore: appRule matched for" << windowId
-                                 << "zone=" << result.zoneId;
+            qCInfo(lcDbusWindow) << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
             return;
         }
     }
@@ -185,9 +184,8 @@ QString WindowTrackingAdaptor::resolveScreenForSnap(const QString& callerScreen,
     return m_lastActiveScreenName;
 }
 
-void WindowTrackingAdaptor::applySnapResult(const SnapResult& result, const QString& windowId,
-                                             int& snapX, int& snapY, int& snapWidth, int& snapHeight,
-                                             bool& shouldSnap)
+void WindowTrackingAdaptor::applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY,
+                                            int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = result.geometry.x();
     snapY = result.geometry.y();

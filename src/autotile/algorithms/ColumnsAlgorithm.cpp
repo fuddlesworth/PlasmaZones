@@ -14,7 +14,7 @@ namespace {
 AlgorithmRegistrar<ColumnsAlgorithm> s_columnsRegistrar(DBus::AutotileAlgorithm::Columns, 30);
 }
 
-ColumnsAlgorithm::ColumnsAlgorithm(QObject *parent)
+ColumnsAlgorithm::ColumnsAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -34,13 +34,13 @@ QString ColumnsAlgorithm::icon() const noexcept
     return QStringLiteral("view-split-left-right");
 }
 
-QVector<QRect> ColumnsAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> ColumnsAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 

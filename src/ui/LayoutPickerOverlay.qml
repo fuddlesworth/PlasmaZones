@@ -22,67 +22,39 @@ Window {
     // Layout data (array of layout objects with id, name, zones, category, autoAssign)
     property var layouts: []
     property string activeLayoutId: ""
-
     // Screen info for aspect ratio
     property real screenAspectRatio: 16 / 9
-    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4.0, screenAspectRatio))
-
+    readonly property real safeAspectRatio: Math.max(0.5, Math.min(4, screenAspectRatio))
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
     property color highlightColor: Kirigami.Theme.highlightColor
-
     // Zone appearance (set from C++ settings for consistency with zone selector)
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
     property real activeOpacity: 0.5
     property real inactiveOpacity: 0.3
-
     // Font properties for zone number labels
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
         for (var i = 0; i < layouts.length; i++) {
             if (layouts[i].id === activeLayoutId)
                 return i;
+
         }
         return 0;
     }
-
     // Grid dimensions
     readonly property int layoutCount: layouts.length
     readonly property int gridColumns: Math.min(layoutCount, Math.max(3, Math.min(5, Math.ceil(Math.sqrt(layoutCount * 1.5)))))
     readonly property int gridRows: gridColumns > 0 ? Math.ceil(layoutCount / gridColumns) : 0
-
-    // Layout constants — match ZoneSelectorLayout (zoneselectorlayout.h)
-    QtObject {
-        id: metrics
-
-        // Container chrome
-        readonly property int containerPadding: Kirigami.Units.gridUnit * 2
-        readonly property int paddingSide: Kirigami.Units.gridUnit
-        readonly property int containerRadius: Kirigami.Units.largeSpacing * 2
-        readonly property int indicatorSpacing: Kirigami.Units.gridUnit
-        readonly property real backdropAlpha: 0.3
-
-        // Card preview
-        readonly property int previewWidth: 160
-
-        // Show/hide animation
-        readonly property int showDuration: Kirigami.Units.shortDuration
-        readonly property int hideDuration: Math.round(Kirigami.Units.shortDuration * 0.8)
-        readonly property real showScaleFrom: 0.9
-        readonly property real hideScaleTo: 0.95
-        readonly property real showOvershoot: 1.1
-    }
-
     // Card dimensions
     readonly property int previewWidth: metrics.previewWidth
     readonly property int previewHeight: Math.round(previewWidth / safeAspectRatio)
@@ -93,11 +65,6 @@ Window {
     // Signals
     signal layoutSelected(string layoutId)
     signal dismissed()
-
-    // Window configuration
-    flags: Qt.FramelessWindowHint | Qt.Tool
-    color: "transparent"
-    visible: false
 
     // Show with animation
     function show() {
@@ -113,70 +80,15 @@ Window {
     // Hide with animation
     function hide() {
         showAnimation.stop();
-        if (root.visible) {
+        if (root.visible)
             hideAnimation.start();
-        }
+
     }
-
-    // Show animation
-    ParallelAnimation {
-        id: showAnimation
-
-        NumberAnimation {
-            target: contentWrapper
-            property: "opacity"
-            from: 0; to: 1
-            duration: metrics.showDuration
-            easing.type: Easing.OutCubic
-        }
-        NumberAnimation {
-            target: container
-            property: "scale"
-            from: metrics.showScaleFrom; to: 1
-            duration: metrics.showDuration
-            easing.type: Easing.OutBack
-            easing.overshoot: metrics.showOvershoot
-        }
-    }
-
-    // Hide animation
-    SequentialAnimation {
-        id: hideAnimation
-
-        ParallelAnimation {
-            NumberAnimation {
-                target: contentWrapper
-                property: "opacity"
-                to: 0
-                duration: metrics.hideDuration
-                easing.type: Easing.InCubic
-            }
-            NumberAnimation {
-                target: container
-                property: "scale"
-                to: metrics.hideScaleTo
-                duration: metrics.hideDuration
-                easing.type: Easing.InCubic
-            }
-        }
-        ScriptAction {
-            script: {
-                root.visible = false;
-                root.dismissed();
-            }
-        }
-    }
-
-    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support)
-    Shortcut { sequence: "Return"; onActivated: confirmSelection() }
-    Shortcut { sequence: "Enter"; onActivated: confirmSelection() }
-    Shortcut { sequence: "Left"; onActivated: moveSelection(-1, 0) }
-    Shortcut { sequence: "Right"; onActivated: moveSelection(1, 0) }
-    Shortcut { sequence: "Up"; onActivated: moveSelection(0, -1) }
-    Shortcut { sequence: "Down"; onActivated: moveSelection(0, 1) }
 
     function moveSelection(dx, dy) {
-        if (layoutCount === 0) return;
+        if (layoutCount === 0)
+            return ;
+
         var col = selectedIndex % gridColumns;
         var row = Math.floor(selectedIndex / gridColumns);
         col = (col + dx + gridColumns) % gridColumns;
@@ -197,9 +109,123 @@ Window {
         }
     }
 
+    // Window configuration
+    flags: Qt.FramelessWindowHint | Qt.Tool
+    color: "transparent"
+    visible: false
+
+    // Layout constants — match ZoneSelectorLayout (zoneselectorlayout.h)
+    QtObject {
+        id: metrics
+
+        // Container chrome
+        readonly property int containerPadding: Kirigami.Units.gridUnit * 2
+        readonly property int paddingSide: Kirigami.Units.gridUnit
+        readonly property int containerRadius: Kirigami.Units.largeSpacing * 2
+        readonly property int indicatorSpacing: Kirigami.Units.gridUnit
+        readonly property real backdropAlpha: 0.3
+        // Card preview
+        readonly property int previewWidth: 160
+        // Show/hide animation
+        readonly property int showDuration: Kirigami.Units.shortDuration
+        readonly property int hideDuration: Math.round(Kirigami.Units.shortDuration * 0.8)
+        readonly property real showScaleFrom: 0.9
+        readonly property real hideScaleTo: 0.95
+        readonly property real showOvershoot: 1.1
+    }
+
+    // Show animation
+    ParallelAnimation {
+        id: showAnimation
+
+        NumberAnimation {
+            target: contentWrapper
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: metrics.showDuration
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: container
+            property: "scale"
+            from: metrics.showScaleFrom
+            to: 1
+            duration: metrics.showDuration
+            easing.type: Easing.OutBack
+            easing.overshoot: metrics.showOvershoot
+        }
+
+    }
+
+    // Hide animation
+    SequentialAnimation {
+        id: hideAnimation
+
+        ParallelAnimation {
+            NumberAnimation {
+                target: contentWrapper
+                property: "opacity"
+                to: 0
+                duration: metrics.hideDuration
+                easing.type: Easing.InCubic
+            }
+
+            NumberAnimation {
+                target: container
+                property: "scale"
+                to: metrics.hideScaleTo
+                duration: metrics.hideDuration
+                easing.type: Easing.InCubic
+            }
+
+        }
+
+        ScriptAction {
+            script: {
+                root.visible = false;
+                root.dismissed();
+            }
+        }
+
+    }
+
+    // Keyboard handling (Escape is handled by C++ eventFilter for reliable Wayland support)
+    Shortcut {
+        sequence: "Return"
+        onActivated: confirmSelection()
+    }
+
+    Shortcut {
+        sequence: "Enter"
+        onActivated: confirmSelection()
+    }
+
+    Shortcut {
+        sequence: "Left"
+        onActivated: moveSelection(-1, 0)
+    }
+
+    Shortcut {
+        sequence: "Right"
+        onActivated: moveSelection(1, 0)
+    }
+
+    Shortcut {
+        sequence: "Up"
+        onActivated: moveSelection(0, -1)
+    }
+
+    Shortcut {
+        sequence: "Down"
+        onActivated: moveSelection(0, 1)
+    }
+
     // Content wrapper for opacity animation (avoid Wayland setOpacity warning)
     Item {
         id: contentWrapper
+
         anchors.fill: parent
         opacity: 0
 
@@ -207,12 +233,14 @@ Window {
         Rectangle {
             anchors.fill: parent
             color: Qt.rgba(0, 0, 0, metrics.backdropAlpha)
+
             MouseArea {
                 anchors.fill: parent
                 onClicked: root.hide()
                 Accessible.name: i18n("Dismiss layout picker")
                 Accessible.role: Accessible.Button
             }
+
         }
 
         // Main container card
@@ -230,12 +258,15 @@ Window {
             // Absorb clicks inside container to prevent backdrop dismiss
             MouseArea {
                 anchors.fill: parent
-                onClicked: function(mouse) { mouse.accepted = true; }
+                onClicked: function(mouse) {
+                    mouse.accepted = true;
+                }
             }
 
             // Title
             Label {
                 id: titleLabel
+
                 anchors.top: parent.top
                 anchors.topMargin: metrics.paddingSide
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -268,7 +299,6 @@ Window {
 
                         width: root.cardWidth
                         height: root.cardHeight
-
                         Accessible.role: Accessible.Button
                         Accessible.name: layoutData.name || ""
                         Accessible.focusable: true
@@ -281,11 +311,9 @@ Window {
                             isHovered: layoutCard.isHovered
                             previewWidth: root.previewWidth
                             previewHeight: root.previewHeight
-
                             // Layout picker features
                             showCardBackground: true
                             interactive: false
-
                             // Zone appearance (consistent with zone selector)
                             zonePadding: 1
                             edgeGap: 1
@@ -295,12 +323,10 @@ Window {
                             zoneBorderColor: root.borderColor
                             activeOpacity: root.activeOpacity
                             inactiveOpacity: root.inactiveOpacity
-
                             // Theme
                             highlightColor: root.highlightColor
                             textColor: root.textColor
                             backgroundColor: root.backgroundColor
-
                             // Font
                             fontFamily: root.fontFamily
                             fontSizeScale: root.fontSizeScale
@@ -308,12 +334,12 @@ Window {
                             fontItalic: root.fontItalic
                             fontUnderline: root.fontUnderline
                             fontStrikeout: root.fontStrikeout
-
                             animationDuration: Kirigami.Units.shortDuration
                         }
 
                         MouseArea {
                             id: cardMouse
+
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: {
@@ -322,9 +348,15 @@ Window {
                             }
                             onEntered: root.selectedIndex = index
                         }
+
                     }
+
                 }
+
             }
+
         }
+
     }
+
 }

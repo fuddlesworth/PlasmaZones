@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import ".."
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
-import ".."
 
 /**
  * @brief Assignments tab - Monitor, activity, quick layout slot, and app-to-zone assignments
@@ -20,7 +20,6 @@ ScrollView {
 
     required property var kcm
     required property QtObject constants
-
     // View mode: 0 = snapping (zone layouts), 1 = tiling (autotile algorithms)
     // When autotiling is disabled, this is always 0.
     readonly property int viewMode: root.kcm.autotileEnabled ? root.kcm.assignmentViewMode : 0
@@ -30,6 +29,7 @@ ScrollView {
 
     WindowPickerDialog {
         id: windowPickerDialog
+
         kcm: root.kcm
     }
 
@@ -55,6 +55,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: modeSelectorCard
+
                 anchors.fill: parent
 
                 header: Kirigami.Heading {
@@ -68,19 +69,21 @@ ScrollView {
 
                     ComboBox {
                         id: modeCombo
+
                         Layout.fillWidth: true
-                        model: [
-                            { text: i18n("Snapping — Zone layouts"), value: 0 },
-                            { text: i18n("Tiling — Autotile algorithms"), value: 1 }
-                        ]
+                        model: [{
+                            "text": i18n("Snapping — Zone layouts"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Tiling — Autotile algorithms"),
+                            "value": 1
+                        }]
                         textRole: "text"
                         valueRole: "value"
                         currentIndex: root.kcm.assignmentViewMode
-
                         onActivated: {
-                            root.kcm.assignmentViewMode = model[currentIndex].value
+                            root.kcm.assignmentViewMode = model[currentIndex].value;
                         }
-
                         ToolTip.visible: hovered
                         ToolTip.delay: Kirigami.Units.toolTipDelay
                         ToolTip.text: i18n("Switch between snapping and tiling configurations. Both are saved independently.")
@@ -92,12 +95,13 @@ ScrollView {
                         Layout.topMargin: Kirigami.Units.smallSpacing * 2
                         visible: true
                         type: root.viewMode === 1 ? Kirigami.MessageType.Positive : Kirigami.MessageType.Information
-                        text: root.viewMode === 1
-                            ? i18n("Tiling mode: assign autotile algorithms to each monitor. These are used when tiling is active.")
-                            : i18n("Snapping mode: assign zone layouts to each monitor. These are used when dragging windows.")
+                        text: root.viewMode === 1 ? i18n("Tiling mode: assign autotile algorithms to each monitor. These are used when tiling is active.") : i18n("Snapping mode: assign zone layouts to each monitor. These are used when dragging windows.")
                     }
+
                 }
+
             }
+
         }
 
         // Monitor Assignments - wrapped in Item for stable sizing
@@ -107,11 +111,13 @@ ScrollView {
 
             MonitorAssignmentsCard {
                 id: monitorCard
+
                 anchors.fill: parent
                 kcm: root.kcm
                 constants: root.constants
                 viewMode: root.viewMode
             }
+
         }
 
         // Activity Assignments (visible when Activities are available in both modes)
@@ -122,11 +128,13 @@ ScrollView {
 
             ActivityAssignmentsCard {
                 id: activityCard
+
                 anchors.fill: parent
                 kcm: root.kcm
                 constants: root.constants
                 viewMode: root.viewMode
             }
+
         }
 
         // Info message when Activities not available
@@ -145,12 +153,14 @@ ScrollView {
 
             AppRulesCard {
                 id: appRulesCard
+
                 anchors.fill: parent
                 kcm: root.kcm
                 constants: root.constants
                 windowPickerDialog: windowPickerDialog
                 viewMode: root.viewMode
             }
+
         }
 
         // Quick Layout Shortcuts - wrapped in Item for stable sizing
@@ -160,12 +170,15 @@ ScrollView {
 
             QuickLayoutSlotsCard {
                 id: quickSlotsCard
+
                 anchors.fill: parent
                 kcm: root.kcm
                 constants: root.constants
                 viewMode: root.viewMode
             }
+
         }
 
     }
+
 }

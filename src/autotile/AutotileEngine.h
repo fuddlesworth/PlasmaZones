@@ -392,8 +392,7 @@ public:
      * @param direction Direction string ("left", "right", "up", "down")
      * @param action OSD action label — "move" or "swap" (defaults to "move")
      */
-    Q_INVOKABLE void swapFocusedInDirection(const QString& direction,
-                                            const QString& action = QStringLiteral("move"));
+    Q_INVOKABLE void swapFocusedInDirection(const QString& direction, const QString& action = QStringLiteral("move"));
 
     /**
      * @brief Focus the adjacent window in tiling order with OSD feedback
@@ -403,8 +402,7 @@ public:
      * @param direction Direction string ("left", "right", "up", "down")
      * @param action OSD action label — "focus" or "cycle" (defaults to "focus")
      */
-    Q_INVOKABLE void focusInDirection(const QString& direction,
-                                      const QString& action = QStringLiteral("focus"));
+    Q_INVOKABLE void focusInDirection(const QString& direction, const QString& action = QStringLiteral("focus"));
 
     /**
      * @brief Move the focused window to a specific position in the tiling order
@@ -696,7 +694,6 @@ private:
      * @param screenName Screen to retile
      */
     void retileScreen(const QString& screenName);
-
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods

@@ -39,8 +39,8 @@ Item {
     property bool isPartOfMultiSelection: false // True when zone is selected AND multiple zones are selected
     required property bool previewMode
     property var controller: null
-    property real zoneSpacing: 0  // Gap between adjacent zones (applied as zoneSpacing/2 per side)
-    property real edgeGap: 0      // Gap at screen edges
+    property real zoneSpacing: 0 // Gap between adjacent zones (applied as zoneSpacing/2 per side)
+    property real edgeGap: 0 // Gap at screen edges
     property var snapIndicator: null
     // Fixed geometry support
     property bool isFixedZone: zoneData ? (zoneData.geometryMode === 1) : false
@@ -73,6 +73,19 @@ Item {
     property bool mouseOverZone: hoverArea.containsMouse || anyButtonHovered || anyHandleHovered
     property bool anyButtonHovered: false // Will be set by buttons
     property bool anyHandleHovered: false // Will be set by handles
+    // Apply differentiated gaps: edgeGap at screen boundaries, zoneSpacing/2 between zones
+    // Detect screen boundaries using relative coordinates (tolerance 0.01)
+    readonly property real edgeTolerance: 0.01
+    // Zone data uses x, y, width, height (relative coordinates 0-1)
+    readonly property real relX: zoneData ? (zoneData.x || 0) : 0
+    readonly property real relY: zoneData ? (zoneData.y || 0) : 0
+    readonly property real relWidth: zoneData ? (zoneData.width || 0) : 0
+    readonly property real relHeight: zoneData ? (zoneData.height || 0) : 0
+    // Calculate gap for each edge: edgeGap if at screen boundary, zoneSpacing/2 otherwise
+    readonly property real leftGap: relX < edgeTolerance ? edgeGap : zoneSpacing / 2
+    readonly property real topGap: relY < edgeTolerance ? edgeGap : zoneSpacing / 2
+    readonly property real rightGap: (relX + relWidth) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
+    readonly property real bottomGap: (relY + relHeight) > (1 - edgeTolerance) ? edgeGap : zoneSpacing / 2
 
     // Signals
     signal clicked(var event)
@@ -224,7 +237,8 @@ Item {
     function syncFromZoneData() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!parent)
-            return;
+            return ;
+
         geometrySync.syncFromZoneData();
     }
 
@@ -232,7 +246,8 @@ Item {
     function ensureDimensionsInitialized() {
         // Guard: zone removed from Repeater - avoid use-after-free from pending Qt.callLater
         if (!parent)
-            return;
+            return ;
+
         geometrySync.ensureDimensionsInitialized();
     }
 
@@ -246,19 +261,6 @@ Item {
     }
 
     focus: false
-    // Apply differentiated gaps: edgeGap at screen boundaries, zoneSpacing/2 between zones
-    // Detect screen boundaries using relative coordinates (tolerance 0.01)
-    readonly property real edgeTolerance: 0.01
-    // Zone data uses x, y, width, height (relative coordinates 0-1)
-    readonly property real relX: zoneData ? (zoneData.x || 0) : 0
-    readonly property real relY: zoneData ? (zoneData.y || 0) : 0
-    readonly property real relWidth: zoneData ? (zoneData.width || 0) : 0
-    readonly property real relHeight: zoneData ? (zoneData.height || 0) : 0
-    // Calculate gap for each edge: edgeGap if at screen boundary, zoneSpacing/2 otherwise
-    readonly property real leftGap: relX < edgeTolerance ? edgeGap : zoneSpacing / 2
-    readonly property real topGap: relY < edgeTolerance ? edgeGap : zoneSpacing / 2
-    readonly property real rightGap: (relX + relWidth) > (1.0 - edgeTolerance) ? edgeGap : zoneSpacing / 2
-    readonly property real bottomGap: (relY + relHeight) > (1.0 - edgeTolerance) ? edgeGap : zoneSpacing / 2
     // Position with differentiated gaps
     x: visualX + leftGap
     y: visualY + topGap
@@ -357,8 +359,8 @@ Item {
         property color _highlightColorTracker: zoneData ? zoneData.highlightColor : "transparent"
         property color _inactiveColorTracker: zoneData ? zoneData.inactiveColor : "transparent"
         property color _borderColorTracker: zoneData ? zoneData.borderColor : "transparent"
-        property real _activeOpacityTracker: zoneData ? zoneData.activeOpacity : 0.0
-        property real _inactiveOpacityTracker: zoneData ? zoneData.inactiveOpacity : 0.0
+        property real _activeOpacityTracker: zoneData ? zoneData.activeOpacity : 0
+        property real _inactiveOpacityTracker: zoneData ? zoneData.inactiveOpacity : 0
         property int _borderWidthTracker: zoneData ? zoneData.borderWidth : 0
         property int _borderRadiusTracker: zoneData ? zoneData.borderRadius : 0
         property bool _useCustomColorsTracker: zoneData ? zoneData.useCustomColors : false
@@ -500,7 +502,7 @@ Item {
         anchors.fill: parent
         zoneData: root.zoneData
         fontFamily: root.controller ? root.controller.labelFontFamily : ""
-        fontSizeScale: root.controller ? root.controller.labelFontSizeScale : 1.0
+        fontSizeScale: root.controller ? root.controller.labelFontSizeScale : 1
         fontWeight: root.controller ? root.controller.labelFontWeight : Font.Bold
         fontItalic: root.controller ? root.controller.labelFontItalic : false
         fontUnderline: root.controller ? root.controller.labelFontUnderline : false
@@ -512,18 +514,23 @@ Item {
     // However, QVariantMap property changes don't automatically trigger QML bindings,
     // so we need to force re-evaluation by updating tracker properties
     Connections {
+        // Expected when zone is destroyed between signal and callLater
+        // Expected when zone is destroyed between signal and callLater
+
         // Avoid use-after-free when zone is removed from Repeater (e.g. deleteZone) but
         // Qt.callLater callbacks from prior zoneColorChanged/zonesChanged still run.
         function onZoneColorChanged(zoneId) {
             if (zoneId !== root.zoneId || !root.zoneData)
-                return;
+                return ;
+
             var rootRef = root;
             var zoneRectRef = zoneRect;
             Qt.callLater(function() {
                 try {
                     // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
                     if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
-                        return;
+                        return ;
+
                     zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
                     zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
                     zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
@@ -533,21 +540,22 @@ Item {
                     zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
                     zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
                 } catch (e) {
-                    // Expected when zone is destroyed between signal and callLater
                 }
             });
         }
 
         function onZonesChanged() {
             if (!root.zoneData)
-                return;
+                return ;
+
             var rootRef = root;
             var zoneRectRef = zoneRect;
             Qt.callLater(function() {
                 try {
                     // Guard: zone removed from scene (Repeater update) - avoid accessing destroyed objects
                     if (!rootRef || !rootRef.parent || !rootRef.zoneData || !zoneRectRef)
-                        return;
+                        return ;
+
                     zoneRectRef._highlightColorTracker = rootRef.zoneData.highlightColor;
                     zoneRectRef._inactiveColorTracker = rootRef.zoneData.inactiveColor;
                     zoneRectRef._borderColorTracker = rootRef.zoneData.borderColor;
@@ -557,7 +565,6 @@ Item {
                     zoneRectRef._borderRadiusTracker = rootRef.zoneData.borderRadius;
                     zoneRectRef._useCustomColorsTracker = rootRef.zoneData.useCustomColors;
                 } catch (e) {
-                    // Expected when zone is destroyed between signal and callLater
                 }
             });
         }

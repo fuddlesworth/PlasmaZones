@@ -42,8 +42,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
 
     // Forward service signals to D-Bus
-    connect(m_service, &WindowTrackingService::windowZoneChanged,
-            this, &WindowTrackingAdaptor::windowZoneChanged);
+    connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
 
     // Connect service state changes to persistence
     connect(m_service, &WindowTrackingService::stateChanged, this, &WindowTrackingAdaptor::scheduleSaveState);
@@ -71,7 +70,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
             // ScreenManager not available - this is unexpected but we handle it gracefully.
             // Window restoration will still work via onLayoutChanged() -> tryEmitPendingRestoresAvailable()
             // which will emit immediately since isPanelGeometryReady() returns false when instance is null.
-            qCWarning(lcDbusWindow) << "ScreenManager instance not available - window restoration may use incorrect geometry";
+            qCWarning(lcDbusWindow)
+                << "ScreenManager instance not available - window restoration may use incorrect geometry";
         }
     });
 
@@ -134,7 +134,8 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 }
 
-void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenName)
+void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
+                                                   const QString& screenName)
 {
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
@@ -169,7 +170,8 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
         m_service->updateLastUsedZone(primaryZoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
-    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen" << resolvedScreen;
+    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
+                         << resolvedScreen;
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)

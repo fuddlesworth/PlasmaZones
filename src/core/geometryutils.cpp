@@ -61,7 +61,8 @@ static QRectF calculateZoneGeometryInAvailableArea(Zone* zone, QScreen* screen)
  * @param screenGeom The reference screen geometry (for fixed mode pixel checks)
  * @return Array of 4 bools: [left, top, right, bottom] — true if at boundary
  */
-struct EdgeBoundaries {
+struct EdgeBoundaries
+{
     bool left = false;
     bool top = false;
     bool right = false;
@@ -93,7 +94,8 @@ static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
     return edges;
 }
 
-QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps, bool useAvailableGeometry)
+QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
+                               bool useAvailableGeometry)
 {
     if (!zone || !screen) {
         return QRectF();
@@ -174,18 +176,15 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QStrin
                 auto leftIt = perScreen.constFind(QLatin1String("OuterGapLeft"));
                 auto rightIt = perScreen.constFind(QLatin1String("OuterGapRight"));
                 // If any per-side key is present, use per-screen per-side gaps
-                if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd()
-                    || leftIt != perScreen.constEnd() || rightIt != perScreen.constEnd()) {
+                if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
+                    || rightIt != perScreen.constEnd()) {
                     // Fall back to per-screen uniform OuterGap, then global for missing sides
                     auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
-                    int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt()
-                                    : settings->outerGap();
-                    return {
-                        (topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
-                        (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
-                        (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
-                        (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback
-                    };
+                    int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : settings->outerGap();
+                    return {(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
+                            (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
+                            (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
+                            (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
                 }
             }
             // UsePerSideOuterGap not set or false — per-side keys ignored if present
@@ -202,16 +201,24 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QStrin
         EdgeGaps gaps = layout->rawOuterGaps();
         // Fill in -1 sentinel values from global per-side or uniform fallback
         if (settings && settings->usePerSideOuterGap()) {
-            if (gaps.top < 0) gaps.top = settings->outerGapTop();
-            if (gaps.bottom < 0) gaps.bottom = settings->outerGapBottom();
-            if (gaps.left < 0) gaps.left = settings->outerGapLeft();
-            if (gaps.right < 0) gaps.right = settings->outerGapRight();
+            if (gaps.top < 0)
+                gaps.top = settings->outerGapTop();
+            if (gaps.bottom < 0)
+                gaps.bottom = settings->outerGapBottom();
+            if (gaps.left < 0)
+                gaps.left = settings->outerGapLeft();
+            if (gaps.right < 0)
+                gaps.right = settings->outerGapRight();
         } else {
             int fallback = settings ? settings->outerGap() : Defaults::OuterGap;
-            if (gaps.top < 0) gaps.top = fallback;
-            if (gaps.bottom < 0) gaps.bottom = fallback;
-            if (gaps.left < 0) gaps.left = fallback;
-            if (gaps.right < 0) gaps.right = fallback;
+            if (gaps.top < 0)
+                gaps.top = fallback;
+            if (gaps.bottom < 0)
+                gaps.bottom = fallback;
+            if (gaps.left < 0)
+                gaps.left = fallback;
+            if (gaps.right < 0)
+                gaps.right = fallback;
         }
         return gaps;
     }
@@ -224,8 +231,8 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QStrin
     // Fall back to global settings
     if (settings) {
         if (settings->usePerSideOuterGap()) {
-            return {settings->outerGapTop(), settings->outerGapBottom(),
-                    settings->outerGapLeft(), settings->outerGapRight()};
+            return {settings->outerGapTop(), settings->outerGapBottom(), settings->outerGapLeft(),
+                    settings->outerGapRight()};
         }
         return EdgeGaps::uniform(settings->outerGap());
     }

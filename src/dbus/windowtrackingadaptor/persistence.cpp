@@ -89,8 +89,8 @@ void WindowTrackingAdaptor::clearPreSnapGeometry(const QString& windowId)
     }
 }
 
-void WindowTrackingAdaptor::recordPreAutotileGeometry(const QString& windowId, const QString& screenName,
-                                                       int x, int y, int width, int height)
+void WindowTrackingAdaptor::recordPreAutotileGeometry(const QString& windowId, const QString& screenName, int x, int y,
+                                                      int width, int height)
 {
     Q_UNUSED(screenName)
     if (windowId.isEmpty() || width <= 0 || height <= 0) {
@@ -115,7 +115,8 @@ QString WindowTrackingAdaptor::getPreAutotileGeometriesJson()
     return serializeGeometryMap(m_service->preAutotileGeometries());
 }
 
-bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId, int& x, int& y, int& width, int& height)
+bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId, int& x, int& y, int& width,
+                                                        int& height)
 {
     x = y = width = height = 0;
 
@@ -222,7 +223,8 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
     // Both conditions met (or ScreenManager unavailable) - emit the signal
     m_pendingRestoresEmitted = true;
     if (!ScreenManager::instance()) {
-        qCWarning(lcDbusWindow) << "Emitting pendingRestoresAvailable without ScreenManager - geometry may be incorrect";
+        qCWarning(lcDbusWindow)
+            << "Emitting pendingRestoresAvailable without ScreenManager - geometry may be incorrect";
     } else {
         qCInfo(lcDbusWindow) << "Panel geometry ready AND pending restores available - notifying effect";
     }
@@ -260,7 +262,8 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
     for (QScreen* screen : Utils::allScreens()) {
-        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop, m_layoutManager->currentActivity());
+        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop,
+                                                          m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
             return screen->name();
         }

@@ -64,8 +64,7 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
         for (const auto& t : capped) {
             int mod = t.toMap().value(QStringLiteral("modifier"), 0).toInt();
             if (mod != 0) {
-                synced = static_cast<DragModifier>(
-                    qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
+                synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
                 break;
             }
         }
@@ -184,12 +183,15 @@ SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, mi
 // Behavior setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SETTINGS_SETTER(bool, KeepWindowsInZonesOnResolutionChange, m_keepWindowsInZonesOnResolutionChange, keepWindowsInZonesOnResolutionChangeChanged)
+SETTINGS_SETTER(bool, KeepWindowsInZonesOnResolutionChange, m_keepWindowsInZonesOnResolutionChange,
+                keepWindowsInZonesOnResolutionChangeChanged)
 SETTINGS_SETTER(bool, MoveNewWindowsToLastZone, m_moveNewWindowsToLastZone, moveNewWindowsToLastZoneChanged)
 SETTINGS_SETTER(bool, RestoreOriginalSizeOnUnsnap, m_restoreOriginalSizeOnUnsnap, restoreOriginalSizeOnUnsnapChanged)
 SETTINGS_SETTER(StickyWindowHandling, StickyWindowHandling, m_stickyWindowHandling, stickyWindowHandlingChanged)
 
-SETTINGS_SETTER_ENUM_INT(StickyWindowHandling, StickyWindowHandling, static_cast<int>(StickyWindowHandling::TreatAsNormal), static_cast<int>(StickyWindowHandling::IgnoreAll))
+SETTINGS_SETTER_ENUM_INT(StickyWindowHandling, StickyWindowHandling,
+                         static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                         static_cast<int>(StickyWindowHandling::IgnoreAll))
 
 SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
 SETTINGS_SETTER(bool, SnapAssistFeatureEnabled, m_snapAssistFeatureEnabled, snapAssistFeatureEnabledChanged)
@@ -226,7 +228,8 @@ SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindo
 // ═══════════════════════════════════════════════════════════════════════════════
 
 SETTINGS_SETTER(bool, ZoneSelectorEnabled, m_zoneSelectorEnabled, zoneSelectorEnabledChanged)
-SETTINGS_SETTER_CLAMPED(ZoneSelectorTriggerDistance, m_zoneSelectorTriggerDistance, zoneSelectorTriggerDistanceChanged, 10, 200)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorTriggerDistance, m_zoneSelectorTriggerDistance, zoneSelectorTriggerDistanceChanged,
+                        10, 200)
 SETTINGS_SETTER(ZoneSelectorPosition, ZoneSelectorPosition, m_zoneSelectorPosition, zoneSelectorPositionChanged)
 
 void Settings::setZoneSelectorPositionInt(int position)
@@ -239,11 +242,14 @@ void Settings::setZoneSelectorPositionInt(int position)
 
 SETTINGS_SETTER(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, m_zoneSelectorLayoutMode, zoneSelectorLayoutModeChanged)
 
-SETTINGS_SETTER_ENUM_INT(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, 0, static_cast<int>(ZoneSelectorLayoutMode::Vertical))
+SETTINGS_SETTER_ENUM_INT(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, 0,
+                         static_cast<int>(ZoneSelectorLayoutMode::Vertical))
 
 SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewWidth, m_zoneSelectorPreviewWidth, zoneSelectorPreviewWidthChanged, 80, 400)
-SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewHeight, m_zoneSelectorPreviewHeight, zoneSelectorPreviewHeightChanged, 60, 300)
-SETTINGS_SETTER(bool, ZoneSelectorPreviewLockAspect, m_zoneSelectorPreviewLockAspect, zoneSelectorPreviewLockAspectChanged)
+SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewHeight, m_zoneSelectorPreviewHeight, zoneSelectorPreviewHeightChanged, 60,
+                        300)
+SETTINGS_SETTER(bool, ZoneSelectorPreviewLockAspect, m_zoneSelectorPreviewLockAspect,
+                zoneSelectorPreviewLockAspectChanged)
 SETTINGS_SETTER_CLAMPED(ZoneSelectorGridColumns, m_zoneSelectorGridColumns, zoneSelectorGridColumnsChanged, 1, 10)
 SETTINGS_SETTER(ZoneSelectorSizeMode, ZoneSelectorSizeMode, m_zoneSelectorSizeMode, zoneSelectorSizeModeChanged)
 
@@ -262,8 +268,7 @@ void Settings::setAutotileAlgorithm(const QString& algorithm)
     // Validate algorithm ID against the algorithm registry (single source of truth)
     QString validatedAlgorithm = algorithm;
     if (!AlgorithmRegistry::instance()->algorithm(algorithm)) {
-        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm
-                            << "- falling back to default";
+        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- falling back to default";
         validatedAlgorithm = AlgorithmRegistry::defaultAlgorithmId();
     }
 
@@ -274,32 +279,51 @@ void Settings::setAutotileAlgorithm(const QString& algorithm)
     }
 }
 
-SETTINGS_SETTER_CLAMPED_QREAL(AutotileSplitRatio, m_autotileSplitRatio, autotileSplitRatioChanged, AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio)
-SETTINGS_SETTER_CLAMPED(AutotileMasterCount, m_autotileMasterCount, autotileMasterCountChanged, AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount)
-SETTINGS_SETTER_CLAMPED_QREAL(AutotileCenteredMasterSplitRatio, m_autotileCenteredMasterSplitRatio, autotileCenteredMasterSplitRatioChanged, AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio)
-SETTINGS_SETTER_CLAMPED(AutotileCenteredMasterMasterCount, m_autotileCenteredMasterMasterCount, autotileCenteredMasterMasterCountChanged, AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount)
-SETTINGS_SETTER_CLAMPED(AutotileInnerGap, m_autotileInnerGap, autotileInnerGapChanged, AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(AutotileOuterGap, m_autotileOuterGap, autotileOuterGapChanged, AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+SETTINGS_SETTER_CLAMPED_QREAL(AutotileSplitRatio, m_autotileSplitRatio, autotileSplitRatioChanged,
+                              AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio)
+SETTINGS_SETTER_CLAMPED(AutotileMasterCount, m_autotileMasterCount, autotileMasterCountChanged,
+                        AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount)
+SETTINGS_SETTER_CLAMPED_QREAL(AutotileCenteredMasterSplitRatio, m_autotileCenteredMasterSplitRatio,
+                              autotileCenteredMasterSplitRatioChanged, AutotileDefaults::MinSplitRatio,
+                              AutotileDefaults::MaxSplitRatio)
+SETTINGS_SETTER_CLAMPED(AutotileCenteredMasterMasterCount, m_autotileCenteredMasterMasterCount,
+                        autotileCenteredMasterMasterCountChanged, AutotileDefaults::MinMasterCount,
+                        AutotileDefaults::MaxMasterCount)
+SETTINGS_SETTER_CLAMPED(AutotileInnerGap, m_autotileInnerGap, autotileInnerGapChanged, AutotileDefaults::MinGap,
+                        AutotileDefaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(AutotileOuterGap, m_autotileOuterGap, autotileOuterGapChanged, AutotileDefaults::MinGap,
+                        AutotileDefaults::MaxGap)
 SETTINGS_SETTER(bool, AutotileUsePerSideOuterGap, m_autotileUsePerSideOuterGap, autotileUsePerSideOuterGapChanged)
-SETTINGS_SETTER_CLAMPED(AutotileOuterGapTop, m_autotileOuterGapTop, autotileOuterGapTopChanged, AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(AutotileOuterGapBottom, m_autotileOuterGapBottom, autotileOuterGapBottomChanged, AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(AutotileOuterGapLeft, m_autotileOuterGapLeft, autotileOuterGapLeftChanged, AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
-SETTINGS_SETTER_CLAMPED(AutotileOuterGapRight, m_autotileOuterGapRight, autotileOuterGapRightChanged, AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(AutotileOuterGapTop, m_autotileOuterGapTop, autotileOuterGapTopChanged,
+                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(AutotileOuterGapBottom, m_autotileOuterGapBottom, autotileOuterGapBottomChanged,
+                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(AutotileOuterGapLeft, m_autotileOuterGapLeft, autotileOuterGapLeftChanged,
+                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
+SETTINGS_SETTER_CLAMPED(AutotileOuterGapRight, m_autotileOuterGapRight, autotileOuterGapRightChanged,
+                        AutotileDefaults::MinGap, AutotileDefaults::MaxGap)
 
 SETTINGS_SETTER(bool, AutotileFocusNewWindows, m_autotileFocusNewWindows, autotileFocusNewWindowsChanged)
 SETTINGS_SETTER(bool, AutotileSmartGaps, m_autotileSmartGaps, autotileSmartGapsChanged)
-SETTINGS_SETTER_CLAMPED(AutotileMaxWindows, m_autotileMaxWindows, autotileMaxWindowsChanged, AutotileDefaults::MinMaxWindows, AutotileDefaults::MaxMaxWindows)
+SETTINGS_SETTER_CLAMPED(AutotileMaxWindows, m_autotileMaxWindows, autotileMaxWindowsChanged,
+                        AutotileDefaults::MinMaxWindows, AutotileDefaults::MaxMaxWindows)
 SETTINGS_SETTER(AutotileInsertPosition, AutotileInsertPosition, m_autotileInsertPosition, autotileInsertPositionChanged)
 
 SETTINGS_SETTER_ENUM_INT(AutotileInsertPosition, AutotileInsertPosition, 0, 2)
 
 SETTINGS_SETTER(const QString&, AutotileToggleShortcut, m_autotileToggleShortcut, autotileToggleShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut, autotileFocusMasterShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileSwapMasterShortcut, m_autotileSwapMasterShortcut, autotileSwapMasterShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileIncMasterRatioShortcut, m_autotileIncMasterRatioShortcut, autotileIncMasterRatioShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileDecMasterRatioShortcut, m_autotileDecMasterRatioShortcut, autotileDecMasterRatioShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileIncMasterCountShortcut, m_autotileIncMasterCountShortcut, autotileIncMasterCountShortcutChanged)
-SETTINGS_SETTER(const QString&, AutotileDecMasterCountShortcut, m_autotileDecMasterCountShortcut, autotileDecMasterCountShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileFocusMasterShortcut, m_autotileFocusMasterShortcut,
+                autotileFocusMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileSwapMasterShortcut, m_autotileSwapMasterShortcut,
+                autotileSwapMasterShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileIncMasterRatioShortcut, m_autotileIncMasterRatioShortcut,
+                autotileIncMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileDecMasterRatioShortcut, m_autotileDecMasterRatioShortcut,
+                autotileDecMasterRatioShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileIncMasterCountShortcut, m_autotileIncMasterCountShortcut,
+                autotileIncMasterCountShortcutChanged)
+SETTINGS_SETTER(const QString&, AutotileDecMasterCountShortcut, m_autotileDecMasterCountShortcut,
+                autotileDecMasterCountShortcutChanged)
 SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut, autotileRetileShortcutChanged)
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -312,7 +336,9 @@ SETTINGS_SETTER(const QString&, AnimationEasingCurve, m_animationEasingCurve, an
 
 SETTINGS_SETTER_CLAMPED(AnimationMinDistance, m_animationMinDistance, animationMinDistanceChanged, 0, 200)
 SETTINGS_SETTER_CLAMPED(AnimationSequenceMode, m_animationSequenceMode, animationSequenceModeChanged, 0, 1)
-SETTINGS_SETTER_CLAMPED(AnimationStaggerInterval, m_animationStaggerInterval, animationStaggerIntervalChanged, AutotileDefaults::MinAnimationStaggerIntervalMs, AutotileDefaults::MaxAnimationStaggerIntervalMs)
+SETTINGS_SETTER_CLAMPED(AnimationStaggerInterval, m_animationStaggerInterval, animationStaggerIntervalChanged,
+                        AutotileDefaults::MinAnimationStaggerIntervalMs,
+                        AutotileDefaults::MaxAnimationStaggerIntervalMs)
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
 SETTINGS_SETTER(bool, AutotileHideTitleBars, m_autotileHideTitleBars, autotileHideTitleBarsChanged)
@@ -397,7 +423,7 @@ void Settings::setIndexedShortcut(QString (&arr)[9], int index, const QString& s
 {
     if (index >= 0 && index < 9 && arr[index] != shortcut) {
         arr[index] = shortcut;
-        Q_EMIT (this->*signals[index])();
+        Q_EMIT(this->*signals[index])();
         Q_EMIT settingsChanged();
     }
 }
@@ -423,8 +449,10 @@ SETTINGS_SETTER(const QString&, FocusZoneRightShortcut, m_focusZoneRightShortcut
 SETTINGS_SETTER(const QString&, FocusZoneUpShortcut, m_focusZoneUpShortcut, focusZoneUpShortcutChanged)
 SETTINGS_SETTER(const QString&, FocusZoneDownShortcut, m_focusZoneDownShortcut, focusZoneDownShortcutChanged)
 SETTINGS_SETTER(const QString&, PushToEmptyZoneShortcut, m_pushToEmptyZoneShortcut, pushToEmptyZoneShortcutChanged)
-SETTINGS_SETTER(const QString&, RestoreWindowSizeShortcut, m_restoreWindowSizeShortcut, restoreWindowSizeShortcutChanged)
-SETTINGS_SETTER(const QString&, ToggleWindowFloatShortcut, m_toggleWindowFloatShortcut, toggleWindowFloatShortcutChanged)
+SETTINGS_SETTER(const QString&, RestoreWindowSizeShortcut, m_restoreWindowSizeShortcut,
+                restoreWindowSizeShortcutChanged)
+SETTINGS_SETTER(const QString&, ToggleWindowFloatShortcut, m_toggleWindowFloatShortcut,
+                toggleWindowFloatShortcutChanged)
 
 SETTINGS_SETTER(const QString&, SwapWindowLeftShortcut, m_swapWindowLeftShortcut, swapWindowLeftShortcutChanged)
 SETTINGS_SETTER(const QString&, SwapWindowRightShortcut, m_swapWindowRightShortcut, swapWindowRightShortcutChanged)
@@ -496,12 +524,17 @@ void Settings::setSnapToZone9Shortcut(const QString& shortcut)
     setSnapToZoneShortcut(8, shortcut);
 }
 
-SETTINGS_SETTER(const QString&, RotateWindowsClockwiseShortcut, m_rotateWindowsClockwiseShortcut, rotateWindowsClockwiseShortcutChanged)
-SETTINGS_SETTER(const QString&, RotateWindowsCounterclockwiseShortcut, m_rotateWindowsCounterclockwiseShortcut, rotateWindowsCounterclockwiseShortcutChanged)
+SETTINGS_SETTER(const QString&, RotateWindowsClockwiseShortcut, m_rotateWindowsClockwiseShortcut,
+                rotateWindowsClockwiseShortcutChanged)
+SETTINGS_SETTER(const QString&, RotateWindowsCounterclockwiseShortcut, m_rotateWindowsCounterclockwiseShortcut,
+                rotateWindowsCounterclockwiseShortcutChanged)
 
-SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForwardShortcut, cycleWindowForwardShortcutChanged)
-SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut, cycleWindowBackwardShortcutChanged)
-SETTINGS_SETTER(const QString&, ResnapToNewLayoutShortcut, m_resnapToNewLayoutShortcut, resnapToNewLayoutShortcutChanged)
+SETTINGS_SETTER(const QString&, CycleWindowForwardShortcut, m_cycleWindowForwardShortcut,
+                cycleWindowForwardShortcutChanged)
+SETTINGS_SETTER(const QString&, CycleWindowBackwardShortcut, m_cycleWindowBackwardShortcut,
+                cycleWindowBackwardShortcutChanged)
+SETTINGS_SETTER(const QString&, ResnapToNewLayoutShortcut, m_resnapToNewLayoutShortcut,
+                resnapToNewLayoutShortcutChanged)
 SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut, snapAllWindowsShortcutChanged)
 SETTINGS_SETTER(const QString&, LayoutPickerShortcut, m_layoutPickerShortcut, layoutPickerShortcutChanged)
 

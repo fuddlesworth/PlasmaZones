@@ -20,9 +20,8 @@ class UpdateFixedGeometryCommand : public BaseZoneCommand
 {
 public:
     explicit UpdateFixedGeometryCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
-                                        const QRectF& oldFixed, const QRectF& newFixed,
-                                        const QRectF& oldRelative, const QRectF& newRelative,
-                                        QUndoCommand* parent = nullptr);
+                                        const QRectF& oldFixed, const QRectF& newFixed, const QRectF& oldRelative,
+                                        const QRectF& newRelative, QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;

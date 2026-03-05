@@ -54,8 +54,7 @@ bool OverflowManager::isOverflow(const QString& windowId) const
     return m_windowToScreen.contains(windowId);
 }
 
-QStringList OverflowManager::applyOverflow(const QString& screenName,
-                                           const QStringList& windows, int tileCount)
+QStringList OverflowManager::applyOverflow(const QString& screenName, const QStringList& windows, int tileCount)
 {
     if (screenName.isEmpty()) {
         return {};

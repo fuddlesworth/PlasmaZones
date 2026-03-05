@@ -36,7 +36,7 @@ class PLASMAZONES_EXPORT MasterStackAlgorithm : public TilingAlgorithm
     Q_OBJECT
 
 public:
-    explicit MasterStackAlgorithm(QObject *parent = nullptr);
+    explicit MasterStackAlgorithm(QObject* parent = nullptr);
     ~MasterStackAlgorithm() override = default;
 
     // TilingAlgorithm interface
@@ -44,7 +44,7 @@ public:
     QString description() const override;
     QString icon() const noexcept override;
 
-    QVector<QRect> calculateZones(const TilingParams &params) const override;
+    QVector<QRect> calculateZones(const TilingParams& params) const override;
 
     int masterZoneIndex() const noexcept override;
     bool supportsMasterCount() const noexcept override;

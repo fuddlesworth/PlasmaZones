@@ -18,24 +18,24 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Setup a global shortcut: ConfigDefaults for default, m_settings for current
-#define SETUP_SHORTCUT(actionMember, i18nName, objectName, getterName, slot) \
-    do { \
-        if (!actionMember) { \
-            actionMember = new QAction(i18n(i18nName), this); \
-            actionMember->setObjectName(QStringLiteral(objectName)); \
-            const QKeySequence defaultShortcut(ConfigDefaults::getterName()); \
-            const QKeySequence shortcut(m_settings->getterName()); \
-            KGlobalAccel::self()->setDefaultShortcut(actionMember, {defaultShortcut}); \
-            KGlobalAccel::setGlobalShortcut(actionMember, shortcut); \
-            connect(actionMember, &QAction::triggered, this, slot); \
-        } \
+#define SETUP_SHORTCUT(actionMember, i18nName, objectName, getterName, slot)                                           \
+    do {                                                                                                               \
+        if (!actionMember) {                                                                                           \
+            actionMember = new QAction(i18n(i18nName), this);                                                          \
+            actionMember->setObjectName(QStringLiteral(objectName));                                                   \
+            const QKeySequence defaultShortcut(ConfigDefaults::getterName());                                          \
+            const QKeySequence shortcut(m_settings->getterName());                                                     \
+            KGlobalAccel::self()->setDefaultShortcut(actionMember, {defaultShortcut});                                 \
+            KGlobalAccel::setGlobalShortcut(actionMember, shortcut);                                                   \
+            connect(actionMember, &QAction::triggered, this, slot);                                                    \
+        }                                                                                                              \
     } while (0)
 
 // Delete and null a shortcut action
-#define DELETE_SHORTCUT(actionMember) \
-    do { \
-        delete actionMember; \
-        actionMember = nullptr; \
+#define DELETE_SHORTCUT(actionMember)                                                                                  \
+    do {                                                                                                               \
+        delete actionMember;                                                                                           \
+        actionMember = nullptr;                                                                                        \
     } while (0)
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -56,56 +56,102 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::nextLayoutShortcutChanged, this, &ShortcutManager::updateNextLayoutShortcut);
 
     // Quick layout shortcuts (1-9)
-    connect(m_settings, &Settings::quickLayout1ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(0); });
-    connect(m_settings, &Settings::quickLayout2ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(1); });
-    connect(m_settings, &Settings::quickLayout3ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(2); });
-    connect(m_settings, &Settings::quickLayout4ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(3); });
-    connect(m_settings, &Settings::quickLayout5ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(4); });
-    connect(m_settings, &Settings::quickLayout6ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(5); });
-    connect(m_settings, &Settings::quickLayout7ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(6); });
-    connect(m_settings, &Settings::quickLayout8ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(7); });
-    connect(m_settings, &Settings::quickLayout9ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(8); });
+    connect(m_settings, &Settings::quickLayout1ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(0);
+    });
+    connect(m_settings, &Settings::quickLayout2ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(1);
+    });
+    connect(m_settings, &Settings::quickLayout3ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(2);
+    });
+    connect(m_settings, &Settings::quickLayout4ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(3);
+    });
+    connect(m_settings, &Settings::quickLayout5ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(4);
+    });
+    connect(m_settings, &Settings::quickLayout6ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(5);
+    });
+    connect(m_settings, &Settings::quickLayout7ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(6);
+    });
+    connect(m_settings, &Settings::quickLayout8ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(7);
+    });
+    connect(m_settings, &Settings::quickLayout9ShortcutChanged, this, [this]() {
+        updateQuickLayoutShortcut(8);
+    });
 
     // Phase 1 Keyboard Navigation - connect to settings changes
     connect(m_settings, &Settings::moveWindowLeftShortcutChanged, this, &ShortcutManager::updateMoveWindowLeftShortcut);
-    connect(m_settings, &Settings::moveWindowRightShortcutChanged, this, &ShortcutManager::updateMoveWindowRightShortcut);
+    connect(m_settings, &Settings::moveWindowRightShortcutChanged, this,
+            &ShortcutManager::updateMoveWindowRightShortcut);
     connect(m_settings, &Settings::moveWindowUpShortcutChanged, this, &ShortcutManager::updateMoveWindowUpShortcut);
     connect(m_settings, &Settings::moveWindowDownShortcutChanged, this, &ShortcutManager::updateMoveWindowDownShortcut);
     connect(m_settings, &Settings::focusZoneLeftShortcutChanged, this, &ShortcutManager::updateFocusZoneLeftShortcut);
     connect(m_settings, &Settings::focusZoneRightShortcutChanged, this, &ShortcutManager::updateFocusZoneRightShortcut);
     connect(m_settings, &Settings::focusZoneUpShortcutChanged, this, &ShortcutManager::updateFocusZoneUpShortcut);
     connect(m_settings, &Settings::focusZoneDownShortcutChanged, this, &ShortcutManager::updateFocusZoneDownShortcut);
-    connect(m_settings, &Settings::pushToEmptyZoneShortcutChanged, this, &ShortcutManager::updatePushToEmptyZoneShortcut);
-    connect(m_settings, &Settings::restoreWindowSizeShortcutChanged, this, &ShortcutManager::updateRestoreWindowSizeShortcut);
-    connect(m_settings, &Settings::toggleWindowFloatShortcutChanged, this, &ShortcutManager::updateToggleWindowFloatShortcut);
+    connect(m_settings, &Settings::pushToEmptyZoneShortcutChanged, this,
+            &ShortcutManager::updatePushToEmptyZoneShortcut);
+    connect(m_settings, &Settings::restoreWindowSizeShortcutChanged, this,
+            &ShortcutManager::updateRestoreWindowSizeShortcut);
+    connect(m_settings, &Settings::toggleWindowFloatShortcutChanged, this,
+            &ShortcutManager::updateToggleWindowFloatShortcut);
 
     // Swap window shortcuts
     connect(m_settings, &Settings::swapWindowLeftShortcutChanged, this, &ShortcutManager::updateSwapWindowLeftShortcut);
-    connect(m_settings, &Settings::swapWindowRightShortcutChanged, this, &ShortcutManager::updateSwapWindowRightShortcut);
+    connect(m_settings, &Settings::swapWindowRightShortcutChanged, this,
+            &ShortcutManager::updateSwapWindowRightShortcut);
     connect(m_settings, &Settings::swapWindowUpShortcutChanged, this, &ShortcutManager::updateSwapWindowUpShortcut);
     connect(m_settings, &Settings::swapWindowDownShortcutChanged, this, &ShortcutManager::updateSwapWindowDownShortcut);
 
     // Snap to Zone by Number shortcuts (1-9)
-    connect(m_settings, &Settings::snapToZone1ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(0); });
-    connect(m_settings, &Settings::snapToZone2ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(1); });
-    connect(m_settings, &Settings::snapToZone3ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(2); });
-    connect(m_settings, &Settings::snapToZone4ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(3); });
-    connect(m_settings, &Settings::snapToZone5ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(4); });
-    connect(m_settings, &Settings::snapToZone6ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(5); });
-    connect(m_settings, &Settings::snapToZone7ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(6); });
-    connect(m_settings, &Settings::snapToZone8ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(7); });
-    connect(m_settings, &Settings::snapToZone9ShortcutChanged, this, [this]() { updateSnapToZoneShortcut(8); });
+    connect(m_settings, &Settings::snapToZone1ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(0);
+    });
+    connect(m_settings, &Settings::snapToZone2ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(1);
+    });
+    connect(m_settings, &Settings::snapToZone3ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(2);
+    });
+    connect(m_settings, &Settings::snapToZone4ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(3);
+    });
+    connect(m_settings, &Settings::snapToZone5ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(4);
+    });
+    connect(m_settings, &Settings::snapToZone6ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(5);
+    });
+    connect(m_settings, &Settings::snapToZone7ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(6);
+    });
+    connect(m_settings, &Settings::snapToZone8ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(7);
+    });
+    connect(m_settings, &Settings::snapToZone9ShortcutChanged, this, [this]() {
+        updateSnapToZoneShortcut(8);
+    });
 
     // Rotate Windows shortcuts
-    connect(m_settings, &Settings::rotateWindowsClockwiseShortcutChanged, this, &ShortcutManager::updateRotateWindowsClockwiseShortcut);
-    connect(m_settings, &Settings::rotateWindowsCounterclockwiseShortcutChanged, this, &ShortcutManager::updateRotateWindowsCounterclockwiseShortcut);
+    connect(m_settings, &Settings::rotateWindowsClockwiseShortcutChanged, this,
+            &ShortcutManager::updateRotateWindowsClockwiseShortcut);
+    connect(m_settings, &Settings::rotateWindowsCounterclockwiseShortcutChanged, this,
+            &ShortcutManager::updateRotateWindowsCounterclockwiseShortcut);
 
     // Cycle Windows in Zone shortcuts
-    connect(m_settings, &Settings::cycleWindowForwardShortcutChanged, this, &ShortcutManager::updateCycleWindowForwardShortcut);
-    connect(m_settings, &Settings::cycleWindowBackwardShortcutChanged, this, &ShortcutManager::updateCycleWindowBackwardShortcut);
+    connect(m_settings, &Settings::cycleWindowForwardShortcutChanged, this,
+            &ShortcutManager::updateCycleWindowForwardShortcut);
+    connect(m_settings, &Settings::cycleWindowBackwardShortcutChanged, this,
+            &ShortcutManager::updateCycleWindowBackwardShortcut);
 
     // Resnap to New Layout shortcut
-    connect(m_settings, &Settings::resnapToNewLayoutShortcutChanged, this, &ShortcutManager::updateResnapToNewLayoutShortcut);
+    connect(m_settings, &Settings::resnapToNewLayoutShortcutChanged, this,
+            &ShortcutManager::updateResnapToNewLayoutShortcut);
 
     // Snap All Windows shortcut
     connect(m_settings, &Settings::snapAllWindowsShortcutChanged, this, &ShortcutManager::updateSnapAllWindowsShortcut);
@@ -115,12 +161,17 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
 
     // Autotile shortcut settings connections
     connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
-    connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this, &ShortcutManager::updateFocusMasterShortcut);
+    connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this,
+            &ShortcutManager::updateFocusMasterShortcut);
     connect(m_settings, &Settings::autotileSwapMasterShortcutChanged, this, &ShortcutManager::updateSwapMasterShortcut);
-    connect(m_settings, &Settings::autotileIncMasterRatioShortcutChanged, this, &ShortcutManager::updateIncMasterRatioShortcut);
-    connect(m_settings, &Settings::autotileDecMasterRatioShortcutChanged, this, &ShortcutManager::updateDecMasterRatioShortcut);
-    connect(m_settings, &Settings::autotileIncMasterCountShortcutChanged, this, &ShortcutManager::updateIncMasterCountShortcut);
-    connect(m_settings, &Settings::autotileDecMasterCountShortcutChanged, this, &ShortcutManager::updateDecMasterCountShortcut);
+    connect(m_settings, &Settings::autotileIncMasterRatioShortcutChanged, this,
+            &ShortcutManager::updateIncMasterRatioShortcut);
+    connect(m_settings, &Settings::autotileDecMasterRatioShortcutChanged, this,
+            &ShortcutManager::updateDecMasterRatioShortcut);
+    connect(m_settings, &Settings::autotileIncMasterCountShortcutChanged, this,
+            &ShortcutManager::updateIncMasterCountShortcut);
+    connect(m_settings, &Settings::autotileDecMasterCountShortcutChanged, this,
+            &ShortcutManager::updateDecMasterCountShortcut);
     connect(m_settings, &Settings::autotileRetileShortcutChanged, this, &ShortcutManager::updateRetileShortcut);
 
     // Connect to general settingsChanged signal to handle KCM reload
@@ -296,16 +347,16 @@ void ShortcutManager::unregisterShortcuts()
 
 void ShortcutManager::setupEditorShortcut()
 {
-    SETUP_SHORTCUT(m_editorAction, "Open Zone Editor", "open_editor",
-                   openEditorShortcut, &ShortcutManager::onOpenEditor);
+    SETUP_SHORTCUT(m_editorAction, "Open Zone Editor", "open_editor", openEditorShortcut,
+                   &ShortcutManager::onOpenEditor);
 }
 
 void ShortcutManager::setupCyclingShortcuts()
 {
-    SETUP_SHORTCUT(m_previousLayoutAction, "Previous Layout", "previous_layout",
-                   previousLayoutShortcut, &ShortcutManager::onPreviousLayout);
-    SETUP_SHORTCUT(m_nextLayoutAction, "Next Layout", "next_layout",
-                   nextLayoutShortcut, &ShortcutManager::onNextLayout);
+    SETUP_SHORTCUT(m_previousLayoutAction, "Previous Layout", "previous_layout", previousLayoutShortcut,
+                   &ShortcutManager::onPreviousLayout);
+    SETUP_SHORTCUT(m_nextLayoutAction, "Next Layout", "next_layout", nextLayoutShortcut,
+                   &ShortcutManager::onNextLayout);
 }
 
 void ShortcutManager::setupQuickLayoutShortcuts()
@@ -319,8 +370,7 @@ void ShortcutManager::setupQuickLayoutShortcuts()
         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
         ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-        ConfigDefaults::quickLayout9Shortcut()
-    };
+        ConfigDefaults::quickLayout9Shortcut()};
 
     for (int i = 0; i < 9; ++i) {
         auto* quickAction = new QAction(i18n("Apply Layout %1", i + 1), this);
@@ -340,46 +390,46 @@ void ShortcutManager::setupQuickLayoutShortcuts()
 void ShortcutManager::setupNavigationShortcuts()
 {
     // Move Window shortcuts
-    SETUP_SHORTCUT(m_moveWindowLeftAction, "Move Window Left", "move_window_left",
-                   moveWindowLeftShortcut, &ShortcutManager::onMoveWindowLeft);
-    SETUP_SHORTCUT(m_moveWindowRightAction, "Move Window Right", "move_window_right",
-                   moveWindowRightShortcut, &ShortcutManager::onMoveWindowRight);
-    SETUP_SHORTCUT(m_moveWindowUpAction, "Move Window Up", "move_window_up",
-                   moveWindowUpShortcut, &ShortcutManager::onMoveWindowUp);
-    SETUP_SHORTCUT(m_moveWindowDownAction, "Move Window Down", "move_window_down",
-                   moveWindowDownShortcut, &ShortcutManager::onMoveWindowDown);
+    SETUP_SHORTCUT(m_moveWindowLeftAction, "Move Window Left", "move_window_left", moveWindowLeftShortcut,
+                   &ShortcutManager::onMoveWindowLeft);
+    SETUP_SHORTCUT(m_moveWindowRightAction, "Move Window Right", "move_window_right", moveWindowRightShortcut,
+                   &ShortcutManager::onMoveWindowRight);
+    SETUP_SHORTCUT(m_moveWindowUpAction, "Move Window Up", "move_window_up", moveWindowUpShortcut,
+                   &ShortcutManager::onMoveWindowUp);
+    SETUP_SHORTCUT(m_moveWindowDownAction, "Move Window Down", "move_window_down", moveWindowDownShortcut,
+                   &ShortcutManager::onMoveWindowDown);
 
     // Focus Zone shortcuts
-    SETUP_SHORTCUT(m_focusZoneLeftAction, "Focus Zone Left", "focus_zone_left",
-                   focusZoneLeftShortcut, &ShortcutManager::onFocusZoneLeft);
-    SETUP_SHORTCUT(m_focusZoneRightAction, "Focus Zone Right", "focus_zone_right",
-                   focusZoneRightShortcut, &ShortcutManager::onFocusZoneRight);
-    SETUP_SHORTCUT(m_focusZoneUpAction, "Focus Zone Up", "focus_zone_up",
-                   focusZoneUpShortcut, &ShortcutManager::onFocusZoneUp);
-    SETUP_SHORTCUT(m_focusZoneDownAction, "Focus Zone Down", "focus_zone_down",
-                   focusZoneDownShortcut, &ShortcutManager::onFocusZoneDown);
+    SETUP_SHORTCUT(m_focusZoneLeftAction, "Focus Zone Left", "focus_zone_left", focusZoneLeftShortcut,
+                   &ShortcutManager::onFocusZoneLeft);
+    SETUP_SHORTCUT(m_focusZoneRightAction, "Focus Zone Right", "focus_zone_right", focusZoneRightShortcut,
+                   &ShortcutManager::onFocusZoneRight);
+    SETUP_SHORTCUT(m_focusZoneUpAction, "Focus Zone Up", "focus_zone_up", focusZoneUpShortcut,
+                   &ShortcutManager::onFocusZoneUp);
+    SETUP_SHORTCUT(m_focusZoneDownAction, "Focus Zone Down", "focus_zone_down", focusZoneDownShortcut,
+                   &ShortcutManager::onFocusZoneDown);
 
     // Additional navigation shortcuts
-    SETUP_SHORTCUT(m_pushToEmptyZoneAction, "Push to Empty Zone", "push_to_empty_zone",
-                   pushToEmptyZoneShortcut, &ShortcutManager::onPushToEmptyZone);
-    SETUP_SHORTCUT(m_restoreWindowSizeAction, "Restore Window Size", "restore_window_size",
-                   restoreWindowSizeShortcut, &ShortcutManager::onRestoreWindowSize);
-    SETUP_SHORTCUT(m_toggleWindowFloatAction, "Toggle Window Float", "toggle_window_float",
-                   toggleWindowFloatShortcut, &ShortcutManager::onToggleWindowFloat);
+    SETUP_SHORTCUT(m_pushToEmptyZoneAction, "Push to Empty Zone", "push_to_empty_zone", pushToEmptyZoneShortcut,
+                   &ShortcutManager::onPushToEmptyZone);
+    SETUP_SHORTCUT(m_restoreWindowSizeAction, "Restore Window Size", "restore_window_size", restoreWindowSizeShortcut,
+                   &ShortcutManager::onRestoreWindowSize);
+    SETUP_SHORTCUT(m_toggleWindowFloatAction, "Toggle Window Float", "toggle_window_float", toggleWindowFloatShortcut,
+                   &ShortcutManager::onToggleWindowFloat);
 
     qCInfo(lcShortcuts) << "Navigation shortcuts registered";
 }
 
 void ShortcutManager::setupSwapWindowShortcuts()
 {
-    SETUP_SHORTCUT(m_swapWindowLeftAction, "Swap Window Left", "swap_window_left",
-                   swapWindowLeftShortcut, &ShortcutManager::onSwapWindowLeft);
-    SETUP_SHORTCUT(m_swapWindowRightAction, "Swap Window Right", "swap_window_right",
-                   swapWindowRightShortcut, &ShortcutManager::onSwapWindowRight);
-    SETUP_SHORTCUT(m_swapWindowUpAction, "Swap Window Up", "swap_window_up",
-                   swapWindowUpShortcut, &ShortcutManager::onSwapWindowUp);
-    SETUP_SHORTCUT(m_swapWindowDownAction, "Swap Window Down", "swap_window_down",
-                   swapWindowDownShortcut, &ShortcutManager::onSwapWindowDown);
+    SETUP_SHORTCUT(m_swapWindowLeftAction, "Swap Window Left", "swap_window_left", swapWindowLeftShortcut,
+                   &ShortcutManager::onSwapWindowLeft);
+    SETUP_SHORTCUT(m_swapWindowRightAction, "Swap Window Right", "swap_window_right", swapWindowRightShortcut,
+                   &ShortcutManager::onSwapWindowRight);
+    SETUP_SHORTCUT(m_swapWindowUpAction, "Swap Window Up", "swap_window_up", swapWindowUpShortcut,
+                   &ShortcutManager::onSwapWindowUp);
+    SETUP_SHORTCUT(m_swapWindowDownAction, "Swap Window Down", "swap_window_down", swapWindowDownShortcut,
+                   &ShortcutManager::onSwapWindowDown);
 
     qCInfo(lcShortcuts) << "Swap window shortcuts registered (Meta+Ctrl+Alt+Arrow)";
 }
@@ -390,13 +440,11 @@ void ShortcutManager::setupSnapToZoneShortcuts()
     qDeleteAll(m_snapToZoneActions);
     m_snapToZoneActions.clear();
 
-    const QString snapToZoneDefaults[] = {
-        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-        ConfigDefaults::snapToZone9Shortcut()
-    };
+    const QString snapToZoneDefaults[] = {ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
+                                          ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
+                                          ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
+                                          ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
+                                          ConfigDefaults::snapToZone9Shortcut()};
 
     for (int i = 0; i < 9; ++i) {
         auto* snapAction = new QAction(i18n("Snap to Zone %1", i + 1), this);
@@ -419,8 +467,9 @@ void ShortcutManager::setupRotateWindowsShortcuts()
 {
     SETUP_SHORTCUT(m_rotateWindowsClockwiseAction, "Rotate Windows Clockwise", "rotate_windows_clockwise",
                    rotateWindowsClockwiseShortcut, &ShortcutManager::onRotateWindowsClockwise);
-    SETUP_SHORTCUT(m_rotateWindowsCounterclockwiseAction, "Rotate Windows Counterclockwise", "rotate_windows_counterclockwise",
-                   rotateWindowsCounterclockwiseShortcut, &ShortcutManager::onRotateWindowsCounterclockwise);
+    SETUP_SHORTCUT(m_rotateWindowsCounterclockwiseAction, "Rotate Windows Counterclockwise",
+                   "rotate_windows_counterclockwise", rotateWindowsCounterclockwiseShortcut,
+                   &ShortcutManager::onRotateWindowsCounterclockwise);
 
     qCInfo(lcShortcuts) << "Rotate windows shortcuts registered (Meta+Ctrl+[ / Meta+Ctrl+])";
 }
@@ -440,26 +489,24 @@ void ShortcutManager::setupResnapToNewLayoutShortcut()
     SETUP_SHORTCUT(m_resnapToNewLayoutAction, "Resnap Windows to New Layout", "resnap_to_new_layout",
                    resnapToNewLayoutShortcut, &ShortcutManager::onResnapToNewLayout);
 
-    qCInfo(lcShortcuts) << "Resnap to new layout shortcut registered ("
-                        << m_settings->resnapToNewLayoutShortcut() << ")";
+    qCInfo(lcShortcuts) << "Resnap to new layout shortcut registered (" << m_settings->resnapToNewLayoutShortcut()
+                        << ")";
 }
 
 void ShortcutManager::setupSnapAllWindowsShortcut()
 {
-    SETUP_SHORTCUT(m_snapAllWindowsAction, "Snap All Windows to Zones", "snap_all_windows",
-                   snapAllWindowsShortcut, &ShortcutManager::onSnapAllWindows);
+    SETUP_SHORTCUT(m_snapAllWindowsAction, "Snap All Windows to Zones", "snap_all_windows", snapAllWindowsShortcut,
+                   &ShortcutManager::onSnapAllWindows);
 
-    qCInfo(lcShortcuts) << "Snap all windows shortcut registered ("
-                        << m_settings->snapAllWindowsShortcut() << ")";
+    qCInfo(lcShortcuts) << "Snap all windows shortcut registered (" << m_settings->snapAllWindowsShortcut() << ")";
 }
 
 void ShortcutManager::setupLayoutPickerShortcut()
 {
-    SETUP_SHORTCUT(m_layoutPickerAction, "Open Layout Picker", "layout_picker",
-                   layoutPickerShortcut, &ShortcutManager::onLayoutPicker);
+    SETUP_SHORTCUT(m_layoutPickerAction, "Open Layout Picker", "layout_picker", layoutPickerShortcut,
+                   &ShortcutManager::onLayoutPicker);
 
-    qCInfo(lcShortcuts) << "Layout picker shortcut registered ("
-                        << m_settings->layoutPickerShortcut() << ")";
+    qCInfo(lcShortcuts) << "Layout picker shortcut registered (" << m_settings->layoutPickerShortcut() << ")";
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -468,12 +515,12 @@ void ShortcutManager::setupLayoutPickerShortcut()
 
 void ShortcutManager::setupAutotileShortcuts()
 {
-    SETUP_SHORTCUT(m_toggleAutotileAction, "Toggle Autotile", "PlasmaZones Toggle Autotile",
-                   autotileToggleShortcut, &ShortcutManager::onToggleAutotile);
-    SETUP_SHORTCUT(m_focusMasterAction, "Focus Master Window", "PlasmaZones Focus Master",
-                   autotileFocusMasterShortcut, &ShortcutManager::onFocusMaster);
-    SETUP_SHORTCUT(m_swapMasterAction, "Swap with Master", "PlasmaZones Swap Master",
-                   autotileSwapMasterShortcut, &ShortcutManager::onSwapWithMaster);
+    SETUP_SHORTCUT(m_toggleAutotileAction, "Toggle Autotile", "PlasmaZones Toggle Autotile", autotileToggleShortcut,
+                   &ShortcutManager::onToggleAutotile);
+    SETUP_SHORTCUT(m_focusMasterAction, "Focus Master Window", "PlasmaZones Focus Master", autotileFocusMasterShortcut,
+                   &ShortcutManager::onFocusMaster);
+    SETUP_SHORTCUT(m_swapMasterAction, "Swap with Master", "PlasmaZones Swap Master", autotileSwapMasterShortcut,
+                   &ShortcutManager::onSwapWithMaster);
     SETUP_SHORTCUT(m_incMasterRatioAction, "Increase Master Ratio", "PlasmaZones Inc Master Ratio",
                    autotileIncMasterRatioShortcut, &ShortcutManager::onIncreaseMasterRatio);
     SETUP_SHORTCUT(m_decMasterRatioAction, "Decrease Master Ratio", "PlasmaZones Dec Master Ratio",
@@ -482,8 +529,8 @@ void ShortcutManager::setupAutotileShortcuts()
                    autotileIncMasterCountShortcut, &ShortcutManager::onIncreaseMasterCount);
     SETUP_SHORTCUT(m_decMasterCountAction, "Decrease Master Count", "PlasmaZones Dec Master Count",
                    autotileDecMasterCountShortcut, &ShortcutManager::onDecreaseMasterCount);
-    SETUP_SHORTCUT(m_retileAction, "Retile Windows", "PlasmaZones Retile",
-                   autotileRetileShortcut, &ShortcutManager::onRetile);
+    SETUP_SHORTCUT(m_retileAction, "Retile Windows", "PlasmaZones Retile", autotileRetileShortcut,
+                   &ShortcutManager::onRetile);
 
     qCInfo(lcShortcuts) << "Autotile shortcuts registered";
 }

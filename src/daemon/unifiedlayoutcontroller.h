@@ -50,7 +50,10 @@ public:
     /**
      * @brief Get the current layout ID (layout UUID).
      */
-    QString currentLayoutId() const { return m_currentLayoutId; }
+    QString currentLayoutId() const
+    {
+        return m_currentLayoutId;
+    }
 
     /**
      * @brief Get the full unified layout list
@@ -121,7 +124,10 @@ public:
     /**
      * @brief Get current screen name
      */
-    QString currentScreenName() const { return m_currentScreenName; }
+    QString currentScreenName() const
+    {
+        return m_currentScreenName;
+    }
 
     /**
      * @brief Set current screen name for per-screen visibility filtering

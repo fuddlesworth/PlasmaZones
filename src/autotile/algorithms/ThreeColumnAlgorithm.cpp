@@ -17,7 +17,7 @@ namespace {
 AlgorithmRegistrar<ThreeColumnAlgorithm> s_threeColumnRegistrar(DBus::AutotileAlgorithm::ThreeColumn, 100);
 }
 
-ThreeColumnAlgorithm::ThreeColumnAlgorithm(QObject *parent)
+ThreeColumnAlgorithm::ThreeColumnAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -37,13 +37,13 @@ QString ThreeColumnAlgorithm::icon() const noexcept
     return QStringLiteral("view-column-three");
 }
 
-QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -51,7 +51,7 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
         return zones;
     }
 
-    const auto &state = *params.state;
+    const auto& state = *params.state;
 
     const QRect area = innerRect(screenGeometry, outerGaps);
 
@@ -86,8 +86,7 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
             const int totalMin2 = minMW + minSW;
             if (totalMin2 > contentWidth && totalMin2 > 0) {
                 // Unsatisfiable: distribute proportionally
-                masterWidth = static_cast<int>(
-                    static_cast<qint64>(contentWidth) * std::max(minMW, 1) / totalMin2);
+                masterWidth = static_cast<int>(static_cast<qint64>(contentWidth) * std::max(minMW, 1) / totalMin2);
                 stackWidth = contentWidth - masterWidth;
             } else {
                 if (minMW > 0 && masterWidth < minMW) {
@@ -119,7 +118,7 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
 
     // Count windows for each column (excluding master)
     const int stackCount = windowCount - 1;
-    const int leftCount = (stackCount + 1) / 2;  // Left gets extra if odd
+    const int leftCount = (stackCount + 1) / 2; // Left gets extra if odd
     const int rightCount = stackCount - leftCount;
 
     // Compute per-column minimum widths from minSizes
@@ -154,9 +153,8 @@ QVector<QRect> ThreeColumnAlgorithm::calculateZones(const TilingParams &params) 
         }
     }
 
-    const auto cols = solveThreeColumnWidths(
-        area.x(), contentWidth, innerGap, state.splitRatio(),
-        minLeftWidth, minCenterWidth, minRightWidth);
+    const auto cols = solveThreeColumnWidths(area.x(), contentWidth, innerGap, state.splitRatio(), minLeftWidth,
+                                             minCenterWidth, minRightWidth);
 
     const int leftWidth = cols.leftWidth;
     const int centerWidth = cols.centerWidth;

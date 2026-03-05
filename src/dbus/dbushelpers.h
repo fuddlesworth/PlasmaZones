@@ -45,7 +45,7 @@ namespace DbusHelpers {
  *   auto uuid = Utils::parseUuid(id);
  *   if (!uuid) { qCWarning() << "..."; return; }
  */
-template <typename LogCategory>
+template<typename LogCategory>
 std::optional<QUuid> parseAndValidateUuid(const QString& id, const QString& operation, LogCategory category)
 {
     if (id.isEmpty()) {
@@ -85,7 +85,7 @@ inline std::optional<QUuid> parseAndValidateUuid(const QString& id, const QStrin
  *   auto* layout = m_layoutManager->activeLayout();
  *   if (!layout) { qCWarning() << "no active layout"; return; }
  */
-template <typename LogCategory>
+template<typename LogCategory>
 Layout* getActiveLayoutOrWarn(ILayoutManager* mgr, const QString& operation, LogCategory category)
 {
     if (!mgr) {
@@ -112,8 +112,9 @@ Layout* getActiveLayoutOrWarn(ILayoutManager* mgr, const QString& operation, Log
  *
  * Combines UUID validation + active layout check + zone lookup.
  */
-template <typename LogCategory>
-Zone* getZoneFromActiveLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation, LogCategory category)
+template<typename LogCategory>
+Zone* getZoneFromActiveLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation,
+                              LogCategory category)
 {
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
@@ -153,7 +154,7 @@ inline Zone* getZoneFromActiveLayout(ILayoutManager* mgr, const QString& zoneId,
  * Searches active layout first, then all layouts.
  * Useful for per-screen layout assignments where zone may be in non-active layout.
  */
-template <typename LogCategory>
+template<typename LogCategory>
 Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, const QString& operation, LogCategory category)
 {
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
@@ -210,7 +211,7 @@ inline Zone* findZoneInAnyLayout(ILayoutManager* mgr, const QString& zoneId, con
  * @param category Logging category to use
  * @return Screen pointer or nullptr (logs warning if not found)
  */
-template <typename LogCategory>
+template<typename LogCategory>
 QScreen* getScreenOrWarn(const QString& screenName, const QString& operation, LogCategory category)
 {
     QScreen* screen = Utils::findScreenByIdOrName(screenName);
@@ -235,7 +236,7 @@ inline QScreen* getScreenOrWarn(const QString& screenName, const QString& operat
  * @param category Logging category to use
  * @return Primary screen pointer or nullptr (logs warning if null)
  */
-template <typename LogCategory>
+template<typename LogCategory>
 QScreen* getPrimaryScreenOrWarn(const QString& operation, LogCategory category)
 {
     QScreen* screen = Utils::primaryScreen();
@@ -266,7 +267,7 @@ inline QScreen* getPrimaryScreenOrWarn(const QString& operation)
  * @param category Logging category to use
  * @return true if valid (non-empty), false if empty (logs warning)
  */
-template <typename LogCategory>
+template<typename LogCategory>
 bool validateNonEmpty(const QString& value, const QString& paramName, const QString& operation, LogCategory category)
 {
     if (value.isEmpty()) {

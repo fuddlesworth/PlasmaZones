@@ -113,22 +113,40 @@ bool EditorController::moveSelectedZones(int direction, qreal step)
                 QSize ss = targetScreenSize();
 
                 switch (direction) {
-                case 0: fg.moveLeft(qMax(0.0, fg.x() - pxStep)); break;
-                case 1: fg.moveLeft(qMin(static_cast<qreal>(ss.width()) - fg.width(), fg.x() + pxStep)); break;
-                case 2: fg.moveTop(qMax(0.0, fg.y() - pxStep)); break;
-                case 3: fg.moveTop(qMin(static_cast<qreal>(ss.height()) - fg.height(), fg.y() + pxStep)); break;
-                default: continue;
+                case 0:
+                    fg.moveLeft(qMax(0.0, fg.x() - pxStep));
+                    break;
+                case 1:
+                    fg.moveLeft(qMin(static_cast<qreal>(ss.width()) - fg.width(), fg.x() + pxStep));
+                    break;
+                case 2:
+                    fg.moveTop(qMax(0.0, fg.y() - pxStep));
+                    break;
+                case 3:
+                    fg.moveTop(qMin(static_cast<qreal>(ss.height()) - fg.height(), fg.y() + pxStep));
+                    break;
+                default:
+                    continue;
                 }
                 updateZoneGeometry(zoneId, fg.x(), fg.y(), fg.width(), fg.height(), true);
             } else {
                 // Relative mode: compute delta, clamp, and apply
                 qreal dx = 0.0, dy = 0.0;
                 switch (direction) {
-                case 0: dx = -step; break;
-                case 1: dx = step; break;
-                case 2: dy = -step; break;
-                case 3: dy = step; break;
-                default: continue;
+                case 0:
+                    dx = -step;
+                    break;
+                case 1:
+                    dx = step;
+                    break;
+                case 2:
+                    dy = -step;
+                    break;
+                case 3:
+                    dy = step;
+                    break;
+                default:
+                    continue;
                 }
                 qreal x = qBound(0.0, zone[JsonKeys::X].toDouble() + dx, 1.0 - zone[JsonKeys::Width].toDouble());
                 qreal y = qBound(0.0, zone[JsonKeys::Y].toDouble() + dy, 1.0 - zone[JsonKeys::Height].toDouble());
@@ -177,11 +195,20 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
                 QSize ss = targetScreenSize();
 
                 switch (direction) {
-                case 0: fg.setWidth(qMax(minFixed, fg.width() - pxStep)); break;
-                case 1: fg.setWidth(qMin(static_cast<qreal>(ss.width()) - fg.x(), fg.width() + pxStep)); break;
-                case 2: fg.setHeight(qMax(minFixed, fg.height() - pxStep)); break;
-                case 3: fg.setHeight(qMin(static_cast<qreal>(ss.height()) - fg.y(), fg.height() + pxStep)); break;
-                default: continue;
+                case 0:
+                    fg.setWidth(qMax(minFixed, fg.width() - pxStep));
+                    break;
+                case 1:
+                    fg.setWidth(qMin(static_cast<qreal>(ss.width()) - fg.x(), fg.width() + pxStep));
+                    break;
+                case 2:
+                    fg.setHeight(qMax(minFixed, fg.height() - pxStep));
+                    break;
+                case 3:
+                    fg.setHeight(qMin(static_cast<qreal>(ss.height()) - fg.y(), fg.height() + pxStep));
+                    break;
+                default:
+                    continue;
                 }
                 fg.setWidth(qMax(minFixed, fg.width()));
                 fg.setHeight(qMax(minFixed, fg.height()));
@@ -195,23 +222,40 @@ bool EditorController::resizeSelectedZones(int direction, qreal step)
                 qreal height = zone[JsonKeys::Height].toDouble();
 
                 switch (direction) {
-                case 0: width = qMax(minSize, width - step); break;
-                case 1: width = qMin(1.0 - x, width + step); break;
-                case 2: height = qMax(minSize, height - step); break;
-                case 3: height = qMin(1.0 - y, height + step); break;
-                default: continue;
+                case 0:
+                    width = qMax(minSize, width - step);
+                    break;
+                case 1:
+                    width = qMin(1.0 - x, width + step);
+                    break;
+                case 2:
+                    height = qMax(minSize, height - step);
+                    break;
+                case 3:
+                    height = qMin(1.0 - y, height + step);
+                    break;
+                default:
+                    continue;
                 }
 
-                if (width < minSize) width = minSize;
-                if (height < minSize) height = minSize;
+                if (width < minSize)
+                    width = minSize;
+                if (height < minSize)
+                    height = minSize;
 
                 if (x + width > 1.0) {
                     width = 1.0 - x;
-                    if (width < minSize) { width = minSize; x = 1.0 - minSize; }
+                    if (width < minSize) {
+                        width = minSize;
+                        x = 1.0 - minSize;
+                    }
                 }
                 if (y + height > 1.0) {
                     height = 1.0 - y;
-                    if (height < minSize) { height = minSize; y = 1.0 - minSize; }
+                    if (height < minSize) {
+                        height = minSize;
+                        y = 1.0 - minSize;
+                    }
                 }
 
                 updateZoneGeometry(zoneId, x, y, width, height, true);

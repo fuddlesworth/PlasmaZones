@@ -38,11 +38,8 @@ public:
      * @param borderWidth   Border thickness in logical pixels
      * @param borderColor   Border color (alpha-blended)
      */
-    void drawBorders(const KWin::RenderTarget& renderTarget,
-                     const KWin::RenderViewport& viewport,
-                     const QVector<QRect>& zoneGeometries,
-                     int borderWidth,
-                     const QColor& borderColor);
+    void drawBorders(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
+                     const QVector<QRect>& zoneGeometries, int borderWidth, const QColor& borderColor);
 };
 
 } // namespace PlasmaZones

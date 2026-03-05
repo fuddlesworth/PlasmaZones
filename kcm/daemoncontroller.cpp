@@ -24,10 +24,8 @@ DaemonController::DaemonController(KCMPlasmaZones* kcm, QObject* parent)
 
     // Set up D-Bus service watcher for immediate daemon start/stop notification
     m_watcher = new QDBusServiceWatcher(
-        QString(DBus::ServiceName),
-        QDBusConnection::sessionBus(),
-        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration,
-        this);
+        QString(DBus::ServiceName), QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForRegistration | QDBusServiceWatcher::WatchForUnregistration, this);
 
     connect(m_watcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
         if (!m_lastState) {

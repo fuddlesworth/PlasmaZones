@@ -55,8 +55,8 @@ void EditorController::setZonePadding(int padding)
         padding = -1;
     }
     if (m_zonePadding != padding) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::ZonePadding,
-                                                 m_zonePadding, padding);
+        auto* cmd =
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::ZonePadding, m_zonePadding, padding);
         m_undoController->push(cmd);
     }
 }
@@ -79,8 +79,7 @@ void EditorController::setOuterGap(int gap)
         gap = -1;
     }
     if (m_outerGap != gap) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap,
-                                                 m_outerGap, gap);
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, gap);
         m_undoController->push(cmd);
     }
 }
@@ -124,7 +123,8 @@ int EditorController::outerGapRight() const
 
 bool EditorController::hasPerSideOuterGapOverride() const
 {
-    return m_usePerSideOuterGap && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
+    return m_usePerSideOuterGap
+        && (m_outerGapTop >= 0 || m_outerGapBottom >= 0 || m_outerGapLeft >= 0 || m_outerGapRight >= 0);
 }
 
 bool EditorController::globalUsePerSideOuterGap() const
@@ -173,17 +173,19 @@ void EditorController::setUsePerSideOuterGapDirect(bool enabled)
 
 void EditorController::setOuterGapTop(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapTop != gap) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop,
-                                                 m_outerGapTop, gap);
+        auto* cmd =
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop, m_outerGapTop, gap);
         m_undoController->push(cmd);
     }
 }
 
 void EditorController::setOuterGapTopDirect(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapTop != gap) {
         m_outerGapTop = gap;
         markUnsaved();
@@ -193,7 +195,8 @@ void EditorController::setOuterGapTopDirect(int gap)
 
 void EditorController::setOuterGapBottom(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapBottom != gap) {
         auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
                                                  m_outerGapBottom, gap);
@@ -203,7 +206,8 @@ void EditorController::setOuterGapBottom(int gap)
 
 void EditorController::setOuterGapBottomDirect(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapBottom != gap) {
         m_outerGapBottom = gap;
         markUnsaved();
@@ -213,17 +217,19 @@ void EditorController::setOuterGapBottomDirect(int gap)
 
 void EditorController::setOuterGapLeft(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapLeft != gap) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft,
-                                                 m_outerGapLeft, gap);
+        auto* cmd =
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft, m_outerGapLeft, gap);
         m_undoController->push(cmd);
     }
 }
 
 void EditorController::setOuterGapLeftDirect(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapLeft != gap) {
         m_outerGapLeft = gap;
         markUnsaved();
@@ -233,17 +239,19 @@ void EditorController::setOuterGapLeftDirect(int gap)
 
 void EditorController::setOuterGapRight(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapRight != gap) {
-        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight,
-                                                 m_outerGapRight, gap);
+        auto* cmd =
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight, m_outerGapRight, gap);
         m_undoController->push(cmd);
     }
 }
 
 void EditorController::setOuterGapRightDirect(int gap)
 {
-    if (gap < -1) gap = -1;
+    if (gap < -1)
+        gap = -1;
     if (m_outerGapRight != gap) {
         m_outerGapRight = gap;
         markUnsaved();
@@ -259,8 +267,7 @@ void EditorController::clearZonePaddingOverride()
 void EditorController::clearOuterGapOverride()
 {
     // Early return if nothing to clear — avoids empty macro on undo stack
-    bool hasAnyOverride = m_outerGap != -1 || m_usePerSideOuterGap
-        || m_outerGapTop != -1 || m_outerGapBottom != -1
+    bool hasAnyOverride = m_outerGap != -1 || m_usePerSideOuterGap || m_outerGapTop != -1 || m_outerGapBottom != -1
         || m_outerGapLeft != -1 || m_outerGapRight != -1;
     if (!hasAnyOverride) {
         return;
@@ -270,28 +277,28 @@ void EditorController::clearOuterGapOverride()
     // Uses beginMacro/endMacro so the entire clear is one undo step.
     m_undoController->beginMacro(i18nc("@action", "Clear Edge Gap Override"));
     if (m_outerGap != -1) {
-        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap,
-                                                             m_outerGap, -1));
+        m_undoController->push(
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGap, m_outerGap, -1));
     }
     if (m_usePerSideOuterGap) {
-        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap,
-                                                             1, 0));
+        m_undoController->push(
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::UsePerSideOuterGap, 1, 0));
     }
     if (m_outerGapTop != -1) {
-        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop,
-                                                             m_outerGapTop, -1));
+        m_undoController->push(
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapTop, m_outerGapTop, -1));
     }
     if (m_outerGapBottom != -1) {
         m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapBottom,
-                                                             m_outerGapBottom, -1));
+                                                            m_outerGapBottom, -1));
     }
     if (m_outerGapLeft != -1) {
-        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft,
-                                                             m_outerGapLeft, -1));
+        m_undoController->push(
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapLeft, m_outerGapLeft, -1));
     }
     if (m_outerGapRight != -1) {
-        m_undoController->push(new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight,
-                                                             m_outerGapRight, -1));
+        m_undoController->push(
+            new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OuterGapRight, m_outerGapRight, -1));
     }
     m_undoController->endMacro();
 }
@@ -369,13 +376,13 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
     } else {
         // Switching to Relative: convert pixel -> relative (keep relativeGeometry as-is since it's maintained)
         if (oldFixedGeo.isValid() && sw > 0 && sh > 0) {
-            newRelGeo = QRectF(oldFixedGeo.x() / sw, oldFixedGeo.y() / sh,
-                               oldFixedGeo.width() / sw, oldFixedGeo.height() / sh);
+            newRelGeo =
+                QRectF(oldFixedGeo.x() / sw, oldFixedGeo.y() / sh, oldFixedGeo.width() / sw, oldFixedGeo.height() / sh);
         }
     }
 
-    auto* cmd = new ToggleGeometryModeCommand(this, zoneId, oldMode, newMode,
-                                               oldRelGeo, newRelGeo, oldFixedGeo, newFixedGeo);
+    auto* cmd =
+        new ToggleGeometryModeCommand(this, zoneId, oldMode, newMode, oldRelGeo, newRelGeo, oldFixedGeo, newFixedGeo);
     m_undoController->push(cmd);
     markUnsaved();
 }
@@ -414,13 +421,14 @@ void EditorController::updateZoneFixedGeometry(const QString& zoneId, qreal x, q
         return;
     }
 
-    auto* cmd = new UpdateFixedGeometryCommand(QPointer<ZoneManager>(m_zoneManager), zoneId,
-                                                oldFixed, newFixed, oldRelative, newRelative);
+    auto* cmd = new UpdateFixedGeometryCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldFixed, newFixed,
+                                               oldRelative, newRelative);
     m_undoController->push(cmd);
     markUnsaved();
 }
 
-void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, const QRectF& relativeGeo, const QRectF& fixedGeo)
+void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, const QRectF& relativeGeo,
+                                             const QRectF& fixedGeo)
 {
     if (!m_zoneManager) {
         return;
@@ -492,12 +500,9 @@ void EditorController::refreshGlobalOuterGap()
     int newLeft = SettingsDbusQueries::queryGlobalOuterGapLeft();
     int newRight = SettingsDbusQueries::queryGlobalOuterGapRight();
 
-    bool changed = (m_cachedGlobalOuterGap != newValue)
-        || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
-        || (m_cachedGlobalOuterGapTop != newTop)
-        || (m_cachedGlobalOuterGapBottom != newBottom)
-        || (m_cachedGlobalOuterGapLeft != newLeft)
-        || (m_cachedGlobalOuterGapRight != newRight);
+    bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
+        || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
+        || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
 
     m_cachedGlobalOuterGap = newValue;
     m_cachedGlobalUsePerSideOuterGap = newUsePerSide;

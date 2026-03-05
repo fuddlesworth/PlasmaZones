@@ -20,18 +20,14 @@ using namespace PlasmaZones;
 
 QRectF ZoneManager::extractZoneGeometry(const QVariantMap& zone) const
 {
-    return QRectF(zone[JsonKeys::X].toDouble(),
-                  zone[JsonKeys::Y].toDouble(),
-                  zone[JsonKeys::Width].toDouble(),
+    return QRectF(zone[JsonKeys::X].toDouble(), zone[JsonKeys::Y].toDouble(), zone[JsonKeys::Width].toDouble(),
                   zone[JsonKeys::Height].toDouble());
 }
 
 QRectF ZoneManager::extractFixedGeometry(const QVariantMap& zone) const
 {
-    return QRectF(zone.value(JsonKeys::FixedX, 0.0).toDouble(),
-                  zone.value(JsonKeys::FixedY, 0.0).toDouble(),
-                  zone.value(JsonKeys::FixedWidth, 0.0).toDouble(),
-                  zone.value(JsonKeys::FixedHeight, 0.0).toDouble());
+    return QRectF(zone.value(JsonKeys::FixedX, 0.0).toDouble(), zone.value(JsonKeys::FixedY, 0.0).toDouble(),
+                  zone.value(JsonKeys::FixedWidth, 0.0).toDouble(), zone.value(JsonKeys::FixedHeight, 0.0).toDouble());
 }
 
 bool ZoneManager::isFixedMode(const QVariantMap& zone)
@@ -81,7 +77,8 @@ ZoneManager::ValidatedGeometry ZoneManager::validateAndClampGeometry(qreal x, qr
     return result;
 }
 
-ZoneManager::ValidatedFixedGeometry ZoneManager::validateAndClampFixedGeometry(qreal x, qreal y, qreal width, qreal height) const
+ZoneManager::ValidatedFixedGeometry ZoneManager::validateAndClampFixedGeometry(qreal x, qreal y, qreal width,
+                                                                               qreal height) const
 {
     ValidatedFixedGeometry result;
 

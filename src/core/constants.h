@@ -47,8 +47,8 @@ constexpr qreal InactiveOpacity = 0.3;
 constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
 constexpr int ZonePadding = 8;
-constexpr int OuterGap = 8;  // Gap at screen edges (separate from zonePadding between zones)
-constexpr int MaxGap = 50;   // Maximum for zone padding and outer gap settings
+constexpr int OuterGap = 8; // Gap at screen edges (separate from zonePadding between zones)
+constexpr int MaxGap = 50; // Maximum for zone padding and outer gap settings
 constexpr int AdjacentThreshold = 20;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
@@ -77,7 +77,7 @@ constexpr int MaxMasterCount = 5;
 constexpr int DefaultMasterCount = 1;
 constexpr int MinGap = 0;
 constexpr int MaxGap = 50;
-constexpr int DefaultGap = 8;  // Intentionally independent from Defaults::OuterGap
+constexpr int DefaultGap = 8; // Intentionally independent from Defaults::OuterGap
 constexpr int MinZoneSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
 constexpr bool DefaultSmartGaps = true;
@@ -250,11 +250,11 @@ inline constexpr QLatin1String AlgorithmId{"algorithmId"};
 inline constexpr QLatin1String InnerGap{"innerGap"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
 // Per-side outer gap keys (shared with LayoutJsonKeys — same wire format)
-using JsonKeys::UsePerSideOuterGap;
-using JsonKeys::OuterGapTop;
 using JsonKeys::OuterGapBottom;
 using JsonKeys::OuterGapLeft;
 using JsonKeys::OuterGapRight;
+using JsonKeys::OuterGapTop;
+using JsonKeys::UsePerSideOuterGap;
 inline constexpr QLatin1String SmartGaps{"smartGaps"};
 inline constexpr QLatin1String FocusNewWindows{"focusNewWindows"};
 inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};
@@ -320,16 +320,20 @@ inline constexpr QLatin1String CenteredMaster{"centered-master"};
 namespace LayoutId {
 inline constexpr QLatin1String AutotilePrefix{"autotile:"};
 
-inline bool isAutotile(const QString& id) {
+inline bool isAutotile(const QString& id)
+{
     return id.startsWith(AutotilePrefix);
 }
 
-inline QString extractAlgorithmId(const QString& id) {
-    if (!isAutotile(id)) return QString();
+inline QString extractAlgorithmId(const QString& id)
+{
+    if (!isAutotile(id))
+        return QString();
     return id.mid(AutotilePrefix.size());
 }
 
-inline QString makeAutotileId(const QString& algorithmId) {
+inline QString makeAutotileId(const QString& algorithmId)
+{
     return AutotilePrefix + algorithmId;
 }
 }
@@ -346,14 +350,21 @@ inline QString makeAutotileId(const QString& algorithmId) {
  * (meaning "use global setting") — those must be resolved via
  * getEffectiveOuterGaps() before use in geometry calculations.
  */
-struct EdgeGaps {
+struct EdgeGaps
+{
     int top = 8;
     int bottom = 8;
     int left = 8;
     int right = 8;
     bool operator==(const EdgeGaps&) const = default;
-    bool isUniform() const { return top == bottom && bottom == left && left == right; }
-    static EdgeGaps uniform(int gap) { return {gap, gap, gap, gap}; }
+    bool isUniform() const
+    {
+        return top == bottom && bottom == left && left == right;
+    }
+    static EdgeGaps uniform(int gap)
+    {
+        return {gap, gap, gap, gap};
+    }
 };
 
 } // namespace PlasmaZones

@@ -30,8 +30,14 @@ public:
     explicit LayoutManager(KCMPlasmaZones* kcm, Settings* settings, QObject* parent = nullptr);
 
     // Layout list accessors
-    const QVariantList& layouts() const { return m_layouts; }
-    QString layoutToSelect() const { return m_layoutToSelect; }
+    const QVariantList& layouts() const
+    {
+        return m_layouts;
+    }
+    QString layoutToSelect() const
+    {
+        return m_layoutToSelect;
+    }
 
     // CRUD operations (D-Bus to daemon)
     void createNewLayout();
@@ -58,7 +64,10 @@ public:
     void clearPendingStates();
 
     // Prevent reloads during save
-    void setSaveInProgress(bool inProgress) { m_saveInProgress = inProgress; }
+    void setSaveInProgress(bool inProgress)
+    {
+        m_saveInProgress = inProgress;
+    }
 
 Q_SIGNALS:
     void layoutsChanged();
@@ -66,8 +75,7 @@ Q_SIGNALS:
     void needsSave();
 
 private:
-    QDBusMessage callDaemon(const QString& interface, const QString& method,
-                            const QVariantList& args = {}) const;
+    QDBusMessage callDaemon(const QString& interface, const QString& method, const QVariantList& args = {}) const;
     void watchAsyncDbusCall(QDBusPendingCall call, const QString& operation);
 
     KCMPlasmaZones* m_kcm = nullptr;

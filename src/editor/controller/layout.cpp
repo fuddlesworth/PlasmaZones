@@ -50,8 +50,7 @@ void EditorController::setTargetScreen(const QString& screenName)
         // Load the layout assigned to this screen
         if (!screenName.isEmpty() && m_layoutService) {
             QString layoutId = m_layoutService->getLayoutIdForScreen(screenName);
-            qCDebug(lcEditor) << "setTargetScreen:" << screenName
-                              << "daemon returned layoutId:" << layoutId
+            qCDebug(lcEditor) << "setTargetScreen:" << screenName << "daemon returned layoutId:" << layoutId
                               << "current layoutId:" << previousLayout;
             if (!layoutId.isEmpty()) {
                 // Load the assigned layout
@@ -354,13 +353,17 @@ void EditorController::loadLayout(const QString& layoutId)
         : -1;
     m_usePerSideOuterGap = layoutObj[QLatin1String(JsonKeys::UsePerSideOuterGap)].toBool(false);
     m_outerGapTop = layoutObj.contains(QLatin1String(JsonKeys::OuterGapTop))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapTop)].toInt(-1) : -1;
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapTop)].toInt(-1)
+        : -1;
     m_outerGapBottom = layoutObj.contains(QLatin1String(JsonKeys::OuterGapBottom))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapBottom)].toInt(-1) : -1;
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapBottom)].toInt(-1)
+        : -1;
     m_outerGapLeft = layoutObj.contains(QLatin1String(JsonKeys::OuterGapLeft))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapLeft)].toInt(-1) : -1;
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapLeft)].toInt(-1)
+        : -1;
     m_outerGapRight = layoutObj.contains(QLatin1String(JsonKeys::OuterGapRight))
-        ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1) : -1;
+        ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1)
+        : -1;
     m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
 
     m_selectedZoneId.clear();

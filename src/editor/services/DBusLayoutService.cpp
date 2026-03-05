@@ -34,7 +34,7 @@ QDBusInterface* DBusLayoutService::getInterface()
     if (m_interface && m_interface->isValid()) {
         return m_interface;
     }
-    
+
     // Clean up invalid interface
     m_interface->deleteLater();
     m_interface = nullptr;
@@ -49,7 +49,7 @@ QDBusInterface* DBusLayoutService::getInterface()
         m_interface = nullptr;
         return nullptr;
     }
-    
+
     return m_interface;
 }
 

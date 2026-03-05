@@ -196,7 +196,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     m_overflow.clearForRemovedScreens(m_autotileScreens);
 
     // Clear any pending deferred retiles for removed screens
-    for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end(); ) {
+    for (auto pit = m_pendingRetileScreens.begin(); pit != m_pendingRetileScreens.end();) {
         if (!m_autotileScreens.contains(*pit)) {
             pit = m_pendingRetileScreens.erase(pit);
         } else {
@@ -290,8 +290,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
     // the engine's runtime state and the Settings object. Signal-blocked write
     // prevents recursive corruption (daemon settingsChanged → syncFromSettings →
     // setAlgorithm with stale KCM algo).
-    m_settingsBridge->syncAlgorithmToSettings(newId, m_config->splitRatio,
-                                              m_config->maxWindows, oldMaxWindows);
+    m_settingsBridge->syncAlgorithmToSettings(newId, m_config->splitRatio, m_config->maxWindows, oldMaxWindows);
 
     m_algorithmId = newId;
     m_config->algorithmId = newId;
@@ -368,8 +367,8 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenName, const QStr
     // tiledWindows() to also detect floating-only states.
     TilingState* state = m_screenStates.value(screenName);
     if (state && state->windowCount() > 0) {
-        qCDebug(lcAutotile) << "setInitialWindowOrder: screen" << screenName
-                            << "already has" << state->windowCount() << "windows, ignoring pre-seeded order";
+        qCDebug(lcAutotile) << "setInitialWindowOrder: screen" << screenName << "already has" << state->windowCount()
+                            << "windows, ignoring pre-seeded order";
         return;
     }
     // Warn (but allow) if overwriting a pending order that hasn't been fully consumed
@@ -382,8 +381,8 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenName, const QStr
     // Safety timeout: clean up if windows never arrive (e.g., app crash during startup)
     QTimer::singleShot(PendingOrderTimeoutMs, this, [this, screenName]() {
         if (m_pendingInitialOrders.remove(screenName)) {
-            qCWarning(lcAutotile) << "Pending initial order for screen" << screenName
-                                  << "timed out after" << PendingOrderTimeoutMs << "ms — cleaning up stale entry";
+            qCWarning(lcAutotile) << "Pending initial order for screen" << screenName << "timed out after"
+                                  << PendingOrderTimeoutMs << "ms — cleaning up stale entry";
         }
     });
 }
@@ -515,8 +514,7 @@ void AutotileEngine::scheduleRetileForScreen(const QString& screenName)
         // sends N windowOpened D-Bus calls in rapid succession — they all arrive
         // in one socket read and are dispatched before this queued call fires.
         // Single-window opens retile on the very next event loop iteration (~0ms).
-        QMetaObject::invokeMethod(this, &AutotileEngine::processPendingRetiles,
-                                  Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, &AutotileEngine::processPendingRetiles, Qt::QueuedConnection);
     }
 }
 
@@ -751,9 +749,8 @@ void AutotileEngine::toggleFocusedWindowFloat()
 
     if (!state) {
         qCWarning(lcAutotile) << "toggleFocusedWindowFloat: no state found for focused screen"
-                               << "(m_activeScreen=" << m_activeScreen << ")";
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
-                                           QStringLiteral("no_focused_screen"),
+                              << "(m_activeScreen=" << m_activeScreen << ")";
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("no_focused_screen"),
                                            QString(), QString(), m_activeScreen);
         return;
     }
@@ -761,8 +758,7 @@ void AutotileEngine::toggleFocusedWindowFloat()
     const QString focused = state->focusedWindow();
     if (focused.isEmpty()) {
         qCWarning(lcAutotile) << "toggleFocusedWindowFloat: no focused window on screen" << screenName;
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
-                                           QStringLiteral("no_focused_window"),
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("no_focused_window"),
                                            QString(), QString(), screenName);
         return;
     }
@@ -778,9 +774,8 @@ void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& s
 
     if (screenName.isEmpty()) {
         qCWarning(lcAutotile) << "toggleWindowFloat: empty screenName for window" << windowId;
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
-                                           QStringLiteral("no_screen"),
-                                           QString(), QString(), QString());
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("no_screen"), QString(),
+                                           QString(), QString());
         return;
     }
 
@@ -802,8 +797,7 @@ void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& s
             if (it.value() && it.value()->containsWindow(windowId)) {
                 state = it.value();
                 resolvedScreen = it.key();
-                qCInfo(lcAutotile) << "toggleWindowFloat: window" << windowId
-                                   << "found on screen" << resolvedScreen
+                qCInfo(lcAutotile) << "toggleWindowFloat: window" << windowId << "found on screen" << resolvedScreen
                                    << "(caller reported" << screenName << ")";
                 break;
             }
@@ -811,10 +805,8 @@ void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& s
     }
 
     if (!state) {
-        qCWarning(lcAutotile) << "toggleWindowFloat: window" << windowId
-                               << "not found in any autotile state";
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"),
-                                           QStringLiteral("window_not_tracked"),
+        qCWarning(lcAutotile) << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
+        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"),
                                            QString(), QString(), screenName);
         return;
     }
@@ -829,8 +821,8 @@ void AutotileEngine::performToggleFloat(TilingState* state, const QString& windo
     retileAfterOperation(screenName, true);
 
     const bool isNowFloating = state->isFloating(windowId);
-    qCInfo(lcAutotile) << "Window" << windowId << (isNowFloating ? "now floating" : "now tiled")
-                       << "on screen" << screenName;
+    qCInfo(lcAutotile) << "Window" << windowId << (isNowFloating ? "now floating" : "now tiled") << "on screen"
+                       << screenName;
     Q_EMIT windowFloatingChanged(windowId, isNowFloating, screenName);
 }
 
@@ -853,8 +845,8 @@ void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     }
 
     if (state->isFloating(windowId) == shouldFloat) {
-        qCDebug(lcAutotile) << (shouldFloat ? "floatWindow: already floating" : "unfloatWindow: not floating")
-                            << ":" << windowId;
+        qCDebug(lcAutotile) << (shouldFloat ? "floatWindow: already floating" : "unfloatWindow: not floating") << ":"
+                            << windowId;
         return;
     }
 
@@ -969,15 +961,14 @@ void AutotileEngine::windowFocused(const QString& windowId, const QString& scree
         if (oldState && oldState->containsWindow(windowId)) {
             oldState->removeWindow(windowId);
             m_overflow.migrateWindow(windowId);
-            qCInfo(lcAutotile) << "Window" << windowId << "moved from" << oldScreen
-                               << "to" << screenName << "- migrating";
+            qCInfo(lcAutotile) << "Window" << windowId << "moved from" << oldScreen << "to" << screenName
+                               << "- migrating";
             // Re-add to the new screen's normal flow (will be overflow-checked on next retile)
             onWindowAdded(windowId);
         }
     }
 
     onWindowFocused(windowId);
-
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -994,8 +985,7 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     TilingState* state = stateForScreen(screenName);
     const int maxWin = effectiveMaxWindows(screenName);
     if (state && state->tiledWindowCount() >= maxWin) {
-        qCDebug(lcAutotile) << "Max window limit reached for screen" << screenName
-                            << "(max=" << maxWin << ")";
+        qCDebug(lcAutotile) << "Max window limit reached for screen" << screenName << "(max=" << maxWin << ")";
         // Purge this window from pending initial orders so the order doesn't
         // leak waiting for a window that will never be inserted.
         for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end(); ++pit) {
@@ -1111,8 +1101,8 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
             }
             state->addWindow(windowId, insertAt);
             inserted = true;
-            qCDebug(lcAutotile) << "Inserted pre-seeded window" << windowId
-                                << "at position" << insertAt << "(desired:" << desiredPos << ")";
+            qCDebug(lcAutotile) << "Inserted pre-seeded window" << windowId << "at position" << insertAt
+                                << "(desired:" << desiredPos << ")";
         }
         // Clean up pending order when all pre-seeded windows have been inserted (or closed)
         if (inserted) {
@@ -1172,7 +1162,7 @@ void AutotileEngine::removeWindow(const QString& windowId)
     // Purge closed window from pending initial orders.
     // If a pre-seeded window closes before arriving at the autotile engine,
     // the pending order would leak indefinitely without this cleanup.
-    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end(); ) {
+    for (auto pit = m_pendingInitialOrders.begin(); pit != m_pendingInitialOrders.end();) {
         pit.value().removeAll(windowId);
         if (pit.value().isEmpty()) {
             pit = m_pendingInitialOrders.erase(pit);
@@ -1249,7 +1239,7 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     // Validate algorithm returned correct number of zones
     if (zones.size() != windowCount) {
         qCWarning(lcAutotile) << "AutotileEngine::recalculateLayout: algorithm returned" << zones.size() << "zones for"
-                   << windowCount << "windows";
+                              << windowCount << "windows";
         return;
     }
 
@@ -1258,8 +1248,7 @@ void AutotileEngine::recalculateLayout(const QString& screenName)
     // edge cases the algorithm couldn't fully solve (e.g., unsatisfiable constraints).
     // Skip for Monocle: zones intentionally overlap (stacked windows), and
     // removeZoneOverlaps would separate them into side-by-side columns.
-    if (effectiveRespectMinimumSize(screenName) && !minSizes.isEmpty()
-        && algoId != DBus::AutotileAlgorithm::Monocle) {
+    if (effectiveRespectMinimumSize(screenName) && !minSizes.isEmpty() && algoId != DBus::AutotileAlgorithm::Monocle) {
         const int threshold = effectiveInnerGap(screenName) + qMax(AutotileDefaults::GapEdgeThresholdPx, 12);
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
     }
@@ -1285,8 +1274,8 @@ void AutotileEngine::applyTiling(const QString& screenName)
         return;
     }
     if (zones.size() > windows.size()) {
-        qCWarning(lcAutotile) << "AutotileEngine::applyTiling: zone count exceeds window count" << windows.size() << "vs"
-                   << zones.size();
+        qCWarning(lcAutotile) << "AutotileEngine::applyTiling: zone count exceeds window count" << windows.size()
+                              << "vs" << zones.size();
         return;
     }
 
@@ -1393,7 +1382,8 @@ QRect AutotileEngine::screenGeometry(const QString& screenName) const
 
 void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(TilingAlgorithm* oldAlgo, TilingAlgorithm* newAlgo)
 {
-    if (!oldAlgo || !newAlgo) return;
+    if (!oldAlgo || !newAlgo)
+        return;
     if (m_config->maxWindows == oldAlgo->defaultMaxWindows()) {
         m_config->maxWindows = newAlgo->defaultMaxWindows();
     }
@@ -1428,8 +1418,12 @@ void AutotileEngine::backfillWindows()
             if (bfState && !m_overflow.isEmpty()) {
                 QStringList unfloated = m_overflow.recoverIfRoom(
                     screenName, bfState->tiledWindowCount(), effectiveMaxWindows(screenName),
-                    [bfState](const QString& wid) { return bfState->isFloating(wid); },
-                    [bfState](const QString& wid) { return bfState->containsWindow(wid); });
+                    [bfState](const QString& wid) {
+                        return bfState->isFloating(wid);
+                    },
+                    [bfState](const QString& wid) {
+                        return bfState->containsWindow(wid);
+                    });
                 for (const QString& wid : unfloated) {
                     bfState->setFloating(wid, false);
                     Q_EMIT windowFloatingChanged(wid, false, screenName);
@@ -1449,8 +1443,7 @@ void AutotileEngine::backfillWindows()
         // (insertWindow calls m_windowToScreen.insert which is unsafe during const iteration)
         QStringList candidates;
         for (auto it = m_windowToScreen.constBegin(); it != m_windowToScreen.constEnd(); ++it) {
-            if (it.value() == screenName && !state->containsWindow(it.key())
-                && shouldTileWindow(it.key())) {
+            if (it.value() == screenName && !state->containsWindow(it.key()) && shouldTileWindow(it.key())) {
                 candidates.append(it.key());
             }
         }
@@ -1478,8 +1471,12 @@ void AutotileEngine::retileScreen(const QString& screenName)
     if (!m_overflow.isEmpty()) {
         unfloated = m_overflow.recoverIfRoom(
             screenName, state->tiledWindowCount(), effectiveMaxWindows(screenName),
-            [state](const QString& wid) { return state->isFloating(wid); },
-            [state](const QString& wid) { return state->containsWindow(wid); });
+            [state](const QString& wid) {
+                return state->isFloating(wid);
+            },
+            [state](const QString& wid) {
+                return state->containsWindow(wid);
+            });
         for (const QString& wid : unfloated) {
             state->setFloating(wid, false);
         }
@@ -1524,7 +1521,6 @@ void AutotileEngine::retileAfterOperation(const QString& screenName, bool operat
     m_retiling = true;
     retileScreen(screenName);
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Helper Methods

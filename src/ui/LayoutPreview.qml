@@ -18,7 +18,7 @@ Rectangle {
     property string layoutId: ""
     property string layoutName: ""
     property var zones: [] // Array of zone objects with relativeGeometry
-    property int category: 0  // 0=Manual (matches LayoutCategory in C++)
+    property int category: 0 // 0=Manual (matches LayoutCategory in C++)
     property bool autoAssign: false
     // State
     property bool isActive: false
@@ -34,7 +34,7 @@ Rectangle {
     property real hoverOpacity: 0.4
     // Font properties for zone number labels
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -146,6 +146,7 @@ Rectangle {
                 elide: Text.ElideRight
                 width: Math.min(implicitWidth, labelContainer.width - categoryBadge.width - Kirigami.Units.gridUnit * 1.5)
             }
+
         }
 
     }
@@ -182,7 +183,6 @@ Rectangle {
         }
 
     }
-
 
     // Mouse interaction
     MouseArea {

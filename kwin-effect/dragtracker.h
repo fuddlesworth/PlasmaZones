@@ -36,10 +36,22 @@ public:
     explicit DragTracker(PlasmaZonesEffect* effect, QObject* parent = nullptr);
 
     // State queries
-    bool isDragging() const { return m_draggedWindow != nullptr; }
-    KWin::EffectWindow* draggedWindow() const { return m_draggedWindow; }
-    QString draggedWindowId() const { return m_draggedWindowId; }
-    QPointF lastCursorPos() const { return m_lastCursorPos; }
+    bool isDragging() const
+    {
+        return m_draggedWindow != nullptr;
+    }
+    KWin::EffectWindow* draggedWindow() const
+    {
+        return m_draggedWindow;
+    }
+    QString draggedWindowId() const
+    {
+        return m_draggedWindowId;
+    }
+    QPointF lastCursorPos() const
+    {
+        return m_lastCursorPos;
+    }
 
     // Event-driven drag start/end detection via KWin's per-window signals.
     // Connected in setupWindowConnections() to windowStartUserMovedResized /

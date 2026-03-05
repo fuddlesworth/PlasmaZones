@@ -37,17 +37,10 @@ public:
      * @param fontStrikeout Whether to strike out text (default false)
      * @return QImage (Format_ARGB32_Premultiplied) or null if showNumbers=false or no zones
      */
-    static QImage build(const QVariantList& zones,
-                        const QSize& size,
-                        const QColor& labelFontColor,
-                        bool showNumbers,
-                        const QColor& backgroundColor = Qt::black,
-                        const QString& fontFamily = QString(),
-                        qreal fontSizeScale = 1.0,
-                        int fontWeight = QFont::Bold,
-                        bool fontItalic = false,
-                        bool fontUnderline = false,
-                        bool fontStrikeout = false);
+    static QImage build(const QVariantList& zones, const QSize& size, const QColor& labelFontColor, bool showNumbers,
+                        const QColor& backgroundColor = Qt::black, const QString& fontFamily = QString(),
+                        qreal fontSizeScale = 1.0, int fontWeight = QFont::Bold, bool fontItalic = false,
+                        bool fontUnderline = false, bool fontStrikeout = false);
 };
 
 } // namespace PlasmaZones

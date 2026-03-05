@@ -21,10 +21,8 @@ Kirigami.Card {
     required property string emptyExplanation
     required property string iconSource
     required property var model
-
     // Whether to use monospace font for list items
     property bool useMonospaceFont: false
-
     // Whether to show the "Pick from running windows" button
     property bool showPickButton: false
 
@@ -48,13 +46,13 @@ Kirigami.Card {
 
             TextField {
                 id: inputField
+
                 Layout.fillWidth: true
                 placeholderText: root.placeholderText
-
                 onAccepted: {
                     if (text.length > 0) {
-                        root.addRequested(text)
-                        text = ""
+                        root.addRequested(text);
+                        text = "";
                     }
                 }
             }
@@ -64,8 +62,8 @@ Kirigami.Card {
                 icon.name: "list-add"
                 enabled: inputField.text.length > 0
                 onClicked: {
-                    root.addRequested(inputField.text)
-                    inputField.text = ""
+                    root.addRequested(inputField.text);
+                    inputField.text = "";
                 }
             }
 
@@ -77,10 +75,12 @@ Kirigami.Card {
                 onClicked: root.pickRequested()
                 Accessible.name: i18n("Pick from running windows")
             }
+
         }
 
         ListView {
             id: listView
+
             Layout.fillWidth: true
             // Use contentHeight with minimum fallback - never use fillHeight in ScrollView
             Layout.preferredHeight: Math.max(contentHeight, Kirigami.Units.gridUnit * 6)
@@ -88,22 +88,28 @@ Kirigami.Card {
             Layout.margins: Kirigami.Units.smallSpacing
             clip: true
             model: root.model
-            interactive: false  // Parent ScrollView handles scrolling
+            interactive: false // Parent ScrollView handles scrolling
             focus: true
             keyNavigationEnabled: true
             activeFocusOnTab: true
-
             Accessible.name: root.title
             Accessible.role: Accessible.List
 
+            Kirigami.PlaceholderMessage {
+                anchors.centerIn: parent
+                width: parent.width - Kirigami.Units.gridUnit * 4
+                visible: parent.count === 0
+                text: root.emptyTitle
+                explanation: root.emptyExplanation
+            }
+
             delegate: ItemDelegate {
-                width: ListView.view.width
                 required property string modelData
                 required property int index
 
+                width: ListView.view.width
                 highlighted: ListView.isCurrentItem
                 onClicked: listView.currentIndex = index
-
                 Keys.onDeletePressed: root.removeRequested(index)
 
                 contentItem: RowLayout {
@@ -126,16 +132,13 @@ Kirigami.Card {
                         onClicked: root.removeRequested(index)
                         Accessible.name: i18n("Remove %1", modelData)
                     }
+
                 }
+
             }
 
-            Kirigami.PlaceholderMessage {
-                anchors.centerIn: parent
-                width: parent.width - Kirigami.Units.gridUnit * 4
-                visible: parent.count === 0
-                text: root.emptyTitle
-                explanation: root.emptyExplanation
-            }
         }
+
     }
+
 }

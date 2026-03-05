@@ -17,23 +17,17 @@ namespace PlasmaZones {
 // Buffer passes render to intermediate textures and should NOT alpha-blend against
 // the clear color; use enableBlend=false for those so shaders can freely use the
 // alpha channel for data without darkening the RGB output.
-static std::unique_ptr<QRhiGraphicsPipeline> createFullscreenQuadPipeline(
-    QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
-    const QShader& fragmentShader, QRhiShaderResourceBindings* srb,
-    bool enableBlend = true)
+static std::unique_ptr<QRhiGraphicsPipeline>
+createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
+                             const QShader& fragmentShader, QRhiShaderResourceBindings* srb, bool enableBlend = true)
 {
     std::unique_ptr<QRhiGraphicsPipeline> pipeline(rhi->newGraphicsPipeline());
     pipeline->setTopology(QRhiGraphicsPipeline::TriangleStrip);
-    pipeline->setShaderStages({
-        { QRhiShaderStage::Vertex, vertexShader },
-        { QRhiShaderStage::Fragment, fragmentShader }
-    });
+    pipeline->setShaderStages({{QRhiShaderStage::Vertex, vertexShader}, {QRhiShaderStage::Fragment, fragmentShader}});
     QRhiVertexInputLayout inputLayout;
-    inputLayout.setBindings({ { 4 * sizeof(float) } });
-    inputLayout.setAttributes({
-        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
-        { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) }
-    });
+    inputLayout.setBindings({{4 * sizeof(float)}});
+    inputLayout.setAttributes(
+        {{0, 0, QRhiVertexInputAttribute::Float2, 0}, {0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float)}});
     pipeline->setVertexInputLayout(inputLayout);
     pipeline->setShaderResourceBindings(srb);
     pipeline->setRenderPassDescriptor(rpDesc);
@@ -43,7 +37,7 @@ static std::unique_ptr<QRhiGraphicsPipeline> createFullscreenQuadPipeline(
     blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
     blend.srcAlpha = QRhiGraphicsPipeline::One;
     blend.dstAlpha = QRhiGraphicsPipeline::OneMinusSrcAlpha;
-    pipeline->setTargetBlends({ blend });
+    pipeline->setTargetBlends({blend});
     if (!pipeline->create()) {
         return nullptr;
     }
@@ -107,9 +101,10 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
             m_srbB.reset();
         }
         if (!m_bufferSampler) {
-            const QRhiSampler::AddressMode addr = (m_bufferWrap == QLatin1String("repeat"))
-                ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
-            m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+            const QRhiSampler::AddressMode addr =
+                (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            m_bufferSampler.reset(
+                rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_bufferSampler->create()) {
                 qCWarning(lcOverlay) << "Failed to create buffer sampler";
                 return false;
@@ -124,9 +119,10 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
             return false;
         }
         if (!m_bufferSampler) {
-            const QRhiSampler::AddressMode addr = (m_bufferWrap == QLatin1String("repeat"))
-                ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
-            m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+            const QRhiSampler::AddressMode addr =
+                (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            m_bufferSampler.reset(
+                rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_bufferSampler->create()) {
                 qCWarning(lcOverlay) << "Failed to create buffer sampler";
                 return false;
@@ -167,8 +163,8 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         m_srbB.reset();
     }
     if (m_bufferTexture && !m_bufferSampler) {
-        const QRhiSampler::AddressMode addr = (m_bufferWrap == QLatin1String("repeat"))
-            ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+        const QRhiSampler::AddressMode addr =
+            (m_bufferWrap == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
         m_bufferSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
         if (!m_bufferSampler->create()) {
             qCWarning(lcOverlay) << "Failed to create buffer sampler";
@@ -217,13 +213,14 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                 for (int j = 0; j < i; ++j) {
                     if (m_multiBufferTextures[j] && m_bufferSampler) {
                         bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                            2 + j, QRhiShaderResourceBinding::FragmentStage,
-                            m_multiBufferTextures[j].get(), m_bufferSampler.get()));
+                            2 + j, QRhiShaderResourceBinding::FragmentStage, m_multiBufferTextures[j].get(),
+                            m_bufferSampler.get()));
                     }
                 }
                 if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
                     bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                        6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+                        6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(),
+                        m_audioSpectrumSampler.get()));
                 }
                 appendUserTextureBindings(bindings);
                 appendWallpaperBinding(bindings);
@@ -238,8 +235,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                 QRhiRenderPassDescriptor* rpDescI = m_multiBufferRenderPassDescriptors[i]
                     ? m_multiBufferRenderPassDescriptors[i].get()
                     : m_multiBufferRenderTargets[i]->renderPassDescriptor();
-                m_multiBufferPipelines[i] = createFullscreenQuadPipeline(rhi, rpDescI,
-                    m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
+                m_multiBufferPipelines[i] = createFullscreenQuadPipeline(
+                    rhi, rpDescI, m_vertexShader, m_multiBufferFragmentShaders[i], m_multiBufferSrbs[i].get(),
                     /*enableBlend=*/false);
                 if (!m_multiBufferPipelines[i]) {
                     m_shaderError = QStringLiteral("Failed to create multi-buffer pipeline ");
@@ -260,7 +257,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     if (!rhi) {
         return false;
     }
-    QRhiRenderPassDescriptor* rpDesc = m_bufferRenderPassDescriptor ? m_bufferRenderPassDescriptor.get() : m_bufferRenderTarget->renderPassDescriptor();
+    QRhiRenderPassDescriptor* rpDesc = m_bufferRenderPassDescriptor ? m_bufferRenderPassDescriptor.get()
+                                                                    : m_bufferRenderTarget->renderPassDescriptor();
     if (!rpDesc) {
         return false;
     }
@@ -278,16 +276,17 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
         bindings.append(QRhiShaderResourceBinding::uniformBuffer(
             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
         if (m_labelsTexture && m_labelsSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_labelsTexture.get(), m_labelsSampler.get()));
         }
         if (channel0Texture && m_bufferSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                2, QRhiShaderResourceBinding::FragmentStage, channel0Texture, m_bufferSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
+                                                                      channel0Texture, m_bufferSampler.get()));
         }
         if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_audioSpectrumTexture.get(),
+                                                                      m_audioSpectrumSampler.get()));
         }
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
@@ -312,8 +311,9 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     }
 
     if (!m_bufferPipeline) {
-        m_bufferPipeline = createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_bufferFragmentShader, m_bufferSrb.get(),
-            /*enableBlend=*/false);
+        m_bufferPipeline =
+            createFullscreenQuadPipeline(rhi, rpDesc, m_vertexShader, m_bufferFragmentShader, m_bufferSrb.get(),
+                                         /*enableBlend=*/false);
         if (!m_bufferPipeline) {
             m_shaderError = QStringLiteral("Failed to create buffer pipeline");
             return false;
@@ -350,7 +350,8 @@ bool ZoneShaderNodeRhi::ensurePipeline()
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     const bool hasMultipass = !m_bufferPath.isEmpty() || multiBufferMode;
 
-    auto createImageSrbSingle = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
+    auto createImageSrbSingle = [rhi,
+                                 this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
         QRhiSampler* channel0Sampler = (channel0Texture && m_bufferSampler) ? m_bufferSampler.get() : nullptr;
         if (!channel0Texture && !m_bufferPath.isEmpty()) {
             channel0Texture = m_dummyChannelTexture.get();
@@ -361,16 +362,17 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         bindings.append(QRhiShaderResourceBinding::uniformBuffer(
             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
         if (m_labelsTexture && m_labelsSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_labelsTexture.get(), m_labelsSampler.get()));
         }
         if (channel0Texture && channel0Sampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                2, QRhiShaderResourceBinding::FragmentStage, channel0Texture, channel0Sampler));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(2, QRhiShaderResourceBinding::FragmentStage,
+                                                                      channel0Texture, channel0Sampler));
         }
         if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_audioSpectrumTexture.get(),
+                                                                      m_audioSpectrumSampler.get()));
         }
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
@@ -383,8 +385,8 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         bindings.append(QRhiShaderResourceBinding::uniformBuffer(
             0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
         if (m_labelsTexture && m_labelsSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_labelsTexture.get(), m_labelsSampler.get()));
         }
         const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
         QRhiSampler* bufferSam = m_bufferSampler.get();
@@ -399,8 +401,9 @@ bool ZoneShaderNodeRhi::ensurePipeline()
             }
         }
         if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_audioSpectrumTexture.get(),
+                                                                      m_audioSpectrumSampler.get()));
         }
         appendUserTextureBindings(bindings);
         appendWallpaperBinding(bindings);
@@ -418,9 +421,8 @@ bool ZoneShaderNodeRhi::ensurePipeline()
             }
         }
         if (!m_dummyChannelSampler && m_dummyChannelTexture) {
-            m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear,
-                                                         QRhiSampler::None, QRhiSampler::ClampToEdge,
-                                                         QRhiSampler::ClampToEdge));
+            m_dummyChannelSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                        QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_dummyChannelSampler->create()) {
                 m_dummyChannelSampler.reset();
             }

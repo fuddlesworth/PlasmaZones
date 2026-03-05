@@ -210,8 +210,8 @@ QStringList LayoutAdaptor::getLayoutList()
                 }
 
                 // Include allow-lists so KCM can show the filter badge
-                LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
-                                                  layout->allowedDesktops(), layout->allowedActivities());
+                LayoutUtils::serializeAllowLists(json, layout->allowedScreens(), layout->allowedDesktops(),
+                                                 layout->allowedActivities());
             }
         }
 

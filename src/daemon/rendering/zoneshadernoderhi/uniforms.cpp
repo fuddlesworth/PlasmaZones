@@ -35,12 +35,13 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     m_uniforms.iDate[0] = static_cast<float>(now.date().year());
     m_uniforms.iDate[1] = static_cast<float>(now.date().month());
     m_uniforms.iDate[2] = static_cast<float>(now.date().day());
-    m_uniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60
-                                             + now.time().second() + now.time().msec() / 1000.0);
+    m_uniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60 + now.time().second()
+                                             + now.time().msec() / 1000.0);
     m_uniforms.zoneCount = m_zones.size();
     int highlightedCount = 0;
     for (const auto& zone : m_zones) {
-        if (zone.isHighlighted) ++highlightedCount;
+        if (zone.isHighlighted)
+            ++highlightedCount;
     }
     m_uniforms.highlightedCount = highlightedCount;
 
@@ -130,7 +131,8 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
     // iChannelResolution (std140: vec2[4], each element 16 bytes). Per-channel size for UV scaling.
     // Unbound/dummy channels use (1,1); others use actual buffer size.
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), 4) : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
+    const int numChannels =
+        multiBufferMode ? qMin(m_bufferPaths.size(), 4) : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
     for (int i = 0; i < 4; ++i) {
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {
@@ -183,8 +185,8 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     if (m_labelsTextureDirty && m_labelsTexture && m_labelsSampler) {
         m_labelsTextureDirty = false;
         const QSize targetSize = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
-                                     ? m_labelsImage.size()
-                                     : QSize(1, 1);
+            ? m_labelsImage.size()
+            : QSize(1, 1);
         if (m_labelsTexture->pixelSize() != targetSize) {
             m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!m_labelsTexture->create()) {
@@ -199,8 +201,8 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
             const QImage& src = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
-                                    ? m_labelsImage
-                                    : m_transparentFallbackImage;
+                ? m_labelsImage
+                : m_transparentFallbackImage;
             batch->uploadTexture(m_labelsTexture.get(), src);
             cb->resourceUpdate(batch);
         }
@@ -218,16 +220,14 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             } else {
                 using namespace ZoneShaderUboRegions;
                 if (m_timeDirty) {
-                    batch->updateDynamicBuffer(m_ubo.get(),
-                                               K_TIME_BLOCK_OFFSET,
-                                               K_TIME_BLOCK_SIZE,
-                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + K_TIME_BLOCK_OFFSET);
+                    batch->updateDynamicBuffer(m_ubo.get(), K_TIME_BLOCK_OFFSET, K_TIME_BLOCK_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms))
+                                                   + K_TIME_BLOCK_OFFSET);
                 }
                 if (m_zoneDataDirty) {
-                    batch->updateDynamicBuffer(m_ubo.get(),
-                                               K_SCENE_DATA_OFFSET,
-                                               K_SCENE_DATA_SIZE,
-                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms)) + K_SCENE_DATA_OFFSET);
+                    batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_DATA_OFFSET, K_SCENE_DATA_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms))
+                                                   + K_SCENE_DATA_OFFSET);
                 }
                 // Defensive: if a future setter sets m_uniformsDirty without granular flags, do full upload
                 if (!m_timeDirty && !m_zoneDataDirty) {
@@ -301,10 +301,10 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     for (int i = 0; i < kMaxUserTextures; ++i) {
         // Recreate sampler if reset (e.g. wrap mode change)
         if (m_userTextures[i] && !m_userTextureSamplers[i]) {
-            const QRhiSampler::AddressMode addr = (m_userTextureWraps[i] == QLatin1String("repeat"))
-                ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
-            m_userTextureSamplers[i].reset(rhi->newSampler(
-                QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
+            const QRhiSampler::AddressMode addr =
+                (m_userTextureWraps[i] == QLatin1String("repeat")) ? QRhiSampler::Repeat : QRhiSampler::ClampToEdge;
+            m_userTextureSamplers[i].reset(
+                rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, addr, addr));
             if (!m_userTextureSamplers[i]->create()) {
                 continue;
             }
@@ -315,8 +315,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
         m_userTextureDirty[i] = false;
         const QImage& img = m_userTextureImages[i];
-        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0)
-                                     ? img.size() : QSize(1, 1);
+        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
         if (m_userTextures[i]->pixelSize() != targetSize) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!m_userTextures[i]->create()) {
@@ -344,8 +343,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     if (m_wallpaperDirty && m_wallpaperTexture && m_wallpaperSampler) {
         m_wallpaperDirty = false;
         const QImage& img = m_wallpaperImage;
-        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0)
-                                     ? img.size() : QSize(1, 1);
+        const QSize targetSize = (!img.isNull() && img.width() > 0 && img.height() > 0) ? img.size() : QSize(1, 1);
         if (m_wallpaperTexture->pixelSize() != targetSize) {
             m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
             if (!m_wallpaperTexture->create()) {
@@ -469,12 +467,13 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             m_multiBufferFragmentShaderSources[i] = src;
             m_multiBufferMtimes[i] = QFileInfo(path).lastModified().toMSecsSinceEpoch();
             QShaderBaker fragmentBaker;
-            fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
             fragmentBaker.setSourceString(src.toUtf8(), QShader::FragmentStage);
             m_multiBufferFragmentShaders[i] = fragmentBaker.bake();
             if (!m_multiBufferFragmentShaders[i].isValid()) {
-                qCWarning(lcOverlay) << "Multi-buffer shader" << i << "compile failed:" << path << fragmentBaker.errorMessage();
+                qCWarning(lcOverlay) << "Multi-buffer shader" << i << "compile failed:" << path
+                                     << fragmentBaker.errorMessage();
                 allOk = false;
                 break;
             }
@@ -507,7 +506,7 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
         if (!m_bufferFragmentShaderSource.isEmpty()) {
             const QList<QShaderBaker::GeneratedShader>& targets = detail::bakeTargets();
             QShaderBaker fragmentBaker;
-            fragmentBaker.setGeneratedShaderVariants({ QShader::StandardShader });
+            fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
             fragmentBaker.setSourceString(m_bufferFragmentShaderSource.toUtf8(), QShader::FragmentStage);
             m_bufferFragmentShader = fragmentBaker.bake();

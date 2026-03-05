@@ -106,9 +106,8 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
         QColor fillColor(zone.value(JsonKeys::HighlightColor).toString());
         if (!useCustom || !fillColor.isValid())
             fillColor = Defaults::HighlightColor;
-        const qreal alpha = useCustom
-            ? zone.value(JsonKeys::ActiveOpacity, Defaults::Opacity).toReal()
-            : Defaults::Opacity;
+        const qreal alpha =
+            useCustom ? zone.value(JsonKeys::ActiveOpacity, Defaults::Opacity).toReal() : Defaults::Opacity;
         out[QLatin1String("fillR")] = fillColor.redF() * alpha;
         out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
         out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
@@ -147,18 +146,18 @@ void EditorController::showShaderPreviewOverlay(int x, int y, int width, int hei
                                                 const QString& zonesJson)
 {
     QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                        QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
+                         QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
     if (iface.isValid()) {
         iface.asyncCall(QStringLiteral("showShaderPreview"), x, y, width, height, screenName, shaderId,
                         shaderParamsJson, zonesJson);
     }
 }
 
-void EditorController::updateShaderPreviewOverlay(int x, int y, int width, int height,
-                                                  const QString& shaderParamsJson, const QString& zonesJson)
+void EditorController::updateShaderPreviewOverlay(int x, int y, int width, int height, const QString& shaderParamsJson,
+                                                  const QString& zonesJson)
 {
     QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                        QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
+                         QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
     if (iface.isValid()) {
         iface.asyncCall(QStringLiteral("updateShaderPreview"), x, y, width, height, shaderParamsJson, zonesJson);
     }
@@ -167,7 +166,7 @@ void EditorController::updateShaderPreviewOverlay(int x, int y, int width, int h
 void EditorController::hideShaderPreviewOverlay()
 {
     QDBusInterface iface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                        QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
+                         QString::fromLatin1(DBus::Interface::Overlay), QDBusConnection::sessionBus());
     if (iface.isValid()) {
         // Use synchronous call so hide completes before any in-flight async show can leave
         // a visible overlay after the dialog has closed.

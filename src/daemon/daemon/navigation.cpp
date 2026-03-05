@@ -207,8 +207,8 @@ void Daemon::handleRetile()
         if (screenName.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
             screenName = *m_autotileEngine->autotileScreens().begin();
         }
-        m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"),
-                                           QString(), QString(), screenName);
+        m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
+                                            QString(), screenName);
     }
 }
 

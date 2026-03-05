@@ -17,8 +17,7 @@
 namespace PlasmaZones {
 
 WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
-                                             ISettings* settings, VirtualDesktopManager* vdm,
-                                             QObject* parent)
+                                             ISettings* settings, VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_zoneDetector(zoneDetector)
@@ -52,13 +51,13 @@ WindowTrackingService::~WindowTrackingService()
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
-                                                const QString& screenName, int virtualDesktop)
+                                               const QString& screenName, int virtualDesktop)
 {
     assignWindowToZones(windowId, QStringList{zoneId}, screenName, virtualDesktop);
 }
 
 void WindowTrackingService::assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
-                                                 const QString& screenName, int virtualDesktop)
+                                                const QString& screenName, int virtualDesktop)
 {
     if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
         return;
@@ -88,7 +87,7 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     // Get the zones before removing (needed for last-used zone check)
     QStringList previousZoneIds = m_windowZoneAssignments.take(windowId);
     if (previousZoneIds.isEmpty()) {
-        return;  // Window wasn't assigned, nothing to do
+        return; // Window wasn't assigned, nothing to do
     }
 
     m_windowScreenAssignments.remove(windowId);
@@ -124,8 +123,7 @@ QStringList WindowTrackingService::zonesForWindow(const QString& windowId) const
 QStringList WindowTrackingService::windowsInZone(const QString& zoneId) const
 {
     QStringList result;
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         if (it.value().contains(zoneId)) {
             result.append(it.key());
         }
@@ -447,6 +445,5 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 {
     return m_windowStickyStates.value(windowId, false);
 }
-
 
 } // namespace PlasmaZones

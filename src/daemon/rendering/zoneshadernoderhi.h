@@ -13,7 +13,6 @@
 #include <array>
 #include <memory>
 
-
 #include <plasmazones_rendering_export.h>
 #include <rhi/qrhi.h>
 
@@ -241,7 +240,8 @@ private:
 };
 
 /** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */
-struct WarmShaderBakeResult {
+struct WarmShaderBakeResult
+{
     bool success = false;
     QString errorMessage;
 };

@@ -49,7 +49,9 @@ void applyPerScreenOverrides(ZoneSelectorConfig& config, const QVariantMap& over
         auto it = overrides.constFind(QLatin1String(key));
         if (it != overrides.constEnd()) {
             QVariant v = validatePerScreenValue(QLatin1String(key), it.value());
-            if (v.isValid()) { field = v.toInt(); }
+            if (v.isValid()) {
+                field = v.toInt();
+            }
         }
     };
     applyInt(K::Position, config.position);
@@ -63,43 +65,26 @@ void applyPerScreenOverrides(ZoneSelectorConfig& config, const QVariantMap& over
     auto lockIt = overrides.constFind(QLatin1String(K::PreviewLockAspect));
     if (lockIt != overrides.constEnd()) {
         QVariant v = validatePerScreenValue(QLatin1String(K::PreviewLockAspect), lockIt.value());
-        if (v.isValid()) { config.previewLockAspect = v.toBool(); }
+        if (v.isValid()) {
+            config.previewLockAspect = v.toBool();
+        }
     }
 }
 
 constexpr const char* kPerScreenKeys[] = {
-    ZoneSelectorConfigKey::Position,
-    ZoneSelectorConfigKey::LayoutMode,
-    ZoneSelectorConfigKey::SizeMode,
-    ZoneSelectorConfigKey::MaxRows,
-    ZoneSelectorConfigKey::PreviewWidth,
-    ZoneSelectorConfigKey::PreviewHeight,
-    ZoneSelectorConfigKey::PreviewLockAspect,
-    ZoneSelectorConfigKey::GridColumns,
+    ZoneSelectorConfigKey::Position,          ZoneSelectorConfigKey::LayoutMode,
+    ZoneSelectorConfigKey::SizeMode,          ZoneSelectorConfigKey::MaxRows,
+    ZoneSelectorConfigKey::PreviewWidth,      ZoneSelectorConfigKey::PreviewHeight,
+    ZoneSelectorConfigKey::PreviewLockAspect, ZoneSelectorConfigKey::GridColumns,
     ZoneSelectorConfigKey::TriggerDistance,
 };
 
 constexpr const char* kPerScreenAutotileKeys[] = {
-    "AutotileAlgorithm",
-    "AutotileSplitRatio",
-    "AutotileMasterCount",
-    "AutotileInnerGap",
-    "AutotileOuterGap",
-    "AutotileUsePerSideOuterGap",
-    "AutotileOuterGapTop",
-    "AutotileOuterGapBottom",
-    "AutotileOuterGapLeft",
-    "AutotileOuterGapRight",
-    "AutotileFocusNewWindows",
-    "AutotileSmartGaps",
-    "AutotileMaxWindows",
-    "AutotileInsertPosition",
-    "AutotileFocusFollowsMouse",
-    "AutotileRespectMinimumSize",
-    "AutotileHideTitleBars",
-    "AnimationsEnabled",
-    "AnimationDuration",
-    "AnimationEasingCurve",
+    "AutotileAlgorithm",     "AutotileSplitRatio",         "AutotileMasterCount",       "AutotileInnerGap",
+    "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",       "AutotileOuterGapBottom",
+    "AutotileOuterGapLeft",  "AutotileOuterGapRight",      "AutotileFocusNewWindows",   "AutotileSmartGaps",
+    "AutotileMaxWindows",    "AutotileInsertPosition",     "AutotileFocusFollowsMouse", "AutotileRespectMinimumSize",
+    "AutotileHideTitleBars", "AnimationsEnabled",          "AnimationDuration",         "AnimationEasingCurve",
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -145,15 +130,9 @@ QVariant readPerScreenAutotileEntry(const KConfigGroup& group, const QLatin1Stri
 }
 
 constexpr const char* kPerScreenSnappingKeys[] = {
-    "SnapAssistEnabled",
-    "ZoneSelectorEnabled",
-    "ZoneSelectorTriggerDistance",
-    "ZoneSelectorPosition",
-    "ZoneSelectorLayoutMode",
-    "ZoneSelectorSizeMode",
-    "ZoneSelectorMaxRows",
-    "ZoneSelectorPreviewWidth",
-    "ZoneSelectorPreviewHeight",
+    "SnapAssistEnabled",    "ZoneSelectorEnabled",      "ZoneSelectorTriggerDistance",
+    "ZoneSelectorPosition", "ZoneSelectorLayoutMode",   "ZoneSelectorSizeMode",
+    "ZoneSelectorMaxRows",  "ZoneSelectorPreviewWidth", "ZoneSelectorPreviewHeight",
 };
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
@@ -205,7 +184,8 @@ void savePerScreenOverrides(KSharedConfigPtr config, const QLatin1String& prefix
     }
     for (auto it = source.constBegin(); it != source.constEnd(); ++it) {
         const QVariantMap& overrides = it.value();
-        if (overrides.isEmpty()) continue;
+        if (overrides.isEmpty())
+            continue;
         KConfigGroup screenGroup = config->group(prefix + it.key());
         for (auto oit = overrides.constBegin(); oit != overrides.constEnd(); ++oit) {
             screenGroup.writeEntry(oit.key(), oit.value());
@@ -216,14 +196,13 @@ void savePerScreenOverrides(KSharedConfigPtr config, const QLatin1String& prefix
 void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
 {
     QHash<QString, QVariantMap> migrated;
-    for (auto it = settings.begin(); it != settings.end(); ) {
+    for (auto it = settings.begin(); it != settings.end();) {
         if (Utils::isConnectorName(it.key())) {
             QString resolved = Utils::screenIdForName(it.key());
             if (resolved != it.key()) {
                 if (migrated.contains(resolved)) {
-                    qCWarning(lcConfig) << "EDID collision during migration:"
-                                        << it.key() << "and another connector both resolve to"
-                                        << resolved << "— later entry wins";
+                    qCWarning(lcConfig) << "EDID collision during migration:" << it.key()
+                                        << "and another connector both resolve to" << resolved << "— later entry wins";
                 }
                 migrated[resolved] = it.value();
                 it = settings.erase(it);
@@ -240,17 +219,17 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
 using PerScreenReadFn = QVariant (*)(const KConfigGroup&, const QLatin1String&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
-void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups,
-                         const QLatin1String& prefix,
-                         const char* const* keys, size_t keyCount,
-                         PerScreenReadFn readEntry, PerScreenValidateFn validate,
-                         QHash<QString, QVariantMap>& dest)
+void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups, const QLatin1String& prefix,
+                        const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
+                        PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
     dest.clear();
     for (const QString& groupName : allGroups) {
-        if (!groupName.startsWith(prefix)) continue;
+        if (!groupName.startsWith(prefix))
+            continue;
         QString screenName = groupName.mid(prefix.size());
-        if (screenName.isEmpty()) continue;
+        if (screenName.isEmpty())
+            continue;
 
         KConfigGroup screenGroup = config->group(groupName);
         QVariantMap overrides;
@@ -277,18 +256,14 @@ void loadPerScreenGroup(KSharedConfigPtr config, const QStringList& allGroups,
 void Settings::loadPerScreenOverrides(KSharedConfigPtr config)
 {
     const QStringList allGroups = config->groupList();
-    loadPerScreenGroup(config, allGroups, QLatin1String("ZoneSelector:"),
-                       kPerScreenKeys, std::size(kPerScreenKeys),
-                       readPerScreenZoneSelectorEntry,
-                       validatePerScreenValue, m_perScreenZoneSelectorSettings);
-    loadPerScreenGroup(config, allGroups, QLatin1String("AutotileScreen:"),
-                       kPerScreenAutotileKeys, std::size(kPerScreenAutotileKeys),
-                       readPerScreenAutotileEntry,
-                       validatePerScreenAutotileValue, m_perScreenAutotileSettings);
-    loadPerScreenGroup(config, allGroups, QLatin1String("SnappingScreen:"),
-                       kPerScreenSnappingKeys, std::size(kPerScreenSnappingKeys),
-                       readPerScreenSnappingEntry,
-                       validatePerScreenSnappingValue, m_perScreenSnappingSettings);
+    loadPerScreenGroup(config, allGroups, QLatin1String("ZoneSelector:"), kPerScreenKeys, std::size(kPerScreenKeys),
+                       readPerScreenZoneSelectorEntry, validatePerScreenValue, m_perScreenZoneSelectorSettings);
+    loadPerScreenGroup(config, allGroups, QLatin1String("AutotileScreen:"), kPerScreenAutotileKeys,
+                       std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
+                       m_perScreenAutotileSettings);
+    loadPerScreenGroup(config, allGroups, QLatin1String("SnappingScreen:"), kPerScreenSnappingKeys,
+                       std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
+                       m_perScreenSnappingSettings);
 }
 
 void Settings::saveAllPerScreenOverrides(KSharedConfigPtr config)
@@ -298,9 +273,9 @@ void Settings::saveAllPerScreenOverrides(KSharedConfigPtr config)
     savePerScreenOverrides(config, QLatin1String("SnappingScreen:"), m_perScreenSnappingSettings);
 }
 
-template <typename T>
-static typename QHash<QString, T>::const_iterator
-findPerScreenEntry(const QHash<QString, T>& hash, const QString& screenName)
+template<typename T>
+static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash<QString, T>& hash,
+                                                                     const QString& screenName)
 {
     auto it = hash.constFind(screenName);
     if (it != hash.constEnd()) {
@@ -310,18 +285,20 @@ findPerScreenEntry(const QHash<QString, T>& hash, const QString& screenName)
         QString resolved = Utils::screenIdForName(screenName);
         if (resolved != screenName) {
             it = hash.constFind(resolved);
-            if (it != hash.constEnd()) return it;
+            if (it != hash.constEnd())
+                return it;
         }
     }
     QString connector = Utils::screenNameForId(screenName);
     if (!connector.isEmpty() && connector != screenName) {
         it = hash.constFind(connector);
-        if (it != hash.constEnd()) return it;
+        if (it != hash.constEnd())
+            return it;
     }
     return hash.constEnd();
 }
 
-template <typename T>
+template<typename T>
 static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenName)
 {
     if (hash.remove(screenName)) {
@@ -329,10 +306,12 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenN
     }
     if (Utils::isConnectorName(screenName)) {
         QString resolved = Utils::screenIdForName(screenName);
-        if (resolved != screenName && hash.remove(resolved)) return true;
+        if (resolved != screenName && hash.remove(resolved))
+            return true;
     }
     QString connector = Utils::screenNameForId(screenName);
-    if (!connector.isEmpty() && connector != screenName && hash.remove(connector)) return true;
+    if (!connector.isEmpty() && connector != screenName && hash.remove(connector))
+        return true;
     return false;
 }
 
@@ -340,17 +319,15 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenN
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenName) const
 {
-    ZoneSelectorConfig config = {
-        static_cast<int>(m_zoneSelectorPosition),
-        static_cast<int>(m_zoneSelectorLayoutMode),
-        static_cast<int>(m_zoneSelectorSizeMode),
-        m_zoneSelectorMaxRows,
-        m_zoneSelectorPreviewWidth,
-        m_zoneSelectorPreviewHeight,
-        m_zoneSelectorPreviewLockAspect,
-        m_zoneSelectorGridColumns,
-        m_zoneSelectorTriggerDistance
-    };
+    ZoneSelectorConfig config = {static_cast<int>(m_zoneSelectorPosition),
+                                 static_cast<int>(m_zoneSelectorLayoutMode),
+                                 static_cast<int>(m_zoneSelectorSizeMode),
+                                 m_zoneSelectorMaxRows,
+                                 m_zoneSelectorPreviewWidth,
+                                 m_zoneSelectorPreviewHeight,
+                                 m_zoneSelectorPreviewLockAspect,
+                                 m_zoneSelectorGridColumns,
+                                 m_zoneSelectorTriggerDistance};
 
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName);
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {
@@ -398,7 +375,8 @@ void Settings::clearPerScreenZoneSelectorSettings(const QString& screenName)
 
 bool Settings::hasPerScreenZoneSelectorSettings(const QString& screenName) const
 {
-    return findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName) != m_perScreenZoneSelectorSettings.constEnd();
+    return findPerScreenEntry(m_perScreenZoneSelectorSettings, screenName)
+        != m_perScreenZoneSelectorSettings.constEnd();
 }
 
 QStringList Settings::screensWithZoneSelectorOverrides() const

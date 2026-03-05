@@ -57,10 +57,13 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     // Note: algorithmId is excluded — it is synced to m_algorithmId (the
     // authoritative engine field) separately below with validation.
     // splitRatio uses qFuzzyCompare for floating-point safety.
-#define SYNC_FIELD(field, getter) \
-    do { \
-        auto newVal = settings->getter(); \
-        if (cfg->field != newVal) { cfg->field = newVal; configChanged = true; } \
+#define SYNC_FIELD(field, getter)                                                                                      \
+    do {                                                                                                               \
+        auto newVal = settings->getter();                                                                              \
+        if (cfg->field != newVal) {                                                                                    \
+            cfg->field = newVal;                                                                                       \
+            configChanged = true;                                                                                      \
+        }                                                                                                              \
     } while (0)
 
     SYNC_FIELD(masterCount, autotileMasterCount);
@@ -175,7 +178,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // only emits settingsChanged, which triggers syncFromSettings).
 #define CONNECT_SETTING_RETILE(signal, field, getter)                                                                  \
     QObject::connect(settings, &Settings::signal, m_engine, [this]() {                                                 \
-        if (!m_settings) return;                                                                                       \
+        if (!m_settings)                                                                                               \
+            return;                                                                                                    \
         m_engine->config()->field = m_settings->getter();                                                              \
         scheduleSettingsRetile();                                                                                      \
     })
@@ -183,7 +187,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // Pattern 2: Update config field only (no retile)
 #define CONNECT_SETTING_NO_RETILE(signal, field, getter)                                                               \
     QObject::connect(settings, &Settings::signal, m_engine, [this]() {                                                 \
-        if (!m_settings) return;                                                                                       \
+        if (!m_settings)                                                                                               \
+            return;                                                                                                    \
         m_engine->config()->field = m_settings->getter();                                                              \
     })
 
@@ -196,7 +201,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // (applyEntry) and mode toggle in the daemon.
 
     QObject::connect(settings, &Settings::autotileAlgorithmChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         m_engine->setAlgorithm(m_settings->autotileAlgorithm());
     });
 
@@ -205,21 +211,24 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // ═══════════════════════════════════════════════════════════════════════════════
 
     QObject::connect(settings, &Settings::autotileSplitRatioChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         m_engine->config()->splitRatio = m_settings->autotileSplitRatio();
         m_engine->propagateGlobalSplitRatio();
         scheduleSettingsRetile();
     });
 
     QObject::connect(settings, &Settings::autotileMasterCountChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         m_engine->config()->masterCount = m_settings->autotileMasterCount();
         m_engine->propagateGlobalMasterCount();
         scheduleSettingsRetile();
     });
 
     QObject::connect(settings, &Settings::autotileCenteredMasterSplitRatioChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         m_engine->config()->centeredMasterSplitRatio = m_settings->autotileCenteredMasterSplitRatio();
         if (m_engine->m_algorithmId == QLatin1String("centered-master")) {
             m_engine->config()->splitRatio = m_engine->config()->centeredMasterSplitRatio;
@@ -229,7 +238,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
     });
 
     QObject::connect(settings, &Settings::autotileCenteredMasterMasterCountChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         m_engine->config()->centeredMasterMasterCount = m_settings->autotileCenteredMasterMasterCount();
         if (m_engine->m_algorithmId == QLatin1String("centered-master")) {
             m_engine->config()->masterCount = m_engine->config()->centeredMasterMasterCount;
@@ -251,7 +261,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
     // MaxWindows needs a custom handler: when the limit increases, backfill
     // windows that were previously rejected by onWindowAdded's gate check.
     QObject::connect(settings, &Settings::autotileMaxWindowsChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         const int oldMax = m_engine->config()->maxWindows;
         m_engine->config()->maxWindows = m_settings->autotileMaxWindows();
 
@@ -272,7 +283,8 @@ void SettingsBridge::connectToSettings(Settings* settings)
 
     // InsertPosition requires cast
     QObject::connect(settings, &Settings::autotileInsertPositionChanged, m_engine, [this]() {
-        if (!m_settings) return;
+        if (!m_settings)
+            return;
         m_engine->config()->insertPosition =
             static_cast<AutotileConfig::InsertPosition>(m_settings->autotileInsertPositionInt());
     });
@@ -281,8 +293,7 @@ void SettingsBridge::connectToSettings(Settings* settings)
 #undef CONNECT_SETTING_NO_RETILE
 }
 
-void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitRatio,
-                                             int maxWindows, int oldMaxWindows)
+void SettingsBridge::syncAlgorithmToSettings(const QString& algoId, qreal splitRatio, int maxWindows, int oldMaxWindows)
 {
     if (!m_settings) {
         return;

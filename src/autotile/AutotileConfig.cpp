@@ -26,7 +26,7 @@ QString insertPositionToString(AutotileConfig::InsertPosition pos)
     }
 }
 
-AutotileConfig::InsertPosition stringToInsertPosition(const QString &str)
+AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
 {
     if (str == InsertAfterFocused) {
         return AutotileConfig::InsertPosition::AfterFocused;
@@ -38,30 +38,22 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString &str)
 }
 } // anonymous namespace
 
-bool AutotileConfig::operator==(const AutotileConfig &other) const
+bool AutotileConfig::operator==(const AutotileConfig& other) const
 {
     // Use qFuzzyCompare properly (add 1.0 for values that could be near zero)
-    return algorithmId == other.algorithmId
-        && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
+    return algorithmId == other.algorithmId && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
         && masterCount == other.masterCount
         && qFuzzyCompare(1.0 + centeredMasterSplitRatio, 1.0 + other.centeredMasterSplitRatio)
-        && centeredMasterMasterCount == other.centeredMasterMasterCount
-        && innerGap == other.innerGap
-        && outerGap == other.outerGap
-        && usePerSideOuterGap == other.usePerSideOuterGap
-        && outerGapTop == other.outerGapTop
-        && outerGapBottom == other.outerGapBottom
-        && outerGapLeft == other.outerGapLeft
-        && outerGapRight == other.outerGapRight
-        && insertPosition == other.insertPosition
-        && focusFollowsMouse == other.focusFollowsMouse
-        && focusNewWindows == other.focusNewWindows
-        && smartGaps == other.smartGaps
-        && respectMinimumSize == other.respectMinimumSize
-        && maxWindows == other.maxWindows;
+        && centeredMasterMasterCount == other.centeredMasterMasterCount && innerGap == other.innerGap
+        && outerGap == other.outerGap && usePerSideOuterGap == other.usePerSideOuterGap
+        && outerGapTop == other.outerGapTop && outerGapBottom == other.outerGapBottom
+        && outerGapLeft == other.outerGapLeft && outerGapRight == other.outerGapRight
+        && insertPosition == other.insertPosition && focusFollowsMouse == other.focusFollowsMouse
+        && focusNewWindows == other.focusNewWindows && smartGaps == other.smartGaps
+        && respectMinimumSize == other.respectMinimumSize && maxWindows == other.maxWindows;
 }
 
-bool AutotileConfig::operator!=(const AutotileConfig &other) const
+bool AutotileConfig::operator!=(const AutotileConfig& other) const
 {
     return !(*this == other);
 }
@@ -90,7 +82,7 @@ QJsonObject AutotileConfig::toJson() const
     return json;
 }
 
-AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
+AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
 {
     AutotileConfig config;
 
@@ -106,11 +98,13 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
         config.masterCount = std::clamp(config.masterCount, MinMasterCount, MaxMasterCount);
     }
     if (json.contains(QStringLiteral("centeredMasterSplitRatio"))) {
-        config.centeredMasterSplitRatio = json[QStringLiteral("centeredMasterSplitRatio")].toDouble(config.centeredMasterSplitRatio);
+        config.centeredMasterSplitRatio =
+            json[QStringLiteral("centeredMasterSplitRatio")].toDouble(config.centeredMasterSplitRatio);
         config.centeredMasterSplitRatio = std::clamp(config.centeredMasterSplitRatio, MinSplitRatio, MaxSplitRatio);
     }
     if (json.contains(QStringLiteral("centeredMasterMasterCount"))) {
-        config.centeredMasterMasterCount = json[QStringLiteral("centeredMasterMasterCount")].toInt(config.centeredMasterMasterCount);
+        config.centeredMasterMasterCount =
+            json[QStringLiteral("centeredMasterMasterCount")].toInt(config.centeredMasterMasterCount);
         config.centeredMasterMasterCount = std::clamp(config.centeredMasterMasterCount, MinMasterCount, MaxMasterCount);
     }
     if (json.contains(InnerGap)) {
@@ -128,13 +122,16 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject &json)
         config.outerGapTop = std::clamp(json[AutotileJsonKeys::OuterGapTop].toInt(config.outerGapTop), MinGap, MaxGap);
     }
     if (json.contains(AutotileJsonKeys::OuterGapBottom)) {
-        config.outerGapBottom = std::clamp(json[AutotileJsonKeys::OuterGapBottom].toInt(config.outerGapBottom), MinGap, MaxGap);
+        config.outerGapBottom =
+            std::clamp(json[AutotileJsonKeys::OuterGapBottom].toInt(config.outerGapBottom), MinGap, MaxGap);
     }
     if (json.contains(AutotileJsonKeys::OuterGapLeft)) {
-        config.outerGapLeft = std::clamp(json[AutotileJsonKeys::OuterGapLeft].toInt(config.outerGapLeft), MinGap, MaxGap);
+        config.outerGapLeft =
+            std::clamp(json[AutotileJsonKeys::OuterGapLeft].toInt(config.outerGapLeft), MinGap, MaxGap);
     }
     if (json.contains(AutotileJsonKeys::OuterGapRight)) {
-        config.outerGapRight = std::clamp(json[AutotileJsonKeys::OuterGapRight].toInt(config.outerGapRight), MinGap, MaxGap);
+        config.outerGapRight =
+            std::clamp(json[AutotileJsonKeys::OuterGapRight].toInt(config.outerGapRight), MinGap, MaxGap);
     }
     if (json.contains(AutotileJsonKeys::InsertPosition)) {
         config.insertPosition = stringToInsertPosition(json[AutotileJsonKeys::InsertPosition].toString());

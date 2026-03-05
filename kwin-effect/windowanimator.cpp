@@ -62,8 +62,8 @@ qreal EasingCurve::evaluateBounceOut(qreal t, qreal amp, int n)
     for (int k = 0; k < n; ++k) {
         const qreal dk = d * qPow(r, k);
         if (t < tAccum + dk || k == n - 1) {
-            const qreal u = (t - tAccum) / dk;                    // 0..1 within this arc
-            const qreal height = qPow(r, 2 * (k + 1));           // standard dip depth
+            const qreal u = (t - tAccum) / dk; // 0..1 within this arc
+            const qreal height = qPow(r, 2 * (k + 1)); // standard dip depth
             // Parabola: 1.0 at u=0 and u=1, dips to (1 - height*amp) at u=0.5
             const qreal dip = 1.0 - 4.0 * (u - 0.5) * (u - 0.5); // 0 at edges, 1 at center
             return 1.0 - height * amp * dip;
@@ -130,12 +130,14 @@ EasingCurve EasingCurve::fromString(const QString& str)
             }
             // Second param: period (elastic) or bounce count (bounce)
             if (parts.size() >= 2) {
-                if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut || curve.type == Type::ElasticInOut) {
+                if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut
+                    || curve.type == Type::ElasticInOut) {
                     bool ok;
                     qreal p = parts[1].trimmed().toDouble(&ok);
                     if (ok)
                         curve.period = qBound(0.1, p, 1.0);
-                } else if (curve.type == Type::BounceIn || curve.type == Type::BounceOut || curve.type == Type::BounceInOut) {
+                } else if (curve.type == Type::BounceIn || curve.type == Type::BounceOut
+                           || curve.type == Type::BounceInOut) {
                     bool ok;
                     int b = parts[1].trimmed().toInt(&ok);
                     if (ok)
@@ -172,7 +174,11 @@ QString EasingCurve::toString() const
 {
     switch (type) {
     case Type::CubicBezier:
-        return QStringLiteral("%1,%2,%3,%4").arg(x1, 0, 'f', 2).arg(y1, 0, 'f', 2).arg(x2, 0, 'f', 2).arg(y2, 0, 'f', 2);
+        return QStringLiteral("%1,%2,%3,%4")
+            .arg(x1, 0, 'f', 2)
+            .arg(y1, 0, 'f', 2)
+            .arg(x2, 0, 'f', 2)
+            .arg(y2, 0, 'f', 2);
     case Type::ElasticIn:
         return QStringLiteral("elastic-in:%1,%2").arg(amplitude, 0, 'f', 2).arg(period, 0, 'f', 2);
     case Type::ElasticOut:
@@ -283,9 +289,8 @@ bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& o
 
     window->addRepaintFull();
 
-    qCDebug(lcEffect) << "Started slide animation from" << oldPosition << "to" << newPos
-                      << "distance:" << dist << "duration:" << m_duration
-                      << "easing:" << m_easing.toString();
+    qCDebug(lcEffect) << "Started slide animation from" << oldPosition << "to" << newPos << "distance:" << dist
+                      << "duration:" << m_duration << "easing:" << m_easing.toString();
     return true;
 }
 
@@ -386,9 +391,7 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     // Guard: once a window enters the "deleted" state, its Item tree may be
     // torn down and expandedGeometry() would dereference a null Item pointer
     // (SIGSEGV in KWin::Item::boundingRect).  Fall back to the stored target.
-    QRectF expanded = (window && !window->isDeleted())
-        ? window->expandedGeometry()
-        : QRectF(it->targetGeometry);
+    QRectF expanded = (window && !window->isDeleted()) ? window->expandedGeometry() : QRectF(it->targetGeometry);
 
     // The same visual footprint translated to the animation start position
     const QPointF maxOffset(it->startPosition.x() - it->targetGeometry.x(),
@@ -403,17 +406,15 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     // Elastic curves overshoot; bounce curves with amplitude > 1.0 can dip below 0.
     // Bezier curves only overshoot when control points exceed [0,1] Y range.
     // Bounce with amplitude <= 1.0 is always in [0,1] — skip sampling.
-    const bool isBounce = (it->easing.type == EasingCurve::Type::BounceIn
-        || it->easing.type == EasingCurve::Type::BounceOut
-        || it->easing.type == EasingCurve::Type::BounceInOut);
+    const bool isBounce =
+        (it->easing.type == EasingCurve::Type::BounceIn || it->easing.type == EasingCurve::Type::BounceOut
+         || it->easing.type == EasingCurve::Type::BounceInOut);
     const bool needsSampling =
-        (it->easing.type == EasingCurve::Type::ElasticIn
-         || it->easing.type == EasingCurve::Type::ElasticOut
+        (it->easing.type == EasingCurve::Type::ElasticIn || it->easing.type == EasingCurve::Type::ElasticOut
          || it->easing.type == EasingCurve::Type::ElasticInOut)
         || (isBounce && it->easing.amplitude > 1.0)
         || (it->easing.type == EasingCurve::Type::CubicBezier
-            && (it->easing.y1 < 0.0 || it->easing.y1 > 1.0
-                || it->easing.y2 < 0.0 || it->easing.y2 > 1.0));
+            && (it->easing.y1 < 0.0 || it->easing.y1 > 1.0 || it->easing.y2 < 0.0 || it->easing.y2 > 1.0));
 
     if (needsSampling) {
         qreal pMin = 0.0, pMax = 1.0;

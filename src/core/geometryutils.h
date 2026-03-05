@@ -47,7 +47,7 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  * @return Geometry with appropriate gaps applied
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
-                                                   bool useAvailableGeometry = true);
+                                                  bool useAvailableGeometry = true);
 
 /**
  * @brief Get effective zone padding for a layout
@@ -140,8 +140,8 @@ PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, 
  * expand it by shrinking adjacent neighbors proportionally. When multiple
  * windows have minimum size, overlaps can occur; a final pass removes them.
  */
-PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes,
-                                               int gapThreshold, int innerGap = 0);
+PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes, int gapThreshold,
+                                              int innerGap = 0);
 
 /**
  * @brief Remove overlapping zone rectangles so no two zones intersect
@@ -157,7 +157,7 @@ PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVect
  * minimum sizes so enforcement is not undone.
  */
 PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
-                                            int innerGap = 0);
+                                           int innerGap = 0);
 
 } // namespace GeometryUtils
 

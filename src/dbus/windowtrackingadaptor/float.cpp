@@ -43,7 +43,8 @@ bool WindowTrackingAdaptor::getPreFloatZone(const QString& windowId, QString& zo
     }
     // Delegate to service
     zoneIdOut = m_service->preFloatZone(windowId);
-    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneIdOut.isEmpty() << "zone:" << zoneIdOut;
+    qCDebug(lcDbusWindow) << "getPreFloatZone for" << windowId << "-> found:" << !zoneIdOut.isEmpty()
+                          << "zone:" << zoneIdOut;
     return !zoneIdOut.isEmpty();
 }
 
@@ -83,7 +84,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     QString restoreScreen = m_service->preFloatScreen(windowId);
     if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
         qCInfo(lcDbusWindow) << "calculateUnfloatRestore: saved screen" << restoreScreen
-                              << "no longer exists, falling back to" << screenName;
+                             << "no longer exists, falling back to" << screenName;
         restoreScreen.clear();
     }
     if (restoreScreen.isEmpty()) {
@@ -156,8 +157,8 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
     qCInfo(lcDbusWindow) << "toggleFloatForWindow called: windowId=" << windowId << "screen=" << screenName;
 
     if (!validateWindowId(windowId, QStringLiteral("toggle float"))) {
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("invalid_window"),
-                                QString(), QString(), screenName);
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("invalid_window"), QString(),
+                                  QString(), screenName);
         return;
     }
 
@@ -166,8 +167,7 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
 
     // If the window is neither snapped nor floating, it was never managed — nothing to toggle.
     if (!currentlyFloating && !currentlySnapped) {
-        qCInfo(lcDbusWindow) << "toggleFloatForWindow: window" << windowId
-                             << "is not snapped or floating, ignoring";
+        qCInfo(lcDbusWindow) << "toggleFloatForWindow: window" << windowId << "is not snapped or floating, ignoring";
         return;
     }
 
@@ -176,14 +176,14 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
         QString restoreJson = calculateUnfloatRestore(windowId, screenName);
         QJsonDocument doc = QJsonDocument::fromJson(restoreJson.toUtf8());
         if (!doc.isObject()) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_pre_float_zone"),
-                                    QString(), QString(), screenName);
+            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_pre_float_zone"), QString(),
+                                      QString(), screenName);
             return;
         }
         QJsonObject obj = doc.object();
         if (!obj.value(QLatin1String("found")).toBool(false)) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_pre_float_zone"),
-                                    QString(), QString(), screenName);
+            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_pre_float_zone"), QString(),
+                                      QString(), screenName);
             return;
         }
         QStringList zoneIds;
@@ -191,11 +191,11 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
             zoneIds.append(v.toString());
         }
         QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                 obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
         QString restoreScreen = obj.value(QLatin1String("screenName")).toString();
         if (zoneIds.isEmpty() || !geo.isValid()) {
-            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_pre_float_zone"),
-                                    QString(), QString(), screenName);
+            Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_pre_float_zone"), QString(),
+                                      QString(), screenName);
             return;
         }
         m_service->setWindowFloating(windowId, false);
@@ -213,8 +213,8 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
 
         Q_EMIT windowFloatingChanged(windowId, false);
         Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), restoreScreen);
-        Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("unfloated"),
-                                QString(), QString(), restoreScreen);
+        Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("unfloated"), QString(), QString(),
+                                  restoreScreen);
     } else {
         // Float (manual path): restore to pre-snap geometry (prefers pre-snap over
         // pre-autotile — opposite of applyGeometryForFloat which is the autotile path).
@@ -224,8 +224,8 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
             m_service->unsnapForFloat(windowId);
             m_service->setWindowFloating(windowId, true);
             Q_EMIT windowFloatingChanged(windowId, true);
-            Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"),
-                                    QString(), QString(), screenName);
+            Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
+                                      screenName);
             return;
         }
         m_service->unsnapForFloat(windowId);
@@ -235,8 +235,8 @@ void WindowTrackingAdaptor::toggleFloatForWindow(const QString& windowId, const 
         QRect geo(x, y, w, h);
         Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), screenName);
         Q_EMIT windowFloatingChanged(windowId, true);
-        Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"),
-                                QString(), QString(), screenName);
+        Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
+                                  screenName);
     }
 }
 

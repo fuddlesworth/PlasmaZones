@@ -92,8 +92,7 @@ void EditorController::cutZones(const QStringList& zoneIds)
 
     // Then delete with undo macro for single undo step
     {
-        BatchOperationScope scope(m_undoController, m_zoneManager,
-                                  i18nc("@action", "Cut %1 Zones", zoneIds.count()));
+        BatchOperationScope scope(m_undoController, m_zoneManager, i18nc("@action", "Cut %1 Zones", zoneIds.count()));
         for (const QString& zoneId : zoneIds) {
             deleteZone(zoneId);
         }

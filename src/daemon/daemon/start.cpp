@@ -39,11 +39,9 @@ void Daemon::connectScreenSignals()
         // Use per-screen layout (falls back to activeLayout if no assignment)
         Layout* screenLayout = m_layoutManager->layoutForScreen(
             Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
-            m_activityManager && ActivityManager::isAvailable()
-                ? m_activityManager->currentActivity() : QString());
+            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString());
         if (screenLayout) {
-            screenLayout->recalculateZoneGeometries(
-                GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
+            screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
         }
     });
 
@@ -61,7 +59,8 @@ void Daemon::connectScreenSignals()
         // Check both screen ID (new) and connector name (legacy)
         for (Layout* layout : m_layoutManager->layouts()) {
             QStringList allowed = layout->allowedScreens();
-            if (allowed.isEmpty()) continue;
+            if (allowed.isEmpty())
+                continue;
             bool changed = false;
             changed |= (allowed.removeAll(removedScreenId) > 0);
             changed |= (allowed.removeAll(removedName) > 0);
@@ -226,17 +225,39 @@ void Daemon::connectShortcutSignals()
     // ═══════════════════════════════════════════════════════════════════════════
 
     // Navigation shortcuts — single code path per operation (handleXxx)
-    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) { handleMove(d); });
-    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) { handleFocus(d); });
-    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() { handlePush(); });
-    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() { handleRestore(); });
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() { handleFloat(); });
-    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this, [this](NavigationDirection d) { handleSwap(d); });
-    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) { handleRotate(cw); });
-    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) { handleSnap(n); });
-    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) { handleCycle(fwd); });
-    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() { handleResnap(); });
-    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() { handleSnapAll(); });
+    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) {
+        handleMove(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) {
+        handleFocus(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
+        handlePush();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() {
+        handleRestore();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
+        handleFloat();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this, [this](NavigationDirection d) {
+        handleSwap(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) {
+        handleRotate(cw);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) {
+        handleSnap(n);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) {
+        handleCycle(fwd);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
+        handleResnap();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
+        handleSnapAll();
+    });
 
     // Layout picker shortcut (interactive layout browser + resnap)
     // Capture screen name at open time so it's still valid after the picker closes.

@@ -28,15 +28,15 @@ struct ZoneSelectorLayout
     int labelTopMargin = 8;
     int labelHeight = 20;
     int labelSpace = 28;
-    int cardPadding = 26;  // Extra vertical space for card chrome (showCardBackground: true)
+    int cardPadding = 26; // Extra vertical space for card chrome (showCardBackground: true)
     int cardTopMargin = 18; // Preview top offset within card (matches Kirigami.Units.gridUnit)
     int cardSidePadding = 18; // Extra horizontal space for card chrome (matches paddingSide)
     int paddingSide = 18;
-    int cellWidth = 0;     // Full card cell width (indicatorWidth + cardSidePadding * 2)
-    int cellHeight = 0;    // Full card cell height (indicatorHeight + labelSpace + cardPadding)
+    int cellWidth = 0; // Full card cell width (indicatorWidth + cardSidePadding * 2)
+    int cellHeight = 0; // Full card cell height (indicatorHeight + labelSpace + cardPadding)
     int columns = 1;
-    int rows = 1;          // Visible rows (may be limited by maxRows)
-    int totalRows = 1;     // Total rows (for scroll content height)
+    int rows = 1; // Visible rows (may be limited by maxRows)
+    int totalRows = 1; // Total rows (for scroll content height)
     int contentWidth = 0;
     int contentHeight = 0;
     int scrollContentHeight = 0;
@@ -125,12 +125,11 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.needsScrolling = (layout.totalRows > visibleRows);
 
     layout.scrollContentWidth = layout.columns * layout.cellWidth + (layout.columns - 1) * layout.indicatorSpacing;
-    layout.scrollContentHeight = layout.totalRows * layout.cellHeight
-        + (layout.totalRows - 1) * layout.indicatorSpacing;
+    layout.scrollContentHeight =
+        layout.totalRows * layout.cellHeight + (layout.totalRows - 1) * layout.indicatorSpacing;
 
     layout.contentWidth = layout.scrollContentWidth;
-    layout.contentHeight =
-        visibleRows * layout.cellHeight + (visibleRows - 1) * layout.indicatorSpacing;
+    layout.contentHeight = visibleRows * layout.cellHeight + (visibleRows - 1) * layout.indicatorSpacing;
 
     if (layout.contentWidth > maxContentW && maxContentW > 0) {
         layout.contentWidth = maxContentW;

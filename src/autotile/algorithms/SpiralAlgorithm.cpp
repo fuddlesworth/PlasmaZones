@@ -17,7 +17,7 @@ namespace {
 AlgorithmRegistrar<SpiralAlgorithm> s_spiralRegistrar(DBus::AutotileAlgorithm::Spiral, 90);
 }
 
-SpiralAlgorithm::SpiralAlgorithm(QObject *parent)
+SpiralAlgorithm::SpiralAlgorithm(QObject* parent)
     : TilingAlgorithm(parent)
 {
 }
@@ -37,13 +37,13 @@ QString SpiralAlgorithm::icon() const noexcept
     return QStringLiteral("shape-spiral");
 }
 
-QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
+QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams& params) const
 {
     const int windowCount = params.windowCount;
-    const auto &screenGeometry = params.screenGeometry;
+    const auto& screenGeometry = params.screenGeometry;
     const int innerGap = params.innerGap;
-    const auto &outerGaps = params.outerGaps;
-    const auto &minSizes = params.minSizes;
+    const auto& outerGaps = params.outerGaps;
+    const auto& minSizes = params.minSizes;
 
     QVector<QRect> zones;
 
@@ -60,14 +60,13 @@ QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
     }
 
     // Read split ratio from TilingState (user-adjustable via slider)
-    const qreal splitRatio = std::clamp(params.state->splitRatio(),
-                                        MinSplitRatio, MaxSplitRatio);
+    const qreal splitRatio = std::clamp(params.state->splitRatio(), MinSplitRatio, MaxSplitRatio);
 
     // Precompute direction-aware cumulative min dimensions for remaining windows.
     // Spiral rotates through 4 directions but splitV = (i%2==0), same as Dwindle.
     const auto cumMinDims = computeAlternatingCumulativeMinDims(windowCount, minSizes, innerGap);
-    const auto &remainingMinW = cumMinDims.minW;
-    const auto &remainingMinH = cumMinDims.minH;
+    const auto& remainingMinW = cumMinDims.minW;
+    const auto& remainingMinH = cumMinDims.minH;
 
     // Spiral pattern: rotates through 4 directions.
     //   0: Right  — split vertical,   window=left,   remaining=right
@@ -78,8 +77,7 @@ QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
 
     for (int i = 0; i < windowCount; ++i) {
         // Last window or remaining area too small — assign all of it
-        if (i == windowCount - 1
-            || remaining.width() < MinZoneSizePx || remaining.height() < MinZoneSizePx) {
+        if (i == windowCount - 1 || remaining.width() < MinZoneSizePx || remaining.height() < MinZoneSizePx) {
             zones.append(remaining);
             appendGracefulDegradation(zones, remaining, windowCount - i - 1, innerGap);
             break;
@@ -113,16 +111,14 @@ QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
 
             if (dir == 0) {
                 // Right: window=left, remaining=right
-                windowZone = QRect(remaining.x(), remaining.y(),
-                                   windowWidth, remaining.height());
-                remaining = QRect(remaining.x() + windowWidth + innerGap, remaining.y(),
-                                  otherWidth, remaining.height());
+                windowZone = QRect(remaining.x(), remaining.y(), windowWidth, remaining.height());
+                remaining =
+                    QRect(remaining.x() + windowWidth + innerGap, remaining.y(), otherWidth, remaining.height());
             } else {
                 // Left: window=right, remaining=left
-                windowZone = QRect(remaining.x() + otherWidth + innerGap, remaining.y(),
-                                   windowWidth, remaining.height());
-                remaining = QRect(remaining.x(), remaining.y(),
-                                  otherWidth, remaining.height());
+                windowZone =
+                    QRect(remaining.x() + otherWidth + innerGap, remaining.y(), windowWidth, remaining.height());
+                remaining = QRect(remaining.x(), remaining.y(), otherWidth, remaining.height());
             }
         } else {
             // Horizontal split (dir == 1 or dir == 3)
@@ -149,16 +145,14 @@ QVector<QRect> SpiralAlgorithm::calculateZones(const TilingParams &params) const
 
             if (dir == 1) {
                 // Down: window=top, remaining=bottom
-                windowZone = QRect(remaining.x(), remaining.y(),
-                                   remaining.width(), windowHeight);
-                remaining = QRect(remaining.x(), remaining.y() + windowHeight + innerGap,
-                                  remaining.width(), otherHeight);
+                windowZone = QRect(remaining.x(), remaining.y(), remaining.width(), windowHeight);
+                remaining =
+                    QRect(remaining.x(), remaining.y() + windowHeight + innerGap, remaining.width(), otherHeight);
             } else {
                 // Up: window=bottom, remaining=top
-                windowZone = QRect(remaining.x(), remaining.y() + otherHeight + innerGap,
-                                   remaining.width(), windowHeight);
-                remaining = QRect(remaining.x(), remaining.y(),
-                                  remaining.width(), otherHeight);
+                windowZone =
+                    QRect(remaining.x(), remaining.y() + otherHeight + innerGap, remaining.width(), windowHeight);
+                remaining = QRect(remaining.x(), remaining.y(), remaining.width(), otherHeight);
             }
         }
 

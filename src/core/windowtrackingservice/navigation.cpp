@@ -88,9 +88,7 @@ QString WindowTrackingService::getEmptyZonesJson(const QString& screenName) cons
         return QStringLiteral("[]");
     }
 
-    QScreen* screen = screenName.isEmpty()
-        ? Utils::primaryScreen()
-        : Utils::findScreenByIdOrName(screenName);
+    QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenName);
     if (!screen) {
         screen = Utils::primaryScreen();
     }
@@ -98,8 +96,9 @@ QString WindowTrackingService::getEmptyZonesJson(const QString& screenName) cons
         return QStringLiteral("[]");
     }
 
-    return GeometryUtils::buildEmptyZonesJson(layout, screen, m_settings,
-        [this](const Zone* z) { return windowsInZone(z->id().toString()).isEmpty(); });
+    return GeometryUtils::buildEmptyZonesJson(layout, screen, m_settings, [this](const Zone* z) {
+        return windowsInZone(z->id().toString()).isEmpty();
+    });
 }
 
 QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& screenName) const
@@ -123,9 +122,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    QScreen* screen = screenName.isEmpty()
-        ? Utils::primaryScreen()
-        : Utils::findScreenByIdOrName(screenName);
+    QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenName);
 
     if (!screen) {
         screen = Utils::primaryScreen();
@@ -168,8 +165,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
     // Group snapped windows by screen so each screen rotates independently
     // using its own per-screen layout (not the global active layout)
     QHash<QString, QVector<QPair<QString, QString>>> windowsByScreen; // screenName -> [(windowId, primaryZoneId)]
-    for (auto it = m_windowZoneAssignments.constBegin();
-         it != m_windowZoneAssignments.constEnd(); ++it) {
+    for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
         // User-initiated snap commands override floating state.
         // Floating windows are unsnapped (not in m_windowZoneAssignments), so this
         // is a no-op, but we remove the check for consistency across all snap paths.
@@ -190,8 +186,7 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
     }
 
     // Process each screen independently
-    for (auto screenIt = windowsByScreen.constBegin();
-         screenIt != windowsByScreen.constEnd(); ++screenIt) {
+    for (auto screenIt = windowsByScreen.constBegin(); screenIt != windowsByScreen.constEnd(); ++screenIt) {
         const QString& screenName = screenIt.key();
 
         // Get the layout assigned to THIS screen (not the global active layout)
@@ -239,14 +234,12 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
                 windowZoneIndices.append({windowId, zoneIndex});
             } else {
                 qCDebug(lcCore) << "Window" << windowId << "has zone ID" << storedZoneId
-                               << "not found in layout for screen" << screenName << "- skipping rotation";
+                                << "not found in layout for screen" << screenName << "- skipping rotation";
             }
         }
 
         // Get screen and gap settings for geometry calculation
-        QScreen* screen = screenName.isEmpty()
-            ? Utils::primaryScreen()
-            : Utils::findScreenByIdOrName(screenName);
+        QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenName);
         if (!screen) {
             screen = Utils::primaryScreen();
         }
@@ -261,15 +254,13 @@ QVector<RotationEntry> WindowTrackingService::calculateRotation(bool clockwise, 
         // Calculate rotated positions within this screen's zones
         for (const auto& pair : windowZoneIndices) {
             int currentIdx = pair.second;
-            int targetIdx = clockwise
-                ? (currentIdx + 1) % zones.size()
-                : (currentIdx - 1 + zones.size()) % zones.size();
+            int targetIdx =
+                clockwise ? (currentIdx + 1) % zones.size() : (currentIdx - 1 + zones.size()) % zones.size();
 
             Zone* sourceZone = zones[currentIdx];
             Zone* targetZone = zones[targetIdx];
             bool useAvail = !(layout && layout->useFullScreenGeometry());
-            QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(
-                targetZone, screen, zonePadding, outerGaps, useAvail);
+            QRectF geoF = GeometryUtils::getZoneGeometryWithGaps(targetZone, screen, zonePadding, outerGaps, useAvail);
             QRect geo = GeometryUtils::snapToRect(geoF);
 
             if (geo.isValid()) {

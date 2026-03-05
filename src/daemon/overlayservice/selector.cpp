@@ -134,8 +134,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
             // Cell origin includes card chrome; preview is offset by cardSidePadding horizontally
             // and cardTopMargin vertically (matches Kirigami.Units.gridUnit in LayoutCard.qml)
             int indicatorX = contentGridX + col * (layout.cellWidth + layout.indicatorSpacing) + layout.cardSidePadding;
-            int indicatorY =
-                contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
+            int indicatorY = contentGridY + row * (layout.cellHeight + layout.indicatorSpacing) + layout.cardTopMargin;
 
             // Check if cursor is over this indicator
             if (localX >= indicatorX && localX < indicatorX + layout.indicatorWidth && localY >= indicatorY
@@ -255,7 +254,8 @@ void OverlayService::createZoneSelectorWindow(QScreen* screen)
     // called immediately after createZoneSelectorWindow() in showZoneSelector().
 
     window->setVisible(false);
-    auto conn = connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this, SLOT(onZoneSelected(QString, int, QVariant)));
+    auto conn = connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this,
+                        SLOT(onZoneSelected(QString, int, QVariant)));
     if (!conn) {
         qCWarning(lcOverlay) << "Failed to connect zoneSelected signal for screen" << screen->name()
                              << "- zone selector layout switching will not work";
@@ -304,8 +304,7 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
                 int zonePadding = GeometryUtils::getEffectiveZonePadding(selectedLayout, m_settings, screenId);
                 EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(selectedLayout, m_settings, screenId);
                 bool useAvail = !(selectedLayout && selectedLayout->useFullScreenGeometry());
-                QRectF geom = GeometryUtils::getZoneGeometryWithGaps(
-                    zone, screen, zonePadding, outerGaps, useAvail);
+                QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
                 return GeometryUtils::snapToRect(geom);
             }
         }
@@ -314,11 +313,10 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     // Fallback: manual calculation when layout/zone lookup fails
     // Use snapToRect for edge-consistent rounding (matches primary path)
     QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-    QRectF geom(
-        availableGeom.x() + m_selectedZoneRelGeo.x() * availableGeom.width(),
-        availableGeom.y() + m_selectedZoneRelGeo.y() * availableGeom.height(),
-        m_selectedZoneRelGeo.width() * availableGeom.width(),
-        m_selectedZoneRelGeo.height() * availableGeom.height());
+    QRectF geom(availableGeom.x() + m_selectedZoneRelGeo.x() * availableGeom.width(),
+                availableGeom.y() + m_selectedZoneRelGeo.y() * availableGeom.height(),
+                m_selectedZoneRelGeo.width() * availableGeom.width(),
+                m_selectedZoneRelGeo.height() * availableGeom.height());
     return GeometryUtils::snapToRect(geom);
 }
 

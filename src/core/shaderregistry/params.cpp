@@ -189,8 +189,8 @@ QString ShaderRegistry::plasmaWallpaperPath()
         return s_cachedWallpaperPath;
     }
 
-    auto config = KSharedConfig::openConfig(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"),
-                                            KConfig::SimpleConfig);
+    auto config =
+        KSharedConfig::openConfig(QStringLiteral("plasma-org.kde.plasma.desktop-appletsrc"), KConfig::SimpleConfig);
     // KConfig nested group format: [Containments][355] means group "355" inside "Containments".
     // config->groupList() returns top-level groups like "Containments", not the numbered subgroups.
     // We must iterate subgroups of the "Containments" group.
@@ -256,8 +256,7 @@ QImage ShaderRegistry::loadWallpaperImage()
     // Check if cached image is still valid (same path + same mtime)
     const QFileInfo fi(path);
     const qint64 mtime = fi.lastModified().toMSecsSinceEpoch();
-    if (!s_cachedWallpaperImage.isNull()
-        && s_cachedWallpaperMtime == mtime) {
+    if (!s_cachedWallpaperImage.isNull() && s_cachedWallpaperMtime == mtime) {
         return s_cachedWallpaperImage;
     }
     // Load outside of lock scope is not possible since we write to static cache
@@ -267,8 +266,7 @@ QImage ShaderRegistry::loadWallpaperImage()
     }
     s_cachedWallpaperImage = img.convertToFormat(QImage::Format_RGBA8888);
     s_cachedWallpaperMtime = mtime;
-    qCDebug(lcCore) << "Loaded and cached wallpaper image:" << path
-                     << s_cachedWallpaperImage.size();
+    qCDebug(lcCore) << "Loaded and cached wallpaper image:" << path << s_cachedWallpaperImage.size();
     return s_cachedWallpaperImage;
 }
 
@@ -310,7 +308,8 @@ QVariantMap ShaderRegistry::translateParamsToUniforms(const QString& shaderId, c
                 } else {
                     // Fallback to default or transparent black (never null QVariant for D-Bus safety)
                     QColor defColor(param.defaultValue.toString());
-                    result[uniformName] = defColor.isValid() ? defColor.name(QColor::HexArgb) : QStringLiteral("#00000000");
+                    result[uniformName] =
+                        defColor.isValid() ? defColor.name(QColor::HexArgb) : QStringLiteral("#00000000");
                 }
             } else {
                 result[uniformName] = value;

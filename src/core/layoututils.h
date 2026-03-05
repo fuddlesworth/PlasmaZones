@@ -12,7 +12,9 @@
 #include <QVector>
 
 // Forward declaration for autotile support
-namespace PlasmaZones { class AlgorithmRegistry; }
+namespace PlasmaZones {
+class AlgorithmRegistry;
+}
 
 namespace PlasmaZones {
 
@@ -28,11 +30,11 @@ class Zone;
  */
 enum class ZoneField {
     None = 0,
-    Name = 1 << 0,              ///< Include zone name
-    Appearance = 1 << 1,        ///< Include colors, opacities, border properties
+    Name = 1 << 0, ///< Include zone name
+    Appearance = 1 << 1, ///< Include colors, opacities, border properties
 
-    Minimal = None,             ///< Id, ZoneNumber, RelativeGeometry only (for previews)
-    Full = Name | Appearance    ///< All fields (for overlay rendering)
+    Minimal = None, ///< Id, ZoneNumber, RelativeGeometry only (for previews)
+    Full = Name | Appearance ///< All fields (for overlay rendering)
 };
 Q_DECLARE_FLAGS(ZoneFields, ZoneField)
 Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
@@ -46,12 +48,13 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
  * When isAutotile is true, the entry represents an autotile algorithm rather
  * than a manual zone-based layout. The id will be prefixed with "autotile:".
  */
-struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
-    QString id;          ///< Layout UUID or autotile prefixed ID (e.g. "autotile:master-stack")
-    QString name;       ///< Display name for UI
+struct PLASMAZONES_EXPORT UnifiedLayoutEntry
+{
+    QString id; ///< Layout UUID or autotile prefixed ID (e.g. "autotile:master-stack")
+    QString name; ///< Display name for UI
     QString description; ///< Optional description
-    int zoneCount = 0;   ///< Number of zones for manual layouts, or algorithm's defaultMaxWindows for autotile
-    QVariantList zones;  ///< Zone data for preview rendering
+    int zoneCount = 0; ///< Number of zones for manual layouts, or algorithm's defaultMaxWindows for autotile
+    QVariantList zones; ///< Zone data for preview rendering
     QVariantList previewZones; ///< Preview zones (used for autotile algorithm previews)
     bool autoAssign = false; ///< Auto-assign: new windows fill first empty zone
     bool isAutotile = false; ///< True if this entry represents an autotile algorithm
@@ -62,8 +65,14 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry {
      */
     QString algorithmId() const;
 
-    bool operator==(const UnifiedLayoutEntry& other) const { return id == other.id; }
-    bool operator!=(const UnifiedLayoutEntry& other) const { return id != other.id; }
+    bool operator==(const UnifiedLayoutEntry& other) const
+    {
+        return id == other.id;
+    }
+    bool operator!=(const UnifiedLayoutEntry& other) const
+    {
+        return id != other.id;
+    }
 };
 
 /**
@@ -83,7 +92,7 @@ namespace LayoutUtils {
  * @return Vector of unified layout entries
  */
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
-                                                                       bool includeAutotile = false);
+                                                                      bool includeAutotile = false);
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -99,13 +108,9 @@ PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutMan
  * @param includeManual Include manual zone-based layouts (default: true)
  * @param includeAutotile Include dynamic autotile algorithm layouts (default: true)
  */
-PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
-    ILayoutManager* layoutManager,
-    const QString& screenName,
-    int virtualDesktop,
-    const QString& activity,
-    bool includeManual = true,
-    bool includeAutotile = true);
+PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
+buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName, int virtualDesktop,
+                       const QString& activity, bool includeManual = true, bool includeAutotile = true);
 
 /**
  * @brief Convert a unified layout entry to QVariantMap for QML
@@ -158,7 +163,7 @@ PLASMAZONES_EXPORT int findLayoutIndex(const QVector<UnifiedLayoutEntry>& entrie
  * @return Pointer to entry if found, nullptr otherwise
  */
 PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLayoutEntry>& entries,
-                                                         const QString& layoutId);
+                                                        const QString& layoutId);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Allow-list serialization (shared by Layout, LayoutAdaptor, EditorController)
@@ -167,14 +172,14 @@ PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLay
 /**
  * @brief Serialize visibility allow-lists to JSON (only writes non-empty lists)
  */
-PLASMAZONES_EXPORT void serializeAllowLists(QJsonObject& json, const QStringList& screens,
-                                             const QList<int>& desktops, const QStringList& activities);
+PLASMAZONES_EXPORT void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QList<int>& desktops,
+                                            const QStringList& activities);
 
 /**
  * @brief Deserialize visibility allow-lists from JSON (clears output params first)
  */
-PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringList& screens,
-                                               QList<int>& desktops, QStringList& activities);
+PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<int>& desktops,
+                                              QStringList& activities);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Zone conversion utilities

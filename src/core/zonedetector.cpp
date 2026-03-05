@@ -107,7 +107,6 @@ bool sharesEdge(const QRectF& r1, const QRectF& r2, qreal tolerance, qreal minOv
     return false;
 }
 
-
 // Expand seed zones to include all zones that intersect the bounding rectangle.
 // Used by paint-to-span to fill gaps between user-painted zones.
 // The bounding rect grows iteratively so transitive gaps get filled
