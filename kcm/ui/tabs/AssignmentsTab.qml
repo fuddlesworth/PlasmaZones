@@ -67,7 +67,7 @@ ScrollView {
                 contentItem: ColumnLayout {
                     spacing: Kirigami.Units.smallSpacing
 
-                    ComboBox {
+                    WideComboBox {
                         id: modeCombo
 
                         Layout.fillWidth: true

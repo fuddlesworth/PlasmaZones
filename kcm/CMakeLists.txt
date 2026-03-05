@@ -62,6 +62,7 @@ qt_add_resources(kcm_plasmazones "kcm_qml_components"
         ui/PositionPicker.qml
         ui/PreviewSizeControl.qml
         ui/ScreenComboBox.qml
+        ui/WideComboBox.qml
         ui/MonitorSelectorSection.qml
         ui/EasingPreview.qml
         ui/PerScreenOverrideHelper.qml
@@ -120,6 +121,7 @@ install(FILES
     ui/LayoutComboBox.qml
     ui/AssignmentRow.qml
     ui/ScreenComboBox.qml
+    ui/WideComboBox.qml
     ui/FontPickerDialog.qml
     ui/MonitorSelectorSection.qml
     ui/EasingPreview.qml

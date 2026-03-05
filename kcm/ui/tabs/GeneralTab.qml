@@ -83,7 +83,7 @@ ScrollView {
                         Layout.fillWidth: true
 
                         // Preset selector
-                        ComboBox {
+                        WideComboBox {
                             // --- Standard ---
                             // --- Sine ---
                             // --- Quad ---
@@ -485,7 +485,7 @@ ScrollView {
                         }
 
                         // Sequence mode (all at once vs one by one)
-                        ComboBox {
+                        WideComboBox {
                             Kirigami.FormData.label: i18n("Multiple windows:")
                             enabled: animationsEnabledCheck.checked
                             model: [i18n("Animate all at once"), i18n("Animate one by one (zone order)")]
@@ -594,7 +594,7 @@ ScrollView {
                         onToggled: kcm.showNavigationOsd = checked
                     }
 
-                    ComboBox {
+                    WideComboBox {
                         id: osdStyleCombo
 
                         readonly property int osdStyleNone: 0

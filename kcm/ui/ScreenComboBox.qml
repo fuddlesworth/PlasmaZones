@@ -18,7 +18,7 @@ import org.kde.kirigami as Kirigami
  *   - showNoneOption: whether to show the none/all option (default: true)
  *   - currentScreenName: the currently selected screen name ("" for none)
  */
-ComboBox {
+WideComboBox {
     id: root
 
     required property var kcm
@@ -26,17 +26,6 @@ ComboBox {
     property bool showNoneOption: true
     //* The screen name of the current selection ("" if none/all selected)
     readonly property string currentScreenName: currentValue ?? ""
-    // Measure the widest item text using a hidden TextMetrics
-    readonly property real _longestItemWidth: {
-        let maxW = 0;
-        if (root.model) {
-            for (let i = 0; i < root.model.length; ++i) {
-                _metrics.text = root.model[i].text || "";
-                maxW = Math.max(maxW, _metrics.advanceWidth);
-            }
-        }
-        return maxW;
-    }
 
     //* Select a screen by name, or reset to index 0 if not found
     function selectScreenName(name) {
@@ -97,14 +86,6 @@ ComboBox {
     textRole: "text"
     valueRole: "value"
     model: root._buildModel()
-    // Allow popup to be wider than the combo box so long screen names aren't truncated
-    popup.width: Math.max(root.width, _longestItemWidth + Kirigami.Units.gridUnit * 3)
-
-    TextMetrics {
-        id: _metrics
-
-        font: root.font
-    }
 
     // Rebuild model when screens change (hotplug)
     Connections {

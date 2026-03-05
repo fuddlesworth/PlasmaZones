@@ -240,7 +240,7 @@ ColumnLayout {
             }
 
             contentItem: Kirigami.FormLayout {
-                ComboBox {
+                WideComboBox {
                     id: zoneSelectorLayoutModeCombo
 
                     Kirigami.FormData.label: i18n("Arrangement:")

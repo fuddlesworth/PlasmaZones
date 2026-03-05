@@ -12,3 +12,4 @@ PreviewSizeControl 1.0 PreviewSizeControl.qml
 ScreenComboBox 1.0 ScreenComboBox.qml
 MonitorSelectorSection 1.0 MonitorSelectorSection.qml
 EasingPreview 1.0 EasingPreview.qml
+WideComboBox 1.0 WideComboBox.qml

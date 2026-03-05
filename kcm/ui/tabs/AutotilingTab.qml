@@ -90,7 +90,7 @@ ScrollView {
                 }
 
                 contentItem: Kirigami.FormLayout {
-                    ComboBox {
+                    WideComboBox {
                         id: insertPositionCombo
 
                         Kirigami.FormData.label: i18n("New windows:")
@@ -456,11 +456,10 @@ ScrollView {
                         spacing: Kirigami.Units.smallSpacing
                         Layout.maximumWidth: Math.min(Kirigami.Units.gridUnit * 25, parent.width)
 
-                        ComboBox {
+                        WideComboBox {
                             id: algorithmCombo
 
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.preferredWidth: Kirigami.Units.gridUnit * 15
                             Accessible.name: i18n("Tiling algorithm")
                             textRole: "name"
                             valueRole: "id"

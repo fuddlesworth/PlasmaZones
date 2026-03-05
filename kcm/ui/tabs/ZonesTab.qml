@@ -719,7 +719,7 @@ ScrollView {
                         ToolTip.text: i18n("When enabled, windows return to their previous zone when reopened, including after login or session restart.")
                     }
 
-                    ComboBox {
+                    WideComboBox {
                         id: stickyHandlingCombo
 
                         Kirigami.FormData.label: i18n("Sticky windows:")
