@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.7] - 2026-03-06
+
+### Fixed
+- **KWin 6.6.2 compatibility**: Rebuild for KWin 6.6.2 minor release; effect plugin is version-locked and requires exact KWin version match to load.
+
 ## [1.15.6] - 2026-02-28
 
 ### Fixed
