@@ -369,22 +369,8 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         float colorMix = sin(mouseTime * 0.5 + globalUV.x * 3.0) * 0.5 + 0.5;
         vec3 circuitColor = mix(primaryColor, secondaryColor, colorMix);
 
-        // Chromatic aberration - approximate from single evaluation
-        // Instead of calling circuitPattern 3 times, shift the single result
-        // by sampling the UV gradient to fake the R/B channel offsets
-        float enhancedChroma = chromaShift * (1.0 + mouseInfluence * 2.5);
-        vec2 chromaDir = vec2(enhancedChroma / rectSize.x, 0.0);
-        // dFdx is technically UB in non-uniform flow per Vulkan spec, but the SDF
-        // branch is spatially coherent (adjacent fragments agree), so this is safe
-        // on all real GPU drivers.
-        float dCircuit = dFdx(circuit) * chromaDir.x * rectSize.x;
-        float circuitR = clamp(circuit + dCircuit, 0.0, 1.0);
-        float circuitB = clamp(circuit - dCircuit, 0.0, 1.0);
-
-        vec3 circuitRGB;
-        circuitRGB.r = circuitR * circuitColor.r;
-        circuitRGB.g = circuit * circuitColor.g;
-        circuitRGB.b = circuitB * circuitColor.b;
+        // Circuit traces glow in their voltage-aware trace color
+        vec3 circuitRGB = circuitColor * circuit;
 
         baseColor += circuitRGB * glowStrength;
 
@@ -468,37 +454,24 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             baseColor += surgeColor * cascadeColor * 0.7;
         }
 
-        // POWER SURGE: bass brightens circuit traces in sequence outward from
-        // node intersections, like a power spike radiating through the grid.
-        if (hasAudio && bass > 0.05) {
-            // Distance from nearest grid node (orthogonal grid)
-            float nodeDist = length(fract(glitchedUV * circuitDensity) - 0.5);
-            float maxDist = 0.5; // half-cell diagonal
-            // Expanding wavefront from each node, gated by bass
-            float surgeWave = exp(-abs(nodeDist - fract(iTime * 2.0) * maxDist) * 5.0) * bass;
-            // Only on traces (reuse proximity from trace pattern)
-            float hTraceP = smoothstep(0.02, 0.0, abs(fract(glitchedUV.y * circuitDensity) - 0.5));
-            float vTraceP = smoothstep(0.02, 0.0, abs(fract(glitchedUV.x * circuitDensity) - 0.5));
-            float onTraceP = max(hTraceP, vTraceP);
-            vec3 powerColor = mix(primaryColor, vec3(1.0, 0.95, 0.85), surgeWave * 0.6);
-            baseColor += powerColor * surgeWave * onTraceP * 0.8 * audioSensitivity;
-        }
-
         // MIDS SIGNAL PROPAGATION: data packets traveling along traces.
         // Individual trace segments light up in sequence, creating visible
         // signal flow rather than uniform brightening.
         if (hasAudio && signalDensity > 0.05) {
+            // Bass overclock: packets race faster when bass hits
+            float packetSpeedBoost = 1.0 + bass * 1.5 * audioSensitivity;
+
             // Horizontal trace signal packets
             float hTraceOn = smoothstep(0.02, 0.0, abs(fract(glitchedUV.y * circuitDensity) - 0.5));
             // Packet position along horizontal trace: sharp, localized pulses
-            float hPacketPhase = glitchedUV.x * circuitDensity * 3.0 - iTime * (4.0 + signalDensity * 8.0);
+            float hPacketPhase = glitchedUV.x * circuitDensity * 3.0 - iTime * packetSpeedBoost * (4.0 + signalDensity * 8.0);
             float hPacket = pow(max(sin(hPacketPhase) * 0.5 + 0.5, 0.0), 8.0);
             // Second packet stream at different speed for density
             float hPacket2 = pow(max(sin(hPacketPhase * 1.7 + 2.1) * 0.5 + 0.5, 0.0), 8.0);
 
             // Vertical trace signal packets
             float vTraceOn = smoothstep(0.02, 0.0, abs(fract(glitchedUV.x * circuitDensity) - 0.5));
-            float vPacketPhase = glitchedUV.y * circuitDensity * 3.0 + iTime * (3.5 + signalDensity * 7.0);
+            float vPacketPhase = glitchedUV.y * circuitDensity * 3.0 + iTime * packetSpeedBoost * (3.5 + signalDensity * 7.0);
             float vPacket = pow(max(sin(vPacketPhase) * 0.5 + 0.5, 0.0), 8.0);
             float vPacket2 = pow(max(sin(vPacketPhase * 1.4 + 3.7) * 0.5 + 0.5, 0.0), 8.0);
 
@@ -583,19 +556,10 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         result.a = fillOpacity;
     }
 
-    // Neon toxic border with chromatic split (vitality-modulated)
+    // Neon toxic border with voltage-aware glow (vitality-modulated)
     float effectiveBorderWidth = borderWidth * vitalityScale(1.0, 1.5, vitality);
     float border = softBorder(d, effectiveBorderWidth);
-    if (abs(d) < effectiveBorderWidth + chromaShift + 5.0) {
-        // Chromatic border split
-        float chromaAmount = chromaShift * vitalityScale(0.4, 0.6, vitality);
-        float dR = sdRoundedBox(p + vec2(chromaAmount, 0.0), rectSize * 0.5, borderRadius);
-        float dB = sdRoundedBox(p - vec2(chromaAmount, 0.0), rectSize * 0.5, borderRadius);
-
-        float bR = softBorder(dR, effectiveBorderWidth);
-        float bG = border;
-        float bB = softBorder(dB, effectiveBorderWidth);
-
+    if (abs(d) < effectiveBorderWidth + 5.0) {
         // Animated border color (vitality-modulated pulse rate)
         float pulseRate = vitalityScale(3.0, 5.0, vitality);
         float borderPulse = sin(iTime * pulseSpeed * pulseRate) * 0.5 + 0.5;
@@ -605,11 +569,9 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
         borderBase = mix(borderBase, accentColor, vitalityScale(0.0, 0.4, vitality));
         borderBase *= vitalityScale(0.8, 1.3, vitality);
 
-        vec3 borderRGB;
+        // Border glows uniformly in its voltage-aware color
         float intensityMult = vitalityScale(2.0, 2.8, vitality);
-        borderRGB.r = borderBase.r * bR * intensityMult;
-        borderRGB.g = borderBase.g * bG * intensityMult;
-        borderRGB.b = borderBase.b * bB * intensityMult;
+        vec3 borderRGB = borderBase * border * intensityMult;
 
         // White-hot core (vitality-modulated)
         float coreIntensity = pow(border, 2.0);
@@ -629,9 +591,8 @@ vec4 renderToxicCircuitZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 bord
             borderRGB *= 1.0 + mouseInfluence * 0.4;
         }
 
-        float borderAlpha = max(max(bR, bG), bB);
-        result.rgb = mix(result.rgb, borderRGB, borderAlpha);
-        result.a = max(result.a, borderAlpha * 0.98);
+        result.rgb = mix(result.rgb, borderRGB, border);
+        result.a = max(result.a, border * 0.98);
     }
 
     // Outer toxic glow (vitality-modulated)

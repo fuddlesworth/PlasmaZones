@@ -376,11 +376,13 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
             fx += shockColor * ring2 * shockwaveStrength * 0.4;
         }
 
-        // ── MIDS: EM Interference Bands ─────────────────────────────
+        // ── MIDS: EM Interference Bands (field-aligned) ───────────────
         if (hasAudio && emBandIntensity > 0.01) {
-            // Diagonal sweep bands moving through the zone
-            float bandAngle = 0.3; // slight diagonal
-            float bandCoord = globalUV.y * cos(bandAngle) + globalUV.x * sin(bandAngle);
+            // Compute field direction at this fragment to align bands with field lines
+            vec2 localField = fieldVector(globalUV, mouseGlobal, fieldStrength * 0.5, t, polarityFlip);
+            float fieldAngle = atan(localField.y, localField.x);
+            // Project UV perpendicular to the field direction so bands run along field lines
+            float bandCoord = globalUV.x * cos(fieldAngle) - globalUV.y * sin(fieldAngle);
             // Multiple band frequencies for EM interference look
             float sweep = iTime * emBandSpeed * 0.3;
             float band1 = sin(bandCoord * 25.0 - sweep) * 0.5 + 0.5;
@@ -389,16 +391,9 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
             // Combine for interference pattern
             float emBand = band1 * band2 * 0.7 + band3 * 0.3;
             emBand = pow(emBand, 2.0); // sharpen the bands
-            // Chromatic aberration: offset R and B channels for color fringing
-            float bandR = sin((bandCoord - 0.003) * 25.0 - sweep) * 0.5 + 0.5;
-            float bandB = sin((bandCoord + 0.003) * 25.0 - sweep) * 0.5 + 0.5;
-            vec3 fringedBand = vec3(
-                bandR * band2 * 0.7 + band3 * 0.3,
-                emBand,
-                bandB * band2 * 0.7 + band3 * 0.3
-            );
-            fringedBand = pow(fringedBand, vec3(2.0));
-            fx += fringedBand * emBandIntensity * 0.35;
+            // Color the bands with the field's polarity color (no chromatic split)
+            vec3 polarityColor = mix(fieldColor, highlightColor, smoothstep(-0.5, 0.5, polarityFlip) * 0.6);
+            fx += polarityColor * emBand * emBandIntensity * 0.35;
         }
 
         // ── TREBLE: Corona Discharge Arcs at zone edges ─────────────
@@ -516,7 +511,7 @@ vec4 compositeMagneticLabels(vec4 color, vec2 fragCoord,
         float polarity = sin(angle) * 0.5 + 0.5;
         vec3 coronaCol = mix(fieldColor, highlightColor, polarity);
 
-        float arcBright = haloEdge * (0.4 + arc * 0.6) * (hasAudio ? 1.0 + bass * 0.8 * labelAudioReact : 1.0);
+        float arcBright = haloEdge * (0.4 + arc * 0.6) * (hasAudio ? 1.0 + bass * 0.2 * labelAudioReact : 1.0);
         color.rgb += coronaCol * arcBright;
 
         // Mouse proximity: labels near cursor glow brighter

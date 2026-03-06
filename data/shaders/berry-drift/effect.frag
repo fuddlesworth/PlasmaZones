@@ -41,7 +41,7 @@
  * Audio reactive:
  *   Bass: per-blob breathing (each pulses at own rhythm), organic wobble
  *         deformation (2-3 lobes distort circular shape), glow intensifies
- *   Mids: UV swirl (gentle rotational warp of entire blob field)
+ *   Mids: color temperature shift (blobs drift warmer/cooler)
  *   Treble: high-freq edge jitter (6-8 lobes), sparkle flash bursts
  *   Overall: lifts background warmth, widens glow
  */
@@ -223,17 +223,10 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         float softK = max(blobSoftness * 0.05, 0.001);
         int blobCount = clamp(int(blobScale), 3, 16);
 
-        // Mids-driven UV swirl: gentle rotational warp instead of generic speed change
-        vec2 blobUV = globalUV;
-        if (midsAmt > 0.01) {
-            vec2 toCenter = globalUV - 0.5;
-            float swirlAngle = midsAmt * 0.15 * sin(iTime * 1.5);
-            float ca = cos(swirlAngle), sa = sin(swirlAngle);
-            blobUV = vec2(toCenter.x * ca - toCenter.y * sa,
-                          toCenter.x * sa + toCenter.y * ca) + 0.5;
-        }
+        // Mids-driven color warmth: applied per-blob below
+        float midsWarmth = midsAmt * 0.12;
 
-        vec2 field = blobField(blobUV, blobTime, 1.0, softK,
+        vec2 field = blobField(globalUV, blobTime, 1.0, softK,
                                blobCount, aspect, blobSizeMin, blobSizeMax,
                                bassAmt, trebleAmt, iTime);
         float blobDist = field.x;
@@ -253,6 +246,11 @@ vec4 renderBerryZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
             vec3 blobColor = mix(berryPink, deepViolet, smoothstep(0.3, 0.7, t));
             blobColor = mix(blobColor, bubblegum, smoothstep(0.4, 0.8, internalPattern) * 0.5);
             blobColor = mix(blobColor, lavender * 0.8, smoothstep(0.7, 0.95, internalPattern) * 0.3);
+
+            // Mids shift color temperature: positive warmth pushes toward bubblegum/pink,
+            // modulated per-blob so each drifts slightly differently
+            float blobWarmthBias = hash11(closestIdx * 1.9 + 42.0) * 0.6 + 0.7; // 0.7–1.3
+            blobColor = mix(blobColor, bubblegum, midsWarmth * blobWarmthBias);
 
             // Center-to-edge gradient: center is deeper/richer, edges brighter
             float depth = clamp(-blobDist / 0.06, 0.0, 1.0);

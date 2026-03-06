@@ -12,7 +12,9 @@
  * Based on Inigo Quilez's palette technique and classic fbm.
  *
  * Features highlight/dormant vitality system, secondary detail veins,
- * inner edge glow with bevel, and audio reactivity.
+ * inner edge glow with bevel, and organic audio reactivity (FBM contrast
+ * deepening, palette phase rotation, vein widening — no UV warping or
+ * shockwave clichés).
  */
 
 layout(location = 0) in vec2 vTexCoord;
@@ -149,57 +151,20 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     float idlePulse = hasAudio ? 0.0 : (0.5 + 0.5 * sin(iTime * 0.8 * PI)) * 0.5;
 
-    // ── Identity-native audio: cosmic / nebula ──────────────
+    // ── Audio envelopes ────────────────────────────────────────
+    float bassEnv   = hasAudio ? smoothstep(0.02, 0.3, bass) * audioReact : 0.0;
+    float midsEnv   = hasAudio ? smoothstep(0.02, 0.4, mids) * audioReact : 0.0;
+    float trebleEnv = hasAudio ? smoothstep(0.05, 0.5, treble) * audioReact : 0.0;
 
-    // ** Nebula Breathing (bass) **
-    // Bass warps the flow field with organic, spatially-varying displacement.
-    // Two offset noise layers push fragments in different directions, creating
-    // a tidal pull effect rather than a flat zoom.
-    if (hasAudio && bass > 0.02) {
-        float bassEnv = smoothstep(0.02, 0.3, bass) * audioReact;
-        // Two independent noise fields for X and Y displacement
-        float warpSeed = iTime * 0.4;
-        float nx = noise2D(globalUV * 4.0 + vec2(warpSeed, 0.0)) - 0.5;
-        float ny = noise2D(globalUV * 4.0 + vec2(0.0, warpSeed + 73.1)) - 0.5;
-        // Displacement magnitude varies across the field (stronger at noise peaks)
-        float localIntensity = 0.5 + 0.5 * noise2D(globalUV * 2.0 - warpSeed * 0.3);
-        vec2 warp = vec2(nx, ny) * bassEnv * localIntensity * 0.6;
-        centeredUV += warp;
-    }
+    // Audio modulates existing animation parameters organically:
+    //   bass  → FBM contrast deepening (brighter peaks, darker valleys)
+    //   mids  → palette phase rotation (prismatic drift per channel)
+    //   treble → stellar sparks (handled below, already unique)
+    float audioContrast = 1.0 + bassEnv * 0.4;
 
-    // ** Flow Direction Shift (mids) **
-    // Mids create localized swirl vortices rather than a uniform rotation.
-    // Each fragment rotates by a different amount based on its position in
-    // the noise field, producing organic eddies that respond to mid energy.
-    if (hasAudio && mids > 0.02) {
-        float midsEnv = smoothstep(0.02, 0.4, mids) * audioReact;
-        // Spatially-varying rotation angle: some areas swirl more than others
-        float swirlNoise = noise2D(globalUV * 3.5 + iTime * 0.25) - 0.5;
-        float rotAngle = swirlNoise * midsEnv * 0.7; // ~±20 degrees at peaks
-        float cs = cos(rotAngle);
-        float sn = sin(rotAngle);
-        centeredUV = mat2(cs, -sn, sn, cs) * centeredUV;
-    }
-
-    // ** Gravity Wells / Shockwave Ripples (bass) **
-    // Bass creates localized gravity-well distortions in UV space before FBM.
-    // 3 semi-random seed points (seeded by slow time) emit radial ripples.
-    if (hasAudio && bass > 0.02) {
-        float bassDecay = smoothstep(0.0, 0.15, bass); // smooth envelope
-        float slowSeed = floor(iTime * 0.7); // changes seed ~every 1.4s
-        for (int gw = 0; gw < gwCount && gw < 6; gw++) {
-            // Seed point in centered UV space, varies with time
-            vec2 wellCenter = (hash22(vec2(float(gw) * 31.7, slowSeed * 17.3)) * 2.0 - 1.0)
-                              * noiseScale * 0.6;
-            wellCenter.x *= aspect;
-            vec2 toFrag = centeredUV - wellCenter;
-            float dist = length(toFrag);
-            // Ripple: radial sine wave that propagates outward, gated by bass
-            float ripple = sin(dist * 8.0 - iTime * 5.0) * exp(-dist * 1.5);
-            // Warp UV radially from the well center
-            centeredUV += normalize(toFrag + 0.0001) * ripple * bassDecay * 0.15 * audioReact;
-        }
-    }
+    // Mids rotate the palette phase vector per-channel for prismatic drift
+    float audioPalRotation = midsEnv * 0.25;
+    palD += vec3(audioPalRotation * 0.5, audioPalRotation * 0.3, audioPalRotation * 0.1);
 
     // Pattern speed is constant across all zones so the full-screen field is continuous.
     // Vitality only affects post-computation brightness/saturation, never the pattern itself.
@@ -218,15 +183,17 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         // Second fbm layer - combines with first for complexity
         float r = fbm(centeredUV + q + time * vFlowSpeed, octaves, fbmRot);
 
-        // Generate color from palette
-        vec3 col = palette(r * contrast, palA, palB, palC, palD);
+        // Generate color from palette — bass deepens contrast
+        vec3 col = palette(r * contrast * audioContrast, palA, palB, palC, palD);
 
         // ── Secondary detail layer: noise veins ─────────────
         // Thin vein lines at the 0.5 contour of a higher-frequency noise
+        // Bass widens the vein detection threshold (physically thicker veins)
         float veinNoise = noise(centeredUV * 6.0 + time * vSpeed * 0.5);
-        float veins = 1.0 - smoothstep(0.0, 0.06, abs(veinNoise - 0.5));
+        float veinWidth = 0.06 + bassEnv * 0.04;
+        float veins = 1.0 - smoothstep(0.0, veinWidth, abs(veinNoise - 0.5));
         // Color veins slightly offset from base palette
-        vec3 veinColor = palette(r * contrast + 0.25, palA, palB, palC, palD);
+        vec3 veinColor = palette(r * contrast * audioContrast + 0.25, palA, palB, palC, palD);
         col = mix(col, veinColor, veins * veinDetail);
 
         // ** Stellar Spark Points (treble) **
@@ -304,8 +271,8 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
         result.a = max(result.a, border * 0.98);
     }
 
-    // Outer glow -- bass shockwaves expand the glow radius
-    float bassGlowPush = hasAudio ? smoothstep(0.05, 0.35, bass) * 18.0 : idlePulse * 5.0;
+    // Outer glow
+    float bassGlowPush = hasAudio ? bassEnv * 4.0 : idlePulse * 5.0;
     float glowRadius = mix(12.0, 20.0, vitality) + bassGlowPush;
     if (d > 0.0 && d < glowRadius && borderGlow > 0.01) {
         float glow = expGlow(d, 8.0, borderGlow);

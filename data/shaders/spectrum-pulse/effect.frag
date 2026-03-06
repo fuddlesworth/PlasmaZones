@@ -173,9 +173,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             float fieldIntensity = waveHeight * 3.0;
 
             // Domain-warped UV for organic motion
+            float bassWarpBoost = 1.0 + smoothstep(0.1, 0.4, bassHit) * 0.8;
             vec2 warpUV = globalUV;
-            warpUV.x += qnoise2D(globalUV * 3.0 + vec2(t * 0.7, 0.0)) * 0.15;
-            warpUV.y += qnoise2D(globalUV * 3.0 + vec2(0.0, t * 0.5)) * 0.15;
+            warpUV.x += qnoise2D(globalUV * 3.0 + vec2(t * 0.7, 0.0)) * 0.15 * bassWarpBoost;
+            warpUV.y += qnoise2D(globalUV * 3.0 + vec2(0.0, t * 0.5)) * 0.15 * bassWarpBoost;
 
             // 5-octave FBM with rotation for richer detail
             float n = fbmField(warpUV * 4.0 + t * 0.4, 5);
@@ -241,28 +242,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             result.rgb += veinColor * veinSum * veinPulse * veinIntensity * 0.4;
         }
 
-        // ── Radial energy waves from screen center ────────────
-        if (bassHit > 0.15 && radialWaveStr > 0.01) {
-            float centerDist = length(globalUV - 0.5) * 2.0;
-            float bassAmp = (bassHit - 0.15) * 1.2;
-
-            float ring1 = sin((centerDist - iTime * 1.5) * 18.0) * 0.5 + 0.5;
-            ring1 *= smoothstep(1.2, 0.0, centerDist);
-            float ring2 = sin((centerDist - iTime * 2.2) * 12.0) * 0.5 + 0.5;
-            ring2 *= smoothstep(1.0, 0.0, centerDist);
-            float ring3 = sin((centerDist - iTime * 0.8) * 24.0) * 0.5 + 0.5;
-            ring3 *= smoothstep(1.4, 0.2, centerDist);
-
-            ring1 = pow(ring1, 4.0);
-            ring2 = pow(ring2, 5.0);
-            ring3 = pow(ring3, 6.0);
-
-            float rings = ring1 * 0.5 + ring2 * 0.3 + ring3 * 0.2;
-            // Bass rings tinted with bassColor
-            vec3 ringColor = mix(activeColor, bassCol, 0.35);
-            result.rgb += ringColor * rings * bassAmp * 0.35 * radialWaveStr;
-        }
-
         // ── Subtle grid / mesh for depth (screen-space) ──────
         if (gridOpacity > 0.001) {
             vec2 gridUV = globalUV * vec2(gridRes, gridRes * 0.7);
@@ -326,7 +305,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
     // ── Outer glow (bass-reactive expansion) ──────────────────
 
-    float glowRadius = 20.0 + 30.0 * bassHit + 8.0 * idlePulse;
+    float glowRadius = 20.0 + 5.0 * bassHit + 8.0 * idlePulse;
     if (d > 0.0 && d < glowRadius) {
         float glow1 = expGlow(d, glowRadius * 0.2, intensity * 0.35);
         float glow2 = expGlow(d, glowRadius * 0.5, intensity * 0.12);

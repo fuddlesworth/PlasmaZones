@@ -16,7 +16,7 @@ layout(location = 0) out vec4 fragColor;
  *
  * Colorful tiled mosaic grid with random shapes (circles, diamonds, squares),
  * HSL color variation, sparkles, grid lines, and dithered posterization.
- * Bass drives shape pulse, mids shift hue, treble triggers sparkles.
+ * Bass drives per-tile hue scatter, mids shift hue directionally, treble triggers tile pops and sparkles.
  *
  * Parameters (customParams):
  *   [0].x = gridDensity     — number of vertical tiles
@@ -158,17 +158,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         vec2 cellNorm = cellId / vec2(vw, vh);
 
         // Audio modulation — tile-grid-aware (no uniform scaling)
-        // Shockwave: bass triggers an expanding ring from a wandering origin
-        float waveOriginSeed = floor(t * 0.3);  // new wave every ~3s
-        vec2 waveOrigin = vec2(vw, vh) * 0.5 + vec2(
-            sin(waveOriginSeed * 1.7) * vw * 0.3,
-            cos(waveOriginSeed * 2.3) * vh * 0.3
-        );
-        float waveRadius = fract(t * 0.3) * max(vw, vh) * 0.8;
-        float waveDist = length(cellId - waveOrigin);
-        float bassWave = smoothstep(waveRadius + 2.0, waveRadius, waveDist)
-                       * smoothstep(waveRadius - 2.0, waveRadius, waveDist);
-        float audioShockwave = hasAudio ? bassWave * bass * reactivity : 0.0;
+        // Bass hue scatter: tiles spread further from center hue on bass hits
+        float bassScatter = hasAudio ? smoothstep(0.1, 0.4, bass) * reactivity * 0.15 : 0.0;
 
         // Directional color sweep: mids drive a hue gradient across the grid
         vec2 sweepDir = normalize(vec2(sin(t * 0.4), cos(t * 0.6)));
@@ -198,11 +189,10 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             + 0.05 * sin(cellNorm.x * 4.0 + t)
             + 0.05 * cos(cellNorm.y * 3.0 - t)
             + sweepPhase;  // directional sweep replaces uniform mids hue shift
-        hue += (mosaicHash(cellId + 123.4) - 0.5) * 0.3;
+        hue += (mosaicHash(cellId + 123.4) - 0.5) * (0.3 + bassScatter);
         hue = fract(hue);
 
-        float sat = 0.4 + 0.15 * mosaicFbm(cellId * 0.6 - t * 0.2)
-            + audioShockwave * 0.25;  // shockwave desaturates then saturates tiles as wave passes
+        float sat = 0.4 + 0.15 * mosaicFbm(cellId * 0.6 - t * 0.2);
         sat += (mosaicHash(cellId + 234.5) - 0.5) * 0.25;
         sat = clamp(sat, 0.2, 0.8);
 
@@ -210,8 +200,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             + audioPop * 0.35          // tile pop: treble makes individual tiles flash bright
             + audioRipple * 0.12;      // ripple rings: concentric energy rings modulate brightness
         lit += (mosaicHash(cellId + 345.6) - 0.5) * 0.25;
-        // Shockwave brightens tiles as wavefront passes through
-        lit += audioShockwave * 0.25;
         lit = clamp(lit, 0.35, 0.9);
 
         vec3 bg = hsl2rgb(vec3(hue, sat, lit));
@@ -224,10 +212,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         if (rnd > shapeThreshold) {
             int stype = int(floor(rnd * 4.0));
 
-            // Base pulse + shockwave-driven shape expansion
+            // Base pulse + pop-driven shape expansion
             float pulse = 0.04 * sin(t * 3.0 + rnd * 10.0)
                 + 0.03 * mosaicNoise(cellId + t)
-                + audioShockwave * 0.12   // shapes swell as bass wave passes through
                 + audioPop * 0.06;        // popping tiles briefly expand their shape
 
             float r = shapeSize + pulse;
@@ -245,9 +232,8 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             int cid = int(floor(mosaicHash(cellId + 9.7) * 4.0));
             vec3 shapeCol = pal[cid];
 
-            // Audio-reactive shape color: shockwave warms, pop whitens
+            // Audio-reactive shape color: pop whitens
             if (hasAudio) {
-                shapeCol = mix(shapeCol, vec3(1.0, 0.85, 0.5), audioShockwave * 0.4);
                 shapeCol = mix(shapeCol, vec3(1.0), audioPop * 0.5);
             }
 
@@ -278,7 +264,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         }
 
         // ── Dithered posterization ───────────────────────────
-        float ditherAmt = 0.04 + audioShockwave * 0.03;  // shockwave adds dither grit as it passes
+        float ditherAmt = 0.04;
         float dither = mosaicHash(fragCoord + iTime) * ditherAmt;
         col += dither;
         col = clamp(col, 0.0, 1.0);  // clamp before posterization
@@ -295,7 +281,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.a = mix(fillOpacity * 0.7, fillOpacity, vitality);
 
         // Inner edge glow — pulses with ripple rings near zone edges
-        float edgeRipple = hasAudio ? audioRipple * 0.8 + audioShockwave * 0.5 : 0.0;
+        float edgeRipple = hasAudio ? audioRipple * 0.8 : 0.0;
         float innerGlow = exp(d / mix(25.0, 12.0, vitality)) * mix(0.04, 0.15, vitality) * (1.0 + edgeRipple);
         result.rgb += hueCenter * innerGlow;
     }
@@ -336,7 +322,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Outer glow ──────────────────────────────────────────
 
     float baseGlowR = mix(8.0, 20.0, vitality);
-    float bassGlowR = mix(10.0, 35.0, vitality);
+    float bassGlowR = mix(3.0, 6.0, vitality);
     // Glow radius pulses with bass beat but uses a smoothed envelope, not raw value
     float bassEnvelope = hasAudio ? smoothstep(0.2, 0.7, bass) * bass * reactivity : idlePulse;
     float glowRadius = baseGlowR + bassGlowR * bassEnvelope + 5.0 * energy;

@@ -15,19 +15,18 @@ layout(location = 0) out vec4 fragColor;
  * SONIC RIPPLE — Concentric Audio Rings (Full-Screen with Zone Cutout)
  *
  * A SINGLE continuous ring pattern is centered on the screen center.
- * Zones act as windows into the shared pattern — rings, shockwaves, and
- * nebula flow seamlessly across zone boundaries.  Low frequencies sit at
+ * Zones act as windows into the shared pattern — rings and nebula flow
+ * seamlessly across zone boundaries.  Low frequencies sit at
  * the core, high frequencies at the edge.  Each ring's brightness and
  * thickness IS the amplitude of its frequency band.
  *
- * Bass kicks launch expanding shockwave rings that travel outward and fade.
  * The entire pattern slowly rotates and breathes with overall energy.
  * Edge spectrum bars remain zone-local, painting along each zone's walls.
  *
  * Parameters (customParams):
  *   [0].x = reactivity       — audio sensitivity multiplier
  *   [0].y = ringCount        — how many spectrum rings to draw
- *   [0].z = bassShockwave    — strength of bass-triggered shockwaves
+ *   [0].z = (unused)
  *   [0].w = ringSpeed        — ring expansion speed
  *   [1].x = rotationSpeed    — slow rotation of the pattern
  *   [1].y = idleAnimation    — animation when no audio
@@ -42,21 +41,6 @@ layout(location = 0) out vec4 fragColor;
 
 
 
-// ─── Shockwave ring ─────────────────────────────────────────────
-
-// Returns intensity of a single expanding shockwave ring at distance r
-// birth: time the wave was born, speed: expansion rate
-float shockwave(float r, float birth, float speed) {
-    float age = iTime - birth;
-    if (age < 0.0 || age > 2.0) return 0.0;
-
-    float radius = age * speed;
-    float width = 0.03 + age * 0.02;  // ring gets wider as it expands
-    float ring = exp(-pow((r - radius) / width, 2.0));
-    float fade = 1.0 - age * 0.5;     // fade over 2 seconds
-    return ring * max(fade, 0.0);
-}
-
 // ─── Per-zone rendering ─────────────────────────────────────────
 
 vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
@@ -69,7 +53,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // Parameters with defaults
     float reactivity    = customParams[0].x >= 0.0 ? customParams[0].x : 1.5;
     float ringCount     = customParams[0].y >= 0.0 ? customParams[0].y : 24.0;
-    float bassShock     = customParams[0].z >= 0.0 ? customParams[0].z : 1.5;
     float ringSpeed     = customParams[0].w >= 0.0 ? customParams[0].w : 1.0;
     float rotSpeed      = customParams[1].x >= 0.0 ? customParams[1].x : 0.15;
     float idleAnim      = customParams[1].y >= 0.0 ? customParams[1].y : 1.0;
@@ -91,7 +74,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         glowIntensity *= 1.6;
         reactivity *= 1.4;
         rotSpeed *= 3.0;        // spin faster
-        bassShock *= 1.5;       // bigger shockwaves
     } else {
         // Dormant: desaturated, dimmer, slower
         primary = mix(primary, vec3(dot(primary, vec3(0.299, 0.587, 0.114))), 0.5); // desaturate
@@ -100,7 +82,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         glowIntensity *= 0.5;
         reactivity *= 0.6;
         rotSpeed *= 0.5;        // barely moving
-        bassShock *= 0.3;       // muted shockwaves
         ringCount = max(ringCount * 0.5, 8.0); // fewer rings
     }
 
@@ -156,6 +137,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         float ringBright = 0.0;
         vec3 ringColor = vec3(0.0);
 
+        // Bass envelope: drives ring width for bass-frequency rings
+        float bassEnv = hasAudio ? bass : 0.0;
+
         if (hasAudio) {
             // Each ring corresponds to a frequency band
             int numRings = int(ringCount);
@@ -173,7 +157,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
                 // Ring thickness scales with amplitude — louder = thicker
                 // Highlighted: fat vivid rings; dormant: thin ghost rings
-                float thickness = mix(0.004, 0.008, vitality) + specVal * mix(0.012, 0.03, vitality);
+                float baseWidth = mix(0.004, 0.008, vitality) + specVal * mix(0.012, 0.03, vitality);
+
+                // Bass makes bass-frequency rings physically wider/fatter.
+                // exp(-t * 6.0) ensures only inner rings (low t) are affected;
+                // the boost decays to near-zero by the mid-range.
+                float freqWidthBoost = exp(-t * 6.0) * bassEnv * 0.015;
+                float thickness = baseWidth + freqWidthBoost;
 
                 // Angular wobble: the ring isn't a perfect circle (seamless around the circle)
                 float wobble = angularNoise(angle, 3.0, t * 20.0 + iTime * 0.5) * specVal * 0.03;
@@ -206,35 +196,13 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             }
         }
 
-        // ── Bass shockwaves ─────────────────────────────────
-        // Multiple overlapping shockwave rings triggered by bass beats
-        float shockTotal = 0.0;
-        if (hasAudio && bassShock > 0.01) {
-            // Create shockwaves at regular intervals modulated by bass
-            // Each slot fires when bass crosses a threshold
-            int swSlots = int(customParams[2].w >= 0.0 ? customParams[2].w : 4.0);
-            for (int s = 0; s < swSlots && s < 8; s++) {
-                float slot = float(s);
-                // Stagger birth times: each slot fires at a different phase
-                float period = 0.5 + slot * 0.15;
-                float birth = floor(iTime / period) * period;
-                float shock = shockwave(r, birth, 0.4 + slot * 0.1) * bass * bassShock;
-                shockTotal += shock;
-            }
-        }
-
         // ── Audio-reactive nebula background ────────────────
         // Warped noise field fills the space between and behind rings.
         // Audio drives the warp intensity, color, and flow speed.
 
-        // Warp the UV with audio-driven distortion (screen-space for continuity)
+        // Nebula UV — flows at its own pace without bass-driven warping
         float nebScale = customParams[3].x >= 0.0 ? customParams[3].x : 8.0;
         vec2 nebUV = globalUV * (nebScale / 3.2);
-        float warpAmt = 0.4 + energy * 0.8 + idlePulse * 0.3;
-        float n1 = noise2D(nebUV + iTime * 0.15);
-        float n2 = noise2D(nebUV * 1.7 - iTime * 0.1 + 30.0);
-        vec2 warp = vec2(n1, n2) * warpAmt;
-        nebUV += warp;
 
         // Multi-octave noise for the nebula pattern
         float neb = 0.0;
@@ -271,10 +239,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
         // Add spectrum rings on top
         result.rgb += ringColor * ringBright * glowIntensity * 0.6;
-
-        // Add shockwaves in bass color
-        vec3 shockColor = mix(bassCol, vec3(1.0), 0.3);
-        result.rgb += shockColor * shockTotal * glowIntensity * 0.5;
 
         // Overall energy brightens the core
         float coreBright = exp(-r * 2.5) * energy * 0.15;
@@ -397,14 +361,6 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                 float ringBright = rings * (0.5 + energy * 0.8) * glowIntensity;
                 result.rgb += ringCol * ringBright;
 
-                // Bass: chromatic split on the halo
-                if (hasAudio && bass > 0.05) {
-                    float rH = texture(uZoneLabels, labelUv + vec2(texel.x * bass * 8.0 * labelAudioMul, 0.0)).a;
-                    float bH = texture(uZoneLabels, labelUv - vec2(texel.x * bass * 8.0 * labelAudioMul, 0.0)).a;
-                    float chromaEdge = max(rH, bH) * (1.0 - labelAlpha);
-                    result.rgb += vec3(rH, 0.0, bH) * chromaEdge * primary * 0.3 * bass;
-                }
-
                 result.a = max(result.a, haloEdge * 0.5);
             }
 
@@ -461,7 +417,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     // ── Outer glow ──────────────────────────────────────────
 
     float baseGlowR = mix(8.0, 20.0, vitality);
-    float bassGlowR = mix(10.0, 35.0, vitality);
+    float bassGlowR = mix(2.0, 6.0, vitality);
     float glowRadius = baseGlowR + bassGlowR * (hasAudio ? bass * reactivity : idlePulse) + 5.0 * energy;
     if (d > 0.0 && d < glowRadius) {
         float glow1 = expGlow(d, glowRadius * 0.2, glowIntensity * mix(0.12, 0.35, vitality));
