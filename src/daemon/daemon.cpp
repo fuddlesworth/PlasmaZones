@@ -227,13 +227,6 @@ bool Daemon::init()
             handleAutotileDisabled();
         }
 
-        // Handle autotile feature gate toggle ON:
-        // When the KCM checkbox enables autotile, activate autotile on all screens
-        // using the last algorithm (same logic as snapping-to-autotile transition).
-        if (autotileToggled && autotileNow && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
-            handleSnappingToAutotile();
-        }
-
         // Handle snapping toggle → autotile activation.
         // Guard: skip if already in autotile mode to avoid resetting per-screen
         // algorithm customizations with the global algorithm.
