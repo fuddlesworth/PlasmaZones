@@ -87,7 +87,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
                 const QString windowId = m_effect->getWindowId(w);
 
                 if (m_effect->isWindowFloating(windowId)) {
-                    qCDebug(lcEffect) << "Skipping pre-autotile restore for floating window:" << windowId;
+                    qCInfo(lcEffect) << "slotScreensChanged: skipping restore for floating window:" << windowId
+                                     << "frame:" << w->frameGeometry();
                     continue;
                 }
 
@@ -151,6 +152,18 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
                 continue;
             }
             const QString windowId = m_effect->getWindowId(w);
+            // For floating windows, update daemon's pre-tile geometry to current position
+            // with overwrite=true. The user may have moved the window while floating, and
+            // the daemon's stored geometry (from the original snap) is stale.
+            // saveAndRecordPreAutotileGeometry uses overwrite=false which won't update it.
+            if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonServiceRegistered) {
+                QRectF frame = w->frameGeometry();
+                m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                                                {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                                                 static_cast<int>(frame.width()), static_cast<int>(frame.height()),
+                                                 true},
+                                                QStringLiteral("storePreTileGeometry"));
+            }
             saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
 
             if (!w->isMinimized()) {

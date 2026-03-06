@@ -1596,6 +1596,9 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, cons
         qCDebug(lcEffect) << "slotApplyGeometryRequested: window not found" << windowId;
         return;
     }
+    qCInfo(lcEffect) << "slotApplyGeometryRequested:" << windowId << "geo:" << geometry << "zoneId:" << zoneId
+                     << "screen:" << screenName << "floating:" << isWindowFloating(windowId)
+                     << "currentFrame:" << w->frameGeometry();
     applySnapGeometry(w, geometry);
     if (!zoneId.isEmpty() && ensureWindowTrackingReady("apply geometry windowSnapped")) {
         m_windowTrackingInterface->asyncCall(QStringLiteral("windowSnapped"), getWindowId(w), zoneId, screenName);

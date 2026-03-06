@@ -207,12 +207,12 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
 {
     auto geo = m_service->validatedPreTileGeometry(windowId);
     if (geo) {
+        qCInfo(lcDbusWindow) << "applyGeometryForFloat:" << windowId << "geo:" << *geo << "screen:" << screenName;
         Q_EMIT applyGeometryRequested(windowId, rectToJson(*geo), QString(), screenName);
-        qCDebug(lcDbusWindow) << "Applied pre-tile geometry for float:" << windowId << *geo;
         return true;
     }
 
-    qCDebug(lcDbusWindow) << "No geometry found for float:" << windowId;
+    qCInfo(lcDbusWindow) << "applyGeometryForFloat: NO geometry found for" << windowId;
     return false;
 }
 

@@ -104,6 +104,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     // a shared key that matches ALL instances of the same app, causing
     // cross-contamination when isAutotileFloated() is called for other instances.
     m_autotileFloatedWindows.remove(windowId);
+    m_savedSnapFloatingWindows.remove(windowId);
     m_windowStickyStates.remove(windowId);
     m_autoSnappedWindows.remove(windowId);
 

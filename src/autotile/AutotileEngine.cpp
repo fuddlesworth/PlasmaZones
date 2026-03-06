@@ -996,9 +996,15 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
 
     const bool inserted = insertWindow(windowId, screenName);
 
-    // Notify listeners if the window was restored as floating (e.g., after mode toggle)
-    if (inserted && state && state->isFloating(windowId)) {
-        Q_EMIT windowFloatingChanged(windowId, true, screenName);
+    // Sync floating state to daemon. Float state is per-mode:
+    // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
+    // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
+    if (inserted && state) {
+        if (state->isFloating(windowId)) {
+            Q_EMIT windowFloatingChanged(windowId, true, screenName);
+        } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
+            Q_EMIT windowFloatingChanged(windowId, false, screenName);
+        }
     }
 
     if (inserted && m_config && m_config->focusNewWindows) {
@@ -1127,15 +1133,12 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
     }
 
     // Restore floating state from engine's saved set (populated when autotile was
-    // previously deactivated) OR from WTS (the canonical floating source shared
-    // between autotile and snapping modes). This ensures user-floated windows
-    // stay floating across autotile ↔ snapping mode toggles.
+    // previously deactivated). Float state is per-mode: snap-mode floats don't
+    // carry into autotile and vice versa. Only m_savedFloatingWindows (the
+    // engine's own memory) is authoritative for autotile-mode floating.
     if (m_savedFloatingWindows.remove(windowId)) {
         state->setFloating(windowId, true);
         qCInfo(lcAutotile) << "Restored saved floating state for window" << windowId << "on screen" << screenName;
-    } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-        state->setFloating(windowId, true);
-        qCInfo(lcAutotile) << "Preserved WTS floating state for window" << windowId << "on screen" << screenName;
     }
 
     m_windowToScreen.insert(windowId, screenName);

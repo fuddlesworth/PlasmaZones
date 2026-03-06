@@ -199,6 +199,11 @@ void Daemon::handleAutotileDisabled()
     if (m_autotileEngine) {
         m_autotileEngine->clearAllSavedFloating();
     }
+    // Clear saved snap-floats — we're fully back in snap mode, so the
+    // save/restore mechanism is no longer needed until next autotile entry.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->service()->clearSavedSnapFloating();
+    }
     // Note: resnap happens at the call site AFTER updateAutotileScreens() so that
     // windowsReleasedFromTiling clears floating state before windows are resnapped.
 }
@@ -223,6 +228,9 @@ void Daemon::handleSnappingToAutotile()
         m_autotileEngine->setAlgorithm(algoId);
     }
 
+    // Pre-save snap-float state before autotile entry (same rationale as toggle handler)
+    presaveSnapFloats();
+
     // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch.
     // This ensures deterministic window ordering: zone 1 → master, zone 2 → second, etc.
     for (QScreen* screen : m_screenManager->screens()) {
@@ -242,6 +250,21 @@ void Daemon::handleSnappingToAutotile()
         }
     }
     m_modeTracker->setCurrentMode(TilingMode::Autotile);
+}
+
+void Daemon::presaveSnapFloats()
+{
+    if (!m_windowTrackingAdaptor) {
+        return;
+    }
+    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    const QStringList floatingIds = wts->floatingWindows();
+    for (const QString& fid : floatingIds) {
+        if (!wts->isAutotileFloated(fid)) {
+            wts->saveSnapFloating(fid);
+            qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "before autotile entry";
+        }
+    }
 }
 
 void Daemon::seedAutotileOrderForScreen(const QString& screenName)

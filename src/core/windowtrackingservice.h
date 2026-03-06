@@ -194,6 +194,25 @@ public:
     bool isAutotileFloated(const QString& windowId) const;
 
     /**
+     * @brief Save a snap-mode floating window for later restoration
+     *
+     * Called when a snap-mode-floated window enters autotile and its WTS
+     * floating state is cleared. Mirrors the engine's m_savedFloatingWindows.
+     */
+    void saveSnapFloating(const QString& windowId);
+
+    /**
+     * @brief Consume and restore a saved snap-mode floating window
+     * @return true if the window was in the saved set
+     */
+    bool restoreSnapFloating(const QString& windowId);
+
+    /**
+     * @brief Clear all saved snap-mode floating state
+     */
+    void clearSavedSnapFloating();
+
+    /**
      * @brief Unsnap window for floating (saves zone for later restore)
      * @param windowId Full window ID
      */
@@ -666,6 +685,11 @@ private:
     // Used to distinguish autotile floats from manual snapping-mode floats during
     // mode transitions (only autotile floats are cleared on autotile→snapping).
     QSet<QString> m_autotileFloatedWindows;
+
+    // Saved snap-mode floating windows. When a snap-mode-floated window enters
+    // autotile and its WTS floating is cleared, we save it here so it can be
+    // restored when returning to snap mode. Mirrors the engine's m_savedFloatingWindows.
+    QSet<QString> m_savedSnapFloatingWindows;
 
     // Session persistence: consumption queue (appId -> list of pending restores, consumed FIFO)
     QHash<QString, QList<PendingRestore>> m_pendingRestoreQueues;

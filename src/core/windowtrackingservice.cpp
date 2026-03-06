@@ -307,6 +307,21 @@ bool WindowTrackingService::isAutotileFloated(const QString& windowId) const
     return m_autotileFloatedWindows.contains(windowId);
 }
 
+void WindowTrackingService::saveSnapFloating(const QString& windowId)
+{
+    m_savedSnapFloatingWindows.insert(windowId);
+}
+
+bool WindowTrackingService::restoreSnapFloating(const QString& windowId)
+{
+    return m_savedSnapFloatingWindows.remove(windowId);
+}
+
+void WindowTrackingService::clearSavedSnapFloating()
+{
+    m_savedSnapFloatingWindows.clear();
+}
+
 QStringList WindowTrackingService::floatingWindows() const
 {
     return m_floatingWindows.values();
