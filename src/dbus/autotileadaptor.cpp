@@ -236,34 +236,9 @@ void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString
     m_engine->windowFocused(windowId, screenName);
 }
 
-void AutotileAdaptor::floatWindow(const QString& windowId)
-{
-    if (!ensureEngine("floatWindow")) {
-        return;
-    }
-    if (windowId.isEmpty()) {
-        qCWarning(lcDbusAutotile) << "Cannot floatWindow - empty window ID";
-        return;
-    }
-    qCDebug(lcDbusAutotile) << "D-Bus floatWindow:" << windowId;
-    m_engine->floatWindow(windowId);
-}
-
-void AutotileAdaptor::unfloatWindow(const QString& windowId)
-{
-    if (!ensureEngine("unfloatWindow")) {
-        return;
-    }
-    if (windowId.isEmpty()) {
-        qCWarning(lcDbusAutotile) << "Cannot unfloatWindow - empty window ID";
-        return;
-    }
-    qCDebug(lcDbusAutotile) << "D-Bus unfloatWindow:" << windowId;
-    m_engine->unfloatWindow(windowId);
-}
-
-// toggleFocusedWindowFloat and toggleWindowFloat removed: float toggle
-// is now routed through the unified WTA toggleFloatForWindow method.
+// floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
+// all float operations are now routed through the unified WTA methods
+// (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional).
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Algorithm Query

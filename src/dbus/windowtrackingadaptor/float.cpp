@@ -276,4 +276,66 @@ void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId, c
     }
 }
 
+void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, const QString& screenName,
+                                                       bool floating)
+{
+    if (!validateWindowId(windowId, QStringLiteral("set float for screen"))) {
+        return;
+    }
+
+    // Route to autotile engine if this screen uses autotile mode
+    if (m_isAutotileScreen && m_autotileSetFloat && m_isAutotileScreen(screenName)) {
+        qCInfo(lcDbusWindow) << "setWindowFloatingForScreen: routing to autotile engine for" << windowId
+                             << "floating=" << floating << "screen=" << screenName;
+        m_autotileSetFloat(windowId, floating);
+        return;
+    }
+
+    // Snap mode: manage zone state alongside floating flag.
+    // Mirrors toggleFloatForWindow logic but directional (no toggle).
+    qCInfo(lcDbusWindow) << "setWindowFloatingForScreen:" << windowId << "floating=" << floating
+                         << "screen=" << screenName;
+
+    if (floating) {
+        // Unsnap from zone, preserve pre-float zone for unfloat restore
+        m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
+        Q_EMIT windowFloatingChanged(windowId, true, screenName);
+        applyGeometryForFloat(windowId, screenName);
+    } else {
+        // Unfloat: restore to pre-float zone (same as toggleFloatForWindow unfloat path)
+        QString restoreJson = calculateUnfloatRestore(windowId, screenName);
+        QJsonDocument doc = QJsonDocument::fromJson(restoreJson.toUtf8());
+        QJsonObject obj = doc.isObject() ? doc.object() : QJsonObject();
+        if (!obj.value(QLatin1String("found")).toBool(false)) {
+            // No zone to restore to — just clear floating state
+            m_service->setWindowFloating(windowId, false);
+            Q_EMIT windowFloatingChanged(windowId, false, screenName);
+            return;
+        }
+        QStringList zoneIds;
+        for (const QJsonValue& v : obj.value(QLatin1String("zoneIds")).toArray()) {
+            zoneIds.append(v.toString());
+        }
+        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
+                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+        QString restoreScreen = obj.value(QLatin1String("screenName")).toString();
+        if (zoneIds.isEmpty() || !geo.isValid()) {
+            m_service->setWindowFloating(windowId, false);
+            Q_EMIT windowFloatingChanged(windowId, false, screenName);
+            return;
+        }
+        m_service->setWindowFloating(windowId, false);
+        m_service->clearPreFloatZone(windowId);
+        int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+        if (zoneIds.size() > 1) {
+            m_service->assignWindowToZones(windowId, zoneIds, restoreScreen, currentDesktop);
+        } else {
+            m_service->assignWindowToZone(windowId, zoneIds.first(), restoreScreen, currentDesktop);
+        }
+        Q_EMIT windowFloatingChanged(windowId, false, restoreScreen);
+        Q_EMIT applyGeometryRequested(windowId, rectToJson(geo), QString(), restoreScreen);
+    }
+}
+
 } // namespace PlasmaZones

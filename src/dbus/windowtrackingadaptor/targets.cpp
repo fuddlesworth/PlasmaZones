@@ -205,7 +205,7 @@ QString WindowTrackingAdaptor::getRestoreForWindow(const QString& windowId, cons
     }
 
     int x, y, w, h;
-    bool found = getValidatedPreSnapGeometry(windowId, x, y, w, h);
+    bool found = getValidatedPreTileGeometry(windowId, x, y, w, h);
     QJsonObject obj;
     obj[QLatin1String("success")] = found && w > 0 && h > 0;
     obj[QLatin1String("found")] = found && w > 0 && h > 0;

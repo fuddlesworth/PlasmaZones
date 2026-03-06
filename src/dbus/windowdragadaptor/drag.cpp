@@ -462,7 +462,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         if (m_wasSnapped && !m_restoreSizeEmittedDuringDrag && m_settings && m_settings->restoreOriginalSizeOnUnsnap()
             && m_windowTracking) {
             int origX, origY, origW, origH;
-            if (m_windowTracking->getValidatedPreSnapGeometry(windowId, origX, origY, origW, origH)) {
+            if (m_windowTracking->getValidatedPreTileGeometry(windowId, origX, origY, origW, origH)) {
                 m_restoreSizeEmittedDuringDrag = true;
                 m_lastEmittedZoneGeometry = QRect(); // Reset so re-entering zone will emit
                 Q_EMIT restoreSizeDuringDragChanged(windowId, origW, origH);

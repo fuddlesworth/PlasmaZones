@@ -334,12 +334,13 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
         saveAndRecordPreAutotileGeometry(windowId, screenName, w->frameGeometry());
     }
 
-    const QString method = minimized ? QStringLiteral("floatWindow") : QStringLiteral("unfloatWindow");
     qCInfo(lcEffect) << "Autotile: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:")
                      << windowId << "on" << screenName;
 
     if (m_effect->m_daemonServiceRegistered) {
-        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, method, {windowId}, method);
+        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+                                        {windowId, screenName, minimized},
+                                        QStringLiteral("setWindowFloatingForScreen"));
     }
 
     if (!minimized) {
@@ -360,11 +361,12 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
         return;
     }
     m_monocleMaximizedWindows.remove(windowId);
+    const QString screenName = m_effect->getWindowScreenName(w);
     qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "— floating";
 
     if (m_effect->m_daemonServiceRegistered) {
-        m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("floatWindow"), {windowId},
-                                        QStringLiteral("floatWindow"));
+        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+                                        {windowId, screenName, true}, QStringLiteral("setWindowFloatingForScreen"));
     }
 }
 

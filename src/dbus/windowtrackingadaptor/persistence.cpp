@@ -115,7 +115,7 @@ QString WindowTrackingAdaptor::getPreAutotileGeometriesJson()
     return serializeGeometryMap(m_service->preAutotileGeometries());
 }
 
-bool WindowTrackingAdaptor::getValidatedPreSnapGeometry(const QString& windowId, int& x, int& y, int& width,
+bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width,
                                                         int& height)
 {
     x = y = width = height = 0;

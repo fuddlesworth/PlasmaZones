@@ -241,6 +241,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // and leaves the popup visible with no snap.
                 if (m_autotileHandler->isAutotileScreen(getWindowScreenName(w))) {
                     m_dragBypassedForAutotile = true;
+                    m_dragBypassScreenName = getWindowScreenName(w);
                     return;
                 }
                 m_dragBypassedForAutotile = false;
@@ -291,8 +292,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // to ensure consistent behavior even if autotile screens changed mid-drag.
                 if (m_dragBypassedForAutotile) {
                     if (!cancelled) {
-                        fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("floatWindow"), {windowId},
-                                              QStringLiteral("floatWindow"));
+                        // Use screen captured at drag start — the window may have moved
+                        // to a different screen during the drag.
+                        fireAndForgetDBusCall(
+                            DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+                            {windowId, m_dragBypassScreenName, true}, QStringLiteral("setWindowFloatingForScreen"));
                         qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
                     }
                     return;

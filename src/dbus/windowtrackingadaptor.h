@@ -84,10 +84,12 @@ public:
      * @param autotileToggleFloat Calls AutotileEngine::toggleWindowFloat(windowId, screenName)
      */
     void setAutotileFloatCallbacks(std::function<bool(const QString&)> isAutotileScreen,
-                                   std::function<void(const QString&, const QString&)> autotileToggleFloat)
+                                   std::function<void(const QString&, const QString&)> autotileToggleFloat,
+                                   std::function<void(const QString&, bool)> autotileSetFloat = nullptr)
     {
         m_isAutotileScreen = std::move(isAutotileScreen);
         m_autotileToggleFloat = std::move(autotileToggleFloat);
+        m_autotileSetFloat = std::move(autotileSetFloat);
     }
 
     /**
@@ -239,7 +241,7 @@ public Q_SLOTS:
                                   const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName);
 
     /**
-     * Get validated pre-snap geometry, ensuring it's within visible screen bounds
+     * Get validated pre-tile geometry (pre-snap or pre-autotile), ensuring it's within visible screen bounds
      * @param windowId Window ID
      * @param x Output: X position (adjusted if off-screen)
      * @param y Output: Y position (adjusted if off-screen)
@@ -249,7 +251,7 @@ public Q_SLOTS:
      * @note If original geometry is off-screen, it will be adjusted to fit within
      *       the nearest visible screen while preserving dimensions where possible
      */
-    bool getValidatedPreSnapGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
+    bool getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width, int& height);
 
     /**
      * Check if a geometry rectangle is within any visible screen
@@ -781,6 +783,13 @@ public Q_SLOTS:
     void toggleFloatForWindow(const QString& windowId, const QString& screenName);
 
     /**
+     * @brief Set a window's floating state explicitly (directional, not toggle).
+     * Routes to autotile engine for autotile screens, handles snap mode locally.
+     * Used by minimize/unminimize, drag-to-float, and monocle unmaximize handlers.
+     */
+    void setWindowFloatingForScreen(const QString& windowId, const QString& screenName, bool floating);
+
+    /**
      * @brief Apply pre-snap/pre-autotile geometry for a floated window (call from daemon when autotile engine floats)
      * Gets validated geometry, emits applyGeometryRequested if found, clears stored geometry.
      * @return true if geometry was applied, false if none stored
@@ -910,6 +919,7 @@ private:
     // Autotile routing callbacks (set by daemon after AutotileEngine is created)
     std::function<bool(const QString&)> m_isAutotileScreen;
     std::function<void(const QString&, const QString&)> m_autotileToggleFloat;
+    std::function<void(const QString&, bool)> m_autotileSetFloat;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service

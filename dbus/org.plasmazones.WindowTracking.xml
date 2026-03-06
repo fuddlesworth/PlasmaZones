@@ -109,8 +109,8 @@
                 <annotation name="org.gtk.GDBus.DocString" value="True if pre-snap geometry exists."/>
             </arg>
         </method>
-        <method name="getValidatedPreSnapGeometry">
-            <annotation name="org.gtk.GDBus.DocString" value="Return pre-snap geometry validated against current screen bounds (adjusts off-screen). Returns found, x, y, width, height."/>
+        <method name="getValidatedPreTileGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Return pre-tile geometry (pre-snap or pre-autotile) validated against current screen bounds (adjusts off-screen). Returns found, x, y, width, height."/>
             <arg name="windowId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
             </arg>
@@ -466,6 +466,18 @@
             </arg>
             <arg name="screenName" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+        </method>
+        <method name="setWindowFloatingForScreen">
+            <annotation name="org.gtk.GDBus.DocString" value="Set a window's floating state explicitly (directional, not toggle). Routes to autotile engine for autotile screens, handles snap mode locally. Used by minimize/unminimize, drag-to-float, and monocle unmaximize."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier (from KWin)."/>
+            </arg>
+            <arg name="screenName" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
+            </arg>
+            <arg name="floating" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to float, false to unfloat."/>
             </arg>
         </method>
         <signal name="applyGeometryRequested">

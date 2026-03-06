@@ -1,10 +1,10 @@
-# Unify Snapping & Autotile — Deferred Items
+# Unify Snapping & Autotile — Status
 
-Items from the unification plan that were not implemented. Grouped by risk/effort.
+Tracks what was completed and what remains from the unification plan.
 
 ---
 
-## Completed (this session)
+## Completed
 
 ### PR 1: Signal & Label Unification
 - [x] 1A. Unified `windowFloatingChanged` to 3-param (windowId, isFloating, screenName)
@@ -20,12 +20,19 @@ Items from the unification plan that were not implemented. Grouped by risk/effor
 ### PR 3: Deprecate Redundant Autotile D-Bus Float Methods
 - [x] Removed `toggleFocusedWindowFloat` and `toggleWindowFloat` from Autotile D-Bus
 - [x] Removed dead `handleAutotileFloatToggle` from effect
-- [x] Kept `floatWindow`/`unfloatWindow` — needed for minimize/drag (explicit direction)
+- [x] Added `setWindowFloatingForScreen(windowId, screenName, floating)` to WTA D-Bus
+- [x] WTA routes to autotile engine via `m_autotileSetFloat` callback for autotile screens
+- [x] Updated minimize handler, drag-to-float, and monocle unmaximize to use unified method
+- [x] Removed `floatWindow`/`unfloatWindow` from Autotile D-Bus XML and adaptor
 
 ### PR 4: Feature Parity & Polish
 - [x] 4A. OSD labels already correct for both modes — no change needed
 - [x] 4B. Autotile `onWindowClosed` D-Bus call already gated internally
 - [x] 4C. Fullscreen handler is entirely autotile-specific — no shared logic to extract
+
+### Rename: `getValidatedPreSnapGeometry` -> `getValidatedPreTileGeometry`
+- [x] Renamed across D-Bus XML, WTA header, persistence.cpp, targets.cpp,
+      navigationhandler.cpp, windowdragadaptor drop.cpp and drag.cpp
 
 ### Bug fixes found during review
 - [x] Unconditional geometry stores corrupted float restore for autotile-only windows
@@ -35,24 +42,25 @@ Items from the unification plan that were not implemented. Grouped by risk/effor
 
 ---
 
-## Deferred: PR 3 — Remove `floatWindow`/`unfloatWindow` from Autotile D-Bus
+## Deferred: Unify `windowOpened` D-Bus signature
 
-The plan called for removing all autotile float D-Bus methods. We kept `floatWindow` and
-`unfloatWindow` because the minimize handler and drag-to-float handler need explicit
-directional float/unfloat (not a toggle). Removing them requires either:
+WTS has no `windowOpened` D-Bus method. Autotile has
+`windowOpened(windowId, screenName, minWidth, minHeight)`. The idea was to add a unified
+method to WTA that routes to the autotile engine for autotile screens.
 
-1. Adding a unified `setWindowFloating(windowId, screenName, floating)` to WTA that routes
-   to the autotile engine's `floatWindow`/`unfloatWindow` for autotile screens, or
-2. Using `toggleFloatForWindow` with state guards — risky due to race conditions between
-   the effect's local floating cache and the daemon's state.
+**Why deferred:** The effect's `AutotileHandler::notifyWindowAdded` maintains critical
+local state (`m_notifiedWindows` deduplication, `m_pendingCloses` race-condition guard)
+that would need to move to the daemon or be replicated. The current routing is clean —
+the effect already gates by screen type locally. Moving this to the daemon provides
+minimal benefit for non-trivial rework.
 
-**Effort:** Medium. **Risk:** Medium (minimize/unminimize edge cases).
+**Effort:** Medium (higher than originally estimated). **Risk:** Medium.
 
-**Files involved:**
-- `dbus/org.plasmazones.Autotile.xml` — remove `floatWindow`, `unfloatWindow`
-- `src/dbus/autotileadaptor.h` + `.cpp` — remove implementations
-- `kwin-effect/autotilehandler/signals.cpp:337` — update minimize handler
-- `kwin-effect/plasmazoneseffect.cpp:294` — update drag-to-float handler
+**Files that would be involved:**
+- `dbus/org.plasmazones.WindowTracking.xml` — add `windowOpened` method
+- `src/dbus/windowtrackingadaptor.h` + `/float.cpp` — implement with autotile routing callback
+- `kwin-effect/autotilehandler.cpp` — change D-Bus target from Autotile to WindowTracking
+- `src/daemon/daemon.cpp` — wire new callback
 
 ---
 
@@ -89,18 +97,3 @@ Adding this would give feature parity but needs new D-Bus methods on WTS and new
 connections in the effect.
 
 **Effort:** Medium. **Risk:** Low-Medium.
-
-### Unify `windowOpened` D-Bus signature
-
-WTS `windowOpened` takes `(windowId)` via `notifyWindowOpened`. Autotile takes
-`(windowId, screenName, minWidth, minHeight)`. Extending WTS to accept the extra params
-would allow the daemon to route window-open notifications based on mode.
-
-**Effort:** Low. **Risk:** Low.
-
-### Rename `getValidatedPreSnapGeometry` → `getValidatedPreTileGeometry`
-
-Cosmetic rename to reflect that it now serves both snapping and autotile modes via
-the `applyGeometryForFloat` fallback chain.
-
-**Effort:** Trivial. **Risk:** None (internal API only).

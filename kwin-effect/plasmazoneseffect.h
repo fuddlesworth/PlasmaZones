@@ -410,6 +410,7 @@ private:
     // handler uses the same decision, preventing a race where m_autotileScreens
     // changes mid-drag (e.g., async D-Bus signal) and leaves the popup visible.
     bool m_dragBypassedForAutotile = false;
+    QString m_dragBypassScreenName; // Screen at drag start (for float D-Bus call on drag end)
 
     // Cached activation settings (loaded from daemon via D-Bus, updated on settingsChanged)
     // Used for local trigger checking to gate D-Bus calls (see anyLocalTriggerHeld)

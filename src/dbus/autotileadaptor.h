@@ -186,25 +186,9 @@ public Q_SLOTS:
      */
     void notifyWindowFocused(const QString& windowId, const QString& screenName);
 
-    /**
-     * @brief Float a specific window from autotile management
-     *
-     * Called by KWin effect when a window is dragged during autotile mode.
-     * Marks the window as floating and retiles the remaining windows.
-     *
-     * @param windowId Window identifier from KWin
-     */
-    void floatWindow(const QString& windowId);
-
-    /**
-     * @brief Unfloat a window back into autotile management
-     *
-     * @param windowId Window identifier from KWin
-     */
-    void unfloatWindow(const QString& windowId);
-
-    // toggleFocusedWindowFloat and toggleWindowFloat removed: float toggle
-    // is now routed through the unified WTA toggleFloatForWindow method.
+    // floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
+    // all float operations are now routed through the unified WTA methods
+    // (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional).
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Ratio/Count Adjustment

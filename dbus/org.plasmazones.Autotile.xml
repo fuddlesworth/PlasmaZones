@@ -255,21 +255,8 @@
             </arg>
         </method>
 
-        <method name="floatWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Float a window from autotile management (drag-to-float). Marks the window as floating and retiles remaining windows."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window ID to float from autotiling."/>
-            </arg>
-        </method>
-
-        <method name="unfloatWindow">
-            <annotation name="org.gtk.GDBus.DocString" value="Unfloat a window back into autotile management."/>
-            <arg name="windowId" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="Window ID to unfloat back into autotiling."/>
-            </arg>
-        </method>
-
-        <!-- toggleFocusedWindowFloat and toggleWindowFloat removed: float toggle
-             is now routed through the unified WTA toggleFloatForWindow method -->
+        <!-- floatWindow, unfloatWindow, toggleFocusedWindowFloat, toggleWindowFloat removed:
+             all float operations are now routed through the unified WTA methods
+             (toggleFloatForWindow for toggle, setWindowFloatingForScreen for directional) -->
     </interface>
 </node>

@@ -518,7 +518,7 @@ void NavigationHandler::executeFloatOn(KWin::EffectWindow* activeWindow, const Q
     if (iface && iface->isValid()) {
         QPointer<KWin::EffectWindow> safeWindow = activeWindow;
 
-        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getValidatedPreSnapGeometry"), windowId);
+        QDBusPendingCall pendingCall = iface->asyncCall(QStringLiteral("getValidatedPreTileGeometry"), windowId);
         auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
         connect(watcher, &QDBusPendingCallWatcher::finished, this,

@@ -203,7 +203,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         if (m_settings && m_settings->restoreOriginalSizeOnUnsnap()) {
             int origX, origY, origW, origH;
             if (m_windowTracking
-                && m_windowTracking->getValidatedPreSnapGeometry(windowId, origX, origY, origW, origH)) {
+                && m_windowTracking->getValidatedPreTileGeometry(windowId, origX, origY, origW, origH)) {
                 snapWidth = origW;
                 snapHeight = origH;
                 shouldApplyGeometry = true;
