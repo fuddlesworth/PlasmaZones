@@ -946,9 +946,11 @@ void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
         QString reason = QStringLiteral("resnap:%1").arg(result.successCount);
         m_effect->emitNavigationFeedback(true, QStringLiteral("resnap"), reason, QString(), result.firstTargetZoneId,
                                          screenName);
-        // Show snap assist for remaining empty zones (if enabled).
-        // Use screen from actual snapped windows — active window may be null after picker closes.
-        m_effect->m_snapAssistHandler->showContinuationIfNeeded(result.firstScreenName);
+        // Note: Do NOT call showContinuationIfNeeded() here. Resnap is an automatic
+        // repositioning triggered by layout change — not a user-initiated snap.
+        // The async windowSnapped D-Bus calls haven't been processed by the daemon yet,
+        // so getEmptyZonesJson() would return stale data showing zones as "empty",
+        // causing snap assist to flash briefly with incorrect empty zone data.
     } else {
         m_effect->emitNavigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_resnaps"), QString(),
                                          QString(), screenName);

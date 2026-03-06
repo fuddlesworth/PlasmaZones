@@ -10,8 +10,8 @@
 #include <QPointF>
 #include <QSizeF>
 #include <QString>
-#include <QElapsedTimer>
 #include <QtMath>
+#include <chrono>
 
 namespace KWin {
 class EffectWindow;
@@ -94,61 +94,75 @@ private:
  * The window's actual frame is moved to targetGeometry immediately via
  * moveResize(); this animation provides a visual translation offset and
  * scale factor that morph from the old geometry to the new.
- * Scale converges to 1.0, so the final state is always the natural buffer.
+ *
+ * Timing uses presentTime from KWin's compositor (vsync-aligned) rather
+ * than wall-clock time, ensuring frame-perfect animation. Progress is
+ * cached once per frame to avoid inconsistencies between position and
+ * size interpolation within a single paint cycle.
  */
 struct WindowAnimation
 {
     QPointF startPosition; ///< Visual top-left position before snap
     QSizeF startSize; ///< Visual size before snap (for scale interpolation)
     QRect targetGeometry; ///< Target geometry (for duplicate detection)
-    QElapsedTimer timer; ///< Timer for animation progress
+    std::chrono::milliseconds startTime{-1}; ///< presentTime when animation started (-1 = pending)
     qreal duration = 150.0; ///< Animation duration in milliseconds
     EasingCurve easing; ///< Easing curve for this animation
+    qreal cachedProgress = 0.0; ///< Eased progress, updated once per frame
 
-    /// Check if the animation timer has been started
+    /// Check if the animation has been initialized
     bool isValid() const
     {
-        return timer.isValid();
+        return startTime.count() >= 0;
     }
 
-    /// Calculate current progress (0.0 to 1.0) with the configured easing
-    qreal progress() const
+    /// Update cached progress from presentTime. Called once per frame.
+    void updateProgress(std::chrono::milliseconds presentTime)
     {
-        if (!timer.isValid() || duration <= 0.0) {
-            return 0.0;
-        }
-        qreal t = qMin(1.0, timer.elapsed() / duration);
-        return easing.evaluate(t);
-    }
-
-    /// Check if animation is complete
-    bool isComplete() const
-    {
-        if (!timer.isValid()) {
-            return true;
+        if (startTime.count() < 0) {
+            // First frame — latch the start time to this presentTime
+            startTime = presentTime;
+            cachedProgress = 0.0;
+            return;
         }
         if (duration <= 0.0) {
-            return true;
+            cachedProgress = 1.0;
+            return;
         }
-        return timer.elapsed() >= duration;
+        const qreal elapsed = qreal((presentTime - startTime).count());
+        const qreal t = qMin(1.0, elapsed / duration);
+        cachedProgress = easing.evaluate(t);
     }
 
-    /// Absolute visual top-left position at the current animation progress.
-    /// At t=0 returns startPosition; at t=1 returns targetGeometry.topLeft().
+    /// Returns the cached eased progress (0.0 to 1.0)
+    qreal progress() const
+    {
+        return cachedProgress;
+    }
+
+    /// Check if animation is complete based on presentTime
+    bool isComplete(std::chrono::milliseconds presentTime) const
+    {
+        if (startTime.count() < 0 || duration <= 0.0) {
+            return true;
+        }
+        return qreal((presentTime - startTime).count()) >= duration;
+    }
+
+    /// Absolute visual top-left position at the cached progress.
     QPointF currentVisualPosition() const
     {
-        const qreal p = progress();
+        const qreal p = cachedProgress;
         const qreal tx = targetGeometry.x();
         const qreal ty = targetGeometry.y();
         return QPointF(startPosition.x() + (tx - startPosition.x()) * p,
                        startPosition.y() + (ty - startPosition.y()) * p);
     }
 
-    /// Interpolated visual size at the current animation progress.
-    /// At t=0 returns startSize; at t=1 returns targetGeometry.size().
+    /// Interpolated visual size at the cached progress.
     QSizeF currentVisualSize() const
     {
-        const qreal p = progress();
+        const qreal p = cachedProgress;
         const qreal tw = targetGeometry.width();
         const qreal th = targetGeometry.height();
         return QSizeF(startSize.width() + (tw - startSize.width()) * p,
@@ -168,9 +182,14 @@ struct WindowAnimation
  *
  * When a window is snapped to a zone, the caller applies moveResize()
  * immediately to set the final geometry. This animator provides visual
- * translation and scale transforms that morph the window from its old
- * position/size to the new one. Scale converges to 1.0 at the end,
- * so the client buffer is always rendered at its natural target size.
+ * translation and scale transforms in paintWindow() that morph the
+ * window from its old position/size to the new one. This follows the
+ * standard KDE effect pattern — effects are purely visual overlays on
+ * the compositing pipeline and never call moveResize() per-frame.
+ *
+ * Timing is driven by presentTime (vsync-aligned) for frame-perfect
+ * animation, and progress is cached once per frame to ensure consistent
+ * position and size interpolation within a single paint cycle.
  */
 class WindowAnimator : public QObject
 {
@@ -235,13 +254,14 @@ public:
     /// Used to chain animations when redirecting to a new target mid-flight.
     QSizeF currentVisualSize(KWin::EffectWindow* window) const;
 
-    // Per-frame: clean up completed animations. Called from prePaintScreen().
-    void advanceAnimations();
+    // Per-frame: update cached progress and clean up completed animations.
+    // Called from prePaintScreen() with the compositor's presentTime.
+    void advanceAnimations(std::chrono::milliseconds presentTime);
 
     // Schedule targeted repaints for active animation regions. Called from postPaintScreen().
     void scheduleRepaints() const;
 
-    // Paint helper — applies translate offset and optional scale transform.
+    // Paint helper — applies translate offset and scale transform.
     // The window visually morphs from startPosition/startSize to its final geometry.
     void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 

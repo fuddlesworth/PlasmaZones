@@ -294,7 +294,7 @@ bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& o
     anim.targetGeometry = targetGeometry;
     anim.duration = m_duration;
     anim.easing = m_easing;
-    anim.timer.start();
+    // startTime is -1 (pending); latched to presentTime on first advanceAnimations()
     m_animations[window] = anim;
 
     window->addRepaintFull();
@@ -342,7 +342,7 @@ QSizeF WindowAnimator::currentVisualSize(KWin::EffectWindow* window) const
     return it->currentVisualSize();
 }
 
-void WindowAnimator::advanceAnimations()
+void WindowAnimator::advanceAnimations(std::chrono::milliseconds presentTime)
 {
     // Iterate over a snapshot of keys — signal handlers triggered by repaint
     // could indirectly modify m_animations.
@@ -353,22 +353,24 @@ void WindowAnimator::advanceAnimations()
             continue;
         }
 
-        if (!it->isValid() || window->isDeleted()) {
+        if (window->isDeleted()) {
             m_animations.erase(it);
             continue;
         }
 
-        if (it->isComplete()) {
+        // Update cached progress from presentTime (latches startTime on first call)
+        it->updateProgress(presentTime);
+
+        if (it->isComplete(presentTime)) {
             // Animation done — window is already at its final position
             // (moveResize was called before the animation started).
-            // Clean up and repaint the full animation path.
             const QRectF bounds = animationBounds(window);
             m_animations.erase(it);
             window->addRepaintFull();
             if (bounds.isValid()) {
                 KWin::effects->addRepaint(bounds.toAlignedRect());
             }
-            qCDebug(lcEffect) << "Window slide animation complete";
+            qCDebug(lcEffect) << "Window snap animation complete";
         }
     }
 }
@@ -390,20 +392,18 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
         return;
     }
 
-    // On Wayland, moveResize() triggers a configure/ack cycle so frameGeometry()
-    // may lag behind the target for several frames. Using a relative offset from
-    // frameGeometry() produces a "doubled offset" glitch until geometry catches up.
-    // Computing absolute lerped position + offset-from-actual avoids this entirely.
+    // Translate: compute the desired visual position and offset from
+    // the actual frameGeometry. moveResize() was called once to set the
+    // final geometry, so frameGeometry should be at the target. The
+    // offset shrinks to zero as the animation completes.
     const QPointF desiredPos = it->currentVisualPosition();
     const QPointF actualPos = window->frameGeometry().topLeft();
     data += (desiredPos - actualPos);
 
     // Scale: smoothly morph from old size to target size.
-    // moveResize() was already called, so frameGeometry is at the target.
-    // Scale converges to 1.0 at t=1, ensuring the final state uses the
-    // natural buffer with no transform. The visual invariant holds regardless
-    // of when the Wayland buffer actually resizes:
-    //   visual_size = frameGeometry.size * scale = desiredSize
+    // visual_size = frameGeometry.size * scale = desiredSize.
+    // Scale converges to 1.0 at t=1, so the final state uses the
+    // natural buffer with no transform applied.
     if (it->hasScaleChange()) {
         const QSizeF desiredSize = it->currentVisualSize();
         const QSizeF actualSize = window->frameGeometry().size();
@@ -422,32 +422,25 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
         return QRectF();
     }
 
-    // The window's expanded geometry (includes shadow/decoration padding)
-    // at its real post-moveResize position.
+    // The window's expanded geometry (includes shadow/decoration padding).
     // Guard: once a window enters the "deleted" state, its Item tree may be
-    // torn down and expandedGeometry() would dereference a null Item pointer
-    // (SIGSEGV in KWin::Item::boundingRect).  Fall back to the stored target.
+    // torn down and expandedGeometry() would dereference a null Item pointer.
     QRectF expanded = (window && !window->isDeleted()) ? window->expandedGeometry() : QRectF(it->targetGeometry);
 
-    // Shadow/decoration padding (constant, independent of scale)
+    // Shadow/decoration padding (constant)
     const QRectF frameGeo(it->targetGeometry);
     const qreal padLeft = expanded.x() - frameGeo.x();
     const qreal padTop = expanded.y() - frameGeo.y();
     const qreal padRight = expanded.right() - frameGeo.right();
     const qreal padBottom = expanded.bottom() - frameGeo.bottom();
 
-    // Visual footprint at animation start (t=0): old position + old size + padding
+    // Footprint at animation start (t=0)
     QRectF atStart(it->startPosition.x() + padLeft, it->startPosition.y() + padTop,
                    it->startSize.width() - padLeft + padRight, it->startSize.height() - padTop + padBottom);
 
     QRectF bounds = expanded.united(atStart);
 
-    // For non-bezier curves or overshooting bezier curves, the translation
-    // offset can overshoot past both start and end positions.
-    // Sample the curve to find extremes and expand bounds accordingly.
-    // Elastic curves overshoot; bounce curves with amplitude > 1.0 can dip below 0.
-    // Bezier curves only overshoot when control points exceed [0,1] Y range.
-    // Bounce with amplitude <= 1.0 is always in [0,1] — skip sampling.
+    // For overshooting easing curves, sample to find extremes.
     const bool isBounce =
         (it->easing.type == EasingCurve::Type::BounceIn || it->easing.type == EasingCurve::Type::BounceOut
          || it->easing.type == EasingCurve::Type::BounceInOut);
@@ -459,7 +452,6 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
             && (it->easing.y1 < 0.0 || it->easing.y1 > 1.0 || it->easing.y2 < 0.0 || it->easing.y2 > 1.0));
 
     if (needsSampling) {
-        // Position and size deltas
         const qreal dx = it->startPosition.x() - it->targetGeometry.x();
         const qreal dy = it->startPosition.y() - it->targetGeometry.y();
         const qreal dw = it->startSize.width() - it->targetGeometry.width();
@@ -468,7 +460,6 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
         constexpr int nSamples = 50;
         for (int i = 1; i < nSamples; ++i) {
             qreal p = it->easing.evaluate(qreal(i) / nSamples);
-            // At eased value p, visual offset from target = delta * (1 - p)
             const qreal inv = 1.0 - p;
             QRectF sampledRect(it->targetGeometry.x() + dx * inv + padLeft, it->targetGeometry.y() + dy * inv + padTop,
                                it->targetGeometry.width() + dw * inv - padLeft + padRight,

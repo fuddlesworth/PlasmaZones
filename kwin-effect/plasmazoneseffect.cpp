@@ -2191,8 +2191,8 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
 
     // Animation: moveResize to the final geometry immediately, then morph
     // the window visually from its old position/size to the new one using
-    // translate + scale. Scale converges to 1.0, so the final state uses
-    // the natural buffer with no transform applied.
+    // translate + scale in paintWindow(). This follows the standard KDE
+    // effect pattern — effects are visual overlays, never per-frame moveResize.
     QPointF animStartPos;
     QSizeF animStartSize;
     if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled()) {
@@ -2378,8 +2378,8 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)
 {
-    // Clean up completed animations before the paint cycle
-    m_windowAnimator->advanceAnimations();
+    // Update animation progress from presentTime and clean up completed ones
+    m_windowAnimator->advanceAnimations(presentTime);
 
     if (m_windowAnimator->hasActiveAnimations()) {
         // Windows have translation transforms that move them outside their
@@ -2457,7 +2457,7 @@ void PlasmaZonesEffect::prePaintWindow(KWin::RenderView* view, KWin::EffectWindo
                                        std::chrono::milliseconds presentTime)
 {
     if (w && m_windowAnimator->hasAnimation(w)) {
-        // Mark as transformed so paintWindow applies our translation offset
+        // Mark as transformed so paintWindow applies our translate+scale
         data.setTransformed();
     }
 
