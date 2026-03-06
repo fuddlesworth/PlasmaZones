@@ -7,6 +7,8 @@
 #include "layout.h"
 #include "utils.h"
 #include "zone.h"
+#include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/TilingAlgorithm.h"
 
 #include <algorithm>
 
@@ -15,6 +17,13 @@
 #include <QUuid>
 
 namespace PlasmaZones {
+
+QString UnifiedLayoutEntry::algorithmId() const
+{
+    if (!isAutotile)
+        return QString();
+    return LayoutId::extractAlgorithmId(id);
+}
 
 namespace LayoutUtils {
 
@@ -147,7 +156,42 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
     return entry;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager)
+static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
+{
+    auto* registry = AlgorithmRegistry::instance();
+    if (!registry) {
+        return;
+    }
+    const QStringList algoIds = registry->availableAlgorithms();
+    for (const QString& algoId : algoIds) {
+        TilingAlgorithm* algo = registry->algorithm(algoId);
+        if (!algo) {
+            continue;
+        }
+        UnifiedLayoutEntry entry;
+        entry.id = LayoutId::makeAutotileId(algoId);
+        entry.name = algo->name();
+        entry.description = algo->description();
+        entry.isAutotile = true;
+        entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
+        entry.zones = entry.previewZones;
+        entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+        list.append(entry);
+    }
+}
+
+static void sortUnifiedEntries(QVector<UnifiedLayoutEntry>& list)
+{
+    // Sort: manual layouts first (alphabetical), then autotile entries (alphabetical)
+    std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
+        if (a.isAutotile != b.isAutotile) {
+            return !a.isAutotile; // manual (false) before autotile (true)
+        }
+        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
+    });
+}
+
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -161,18 +205,18 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
         }
     }
 
-    std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
-        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
-    });
+    if (includeAutotile) {
+        appendAutotileEntries(list);
+    }
+
+    sortUnifiedEntries(list);
 
     return list;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
-    ILayoutManager* layoutManager,
-    const QString& screenName,
-    int virtualDesktop,
-    const QString& activity)
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenName,
+                                                   int virtualDesktop, const QString& activity, bool includeManual,
+                                                   bool includeAutotile)
 {
     QVector<UnifiedLayoutEntry> list;
 
@@ -190,46 +234,50 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(
     // (prevents empty selector / broken cycling when active layout is hidden)
     Layout* activeLayout = layoutManager->activeLayout();
 
-    const auto layouts = layoutManager->layouts();
-    for (Layout* layout : layouts) {
-        if (!layout) {
-            continue;
-        }
-
-        bool isActive = (layout == activeLayout);
-
-        // Tier 1: skip globally hidden layouts (unless active)
-        if (layout->hiddenFromSelector() && !isActive) {
-            continue;
-        }
-
-        // Tier 2: screen filter (unless active)
-        if (!isActive && !screenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
-            if (!layout->allowedScreens().contains(screenId)) {
+    if (includeManual) {
+        const auto layouts = layoutManager->layouts();
+        for (Layout* layout : layouts) {
+            if (!layout) {
                 continue;
             }
-        }
 
-        // Tier 2: desktop filter (unless active)
-        if (!isActive && virtualDesktop > 0 && !layout->allowedDesktops().isEmpty()) {
-            if (!layout->allowedDesktops().contains(virtualDesktop)) {
+            bool isActive = (layout == activeLayout);
+
+            // Tier 1: skip globally hidden layouts (unless active)
+            if (layout->hiddenFromSelector() && !isActive) {
                 continue;
             }
-        }
 
-        // Tier 2: activity filter (unless active)
-        if (!isActive && !activity.isEmpty() && !layout->allowedActivities().isEmpty()) {
-            if (!layout->allowedActivities().contains(activity)) {
-                continue;
+            // Tier 2: screen filter (unless active)
+            if (!isActive && !screenId.isEmpty() && !layout->allowedScreens().isEmpty()) {
+                if (!layout->allowedScreens().contains(screenId)) {
+                    continue;
+                }
             }
-        }
 
-        list.append(entryFromLayout(layout));
+            // Tier 2: desktop filter (unless active)
+            if (!isActive && virtualDesktop > 0 && !layout->allowedDesktops().isEmpty()) {
+                if (!layout->allowedDesktops().contains(virtualDesktop)) {
+                    continue;
+                }
+            }
+
+            // Tier 2: activity filter (unless active)
+            if (!isActive && !activity.isEmpty() && !layout->allowedActivities().isEmpty()) {
+                if (!layout->allowedActivities().contains(activity)) {
+                    continue;
+                }
+            }
+
+            list.append(entryFromLayout(layout));
+        }
     }
 
-    std::sort(list.begin(), list.end(), [](const UnifiedLayoutEntry& a, const UnifiedLayoutEntry& b) {
-        return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
-    });
+    if (includeAutotile) {
+        appendAutotileEntries(list);
+    }
+
+    sortUnifiedEntries(list);
 
     return list;
 }
@@ -245,8 +293,10 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Type] = 0;
     map[ZoneCount] = entry.zoneCount;
     map[Zones] = entry.zones;
-    map[Category] = static_cast<int>(LayoutCategory::Manual);
+    map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
     map[AutoAssign] = entry.autoAssign;
+    map[QLatin1String("isAutotile")] = entry.isAutotile;
+    map[IsSystem] = false;
 
     return map;
 }
@@ -274,7 +324,8 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[ZoneCount] = entry.zoneCount;
     json[IsSystem] = false;
     json[Type] = 0;
-    json[Category] = static_cast<int>(LayoutCategory::Manual);
+    json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
+    json[QLatin1String("isAutotile")] = entry.isAutotile;
     if (entry.autoAssign) {
         json[AutoAssign] = true;
     }
@@ -307,8 +358,8 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
 // Allow-list serialization
 // ═══════════════════════════════════════════════════════════════════════════
 
-void serializeAllowLists(QJsonObject& json, const QStringList& screens,
-                          const QList<int>& desktops, const QStringList& activities)
+void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QList<int>& desktops,
+                         const QStringList& activities)
 {
     using namespace JsonKeys;
 
@@ -327,8 +378,7 @@ void serializeAllowLists(QJsonObject& json, const QStringList& screens,
     }
 }
 
-void deserializeAllowLists(const QJsonObject& json, QStringList& screens,
-                            QList<int>& desktops, QStringList& activities)
+void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<int>& desktops, QStringList& activities)
 {
     using namespace JsonKeys;
 

@@ -24,6 +24,7 @@ PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality f
 - **Classes**: `PascalCase` (e.g., `Zone`, `EditorController`)
 - **Functions/Methods**: `camelCase` (e.g., `findZoneById`, `setGeometry`)
 - **Member variables**: `m_` prefix with `camelCase` (e.g., `m_layoutId`, `m_selectedZoneId`)
+- **Struct fields (POD/aggregate)**: `camelCase` without prefix when the struct is a simple data holder (e.g., `BorderState`)
 - **Constants**: `PascalCase` in classes, `UPPER_SNAKE_CASE` in global scope
 - **Signals**: Past tense verb (e.g., `layoutChanged`, `zoneAdded`)
 - **Slots**: Action verb (e.g., `saveLayout`, `deleteZone`)
@@ -71,7 +72,7 @@ PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality f
 ### Header Files
 - Use `#pragma once` (not include guards)
 - Forward declare classes when possible (reduce compile times)
-- Group includes: Qt headers first, then KDE, then project headers
+- Group includes: Own header first (in .cpp files), then project headers, then KDE headers, then Qt headers
 - Use `PLASMAZONES_EXPORT` macro for public API classes
 
 ### Qt6 String Literal Handling
@@ -227,7 +228,7 @@ PlasmaZones is a KDE/Plasma implementation of Windows FancyZones functionality f
 - Use semantic text styles: headings, body, captions
 
 ### Window Management
-- **Wayland only** - X11 is not supported (Plasma 6 is Wayland-first)
+- **Wayland session only** - native X11 sessions are not supported (Plasma 6 is Wayland-first); XWayland windows running within a Wayland session are handled (e.g., size-hints centering)
 - Use `LayerShellQt` for overlay windows (required dependency)
 - LayerShellQt provides proper layer ordering for overlays during drag operations
 - Handle fullscreen properly: `Window.FullScreen` visibility

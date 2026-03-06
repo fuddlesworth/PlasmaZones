@@ -153,6 +153,20 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("showZoneNumbers", showZoneNumbers, setShowZoneNumbers)
     REGISTER_BOOL_SETTING("flashZonesOnSwitch", flashZonesOnSwitch, setFlashZonesOnSwitch)
     REGISTER_BOOL_SETTING("showOsdOnLayoutSwitch", showOsdOnLayoutSwitch, setShowOsdOnLayoutSwitch)
+    REGISTER_BOOL_SETTING("showNavigationOsd", showNavigationOsd, setShowNavigationOsd)
+    // osdStyle: enum (0=None, 1=Text, 2=Preview) — use interface's OsdStyle
+    m_getters[QStringLiteral("osdStyle")] = [this]() {
+        return static_cast<int>(m_settings->osdStyle());
+    };
+    m_setters[QStringLiteral("osdStyle")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= 0 && val <= 2) {
+            m_settings->setOsdStyle(static_cast<OsdStyle>(val));
+            return true;
+        }
+        return false;
+    };
+    REGISTER_STRINGLIST_SETTING("disabledMonitors", disabledMonitors, setDisabledMonitors)
 
     // Appearance settings
     REGISTER_BOOL_SETTING("useSystemColors", useSystemColors, setUseSystemColors)
@@ -201,6 +215,7 @@ void SettingsAdaptor::initializeRegistry()
 
     // Activation
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
+    REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 
     // Behavior settings
     REGISTER_BOOL_SETTING("keepWindowsInZonesOnResolutionChange", keepWindowsInZonesOnResolutionChange,
@@ -222,12 +237,28 @@ void SettingsAdaptor::initializeRegistry()
     // Zone selector
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
 
+    // Animation settings (global — applies to snapping and autotiling)
+    REGISTER_BOOL_SETTING("animationsEnabled", animationsEnabled, setAnimationsEnabled)
+    REGISTER_INT_SETTING("animationDuration", animationDuration, setAnimationDuration)
+    REGISTER_STRING_SETTING("animationEasingCurve", animationEasingCurve, setAnimationEasingCurve)
+
+    REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
+    REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
+    REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+
     // Exclusions
     REGISTER_STRINGLIST_SETTING("excludedApplications", excludedApplications, setExcludedApplications)
     REGISTER_STRINGLIST_SETTING("excludedWindowClasses", excludedWindowClasses, setExcludedWindowClasses)
     REGISTER_BOOL_SETTING("excludeTransientWindows", excludeTransientWindows, setExcludeTransientWindows)
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
+
+    // Autotile decoration settings
+    REGISTER_BOOL_SETTING("autotileHideTitleBars", autotileHideTitleBars, setAutotileHideTitleBars)
+    REGISTER_INT_SETTING("autotileBorderWidth", autotileBorderWidth, setAutotileBorderWidth)
+    REGISTER_COLOR_SETTING("autotileBorderColor", autotileBorderColor, setAutotileBorderColor)
+    REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
+                          setAutotileUseSystemBorderColors)
 
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING
@@ -397,8 +428,12 @@ QString SettingsAdaptor::getRunningWindows()
     QEventLoop loop;
     m_windowListLoop = &loop;
 
-    // Timeout after 2 seconds if KWin effect doesn't respond
-    QTimer::singleShot(2000, &loop, &QEventLoop::quit);
+    // Blocking call: waits for KWin effect to respond via provideRunningWindows().
+    // The 2s timeout prevents indefinite blocking if the effect is unloaded or
+    // unresponsive. This is called from the KCM settings UI (not the daemon hot
+    // path), so briefly blocking the caller thread is acceptable.
+    constexpr int WindowListTimeoutMs = 2000;
+    QTimer::singleShot(WindowListTimeoutMs, &loop, &QEventLoop::quit);
 
     // Signal the KWin effect to enumerate windows
     Q_EMIT runningWindowsRequested();

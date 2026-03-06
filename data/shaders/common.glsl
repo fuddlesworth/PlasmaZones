@@ -22,14 +22,15 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     int highlightedCount;
     vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
-    vec4 customParams[4];
-    vec4 customColors[8];
+    vec4 customParams[8];
+    vec4 customColors[16];
     vec4 zoneRects[64];
     vec4 zoneFillColors[64];
     vec4 zoneBorderColors[64];
     vec4 zoneParams[64];
     vec2 iChannelResolution[4];
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
+    int iFlipBufferY;        // 1 = OpenGL (buffer textures need Y-flip when sampling)
     vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
 };
 
@@ -158,6 +159,25 @@ float noise2D(vec2 p) {
 float angularNoise(float angle, float freq, float seed) {
     vec2 circlePos = vec2(cos(angle), sin(angle)) * freq;
     return noise2D(circlePos + seed);
+}
+
+// ─── Highlight / vitality helpers ────────────────────────────────────────
+
+// Standard vitality factor for highlight vs dormant state.
+// Returns 1.0 when highlighted, 0.3 (subdued) otherwise.
+float zoneVitality(bool isHighlighted) {
+    return isHighlighted ? 1.0 : 0.3;
+}
+
+// Desaturate toward grayscale proportional to dormancy (1=full color, 0=gray).
+vec3 vitalityDesaturate(vec3 col, float vitality) {
+    float lum = luminance(col);
+    return mix(vec3(lum), col, 0.4 + 0.6 * vitality);
+}
+
+// Interpolate a parameter between dormant and active values.
+float vitalityScale(float dormant, float alive, float vitality) {
+    return mix(dormant, alive, vitality);
 }
 
 #endif // PLASMAZONES_COMMON_GLSL

@@ -21,7 +21,8 @@ ZoneAutoFiller::ZoneAutoFiller(ZoneManager* manager, QObject* parent)
 void ZoneAutoFiller::applyRelativeGeometry(const QString& zoneId, qreal rx, qreal ry, qreal rw, qreal rh)
 {
     QVariantMap z = m_manager->getZoneById(zoneId);
-    if (z.isEmpty()) return;
+    if (z.isEmpty())
+        return;
     if (ZoneManager::isFixedMode(z)) {
         QSizeF ss = m_manager->effectiveScreenSizeF();
         m_manager->updateZoneGeometry(zoneId, rx * ss.width(), ry * ss.height(), rw * ss.width(), rh * ss.height());
@@ -32,7 +33,7 @@ void ZoneAutoFiller::applyRelativeGeometry(const QString& zoneId, qreal rx, qrea
 
 bool ZoneAutoFiller::isRectangleEmpty(const QRectF& rect, const QString& excludeZoneId) const
 {
-    const qreal threshold = 0.002; // Small epsilon for floating point comparison
+    const qreal threshold = EditorConstants::OverlapThreshold;
     const QVariantList& zones = m_manager->zones();
 
     for (const QVariant& zoneVar : zones) {
@@ -65,7 +66,7 @@ qreal ZoneAutoFiller::findMaxExpansion(const QString& zoneId, int direction) con
     }
 
     QRectF zoneRect = m_manager->extractZoneGeometry(*zoneOpt);
-    const qreal step = 0.01; // 1% increments
+    const qreal step = EditorConstants::ExpansionStep;
     qreal maxExpansion = 0.0;
 
     switch (direction) {
@@ -144,12 +145,12 @@ QVariantMap ZoneAutoFiller::findAdjacentZones(const QString& zoneId, qreal thres
         QRectF zoneRect = m_manager->extractZoneGeometry(zone);
 
         // Check vertical overlap
-        bool verticalOverlap = (targetRect.y() < zoneRect.bottom() - threshold)
-                            && (targetRect.bottom() > zoneRect.y() + threshold);
+        bool verticalOverlap =
+            (targetRect.y() < zoneRect.bottom() - threshold) && (targetRect.bottom() > zoneRect.y() + threshold);
 
         // Check horizontal overlap
-        bool horizontalOverlap = (targetRect.x() < zoneRect.right() - threshold)
-                              && (targetRect.right() > zoneRect.x() + threshold);
+        bool horizontalOverlap =
+            (targetRect.x() < zoneRect.right() - threshold) && (targetRect.right() > zoneRect.x() + threshold);
 
         // Left adjacency: zone's right edge touches target's left edge
         if (verticalOverlap && qAbs(zoneRect.right() - targetRect.x()) < threshold) {
@@ -187,7 +188,7 @@ QRectF ZoneAutoFiller::findBestEmptyRegion(qreal targetX, qreal targetY, int exc
     // Helper to check if coordinate already exists (with tolerance)
     auto coordExists = [](const QList<qreal>& list, qreal val) {
         for (qreal v : list) {
-            if (qAbs(v - val) < 0.001)
+            if (qAbs(v - val) < EditorConstants::CoordDedupeThreshold)
                 return true;
         }
         return false;
@@ -240,8 +241,7 @@ QRectF ZoneAutoFiller::findBestEmptyRegion(qreal targetX, qreal targetY, int exc
                     }
 
                     // Check if this region CONTAINS the target point
-                    bool containsTarget = (targetX >= rx && targetX <= rx + rw
-                                        && targetY >= ry && targetY <= ry + rh);
+                    bool containsTarget = (targetX >= rx && targetX <= rx + rw && targetY >= ry && targetY <= ry + rh);
                     if (!containsTarget) {
                         continue;
                     }
@@ -309,27 +309,27 @@ bool ZoneAutoFiller::expandToFillSpace(const QString& zoneId, qreal mouseX, qrea
 
     // Try expanding in each direction
     qreal leftExpansion = findMaxExpansion(zoneId, 0);
-    if (leftExpansion > 0.005) {
+    if (leftExpansion > EditorConstants::MinExpansionThreshold) {
         x -= leftExpansion;
         w += leftExpansion;
         changed = true;
     }
 
     qreal rightExpansion = findMaxExpansion(zoneId, 1);
-    if (rightExpansion > 0.005) {
+    if (rightExpansion > EditorConstants::MinExpansionThreshold) {
         w += rightExpansion;
         changed = true;
     }
 
     qreal upExpansion = findMaxExpansion(zoneId, 2);
-    if (upExpansion > 0.005) {
+    if (upExpansion > EditorConstants::MinExpansionThreshold) {
         y -= upExpansion;
         h += upExpansion;
         changed = true;
     }
 
     qreal downExpansion = findMaxExpansion(zoneId, 3);
-    if (downExpansion > 0.005) {
+    if (downExpansion > EditorConstants::MinExpansionThreshold) {
         h += downExpansion;
         changed = true;
     }
@@ -372,8 +372,7 @@ bool ZoneAutoFiller::smartFillZone(const QString& zoneId, qreal mouseX, qreal mo
         return false;
     }
 
-    applyRelativeGeometry(zoneId, bestRegion.x(), bestRegion.y(),
-                          bestRegion.width(), bestRegion.height());
+    applyRelativeGeometry(zoneId, bestRegion.x(), bestRegion.y(), bestRegion.width(), bestRegion.height());
     return true;
 }
 
@@ -401,7 +400,7 @@ QVariantMap ZoneAutoFiller::calculateFillRegion(const QString& zoneId, qreal mou
 
 void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const QVariantMap& adjacentZones)
 {
-    const qreal threshold = 0.02;
+    const qreal threshold = EditorConstants::AdjacencyThreshold;
 
     QVariantList rightZones = adjacentZones[QStringLiteral("right")].toList();
     QVariantList leftZones = adjacentZones[QStringLiteral("left")].toList();
@@ -412,16 +411,17 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
     for (const QVariant& rightZoneVar : rightZones) {
         QString rightZoneId = rightZoneVar.toString();
         auto zoneOpt = m_manager->getValidatedZone(rightZoneId);
-        if (!zoneOpt) continue;
+        if (!zoneOpt)
+            continue;
 
         QRectF rightRect = m_manager->extractZoneGeometry(*zoneOpt);
 
-        if (rightRect.y() >= deletedGeom.y() - threshold
-            && rightRect.bottom() <= deletedGeom.bottom() + threshold) {
+        if (rightRect.y() >= deletedGeom.y() - threshold && rightRect.bottom() <= deletedGeom.bottom() + threshold) {
             qreal expansion = rightRect.x() - deletedGeom.x();
-            if (expansion > 0) {
-                applyRelativeGeometry(rightZoneId, deletedGeom.x(), rightRect.y(),
-                                      rightRect.width() + expansion, rightRect.height());
+            QRectF testRect(deletedGeom.x(), rightRect.y(), expansion, rightRect.height());
+            if (expansion > 0 && isRectangleEmpty(testRect, rightZoneId)) {
+                applyRelativeGeometry(rightZoneId, deletedGeom.x(), rightRect.y(), rightRect.width() + expansion,
+                                      rightRect.height());
             }
         }
     }
@@ -430,18 +430,18 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
     for (const QVariant& leftZoneVar : leftZones) {
         QString leftZoneId = leftZoneVar.toString();
         auto zoneOpt = m_manager->getValidatedZone(leftZoneId);
-        if (!zoneOpt) continue;
+        if (!zoneOpt)
+            continue;
 
         QRectF leftRect = m_manager->extractZoneGeometry(*zoneOpt);
 
-        if (leftRect.y() >= deletedGeom.y() - threshold
-            && leftRect.bottom() <= deletedGeom.bottom() + threshold) {
+        if (leftRect.y() >= deletedGeom.y() - threshold && leftRect.bottom() <= deletedGeom.bottom() + threshold) {
             qreal newRight = deletedGeom.right();
             qreal expansion = newRight - leftRect.right();
             QRectF testRect(leftRect.right(), leftRect.y(), expansion, leftRect.height());
             if (expansion > 0 && isRectangleEmpty(testRect, leftZoneId)) {
-                applyRelativeGeometry(leftZoneId, leftRect.x(), leftRect.y(),
-                                      leftRect.width() + expansion, leftRect.height());
+                applyRelativeGeometry(leftZoneId, leftRect.x(), leftRect.y(), leftRect.width() + expansion,
+                                      leftRect.height());
             }
         }
     }
@@ -450,17 +450,17 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
     for (const QVariant& bottomZoneVar : bottomZones) {
         QString bottomZoneId = bottomZoneVar.toString();
         auto zoneOpt = m_manager->getValidatedZone(bottomZoneId);
-        if (!zoneOpt) continue;
+        if (!zoneOpt)
+            continue;
 
         QRectF bottomRect = m_manager->extractZoneGeometry(*zoneOpt);
 
-        if (bottomRect.x() >= deletedGeom.x() - threshold
-            && bottomRect.right() <= deletedGeom.right() + threshold) {
+        if (bottomRect.x() >= deletedGeom.x() - threshold && bottomRect.right() <= deletedGeom.right() + threshold) {
             qreal expansion = bottomRect.y() - deletedGeom.y();
             QRectF testRect(bottomRect.x(), deletedGeom.y(), bottomRect.width(), expansion);
             if (expansion > 0 && isRectangleEmpty(testRect, bottomZoneId)) {
-                applyRelativeGeometry(bottomZoneId, bottomRect.x(), deletedGeom.y(),
-                                      bottomRect.width(), bottomRect.height() + expansion);
+                applyRelativeGeometry(bottomZoneId, bottomRect.x(), deletedGeom.y(), bottomRect.width(),
+                                      bottomRect.height() + expansion);
             }
         }
     }
@@ -469,18 +469,18 @@ void ZoneAutoFiller::expandAdjacentZonesToFill(const QRectF& deletedGeom, const 
     for (const QVariant& topZoneVar : topZones) {
         QString topZoneId = topZoneVar.toString();
         auto zoneOpt = m_manager->getValidatedZone(topZoneId);
-        if (!zoneOpt) continue;
+        if (!zoneOpt)
+            continue;
 
         QRectF topRect = m_manager->extractZoneGeometry(*zoneOpt);
 
-        if (topRect.x() >= deletedGeom.x() - threshold
-            && topRect.right() <= deletedGeom.right() + threshold) {
+        if (topRect.x() >= deletedGeom.x() - threshold && topRect.right() <= deletedGeom.right() + threshold) {
             qreal newBottom = deletedGeom.bottom();
             qreal expansion = newBottom - topRect.bottom();
             QRectF testRect(topRect.x(), topRect.bottom(), topRect.width(), expansion);
             if (expansion > 0 && isRectangleEmpty(testRect, topZoneId)) {
-                applyRelativeGeometry(topZoneId, topRect.x(), topRect.y(),
-                                      topRect.width(), topRect.height() + expansion);
+                applyRelativeGeometry(topZoneId, topRect.x(), topRect.y(), topRect.width(),
+                                      topRect.height() + expansion);
             }
         }
     }

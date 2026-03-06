@@ -18,92 +18,84 @@ import org.kde.kirigami as Kirigami
  *   - showNoneOption: whether to show the none/all option (default: true)
  *   - currentScreenName: the currently selected screen name ("" for none)
  */
-ComboBox {
+WideComboBox {
     id: root
 
     required property var kcm
     property string noneText: i18n("Any Screen")
     property bool showNoneOption: true
-
-    /** The screen name of the current selection ("" if none/all selected) */
+    //* The screen name of the current selection ("" if none/all selected)
     readonly property string currentScreenName: currentValue ?? ""
 
-    textRole: "text"
-    valueRole: "value"
-
-    model: root._buildModel()
-
-    // Allow popup to be wider than the combo box so long screen names aren't truncated
-    popup.width: Math.max(root.width, _longestItemWidth + Kirigami.Units.gridUnit * 3)
-
-    // Measure the widest item text using a hidden TextMetrics
-    readonly property real _longestItemWidth: {
-        let maxW = 0
-        if (root.model) {
-            for (let i = 0; i < root.model.length; ++i) {
-                _metrics.text = root.model[i].text || ""
-                maxW = Math.max(maxW, _metrics.advanceWidth)
-            }
-        }
-        return maxW
-    }
-    TextMetrics { id: _metrics; font: root.font }
-
-    // Rebuild model when screens change (hotplug)
-    Connections {
-        target: root.kcm
-        function onScreensChanged() {
-            let prev = root.currentScreenName
-            root.model = root._buildModel()
-            root.selectScreenName(prev)
-        }
-    }
-
-    /** Select a screen by name, or reset to index 0 if not found */
+    //* Select a screen by name, or reset to index 0 if not found
     function selectScreenName(name) {
         if (!name || name === "") {
-            currentIndex = 0
-            return
+            currentIndex = 0;
+            return ;
         }
         for (let i = 0; i < model.length; i++) {
             if (model[i].value === name) {
-                currentIndex = i
-                return
+                currentIndex = i;
+                return ;
             }
         }
-        currentIndex = 0
+        currentIndex = 0;
     }
 
-    /** Reset selection to the first item (none/all or first screen) */
+    //* Reset selection to the first item (none/all or first screen)
     function reset() {
-        currentIndex = 0
+        currentIndex = 0;
     }
 
     function _buildModel() {
-        let items = []
-        if (root.showNoneOption) {
-            items.push({text: root.noneText, value: ""})
-        }
+        let items = [];
+        if (root.showNoneOption)
+            items.push({
+            "text": root.noneText,
+            "value": ""
+        });
+
         if (root.kcm && root.kcm.screens) {
             for (let i = 0; i < root.kcm.screens.length; ++i) {
-                let s = root.kcm.screens[i]
-                let label = s.name || (i18n("Monitor") + " " + (i + 1))
-                let mfr = s.manufacturer || ""
-                let mdl = s.model || ""
-                let parts = [mfr, mdl].filter(function(s) { return s !== "" })
-                let displayInfo = parts.join(" ")
-                if (displayInfo) {
-                    label += " " + displayInfo
-                }
-                if (s.resolution) {
-                    label += " (" + s.resolution + ")"
-                }
-                if (s.isPrimary) {
-                    label += " — " + i18n("Primary")
-                }
-                items.push({text: label, value: s.name})
+                let s = root.kcm.screens[i];
+                let label = s.name || (i18n("Monitor") + " " + (i + 1));
+                let mfr = s.manufacturer || "";
+                let mdl = s.model || "";
+                let parts = [mfr, mdl].filter(function(s) {
+                    return s !== "";
+                });
+                let displayInfo = parts.join(" ");
+                if (displayInfo)
+                    label += " " + displayInfo;
+
+                if (s.resolution)
+                    label += " (" + s.resolution + ")";
+
+                if (s.isPrimary)
+                    label += " — " + i18n("Primary");
+
+                items.push({
+                    "text": label,
+                    "value": s.name
+                });
             }
         }
-        return items
+        return items;
     }
+
+    textRole: "text"
+    valueRole: "value"
+    model: root._buildModel()
+
+    // Rebuild model when screens change (hotplug)
+    Connections {
+        function onScreensChanged() {
+            let prev = root.currentScreenName;
+            root.model = root._buildModel();
+            root.selectScreenName(prev);
+        }
+
+        target: root.kcm
+    }
+
 }

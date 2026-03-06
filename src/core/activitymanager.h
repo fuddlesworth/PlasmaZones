@@ -17,7 +17,7 @@ class VirtualDesktopManager;
  * @brief Manages KDE Activities integration for activity-based layouts
  *
  * Handles activity changes and automatically switches layouts
- * based on assignments. 
+ * based on assignments.
  *
  * Note: KActivities is optional - if not available, activity support
  * will be limited but the system will still work.

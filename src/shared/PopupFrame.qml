@@ -19,7 +19,6 @@ Item {
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
     property real containerRadius: Kirigami.Units.smallSpacing * 3
-
     default property alias contentData: frame.data
 
     QtObject {
@@ -49,4 +48,5 @@ Item {
         border.color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, style.borderAlpha)
         border.width: 1
     }
+
 }

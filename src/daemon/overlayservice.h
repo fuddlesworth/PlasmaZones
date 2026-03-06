@@ -8,6 +8,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QString>
 #include <atomic>
 #include <memory>
@@ -74,6 +75,25 @@ public:
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
+    /**
+     * @brief Set which layout types appear in the zone picker
+     *
+     * When autotile mode is active, show only dynamic layouts.
+     * When manual mode is active, show only manual layouts.
+     * The autotile feature gate (KCM setting) controls whether dynamic layouts
+     * are ever visible.
+     */
+    void setLayoutFilter(bool includeManual, bool includeAutotile);
+
+    /**
+     * @brief Set screens to exclude from overlay display
+     *
+     * Used to suppress the overlay on autotile-managed screens in mixed
+     * multi-monitor mode. The overlay will not be shown or updated on
+     * screens whose names appear in the set.
+     */
+    void setExcludedScreens(const QSet<QString>& screenNames);
+
     // Screen management
     void setupForScreen(QScreen* screen);
     void removeScreen(QScreen* screen);
@@ -88,6 +108,9 @@ public:
 
     // Mouse position for shader effects
     void updateMousePosition(int cursorX, int cursorY) override;
+
+    // Filtered layout count for trigger edge computation
+    int visibleLayoutCount(const QString& screenName) const override;
 
     // Selected zone from zone selector (IOverlayService interface)
     bool hasSelectedZone() const override;
@@ -108,16 +131,26 @@ public:
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
                        bool autoAssign = false, const QString& screenName = QString());
 
+    /**
+     * @brief Pre-create Layout OSD QML windows for all connected screens.
+     *
+     * First-time QML compilation of LayoutOsd.qml takes ~100-300ms (component
+     * loading, scene graph creation, Wayland layer-shell registration).  Call
+     * this early (deferred from daemon start) so the first layout switch OSD
+     * appears instantly instead of blocking the event loop.
+     */
+    void warmUpLayoutOsd();
+
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
                            const QString& screenName = QString());
 
     // Shader preview overlay (editor Shader Settings dialog - dedicated window avoids multi-pass clear issues)
-    void showShaderPreview(int x, int y, int width, int height, const QString& screenName,
-                          const QString& shaderId, const QString& shaderParamsJson, const QString& zonesJson) override;
-    void updateShaderPreview(int x, int y, int width, int height,
-                             const QString& shaderParamsJson, const QString& zonesJson) override;
+    void showShaderPreview(int x, int y, int width, int height, const QString& screenName, const QString& shaderId,
+                           const QString& shaderParamsJson, const QString& zonesJson) override;
+    void updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
+                             const QString& zonesJson) override;
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
@@ -155,10 +188,8 @@ private:
     void createOverlayWindow(QScreen* screen);
     void destroyOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
-    void updateLabelsTextureForWindow(QQuickWindow* window,
-                                     const QVariantList& patched,
-                                     QScreen* screen,
-                                     Layout* screenLayout);
+    void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
+                                      Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildLayoutsList(const QString& screenName = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
@@ -196,6 +227,7 @@ private:
     // Shader preview overlay (editor dialog)
     QQuickWindow* m_shaderPreviewWindow = nullptr;
     QScreen* m_shaderPreviewScreen = nullptr;
+    QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
 
     // Snap Assist overlay (window picker after snapping)
     QQuickWindow* m_snapAssistWindow = nullptr;
@@ -206,6 +238,8 @@ private:
     QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
     // Layout Picker overlay (interactive layout browser)
     QQuickWindow* m_layoutPickerWindow = nullptr;
+
+    bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
 
     // Track screens with failed window creation to prevent log spam
     QHash<QScreen*, bool> m_navigationOsdCreationFailed;
@@ -265,9 +299,7 @@ private:
      * Handles common QML window creation: component loading, error checking,
      * QQuickWindow casting, ownership, and screen assignment.
      */
-    QQuickWindow* createQmlWindow(const QUrl& qmlUrl,
-                                  QScreen* screen,
-                                  const char* windowType,
+    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
                                   const QVariantMap& initialProperties = QVariantMap());
 
     // Audio viz: push spectrum to overlay windows
@@ -312,6 +344,13 @@ private:
 
     // Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
+
+    // Layout filter: which types to include in zone picker (set by Daemon)
+    bool m_includeManualLayouts = true;
+    bool m_includeAutotileLayouts = false;
+
+    // Screens excluded from overlay display (autotile-managed screens)
+    QSet<QString> m_excludedScreens;
 };
 
 } // namespace PlasmaZones

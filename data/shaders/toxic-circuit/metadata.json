@@ -19,7 +19,14 @@
         {"id": "mouseInfluenceStrength", "name": "Mouse Influence", "group": "Interaction", "type": "float", "slot": 9, "default": 1.5, "min": 0.5, "max": 3.0},
         {"id": "audioSensitivity", "name": "Audio Sensitivity", "group": "Audio", "type": "float", "slot": 10, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "sparkIntensity", "name": "Spark Intensity", "group": "Audio", "type": "float", "slot": 11, "default": 1.0, "min": 0.0, "max": 3.0},
+        {"id": "arcSpread", "name": "Arc Discharge Spread", "group": "Labels", "type": "float", "slot": 12, "default": 3.0, "min": 1.0, "max": 6.0},
+        {"id": "dischargeBright", "name": "Discharge Brightness", "group": "Labels", "type": "float", "slot": 13, "default": 2.2, "min": 1.0, "max": 4.0},
+        {"id": "toxicReact", "name": "Toxic Reactivity", "group": "Labels", "type": "float", "slot": 14, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "dripCount", "name": "Toxic Drip Count", "group": "Effects", "type": "float", "slot": 15, "default": 5.0, "min": 2.0, "max": 10.0},
+        {"id": "arcFrequency", "name": "Arc Noise Frequency", "group": "Effects", "type": "float", "slot": 16, "default": 12.0, "min": 4.0, "max": 24.0},
         {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#39FF14"},
-        {"id": "secondaryColor", "name": "Secondary Color", "group": "Colors", "type": "color", "slot": 1, "default": "#BF00FF"}
+        {"id": "secondaryColor", "name": "Secondary Color", "group": "Colors", "type": "color", "slot": 1, "default": "#BF00FF"},
+        {"id": "arcColor", "name": "Arc Discharge Color", "group": "Colors", "type": "color", "slot": 2, "default": "#00ff88"},
+        {"id": "smogColor", "name": "Smog Tint", "group": "Colors", "type": "color", "slot": 3, "default": "#1a0033"}
     ]
 }

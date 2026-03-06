@@ -48,7 +48,7 @@ Rectangle {
     property color activeColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, activeOpacity)
     // Font properties for zone number labels
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -301,6 +301,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         propagateComposedEvents: true
+        Accessible.name: i18n("Zone layout selector")
         onEntered: {
             if (root.selectorState === "near")
                 root.setState("expanded");

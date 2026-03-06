@@ -14,10 +14,23 @@ layout(binding = 3) uniform sampler2D iChannel1;
 layout(binding = 4) uniform sampler2D iChannel2;
 layout(binding = 5) uniform sampler2D iChannel3;
 
-// UV for iChannel i when resolution differs from iResolution. channelIndex 0–3.
+// Returns UV for sampling iChannel[channelIndex] at the given fragCoord.
+// fragCoord uses Y=0-at-top convention (matching iResolution / Shadertoy style).
+//
+// On OpenGL (iFlipBufferY=1), FBO textures store row 0 at the physical bottom
+// of GPU memory, so standard UV sampling would invert the result. On Vulkan/Metal
+// (iFlipBufferY=0), FBOs store row 0 at the top, matching UV convention directly.
+//
+// IMPORTANT: Always use channelUv() for ALL iChannel sampling — never sample
+// iChannel textures with raw vTexCoord or manual UV, as this bypasses the
+// backend-specific Y correction.
 vec2 channelUv(int channelIndex, vec2 fragCoord) {
     vec2 r = max(iChannelResolution[channelIndex], vec2(1.0));
-    return fragCoord / r;
+    vec2 uv = fragCoord / r;
+    if (iFlipBufferY != 0) {
+        uv.y = 1.0 - uv.y;
+    }
+    return uv;
 }
 
 #endif

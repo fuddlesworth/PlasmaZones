@@ -25,11 +25,11 @@ namespace PlasmaZones {
  */
 struct PLASMAZONES_EXPORT SnapResult
 {
-    bool shouldSnap = false;    ///< Whether the window should be snapped
-    QRect geometry;             ///< Target geometry for snapping (x, y, width, height)
-    QString zoneId;             ///< UUID of primary target zone (backward compat)
-    QStringList zoneIds;        ///< All zone UUIDs (for multi-zone snap)
-    QString screenName;         ///< Screen where the zone is located
+    bool shouldSnap = false; ///< Whether the window should be snapped
+    QRect geometry; ///< Target geometry for snapping (x, y, width, height)
+    QString zoneId; ///< UUID of primary target zone (backward compat)
+    QStringList zoneIds; ///< All zone UUIDs (for multi-zone snap)
+    QString screenName; ///< Screen where the zone is located
 
     /**
      * @brief Check if this result represents a valid snap operation
@@ -57,13 +57,13 @@ struct PLASMAZONES_EXPORT SnapResult
  */
 struct PLASMAZONES_EXPORT DragInfo
 {
-    QString windowId;           ///< Full window ID (class:resource:pointer)
-    QRect geometry;             ///< Current window geometry
-    QString appName;            ///< Application name (for exclusion checks)
-    QString windowClass;        ///< Window class (for pattern matching)
-    QString screenName;         ///< Screen where window is located
-    bool isSticky = false;      ///< Whether window is on all desktops
-    int virtualDesktop = 0;     ///< Current virtual desktop (0 = all)
+    QString windowId; ///< Full window ID (class:resource:pointer)
+    QRect geometry; ///< Current window geometry
+    QString appName; ///< Application name (for exclusion checks)
+    QString windowClass; ///< Window class (for pattern matching)
+    QString screenName; ///< Screen where window is located
+    bool isSticky = false; ///< Whether window is on all desktops
+    int virtualDesktop = 0; ///< Current virtual desktop (0 = all)
 
     /**
      * @brief Check if drag info has required fields
@@ -73,7 +73,7 @@ struct PLASMAZONES_EXPORT DragInfo
         return !windowId.isEmpty();
     }
 
-    // Note: Use Utils::extractStableId(dragInfo.windowId) to get stable ID
+    // Note: Use Utils::extractAppId(dragInfo.windowId) to get app ID
 };
 
 /**
@@ -84,21 +84,21 @@ struct PLASMAZONES_EXPORT DragInfo
 struct PLASMAZONES_EXPORT NavigationCommand
 {
     enum class Type {
-        MoveToZone,     ///< Move window to a specific zone
-        FocusZone,      ///< Focus window in a zone
-        SwapWindows,    ///< Swap two windows between zones
-        PushToEmpty,    ///< Push window to first empty zone
-        Restore,        ///< Restore window to original size
-        ToggleFloat,    ///< Toggle window floating state
-        SnapToNumber,   ///< Snap to zone by number
-        Rotate          ///< Rotate windows in layout
+        MoveToZone, ///< Move window to a specific zone
+        FocusZone, ///< Focus window in a zone
+        SwapWindows, ///< Swap two windows between zones
+        PushToEmpty, ///< Push window to first empty zone
+        Restore, ///< Restore window to original size
+        ToggleFloat, ///< Toggle window floating state
+        SnapToNumber, ///< Snap to zone by number
+        Rotate ///< Rotate windows in layout
     };
 
     Type type = Type::MoveToZone;
     QString targetZoneId;
     QString targetWindowId;
-    QString zoneGeometry;       ///< JSON geometry for D-Bus
-    bool clockwise = true;      ///< For rotation commands
+    QString zoneGeometry; ///< JSON geometry for D-Bus
+    bool clockwise = true; ///< For rotation commands
 
     /**
      * @brief Create a move-to-zone command
@@ -132,10 +132,10 @@ struct PLASMAZONES_EXPORT NavigationCommand
  */
 struct PLASMAZONES_EXPORT RotationEntry
 {
-    QString windowId;           ///< Window to move
-    QString sourceZoneId;       ///< Zone window is moving from (for OSD highlighting)
-    QString targetZoneId;       ///< Zone to move to
-    QRect targetGeometry;       ///< Target geometry in pixels
+    QString windowId; ///< Window to move
+    QString sourceZoneId; ///< Zone window is moving from (for OSD highlighting)
+    QString targetZoneId; ///< Zone to move to
+    QRect targetGeometry; ///< Target geometry in pixels
 };
 
 } // namespace PlasmaZones

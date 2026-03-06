@@ -38,7 +38,9 @@ RowLayout {
 
     Label {
         id: sectionLabel
+
         text: root.title
         font.weight: Font.DemiBold
     }
+
 }

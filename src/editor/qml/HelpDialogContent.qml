@@ -175,7 +175,7 @@ ScrollView {
 
     component TipLabel: Label {
         required property string tipText
-        text: "• " + tipText
+        text: i18nc("@item:inlistbox Bullet list item, %1 is the tip", "• %1", tipText)
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
     }

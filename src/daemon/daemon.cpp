@@ -8,25 +8,13 @@
 #include <QPointer>
 #include <QtConcurrent>
 #include <QScreen>
-#include <QCursor>
-#include <QAction>
 #include <QDBusConnection>
-#include <QDBusMessage>
-#include <QDBusPendingCall>
 #include <QDBusError>
 #include <QFile>
 #include <QThread>
-#include <QProcess>
-
-#include <KGlobalAccel>
-#include <KLocalizedString>
-#include <KSharedConfig>
-#include <KConfigGroup>
 
 #include "overlayservice.h"
 #include "modetracker.h"
-#include "unifiedlayoutcontroller.h"
-#include "zoneselectorcontroller.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
@@ -38,7 +26,6 @@
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../core/windowtrackingservice.h"
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../dbus/layoutadaptor.h"
@@ -48,77 +35,16 @@
 #include "../dbus/windowtrackingadaptor.h"
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
+#include "../dbus/autotileadaptor.h"
+#include "../autotile/AutotileEngine.h"
+#include "../autotile/AlgorithmRegistry.h"
 
 namespace PlasmaZones {
 
 namespace {
-// Geometry/panel timing (ms) — keep in sync with comments in processPendingGeometryUpdates
+// Geometry/panel timing (ms) — keep in sync with daemon_autotile.cpp constants
 // Debounce: coalesce rapid geometry changes (multi-screen, panel editor) into one update.
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
-// After processing geometry we re-query panels once so we pick up settled state (e.g. panel editor close).
-constexpr int DELAYED_PANEL_REQUERY_MS = 400;
-// Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
-constexpr int REAPPLY_DELAY_MS = 0;
-
-// Helper function to convert NavigationDirection to string
-QString navigationDirectionToString(NavigationDirection direction)
-{
-    switch (direction) {
-    case NavigationDirection::Left:
-        return QStringLiteral("left");
-    case NavigationDirection::Right:
-        return QStringLiteral("right");
-    case NavigationDirection::Up:
-        return QStringLiteral("up");
-    case NavigationDirection::Down:
-        return QStringLiteral("down");
-    }
-    return QString();
-}
-
-/**
- * @brief Resolve current screen for keyboard shortcuts
- *
- * Primary source: the cursor's screen, reported by the KWin effect via
- * cursorScreenChanged (fires on every monitor crossing in slotMouseChanged).
- * This accurately reflects where the user is looking, even if no window
- * on that screen has focus.
- *
- * Fallback: the focused window's screen, reported via windowActivated.
- * Used when the effect hasn't loaded yet or no mouse movement has occurred.
- *
- * QCursor::pos() is NOT used — it returns stale data for background daemons
- * on Wayland.
- */
-QScreen* resolveShortcutScreen(const WindowTrackingAdaptor* trackingAdaptor)
-{
-    if (!trackingAdaptor) {
-        return nullptr;
-    }
-
-    // Prefer cursor screen — tracks the physical cursor position
-    const QString& cursorScreen = trackingAdaptor->lastCursorScreenName();
-    if (!cursorScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByIdOrName(cursorScreen);
-        if (screen) {
-            return screen;
-        }
-    }
-
-    // Cursor screen not yet reported (effect not loaded or no mouse movement).
-    // Fall back to focused window's screen.
-    const QString& activeScreen = trackingAdaptor->lastActiveScreenName();
-    if (!activeScreen.isEmpty()) {
-        QScreen* screen = Utils::findScreenByIdOrName(activeScreen);
-        if (screen) {
-            return screen;
-        }
-    }
-
-    // Last resort: primary screen (daemon just started, no KWin effect data yet)
-    qCDebug(lcDaemon) << "resolveShortcutScreen: falling back to primary screen";
-    return Utils::primaryScreen();
-}
 } // anonymous namespace
 
 Daemon::Daemon(QObject* parent)
@@ -141,7 +67,6 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setSingleShot(true);
     m_geometryUpdateTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
-
 }
 
 Daemon::~Daemon()
@@ -156,39 +81,40 @@ bool Daemon::init()
     // The registry checks for Qt6::ShaderTools availability at compile time
     // and for qsb tool availability at runtime
     auto* shaderRegistry = new ShaderRegistry(this);
-    auto scheduleWarmForShader = [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
-        if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
-            return;
-        }
-        if (info.vertexShaderPath.isEmpty() || info.sourcePath.isEmpty()) {
-            return;
-        }
-        if (!QFile::exists(info.vertexShaderPath) || !QFile::exists(info.sourcePath)) {
-            return;
-        }
-        ShaderRegistry* reg = registryPtr.data();
-        if (!reg) {
-            return;
-        }
-        const QString shaderId = info.id;
-        auto* watcher = new QFutureWatcher<WarmShaderBakeResult>(this);
-        connect(watcher, &QFutureWatcher<WarmShaderBakeResult>::finished, this, [registryPtr, watcher, shaderId]() {
-            if (!registryPtr) {
-                watcher->deleteLater();
+    auto scheduleWarmForShader =
+        [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
+            if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
                 return;
             }
-            const WarmShaderBakeResult r = watcher->result();
-            if (!r.success) {
-                qCWarning(lcDaemon) << "Shader bake failed for" << shaderId << ":" << r.errorMessage;
+            if (info.vertexShaderPath.isEmpty() || info.sourcePath.isEmpty()) {
+                return;
             }
-            registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
-            watcher->deleteLater();
-        });
-        reg->reportShaderBakeStarted(shaderId);
-        watcher->setFuture(QtConcurrent::run([vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
-            return warmShaderBakeCacheForPaths(vertPath, fragPath);
-        }));
-    };
+            if (!QFile::exists(info.vertexShaderPath) || !QFile::exists(info.sourcePath)) {
+                return;
+            }
+            ShaderRegistry* reg = registryPtr.data();
+            if (!reg) {
+                return;
+            }
+            const QString shaderId = info.id;
+            auto* watcher = new QFutureWatcher<WarmShaderBakeResult>(this);
+            connect(watcher, &QFutureWatcher<WarmShaderBakeResult>::finished, this, [registryPtr, watcher, shaderId]() {
+                if (!registryPtr) {
+                    watcher->deleteLater();
+                    return;
+                }
+                const WarmShaderBakeResult r = watcher->result();
+                if (!r.success) {
+                    qCWarning(lcDaemon) << "Shader bake failed for" << shaderId << ":" << r.errorMessage;
+                }
+                registryPtr->reportShaderBakeFinished(shaderId, r.success, r.errorMessage);
+                watcher->deleteLater();
+            });
+            reg->reportShaderBakeStarted(shaderId);
+            watcher->setFuture(QtConcurrent::run([vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
+                return warmShaderBakeCacheForPaths(vertPath, fragPath);
+            }));
+        };
     connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {
         const QList<ShaderRegistry::ShaderInfo> shaders = ShaderRegistry::instance()->availableShaders();
         for (const ShaderRegistry::ShaderInfo& info : shaders) {
@@ -209,8 +135,7 @@ bool Daemon::init()
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
         for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(
-                GeometryUtils::effectiveScreenGeometry(layout, primary));
+            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primary));
         }
     }
 
@@ -220,8 +145,7 @@ bool Daemon::init()
     if (auto* defLayout = m_layoutManager->defaultLayout()) {
         m_overlayService->setLayout(defLayout);
         m_zoneDetector->setLayout(defLayout);
-        qCInfo(lcDaemon) << "Overlay configured layout= " << defLayout->name()
-                         << " zones= " << defLayout->zoneCount();
+        qCInfo(lcDaemon) << "Overlay configured layout= " << defLayout->name() << " zones= " << defLayout->zoneCount();
     } else {
         qCWarning(lcDaemon) << "No default layout available for overlay";
     }
@@ -237,8 +161,7 @@ bool Daemon::init()
             // on the fly via GeometryUtils::getZoneGeometryWithGaps().
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
-                layout->recalculateZoneGeometries(
-                    GeometryUtils::effectiveScreenGeometry(layout, primary));
+                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -262,16 +185,73 @@ bool Daemon::init()
                 // Only recalculate for the specific screen
                 QScreen* screen = m_screenManager->screenByName(screenName);
                 if (screen) {
-                    layout->recalculateZoneGeometries(
-                        GeometryUtils::effectiveScreenGeometry(layout, screen));
+                    layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts
             });
 
-    // Connect settings changes to overlay service
+    // Connect settings changes to overlay service and autotile engine.
+    // This is the SINGLE comprehensive handler for batch config reloads (Settings::load()).
+    // Individual autotile signals are NOT emitted from load() — all autotile state
+    // transitions are handled here to avoid redundant retile passes.
+    m_prevSnappingEnabled = m_settings->snappingEnabled();
+    m_prevAutotileEnabled = m_settings->autotileEnabled();
     connect(m_settings.get(), &Settings::settingsChanged, this, [this]() {
         m_overlayService->updateSettings(m_settings.get());
+
+        // Detect state transitions before syncing
+        const bool snappingNow = m_settings->snappingEnabled();
+        const bool autotileNow = m_settings->autotileEnabled();
+        const bool snappingToggled = snappingNow != m_prevSnappingEnabled;
+        const bool autotileToggled = autotileNow != m_prevAutotileEnabled;
+        m_prevSnappingEnabled = snappingNow;
+        m_prevAutotileEnabled = autotileNow;
+
+        // Capture old preview params before sync to detect tiling parameter changes
+        const auto prevPreviewParams = AlgorithmRegistry::configuredPreviewParams();
+
+        // Sync engine config (idempotent — skips retile if nothing changed)
+        if (m_autotileEngine) {
+            m_autotileEngine->syncFromSettings(m_settings.get());
+        }
+
+        // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
+        // notify layout list consumers to refetch with updated previews
+        if (AlgorithmRegistry::configuredPreviewParams() != prevPreviewParams && m_layoutAdaptor) {
+            m_layoutAdaptor->notifyLayoutListChanged();
+        }
+
+        // Handle autotile feature gate toggle
+        if (autotileToggled && !autotileNow) {
+            handleAutotileDisabled();
+        }
+
+        // Handle autotile feature gate toggle ON:
+        // When the KCM checkbox enables autotile, activate autotile on all screens
+        // using the last algorithm (same logic as snapping-to-autotile transition).
+        if (autotileToggled && autotileNow && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
+            handleSnappingToAutotile();
+        }
+
+        // Handle snapping toggle → autotile activation.
+        // Guard: skip if already in autotile mode to avoid resetting per-screen
+        // algorithm customizations with the global algorithm.
+        if (snappingToggled && !snappingNow && autotileNow && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
+            handleSnappingToAutotile();
+        }
+
+        // Re-derive autotile screens and apply per-screen overrides.
+        // windowsReleasedFromTiling clears floating state for released windows.
+        updateAutotileScreens();
+        updateLayoutFilter();
+
+        // Resnap after autotile disabled: restore windows to manual-mode zones.
+        // Must run after updateAutotileScreens so floating state is cleared first.
+        if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
+            m_suppressResnapOsd = true;
+            m_windowTrackingAdaptor->resnapCurrentAssignments();
+        }
     });
 
     // Initialize domain-specific D-Bus adaptors
@@ -294,6 +274,7 @@ bool Daemon::init()
     // Window tracking adaptor - window-zone assignments
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
                                                         m_virtualDesktopManager.get(), this);
+    m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers
@@ -312,10 +293,18 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Window tracking service - business logic for zone assignments
-    m_windowTrackingService = std::make_unique<WindowTrackingService>(
-        m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-        m_virtualDesktopManager.get(), this);
+    // Initialize autotile engine
+    m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
+                                                        m_screenManager.get(), this);
+    m_autotileEngine->syncFromSettings(m_settings.get());
+    m_autotileEngine->connectToSettings(m_settings.get());
+
+    // Give the window drag adaptor access to the autotile engine for per-screen
+    // autotile checks (overlay suppression and snap rejection on autotile screens)
+    m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
+
+    // Create autotile D-Bus adaptor
+    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
@@ -324,8 +313,11 @@ bool Daemon::init()
         return false;
     }
 
-    // Retry D-Bus service registration (with exponential backoff)
-    const int maxRetries = 3;
+    // Retry D-Bus service registration with exponential backoff.
+    // Synchronous retry is required here because init() runs before QGuiApplication::exec(),
+    // so QTimer-based async approaches won't fire. Delays are kept short (700ms total max).
+    constexpr int maxRetries = 3;
+    constexpr int baseDelayMs = 100; // 100ms, 200ms, 400ms exponential backoff
     bool serviceRegistered = false;
     for (int attempt = 0; attempt < maxRetries; ++attempt) {
         if (bus.registerService(QString(DBus::ServiceName))) {
@@ -335,9 +327,9 @@ bool Daemon::init()
 
         QDBusError error = bus.lastError();
         if (error.type() == QDBusError::ServiceUnknown || error.type() == QDBusError::NoReply) {
-            // Transient error - retry
+            // Transient error - retry with exponential backoff
             if (attempt < maxRetries - 1) {
-                int delayMs = 1000 * (attempt + 1); // Linear backoff: 1s, 2s, 3s
+                const int delayMs = baseDelayMs * (1 << attempt);
                 qCWarning(lcDaemon) << "Failed to register D-Bus service (attempt" << (attempt + 1) << "/" << maxRetries
                                     << "):" << error.message() << "- retrying in" << delayMs << "ms";
                 QThread::msleep(delayMs);
@@ -394,426 +386,18 @@ void Daemon::start()
         return;
     }
 
-    // Initialize and start screen manager
-    m_screenManager->init();
-    m_screenManager->start();
-
-    // Warn about identical monitors producing duplicate screen IDs
-    Utils::warnDuplicateScreenIds();
-
-    // Initialize and start virtual desktop manager
-    m_virtualDesktopManager->init();
-    m_virtualDesktopManager->start();
-
-    // Connect virtual desktop changes to layout switching
-    connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::currentDesktopChanged, this, [this](int desktop) {
-        // Update all components with current desktop for per-desktop layout lookup
-        // NOTE: LayoutManager is the single source of truth for desktop/activity.
-        // WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen().
-        m_overlayService->setCurrentVirtualDesktop(desktop);
-        m_layoutManager->setCurrentVirtualDesktop(desktop);
-        if (m_unifiedLayoutController) {
-            m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
-        }
-        if (m_overlayService->isVisible()) {
-            m_overlayService->updateGeometries();
-        }
-    });
-
-    // Set initial virtual desktop on components that maintain their own copy
-    // (WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen())
-    const int initialDesktop = m_virtualDesktopManager->currentDesktop();
-    m_overlayService->setCurrentVirtualDesktop(initialDesktop);
-
-    // Initialize and start activity manager
-    // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
-    m_activityManager->setVirtualDesktopManager(m_virtualDesktopManager.get());
-    m_activityManager->init();
-    if (ActivityManager::isAvailable()) {
-        m_activityManager->start();
-
-        // Set initial activity on components that maintain their own copy
-        m_overlayService->setCurrentActivity(m_activityManager->currentActivity());
-
-        // Connect activity changes: update all components
-        connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
-                [this](const QString& activityId) {
-                    m_overlayService->setCurrentActivity(activityId);
-                    m_layoutManager->setCurrentActivity(activityId);
-                    if (m_unifiedLayoutController) {
-                        m_unifiedLayoutController->setCurrentActivity(activityId);
-                    }
-                    if (m_overlayService->isVisible()) {
-                        m_overlayService->updateGeometries();
-                    }
-                });
-    }
-
-    // Connect screen manager signals
-    connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
-        // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
-        // (handles the case where EDID wasn't available during very early startup)
-        Utils::invalidateEdidCache(screen->name());
-        m_overlayService->handleScreenAdded(screen);
-        // Use per-screen layout (falls back to activeLayout if no assignment)
-        Layout* screenLayout = m_layoutManager->layoutForScreen(
-            Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
-            m_activityManager && ActivityManager::isAvailable()
-                ? m_activityManager->currentActivity() : QString());
-        if (screenLayout) {
-            screenLayout->recalculateZoneGeometries(
-                GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
-        }
-    });
-
-    connect(m_screenManager.get(), &ScreenManager::screenRemoved, this, [this](QScreen* screen) {
-        m_overlayService->handleScreenRemoved(screen);
-
-        // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
-        const QString removedName = screen->name();
-        const QString removedScreenId = Utils::screenIdentifier(screen);
-
-        // Invalidate cached EDID serial so a different monitor on this connector is detected
-        Utils::invalidateEdidCache(removedName);
-
-        // Clean stale entries from layout visibility restrictions
-        // Check both screen ID (new) and connector name (legacy)
-        for (Layout* layout : m_layoutManager->layouts()) {
-            QStringList allowed = layout->allowedScreens();
-            if (allowed.isEmpty()) continue;
-            bool changed = false;
-            changed |= (allowed.removeAll(removedScreenId) > 0);
-            changed |= (allowed.removeAll(removedName) > 0);
-            if (changed) {
-                layout->setAllowedScreens(allowed);
-            }
-        }
-    });
-
-    connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this,
-            [this](QScreen* screen, const QRect& geometry) {
-                Q_UNUSED(geometry)
-                // Queue geometry update with debouncing to avoid cascade
-                QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-                m_pendingGeometryUpdates[screen->name()] = availableGeom;
-                m_geometryUpdateTimer.start();
-            });
-
-    // Connect to available geometry changes (panels added/removed/resized)
-    // This is reactive - the sensor windows automatically track panel changes
-    // Uses debouncing to coalesce rapid changes into a single update
-    connect(m_screenManager.get(), &ScreenManager::availableGeometryChanged, this,
-            [this](QScreen* screen, const QRect& availableGeometry) {
-                // Queue geometry update with debouncing
-                // Multiple rapid changes will be coalesced into a single update
-                m_pendingGeometryUpdates[screen->name()] = availableGeometry;
-                m_geometryUpdateTimer.start();
-            });
-
-    // Don't pre-create overlay windows at startup. On Wayland with LayerShellQt
-    // this can cause visibility issues. Create on-demand in show() instead,
-    // which also avoids the overlay flashing during login.
-    qCInfo(lcDaemon) << "Overlay service ready -" << m_screenManager->screens().count()
-                     << "screens available (windows created on-demand)";
-
-    // Register global shortcuts via ShortcutManager
+    connectScreenSignals();
+    connectDesktopActivity();
     m_shortcutManager->registerShortcuts();
-
-    // Connect shortcut signals
-    // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
-    // get stale cursor data. resolveShortcutScreen() handles both by falling back to
-    // the screen reported by the KWin effect's windowActivated D-Bus call.
-    connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
-            screen = Utils::findScreenByIdOrName(m_unifiedLayoutController->currentScreenName());
-        }
-        if (screen) {
-            m_layoutAdaptor->openEditorForScreen(screen->name());
-        } else {
-            m_layoutAdaptor->openEditor();
-        }
-    });
-    // Quick layout shortcuts (Meta+1-9)
-    connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
-            qCDebug(lcDaemon) << "No screen info for quickLayout shortcut — skipping";
-            return;
-        }
-        m_unifiedLayoutController->applyLayoutByNumber(number);
-    });
-
-    // Cycle layout shortcuts (Meta+[/])
-    connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
-            qCDebug(lcDaemon) << "No screen info for previousLayout shortcut — skipping";
-            return;
-        }
-        m_unifiedLayoutController->cyclePrevious();
-    });
-    connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
-            qCDebug(lcDaemon) << "No screen info for nextLayout shortcut — skipping";
-            return;
-        }
-        m_unifiedLayoutController->cycleNext();
-    });
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Keyboard Navigation Shortcuts
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    // Move window to adjacent zone shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this,
-            [this](NavigationDirection direction) {
-                QString dirStr = navigationDirectionToString(direction);
-                if (dirStr.isEmpty()) {
-                    qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
-                    return;
-                }
-                m_windowTrackingAdaptor->moveWindowToAdjacentZone(dirStr);
-            });
-
-    // Focus navigation to adjacent zone shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection direction) {
-        QString dirStr = navigationDirectionToString(direction);
-        if (dirStr.isEmpty()) {
-            qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
-            return;
-        }
-        m_windowTrackingAdaptor->focusAdjacentZone(dirStr);
-    });
-
-    // Push to empty zone shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for pushToEmptyZone shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->pushToEmptyZone(screen->name());
-    });
-
-    // Restore window size shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() {
-        m_windowTrackingAdaptor->restoreWindowSize();
-    });
-
-    // Toggle window float shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
-        m_windowTrackingAdaptor->toggleWindowFloat();
-    });
-
-    // Swap window with adjacent zone shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this,
-            [this](NavigationDirection direction) {
-                QString dirStr = navigationDirectionToString(direction);
-                if (dirStr.isEmpty()) {
-                    qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
-                    return;
-                }
-                m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
-            });
-
-    // Rotate windows in layout shortcuts
-    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool clockwise) {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for rotateWindows shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screen->name());
-    });
-
-    // Snap to zone by number shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int zoneNumber) {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for snapToZone shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen->name());
-    });
-
-    // Cycle windows within zone shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool forward) {
-        m_windowTrackingAdaptor->cycleWindowsInZone(forward);
-    });
-
-    // Resnap to new layout shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
-        m_windowTrackingAdaptor->resnapToNewLayout();
-    });
-
-    // Layout picker shortcut (interactive layout browser + resnap)
-    // Capture screen name at open time so it's still valid after the picker closes.
-    connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for layoutPicker shortcut — skipping";
-            return;
-        }
-        const QString screenName = Utils::screenIdentifier(screen);
-        m_unifiedLayoutController->setCurrentScreenName(screenName);
-        m_overlayService->showLayoutPicker(screenName);
-    });
-    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        // Screen name was already set when the picker opened.
-        m_unifiedLayoutController->applyLayoutById(layoutId);
-        // Suppress resnap OSD — the layout switch OSD already provides feedback
-        m_suppressResnapOsd = true;
-        m_windowTrackingAdaptor->resnapToNewLayout();
-    });
-
-    // Snap all windows shortcut
-    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
-            qCDebug(lcDaemon) << "No screen info for snapAllWindows shortcut — skipping";
-            return;
-        }
-        m_windowTrackingAdaptor->snapAllWindows(screen->name());
-    });
-
-    // Initialize mode tracker for last-used layout
-    m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), this);
-    m_modeTracker->load();
-
-    // Initialize unified layout controller (manual layouts only)
-    m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
-        m_layoutManager.get(), m_settings.get(), this);
-
-    // Set initial desktop/activity context for visibility-filtered cycling
-    m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
-    m_unifiedLayoutController->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
-    if (m_activityManager && ActivityManager::isAvailable()) {
-        m_layoutManager->setCurrentActivity(m_activityManager->currentActivity());
-        m_unifiedLayoutController->setCurrentActivity(m_activityManager->currentActivity());
-    }
-
-    // Connect unified layout controller signals for OSD display
-    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
-        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-            showLayoutOsd(layout, m_unifiedLayoutController->currentScreenName());
-        }
-    });
-
-    // Connect layout manager changes to mode tracker for recording last manual layout
-    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
-        if (layout && m_modeTracker) {
-            m_modeTracker->recordManualLayout(layout->id());
-        }
-    });
-
-    // Connect zone selector manual layout selection (drop on zone)
-    // Screen name comes directly from the zone selector window
-    connect(m_overlayService.get(), &OverlayService::manualLayoutSelected, this,
-            [this](const QString& layoutId, const QString& screenName) {
-        if (!m_layoutManager) {
-            return;
-        }
-        Layout* layout = m_layoutManager->layoutById(QUuid::fromString(layoutId));
-        if (!layout) {
-            return;
-        }
-        if (!screenName.isEmpty()) {
-            QString screenId = Utils::screenIdForName(screenName);
-            m_layoutManager->assignLayout(screenId, m_virtualDesktopManager->currentDesktop(),
-                m_activityManager && ActivityManager::isAvailable()
-                    ? m_activityManager->currentActivity() : QString(),
-                layout);
-        }
-        // Always update global active layout — fires activeLayoutChanged which
-        // populates the resnap buffer, cleans stale assignments, updates OSD, etc.
-        m_layoutManager->setActiveLayout(layout);
-        qCInfo(lcDaemon) << "Manual layout selected from zone selector:" << layout->name()
-                         << "on screen:" << screenName;
-        m_overlayService->showLayoutOsd(layout, screenName);
-        if (m_modeTracker) {
-            m_modeTracker->recordManualLayout(layout->id());
-        }
-    });
-
-    // Connect Snap Assist selection: fetch authoritative zone geometry from service (same as
-    // keyboard navigation) to avoid overlay coordinate drift/overlap bugs, then forward to effect
-    connect(m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this,
-            [this](const QString& windowId, const QString& zoneId, const QString& geometryJson,
-                   const QString& screenName) {
-                QString geometryToUse = geometryJson;
-                QString effectiveScreen = screenName;
-                if (effectiveScreen.isEmpty() && QGuiApplication::primaryScreen()) {
-                    effectiveScreen = QGuiApplication::primaryScreen()->name();
-                }
-                if (!effectiveScreen.isEmpty()) {
-                    QString authGeometry =
-                        m_windowTrackingAdaptor->getZoneGeometryForScreen(zoneId, effectiveScreen);
-                    if (!authGeometry.isEmpty()) {
-                        geometryToUse = authGeometry;
-                    }
-                }
-                m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometryToUse);
-            });
-
-    // Connect navigation feedback signal to show OSD (Qt signal from WindowTrackingAdaptor)
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
-            [this](bool success, const QString& action, const QString& reason,
-                   const QString& sourceZoneId, const QString& targetZoneId, const QString& screenName) {
-                // Suppress resnap OSD when triggered from layout picker (layout switch OSD is sufficient)
-                if (m_suppressResnapOsd && action == QStringLiteral("resnap")) {
-                    m_suppressResnapOsd = false;
-                    return;
-                }
-                // Only show OSD if setting is enabled
-                if (m_settings && m_settings->showNavigationOsd()) {
-                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
-                }
-            });
-
-    // Note: KWin effect reports navigation feedback via reportNavigationFeedback D-Bus method,
-    // which emits the Qt navigationFeedback signal. No D-Bus signal connection needed.
-
-    // Dismiss snap assist when any window zone assignment changes (navigation, snap, unsnap,
-    // float toggle, resnap, etc.). Snap assist is only relevant until the user performs another
-    // window operation. The snap assist's own selection path already calls root.close() in QML,
-    // so this is a no-op for that case (isSnapAssistVisible returns false).
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::windowZoneChanged, this,
-            [this](const QString& /*windowId*/, const QString& /*zoneId*/) {
-        if (m_overlayService->isSnapAssistVisible()) {
-            m_overlayService->hideSnapAssist();
-        }
-    });
-
-    // Connect to KWin script
-    connectToKWinScript();
+    connectShortcutSignals();
+    initializeAutotile();
+    initializeUnifiedController();
+    connectLayoutSignals();
+    connectOverlaySignals();
+    finalizeStartup();
 
     m_running = true;
-
-    // Signal that daemon is fully initialized and ready for queries
-    Q_EMIT m_layoutAdaptor->daemonReady();
+    // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 }
 
 void Daemon::stop()
@@ -821,6 +405,10 @@ void Daemon::stop()
     if (!m_running) {
         return;
     }
+
+    // Stop pending timers to prevent callbacks during shutdown
+    m_geometryUpdateTimer.stop();
+    m_pendingGeometryUpdates.clear();
 
     // Hide overlay
     hideOverlay();
@@ -839,119 +427,36 @@ void Daemon::stop()
     }
 
     m_reapplyGeometriesTimer.stop();
+
+    // Save autotile state (per-screen params, algorithm).
+    // Do NOT call setAutotileScreens({}) here — it emits windowsReleasedFromTiling
+    // which clears WTS floating state and restarts the save timer, potentially
+    // overwriting the correct WTS state saved above. The engine is destroyed
+    // immediately after, so cleanup is unnecessary.
+    if (m_autotileEngine) {
+        m_autotileEngine->saveState();
+    }
+
+    // Clear the adaptor's raw engine pointer BEFORE destroying the engine.
+    // The adaptor is a Qt child of the daemon (destroyed later); a D-Bus call
+    // arriving between engine destruction and adaptor destruction would otherwise
+    // access freed memory. After clearing, ensureEngine() returns false.
+    if (m_autotileAdaptor) {
+        m_autotileAdaptor->clearEngine();
+    }
+
+    // Null the WindowDragAdaptor's engine pointer for the same reason.
+    if (m_windowDragAdaptor) {
+        m_windowDragAdaptor->setAutotileEngine(nullptr);
+    }
+
+    // Destroy the engine now (during stop(), before Qt child destruction order).
+    m_autotileEngine.reset();
+
+    // Unregister D-Bus service to prevent late calls during shutdown
+    QDBusConnection::sessionBus().unregisterService(QString(DBus::ServiceName));
+
     m_running = false;
-}
-
-void Daemon::showOverlay()
-{
-    m_overlayService->show();
-}
-
-void Daemon::hideOverlay()
-{
-    clearHighlight();
-    m_overlayService->hide();
-}
-
-bool Daemon::isOverlayVisible() const
-{
-    return m_overlayService->isVisible();
-}
-
-void Daemon::clearHighlight()
-{
-    m_zoneDetector->clearHighlights();
-}
-
-void Daemon::showLayoutOsd(Layout* layout, const QString& screenName)
-{
-    if (!layout) {
-        return;
-    }
-
-    const QString layoutName = layout->name();
-
-    // Check OSD style setting
-    OsdStyle style = m_settings ? m_settings->osdStyle() : OsdStyle::Preview;
-
-    switch (style) {
-    case OsdStyle::None:
-        // No OSD
-        qCInfo(lcDaemon) << "OSD disabled, skipping for layout:" << layoutName;
-        return;
-
-    case OsdStyle::Text:
-        // Use KDE Plasma's OSD service for text-only notification
-        {
-            QDBusMessage msg = QDBusMessage::createMethodCall(
-                QStringLiteral("org.kde.plasmashell"), QStringLiteral("/org/kde/osdService"),
-                QStringLiteral("org.kde.osdService"), QStringLiteral("showText"));
-
-            QString displayText = i18n("Zone Layout: %1", layoutName);
-            msg << QStringLiteral("plasmazones") << displayText;
-
-            QDBusConnection::sessionBus().asyncCall(msg);
-            qCInfo(lcDaemon) << "Showing text OSD for layout:" << layoutName;
-        }
-        break;
-
-    case OsdStyle::Preview:
-        // Use visual layout preview OSD
-        if (m_overlayService) {
-            m_overlayService->showLayoutOsd(layout, screenName);
-            qCInfo(lcDaemon) << "Showing preview OSD for layout:" << layoutName << "on screen:" << screenName;
-        } else {
-            qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
-        }
-        break;
-    }
-}
-
-// Unified layout management now handled by UnifiedLayoutController
-// Screen management now handled by ScreenManager
-// Shortcut management now handled by ShortcutManager
-// Signals are connected in start() method
-// Note: Navigation feedback from KWin effect comes via reportNavigationFeedback D-Bus method,
-// which emits the Qt navigationFeedback signal handled by the connection above.
-
-void Daemon::connectToKWinScript()
-{
-    // The KWin script will call us via D-Bus
-    // We just need to be ready to receive calls
-
-    // Monitor for KWin script connection
-    // The script will call getActiveLayout() on startup
-}
-
-void Daemon::processPendingGeometryUpdates()
-{
-    if (m_pendingGeometryUpdates.isEmpty()) {
-        return;
-    }
-
-    // Recalculate zone geometries for ALL layouts so fixed-mode zones stay
-    // normalized correctly.  Uses primary screen as the reference geometry
-    // (per-layout useFullScreenGeometry is respected by effectiveScreenGeometry).
-    QScreen* primaryScreen = Utils::primaryScreen();
-    if (primaryScreen) {
-        for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(
-                GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
-        }
-    }
-
-    m_pendingGeometryUpdates.clear();
-
-    // Single overlay update after all geometry recalculations
-    m_overlayService->updateGeometries();
-
-    // Ask effect to reapply snapped window positions (next event loop when REAPPLY_DELAY_MS is 0).
-    m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
-    m_reapplyGeometriesTimer.start();
-
-    // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
-    // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.
-    m_screenManager->scheduleDelayedPanelRequery(DELAYED_PANEL_REQUERY_MS);
 }
 
 } // namespace PlasmaZones

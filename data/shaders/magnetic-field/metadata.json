@@ -20,6 +20,11 @@
         {"id": "shockwaveStrength", "name": "Shockwave Strength", "group": "Audio", "type": "float", "slot": 10, "default": 1.0, "min": 0.0, "max": 3.0},
         {"id": "fillOpacity", "name": "Fill Opacity", "group": "Appearance", "type": "float", "slot": 11, "default": 0.85, "min": 0.4, "max": 1.0},
         {"id": "fieldColor", "name": "Field Color", "group": "Colors", "type": "color", "slot": 0, "default": "#8b5cf6"},
-        {"id": "highlightColor", "name": "Highlight Color", "group": "Colors", "type": "color", "slot": 1, "default": "#facc15"}
+        {"id": "highlightColor", "name": "Highlight Color", "group": "Colors", "type": "color", "slot": 1, "default": "#facc15"},
+        {"id": "coronaSpread", "name": "Corona Arc Spread", "group": "Labels", "type": "float", "slot": 12, "default": 3.5, "min": 1.0, "max": 6.0},
+        {"id": "fieldBright", "name": "Field Core Brightness", "group": "Labels", "type": "float", "slot": 13, "default": 2.2, "min": 1.0, "max": 4.0},
+        {"id": "arcReact", "name": "Arc Reactivity", "group": "Labels", "type": "float", "slot": 14, "default": 1.0, "min": 0.0, "max": 2.0},
+        {"id": "arcThickness", "name": "Field Line Thickness", "group": "Field", "type": "float", "slot": 15, "default": 0.006, "min": 0.002, "max": 0.015},
+        {"id": "gridFrequency", "name": "Grid Frequency", "group": "Field", "type": "float", "slot": 16, "default": 20.0, "min": 8.0, "max": 40.0}
     ]
 }

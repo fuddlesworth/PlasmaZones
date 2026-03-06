@@ -1,0 +1,372 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "NavigationController.h"
+#include "AutotileEngine.h"
+#include "AutotileConfig.h"
+#include "TilingState.h"
+#include "core/constants.h"
+#include "core/logging.h"
+#include "core/screenmanager.h"
+
+#include <QScreen>
+#include <algorithm>
+
+namespace PlasmaZones {
+
+NavigationController::NavigationController(AutotileEngine* engine)
+    : m_engine(engine)
+{
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Focus/window cycling
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void NavigationController::focusNext()
+{
+    emitFocusRequestAtIndex(1);
+}
+
+void NavigationController::focusPrevious()
+{
+    emitFocusRequestAtIndex(-1);
+}
+
+void NavigationController::focusMaster()
+{
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+    if (windows.isEmpty()) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("focus_master"),
+                                                     QStringLiteral("no_windows"), QString(), QString(), screenName);
+        return;
+    }
+    emitFocusRequestAtIndex(0, true);
+    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("focus_master"), QStringLiteral("master"),
+                                                 QString(), QString(), screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Window swapping & rotation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void NavigationController::swapFocusedWithMaster()
+{
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.isEmpty() || !state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"), QStringLiteral("no_windows"),
+                                                     QString(), QString(), screenName);
+        return;
+    }
+
+    const QString focused = state->focusedWindow();
+    if (focused.isEmpty()) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("swap_master"), QStringLiteral("no_focus"),
+                                                     QString(), QString(), screenName);
+        return;
+    }
+
+    const bool promoted = state->moveToTiledPosition(focused, 0);
+    m_engine->retileAfterOperation(screenName, promoted);
+
+    if (promoted) {
+        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("swap_master"), QStringLiteral("master"),
+                                                     QString(), QString(), screenName);
+    } else {
+        Q_EMIT m_engine->navigationFeedbackRequested(
+            false, QStringLiteral("swap_master"), QStringLiteral("already_master"), QString(), QString(), screenName);
+    }
+}
+
+void NavigationController::rotateWindowOrder(bool clockwise)
+{
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.size() < 2 || !state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(
+            false, QStringLiteral("rotate"), QStringLiteral("nothing_to_rotate"), QString(), QString(), screenName);
+        return; // Nothing to rotate with 0 or 1 window
+    }
+
+    // Rotate the window order
+    bool rotated = state->rotateWindows(clockwise);
+    m_engine->retileAfterOperation(screenName, rotated);
+
+    if (rotated) {
+        QString reason = QStringLiteral("%1:%2")
+                             .arg(clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
+                             .arg(windows.size());
+        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("rotate"), reason, QString(), QString(),
+                                                     screenName);
+    } else {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("rotate"), QStringLiteral("no_rotations"),
+                                                     QString(), QString(), screenName);
+    }
+
+    qCInfo(lcAutotile) << "Rotated windows" << (clockwise ? "clockwise" : "counterclockwise");
+}
+
+void NavigationController::swapFocusedInDirection(const QString& direction, const QString& action)
+{
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.size() < 2 || !state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("nothing_to_swap"), QString(),
+                                                     QString(), screenName);
+        return;
+    }
+
+    const QString focused = state->focusedWindow();
+    if (focused.isEmpty()) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_focus"), QString(), QString(),
+                                                     screenName);
+        return;
+    }
+
+    const int currentIndex = windows.indexOf(focused);
+    if (currentIndex < 0) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_focus"), QString(), QString(),
+                                                     screenName);
+        return;
+    }
+
+    int targetIndex = forward ? currentIndex + 1 : currentIndex - 1;
+    // Wrap around
+    if (targetIndex < 0) {
+        targetIndex = windows.size() - 1;
+    } else if (targetIndex >= windows.size()) {
+        targetIndex = 0;
+    }
+
+    const QString targetWindow = windows.at(targetIndex);
+    const bool swapped = state->swapWindowsById(focused, targetWindow);
+    m_engine->retileAfterOperation(screenName, swapped);
+
+    Q_EMIT m_engine->navigationFeedbackRequested(swapped, action, direction, QString(), QString(), screenName);
+}
+
+void NavigationController::focusInDirection(const QString& direction, const QString& action)
+{
+    const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
+
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.isEmpty() || !state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, action, QStringLiteral("no_windows"), QString(), QString(),
+                                                     screenName);
+        return;
+    }
+
+    const QString focused = state->focusedWindow();
+    const int currentIndex = qMax(0, windows.indexOf(focused));
+    const int targetIndex = (currentIndex + (forward ? 1 : -1) + windows.size()) % windows.size();
+
+    Q_EMIT m_engine->focusWindowRequested(windows.at(targetIndex));
+    Q_EMIT m_engine->navigationFeedbackRequested(true, action, direction, QString(), QString(), screenName);
+}
+
+void NavigationController::moveFocusedToPosition(int position)
+{
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+
+    if (windows.isEmpty() || !state) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_windows"),
+                                                     QString(), QString(), screenName);
+        return;
+    }
+
+    const QString focused = state->focusedWindow();
+    if (focused.isEmpty()) {
+        Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("snap"), QStringLiteral("no_focus"),
+                                                     QString(), QString(), screenName);
+        return;
+    }
+
+    // position is 1-based (from snap-to-zone-N shortcuts), convert to 0-based
+    const int targetIndex = qBound(0, position - 1, windows.size() - 1);
+    const bool moved = state->moveToTiledPosition(focused, targetIndex);
+    m_engine->retileAfterOperation(screenName, moved);
+
+    if (moved) {
+        Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("snap"),
+                                                     QStringLiteral("position_%1").arg(position), QString(), QString(),
+                                                     screenName);
+    } else {
+        Q_EMIT m_engine->navigationFeedbackRequested(
+            false, QStringLiteral("snap"), QStringLiteral("already_at_position"), QString(), QString(), screenName);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Split ratio adjustment
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void NavigationController::increaseMasterRatio(qreal delta)
+{
+    applyToAllStates([delta](TilingState* state) {
+        // setSplitRatio handles clamping internally
+        state->setSplitRatio(state->splitRatio() + delta);
+    });
+    const QString screenName = resolveActiveScreen();
+    QString reason = delta >= 0 ? QStringLiteral("increased") : QStringLiteral("decreased");
+    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_ratio"), reason, QString(), QString(),
+                                                 screenName);
+}
+
+void NavigationController::decreaseMasterRatio(qreal delta)
+{
+    increaseMasterRatio(-delta);
+}
+
+void NavigationController::setGlobalSplitRatio(qreal ratio)
+{
+    ratio = std::clamp(ratio, AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio);
+    m_engine->config()->splitRatio = ratio;
+    applyToAllStates([ratio](TilingState* state) {
+        state->setSplitRatio(ratio);
+    });
+}
+
+void NavigationController::setGlobalMasterCount(int count)
+{
+    count = std::clamp(count, AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount);
+    m_engine->config()->masterCount = count;
+    applyToAllStates([count](TilingState* state) {
+        state->setMasterCount(count);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Master count adjustment
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void NavigationController::increaseMasterCount()
+{
+    applyToAllStates([](TilingState* state) {
+        state->setMasterCount(state->masterCount() + 1);
+    });
+    const QString screenName = resolveActiveScreen();
+    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), QStringLiteral("increased"),
+                                                 QString(), QString(), screenName);
+}
+
+void NavigationController::decreaseMasterCount()
+{
+    applyToAllStates([](TilingState* state) {
+        if (state->masterCount() > 1) {
+            state->setMasterCount(state->masterCount() - 1);
+        }
+    });
+    const QString screenName = resolveActiveScreen();
+    Q_EMIT m_engine->navigationFeedbackRequested(true, QStringLiteral("master_count"), QStringLiteral("decreased"),
+                                                 QString(), QString(), screenName);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Private helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QString NavigationController::resolveActiveScreen() const
+{
+    if (!m_engine->m_activeScreen.isEmpty()) {
+        return m_engine->m_activeScreen;
+    }
+    if (!m_engine->m_autotileScreens.isEmpty()) {
+        return *m_engine->m_autotileScreens.begin();
+    }
+    return QString();
+}
+
+void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirst)
+{
+    QString screenName;
+    TilingState* state = nullptr;
+    const QStringList windows = tiledWindowsForFocusedScreen(screenName, state);
+    if (windows.isEmpty()) {
+        return;
+    }
+
+    int targetIndex = 0;
+    if (!useFirst && state) {
+        const QString focused = state->focusedWindow();
+        const int currentIndex = qMax(0, windows.indexOf(focused));
+        targetIndex = (currentIndex + indexOffset + windows.size()) % windows.size();
+    }
+
+    Q_EMIT m_engine->focusWindowRequested(windows.at(targetIndex));
+}
+
+QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScreenName, TilingState*& outState)
+{
+    outState = nullptr;
+
+    // Use the tracked active screen (set by onWindowFocused) to avoid
+    // non-deterministic QHash iteration when multiple screens have focused windows
+    if (!m_engine->m_activeScreen.isEmpty() && m_engine->m_screenStates.contains(m_engine->m_activeScreen)) {
+        TilingState* state = m_engine->m_screenStates.value(m_engine->m_activeScreen);
+        if (state && !state->focusedWindow().isEmpty()) {
+            outScreenName = m_engine->m_activeScreen;
+            outState = state;
+            return state->tiledWindows();
+        }
+    }
+
+    // Fallback: scan all states (e.g., if m_activeScreen is stale)
+    for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
+        TilingState* state = it.value();
+        if (state && !state->focusedWindow().isEmpty()) {
+            outScreenName = it.key();
+            outState = state;
+            return state->tiledWindows();
+        }
+    }
+
+    // No focused window found - fallback to primary screen if available
+    if (m_engine->m_screenManager && m_engine->m_screenManager->primaryScreen()) {
+        outScreenName = m_engine->m_screenManager->primaryScreen()->name();
+        if (m_engine->m_screenStates.contains(outScreenName)) {
+            TilingState* state = m_engine->m_screenStates.value(outScreenName);
+            if (state) {
+                outState = state;
+                return state->tiledWindows();
+            }
+        }
+    }
+
+    outScreenName.clear();
+    return {};
+}
+
+void NavigationController::applyToAllStates(const std::function<void(TilingState*)>& operation)
+{
+    if (m_engine->m_screenStates.isEmpty()) {
+        return; // No states to modify
+    }
+
+    for (TilingState* state : m_engine->m_screenStates) {
+        if (state) {
+            operation(state);
+        }
+    }
+
+    if (m_engine->isEnabled()) {
+        m_engine->retile();
+    }
+}
+
+} // namespace PlasmaZones

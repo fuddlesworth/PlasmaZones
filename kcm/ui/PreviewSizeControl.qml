@@ -162,7 +162,7 @@ Item {
                 enabled: root.enabled
                 Layout.preferredWidth: 100
                 textFromValue: function(value, locale) {
-                    return value + " px";
+                    return i18nc("@label Pixel unit, %1 is count", "%1 px", value);
                 }
                 valueFromText: function(text, locale) {
                     var num = parseInt(text.replace(/[^0-9]/g, ""));
@@ -232,7 +232,7 @@ Item {
                 enabled: root.enabled && !root.lockAspectRatio
                 Layout.preferredWidth: 100
                 textFromValue: function(value, locale) {
-                    return value + " px";
+                    return i18nc("@label Pixel unit, %1 is count", "%1 px", value);
                 }
                 valueFromText: function(text, locale) {
                     var num = parseInt(text.replace(/[^0-9]/g, ""));
@@ -333,7 +333,7 @@ Item {
                     anchors.top: parent.bottom
                     anchors.topMargin: 2
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: root.previewWidth + " x " + root.previewHeight
+                    text: i18nc("@label Dimensions, %1 is width, %2 is height", "%1 × %2", root.previewWidth, root.previewHeight)
                     font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     opacity: 0.6
                 }

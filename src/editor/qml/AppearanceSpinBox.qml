@@ -17,22 +17,18 @@ SpinBox {
      * @brief Current value
      */
     property int spinValue: 0
-
     /**
      * @brief Default value used when spinValue is undefined
      */
     property int defaultValue: 0
-
     /**
      * @brief Whether the spinbox is enabled
      */
     property bool spinEnabled: true
-
     /**
      * @brief Accessibility name
      */
     property string accessibleName: ""
-
     /**
      * @brief Tooltip text
      */
@@ -49,7 +45,6 @@ SpinBox {
     Accessible.name: accessibleName
     ToolTip.text: toolTipText
     ToolTip.visible: hovered && toolTipText !== ""
-
     onValueModified: {
         appearanceSpinBox.spinValueModified(value);
     }

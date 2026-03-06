@@ -14,16 +14,19 @@
 
 namespace PlasmaZones {
 
+namespace {
+constexpr int CollapseDelayMs = 300; // Delay before collapsing selector after cursor leaves
+constexpr int ProximityCheckMs = 16; // ~60fps polling; TODO: derive from screen refresh rate
+} // namespace
+
 ZoneSelectorController::ZoneSelectorController(QObject* parent)
     : QObject(parent)
 {
-    // Configure collapse timer
     m_collapseTimer.setSingleShot(true);
-    m_collapseTimer.setInterval(300); // 300ms delay before collapse
+    m_collapseTimer.setInterval(CollapseDelayMs);
     connect(&m_collapseTimer, &QTimer::timeout, this, &ZoneSelectorController::onCollapseTimerTimeout);
 
-    // Configure proximity check timer (only active during drag)
-    m_proximityCheckTimer.setInterval(16); // ~60fps updates
+    m_proximityCheckTimer.setInterval(ProximityCheckMs);
     connect(&m_proximityCheckTimer, &QTimer::timeout, this, &ZoneSelectorController::onProximityCheckTimeout);
 }
 
@@ -79,12 +82,14 @@ void ZoneSelectorController::setEnabled(bool enabled)
 QVariantList ZoneSelectorController::layouts() const
 {
     // Use shared utility to build filtered layout list for current context
+    // and mode-based filtering (manual-only vs autotile-only)
     QString screenName;
     if (m_screen) {
         screenName = m_screen->name();
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity);
+    const auto entries =
+        LayoutUtils::buildUnifiedLayoutList(m_layoutManager, screenName, m_currentVirtualDesktop, m_currentActivity,
+                                            m_includeManualLayouts, m_includeAutotileLayouts);
     return LayoutUtils::toVariantList(entries);
 }
 
@@ -170,8 +175,8 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
             // Pass current virtual desktop for per-desktop layout lookup
             Layout* effectiveLayout = nullptr;
             if (m_screen) {
-                effectiveLayout =
-                    m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
+                effectiveLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
+                                                                   m_currentVirtualDesktop, m_currentActivity);
             }
             if (!effectiveLayout) {
                 effectiveLayout = layout;
@@ -210,7 +215,8 @@ void ZoneSelectorController::setScreen(QScreen* screen)
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
+        Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
+                                                                m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -226,8 +232,8 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         m_currentVirtualDesktop = desktop;
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
-            Layout* screenLayout =
-                m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen), m_currentVirtualDesktop, m_currentActivity);
+            Layout* screenLayout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(m_screen),
+                                                                    m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
             }
@@ -242,6 +248,16 @@ void ZoneSelectorController::setCurrentActivity(const QString& activity)
         // Refresh layout list when activity changes
         Q_EMIT layoutsChanged();
     }
+}
+
+void ZoneSelectorController::setLayoutFilter(bool includeManual, bool includeAutotile)
+{
+    if (m_includeManualLayouts == includeManual && m_includeAutotileLayouts == includeAutotile) {
+        return;
+    }
+    m_includeManualLayouts = includeManual;
+    m_includeAutotileLayouts = includeAutotile;
+    Q_EMIT layoutsChanged();
 }
 
 void ZoneSelectorController::startDrag()
@@ -334,10 +350,10 @@ void ZoneSelectorController::selectLayout(const QString& layoutId)
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Defensive: set the active layout directly so the switch happens even if the
-    // signal chain (QML zoneSelected → OverlayService::onZoneSelected →
-    // manualLayoutSelected → daemon handler) is broken. setActiveLayout is
-    // idempotent — the daemon handler becomes a no-op for the same layout.
+    // Apply layout directly as a defensive fallback. The QML signal chain
+    // (zoneSelected → OverlayService::onZoneSelected → manualLayoutSelected → daemon handler)
+    // is the primary path, but selectLayout() may be called from keyboard navigation
+    // or other controller paths where that chain doesn't apply.
     if (m_layoutManager) {
         QUuid uuid = QUuid::fromString(layoutId);
         if (!uuid.isNull()) {

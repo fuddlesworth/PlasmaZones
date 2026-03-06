@@ -108,17 +108,15 @@ QString ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& zoneId, co
     // Use geometry with gaps (matches snap behavior)
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
     Layout* zoneLayout = qobject_cast<Layout*>(zone->parent());
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings);
+    QString screenId = Utils::screenIdentifier(screen);
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(zoneLayout, m_settings, screenId);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(zoneLayout, m_settings, screenId);
     bool useAvail = !(zoneLayout && zoneLayout->useFullScreenGeometry());
     QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+    QRect snapped = GeometryUtils::snapToRect(geom);
 
     // Return as "x,y,width,height"
-    return QStringLiteral("%1,%2,%3,%4")
-        .arg(static_cast<int>(geom.x()))
-        .arg(static_cast<int>(geom.y()))
-        .arg(static_cast<int>(geom.width()))
-        .arg(static_cast<int>(geom.height()));
+    return QStringLiteral("%1,%2,%3,%4").arg(snapped.x()).arg(snapped.y()).arg(snapped.width()).arg(snapped.height());
 }
 
 QStringList ZoneDetectionAdaptor::getZonesForScreen(const QString& screenName)
@@ -197,7 +195,8 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
 
     // Find the zone - it may be in any layout (not just activeLayout)
     // when per-screen layout assignments are used
-    Zone* currentZone = DbusHelpers::findZoneInAnyLayout(m_layoutManager, currentZoneId, QStringLiteral("get adjacent zone"));
+    Zone* currentZone =
+        DbusHelpers::findZoneInAnyLayout(m_layoutManager, currentZoneId, QStringLiteral("get adjacent zone"));
     if (!currentZone) {
         return QString();
     }
@@ -379,19 +378,21 @@ QStringList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& screenName
     }
 
     // Use per-layout zonePadding/outerGap if set, otherwise fall back to global settings
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings);
+    QString screenId = Utils::screenIdentifier(screen);
+    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
+    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior)
         QRectF geom = GeometryUtils::getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail);
+        QRect snapped = GeometryUtils::snapToRect(geom);
         // Format: "zoneId:x,y,width,height"
         QString entry = QStringLiteral("%1:%2,%3,%4,%5")
                             .arg(zone->id().toString())
-                            .arg(static_cast<int>(geom.x()))
-                            .arg(static_cast<int>(geom.y()))
-                            .arg(static_cast<int>(geom.width()))
-                            .arg(static_cast<int>(geom.height()));
+                            .arg(snapped.x())
+                            .arg(snapped.y())
+                            .arg(snapped.width())
+                            .arg(snapped.height());
         result.append(entry);
     }
 

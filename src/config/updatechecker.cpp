@@ -43,7 +43,7 @@ void UpdateChecker::parseVersionComponent(const QString& part, int& number, QStr
 
     if (match.hasMatch()) {
         number = match.captured(1).toInt();
-        preRelease = match.captured(2);  // Empty if no pre-release suffix
+        preRelease = match.captured(2); // Empty if no pre-release suffix
     } else {
         number = part.toInt();
         preRelease.clear();
@@ -72,16 +72,21 @@ int UpdateChecker::compareVersions(const QString& v1, const QString& v2)
         }
 
         // Compare numeric parts first
-        if (num1 < num2) return -1;
-        if (num1 > num2) return 1;
+        if (num1 < num2)
+            return -1;
+        if (num1 > num2)
+            return 1;
 
         // If numbers equal, compare pre-release (no pre-release > pre-release)
         // e.g., "1.4.0" > "1.4.0-beta"
-        if (pre1.isEmpty() && !pre2.isEmpty()) return 1;   // v1 is release, v2 is pre-release
-        if (!pre1.isEmpty() && pre2.isEmpty()) return -1;  // v1 is pre-release, v2 is release
+        if (pre1.isEmpty() && !pre2.isEmpty())
+            return 1; // v1 is release, v2 is pre-release
+        if (!pre1.isEmpty() && pre2.isEmpty())
+            return -1; // v1 is pre-release, v2 is release
         if (!pre1.isEmpty() && !pre2.isEmpty()) {
             int cmp = pre1.compare(pre2);
-            if (cmp != 0) return cmp < 0 ? -1 : 1;
+            if (cmp != 0)
+                return cmp < 0 ? -1 : 1;
         }
     }
 
@@ -98,8 +103,7 @@ void UpdateChecker::checkForUpdates()
     // Rate limiting: don't check more than once per CHECK_INTERVAL_MS
     qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (m_lastCheckTime > 0 && (now - m_lastCheckTime) < CHECK_INTERVAL_MS) {
-        qCDebug(lcUpdateChecker) << "Rate limited: last check was"
-                                  << (now - m_lastCheckTime) / 1000 << "seconds ago";
+        qCDebug(lcUpdateChecker) << "Rate limited: last check was" << (now - m_lastCheckTime) / 1000 << "seconds ago";
         return;
     }
 
@@ -112,8 +116,7 @@ void UpdateChecker::checkForUpdates()
     qCInfo(lcUpdateChecker) << "Checking for updates at" << GITHUB_API_URL;
 
     QNetworkRequest request{QUrl(GITHUB_API_URL)};
-    request.setHeader(QNetworkRequest::UserAgentHeader,
-        QStringLiteral("PlasmaZones/%1").arg(VERSION_STRING));
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("PlasmaZones/%1").arg(VERSION_STRING));
     request.setRawHeader("Accept", "application/vnd.github+json");
     request.setTransferTimeout(REQUEST_TIMEOUT_MS);
 
@@ -173,8 +176,7 @@ void UpdateChecker::onRequestFinished(QNetworkReply* reply)
     bool wasUpdateAvailable = m_updateAvailable;
     m_updateAvailable = (compareVersions(VERSION_STRING, m_latestVersion) < 0);
 
-    qCInfo(lcUpdateChecker) << "Current version:" << VERSION_STRING
-                            << "Latest version:" << m_latestVersion
+    qCInfo(lcUpdateChecker) << "Current version:" << VERSION_STRING << "Latest version:" << m_latestVersion
                             << "Update available:" << m_updateAvailable;
 
     if (m_updateAvailable != wasUpdateAvailable) {

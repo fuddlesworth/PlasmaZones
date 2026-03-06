@@ -21,11 +21,11 @@ class EditorController;
 class UpdateVisibilityCommand : public QUndoCommand
 {
 public:
-    explicit UpdateVisibilityCommand(QPointer<EditorController> editorController,
-                                     const QStringList& oldScreens, const QStringList& newScreens,
-                                     const QList<int>& oldDesktops, const QList<int>& newDesktops,
-                                     const QStringList& oldActivities, const QStringList& newActivities,
-                                     const QString& text = QString(), QUndoCommand* parent = nullptr);
+    explicit UpdateVisibilityCommand(QPointer<EditorController> editorController, const QStringList& oldScreens,
+                                     const QStringList& newScreens, const QList<int>& oldDesktops,
+                                     const QList<int>& newDesktops, const QStringList& oldActivities,
+                                     const QStringList& newActivities, const QString& text = QString(),
+                                     QUndoCommand* parent = nullptr);
 
     void undo() override;
     void redo() override;

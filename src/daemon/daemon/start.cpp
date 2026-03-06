@@ -1,0 +1,293 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "../daemon.h"
+#include "helpers.h"
+#include "../overlayservice.h"
+#include "../unifiedlayoutcontroller.h"
+#include "../shortcutmanager.h"
+#include "../../core/layoutmanager.h"
+#include "../../core/screenmanager.h"
+#include "../../core/virtualdesktopmanager.h"
+#include "../../core/activitymanager.h"
+#include "../../core/geometryutils.h"
+#include "../../core/logging.h"
+#include "../../core/utils.h"
+#include "../../dbus/layoutadaptor.h"
+#include "../../dbus/windowtrackingadaptor.h"
+#include "../../autotile/AutotileEngine.h"
+#include <QGuiApplication>
+#include <QScreen>
+
+namespace PlasmaZones {
+
+void Daemon::connectScreenSignals()
+{
+    // Initialize and start screen manager
+    m_screenManager->init();
+    m_screenManager->start();
+
+    // Warn about identical monitors producing duplicate screen IDs
+    Utils::warnDuplicateScreenIds();
+
+    // Connect screen manager signals
+    connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
+        // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
+        // (handles the case where EDID wasn't available during very early startup)
+        Utils::invalidateEdidCache(screen->name());
+        m_overlayService->handleScreenAdded(screen);
+        // Use per-screen layout (falls back to activeLayout if no assignment)
+        Layout* screenLayout = m_layoutManager->layoutForScreen(
+            Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
+            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString());
+        if (screenLayout) {
+            screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
+        }
+    });
+
+    connect(m_screenManager.get(), &ScreenManager::screenRemoved, this, [this](QScreen* screen) {
+        m_overlayService->handleScreenRemoved(screen);
+
+        // Capture screen ID BEFORE invalidating cache (screenIdentifier reads cached EDID)
+        const QString removedName = screen->name();
+        const QString removedScreenId = Utils::screenIdentifier(screen);
+
+        // Invalidate cached EDID serial so a different monitor on this connector is detected
+        Utils::invalidateEdidCache(removedName);
+
+        // Clean stale entries from layout visibility restrictions
+        // Check both screen ID (new) and connector name (legacy)
+        for (Layout* layout : m_layoutManager->layouts()) {
+            QStringList allowed = layout->allowedScreens();
+            if (allowed.isEmpty())
+                continue;
+            bool changed = false;
+            changed |= (allowed.removeAll(removedScreenId) > 0);
+            changed |= (allowed.removeAll(removedName) > 0);
+            if (changed) {
+                layout->setAllowedScreens(allowed);
+            }
+        }
+    });
+
+    connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this,
+            [this](QScreen* screen, const QRect& geometry) {
+                Q_UNUSED(geometry)
+                // Queue geometry update with debouncing to avoid cascade
+                QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
+                m_pendingGeometryUpdates[screen->name()] = availableGeom;
+                m_geometryUpdateTimer.start();
+            });
+
+    // Connect to available geometry changes (panels added/removed/resized)
+    // This is reactive - the sensor windows automatically track panel changes
+    // Uses debouncing to coalesce rapid changes into a single update
+    connect(m_screenManager.get(), &ScreenManager::availableGeometryChanged, this,
+            [this](QScreen* screen, const QRect& availableGeometry) {
+                // Queue geometry update with debouncing
+                // Multiple rapid changes will be coalesced into a single update
+                m_pendingGeometryUpdates[screen->name()] = availableGeometry;
+                m_geometryUpdateTimer.start();
+            });
+
+    // Don't pre-create overlay windows at startup. On Wayland with LayerShellQt
+    // this can cause visibility issues. Create on-demand in show() instead,
+    // which also avoids the overlay flashing during login.
+    qCInfo(lcDaemon) << "Overlay service ready -" << m_screenManager->screens().count()
+                     << "screens available (windows created on-demand)";
+}
+
+void Daemon::connectDesktopActivity()
+{
+    // Initialize and start virtual desktop manager
+    m_virtualDesktopManager->init();
+    m_virtualDesktopManager->start();
+
+    // Connect virtual desktop changes to layout switching
+    connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::currentDesktopChanged, this, [this](int desktop) {
+        // Update all components with current desktop for per-desktop layout lookup
+        // NOTE: LayoutManager is the single source of truth for desktop/activity.
+        // WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen().
+        m_overlayService->setCurrentVirtualDesktop(desktop);
+        m_layoutManager->setCurrentVirtualDesktop(desktop);
+        if (m_unifiedLayoutController) {
+            m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
+        }
+        // Per-desktop assignments may differ — recompute autotile screens
+        updateAutotileScreens();
+        if (m_overlayService->isVisible()) {
+            m_overlayService->updateGeometries();
+        }
+    });
+
+    // Set initial virtual desktop on components that maintain their own copy
+    // (WindowDragAdaptor reads from LayoutManager directly via resolveLayoutForScreen())
+    const int initialDesktop = m_virtualDesktopManager->currentDesktop();
+    m_overlayService->setCurrentVirtualDesktop(initialDesktop);
+
+    // Initialize and start activity manager
+    // Connect to VirtualDesktopManager for desktop+activity coordinate lookup
+    m_activityManager->setVirtualDesktopManager(m_virtualDesktopManager.get());
+    m_activityManager->init();
+    if (ActivityManager::isAvailable()) {
+        m_activityManager->start();
+
+        // Set initial activity on components that maintain their own copy
+        m_overlayService->setCurrentActivity(m_activityManager->currentActivity());
+
+        // Connect activity changes: update all components
+        connect(m_activityManager.get(), &ActivityManager::currentActivityChanged, this,
+                [this](const QString& activityId) {
+                    m_overlayService->setCurrentActivity(activityId);
+                    m_layoutManager->setCurrentActivity(activityId);
+                    if (m_unifiedLayoutController) {
+                        m_unifiedLayoutController->setCurrentActivity(activityId);
+                    }
+                    // Per-activity assignments may differ — recompute autotile screens
+                    updateAutotileScreens();
+                    if (m_overlayService->isVisible()) {
+                        m_overlayService->updateGeometries();
+                    }
+                });
+    }
+}
+
+void Daemon::connectShortcutSignals()
+{
+    // Register global shortcuts via ShortcutManager
+    m_shortcutManager->registerShortcuts();
+
+    // Connect shortcut signals
+    // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
+    // get stale cursor data. resolveShortcutScreen() handles both by falling back to
+    // the screen reported by the KWin effect's windowActivated D-Bus call.
+    connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
+            screen = Utils::findScreenByIdOrName(m_unifiedLayoutController->currentScreenName());
+        }
+        if (screen) {
+            m_layoutAdaptor->openEditorForScreen(screen->name());
+        } else {
+            m_layoutAdaptor->openEditor();
+        }
+    });
+    // Quick layout shortcuts (Meta+1-9)
+    connect(m_shortcutManager.get(), &ShortcutManager::quickLayoutRequested, this, [this](int number) {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (screen) {
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
+        } else {
+            qCDebug(lcDaemon) << "No screen info for quickLayout shortcut — skipping";
+            return;
+        }
+        if (!m_unifiedLayoutController->applyLayoutByNumber(number)) {
+            return;
+        }
+        resnapIfManualMode();
+    });
+
+    // Cycle layout shortcuts (Meta+[/])
+    connect(m_shortcutManager.get(), &ShortcutManager::previousLayoutRequested, this, [this]() {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (screen) {
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
+        } else {
+            qCDebug(lcDaemon) << "No screen info for previousLayout shortcut — skipping";
+            return;
+        }
+        m_unifiedLayoutController->cyclePrevious();
+        resnapIfManualMode();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (screen) {
+            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
+        } else {
+            qCDebug(lcDaemon) << "No screen info for nextLayout shortcut — skipping";
+            return;
+        }
+        m_unifiedLayoutController->cycleNext();
+        resnapIfManualMode();
+    });
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Keyboard Navigation Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Navigation shortcuts — single code path per operation (handleXxx)
+    connect(m_shortcutManager.get(), &ShortcutManager::moveWindowRequested, this, [this](NavigationDirection d) {
+        handleMove(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::focusZoneRequested, this, [this](NavigationDirection d) {
+        handleFocus(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::pushToEmptyZoneRequested, this, [this]() {
+        handlePush();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::restoreWindowSizeRequested, this, [this]() {
+        handleRestore();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::toggleWindowFloatRequested, this, [this]() {
+        handleFloat();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::swapWindowRequested, this, [this](NavigationDirection d) {
+        handleSwap(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) {
+        handleRotate(cw);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) {
+        handleSnap(n);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::cycleWindowsInZoneRequested, this, [this](bool fwd) {
+        handleCycle(fwd);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::resnapToNewLayoutRequested, this, [this]() {
+        handleResnap();
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::snapAllWindowsRequested, this, [this]() {
+        handleSnapAll();
+    });
+
+    // Layout picker shortcut (interactive layout browser + resnap)
+    // Capture screen name at open time so it's still valid after the picker closes.
+    connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
+        if (!screen) {
+            qCDebug(lcDaemon) << "No screen info for layoutPicker shortcut — skipping";
+            return;
+        }
+        const QString screenName = Utils::screenIdentifier(screen);
+        m_unifiedLayoutController->setCurrentScreenName(screenName);
+        m_overlayService->showLayoutPicker(screenName);
+    });
+    connect(m_overlayService.get(), &OverlayService::layoutPickerSelected, this, [this](const QString& layoutId) {
+        if (!m_unifiedLayoutController) {
+            return;
+        }
+        // Screen name was already set when the picker opened.
+        if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
+            return;
+        }
+        // Suppress resnap OSD — the layout switch OSD already provides feedback
+        if (m_windowTrackingAdaptor) {
+            m_suppressResnapOsd = true;
+            m_windowTrackingAdaptor->resnapToNewLayout();
+        }
+    });
+}
+
+} // namespace PlasmaZones

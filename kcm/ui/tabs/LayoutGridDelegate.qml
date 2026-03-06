@@ -1,12 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import ".."
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.plasmazones.common as QFZCommon
-import ".."
 
 /**
  * @brief Grid delegate for displaying a single layout card
@@ -21,7 +21,9 @@ Item {
     required property var kcm
     required property real cellWidth
     required property real cellHeight
-
+    property int viewMode: 0 // 0 = Snapping Layouts, 1 = Auto Tile
+    // The full autotile default ID including prefix, for comparison
+    readonly property string autotileDefaultId: "autotile:" + root.kcm.autotileAlgorithm
     // Selection state (bound from parent GridView)
     property bool isSelected: false
     property bool isHovered: false
@@ -33,15 +35,19 @@ Item {
 
     width: cellWidth
     height: cellHeight
-
     Accessible.name: modelData.name || i18n("Unnamed Layout")
-    Accessible.description: modelData.isSystem
-            ? i18n("System layout with %1 zones", modelData.zoneCount || 0)
-            : i18n("Custom layout with %1 zones", modelData.zoneCount || 0)
+    Accessible.description: i18n("Layout with %1 zones", modelData.zoneCount || 0)
     Accessible.role: Accessible.ListItem
+    Keys.onReturnPressed: root.activated(root.modelData.id)
+    Keys.onDeletePressed: {
+        if (!root.modelData.isSystem && !root.modelData.isAutotile)
+            root.deleteRequested(root.modelData);
+
+    }
 
     HoverHandler {
         id: hoverHandler
+
         onHoveredChanged: root.isHovered = hovered
     }
 
@@ -50,28 +56,14 @@ Item {
         onDoubleTapped: root.activated(root.modelData.id)
     }
 
-    Keys.onReturnPressed: root.activated(root.modelData.id)
-    Keys.onDeletePressed: {
-        if (!root.modelData.isSystem) {
-            root.deleteRequested(root.modelData)
-        }
-    }
-
     Rectangle {
         id: cardBackground
+
         anchors.fill: parent
         anchors.margins: Kirigami.Units.smallSpacing / 2
         radius: Kirigami.Units.smallSpacing
-
-        color: root.isSelected ? Kirigami.Theme.highlightColor :
-               root.isHovered ? Qt.rgba(Kirigami.Theme.highlightColor.r,
-                                        Kirigami.Theme.highlightColor.g,
-                                        Kirigami.Theme.highlightColor.b, 0.2) :
-               "transparent"
-
-        border.color: root.isSelected ? Kirigami.Theme.highlightColor :
-                      root.isHovered ? Kirigami.Theme.disabledTextColor :
-                      "transparent"
+        color: root.isSelected ? Kirigami.Theme.highlightColor : root.isHovered ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.2) : "transparent"
+        border.color: root.isSelected ? Kirigami.Theme.highlightColor : root.isHovered ? Kirigami.Theme.disabledTextColor : "transparent"
         border.width: 1
 
         ColumnLayout {
@@ -83,25 +75,28 @@ Item {
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                // Dim thumbnail when hidden
+                opacity: root.modelData.hiddenFromSelector ? 0.5 : 1
 
                 LayoutThumbnail {
                     id: layoutThumbnail
-                    anchors.centerIn: parent
-                    layout: root.modelData
-                    isSelected: root.isSelected
-                    fontFamily: root.kcm ? root.kcm.labelFontFamily : ""
-                    fontSizeScale: root.kcm ? root.kcm.labelFontSizeScale : 1.0
-                    fontWeight: root.kcm ? root.kcm.labelFontWeight : Font.Bold
-                    fontItalic: root.kcm ? root.kcm.labelFontItalic : false
-                    fontUnderline: root.kcm ? root.kcm.labelFontUnderline : false
-                    fontStrikeout: root.kcm ? root.kcm.labelFontStrikeout : false
-                    transformOrigin: Item.Center
 
                     // Safe scale calculation - fit thumbnail within parent bounds
                     readonly property real safeImplicitWidth: Math.max(1, implicitWidth)
                     readonly property real safeImplicitHeight: Math.max(1, implicitHeight)
                     readonly property real safeParentWidth: Math.max(1, parent.width)
                     readonly property real safeParentHeight: Math.max(1, parent.height)
+
+                    anchors.centerIn: parent
+                    layout: root.modelData
+                    isSelected: root.isSelected
+                    fontFamily: root.kcm ? root.kcm.labelFontFamily : ""
+                    fontSizeScale: root.kcm ? root.kcm.labelFontSizeScale : 1
+                    fontWeight: root.kcm ? root.kcm.labelFontWeight : Font.Bold
+                    fontItalic: root.kcm ? root.kcm.labelFontItalic : false
+                    fontUnderline: root.kcm ? root.kcm.labelFontUnderline : false
+                    fontStrikeout: root.kcm ? root.kcm.labelFontStrikeout : false
+                    transformOrigin: Item.Center
                     scale: Math.min(1, safeParentWidth / safeImplicitWidth, safeParentHeight / safeImplicitHeight)
                 }
 
@@ -114,36 +109,42 @@ Item {
 
                     Kirigami.Icon {
                         id: defaultIcon
+
                         source: "favorite"
-                        visible: root.modelData.id === root.kcm.defaultLayoutId
+                        visible: root.viewMode === 1 ? root.modelData.id === root.autotileDefaultId : root.modelData.id === root.kcm.defaultLayoutId
                         width: Kirigami.Units.iconSizes.small
                         height: Kirigami.Units.iconSizes.small
                         color: Kirigami.Theme.positiveTextColor
-
-                        HoverHandler { id: defaultIconHover }
                         ToolTip.visible: defaultIconHover.hovered
-                        ToolTip.text: i18n("Default layout")
+                        ToolTip.text: root.viewMode === 1 ? i18n("Default autotile algorithm") : i18n("Default layout")
+
+                        HoverHandler {
+                            id: defaultIconHover
+                        }
+
                     }
 
                     Kirigami.Icon {
                         source: "view-filter"
                         visible: {
-                            var d = root.modelData
-                            var s = d.allowedScreens
-                            var k = d.allowedDesktops
-                            var a = d.allowedActivities
-                            return (s !== undefined && s !== null && s.length > 0) ||
-                                   (k !== undefined && k !== null && k.length > 0) ||
-                                   (a !== undefined && a !== null && a.length > 0)
+                            var d = root.modelData;
+                            var s = d.allowedScreens;
+                            var k = d.allowedDesktops;
+                            var a = d.allowedActivities;
+                            return (s !== undefined && s !== null && s.length > 0) || (k !== undefined && k !== null && k.length > 0) || (a !== undefined && a !== null && a.length > 0);
                         }
                         width: Kirigami.Units.iconSizes.small
                         height: Kirigami.Units.iconSizes.small
                         color: Kirigami.Theme.disabledTextColor
-
-                        HoverHandler { id: filterIconHover }
                         ToolTip.visible: filterIconHover.hovered
                         ToolTip.text: i18n("This layout has per-screen/desktop/activity restrictions")
+
+                        HoverHandler {
+                            id: filterIconHover
+                        }
+
                     }
+
                 }
 
                 // Top-right toggle buttons (autoAssign and hidden are independent:
@@ -155,22 +156,19 @@ Item {
                     anchors.margins: Kirigami.Units.smallSpacing / 2
                     spacing: 0
 
-                    // Auto-assign toggle
+                    // Auto-assign toggle (hidden for autotile — the tiling engine manages those)
                     ToolButton {
                         width: Kirigami.Units.iconSizes.small + Kirigami.Units.smallSpacing
                         height: width
                         padding: 0
-                        visible: root.isHovered || root.modelData.autoAssign === true
+                        visible: root.modelData.isAutotile !== true && (root.isHovered || root.modelData.autoAssign === true)
                         icon.name: root.modelData.autoAssign === true ? "window-duplicate" : "window-new"
                         icon.width: Kirigami.Units.iconSizes.small
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.autoAssign === true ? Kirigami.Theme.textColor : Kirigami.Theme.disabledTextColor
                         onClicked: root.kcm.setLayoutAutoAssign(root.modelData.id, !(root.modelData.autoAssign === true))
-
                         ToolTip.visible: hovered
-                        ToolTip.text: root.modelData.autoAssign === true
-                            ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.")
-                            : i18n("Click to auto-assign new windows to empty zones")
+                        ToolTip.text: root.modelData.autoAssign === true ? i18n("Auto-assign enabled: new windows fill empty zones. Click to disable.") : i18n("Click to auto-assign new windows to empty zones")
                     }
 
                     // Visibility toggle
@@ -184,16 +182,11 @@ Item {
                         icon.height: Kirigami.Units.iconSizes.small
                         icon.color: root.modelData.hiddenFromSelector ? Kirigami.Theme.disabledTextColor : Kirigami.Theme.textColor
                         onClicked: root.kcm.setLayoutHidden(root.modelData.id, !root.modelData.hiddenFromSelector)
-
                         ToolTip.visible: hovered
-                        ToolTip.text: root.modelData.hiddenFromSelector
-                            ? i18n("Hidden from zone selector. Click to show.")
-                            : i18n("Visible in zone selector. Click to hide.")
+                        ToolTip.text: root.modelData.hiddenFromSelector ? i18n("Hidden from zone selector. Click to show.") : i18n("Visible in zone selector. Click to hide.")
                     }
-                }
 
-                // Dim thumbnail when hidden
-                opacity: root.modelData.hiddenFromSelector ? 0.5 : 1.0
+                }
 
             }
 
@@ -212,17 +205,13 @@ Item {
                     elide: Text.ElideRight
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                     color: root.isSelected ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.disabledTextColor
-
-                    text: {
-                        var zoneCount = root.modelData.zoneCount || 0
-                        if (root.modelData.isSystem) {
-                            return i18n("System · %1 zones", zoneCount)
-                        } else {
-                            return i18n("%1 zones", zoneCount)
-                        }
-                    }
+                    text: i18n("%1 zones", root.modelData.zoneCount || 0)
                 }
+
             }
+
         }
+
     }
+
 }

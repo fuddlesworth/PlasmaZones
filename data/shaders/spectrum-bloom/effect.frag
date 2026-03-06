@@ -58,6 +58,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float auroraStr    = customParams[1].w >= 0.0 ? customParams[1].w : 0.15;
     float sparkleScale = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
     float fillOpacity  = customParams[2].y >= 0.0 ? customParams[2].y : 0.85;
+    float auroraRays   = customParams[3].y >= 0.0 ? customParams[3].y : 12.0;
 
     // Zone geometry -- KEEP for cutout, border, edge effects
     vec2 rectPos  = zoneRectPos(rect);
@@ -216,6 +217,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             // Glow at the contour edge
             float glow = exp(-abs(distToContour) / glowWidth) * mix(0.25, 0.7, vitality) + specVal * mix(0.2, 0.5, vitality);
+            glow = clamp(glow, 0.0, 1.0);
             // Glow follows the same 5-color contour gradient
             vec3 glowColor;
             if (ct5 < 1.0) glowColor = mix(primary, midCol, ct5);
@@ -229,10 +231,9 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         // ── Aurora streaks radiating from center ───────────────
         // Radial lines emanating outward, modulated by noise for a flowing look.
         {
-            float auroraCount = 12.0;
             float auroraFlow = iTime * 0.4;
             // Angular noise creates flowing streaks
-            float aN = angularNoise(angle, auroraCount, auroraFlow);
+            float aN = angularNoise(angle, auroraRays, auroraFlow);
             // Sharpen the noise into distinct streaks
             float streaks = pow(aN, 3.0);
             // Radial falloff: strongest mid-range, fading at center and far edge
@@ -240,7 +241,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
             // Audio modulation: mids drive aurora intensity
             float auroraEnergy = mix(auroraStr * 0.53, auroraStr * 1.33, vitality) + (hasAudio ? mids * mix(0.15, 0.45, vitality) : idlePulse * 0.1);
             // Second layer of streaks at different frequency for depth
-            float aN2 = angularNoise(angle, auroraCount * 0.6, -auroraFlow * 0.7 + 50.0);
+            float aN2 = angularNoise(angle, auroraRays * 0.6, -auroraFlow * 0.7 + 50.0);
             float streaks2 = pow(aN2, 3.0);
 
             vec3 auroraCol1 = mix(midCol, cool, 0.3 + 0.3 * sin(angle * 2.0 + iTime * 0.3));
@@ -273,7 +274,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
                     vec2 sPos = vec2(cos(sAngleJ), sin(sAngleJ)) * sR * refSize;
                     float sDist = length(sp - sPos) / max(refSize, 1.0);
                     // Sharp bright point
-                    float sparkle = exp(-sDist * sDist / (0.0004 * mix(0.5, 1.5, vitality)));
+                    float sparkle = exp(-sDist * sDist / (0.0004 * sparkleScale * mix(0.5, 1.5, vitality)));
                     // Brightness driven by local spectrum peak
                     float brightness = sSpec * mix(0.3, 1.2, vitality);
                     // Twinkle
@@ -358,6 +359,62 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     return result;
 }
 
+// ─── Custom Label Composite ───────────────────────────────────────
+
+vec4 compositeBloomLabels(vec4 color, vec2 fragCoord, float bass, bool hasAudio) {
+    vec2 uv = labelsUv(fragCoord);
+    vec2 px = 1.0 / max(iResolution, vec2(1.0));
+    vec4 labels = texture(uZoneLabels, uv);
+
+    float labelGlowSpread = customParams[2].z >= 0.0 ? customParams[2].z : 2.5;
+    float labelBrightness = customParams[2].w >= 0.0 ? customParams[2].w : 2.2;
+    float labelAudioReact = customParams[3].x >= 0.0 ? customParams[3].x : 1.0;
+
+    vec3 primary = colorWithFallback(customColors[0].rgb, vec3(0.0, 0.9, 1.0));
+    vec3 accent  = colorWithFallback(customColors[1].rgb, vec3(1.0, 0.2, 0.7));
+    vec3 warm    = colorWithFallback(customColors[2].rgb, vec3(1.0, 0.6, 0.1));
+    vec3 midCol  = colorWithFallback(customColors[3].rgb, vec3(0.2, 1.0, 0.4));
+    vec3 cool    = colorWithFallback(customColors[4].rgb, vec3(0.4, 0.1, 0.9));
+
+    // Gaussian halo for smooth outline
+    float halo = 0.0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            float w = exp(-float(dx * dx + dy * dy) * 0.3);
+            halo += texture(uZoneLabels, uv + vec2(float(dx), float(dy)) * px * labelGlowSpread).a * w;
+        }
+    }
+    halo /= 16.5;
+    float outline = halo * (1.0 - labels.a);
+
+    if (outline > 0.01) {
+        // 5-color cycling rainbow around the label
+        float angle = atan(uv.y - 0.5, uv.x - 0.5) / TAU + 0.5;
+        float t = fract(angle + iTime * 0.15);
+        vec3 outlineCol;
+        if (t < 0.2)       outlineCol = mix(cool, primary, t * 5.0);
+        else if (t < 0.4)  outlineCol = mix(primary, midCol, (t - 0.2) * 5.0);
+        else if (t < 0.6)  outlineCol = mix(midCol, warm, (t - 0.4) * 5.0);
+        else if (t < 0.8)  outlineCol = mix(warm, accent, (t - 0.6) * 5.0);
+        else                outlineCol = mix(accent, cool, (t - 0.8) * 5.0);
+
+        float bassPulse = hasAudio ? 1.0 + bass * 0.6 * labelAudioReact : 1.0;
+        color.rgb += outlineCol * outline * 0.8 * bassPulse;
+        color.a = max(color.a, outline * 0.7);
+    }
+
+    // Core: warm bass glow through the label
+    if (labels.a > 0.01) {
+        vec3 core = color.rgb * labelBrightness + warm * 0.3;
+        float bassGlow = hasAudio ? 1.0 + bass * 0.6 * labelAudioReact : 1.0;
+        core *= bassGlow;
+        color.rgb = mix(color.rgb, core, labels.a);
+        color.a = max(color.a, labels.a);
+    }
+
+    return color;
+}
+
 // ─── Main ─────────────────────────────────────────────────────────
 
 void main() {
@@ -371,10 +428,10 @@ void main() {
 
     // Audio analysis (computed once for all zones)
     bool  hasAudio = iAudioSpectrumSize > 0;
-    float bass    = getBass();
-    float mids    = getMids();
-    float treble  = getTreble();
-    float overall = getOverall();
+    float bass    = getBassSoft();
+    float mids    = getMidsSoft();
+    float treble  = getTrebleSoft();
+    float overall = getOverallSoft();
 
     for (int i = 0; i < zoneCount && i < 64; i++) {
         vec4 rect = zoneRects[i];
@@ -387,6 +444,6 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeLabelsWithUv(color, fragCoord);
+    color = compositeBloomLabels(color, fragCoord, bass, hasAudio);
     fragColor = clampFragColor(color);
 }

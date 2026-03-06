@@ -15,7 +15,7 @@ Item {
 
     required property var zoneData
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false

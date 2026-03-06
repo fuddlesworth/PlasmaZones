@@ -22,13 +22,13 @@ ScrollView {
 
     WindowPickerDialog {
         id: windowPickerDialog
+
         kcm: root.kcm
         onPicked: (value) => {
-            if (forApps) {
-                root.kcm.addExcludedApp(value)
-            } else {
-                root.kcm.addExcludedWindowClass(value)
-            }
+            if (forApps)
+                root.kcm.addExcludedApp(value);
+            else
+                root.kcm.addExcludedWindowClass(value);
         }
     }
 
@@ -50,6 +50,7 @@ ScrollView {
 
             Kirigami.Card {
                 id: filteringCard
+
                 anchors.fill: parent
 
                 header: Kirigami.Heading {
@@ -80,35 +81,38 @@ ScrollView {
                             Label {
                                 text: i18n("Width:")
                             }
+
                             SpinBox {
                                 from: 0
                                 to: 1000
                                 stepSize: 10
                                 value: kcm.minimumWindowWidth
                                 onValueModified: kcm.minimumWindowWidth = value
-
                                 textFromValue: function(value) {
-                                    return value === 0 ? i18n("Disabled") : value + " px"
+                                    return value === 0 ? i18n("Disabled") : value + " px";
                                 }
                             }
+
                         }
 
                         RowLayout {
                             Label {
                                 text: i18n("Height:")
                             }
+
                             SpinBox {
                                 from: 0
                                 to: 1000
                                 stepSize: 10
                                 value: kcm.minimumWindowHeight
                                 onValueModified: kcm.minimumWindowHeight = value
-
                                 textFromValue: function(value) {
-                                    return value === 0 ? i18n("Disabled") : value + " px"
+                                    return value === 0 ? i18n("Disabled") : value + " px";
                                 }
                             }
+
                         }
+
                     }
 
                     Label {
@@ -118,8 +122,11 @@ ScrollView {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
+
                 }
+
             }
+
         }
 
         // Excluded applications - wrapped in Item for stable sizing
@@ -129,8 +136,8 @@ ScrollView {
 
             ExclusionListCard {
                 id: appsCard
-                anchors.fill: parent
 
+                anchors.fill: parent
                 title: i18n("Excluded Applications")
                 placeholderText: i18n("Application name (e.g., firefox, konsole)")
                 emptyTitle: i18n("No excluded applications")
@@ -139,11 +146,15 @@ ScrollView {
                 model: kcm.excludedApplications
                 useMonospaceFont: false
                 showPickButton: true
-
-                onAddRequested: (text) => kcm.addExcludedApp(text)
-                onRemoveRequested: (index) => kcm.removeExcludedApp(index)
+                onAddRequested: (text) => {
+                    return kcm.addExcludedApp(text);
+                }
+                onRemoveRequested: (index) => {
+                    return kcm.removeExcludedApp(index);
+                }
                 onPickRequested: windowPickerDialog.openForApps()
             }
+
         }
 
         // Excluded window classes - wrapped in Item for stable sizing
@@ -153,8 +164,8 @@ ScrollView {
 
             ExclusionListCard {
                 id: classesCard
-                anchors.fill: parent
 
+                anchors.fill: parent
                 title: i18n("Excluded Window Classes")
                 placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
                 emptyTitle: i18n("No excluded window classes")
@@ -163,11 +174,17 @@ ScrollView {
                 model: kcm.excludedWindowClasses
                 useMonospaceFont: false
                 showPickButton: true
-
-                onAddRequested: (text) => kcm.addExcludedWindowClass(text)
-                onRemoveRequested: (index) => kcm.removeExcludedWindowClass(index)
+                onAddRequested: (text) => {
+                    return kcm.addExcludedWindowClass(text);
+                }
+                onRemoveRequested: (index) => {
+                    return kcm.removeExcludedWindowClass(index);
+                }
                 onPickRequested: windowPickerDialog.openForClasses()
             }
+
         }
+
     }
+
 }

@@ -23,7 +23,7 @@ Item {
     property string zoneName: ""
     property color labelFontColor: Kirigami.Theme.textColor
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -44,7 +44,6 @@ Item {
         font.family: root.fontFamily
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
-
         // Text outline for visibility on any background
         // Note: Using explicit black/white for contrast is intentional here - the luminance
         // calculation determines which provides better readability regardless of theme.
@@ -53,12 +52,11 @@ Item {
         styleColor: {
             // Use contrasting color for outline based on luminance
             // Guard against undefined/null labelFontColor during initialization
-            var c = root.labelFontColor || Qt.rgba(1, 1, 1, 1)
-            var luminance = c.r * 0.299 + c.g * 0.587 + c.b * 0.114
+            var c = root.labelFontColor || Qt.rgba(1, 1, 1, 1);
+            var luminance = c.r * 0.299 + c.g * 0.587 + c.b * 0.114;
             // Dark outline for light text, light outline for dark text
-            return luminance > 0.5
-                ? Qt.rgba(Kirigami.Theme.backgroundColor.r * 0.2, Kirigami.Theme.backgroundColor.g * 0.2, Kirigami.Theme.backgroundColor.b * 0.2, 0.8)
-                : Qt.rgba(1.0 - Kirigami.Theme.backgroundColor.r * 0.2, 1.0 - Kirigami.Theme.backgroundColor.g * 0.2, 1.0 - Kirigami.Theme.backgroundColor.b * 0.2, 0.8)
+            return luminance > 0.5 ? Qt.rgba(Kirigami.Theme.backgroundColor.r * 0.2, Kirigami.Theme.backgroundColor.g * 0.2, Kirigami.Theme.backgroundColor.b * 0.2, 0.8) : Qt.rgba(1 - Kirigami.Theme.backgroundColor.r * 0.2, 1 - Kirigami.Theme.backgroundColor.g * 0.2, 1 - Kirigami.Theme.backgroundColor.b * 0.2, 0.8);
         }
     }
+
 }

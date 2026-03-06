@@ -22,6 +22,9 @@ Define zones on your screen. Drag windows into them. Done.
 
 - [How It Works](#how-it-works)
 - [Features](#features)
+  - [Window Snapping](#window-snapping)
+  - [Autotiling](#autotiling)
+  - [Shader Effects](#shader-effects)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -51,6 +54,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 **Snapping**
 - Drag with modifier key or mouse button to snap windows to zones
 - Always-active mode: zones activate on every drag without a modifier key
+- Snapping enable/disable toggle
 - Snap all visible windows to zones at once
 - Auto-assign windows to first empty zone per layout
 - Multi-zone snapping support
@@ -63,6 +67,7 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 - Push window to first empty zone
 - Restore original size on unsnap
 - Per-window floating toggle
+- Staggered window animations with configurable easing curves (including elastic and bounce)
 
 **Focus & Cycling**
 - Focus adjacent zones without mouse
@@ -88,15 +93,50 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
   <img src="docs/media/videos/editor.gif" alt="Layout Editor" />
 </p>
 
+### Autotiling
+
+Automatic tiling window manager built into PlasmaZones. Enable per-screen and windows are automatically arranged using one of 11 layout algorithms:
+
+| Algorithm | Description |
+|-----------|-------------|
+| Master+Stack | Primary master area with stacked secondaries |
+| Centered Master | Master in the center, stacks on both sides |
+| Three Column | Even three-column split |
+| Columns | Equal vertical columns |
+| Rows | Equal horizontal rows |
+| Grid | Automatic grid arrangement |
+| Dwindle | Recursive halving (alternating direction) |
+| Spiral | Recursive halving in a spiral pattern |
+| BSP | Binary space partitioning |
+| Wide | Horizontal master with stacked columns below |
+| Monocle | Fullscreen one-at-a-time with cycling |
+
+- **Per-screen algorithm selection** with independent settings
+- **Configurable master ratio and master count** (per-algorithm for Centered Master vs Master+Stack)
+- **Inner and outer gaps** with per-side outer gap control (top/bottom/left/right independently)
+- **Smart gaps**: automatically remove gaps when only one window is tiled
+- **Max windows cap**: overflow windows are floated automatically
+- **Title bar hiding** on tiled windows with configurable colored borders
+- **Window insertion position**: end, after focused, or as master
+- **Focus follows mouse** and **focus new windows** options
+- **Minimize/unminimize tracking**: minimized windows are floated, unminimized windows rejoin the tiling
+- **Per-window floating toggle** (`Meta+F`)
+- **Staggered tiling animations** with cascading overlap
+
+<!-- TODO: screenshot or gif of autotiling in action -->
+
 ### Shader Effects
 
-GPU-accelerated zone overlays with 9 built-in effects, including multipass shaders and audio-reactive visuals:
+GPU-accelerated zone overlays with 12 built-in effects, including multipass shaders and audio-reactive visuals:
 
 | Effect | Description |
 |--------|-------------|
 | Aretha Shell | Cyberpunk effect with color grading, hex grid, and data streams |
+| Berry Drift | Organic metaball blobs in berry and violet tones with mint sparkles |
 | Cosmic Flow | Flowing fractal noise with animated color palette |
+| Liquid Canvas | Desktop wallpaper as a living liquid painting with flow-field distortion |
 | Magnetic Field | Mouse-reactive magnetic field with orbiting particles |
+| Mosaic Pulse | Audio-reactive stained glass mosaic with pulsing shapes and sparkles |
 | Nexus Cascade | Multi-pass plasma with distortion, bloom, and chromatic aberration |
 | Prismata | Crystalline prismatic facets and caustics with audio-reactive chromatic fracture |
 | Sonic Ripple | Audio-reactive concentric rings with bass shockwaves and spectrum visualization |
@@ -104,7 +144,7 @@ GPU-accelerated zone overlays with 9 built-in effects, including multipass shade
 | Spectrum Pulse | Audio-reactive neon energy with bass glow, spectrum aurora, and CAVA integration |
 | Toxic Circuit | Glowing circuit traces with toxic drip and digital corruption |
 
-Shaders support up to 4 user-supplied image textures with configurable wrap modes.
+Shaders support up to 4 user-supplied image textures with configurable wrap modes. Shaders can also sample the current desktop wallpaper as a texture input.
 
 <p align="center">
   <img src="docs/media/videos/shaders.gif" alt="Shader effects showcase" />
@@ -157,7 +197,7 @@ Keyboard navigation actions (move, focus, swap, rotate, push) show brief feedbac
 
 ### System Settings Integration
 
-Full KCM module with 7 tabs — no config file editing required. Includes built-in update checker with GitHub release notifications.
+Full KCM module with 8 tabs — no config file editing required. Includes built-in update checker with GitHub release notifications.
 
 <details>
 <summary>Screenshots</summary>
@@ -172,6 +212,11 @@ Keyboard shortcuts for zone operations (duplicate, split, fill), grid/edge snapp
 
 #### Assignments
 Per-monitor, virtual desktop, and activity layout assignments; quick-switch keyboard slots; app-to-zone auto-snap rules.
+
+#### Autotiling
+Enable/disable autotiling per-screen, select algorithm, configure master ratio, master count, inner/outer gaps, per-side outer gaps, smart gaps, max windows, title bar hiding, border rendering, insertion position, focus behavior.
+
+<!-- TODO: screenshot of autotiling tab -->
 
 #### Zones
 Colors, opacity, borders, blur, shader effects, zone numbers, OSD style, animations, activation modifiers, always-active mode, multi-zone selection, zone padding, per-side edge gaps, and window snap behavior.
@@ -379,6 +424,17 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 </details>
 
 <details>
+<summary>Autotiling</summary>
+
+| Action | Default Shortcut |
+|--------|------------------|
+| Toggle float | `Meta+F` |
+
+<!-- TODO: add more autotile shortcuts if applicable -->
+
+</details>
+
+<details>
 <summary>Other</summary>
 
 | Action | Default Shortcut |
@@ -470,10 +526,11 @@ systemctl --user restart plasmazones.service
 
 ## D-Bus API
 
-PlasmaZones exposes 6 D-Bus interfaces for scripting and integration:
+PlasmaZones exposes 7 D-Bus interfaces for scripting and integration:
 
 | Interface | Purpose |
 |-----------|---------|
+| `Autotile` | Autotiling engine control, algorithm selection, window float/unfloat |
 | `LayoutManager` | Layout CRUD, screen/desktop/activity assignment, quick slots |
 | `Overlay` | Zone overlay visibility, highlighting, zone detection, Zone Selector |
 | `Screen` | Screen enumeration, geometry, scale, add/remove notifications |
@@ -507,6 +564,8 @@ Full API documentation: [wiki — D-Bus API](https://github.com/fuddlesworth/Pla
 
 ```
 src/
+├── autotile/       # Autotiling engine, algorithms, per-screen config
+│   └── algorithms/ # 11 tiling algorithms (master-stack, dwindle, grid, etc.)
 ├── core/           # Zone, Layout, LayoutManager, ShaderRegistry
 ├── daemon/         # Background service, overlay windows
 │   └── rendering/  # GPU rendering (QRhi), label texture builder
@@ -515,17 +574,17 @@ src/
 │   ├── helpers/    # D-Bus queries, serialization, batch operations
 │   ├── services/   # Editor services (snapping, templates, zone manager)
 │   └── undo/       # Undo/redo command system
-├── dbus/           # D-Bus adaptors (6 interfaces)
+├── dbus/           # D-Bus adaptors (7 interfaces)
 ├── config/         # Settings (KConfig), update checker
 ├── ui/             # QML components (OSD, overlays, zone selector)
 └── shared/         # Shared QML components and plugins
 kcm/                # System Settings module (KCM)
 └── ui/             # KCM QML pages
-    └── tabs/       # Tab components (7 tabs)
-kwin-effect/        # KWin effect plugin (modifier detection, window tracking)
+    └── tabs/       # Tab components (8 tabs)
+kwin-effect/        # KWin effect plugin (modifier detection, autotile handler)
 data/
 ├── layouts/        # Default layout templates (12)
-├── shaders/        # Built-in GLSL shader effects (9) + shared utilities
+├── shaders/        # Built-in GLSL shader effects (12) + shared utilities
 └── shader-presets/ # Bundled shader preset configurations
 packaging/
 ├── arch/           # AUR PKGBUILD (source, binary, git)
@@ -534,7 +593,7 @@ packaging/
 └── rpm/            # RPM spec
 cmake/              # CMake helpers (extract-pot, format-qml, uninstall)
 tests/              # Unit and integration tests
-dbus/               # D-Bus XML interface definitions
+dbus/               # D-Bus XML interface definitions (7 interfaces)
 icons/              # Application icons (hicolor + hicolor-light)
 po/                 # Translations (KI18n/Gettext)
 docs/               # Documentation and media

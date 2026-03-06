@@ -19,7 +19,7 @@ Rectangle {
     property bool isSelected: false
     // Font properties for zone number labels
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -63,7 +63,7 @@ Rectangle {
         zones: root.layout && root.layout.zones ? root.layout.zones : []
         isActive: root.isSelected
         zonePadding: 1 // Minimal padding for thumbnail
-        edgeGap: 1     // Minimal edge gap for thumbnail
+        edgeGap: 1 // Minimal edge gap for thumbnail
         minZoneSize: 8
         showZoneNumbers: true
         fontFamily: root.fontFamily

@@ -47,7 +47,8 @@ constexpr qreal InactiveOpacity = 0.3;
 constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
 constexpr int ZonePadding = 8;
-constexpr int OuterGap = 8;  // Gap at screen edges (separate from zonePadding between zones)
+constexpr int OuterGap = 8; // Gap at screen edges (separate from zonePadding between zones)
+constexpr int MaxGap = 50; // Maximum for zone padding and outer gap settings
 constexpr int AdjacentThreshold = 20;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
@@ -62,6 +63,35 @@ constexpr qreal PriorityGridMainRatio = 0.667;
 constexpr qreal PriorityGridSecondaryRatio = 0.333;
 constexpr qreal FocusSideRatio = 0.2;
 constexpr qreal FocusMainRatio = 0.6;
+}
+
+/**
+ * @brief Auto-tiling algorithm defaults
+ */
+namespace AutotileDefaults {
+constexpr qreal MinSplitRatio = 0.1;
+constexpr qreal MaxSplitRatio = 0.9;
+constexpr qreal DefaultSplitRatio = 0.6;
+constexpr int MinMasterCount = 1;
+constexpr int MaxMasterCount = 5;
+constexpr int DefaultMasterCount = 1;
+constexpr int MinGap = 0;
+constexpr int MaxGap = 50;
+constexpr int DefaultGap = 8; // Intentionally independent from Defaults::OuterGap
+constexpr int MinZoneSizePx = 50;
+constexpr int GapEdgeThresholdPx = 5;
+constexpr bool DefaultSmartGaps = true;
+constexpr bool DefaultFocusNewWindows = true;
+constexpr int MinMaxWindows = 1;
+constexpr int MaxMaxWindows = 12;
+constexpr int DefaultMaxWindows = 6;
+constexpr int MinInsertPosition = 0;
+constexpr int MaxInsertPosition = 2;
+constexpr int MinAnimationDuration = 50;
+constexpr int MaxAnimationDuration = 500;
+constexpr int MinAnimationStaggerIntervalMs = 10;
+constexpr int MaxAnimationStaggerIntervalMs = 200;
+constexpr int DefaultAnimationDuration = 150;
 }
 
 /**
@@ -85,6 +115,14 @@ constexpr int DuplicateOffsetPixels = 20; // 20px offset when duplicating fixed 
 
 // Keyboard step for fixed geometry zones
 constexpr int KeyboardStepPixels = 10; // 10px step for keyboard move/resize of fixed zones
+
+// Floating-point tolerances (relative coordinates 0.0-1.0)
+constexpr qreal OverlapThreshold = 0.002; // Epsilon for zone overlap detection
+constexpr qreal CoordDedupeThreshold = 0.001; // Coordinate deduplication tolerance
+constexpr qreal MinExpansionThreshold = 0.005; // Minimum expansion to accept
+constexpr qreal AdjacencyThreshold = 0.02; // Default adjacency detection threshold
+constexpr qreal ExpansionStep = 0.01; // 1% increment for fill expansion
+constexpr qreal GeometryBoundsTolerance = 0.001; // Tolerance for coordinate bounds checking
 
 // Default zone colors (hex strings for QML compatibility)
 inline constexpr const char* DefaultHighlightColor = "#800078D4";
@@ -134,7 +172,7 @@ inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; // Legacy, for backward c
 inline constexpr QLatin1String IsSystem{"isSystem"}; // New: determined by source path
 inline constexpr QLatin1String SystemSourcePath{"systemSourcePath"}; // Original system layout path (for user overrides)
 inline constexpr QLatin1String ZoneCount{"zoneCount"};
-inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual
+inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual, 1=Autotile
 
 // Shader keys
 inline constexpr QLatin1String ShaderId{"shaderId"};
@@ -196,6 +234,40 @@ inline constexpr QLatin1String Colors{"colors"};
 }
 
 /**
+ * @brief JSON keys for autotile state serialization
+ */
+namespace AutotileJsonKeys {
+// TilingState keys
+inline constexpr QLatin1String ScreenName{"screenName"};
+inline constexpr QLatin1String WindowOrder{"windowOrder"};
+inline constexpr QLatin1String FloatingWindows{"floatingWindows"};
+inline constexpr QLatin1String FocusedWindow{"focusedWindow"};
+inline constexpr QLatin1String MasterCount{"masterCount"};
+inline constexpr QLatin1String SplitRatio{"splitRatio"};
+
+// AutotileConfig keys
+inline constexpr QLatin1String AlgorithmId{"algorithmId"};
+inline constexpr QLatin1String InnerGap{"innerGap"};
+inline constexpr QLatin1String OuterGap{"outerGap"};
+// Per-side outer gap keys (shared with LayoutJsonKeys — same wire format)
+using JsonKeys::OuterGapBottom;
+using JsonKeys::OuterGapLeft;
+using JsonKeys::OuterGapRight;
+using JsonKeys::OuterGapTop;
+using JsonKeys::UsePerSideOuterGap;
+inline constexpr QLatin1String SmartGaps{"smartGaps"};
+inline constexpr QLatin1String FocusNewWindows{"focusNewWindows"};
+inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};
+inline constexpr QLatin1String InsertPosition{"insertPosition"};
+inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
+inline constexpr QLatin1String MaxWindows{"maxWindows"};
+// InsertPosition values
+inline constexpr QLatin1String InsertEnd{"end"};
+inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
+inline constexpr QLatin1String InsertAsMaster{"asMaster"};
+}
+
+/**
  * @brief Audio visualization constants (CAVA)
  */
 namespace Audio {
@@ -218,6 +290,51 @@ inline constexpr QLatin1String Screen{"org.plasmazones.Screen"};
 inline constexpr QLatin1String WindowDrag{"org.plasmazones.WindowDrag"};
 inline constexpr QLatin1String WindowTracking{"org.plasmazones.WindowTracking"};
 inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
+inline constexpr QLatin1String Autotile{"org.plasmazones.Autotile"};
+}
+
+/**
+ * @brief Autotile algorithm D-Bus identifiers
+ */
+namespace AutotileAlgorithm {
+inline constexpr QLatin1String MasterStack{"master-stack"};
+inline constexpr QLatin1String BSP{"bsp"};
+inline constexpr QLatin1String Columns{"columns"};
+inline constexpr QLatin1String Rows{"rows"};
+inline constexpr QLatin1String Dwindle{"dwindle"};
+inline constexpr QLatin1String Spiral{"spiral"};
+inline constexpr QLatin1String Monocle{"monocle"};
+inline constexpr QLatin1String ThreeColumn{"three-column"};
+inline constexpr QLatin1String Grid{"grid"};
+inline constexpr QLatin1String Wide{"wide"};
+inline constexpr QLatin1String CenteredMaster{"centered-master"};
+}
+}
+
+/**
+ * @brief Layout ID utilities for autotile algorithm layouts
+ *
+ * Autotile layouts use prefixed IDs: "autotile:algorithm-id"
+ * Manual layouts use UUID strings.
+ */
+namespace LayoutId {
+inline constexpr QLatin1String AutotilePrefix{"autotile:"};
+
+inline bool isAutotile(const QString& id)
+{
+    return id.startsWith(AutotilePrefix);
+}
+
+inline QString extractAlgorithmId(const QString& id)
+{
+    if (!isAutotile(id))
+        return QString();
+    return id.mid(AutotilePrefix.size());
+}
+
+inline QString makeAutotileId(const QString& algorithmId)
+{
+    return AutotilePrefix + algorithmId;
 }
 }
 
@@ -233,14 +350,21 @@ inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
  * (meaning "use global setting") — those must be resolved via
  * getEffectiveOuterGaps() before use in geometry calculations.
  */
-struct EdgeGaps {
+struct EdgeGaps
+{
     int top = 8;
     int bottom = 8;
     int left = 8;
     int right = 8;
     bool operator==(const EdgeGaps&) const = default;
-    bool isUniform() const { return top == bottom && bottom == left && left == right; }
-    static EdgeGaps uniform(int gap) { return {gap, gap, gap, gap}; }
+    bool isUniform() const
+    {
+        return top == bottom && bottom == left && left == right;
+    }
+    static EdgeGaps uniform(int gap)
+    {
+        return {gap, gap, gap, gap};
+    }
 };
 
 } // namespace PlasmaZones

@@ -26,17 +26,40 @@ ColumnLayout {
     signal requestImportLayout()
     signal requestExportLayout(string layoutId)
 
+    // View mode: 0 = Snapping Layouts, 1 = Auto Tile Algorithms
+    property int viewMode: 0
+
     // Current layout helper for toolbar
     readonly property var currentLayout: layoutGrid.currentItem?.modelData ?? null
 
     spacing: Kirigami.Units.largeSpacing
 
-    // Toolbar - extracted component
+    // Reset to Snapping Layouts when autotiling is disabled
+    Connections {
+        target: root.kcm
+        function onAutotileEnabledChanged() {
+            if (!root.kcm.autotileEnabled && root.viewMode !== 0) {
+                root.viewMode = 0
+                layoutGrid.currentIndex = -1
+                layoutGrid.rebuildModel()
+                layoutGrid.selectDefaultLayout(0)
+            }
+        }
+    }
+
+    // Toolbar - extracted component (includes view switcher ComboBox)
     LayoutToolbar {
         Layout.fillWidth: true
         kcm: root.kcm
         currentLayout: root.currentLayout
+        viewMode: root.viewMode
 
+        onViewModeRequested: (mode) => {
+            root.viewMode = mode
+            layoutGrid.currentIndex = -1
+            layoutGrid.rebuildModel()
+            layoutGrid.selectDefaultLayout(mode)
+        }
         onRequestDeleteLayout: (layout) => root.requestDeleteLayout(layout)
         onRequestImportLayout: root.requestImportLayout()
         onRequestExportLayout: (layoutId) => root.requestExportLayout(layoutId)
@@ -48,11 +71,67 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumHeight: root.constants.layoutListMinHeight
-        model: kcm.layouts
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         focus: true
         keyNavigationEnabled: true
+
+        // ── Imperative model management ─────────────────────────────────
+        // Reactive `model: kcm.layouts` bindings cause scroll resets because
+        // every layoutsChanged() creates a new QVariantList, which Qt treats
+        // as a completely new model — destroying all delegates and resetting
+        // contentY to 0. Instead we compare IDs before swapping.
+        model: []
+
+        function _extractIds(list) {
+            let ids = []
+            for (let i = 0; i < list.length; i++) {
+                ids.push(String(list[i].id ?? ""))
+            }
+            return ids
+        }
+
+        function rebuildModel() {
+            let allLayouts = kcm?.layouts ?? []
+
+            // Filter by view mode
+            let newLayouts = []
+            for (let i = 0; i < allLayouts.length; i++) {
+                let isAutotile = allLayouts[i].isAutotile === true
+                if (root.viewMode === 0 && !isAutotile) {
+                    newLayouts.push(allLayouts[i])
+                } else if (root.viewMode === 1 && isAutotile) {
+                    newLayouts.push(allLayouts[i])
+                }
+            }
+
+            // Compare by ID list — skip swap if order hasn't changed
+            let oldIds = _extractIds(model)
+            let newIds = _extractIds(newLayouts)
+            if (oldIds.length === newIds.length) {
+                let same = true
+                for (let i = 0; i < oldIds.length; i++) {
+                    if (oldIds[i] !== newIds[i]) { same = false; break }
+                }
+                if (same) {
+                    // IDs unchanged — update individual entries in-place so
+                    // delegates refresh zone previews without scroll reset.
+                    // JS array assignment to model[i] does NOT reset scroll.
+                    for (let i = 0; i < newLayouts.length; i++) {
+                        model[i] = newLayouts[i]
+                    }
+                    return
+                }
+            }
+
+            // ID list actually changed (add/remove/reorder) — full swap
+            model = newLayouts
+        }
+
+        Connections {
+            target: root.kcm ?? null
+            function onLayoutsChanged() { layoutGrid.rebuildModel() }
+        }
 
         // Responsive cell sizing - aim for 2-4 columns
         readonly property real minCellWidth: Kirigami.Units.gridUnit * 14
@@ -72,12 +151,22 @@ ColumnLayout {
             radius: Kirigami.Units.smallSpacing
         }
 
+        // Select the default layout for the given view mode
+        function selectDefaultLayout(mode) {
+            let defaultId = (mode === 1)
+                ? ("autotile:" + root.kcm.autotileAlgorithm)
+                : root.kcm.defaultLayoutId
+            if (defaultId) {
+                Qt.callLater(() => selectLayoutById(defaultId))
+            }
+        }
+
         // Selection by ID helper
         function selectLayoutById(layoutId) {
-            if (!layoutId || !kcm.layouts) return false
+            if (!layoutId || !model) return false
 
-            for (let i = 0; i < kcm.layouts.length; i++) {
-                if (kcm.layouts[i] && String(kcm.layouts[i].id) === String(layoutId)) {
+            for (let i = 0; i < model.length; i++) {
+                if (model[i] && String(model[i].id) === String(layoutId)) {
                     currentIndex = i
                     positionViewAtIndex(i, GridView.Contain)
                     return true
@@ -86,28 +175,30 @@ ColumnLayout {
             return false
         }
 
-        // Sync with kcm.layoutToSelect
         Connections {
             target: kcm
             function onLayoutToSelectChanged() {
-                if (kcm.layoutToSelect) {
-                    Qt.callLater(() => layoutGrid.selectLayoutById(kcm.layoutToSelect))
+                // Capture value immediately — C++ clears it after emission
+                let layoutId = kcm.layoutToSelect
+                if (layoutId) {
+                    Qt.callLater(() => layoutGrid.selectLayoutById(layoutId))
                 }
-            }
-        }
-
-        onCountChanged: {
-            if (kcm.layoutToSelect && count > 0) {
-                selectLayoutById(kcm.layoutToSelect)
             }
         }
 
         Component.onCompleted: {
-            Qt.callLater(() => {
-                if (kcm.layoutToSelect && count > 0) {
-                    selectLayoutById(kcm.layoutToSelect)
-                }
-            })
+            rebuildModel()
+            // Capture value — may be cleared by the time Qt.callLater runs
+            let layoutId = kcm.layoutToSelect
+            if (layoutId) {
+                Qt.callLater(() => {
+                    if (count > 0) {
+                        selectLayoutById(layoutId)
+                    }
+                })
+            } else {
+                selectDefaultLayout(root.viewMode)
+            }
         }
 
         // Delegate using extracted component
@@ -115,6 +206,7 @@ ColumnLayout {
         // into components with matching required properties
         delegate: LayoutGridDelegate {
             kcm: root.kcm
+            viewMode: root.viewMode
             cellWidth: layoutGrid.cellWidth
             cellHeight: layoutGrid.cellHeight
             isSelected: GridView.isCurrentItem
@@ -129,8 +221,10 @@ ColumnLayout {
             anchors.centerIn: parent
             width: parent.width - Kirigami.Units.gridUnit * 4
             visible: layoutGrid.count === 0
-            text: i18n("No layouts available")
-            explanation: i18n("Start the PlasmaZones daemon or create a new layout")
+            text: root.viewMode === 1 ? i18n("No autotile algorithms available") : i18n("No layouts available")
+            explanation: root.viewMode === 1
+                ? i18n("Enable autotiling to use tiling algorithms")
+                : i18n("Start the PlasmaZones daemon or create a new layout")
         }
     }
 }

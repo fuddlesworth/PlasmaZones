@@ -7,6 +7,50 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-03-05
+
+### Added
+
+#### Autotiling Engine
+- **Pluggable algorithm architecture** with 10 tiling layouts: Master+Stack, Centered Master, BSP, Dwindle, Spiral, Columns, Rows, Grid, Wide, Three-Column, and Monocle
+- **Per-screen algorithm selection** with independent settings per monitor
+- **Separate centered-master settings**: Split ratio and master count are independent from master+stack (defaults: 0.5 vs 0.6)
+- **Per-screen maxWindows cap** to limit tiled window count per monitor
+- **Per-side outer gaps** (top/bottom/left/right) for independent screen edge spacing
+- **Overflow window management**: Auto-float excess windows when maxWindows is reached, auto-recover when room opens
+- **Hide title bars** on tiled windows with configurable active-window border rendering (color, width)
+- **Deterministic zone-ordered window transitions** when switching between snapping and autotiling modes
+- **Float/unfloat toggle** with geometry preservation and cross-screen fallback
+- **Smart gaps**, insert position config, focus-follows-mouse, focus-new-windows
+- **Minimum window size** respect with algorithm-level constraint solving
+- **D-Bus interface** (`org.plasmazones.Autotile`) for runtime control
+- **Read-only preview mode** for autotile layouts in the editor
+- **Pre-autotile geometry persistence** across session restarts for accurate float restore
+
+#### Animation System
+- **Translate-only slide animations** that avoid Wayland buffer desync (no scale transforms)
+- **Staggered cascading window animations** with configurable overlap
+- **Cubic bezier easing curve editor** in KCM with live preview
+- **Elastic and bounce easing curve types** with customizable parameters (amplitude, period, overshoot)
+
+#### KCM Improvements
+- **Dual-view layout picker** with separate Snapping/Tiling modes and default autotile algorithm selection
+- **Dual-mode per-screen assignments** (snapping layouts + autotile algorithms per monitor)
+- **Snapping enable/disable toggle**
+- **Auto-select default layout** in Layout tab
+- **Live algorithm preview widget**
+- **Per-monitor snapping gap/padding overrides**
+
+### Changed
+- **Renamed Zones tab to Snapping** in KCM for clarity alongside the new Tiling tab
+- **BSP algorithm made deterministic**: Removed persistent tree state that caused non-reproducible layouts
+- **Major codebase refactoring**: Split 20+ oversized files (>500 lines) into DRY translation units organized in subdirectories
+  - Extracted `OverflowManager`, `PerScreenConfigResolver`, `NavigationController`, `SettingsBridge` from `AutotileEngine`
+  - Extracted `AssignmentManager`, `DaemonController`, `LayoutManager` from monolithic KCM
+  - Extracted `AutotileHandler`, `ScreenChangeHandler`, `SnapAssistHandler` from KWin effect
+  - Split `Settings`, `OverlayService`, `WindowTrackingService`, D-Bus adaptors, and editor into subdirectories
+- **Comprehensive unit tests** for all algorithms, engine, tiling state, overflow manager, geometry utils, and algorithm registry (11 test suites)
+
 ## [1.15.6] - 2026-02-28
 
 ### Fixed
@@ -612,7 +656,15 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.6...v2.0.0
+[1.15.6]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.5...v1.15.6
+[1.15.5]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.4...v1.15.5
+[1.15.4]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.3...v1.15.4
+[1.15.3]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.2...v1.15.3
+[1.15.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.1...v1.15.2
+[1.15.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.15.0...v1.15.1
+[1.15.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.1...v1.15.0
 [1.14.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.14.0...v1.14.1
 [1.14.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.13.0...v1.14.0
 [1.13.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v1.12.2...v1.13.0
@@ -708,6 +760,19 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 [#139]: https://github.com/fuddlesworth/PlasmaZones/pull/139
 [#143]: https://github.com/fuddlesworth/PlasmaZones/discussions/143
 [#145]: https://github.com/fuddlesworth/PlasmaZones/issues/145
+[#147]: https://github.com/fuddlesworth/PlasmaZones/issues/147
+[#148]: https://github.com/fuddlesworth/PlasmaZones/issues/148
+[#150]: https://github.com/fuddlesworth/PlasmaZones/issues/150
+[#152]: https://github.com/fuddlesworth/PlasmaZones/issues/152
+[#158]: https://github.com/fuddlesworth/PlasmaZones/issues/158
+[#159]: https://github.com/fuddlesworth/PlasmaZones/issues/159
+[#160]: https://github.com/fuddlesworth/PlasmaZones/discussions/160
+[#164]: https://github.com/fuddlesworth/PlasmaZones/issues/164
+[#168]: https://github.com/fuddlesworth/PlasmaZones/issues/168
+[#169]: https://github.com/fuddlesworth/PlasmaZones/pull/169
+[#170]: https://github.com/fuddlesworth/PlasmaZones/pull/170
+[#172]: https://github.com/fuddlesworth/PlasmaZones/issues/172
+[#174]: https://github.com/fuddlesworth/PlasmaZones/pull/174
 [#156]: https://github.com/fuddlesworth/PlasmaZones/discussions/156
 [#166]: https://github.com/fuddlesworth/PlasmaZones/discussions/166
 [#167]: https://github.com/fuddlesworth/PlasmaZones/issues/167

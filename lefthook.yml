@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Lefthook git hooks for PlasmaZones
+# https://github.com/evilmartians/lefthook
+
+pre-commit:
+  parallel: true
+  commands:
+    clang-format:
+      glob: "*.{cpp,h,hpp,cc,cxx}"
+      run: clang-format -i {staged_files}
+      stage_fixed: true
+    qmlformat:
+      glob: "*.qml"
+      run: qmlformat -i {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: |
+        msg=$(head -1 {1})
+        # Allow merge commits
+        if echo "$msg" | grep -qE '^Merge '; then
+          exit 0
+        fi
+        # Allow revert commits
+        if echo "$msg" | grep -qE '^Revert '; then
+          exit 0
+        fi
+        # Enforce Conventional Commits: type(scope): description
+        if ! echo "$msg" | grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+'; then
+          echo ""
+          echo "ERROR: Commit message must follow Conventional Commits format:"
+          echo ""
+          echo "  <type>(<scope>): <description>"
+          echo ""
+          echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+          echo "Scope is optional. Examples:"
+          echo "  feat(autotile): add grid algorithm"
+          echo "  fix: prevent SIGSEGV on hover"
+          echo "  chore: bump version to 2.0.0"
+          echo ""
+          echo "Got: $msg"
+          exit 1
+        fi

@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 1.15.6 LANGUAGES CXX)
+project(PlasmaZones VERSION 2.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -206,14 +206,27 @@ find_program(GETTEXT_MSGCAT_EXECUTABLE NAMES msgcat)
 set(PLASMAZONESD_CPP
     ${CMAKE_SOURCE_DIR}/src/daemon/main.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/daemon.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/daemon/osd.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/overlayservice.cpp
     ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager.cpp
+    ${CMAKE_SOURCE_DIR}/src/daemon/shortcutmanager/handlers.cpp
     ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor.cpp
+    ${CMAKE_SOURCE_DIR}/src/dbus/windowdragadaptor/drag.cpp
 )
 file(GLOB PLASMAZONESD_QML "${CMAKE_SOURCE_DIR}/src/ui/*.qml")
 file(GLOB PLASMAZONES_EDITOR_CPP
     "${CMAKE_SOURCE_DIR}/src/editor/main.cpp"
     "${CMAKE_SOURCE_DIR}/src/editor/EditorController.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/gaps.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/shader.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/layout.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/selection.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/multiselect.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/visibility.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/clipboard.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/zones.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/zoneops.cpp"
+    "${CMAKE_SOURCE_DIR}/src/editor/controller/settings.cpp"
     "${CMAKE_SOURCE_DIR}/src/editor/undo/commands/*.cpp"
 )
 file(GLOB PLASMAZONES_EDITOR_QML "${CMAKE_SOURCE_DIR}/src/editor/qml/*.qml")
@@ -292,6 +305,7 @@ endif()
 
 # Install D-Bus interface XMLs (one per interface)
 install(FILES
+    dbus/org.plasmazones.Autotile.xml
     dbus/org.plasmazones.LayoutManager.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml

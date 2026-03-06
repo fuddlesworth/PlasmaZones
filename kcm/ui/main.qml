@@ -8,8 +8,9 @@
  * - Layouts: View, create, edit, import/export layouts
  * - Editor: Keyboard shortcuts and snapping settings
  * - Assignments: Monitor, activity, quick layout, and app-to-zone assignments
- * - Zones: Appearance and behavior settings (merged for consistency)
- * - Display: Zone selector popup and OSD settings
+ * - Snapping: Zone selector popup, appearance, and behavior settings
+ * - Tiling: Autotiling algorithm, gaps, and per-screen overrides
+ * - General: Mode-agnostic settings (OSD)
  * - Exclusions: Apps and windows to exclude from snapping
  */
 import QtQuick
@@ -36,16 +37,6 @@ KCM.AbstractKCM {
         ? (Screen.width / Screen.height)
         : (16.0 / 9.0)
 
-    // Effective preview dimensions (matches overlayservice.cpp auto-sizing logic)
-    // Auto mode: width = clamp(screenWidth/10, 120, 280), height = width/aspectRatio
-    // Manual mode: use settings values
-    readonly property int effectivePreviewWidth: kcm.zoneSelectorSizeMode === 0
-        ? Math.max(120, Math.min(280, Math.round(Screen.width / 10)))
-        : kcm.zoneSelectorPreviewWidth
-    readonly property int effectivePreviewHeight: kcm.zoneSelectorSizeMode === 0
-        ? Math.round(effectivePreviewWidth / screenAspectRatio)
-        : kcm.zoneSelectorPreviewHeight
-
     // Constants to eliminate magic numbers
     QtObject {
         id: constants
@@ -63,8 +54,11 @@ KCM.AbstractKCM {
         readonly property int opacitySliderMax: 100
         readonly property int borderWidthMax: 10
         readonly property int borderRadiusMax: 50
-        readonly property int paddingMax: 100
-        readonly property int thresholdMax: 200
+        readonly property int paddingMax: 50
+        readonly property int thresholdMax: 100
+        readonly property int zonePaddingMax: 50
+        readonly property int outerGapMax: 50
+        readonly property int adjacentThresholdMax: 100
         readonly property int zoneSelectorTriggerMax: 200
         readonly property int zoneSelectorPreviewWidthMin: 80
         readonly property int zoneSelectorPreviewWidthMax: 400
@@ -76,11 +70,17 @@ KCM.AbstractKCM {
         readonly property int quickLayoutSlotCount: 9
 
         // Layout type ratios (matching C++ Defaults)
-        readonly property real priorityGridMainRatio: 0.67
-        readonly property real priorityGridSecondaryRatio: 0.33
-        readonly property real focusSideRatio: 0.15
-        readonly property real focusMainRatio: 0.70
+        readonly property real priorityGridMainRatio: 0.667
+        readonly property real priorityGridSecondaryRatio: 0.333
+        readonly property real focusSideRatio: 0.2
+        readonly property real focusMainRatio: 0.6
 
+        // Autotiling gap limits
+        readonly property int autotileGapMax: 50
+
+        // Autotiling algorithm preview dimensions
+        readonly property int algorithmPreviewWidth: 280
+        readonly property int algorithmPreviewHeight: 160
     }
 
     header: ColumnLayout {
@@ -129,6 +129,7 @@ KCM.AbstractKCM {
                 id: daemonEnabledSwitch
                 checked: kcm.daemonEnabled
                 onToggled: kcm.daemonEnabled = checked
+                Accessible.name: i18n("Enable PlasmaZones")
             }
         }
 
@@ -161,13 +162,18 @@ KCM.AbstractKCM {
             }
             TabButton {
                 width: tabBar.availableWidth / tabBar.count
-                text: i18n("Zones")
+                text: i18n("Snapping")
                 icon.name: "view-split-left-right"
             }
             TabButton {
                 width: tabBar.availableWidth / tabBar.count
-                text: i18n("Display")
-                icon.name: "select-rectangular"
+                text: i18n("Tiling")
+                icon.name: "window-duplicate"
+            }
+            TabButton {
+                width: tabBar.availableWidth / tabBar.count
+                text: i18n("General")
+                icon.name: "configure"
             }
             TabButton {
                 width: tabBar.availableWidth / tabBar.count
@@ -250,12 +256,13 @@ KCM.AbstractKCM {
             constants: constants
         }
 
-        // TAB 4: ZONES (merged Appearance + Behavior)
+        // TAB 4: SNAPPING (zone selector, appearance, behavior)
         ZonesTab {
             id: zonesTab
             kcm: root.kcmModule
             constants: constants
             isCurrentTab: stackLayout.currentIndex === 3
+            screenAspectRatio: root.screenAspectRatio
 
             onRequestHighlightColorDialog: {
                 highlightColorDialog.selectedColor = kcm.highlightColor
@@ -284,21 +291,31 @@ KCM.AbstractKCM {
             }
         }
 
-        // TAB 5: DISPLAY (Zone Selector)
-        DisplayTab {
+        // TAB 5: TILING (automatic window tiling)
+        AutotilingTab {
+            id: autotilingTab
             kcm: root.kcmModule
             constants: constants
-            screenAspectRatio: root.screenAspectRatio
             isCurrentTab: stackLayout.currentIndex === 4
+            onRequestAutotileBorderColorDialog: {
+                autotileBorderColorDialog.selectedColor = kcm.autotileBorderColor
+                autotileBorderColorDialog.open()
+            }
         }
 
-        // TAB 6: EXCLUSIONS
+        // TAB 6: GENERAL (OSD and global settings)
+        GeneralTab {
+            kcm: root.kcmModule
+            constants: constants
+        }
+
+        // TAB 7: EXCLUSIONS
         ExclusionsTab {
             kcm: root.kcmModule
             constants: constants
         }
 
-        // TAB 7: ABOUT
+        // TAB 8: ABOUT
         AboutTab {
             kcm: root.kcmModule
             constants: constants
@@ -332,6 +349,12 @@ KCM.AbstractKCM {
         id: labelFontColorDialog
         title: i18n("Choose Label Color")
         onAccepted: kcm.labelFontColor = selectedColor
+    }
+
+    ColorDialog {
+        id: autotileBorderColorDialog
+        title: i18n("Choose Autotile Border Color")
+        onAccepted: kcm.autotileBorderColor = selectedColor
     }
 
     // Font dialog
@@ -460,7 +483,7 @@ KCM.AbstractKCM {
             colorImportErrorDialog.open()
         }
         function onColorImportSuccess() {
-            // Switch to Zones tab (index 3) to show the updated colors
+            // Switch to Snapping tab (index 3) to show the updated colors
             tabBar.currentIndex = 3
         }
     }

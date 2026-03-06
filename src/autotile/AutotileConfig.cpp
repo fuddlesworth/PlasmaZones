@@ -1,0 +1,163 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "AutotileConfig.h"
+#include "core/constants.h"
+#include <QtMath>
+
+namespace PlasmaZones {
+
+// Use shared JSON keys and defaults from constants.h
+using namespace AutotileJsonKeys;
+using namespace AutotileDefaults;
+
+namespace {
+// Helper functions for InsertPosition serialization
+QString insertPositionToString(AutotileConfig::InsertPosition pos)
+{
+    switch (pos) {
+    case AutotileConfig::InsertPosition::AfterFocused:
+        return InsertAfterFocused;
+    case AutotileConfig::InsertPosition::AsMaster:
+        return InsertAsMaster;
+    case AutotileConfig::InsertPosition::End:
+    default:
+        return InsertEnd;
+    }
+}
+
+AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
+{
+    if (str == InsertAfterFocused) {
+        return AutotileConfig::InsertPosition::AfterFocused;
+    }
+    if (str == InsertAsMaster) {
+        return AutotileConfig::InsertPosition::AsMaster;
+    }
+    return AutotileConfig::InsertPosition::End;
+}
+} // anonymous namespace
+
+bool AutotileConfig::operator==(const AutotileConfig& other) const
+{
+    // Use qFuzzyCompare properly (add 1.0 for values that could be near zero)
+    return algorithmId == other.algorithmId && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
+        && masterCount == other.masterCount
+        && qFuzzyCompare(1.0 + centeredMasterSplitRatio, 1.0 + other.centeredMasterSplitRatio)
+        && centeredMasterMasterCount == other.centeredMasterMasterCount && innerGap == other.innerGap
+        && outerGap == other.outerGap && usePerSideOuterGap == other.usePerSideOuterGap
+        && outerGapTop == other.outerGapTop && outerGapBottom == other.outerGapBottom
+        && outerGapLeft == other.outerGapLeft && outerGapRight == other.outerGapRight
+        && insertPosition == other.insertPosition && focusFollowsMouse == other.focusFollowsMouse
+        && focusNewWindows == other.focusNewWindows && smartGaps == other.smartGaps
+        && respectMinimumSize == other.respectMinimumSize && maxWindows == other.maxWindows;
+}
+
+bool AutotileConfig::operator!=(const AutotileConfig& other) const
+{
+    return !(*this == other);
+}
+
+QJsonObject AutotileConfig::toJson() const
+{
+    QJsonObject json;
+    json[AlgorithmId] = algorithmId;
+    json[SplitRatio] = splitRatio;
+    json[MasterCount] = masterCount;
+    json[QStringLiteral("centeredMasterSplitRatio")] = centeredMasterSplitRatio;
+    json[QStringLiteral("centeredMasterMasterCount")] = centeredMasterMasterCount;
+    json[InnerGap] = innerGap;
+    json[OuterGap] = outerGap;
+    json[AutotileJsonKeys::UsePerSideOuterGap] = usePerSideOuterGap;
+    json[AutotileJsonKeys::OuterGapTop] = outerGapTop;
+    json[AutotileJsonKeys::OuterGapBottom] = outerGapBottom;
+    json[AutotileJsonKeys::OuterGapLeft] = outerGapLeft;
+    json[AutotileJsonKeys::OuterGapRight] = outerGapRight;
+    json[AutotileJsonKeys::InsertPosition] = insertPositionToString(insertPosition);
+    json[FocusFollowsMouse] = focusFollowsMouse;
+    json[FocusNewWindows] = focusNewWindows;
+    json[SmartGaps] = smartGaps;
+    json[RespectMinimumSize] = respectMinimumSize;
+    json[MaxWindows] = maxWindows;
+    return json;
+}
+
+AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
+{
+    AutotileConfig config;
+
+    if (json.contains(AlgorithmId)) {
+        config.algorithmId = json[AlgorithmId].toString(config.algorithmId);
+    }
+    if (json.contains(SplitRatio)) {
+        config.splitRatio = json[SplitRatio].toDouble(config.splitRatio);
+        config.splitRatio = std::clamp(config.splitRatio, MinSplitRatio, MaxSplitRatio);
+    }
+    if (json.contains(MasterCount)) {
+        config.masterCount = json[MasterCount].toInt(config.masterCount);
+        config.masterCount = std::clamp(config.masterCount, MinMasterCount, MaxMasterCount);
+    }
+    if (json.contains(QStringLiteral("centeredMasterSplitRatio"))) {
+        config.centeredMasterSplitRatio =
+            json[QStringLiteral("centeredMasterSplitRatio")].toDouble(config.centeredMasterSplitRatio);
+        config.centeredMasterSplitRatio = std::clamp(config.centeredMasterSplitRatio, MinSplitRatio, MaxSplitRatio);
+    }
+    if (json.contains(QStringLiteral("centeredMasterMasterCount"))) {
+        config.centeredMasterMasterCount =
+            json[QStringLiteral("centeredMasterMasterCount")].toInt(config.centeredMasterMasterCount);
+        config.centeredMasterMasterCount = std::clamp(config.centeredMasterMasterCount, MinMasterCount, MaxMasterCount);
+    }
+    if (json.contains(InnerGap)) {
+        config.innerGap = json[InnerGap].toInt(config.innerGap);
+        config.innerGap = std::clamp(config.innerGap, MinGap, MaxGap);
+    }
+    if (json.contains(OuterGap)) {
+        config.outerGap = json[OuterGap].toInt(config.outerGap);
+        config.outerGap = std::clamp(config.outerGap, MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::UsePerSideOuterGap)) {
+        config.usePerSideOuterGap = json[AutotileJsonKeys::UsePerSideOuterGap].toBool(config.usePerSideOuterGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapTop)) {
+        config.outerGapTop = std::clamp(json[AutotileJsonKeys::OuterGapTop].toInt(config.outerGapTop), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapBottom)) {
+        config.outerGapBottom =
+            std::clamp(json[AutotileJsonKeys::OuterGapBottom].toInt(config.outerGapBottom), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapLeft)) {
+        config.outerGapLeft =
+            std::clamp(json[AutotileJsonKeys::OuterGapLeft].toInt(config.outerGapLeft), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::OuterGapRight)) {
+        config.outerGapRight =
+            std::clamp(json[AutotileJsonKeys::OuterGapRight].toInt(config.outerGapRight), MinGap, MaxGap);
+    }
+    if (json.contains(AutotileJsonKeys::InsertPosition)) {
+        config.insertPosition = stringToInsertPosition(json[AutotileJsonKeys::InsertPosition].toString());
+    }
+    if (json.contains(FocusFollowsMouse)) {
+        config.focusFollowsMouse = json[FocusFollowsMouse].toBool(config.focusFollowsMouse);
+    }
+    if (json.contains(FocusNewWindows)) {
+        config.focusNewWindows = json[FocusNewWindows].toBool(config.focusNewWindows);
+    }
+    if (json.contains(SmartGaps)) {
+        config.smartGaps = json[SmartGaps].toBool(config.smartGaps);
+    }
+    if (json.contains(RespectMinimumSize)) {
+        config.respectMinimumSize = json[RespectMinimumSize].toBool(config.respectMinimumSize);
+    }
+    if (json.contains(MaxWindows)) {
+        config.maxWindows = json[MaxWindows].toInt(config.maxWindows);
+        config.maxWindows = std::clamp(config.maxWindows, MinMaxWindows, MaxMaxWindows);
+    }
+    return config;
+}
+
+AutotileConfig AutotileConfig::defaults()
+{
+    return AutotileConfig();
+}
+
+} // namespace PlasmaZones

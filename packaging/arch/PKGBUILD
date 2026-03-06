@@ -29,6 +29,7 @@ depends=(
 makedepends=(
     'cmake'
     'extra-cmake-modules'
+    'ninja'
     'qt6-tools'
     'kwin'
 )

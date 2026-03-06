@@ -3,10 +3,13 @@
 
 #include "geometryutils.h"
 #include "zone.h"
+#include "logging.h"
 #include "layout.h"
 #include "interfaces.h"
 #include "constants.h"
 #include "screenmanager.h"
+#include "utils.h"
+#include <algorithm>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -58,7 +61,8 @@ static QRectF calculateZoneGeometryInAvailableArea(Zone* zone, QScreen* screen)
  * @param screenGeom The reference screen geometry (for fixed mode pixel checks)
  * @return Array of 4 bools: [left, top, right, bottom] — true if at boundary
  */
-struct EdgeBoundaries {
+struct EdgeBoundaries
+{
     bool left = false;
     bool top = false;
     bool right = false;
@@ -90,12 +94,8 @@ static EdgeBoundaries detectEdgeBoundaries(Zone* zone, const QRectF& screenGeom)
     return edges;
 }
 
-QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, int outerGap, bool useAvailableGeometry)
-{
-    return getZoneGeometryWithGaps(zone, screen, innerGap, EdgeGaps::uniform(outerGap), useAvailableGeometry);
-}
-
-QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps, bool useAvailableGeometry)
+QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
+                               bool useAvailableGeometry)
 {
     if (!zone || !screen) {
         return QRectF();
@@ -125,9 +125,17 @@ QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const 
     return geom;
 }
 
-int getEffectiveZonePadding(Layout* layout, ISettings* settings)
+int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& screenName)
 {
-    // Check for layout-specific override first
+    // Per-screen snapping override (highest priority)
+    if (!screenName.isEmpty() && settings) {
+        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenName);
+        auto it = perScreen.constFind(QLatin1String("ZonePadding"));
+        if (it != perScreen.constEnd()) {
+            return it->toInt();
+        }
+    }
+    // Check for layout-specific override
     if (layout && layout->hasZonePaddingOverride()) {
         return layout->zonePadding();
     }
@@ -139,37 +147,78 @@ int getEffectiveZonePadding(Layout* layout, ISettings* settings)
     return Defaults::ZonePadding;
 }
 
-int getEffectiveOuterGap(Layout* layout, ISettings* settings)
+QRect snapToRect(const QRectF& rf)
 {
-    // Check for layout-specific override first
-    if (layout && layout->hasOuterGapOverride()) {
-        return layout->outerGap();
-    }
-    // Fall back to global outerGap setting
-    if (settings) {
-        return settings->outerGap();
-    }
-    // Last resort: use default constant
-    return Defaults::OuterGap;
+    // Round each edge independently, then derive width/height from the
+    // rounded edges.  This guarantees that two adjacent zones whose QRectF
+    // edges meet at the same fractional coordinate will round to the same
+    // integer, preserving the exact configured gap between them.
+    //
+    // QRectF uses exclusive right/bottom: right = x + width.
+    const int left = qRound(rf.x());
+    const int top = qRound(rf.y());
+    const int right = qRound(rf.x() + rf.width());
+    const int bottom = qRound(rf.y() + rf.height());
+    return QRect(left, top, std::max(0, right - left), std::max(0, bottom - top));
 }
 
-EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings)
+EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenName)
 {
+    // Per-screen snapping override (highest priority)
+    if (!screenName.isEmpty() && settings) {
+        QVariantMap perScreen = settings->getPerScreenSnappingSettings(screenName);
+        if (!perScreen.isEmpty()) {
+            auto usePerSideIt = perScreen.constFind(QLatin1String("UsePerSideOuterGap"));
+            bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
+            if (usePerSide) {
+                auto topIt = perScreen.constFind(QLatin1String("OuterGapTop"));
+                auto bottomIt = perScreen.constFind(QLatin1String("OuterGapBottom"));
+                auto leftIt = perScreen.constFind(QLatin1String("OuterGapLeft"));
+                auto rightIt = perScreen.constFind(QLatin1String("OuterGapRight"));
+                // If any per-side key is present, use per-screen per-side gaps
+                if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
+                    || rightIt != perScreen.constEnd()) {
+                    // Fall back to per-screen uniform OuterGap, then global for missing sides
+                    auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
+                    int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : settings->outerGap();
+                    return {(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
+                            (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
+                            (leftIt != perScreen.constEnd()) ? leftIt->toInt() : fallback,
+                            (rightIt != perScreen.constEnd()) ? rightIt->toInt() : fallback};
+                }
+            }
+            // UsePerSideOuterGap not set or false — per-side keys ignored if present
+            // Per-screen uniform outer gap
+            auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
+            if (uniformIt != perScreen.constEnd()) {
+                return EdgeGaps::uniform(uniformIt->toInt());
+            }
+        }
+    }
+
     // Check for layout-specific per-side override first
     if (layout && layout->usePerSideOuterGap() && layout->hasPerSideOuterGapOverride()) {
         EdgeGaps gaps = layout->rawOuterGaps();
         // Fill in -1 sentinel values from global per-side or uniform fallback
         if (settings && settings->usePerSideOuterGap()) {
-            if (gaps.top < 0) gaps.top = settings->outerGapTop();
-            if (gaps.bottom < 0) gaps.bottom = settings->outerGapBottom();
-            if (gaps.left < 0) gaps.left = settings->outerGapLeft();
-            if (gaps.right < 0) gaps.right = settings->outerGapRight();
+            if (gaps.top < 0)
+                gaps.top = settings->outerGapTop();
+            if (gaps.bottom < 0)
+                gaps.bottom = settings->outerGapBottom();
+            if (gaps.left < 0)
+                gaps.left = settings->outerGapLeft();
+            if (gaps.right < 0)
+                gaps.right = settings->outerGapRight();
         } else {
             int fallback = settings ? settings->outerGap() : Defaults::OuterGap;
-            if (gaps.top < 0) gaps.top = fallback;
-            if (gaps.bottom < 0) gaps.bottom = fallback;
-            if (gaps.left < 0) gaps.left = fallback;
-            if (gaps.right < 0) gaps.right = fallback;
+            if (gaps.top < 0)
+                gaps.top = fallback;
+            if (gaps.bottom < 0)
+                gaps.bottom = fallback;
+            if (gaps.left < 0)
+                gaps.left = fallback;
+            if (gaps.right < 0)
+                gaps.right = fallback;
         }
         return gaps;
     }
@@ -182,8 +231,8 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings)
     // Fall back to global settings
     if (settings) {
         if (settings->usePerSideOuterGap()) {
-            return {settings->outerGapTop(), settings->outerGapBottom(),
-                    settings->outerGapLeft(), settings->outerGapRight()};
+            return {settings->outerGapTop(), settings->outerGapBottom(), settings->outerGapLeft(),
+                    settings->outerGapRight()};
         }
         return EdgeGaps::uniform(settings->outerGap());
     }
@@ -204,10 +253,8 @@ QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen)
 
 QRectF extractZoneGeometry(const QVariantMap& zone)
 {
-    return QRectF(zone.value(QLatin1String("x")).toDouble(),
-                  zone.value(QLatin1String("y")).toDouble(),
-                  zone.value(QLatin1String("width")).toDouble(),
-                  zone.value(QLatin1String("height")).toDouble());
+    return QRectF(zone.value(QLatin1String("x")).toDouble(), zone.value(QLatin1String("y")).toDouble(),
+                  zone.value(QLatin1String("width")).toDouble(), zone.value(QLatin1String("height")).toDouble());
 }
 
 void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
@@ -228,8 +275,9 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
     bool useAvail = !(layout && layout->useFullScreenGeometry());
     layout->recalculateZoneGeometries(effectiveScreenGeometry(layout, screen));
 
-    int zonePadding = getEffectiveZonePadding(layout, settings);
-    EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings);
+    QString screenId = Utils::screenIdentifier(screen);
+    int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
+    EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 
     QJsonArray arr;
     for (Zone* zone : layout->zones()) {
@@ -251,12 +299,12 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
         obj[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
         obj[JsonKeys::ActiveOpacity] = zone->activeOpacity();
         obj[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
-        obj[JsonKeys::BorderWidth] =
-            zone->useCustomColors() ? zone->borderWidth()
-                                   : (settings ? settings->borderWidth() : Defaults::BorderWidth);
-        obj[JsonKeys::BorderRadius] =
-            zone->useCustomColors() ? zone->borderRadius()
-                                   : (settings ? settings->borderRadius() : Defaults::BorderRadius);
+        obj[JsonKeys::BorderWidth] = zone->useCustomColors()
+            ? zone->borderWidth()
+            : (settings ? settings->borderWidth() : Defaults::BorderWidth);
+        obj[JsonKeys::BorderRadius] = zone->useCustomColors()
+            ? zone->borderRadius()
+            : (settings ? settings->borderRadius() : Defaults::BorderRadius);
         arr.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));

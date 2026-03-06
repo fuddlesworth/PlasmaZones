@@ -50,9 +50,8 @@ class PLASMAZONES_EXPORT WindowTrackingService : public QObject
     Q_OBJECT
 
 public:
-    explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
-                                   ISettings* settings, VirtualDesktopManager* vdm,
-                                   QObject* parent = nullptr);
+    explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
+                                   VirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~WindowTrackingService() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -66,8 +65,8 @@ public:
      * @param screenName Screen where the zone is located
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
-    void assignWindowToZone(const QString& windowId, const QString& zoneId,
-                            const QString& screenName, int virtualDesktop);
+    void assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenName,
+                            int virtualDesktop);
 
     /**
      * @brief Assign a window to multiple zones (multi-zone snap)
@@ -76,8 +75,8 @@ public:
      * @param screenName Screen where the zones are located
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
-    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
-                             const QString& screenName, int virtualDesktop);
+    void assignWindowToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenName,
+                             int virtualDesktop);
 
     /**
      * @brief Remove window from its assigned zone
@@ -146,11 +145,35 @@ public:
     void clearPreSnapGeometry(const QString& windowId);
 
     /**
+     * @brief Store pre-autotile geometry (from KWin when tiling autotile windows)
+     * Used to restore window position when floating from autotile mode.
+     */
+    void storePreAutotileGeometry(const QString& windowId, const QRect& geometry);
+
+    /**
+     * @brief Clear stored pre-autotile geometry (after restore)
+     */
+    void clearPreAutotileGeometry(const QString& windowId);
+
+    /**
      * @brief Get validated pre-snap geometry within screen bounds
      * @param windowId Full window ID
      * @return Adjusted geometry within visible screens, nullopt if not found
      */
     std::optional<QRect> validatedPreSnapGeometry(const QString& windowId) const;
+
+    /**
+     * @brief Get validated pre-snap or pre-autotile geometry (for float restore)
+     * Checks pre-snap first (manual zones), then pre-autotile (autotile mode).
+     */
+    std::optional<QRect> validatedPreSnapOrAutotileGeometry(const QString& windowId) const;
+
+    /**
+     * @brief Get validated pre-autotile geometry only (for autotile float restore)
+     * Unlike validatedPreSnapOrAutotileGeometry, skips pre-snap to avoid using
+     * stale manual-snap data when floating from autotile mode.
+     */
+    std::optional<QRect> validatedPreAutotileGeometry(const QString& windowId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
@@ -172,6 +195,25 @@ public:
      * @brief Get all floating window IDs
      */
     QStringList floatingWindows() const;
+
+    /**
+     * @brief Mark a window's float as originating from autotile mode
+     *
+     * Used to distinguish autotile-originated floats from manual snapping-mode
+     * floats. Only autotile floats are cleared on autotile→snapping transitions;
+     * manual floats are preserved. Must be called AFTER setWindowFloating(true).
+     */
+    void markAutotileFloated(const QString& windowId);
+
+    /**
+     * @brief Clear autotile-floated origin for a window
+     */
+    void clearAutotileFloated(const QString& windowId);
+
+    /**
+     * @brief Check if a window was floated by the autotile engine (not manually in snapping mode)
+     */
+    bool isAutotileFloated(const QString& windowId) const;
 
     /**
      * @brief Unsnap window for floating (saves zone for later restore)
@@ -230,8 +272,7 @@ public:
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info, or noSnap if no rule matches
      */
-    SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName,
-                                       bool isSticky) const;
+    SnapResult calculateSnapToAppRule(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
 
     /**
      * @brief Calculate snap result for new window to last used zone
@@ -240,8 +281,7 @@ public:
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
      */
-    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenName,
-                                        bool isSticky) const;
+    SnapResult calculateSnapToLastZone(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
 
     /**
      * @brief Calculate snap result for new window to first empty zone (auto-assign)
@@ -250,8 +290,7 @@ public:
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
      */
-    SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenName,
-                                         bool isSticky) const;
+    SnapResult calculateSnapToEmptyZone(const QString& windowId, const QString& windowScreenName, bool isSticky) const;
 
     /**
      * @brief Calculate snap result to restore from persisted session
@@ -260,8 +299,7 @@ public:
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
      */
-    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenName,
-                                            bool isSticky) const;
+    SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenName, bool isSticky) const;
 
     /**
      * @brief Record that a window class was user-snapped
@@ -273,13 +311,16 @@ public:
     /**
      * @brief Get last used zone ID
      */
-    QString lastUsedZoneId() const { return m_lastUsedZoneId; }
+    QString lastUsedZoneId() const
+    {
+        return m_lastUsedZoneId;
+    }
 
     /**
      * @brief Update last used zone tracking
      */
-    void updateLastUsedZone(const QString& zoneId, const QString& screenName,
-                            const QString& windowClass, int virtualDesktop);
+    void updateLastUsedZone(const QString& zoneId, const QString& screenName, const QString& windowClass,
+                            int virtualDesktop);
 
     /**
      * @brief Clear stale pending assignment for a window
@@ -381,8 +422,7 @@ public:
      * Assigns windows to zones in zone-number order, skipping already-occupied
      * zones. If more windows than zones, extra windows are left unassigned.
      */
-    QVector<RotationEntry> calculateSnapAllWindows(const QStringList& windowIds,
-                                                    const QString& screenName) const;
+    QVector<RotationEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenName) const;
 
     /**
      * @brief Calculate resnap data for windows from previous layout to current layout
@@ -395,6 +435,46 @@ public:
      * @return List of rotation entries (same format as rotate) for KWin to apply
      */
     QVector<RotationEntry> calculateResnapFromPreviousLayout();
+
+    /**
+     * @brief Calculate resnap data from current zone assignments
+     *
+     * Used when restoring windows after autotile toggle-off: the autotile engine
+     * repositioned windows, but m_windowZoneAssignments still holds the pre-autotile
+     * zone assignments. This method computes zone geometries for those assignments
+     * so windows can be moved back to their zone positions.
+     *
+     * @param screenFilter When non-empty, only include windows on this screen
+     * @return List of rotation entries for KWin to apply
+     */
+    QVector<RotationEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+
+    /**
+     * @brief Calculate resnap data from an explicit autotile window order
+     *
+     * Maps autotile position to manual zone number: windowOrder[0] → zone 1,
+     * [1] → zone 2, etc. If there are more windows than zones, excess windows
+     * are not resnapped (they stay where they are) — no cycling.
+     * Uses the current (manual) layout's zones for geometry calculation.
+     *
+     * @param autotileWindowOrder Ordered list of window IDs from autotile (master first)
+     * @param screenName Screen for layout/geometry resolution
+     * @return List of rotation entries for KWin to apply
+     */
+    QVector<RotationEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                            const QString& screenName) const;
+
+    /**
+     * @brief Build a zone-ordered window list for a screen from current zone assignments
+     *
+     * Iterates all window-zone assignments for the given screen, resolves each window's
+     * primary zone number from the active layout, and returns the window IDs sorted by
+     * zone number ascending. Used to pre-seed autotile window order during transitions.
+     *
+     * @param screenName Screen connector name to filter windows by
+     * @return Window IDs sorted by zone number ascending
+     */
+    QStringList buildZoneOrderedWindowList(const QString& screenName) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
@@ -431,110 +511,142 @@ public:
      * @brief Get all zone assignments for persistence
      * @return Map of windowId -> zoneIds (list of zone UUIDs)
      */
-    const QHash<QString, QStringList>& zoneAssignments() const { return m_windowZoneAssignments; }
+    const QHash<QString, QStringList>& zoneAssignments() const
+    {
+        return m_windowZoneAssignments;
+    }
 
     /**
      * @brief Get all screen assignments for persistence
      */
-    const QHash<QString, QString>& screenAssignments() const { return m_windowScreenAssignments; }
+    const QHash<QString, QString>& screenAssignments() const
+    {
+        return m_windowScreenAssignments;
+    }
 
     /**
      * @brief Get all desktop assignments for persistence
      */
-    const QHash<QString, int>& desktopAssignments() const { return m_windowDesktopAssignments; }
+    const QHash<QString, int>& desktopAssignments() const
+    {
+        return m_windowDesktopAssignments;
+    }
 
     /**
      * @brief Get all pre-snap geometries for persistence
      */
-    const QHash<QString, QRect>& preSnapGeometries() const { return m_preSnapGeometries; }
+    const QHash<QString, QRect>& preSnapGeometries() const
+    {
+        return m_preSnapGeometries;
+    }
 
     /**
-     * @brief Get pending zone assignments (for session restore)
+     * @brief Get all pre-autotile geometries for persistence
      */
-    const QHash<QString, QStringList>& pendingZoneAssignments() const { return m_pendingZoneAssignments; }
+    const QHash<QString, QRect>& preAutotileGeometries() const
+    {
+        return m_preAutotileGeometries;
+    }
 
     /**
-     * @brief Get pending screen assignments
+     * @brief Pending restore entry for a single window instance
+     *
+     * Stores all data needed to restore a window to its previous zone.
+     * Multiple entries per appId support multi-instance apps (e.g. 3 Konsole windows).
      */
-    const QHash<QString, QString>& pendingScreenAssignments() const { return m_pendingZoneScreens; }
+    struct PendingRestore
+    {
+        QStringList zoneIds;
+        QString screenName;
+        int virtualDesktop = 0;
+        QString layoutId;
+        QList<int> zoneNumbers;
+    };
 
     /**
-     * @brief Get pending desktop assignments
+     * @brief Get pending restore queues (consumption queue: appId -> list of pending restores)
      */
-    const QHash<QString, int>& pendingDesktopAssignments() const { return m_pendingZoneDesktops; }
-
-    /**
-     * @brief Get pending layout assignments (for layout validation on restore)
-     */
-    const QHash<QString, QString>& pendingLayoutAssignments() const { return m_pendingZoneLayouts; }
-
-    /**
-     * @brief Get pending zone numbers (for zone-number fallback on session restore)
-     */
-    const QHash<QString, QList<int>>& pendingZoneNumbers() const { return m_pendingZoneNumbers; }
+    const QHash<QString, QList<PendingRestore>>& pendingRestoreQueues() const
+    {
+        return m_pendingRestoreQueues;
+    }
 
     /**
      * @brief Get user-snapped classes
      */
-    const QSet<QString>& userSnappedClasses() const { return m_userSnappedClasses; }
+    const QSet<QString>& userSnappedClasses() const
+    {
+        return m_userSnappedClasses;
+    }
 
     /**
-     * @brief Set pending zone assignments (loaded from KConfig by adaptor)
+     * @brief Set pending restore queues (loaded from KConfig by adaptor)
      */
-    void setPendingZoneAssignments(const QHash<QString, QStringList>& assignments) { m_pendingZoneAssignments = assignments; }
-
-    /**
-     * @brief Set pending screen assignments
-     */
-    void setPendingScreenAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneScreens = assignments; }
-
-    /**
-     * @brief Set pending desktop assignments
-     */
-    void setPendingDesktopAssignments(const QHash<QString, int>& assignments) { m_pendingZoneDesktops = assignments; }
-
-    /**
-     * @brief Set pending layout assignments (loaded from KConfig by adaptor)
-     */
-    void setPendingLayoutAssignments(const QHash<QString, QString>& assignments) { m_pendingZoneLayouts = assignments; }
-
-    /**
-     * @brief Set pending zone numbers (loaded from KConfig by adaptor)
-     */
-    void setPendingZoneNumbers(const QHash<QString, QList<int>>& numbers) { m_pendingZoneNumbers = numbers; }
+    void setPendingRestoreQueues(const QHash<QString, QList<PendingRestore>>& queues)
+    {
+        m_pendingRestoreQueues = queues;
+    }
 
     /**
      * @brief Set pre-snap geometries (loaded from KConfig by adaptor)
      */
-    void setPreSnapGeometries(const QHash<QString, QRect>& geometries) { m_preSnapGeometries = geometries; }
+    void setPreSnapGeometries(const QHash<QString, QRect>& geometries)
+    {
+        m_preSnapGeometries = geometries;
+    }
+
+    /**
+     * @brief Set pre-autotile geometries (loaded from KConfig by adaptor)
+     */
+    void setPreAutotileGeometries(const QHash<QString, QRect>& geometries)
+    {
+        m_preAutotileGeometries = geometries;
+    }
 
     /**
      * @brief Set user-snapped classes (loaded from KConfig by adaptor)
      */
-    void setUserSnappedClasses(const QSet<QString>& classes) { m_userSnappedClasses = classes; }
+    void setUserSnappedClasses(const QSet<QString>& classes)
+    {
+        m_userSnappedClasses = classes;
+    }
 
     /**
      * @brief Set last used zone info (loaded from KConfig by adaptor)
      */
-    void setLastUsedZone(const QString& zoneId, const QString& screenName,
-                         const QString& zoneClass, int desktop);
+    void setLastUsedZone(const QString& zoneId, const QString& screenName, const QString& zoneClass, int desktop);
 
     /**
      * @brief Set floating windows (loaded from KConfig by adaptor)
      */
-    void setFloatingWindows(const QSet<QString>& windows) { m_floatingWindows = windows; }
+    void setFloatingWindows(const QSet<QString>& windows)
+    {
+        m_floatingWindows = windows;
+    }
 
     /**
      * @brief Get pre-float zone assignments for persistence
      */
-    const QHash<QString, QStringList>& preFloatZoneAssignments() const { return m_preFloatZoneAssignments; }
-    const QHash<QString, QString>& preFloatScreenAssignments() const { return m_preFloatScreenAssignments; }
+    const QHash<QString, QStringList>& preFloatZoneAssignments() const
+    {
+        return m_preFloatZoneAssignments;
+    }
+    const QHash<QString, QString>& preFloatScreenAssignments() const
+    {
+        return m_preFloatScreenAssignments;
+    }
 
     /**
      * @brief Set pre-float zone assignments (loaded from KConfig by adaptor)
      */
-    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments) { m_preFloatZoneAssignments = assignments; }
-    void setPreFloatScreenAssignments(const QHash<QString, QString>& assignments) { m_preFloatScreenAssignments = assignments; }
+    void setPreFloatZoneAssignments(const QHash<QString, QStringList>& assignments)
+    {
+        m_preFloatZoneAssignments = assignments;
+    }
+    void setPreFloatScreenAssignments(const QHash<QString, QString>& assignments)
+    {
+        m_preFloatScreenAssignments = assignments;
+    }
 
 Q_SIGNALS:
     /**
@@ -573,9 +685,10 @@ private:
     // Desktop tracking: windowId -> virtual desktop
     QHash<QString, int> m_windowDesktopAssignments;
 
-    // Pre-snap geometries: full windowId at runtime, stableId for session-restored entries
-    // Converted from windowId to stableId on window close for persistence
+    // Pre-snap geometries: full windowId at runtime, appId for session-restored entries
+    // Converted from windowId to appId on window close for persistence
     QHash<QString, QRect> m_preSnapGeometries;
+    QHash<QString, QRect> m_preAutotileGeometries;
 
     // Last used zone tracking
     QString m_lastUsedZoneId;
@@ -583,20 +696,22 @@ private:
     QString m_lastUsedZoneClass;
     int m_lastUsedDesktop = 0;
 
-    // Floating windows: full windowId at runtime, stableId for session-restored entries
-    // Converted from windowId to stableId on window close for persistence
+    // Floating windows: full windowId at runtime, appId for session-restored entries
+    // Converted from windowId to appId on window close for persistence
     QSet<QString> m_floatingWindows;
 
-    // Session persistence
-    QHash<QString, QStringList> m_pendingZoneAssignments;  // stableId -> zoneIds
-    QHash<QString, QString> m_pendingZoneScreens;      // stableId -> screenName
-    QHash<QString, int> m_pendingZoneDesktops;         // stableId -> desktop
-    QHash<QString, QString> m_pendingZoneLayouts;      // stableId -> layoutId (for layout validation on restore)
-    QHash<QString, QList<int>> m_pendingZoneNumbers;  // stableId -> zone numbers (fallback when UUIDs change)
+    // Subset of m_floatingWindows: windows whose float originated from autotile mode.
+    // NOT persisted — on session restore all floats are treated as manual-mode.
+    // Used to distinguish autotile floats from manual snapping-mode floats during
+    // mode transitions (only autotile floats are cleared on autotile→snapping).
+    QSet<QString> m_autotileFloatedWindows;
+
+    // Session persistence: consumption queue (appId -> list of pending restores, consumed FIFO)
+    QHash<QString, QList<PendingRestore>> m_pendingRestoreQueues;
 
     // Pre-float zone and screen (for unfloat restore to correct monitor).
     // Keyed by full windowId at runtime (to distinguish multiple instances of
-    // the same app). Converted to stableId on window close and session save.
+    // the same app). Converted to appId on window close and session save.
     QHash<QString, QStringList> m_preFloatZoneAssignments;
     QHash<QString, QString> m_preFloatScreenAssignments;
 
@@ -611,10 +726,12 @@ private:
 
     // Resnap buffer: when layout changes, store (windowId, zonePosition, screenId, vd)
     // for windows that were in the previous layout, so resnapToNewLayout can map them
-    struct ResnapEntry {
+    struct ResnapEntry
+    {
         QString windowId;
-        int zonePosition; // 1-based position in sorted-by-zoneNumber order
-        QString screenId;  // Stable EDID-based screen identifier (or connector name fallback)
+        int zonePosition; // Primary zone: 1-based position in sorted-by-zoneNumber order
+        QList<int> allZonePositions; // All zones (for multi-zone windows); empty = single-zone
+        QString screenId; // Stable EDID-based screen identifier (or connector name fallback)
         int virtualDesktop = 0;
     };
     QVector<ResnapEntry> m_resnapBuffer;

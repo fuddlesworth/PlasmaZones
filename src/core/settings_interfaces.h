@@ -4,20 +4,14 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "enums.h"
 #include <QString>
 #include <QStringList>
 #include <QColor>
 #include <QVariantList>
+#include <QVariantMap>
 
 namespace PlasmaZones {
-
-// Forward declarations for enums defined in interfaces.h
-enum class DragModifier;
-enum class ZoneSelectorPosition;
-enum class ZoneSelectorLayoutMode;
-enum class ZoneSelectorSizeMode;
-enum class StickyWindowHandling;
-enum class OsdStyle;
 
 /**
  * @brief Per-screen zone selector configuration
@@ -26,10 +20,11 @@ enum class OsdStyle;
  * Used by OverlayService and ZoneSelectorController to apply resolved
  * (per-screen override > global default) settings for each screen.
  */
-struct ZoneSelectorConfig {
-    int position = 1;           // ZoneSelectorPosition enum value (Top)
-    int layoutMode = 0;         // ZoneSelectorLayoutMode enum value (Grid)
-    int sizeMode = 0;           // ZoneSelectorSizeMode enum value (Auto)
+struct ZoneSelectorConfig
+{
+    int position = 1; // ZoneSelectorPosition enum value (Top)
+    int layoutMode = 0; // ZoneSelectorLayoutMode enum value (Grid)
+    int sizeMode = 0; // ZoneSelectorSizeMode enum value (Auto)
     int maxRows = 4;
     int previewWidth = 180;
     int previewHeight = 101;
@@ -82,6 +77,8 @@ public:
     virtual void setZoneSpanTriggers(const QVariantList& triggers) = 0;
     virtual bool toggleActivation() const = 0;
     virtual void setToggleActivation(bool enable) = 0;
+    virtual bool snappingEnabled() const = 0;
+    virtual void setSnappingEnabled(bool enabled) = 0;
 };
 
 /**
@@ -194,6 +191,12 @@ public:
     virtual void setMinimumZoneSizePx(int size) = 0;
     virtual int minimumZoneDisplaySizePx() const = 0;
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
+
+    // Per-screen snapping config resolution (override > global fallback)
+    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenName*/) const
+    {
+        return {};
+    }
 };
 
 /**
@@ -251,18 +254,17 @@ public:
     virtual void setZoneSelectorMaxRows(int rows) = 0;
 
     // Per-screen zone selector config resolution
-    virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenName*/) const {
-        return {
-            static_cast<int>(zoneSelectorPosition()),
-            static_cast<int>(zoneSelectorLayoutMode()),
-            static_cast<int>(zoneSelectorSizeMode()),
-            zoneSelectorMaxRows(),
-            zoneSelectorPreviewWidth(),
-            zoneSelectorPreviewHeight(),
-            zoneSelectorPreviewLockAspect(),
-            zoneSelectorGridColumns(),
-            zoneSelectorTriggerDistance()
-        };
+    virtual ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& /*screenName*/) const
+    {
+        return {static_cast<int>(zoneSelectorPosition()),
+                static_cast<int>(zoneSelectorLayoutMode()),
+                static_cast<int>(zoneSelectorSizeMode()),
+                zoneSelectorMaxRows(),
+                zoneSelectorPreviewWidth(),
+                zoneSelectorPreviewHeight(),
+                zoneSelectorPreviewLockAspect(),
+                zoneSelectorGridColumns(),
+                zoneSelectorTriggerDistance()};
     }
 };
 

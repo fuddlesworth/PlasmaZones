@@ -52,24 +52,33 @@ Item {
     property bool showZoneNumbers: true
     /// Auto-detect monocle layout (stacked full-screen zones with small offsets)
     readonly property bool isMonocleLayout: {
-        if (!zones || zones.length <= 1) return false;
+        if (!zones || zones.length <= 1)
+            return false;
+
         // Monocle pattern detection:
         // - First zone is nearly full-screen (w >= 0.9, h >= 0.9)
         // - All zones are horizontally centered: x ≈ (1-w)/2
         // - All zones have symmetric positioning: x ≈ y (equal margins)
         for (let i = 0; i < zones.length; i++) {
-            const geo = zones[i].relativeGeometry || {};
+            const geo = zones[i].relativeGeometry || {
+            };
             const x = geo.x || 0;
             const y = geo.y || 0;
             const w = geo.width || 1;
             const h = geo.height || 1;
             // First zone must be nearly full-screen
-            if (i === 0 && (w < 0.9 || h < 0.9)) return false;
+            if (i === 0 && (w < 0.9 || h < 0.9))
+                return false;
+
             // Zone must be horizontally centered
             const expectedX = (1 - w) / 2;
-            if (Math.abs(x - expectedX) > 0.02) return false;
+            if (Math.abs(x - expectedX) > 0.02)
+                return false;
+
             // Zone must have symmetric positioning (equal x and y margins)
-            if (Math.abs(x - y) > 0.02) return false;
+            if (Math.abs(x - y) > 0.02)
+                return false;
+
         }
         return true;
     }
@@ -92,10 +101,10 @@ Item {
     /// Border color (default: theme text)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
     /// Scale factor when zone is hovered (1.0 = no scale, set > 1.0 to enable)
-    property real hoverScale: 1.0
+    property real hoverScale: 1
     /// Font properties for zone number labels
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -105,6 +114,8 @@ Item {
     signal zoneHovered(int index)
 
     Repeater {
+        // Brighter border when hovered
+
         model: root.zones || []
 
         delegate: Rectangle {
@@ -113,7 +124,8 @@ Item {
             required property var modelData
             required property int index
             // Parse relative geometry
-            property var relGeo: modelData.relativeGeometry || {}
+            property var relGeo: modelData.relativeGeometry || {
+            }
             property real relX: relGeo.x || 0
             property real relY: relGeo.y || 0
             property real relWidth: relGeo.width || 0.25
@@ -121,13 +133,13 @@ Item {
             // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
             property bool isZoneSelected: {
                 // Highlight all zones when any is selected (highlightAllZones mode)
-                if (root.highlightAllZones && root.selectedZoneIndex >= 0) {
+                if (root.highlightAllZones && root.selectedZoneIndex >= 0)
                     return true;
-                }
+
                 // Option 2: Highlight by index (layout selector mode)
-                if (root.selectedZoneIndex === index) {
+                if (root.selectedZoneIndex === index)
                     return true;
-                }
+
                 // Option 3: Highlight by zone ID (navigation OSD mode)
                 // Note: QStringList from C++ becomes QVariantList in QML, so we need
                 // to iterate and compare strings explicitly (indexOf may not work)
@@ -135,9 +147,9 @@ Item {
                     var zoneId = modelData.zoneId || modelData.id || "";
                     if (zoneId !== "") {
                         for (var i = 0; i < root.highlightedZoneIds.length; i++) {
-                            if (String(root.highlightedZoneIds[i]) === String(zoneId)) {
+                            if (String(root.highlightedZoneIds[i]) === String(zoneId))
                                 return true;
-                            }
+
                         }
                     }
                 }
@@ -145,13 +157,12 @@ Item {
             }
             // Track per-zone hover state
             property bool isZoneHovered: root.interactive && zoneMouseArea.containsMouse
-
             // Detect screen boundaries (tolerance 0.01)
             readonly property real edgeTolerance: 0.01
             readonly property real leftGap: relX < edgeTolerance ? root.edgeGap : root.zonePadding / 2
             readonly property real topGap: relY < edgeTolerance ? root.edgeGap : root.zonePadding / 2
-            readonly property real rightGap: (relX + relWidth) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
-            readonly property real bottomGap: (relY + relHeight) > (1.0 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
+            readonly property real rightGap: (relX + relWidth) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
+            readonly property real bottomGap: (relY + relHeight) > (1 - edgeTolerance) ? root.edgeGap : root.zonePadding / 2
 
             // Position and size - for monocle, C++ already applies offset, so just use raw geometry
             // For other layouts, apply edge gaps and zone padding
@@ -160,27 +171,23 @@ Item {
             width: root.isMonocleLayout ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
             height: root.isMonocleLayout ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
             // Scale on hover (only if hoverScale > 1.0)
-            scale: isZoneHovered && root.hoverScale > 1.0 ? root.hoverScale : 1.0
+            scale: isZoneHovered && root.hoverScale > 1 ? root.hoverScale : 1
             z: isZoneHovered ? 10 : 1
             transformOrigin: Item.Center
             // Zone fill color - use highlight color when selected/hovered, inactive color otherwise
             color: {
                 var isHighlighted = root.isActive || root.isHovered || isZoneSelected || isZoneHovered;
-                if (isHighlighted) {
+                if (isHighlighted)
                     return root.highlightColor;
-                }
+
                 return root.inactiveColor;
             }
             opacity: (root.isActive || root.isHovered || isZoneSelected || isZoneHovered) ? root.activeOpacity : root.inactiveOpacity
             // Border - brighter on hover
             border.color: {
-                if (isZoneHovered) {
-                    // Brighter border when hovered
-                    return Qt.rgba(
-                        Math.min(1, Kirigami.Theme.highlightColor.r * 1.2),
-                        Math.min(1, Kirigami.Theme.highlightColor.g * 1.2),
-                        Math.min(1, Kirigami.Theme.highlightColor.b * 1.2), 1);
-                }
+                if (isZoneHovered)
+                    return Qt.rgba(Math.min(1, Kirigami.Theme.highlightColor.r * 1.2), Math.min(1, Kirigami.Theme.highlightColor.g * 1.2), Math.min(1, Kirigami.Theme.highlightColor.b * 1.2), 1);
+
                 return root.borderColor;
             }
             border.width: (isZoneSelected || isZoneHovered) ? 2 : 1
@@ -215,8 +222,8 @@ Item {
                 id: zoneMouseArea
 
                 anchors.fill: parent
-                anchors.margins: -2  // Slightly larger hit area
-                hoverEnabled: root.interactive
+                anchors.margins: -2 // Slightly larger hit area
+                hoverEnabled: root.interactive && root.visible
                 enabled: root.interactive
                 onEntered: root.zoneHovered(index)
             }

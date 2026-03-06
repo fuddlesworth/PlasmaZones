@@ -14,35 +14,35 @@ namespace PlasmaZones {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Simple setter: if changed, update member and emit signal
-#define ZONE_SETTER(Type, name, member, signal) \
-    void Zone::set##name(Type value) \
-    { \
-        if (member != value) { \
-            member = value; \
-            Q_EMIT signal(); \
-        } \
+#define ZONE_SETTER(Type, name, member, signal)                                                                        \
+    void Zone::set##name(Type value)                                                                                   \
+    {                                                                                                                  \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+        }                                                                                                              \
     }
 
 // Clamped int setter with minimum of 0
-#define ZONE_SETTER_MIN_ZERO(name, member, signal) \
-    void Zone::set##name(int value) \
-    { \
-        value = qMax(0, value); \
-        if (member != value) { \
-            member = value; \
-            Q_EMIT signal(); \
-        } \
+#define ZONE_SETTER_MIN_ZERO(name, member, signal)                                                                     \
+    void Zone::set##name(int value)                                                                                    \
+    {                                                                                                                  \
+        value = qMax(0, value);                                                                                        \
+        if (member != value) {                                                                                         \
+            member = value;                                                                                            \
+            Q_EMIT signal();                                                                                           \
+        }                                                                                                              \
     }
 
 // Clamped qreal setter for opacity (0.0-1.0) with fuzzy compare
-#define ZONE_SETTER_OPACITY(name, member, signal) \
-    void Zone::set##name(qreal opacity) \
-    { \
-        opacity = qBound(0.0, opacity, 1.0); \
-        if (!qFuzzyCompare(member, opacity)) { \
-            member = opacity; \
-            Q_EMIT signal(); \
-        } \
+#define ZONE_SETTER_OPACITY(name, member, signal)                                                                      \
+    void Zone::set##name(qreal opacity)                                                                                \
+    {                                                                                                                  \
+        opacity = qBound(0.0, opacity, 1.0);                                                                           \
+        if (!qFuzzyCompare(1.0 + member, 1.0 + opacity)) {                                                             \
+            member = opacity;                                                                                          \
+            Q_EMIT signal();                                                                                           \
+        }                                                                                                              \
     }
 
 Zone::Zone(QObject* parent)
@@ -169,10 +169,8 @@ QRectF Zone::calculateAbsoluteGeometry(const QRectF& screenGeometry) const
 {
     if (m_geometryMode == ZoneGeometryMode::Fixed) {
         // Fixed mode: pixel coords relative to screen origin
-        return QRectF(screenGeometry.x() + m_fixedGeometry.x(),
-                      screenGeometry.y() + m_fixedGeometry.y(),
-                      m_fixedGeometry.width(),
-                      m_fixedGeometry.height());
+        return QRectF(screenGeometry.x() + m_fixedGeometry.x(), screenGeometry.y() + m_fixedGeometry.y(),
+                      m_fixedGeometry.width(), m_fixedGeometry.height());
     }
     // Relative mode: multiply by screen dimensions
     return QRectF(screenGeometry.x() + m_relativeGeometry.x() * screenGeometry.width(),
@@ -184,8 +182,7 @@ QRectF Zone::calculateAbsoluteGeometry(const QRectF& screenGeometry) const
 QRectF Zone::normalizedGeometry(const QRectF& referenceGeometry) const
 {
     if (m_geometryMode == ZoneGeometryMode::Fixed && referenceGeometry.width() > 0 && referenceGeometry.height() > 0) {
-        return QRectF(m_fixedGeometry.x() / referenceGeometry.width(),
-                      m_fixedGeometry.y() / referenceGeometry.height(),
+        return QRectF(m_fixedGeometry.x() / referenceGeometry.width(), m_fixedGeometry.y() / referenceGeometry.height(),
                       m_fixedGeometry.width() / referenceGeometry.width(),
                       m_fixedGeometry.height() / referenceGeometry.height());
     }
@@ -269,8 +266,8 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
     // Fixed geometry (only present when mode is Fixed)
     if (json.contains(FixedGeometry)) {
         const auto fixedGeo = json[FixedGeometry].toObject();
-        zone->m_fixedGeometry =
-            QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(), fixedGeo[Width].toDouble(), fixedGeo[Height].toDouble());
+        zone->m_fixedGeometry = QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(), fixedGeo[Width].toDouble(),
+                                       fixedGeo[Height].toDouble());
     }
 
     // Appearance

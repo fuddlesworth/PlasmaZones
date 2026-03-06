@@ -28,6 +28,7 @@ Window {
     property int selectionCount: editorWindow._editorController ? editorWindow._editorController.selectionCount : 0
     property bool hasMultipleSelection: editorWindow._editorController ? editorWindow._editorController.hasMultipleSelection : false
     property string selectionAnchorId: "" // For Shift+click range selection
+    readonly property bool previewMode: editorWindow._editorController ? editorWindow._editorController.previewMode : false
     property bool isDrawingZone: false
     property point drawStart: Qt.point(0, 0)
     property rect drawRect: Qt.rect(0, 0, 0, 0)
@@ -35,17 +36,17 @@ Window {
     property bool fullscreenMode: false
     // Zone spacing (between zones) matches zone padding (per-layout override or global setting)
     readonly property real zoneSpacing: {
-        if (!editorWindow._editorController) return Kirigami.Units.gridUnit;
-        return editorWindow._editorController.hasZonePaddingOverride
-            ? editorWindow._editorController.zonePadding
-            : editorWindow._editorController.globalZonePadding;
+        if (!editorWindow._editorController)
+            return Kirigami.Units.gridUnit;
+
+        return editorWindow._editorController.hasZonePaddingOverride ? editorWindow._editorController.zonePadding : editorWindow._editorController.globalZonePadding;
     }
     // Edge gap (at screen boundaries) - separate from zone spacing
     readonly property real edgeGap: {
-        if (!editorWindow._editorController) return Kirigami.Units.gridUnit;
-        return editorWindow._editorController.hasOuterGapOverride
-            ? editorWindow._editorController.outerGap
-            : editorWindow._editorController.globalOuterGap;
+        if (!editorWindow._editorController)
+            return Kirigami.Units.gridUnit;
+
+        return editorWindow._editorController.hasOuterGapOverride ? editorWindow._editorController.outerGap : editorWindow._editorController.globalOuterGap;
     }
     property var _zonesRepeater: null
     // Helper to get selected zone data - reactive to both selectedZoneId AND zones changes
@@ -63,7 +64,6 @@ Window {
         // This avoids copying the entire QVariantList just to create a binding dependency.
         // zonesVersion is a lightweight integer that increments on any zone change.
         var _ = controller.zonesVersion;
-        
         // Use efficient C++ lookup instead of JavaScript loop
         try {
             var zone = controller.getZoneById(zoneId);
@@ -81,7 +81,8 @@ Window {
     // Move the editor window to the screen matching editorController.targetScreen
     function moveToTargetScreen() {
         if (!editorWindow._editorController)
-            return;
+            return ;
+
         // Use C++ method which applies the Wayland setGeometry() workaround
         // (QML Window.screen assignment is a no-op on Wayland for xdg-shell surfaces)
         editorWindow._editorController.showFullScreenOnTargetScreen(editorWindow);
@@ -92,6 +93,7 @@ Window {
     function isZoneSelected(zoneId) {
         if (!zoneId || !editorWindow._editorController)
             return false;
+
         return editorWindow._editorController.isSelected(zoneId);
     }
 
@@ -172,8 +174,8 @@ Window {
             var inactiveHex = "#" + Math.round(inactiveColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(inactiveColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
             var borderHex = "#" + Math.round(borderColor.a * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.r * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.g * 255).toString(16).padStart(2, '0').toUpperCase() + Math.round(borderColor.b * 255).toString(16).padStart(2, '0').toUpperCase();
             editorWindow._editorController.setDefaultZoneColors(highlightHex, inactiveHex, borderHex);
-            // If no layout loaded, create new
-            if (editorWindow._editorController.layoutId === "")
+            // If no layout loaded and not in preview mode, create new
+            if (editorWindow._editorController.layoutId === "" && !editorWindow.previewMode)
                 editorWindow._editorController.createNewLayout();
 
         }
@@ -211,6 +213,7 @@ Window {
         confirmCloseDialog: confirmCloseDialog
         helpDialog: helpDialog
         fullscreenMode: editorWindow.fullscreenMode
+        previewMode: editorWindow.previewMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
     }
 
@@ -244,6 +247,7 @@ Window {
         editorWindow: editorWindow
         exportDialog: exportDialog
         fullscreenMode: editorWindow.fullscreenMode
+        previewMode: editorWindow.previewMode
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
@@ -289,7 +293,8 @@ Window {
                 objectName: "drawingArea" // Required for focus restoration from child components
                 anchors.fill: parent
                 // No margins here - zones apply their own gaps (edgeGap at screen edges, zoneSpacing/2 between zones)
-                focus: true // Enable keyboard focus for navigation
+                focus: true
+                // Enable keyboard focus for navigation
                 // Keyboard navigation - uses extracted KeyboardNavigation component
                 Keys.priority: Keys.AfterItem
                 // Allow standard Tab navigation first
@@ -326,6 +331,7 @@ Window {
                         // Use full drawing area dimensions for calculations
                         canvasWidth: drawingArea.width
                         canvasHeight: drawingArea.height
+                        previewMode: editorWindow.previewMode
                         // Bind directly to modelData - when zones list updates, modelData updates
                         zoneData: modelData
                         zoneId: modelData.id || ""
@@ -437,6 +443,7 @@ Window {
                     zoneSpacing: editorWindow.zoneSpacing
                     drawingArea: drawingArea
                     zonesRepeater: zonesRepeater
+                    previewMode: editorWindow.previewMode
                 }
 
                 // Snap line visualization
@@ -474,7 +481,9 @@ Window {
                     property real width: 0
                     property real height: 0
                     property bool isFixedZone: {
-                        if (!active || !zoneId || !editorWindow._editorController) return false;
+                        if (!active || !zoneId || !editorWindow._editorController)
+                            return false;
+
                         var zoneData = editorWindow._editorController.getZoneById(zoneId);
                         return zoneData ? (zoneData.geometryMode === 1) : false;
                     }
@@ -487,6 +496,7 @@ Window {
                     editorWindow: editorWindow
                     editorController: editorWindow._editorController
                     drawingArea: drawingArea
+                    previewMode: editorWindow.previewMode
                 }
 
             }
@@ -499,7 +509,7 @@ Window {
         PropertyPanel {
             id: propertiesPanel
 
-            visible: !editorWindow.fullscreenMode
+            visible: !editorWindow.fullscreenMode && !editorWindow.previewMode
             editorController: editorWindow._editorController
             selectedZoneId: editorWindow.selectedZoneId
             selectedZone: editorWindow.selectedZone
@@ -519,6 +529,7 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         visible: !editorWindow.fullscreenMode
+        previewMode: editorWindow.previewMode
         editorController: editorWindow._editorController
         confirmCloseDialog: confirmCloseDialog
         editorWindow: editorWindow
@@ -612,7 +623,7 @@ Window {
         fileMode: FileDialog.OpenFile
         onAccepted: {
             if (editorWindow._editorController) {
-                var filePath = selectedFile.toString().replace("file://", "");
+                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
                 editorWindow._editorController.importLayout(filePath);
             }
         }
@@ -627,7 +638,7 @@ Window {
         defaultSuffix: "json"
         onAccepted: {
             if (editorWindow._editorController) {
-                var filePath = selectedFile.toString().replace("file://", "");
+                var filePath = decodeURIComponent(selectedFile.toString().replace(/^file:\/\//, ""));
                 editorWindow._editorController.exportLayout(filePath);
             }
         }
@@ -662,12 +673,12 @@ Window {
 
     }
 
-
     // ═══════════════════════════════════════════════════════════════════
     // SHADER SETTINGS DIALOG
     // ═══════════════════════════════════════════════════════════════════
     ShaderSettingsDialog {
         id: shaderDialog
+
         editorController: editorWindow._editorController
         editorWindow: editorWindow
     }
@@ -677,6 +688,7 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     VisibilitySettingsDialog {
         id: visibilityDialog
+
         editorController: editorWindow._editorController
     }
 
@@ -685,9 +697,9 @@ Window {
     // ═══════════════════════════════════════════════════════════════════
     LayoutSettingsDialog {
         id: layoutSettingsDialog
+
         editorController: editorWindow._editorController
     }
-
 
     Connections {
         // Layout name changed - TopBar Connections should handle this

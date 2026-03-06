@@ -8,9 +8,9 @@
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
 
-Q_DECLARE_LOGGING_CATEGORY(lcEffect)
-
 namespace PlasmaZones {
+
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 DragTracker::DragTracker(PlasmaZonesEffect* effect, QObject* parent)
     : QObject(parent)
@@ -88,7 +88,8 @@ void DragTracker::updateCursorPosition(const QPointF& cursorPos)
 
 void DragTracker::finishDrag(bool cancelled)
 {
-    KWin::EffectWindow* windowToSnap = m_draggedWindow;
+    // Copy raw pointer before clearing — QPointer auto-nulls when the window is destroyed
+    auto* windowToSnap = m_draggedWindow.data();
     QString windowIdToSnap = m_draggedWindowId;
 
     // Clear state first to prevent re-entry issues
@@ -101,8 +102,14 @@ void DragTracker::finishDrag(bool cancelled)
 void DragTracker::handleWindowClosed(KWin::EffectWindow* window)
 {
     if (m_draggedWindow == window) {
+        qCInfo(lcEffect) << "Dragged window closed during drag — cancelling";
+        // Don't call finishDrag() — it would pass the mid-destruction window pointer
+        // through dragStopped, causing use-after-free in callDragStopped's geometry queries.
+        // Instead, clear state and emit with nullptr so the receiver skips the snap.
+        QString windowIdToCancel = m_draggedWindowId;
         m_draggedWindow = nullptr;
         m_draggedWindowId.clear();
+        Q_EMIT dragStopped(nullptr, windowIdToCancel, /*cancelled=*/true);
     }
 }
 

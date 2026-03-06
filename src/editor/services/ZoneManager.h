@@ -145,8 +145,14 @@ public:
                                       const QString& borderColor);
 
     // Screen reference for fixed geometry relative fallback computation
-    void setReferenceScreenSize(const QSize& size) { m_referenceScreenSize = size; }
-    QSize referenceScreenSize() const { return m_referenceScreenSize; }
+    void setReferenceScreenSize(const QSize& size)
+    {
+        m_referenceScreenSize = size;
+    }
+    QSize referenceScreenSize() const
+    {
+        return m_referenceScreenSize;
+    }
 
     /**
      * @brief Get effective screen size as QSizeF (clamped to >= 1.0 per dimension)
@@ -240,7 +246,8 @@ private:
     /**
      * @brief Validated geometry result
      */
-    struct ValidatedGeometry {
+    struct ValidatedGeometry
+    {
         qreal x, y, width, height;
         bool isValid = false;
     };
@@ -248,7 +255,8 @@ private:
     /**
      * @brief Validated fixed (pixel) geometry result
      */
-    struct ValidatedFixedGeometry {
+    struct ValidatedFixedGeometry
+    {
         qreal x, y, width, height;
         bool isValid = false;
     };

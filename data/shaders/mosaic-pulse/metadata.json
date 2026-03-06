@@ -17,7 +17,13 @@
         {"id": "speed",          "name": "Speed",             "group": "Animation",  "type": "float", "slot": 7,  "default": 1.25,  "min": 0.0,  "max": 4.0},
         {"id": "reactivity",     "name": "Audio Reactivity",  "group": "Audio",      "type": "float", "slot": 8,  "default": 1.5,   "min": 0.0,  "max": 4.0},
         {"id": "fillOpacity",    "name": "Fill Opacity",      "group": "Appearance", "type": "float", "slot": 9,  "default": 0.9,   "min": 0.3,  "max": 1.0},
+        {"id": "leadSpread", "name": "Lead Glow Spread",  "group": "Labels",     "type": "float", "slot": 10, "default": 2.0,   "min": 1.0, "max": 4.0},
+        {"id": "tileIntensity", "name": "Fill Intensity",  "group": "Labels",     "type": "float", "slot": 11, "default": 0.7,   "min": 0.3, "max": 1.0},
+        {"id": "shockReact", "name": "Shockwave Reactivity",  "group": "Labels",     "type": "float", "slot": 12, "default": 1.0,   "min": 0.0, "max": 2.0},
+        {"id": "popFrequency",   "name": "Pop Frequency",      "group": "Audio",      "type": "float", "slot": 13, "default": 4.0,   "min": 1.0, "max": 10.0},
         {"id": "hueCenter",      "name": "Hue Center",        "group": "Colors",     "type": "color", "slot": 0,  "default": "#4099bf"},
-        {"id": "shapeTint",      "name": "Shape Tint",        "group": "Colors",     "type": "color", "slot": 1,  "default": "#fffff2"}
+        {"id": "shapeTint",      "name": "Shape Tint",        "group": "Colors",     "type": "color", "slot": 1,  "default": "#fffff2"},
+        {"id": "leadColor",      "name": "Lead Border Color", "group": "Colors",     "type": "color", "slot": 2,  "default": "#403830"},
+        {"id": "sparkleColor",   "name": "Sparkle Color",     "group": "Colors",     "type": "color", "slot": 3,  "default": "#fff5cc"}
     ]
 }

@@ -61,6 +61,8 @@ Window {
     property int labelTopMargin: 8 // Margin between preview and label
     property int labelHeight: 20 // Approximate label height
     property int labelSpace: 28 // Total space for label below preview
+    property int cardPadding: 26 // Extra vertical space for card chrome
+    property int cardSidePadding: 18 // Extra horizontal space for card chrome
     property int containerWidth: 216
     property int containerHeight: 165
     property int barHeight: 175
@@ -91,7 +93,7 @@ Window {
     property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
     property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
     property string fontFamily: ""
-    property real fontSizeScale: 1.0
+    property real fontSizeScale: 1
     property int fontWeight: Font.Bold
     property bool fontItalic: false
     property bool fontUnderline: false
@@ -100,13 +102,20 @@ Window {
     property color textColor: Kirigami.Theme.textColor
     property real activeOpacity: 0.5 // Match Settings default
     property real inactiveOpacity: 0.3 // Match Settings default
-
     // Shared fade color for scroll edge indicators
     readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
 
-    // Animation constants - avoid magic numbers per .cursorrules
+    // Signals (zoneSelected is used by C++ for hover-based zone selection)
+    signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
+
+    // Window configuration for overlay - LayerShellQt handles layering on Wayland
+    flags: Qt.FramelessWindowHint | Qt.Tool
+    color: "transparent"
+
+    // Animation constants
     QtObject {
         id: animationConstants
+
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
     }
@@ -116,68 +125,62 @@ Window {
     // Instead, auto-scroll when cursor is near the edges of the scrollable area.
     QtObject {
         id: autoScrollConstants
+
         readonly property int edgeMargin: Kirigami.Units.gridUnit * 4 // ~32px trigger zone
         readonly property real maxSpeed: 0.04 // max scroll position change per tick (0-1 range)
-        readonly property int interval: 16    // ~60fps
+        readonly property int interval: 16 // ~60fps
         readonly property real scrollThreshold: 0.01 // epsilon for scroll position comparisons
-        readonly property real fadeOpacity: 0.95      // fade gradient edge opacity (matches container)
+        readonly property real fadeOpacity: 0.95 // fade gradient edge opacity (matches container)
     }
 
     Timer {
         id: autoScrollTimer
+
         interval: autoScrollConstants.interval
         repeat: true
         running: root.visible && (root.needsScrolling || root.needsHorizontalScrolling) && root.cursorX >= 0
-
         onTriggered: {
             // Map window-local cursor coords to scrollView-local coordinates
             // cursorX/cursorY are already window-local (C++ does mapFromGlobal before setting them)
             var local = scrollView.mapFromItem(null, root.cursorX, root.cursorY);
             var lx = local.x;
             var ly = local.y;
-
             // Vertical auto-scroll
             if (root.needsScrolling) {
                 var vBar = scrollView.ScrollBar.vertical;
                 if (ly >= 0 && ly < autoScrollConstants.edgeMargin) {
                     // Near top edge — scroll up, speed proportional to closeness
-                    var topFactor = 1.0 - ly / autoScrollConstants.edgeMargin;
+                    var topFactor = 1 - ly / autoScrollConstants.edgeMargin;
                     vBar.position = Math.max(0, vBar.position - autoScrollConstants.maxSpeed * topFactor);
                 } else if (ly > scrollView.height - autoScrollConstants.edgeMargin && ly <= scrollView.height) {
                     // Near bottom edge — scroll down
-                    var bottomFactor = 1.0 - (scrollView.height - ly) / autoScrollConstants.edgeMargin;
-                    var maxPos = 1.0 - vBar.size;
+                    var bottomFactor = 1 - (scrollView.height - ly) / autoScrollConstants.edgeMargin;
+                    var maxPos = 1 - vBar.size;
                     vBar.position = Math.min(maxPos, vBar.position + autoScrollConstants.maxSpeed * bottomFactor);
                 }
             }
-
             // Horizontal auto-scroll
             if (root.needsHorizontalScrolling) {
                 var hBar = scrollView.ScrollBar.horizontal;
                 if (lx >= 0 && lx < autoScrollConstants.edgeMargin) {
                     // Near left edge — scroll left
-                    var leftFactor = 1.0 - lx / autoScrollConstants.edgeMargin;
+                    var leftFactor = 1 - lx / autoScrollConstants.edgeMargin;
                     hBar.position = Math.max(0, hBar.position - autoScrollConstants.maxSpeed * leftFactor);
                 } else if (lx > scrollView.width - autoScrollConstants.edgeMargin && lx <= scrollView.width) {
                     // Near right edge — scroll right
-                    var rightFactor = 1.0 - (scrollView.width - lx) / autoScrollConstants.edgeMargin;
-                    var maxHPos = 1.0 - hBar.size;
+                    var rightFactor = 1 - (scrollView.width - lx) / autoScrollConstants.edgeMargin;
+                    var maxHPos = 1 - hBar.size;
                     hBar.position = Math.min(maxHPos, hBar.position + autoScrollConstants.maxSpeed * rightFactor);
                 }
             }
         }
     }
 
-    // Signals (zoneSelected is used by C++ for hover-based zone selection)
-    signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
-
-    // Window configuration for overlay - LayerShellQt handles layering on Wayland
-    flags: Qt.FramelessWindowHint | Qt.Tool
-    color: "transparent"
-
     // Main container - uses States for proper anchor management
     // Conditional anchors with undefined don't reliably unset in QML
     QFZCommon.PopupFrame {
+        // Scroll fade indicators — show gradient edges when content overflows
+
         id: container
 
         objectName: "zoneSelectorContainer"
@@ -406,8 +409,8 @@ Window {
                         property bool isActive: layoutId === root.activeLayoutId
                         property bool hasSelectedZone: root.selectedLayoutId === layoutId
 
-                        width: root.indicatorWidth
-                        height: root.indicatorHeight + root.labelSpace
+                        width: root.indicatorWidth + root.cardSidePadding * 2
+                        height: root.indicatorHeight + root.labelSpace + root.cardPadding
                         Layout.preferredWidth: width
                         Layout.preferredHeight: height
 
@@ -418,16 +421,14 @@ Window {
                             isSelected: indicator.hasSelectedZone
                             previewWidth: root.indicatorWidth
                             previewHeight: root.indicatorHeight
-
                             // Zone selector features
                             showIndicatorBar: true
-                            showCardBackground: false
+                            showCardBackground: true
                             interactive: true
                             selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
-
                             // Zone appearance
-                            zonePadding: 1
-                            edgeGap: 1
+                            zonePadding: root.scaledPadding
+                            edgeGap: root.scaledPadding
                             minZoneSize: 8
                             zoneHighlightColor: root.highlightColor
                             zoneInactiveColor: root.inactiveColor
@@ -435,11 +436,10 @@ Window {
                             inactiveOpacity: root.inactiveOpacity
                             activeOpacity: root.activeOpacity
                             hoverScale: 1.05
-
                             // Theme
                             highlightColor: root.highlightColor
                             textColor: root.textColor
-
+                            backgroundColor: root.backgroundColor
                             // Font
                             fontFamily: root.fontFamily
                             fontSizeScale: root.fontSizeScale
@@ -447,21 +447,22 @@ Window {
                             fontItalic: root.fontItalic
                             fontUnderline: root.fontUnderline
                             fontStrikeout: root.fontStrikeout
-
                             // Animation
                             animationDuration: animationConstants.normalDuration
                             shortAnimationDuration: animationConstants.shortDuration
                             labelTopMargin: root.labelTopMargin
-
                             onZoneHovered: function(zoneIndex) {
                                 root.selectedLayoutId = indicator.layoutId;
                                 root.selectedZoneIndex = zoneIndex;
                                 var zones = indicator.modelData.zones || [];
                                 var zone = zones[zoneIndex];
-                                var relGeo = zone ? (zone.relativeGeometry || {}) : {};
+                                var relGeo = zone ? (zone.relativeGeometry || {
+                                }) : {
+                                };
                                 root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
                             }
                         }
+
                     }
 
                 }
@@ -469,8 +470,6 @@ Window {
             }
 
         }
-
-        // Scroll fade indicators — show gradient edges when content overflows
 
         // Top fade: visible when scrolled down (more content above)
         Rectangle {
@@ -480,10 +479,20 @@ Window {
             height: root.indicatorSpacing
             visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
             z: 10
+
             gradient: Gradient {
-                GradientStop { position: 0.0; color: root.fadeColor }
-                GradientStop { position: 1.0; color: "transparent" }
+                GradientStop {
+                    position: 0
+                    color: root.fadeColor
+                }
+
+                GradientStop {
+                    position: 1
+                    color: "transparent"
+                }
+
             }
+
         }
 
         // Bottom fade: visible when more content below
@@ -492,12 +501,22 @@ Window {
             anchors.left: scrollView.left
             anchors.right: scrollView.right
             height: root.indicatorSpacing
-            visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1.0 - autoScrollConstants.scrollThreshold)
+            visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1 - autoScrollConstants.scrollThreshold)
             z: 10
+
             gradient: Gradient {
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: root.fadeColor }
+                GradientStop {
+                    position: 0
+                    color: "transparent"
+                }
+
+                GradientStop {
+                    position: 1
+                    color: root.fadeColor
+                }
+
             }
+
         }
 
         // Left fade: visible when scrolled right (more content to the left)
@@ -508,11 +527,22 @@ Window {
             width: root.indicatorSpacing
             visible: root.needsHorizontalScrolling && scrollView.ScrollBar.horizontal.position > autoScrollConstants.scrollThreshold
             z: 10
+
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: root.fadeColor }
-                GradientStop { position: 1.0; color: "transparent" }
+
+                GradientStop {
+                    position: 0
+                    color: root.fadeColor
+                }
+
+                GradientStop {
+                    position: 1
+                    color: "transparent"
+                }
+
             }
+
         }
 
         // Right fade: visible when more content to the right
@@ -521,13 +551,24 @@ Window {
             anchors.bottom: scrollView.bottom
             anchors.right: scrollView.right
             width: root.indicatorSpacing
-            visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1.0 - autoScrollConstants.scrollThreshold)
+            visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1 - autoScrollConstants.scrollThreshold)
             z: 10
+
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: root.fadeColor }
+
+                GradientStop {
+                    position: 0
+                    color: "transparent"
+                }
+
+                GradientStop {
+                    position: 1
+                    color: root.fadeColor
+                }
+
             }
+
         }
 
         // Empty state
