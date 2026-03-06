@@ -108,6 +108,7 @@ private Q_SLOTS:
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
                                                const QString& geometryJson);
+    void slotWindowMinimizedChanged(KWin::EffectWindow* w);
 
     // Daemon lifecycle
     void slotDaemonReady();
@@ -452,6 +453,9 @@ private:
      * @return Data URL string, or empty string on failure
      */
     static QString iconToDataUrl(const QIcon& icon, int size);
+
+    // Snap-mode: windows floated due to minimize (mirrors autotile's m_minimizeFloatedWindows)
+    QSet<QString> m_minimizeFloatedWindows;
 
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid

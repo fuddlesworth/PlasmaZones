@@ -593,6 +593,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     const QString closedWindowId = getWindowId(w);
     const QString closedScreenName = getWindowScreenName(w);
 
+    // Clean up snap-mode minimize tracking
+    m_minimizeFloatedWindows.remove(closedWindowId);
+
     // Notify autotile handler for cleanup (tracking sets + autotile D-Bus)
     m_autotileHandler->onWindowClosed(closedWindowId, closedScreenName);
 
@@ -660,6 +663,9 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMinimizedChanged);
+
+    // Snap mode: track minimize/unminimize to float/unfloat snapped windows
+    connect(w, &KWin::EffectWindow::minimizedChanged, this, &PlasmaZonesEffect::slotWindowMinimizedChanged);
 }
 
 void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldpos, Qt::MouseButtons buttons,
@@ -1795,6 +1801,43 @@ void PlasmaZonesEffect::slotWindowFloatingChanged(const QString& windowId, bool 
     // Uses full windowId for per-instance tracking (appId fallback in isWindowFloating).
     qCInfo(lcEffect) << "Floating state changed for" << windowId << "- isFloating:" << isFloating;
     m_navigationHandler->setWindowFloating(windowId, isFloating);
+}
+
+void PlasmaZonesEffect::slotWindowMinimizedChanged(KWin::EffectWindow* w)
+{
+    if (!w || !shouldHandleWindow(w) || !isTileableWindow(w)) {
+        return;
+    }
+    const QString windowId = getWindowId(w);
+    const QString screenName = getWindowScreenName(w);
+
+    // Autotile handler handles its own screens — only handle snap-mode here
+    if (m_autotileHandler->isAutotileScreen(screenName)) {
+        return;
+    }
+
+    const bool minimized = w->isMinimized();
+
+    if (minimized) {
+        if (isWindowFloating(windowId)) {
+            qCDebug(lcEffect) << "Snap: minimized already-floating window, skipping float:" << windowId;
+            return;
+        }
+        m_minimizeFloatedWindows.insert(windowId);
+    } else {
+        if (!m_minimizeFloatedWindows.remove(windowId)) {
+            qCDebug(lcEffect) << "Snap: unminimized window was not minimize-floated, skipping unfloat:" << windowId;
+            return;
+        }
+    }
+
+    qCInfo(lcEffect) << "Snap: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:") << windowId
+                     << "on" << screenName;
+
+    if (m_daemonServiceRegistered) {
+        fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+                              {windowId, screenName, minimized}, QStringLiteral("setWindowFloatingForScreen"));
+    }
 }
 
 void PlasmaZonesEffect::slotRunningWindowsRequested()
