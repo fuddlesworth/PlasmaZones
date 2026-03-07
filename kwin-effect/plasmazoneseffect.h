@@ -19,11 +19,14 @@
 
 #include <functional>
 
+namespace KWin {
+class OutlinedBorderItem;
+}
+
 namespace PlasmaZones {
 
 // Forward declarations for helper classes
 class AutotileHandler;
-class AutotileBorderRenderer;
 class NavigationHandler;
 class ScreenChangeHandler;
 class SnapAssistHandler;
@@ -73,8 +76,8 @@ public:
     void postPaintScreen() override;
     void prePaintWindow(KWin::RenderView* view, KWin::EffectWindow* w, KWin::WindowPrePaintData& data,
                         std::chrono::milliseconds presentTime) override;
-    void paintScreen(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport, int mask,
-                     const KWin::Region& deviceRegion, KWin::LogicalOutput* screen) override;
+    // paintScreen override removed — borders are now rendered natively by KWin's
+    // scene graph (OutlinedBorderItem), no custom GL drawing needed.
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
@@ -326,8 +329,12 @@ private:
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
     std::unique_ptr<AutotileHandler> m_autotileHandler;
-    std::unique_ptr<AutotileBorderRenderer> m_borderRenderer;
-    QRect m_lastBorderRect; // tracks previous border region for damage scheduling
+
+    // Native border for the active borderless window (scene graph item).
+    void updateActiveBorder();
+    void clearActiveBorder();
+    KWin::OutlinedBorderItem* m_activeBorderItem = nullptr;
+    QMetaObject::Connection m_borderGeometryConnection;
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;

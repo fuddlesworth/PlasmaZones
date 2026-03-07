@@ -44,8 +44,6 @@ set(plasmazones_effect_SRCS
     autotilehandler.h
     autotilehandler/signals.cpp
     autotilehandler/tiling.cpp
-    autotileborderrenderer.cpp
-    autotileborderrenderer.h
     navigationhandler.cpp
     navigationhandler.h
     screenchangehandler.cpp
