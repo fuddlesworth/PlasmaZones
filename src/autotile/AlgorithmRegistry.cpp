@@ -269,7 +269,9 @@ int AlgorithmRegistry::effectiveMaxWindows(TilingAlgorithm* algorithm)
     if (!algorithm) {
         return s_previewParams.maxWindows;
     }
-    return (s_previewParams.maxWindows > 0) ? s_previewParams.maxWindows : algorithm->defaultMaxWindows();
+    // Always use the algorithm's own default for preview generation.
+    // The global maxWindows setting is a runtime cap, not a preview override.
+    return algorithm->defaultMaxWindows();
 }
 
 QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm, int windowCount)
