@@ -103,6 +103,12 @@ class EditorController : public QObject
     Q_PROPERTY(int globalOuterGapLeft READ globalOuterGapLeft NOTIFY globalOuterGapChanged)
     Q_PROPERTY(int globalOuterGapRight READ globalOuterGapRight NOTIFY globalOuterGapChanged)
 
+    // Overlay display mode override
+    Q_PROPERTY(
+        int overlayDisplayMode READ overlayDisplayMode WRITE setOverlayDisplayMode NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(bool hasOverlayDisplayModeOverride READ hasOverlayDisplayModeOverride NOTIFY overlayDisplayModeChanged)
+    Q_PROPERTY(int globalOverlayDisplayMode READ globalOverlayDisplayMode NOTIFY globalOverlayDisplayModeChanged)
+
     // Full screen geometry mode
     Q_PROPERTY(bool useFullScreenGeometry READ useFullScreenGeometry WRITE setUseFullScreenGeometry NOTIFY
                    useFullScreenGeometryChanged)
@@ -203,6 +209,9 @@ public:
     int globalOuterGapBottom() const;
     int globalOuterGapLeft() const;
     int globalOuterGapRight() const;
+    int overlayDisplayMode() const;
+    bool hasOverlayDisplayModeOverride() const;
+    int globalOverlayDisplayMode() const;
     bool useFullScreenGeometry() const;
     QSize targetScreenSize() const;
     bool canPaste() const;
@@ -321,8 +330,11 @@ public:
     void setOuterGapRight(int gap);
     Q_INVOKABLE void clearZonePaddingOverride();
     Q_INVOKABLE void clearOuterGapOverride();
+    Q_INVOKABLE void clearOverlayDisplayModeOverride();
     Q_INVOKABLE void refreshGlobalZonePadding();
     Q_INVOKABLE void refreshGlobalOuterGap();
+    Q_INVOKABLE void refreshGlobalOverlayDisplayMode();
+    void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);
 
     // Shader setters (create undo commands)
@@ -337,6 +349,7 @@ public:
     void setOuterGapBottomDirect(int gap);
     void setOuterGapLeftDirect(int gap);
     void setOuterGapRightDirect(int gap);
+    void setOverlayDisplayModeDirect(int mode);
     void setUseFullScreenGeometryDirect(bool enabled);
 
     // Shader setters - Direct (for undo/redo, bypass command creation)
@@ -647,6 +660,8 @@ Q_SIGNALS:
     void outerGapChanged();
     void globalZonePaddingChanged();
     void globalOuterGapChanged();
+    void overlayDisplayModeChanged();
+    void globalOverlayDisplayModeChanged();
     void useFullScreenGeometryChanged();
     void targetScreenSizeChanged();
 
@@ -829,9 +844,11 @@ private:
     int m_outerGapBottom = -1;
     int m_outerGapLeft = -1;
     int m_outerGapRight = -1;
+    int m_overlayDisplayMode = -1; // -1 = use global setting
     bool m_useFullScreenGeometry = false;
     int m_cachedGlobalZonePadding = PlasmaZones::Defaults::ZonePadding; // Cached to avoid D-Bus calls
     int m_cachedGlobalOuterGap = PlasmaZones::Defaults::OuterGap; // Cached to avoid D-Bus calls
+    int m_cachedGlobalOverlayDisplayMode = 0; // Cached global overlay display mode
     bool m_cachedGlobalUsePerSideOuterGap = false;
     int m_cachedGlobalOuterGapTop = PlasmaZones::Defaults::OuterGap;
     int m_cachedGlobalOuterGapBottom = PlasmaZones::Defaults::OuterGap;

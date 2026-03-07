@@ -417,6 +417,8 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
         normalizedKey = QString::fromLatin1(JsonKeys::BorderWidth);
     } else if (propertyName.compare(QLatin1String("borderRadius"), Qt::CaseInsensitive) == 0) {
         normalizedKey = QString::fromLatin1(JsonKeys::BorderRadius);
+    } else if (propertyName.compare(QLatin1String("overlayDisplayMode"), Qt::CaseInsensitive) == 0) {
+        normalizedKey = QString::fromLatin1(JsonKeys::OverlayDisplayMode);
     }
 
     zone[normalizedKey] = value;

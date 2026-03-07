@@ -162,6 +162,7 @@ void EditorController::createNewLayout()
     m_outerGapBottom = -1;
     m_outerGapLeft = -1;
     m_outerGapRight = -1;
+    m_overlayDisplayMode = -1;
     m_useFullScreenGeometry = false;
 
     // Refresh available shaders from daemon
@@ -179,6 +180,7 @@ void EditorController::createNewLayout()
     Q_EMIT currentShaderParametersChanged();
     Q_EMIT zonePaddingChanged();
     Q_EMIT outerGapChanged();
+    Q_EMIT overlayDisplayModeChanged();
     Q_EMIT useFullScreenGeometryChanged();
 }
 
@@ -268,6 +270,11 @@ void EditorController::loadLayout(const QString& layoutId)
             ? appearance[QLatin1String(JsonKeys::UseCustomColors)].toBool()
             : false;
         zone[useCustomColorsKey] = useCustomColorsValue;
+
+        // Per-zone overlay display mode override (-1 = use layout/global)
+        zone[JsonKeys::OverlayDisplayMode] = appearance.contains(QLatin1String(JsonKeys::OverlayDisplayMode))
+            ? appearance[QLatin1String(JsonKeys::OverlayDisplayMode)].toInt(-1)
+            : -1;
 
         zones.append(zone);
     }
@@ -365,6 +372,10 @@ void EditorController::loadLayout(const QString& layoutId)
         ? layoutObj[QLatin1String(JsonKeys::OuterGapRight)].toInt(-1)
         : -1;
     m_useFullScreenGeometry = layoutObj[QLatin1String(JsonKeys::UseFullScreenGeometry)].toBool(false);
+    int oldOverlayDisplayMode = m_overlayDisplayMode;
+    m_overlayDisplayMode = layoutObj.contains(QLatin1String(JsonKeys::OverlayDisplayMode))
+        ? layoutObj[QLatin1String(JsonKeys::OverlayDisplayMode)].toInt(-1)
+        : -1;
 
     m_selectedZoneId.clear();
     m_selectedZoneIds.clear();
@@ -413,6 +424,9 @@ void EditorController::loadLayout(const QString& layoutId)
     Q_EMIT outerGapChanged();
     if (m_useFullScreenGeometry != oldUseFullScreen) {
         Q_EMIT useFullScreenGeometryChanged();
+    }
+    if (m_overlayDisplayMode != oldOverlayDisplayMode) {
+        Q_EMIT overlayDisplayModeChanged();
     }
 
     // Emit visibility filtering signals
@@ -495,6 +509,11 @@ void EditorController::saveLayout()
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
         appearance[QLatin1String(JsonKeys::UseCustomColors)] =
             zone.contains(useCustomColorsKey) ? zone[useCustomColorsKey].toBool() : false;
+        // Per-zone overlay display mode override (only if set)
+        int zoneOverlayMode = zone.value(JsonKeys::OverlayDisplayMode, -1).toInt();
+        if (zoneOverlayMode >= 0) {
+            appearance[QLatin1String(JsonKeys::OverlayDisplayMode)] = zoneOverlayMode;
+        }
         zoneObj[QLatin1String(JsonKeys::Appearance)] = appearance;
 
         zonesArray.append(zoneObj);
@@ -531,6 +550,11 @@ void EditorController::saveLayout()
             layoutObj[QLatin1String(JsonKeys::OuterGapLeft)] = m_outerGapLeft;
         if (m_outerGapRight >= 0)
             layoutObj[QLatin1String(JsonKeys::OuterGapRight)] = m_outerGapRight;
+    }
+
+    // Include per-layout overlay display mode override (only if set)
+    if (m_overlayDisplayMode >= 0) {
+        layoutObj[QLatin1String(JsonKeys::OverlayDisplayMode)] = m_overlayDisplayMode;
     }
 
     // Include full screen geometry mode (only if enabled)

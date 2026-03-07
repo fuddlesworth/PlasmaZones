@@ -37,6 +37,8 @@ Kirigami.Dialog {
         perSideLeftSpin.value = root.editorController.outerGapLeft >= 0 ? root.editorController.outerGapLeft : root.editorController.globalOuterGapLeft;
         perSideRightSpin.value = root.editorController.outerGapRight >= 0 ? root.editorController.outerGapRight : root.editorController.globalOuterGapRight;
         fullScreenGeomCheck.checked = root.editorController.useFullScreenGeometry;
+        overlayDisplayModeOverrideCheck.checked = root.editorController.hasOverlayDisplayModeOverride;
+        overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.hasOverlayDisplayModeOverride ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode, 1));
     }
 
     // Sync UI state when values change externally (undo/redo, load layout)
@@ -72,6 +74,17 @@ Kirigami.Dialog {
                 perSideLeftSpin.value = root.editorController.globalOuterGapLeft;
                 perSideRightSpin.value = root.editorController.globalOuterGapRight;
             }
+        }
+
+        function onOverlayDisplayModeChanged() {
+            overlayDisplayModeOverrideCheck.checked = root.editorController.hasOverlayDisplayModeOverride;
+            overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.hasOverlayDisplayModeOverride ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode, 1));
+        }
+
+        function onGlobalOverlayDisplayModeChanged() {
+            if (!root.editorController.hasOverlayDisplayModeOverride)
+                overlayDisplayModeCombo.currentIndex = Math.max(0, Math.min(root.editorController.globalOverlayDisplayMode, 1));
+
         }
 
         function onUseFullScreenGeometryChanged() {
@@ -334,6 +347,77 @@ Kirigami.Dialog {
 
                 Label {
                     text: i18nc("@label", "px")
+                }
+
+            }
+
+        }
+
+        Kirigami.Separator {
+            Layout.fillWidth: true
+        }
+
+        // ─── Overlay section ────────────────────────────────
+        ColumnLayout {
+            spacing: Kirigami.Units.smallSpacing
+            Layout.fillWidth: true
+
+            SectionHeader {
+                title: i18nc("@title:group", "Overlay")
+                icon: "view-grid"
+            }
+
+            Label {
+                text: i18nc("@info", "Override the global overlay style for this layout.")
+                wrapMode: Text.WordWrap
+                opacity: 0.7
+                Layout.fillWidth: true
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.maximumWidth: root.preferredWidth - root.padding * 2 - Kirigami.Units.largeSpacing
+            }
+
+            GridLayout {
+                columns: 2
+                columnSpacing: Kirigami.Units.smallSpacing
+                rowSpacing: Kirigami.Units.mediumSpacing
+                Layout.leftMargin: Kirigami.Units.largeSpacing
+                Layout.fillWidth: true
+
+                CheckBox {
+                    id: overlayDisplayModeOverrideCheck
+
+                    text: i18nc("@option:check", "Overlay Style")
+                    checked: root.editorController ? root.editorController.hasOverlayDisplayModeOverride : false
+                    Layout.fillWidth: true
+                    onToggled: {
+                        if (root.editorController) {
+                            if (checked)
+                                root.editorController.overlayDisplayMode = root.editorController.globalOverlayDisplayMode;
+                            else
+                                root.editorController.clearOverlayDisplayModeOverride();
+                        }
+                    }
+                }
+
+                ComboBox {
+                    id: overlayDisplayModeCombo
+
+                    model: [i18nc("@item:inlistbox", "Full zone highlight"), i18nc("@item:inlistbox", "Compact preview")]
+                    currentIndex: {
+                        if (!root.editorController)
+                            return 0;
+
+                        let mode = overlayDisplayModeOverrideCheck.checked ? root.editorController.overlayDisplayMode : root.editorController.globalOverlayDisplayMode;
+                        return Math.max(0, Math.min(mode, 1));
+                    }
+                    enabled: overlayDisplayModeOverrideCheck.checked
+                    Layout.preferredWidth: Kirigami.Units.gridUnit * 9
+                    Accessible.name: i18nc("@label", "Overlay display mode")
+                    onActivated: (index) => {
+                        if (root.editorController && overlayDisplayModeOverrideCheck.checked)
+                            root.editorController.overlayDisplayMode = index;
+
+                    }
                 }
 
             }

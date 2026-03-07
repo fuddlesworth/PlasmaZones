@@ -5,6 +5,8 @@ import "ColorUtils.js" as ColorUtils
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Templates as T
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 
 /**
@@ -678,6 +680,103 @@ Rectangle {
                             editorController.updateZoneAppearance(selectedZoneId, "borderRadius", newValue);
 
                     }
+                }
+
+                // ═══════════════════════════════════════════════════════════════
+                // SINGLE ZONE OVERLAY STYLE
+                // ═══════════════════════════════════════════════════════════════
+                Kirigami.Separator {
+                    visible: panelMode === "single"
+                    Kirigami.FormData.isSection: true
+                    Kirigami.FormData.label: i18nc("@title", "Overlay")
+                }
+
+                ComboBox {
+                    id: zoneOverlayModeCombo
+
+                    readonly property real _longestItemWidth: {
+                        let maxW = 0;
+                        for (let i = 0; i < count; ++i) {
+                            _overlayMetrics.text = textAt(i) || "";
+                            maxW = Math.max(maxW, _overlayMetrics.advanceWidth);
+                        }
+                        return maxW;
+                    }
+
+                    visible: panelMode === "single"
+                    Layout.fillWidth: true
+                    Kirigami.FormData.label: i18nc("@label", "Style:")
+                    implicitContentWidthPolicy: ComboBox.WidestTextWhenCompleted
+                    model: [i18nc("@item:inlistbox overlay mode", "Use layout default"), i18nc("@item:inlistbox", "Full zone highlight"), i18nc("@item:inlistbox", "Compact preview")]
+                    currentIndex: {
+                        if (!selectedZone)
+                            return 0;
+
+                        let mode = selectedZone.overlayDisplayMode !== undefined ? selectedZone.overlayDisplayMode : -1;
+                        return Math.max(0, Math.min(mode + 1, 2)); // -1 -> 0 (default), 0 -> 1, 1 -> 2
+                    }
+                    enabled: Boolean(selectedZone) && Boolean(editorController)
+                    Accessible.name: i18nc("@label", "Zone overlay display mode")
+                    Accessible.description: i18nc("@info:accessibility", "Override the overlay style for this zone only")
+                    onActivated: (index) => {
+                        if (selectedZoneId && editorController)
+                            editorController.updateZoneAppearance(selectedZoneId, "overlayDisplayMode", index - 1);
+
+                    }
+
+                    TextMetrics {
+                        id: _overlayMetrics
+
+                        font: zoneOverlayModeCombo.font
+                    }
+
+                    popup: T.Popup {
+                        y: zoneOverlayModeCombo.height
+                        width: Math.max(zoneOverlayModeCombo.width, zoneOverlayModeCombo._longestItemWidth + Kirigami.Units.gridUnit * 3)
+                        height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (zoneOverlayModeCombo.Window.window ? zoneOverlayModeCombo.Window.window.height : 600) - topMargin - bottomMargin)
+                        topMargin: Kirigami.Units.smallSpacing
+                        bottomMargin: Kirigami.Units.smallSpacing
+                        padding: 1
+
+                        contentItem: ListView {
+                            clip: true
+                            implicitHeight: contentHeight
+                            model: zoneOverlayModeCombo.delegateModel
+                            currentIndex: zoneOverlayModeCombo.highlightedIndex
+                            highlightMoveDuration: 0
+                        }
+
+                        background: Rectangle {
+                            color: Kirigami.Theme.backgroundColor
+                            border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                            border.width: 1
+                            radius: Kirigami.Units.smallSpacing
+                        }
+
+                    }
+
+                    delegate: ItemDelegate {
+                        required property var modelData
+                        required property int index
+                        readonly property bool isCurrentSelection: zoneOverlayModeCombo.currentIndex === index
+
+                        width: zoneOverlayModeCombo.popup.availableWidth
+                        highlighted: zoneOverlayModeCombo.highlightedIndex === index
+
+                        background: Rectangle {
+                            color: parent.highlighted ? Kirigami.Theme.highlightColor : parent.isCurrentSelection ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15) : Kirigami.Theme.backgroundColor
+                        }
+
+                        contentItem: Label {
+                            text: modelData
+                            color: parent.highlighted ? Kirigami.Theme.highlightedTextColor : Kirigami.Theme.textColor
+                            font.bold: parent.highlighted || parent.isCurrentSelection
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                    }
+
                 }
 
                 // ═══════════════════════════════════════════════════════════════

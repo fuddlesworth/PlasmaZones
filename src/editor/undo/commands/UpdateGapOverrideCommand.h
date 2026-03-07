@@ -31,7 +31,8 @@ public:
         OuterGapBottom,
         OuterGapLeft,
         OuterGapRight,
-        UsePerSideOuterGap
+        UsePerSideOuterGap,
+        OverlayDisplayMode
     };
 
     explicit UpdateGapOverrideCommand(QPointer<EditorController> editorController, GapType type, int oldValue,

@@ -124,6 +124,8 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
             overrides[JsonKeys::ShaderId] = obj[JsonKeys::ShaderId];
         if (obj.contains(JsonKeys::ShaderParams))
             overrides[JsonKeys::ShaderParams] = obj[JsonKeys::ShaderParams];
+        if (obj.contains(JsonKeys::OverlayDisplayMode))
+            overrides[JsonKeys::OverlayDisplayMode] = obj[JsonKeys::OverlayDisplayMode];
         m_layoutManager->saveAutotileOverrides(algoId, overrides);
         qCInfo(lcDbusLayout) << "Saved autotile overrides for algorithm:" << algoId;
         Q_EMIT layoutChanged(layoutJson);
@@ -159,6 +161,13 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     layout->setOuterGapBottom(obj.contains(JsonKeys::OuterGapBottom) ? obj[JsonKeys::OuterGapBottom].toInt(-1) : -1);
     layout->setOuterGapLeft(obj.contains(JsonKeys::OuterGapLeft) ? obj[JsonKeys::OuterGapLeft].toInt(-1) : -1);
     layout->setOuterGapRight(obj.contains(JsonKeys::OuterGapRight) ? obj[JsonKeys::OuterGapRight].toInt(-1) : -1);
+
+    // Update per-layout overlay display mode override
+    if (obj.contains(JsonKeys::OverlayDisplayMode)) {
+        layout->setOverlayDisplayMode(obj[JsonKeys::OverlayDisplayMode].toInt(-1));
+    } else {
+        layout->clearOverlayDisplayModeOverride();
+    }
 
     // Update full screen geometry mode
     layout->setUseFullScreenGeometry(obj[JsonKeys::UseFullScreenGeometry].toBool(false));
@@ -230,6 +239,9 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
             }
             if (appearance.contains(JsonKeys::UseCustomColors)) {
                 zone->setUseCustomColors(appearance[JsonKeys::UseCustomColors].toBool());
+            }
+            if (appearance.contains(JsonKeys::OverlayDisplayMode)) {
+                zone->setOverlayDisplayMode(appearance[JsonKeys::OverlayDisplayMode].toInt(-1));
             }
         }
 

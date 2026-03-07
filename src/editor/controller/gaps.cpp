@@ -259,9 +259,53 @@ void EditorController::setOuterGapRightDirect(int gap)
     }
 }
 
+int EditorController::overlayDisplayMode() const
+{
+    return m_overlayDisplayMode;
+}
+
+bool EditorController::hasOverlayDisplayModeOverride() const
+{
+    return m_overlayDisplayMode >= 0;
+}
+
+int EditorController::globalOverlayDisplayMode() const
+{
+    return m_cachedGlobalOverlayDisplayMode;
+}
+
+void EditorController::setOverlayDisplayMode(int mode)
+{
+    if (mode < -1) {
+        mode = -1;
+    }
+    if (m_overlayDisplayMode != mode) {
+        auto* cmd = new UpdateGapOverrideCommand(this, UpdateGapOverrideCommand::GapType::OverlayDisplayMode,
+                                                 m_overlayDisplayMode, mode);
+        m_undoController->push(cmd);
+    }
+}
+
+void EditorController::setOverlayDisplayModeDirect(int mode)
+{
+    if (mode < -1) {
+        mode = -1;
+    }
+    if (m_overlayDisplayMode != mode) {
+        m_overlayDisplayMode = mode;
+        markUnsaved();
+        Q_EMIT overlayDisplayModeChanged();
+    }
+}
+
 void EditorController::clearZonePaddingOverride()
 {
     setZonePadding(-1);
+}
+
+void EditorController::clearOverlayDisplayModeOverride()
+{
+    setOverlayDisplayMode(-1);
 }
 
 void EditorController::clearOuterGapOverride()
@@ -513,6 +557,16 @@ void EditorController::refreshGlobalOuterGap()
 
     if (changed) {
         Q_EMIT globalOuterGapChanged();
+    }
+}
+
+void EditorController::refreshGlobalOverlayDisplayMode()
+{
+    int newValue = SettingsDbusQueries::queryGlobalOverlayDisplayMode();
+
+    if (m_cachedGlobalOverlayDisplayMode != newValue) {
+        m_cachedGlobalOverlayDisplayMode = newValue;
+        Q_EMIT globalOverlayDisplayModeChanged();
     }
 }
 

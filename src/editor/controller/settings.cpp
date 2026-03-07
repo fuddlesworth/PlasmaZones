@@ -118,6 +118,7 @@ void EditorController::loadEditorSettings()
     // in loadLayout(). The global settings are cached here for performance (avoids D-Bus calls).
     refreshGlobalZonePadding();
     refreshGlobalOuterGap();
+    refreshGlobalOverlayDisplayMode();
 
     // Load label font settings from global Appearance config (read-only in editor)
     KConfigGroup appearanceGroup = config->group(QStringLiteral("Appearance"));

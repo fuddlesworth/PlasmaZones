@@ -86,5 +86,10 @@ int queryGlobalOuterGapRight()
     return queryIntSetting(QStringLiteral("outerGapRight"), Defaults::OuterGap);
 }
 
+int queryGlobalOverlayDisplayMode()
+{
+    return queryIntSetting(QStringLiteral("overlayDisplayMode"), 0);
+}
+
 } // namespace SettingsDbusQueries
 } // namespace PlasmaZones
