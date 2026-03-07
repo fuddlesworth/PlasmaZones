@@ -7,10 +7,10 @@
     "fragmentShader": "effect.frag",
     "vertexShader": "zone.vert",
     "parameters": [
-        {"id": "gridDensity",    "name": "Grid Density",      "group": "Grid",       "type": "float", "slot": 0,  "default": 64.0,  "min": 16.0, "max": 128.0},
+        {"id": "gridDensity",    "name": "Grid Density",      "group": "Grid",       "type": "int", "slot": 0,  "default": 64,  "min": 16, "max": 128},
         {"id": "edgeSoftness",   "name": "Edge Softness",     "group": "Grid",       "type": "float", "slot": 1,  "default": 0.18,  "min": 0.02, "max": 0.5},
         {"id": "gridLineWeight", "name": "Grid Line Weight",  "group": "Grid",       "type": "float", "slot": 2,  "default": 0.75,  "min": 0.0,  "max": 1.0},
-        {"id": "posterize",      "name": "Posterize Levels",  "group": "Grid",       "type": "float", "slot": 3,  "default": 8.0,   "min": 2.0,  "max": 32.0},
+        {"id": "posterize",      "name": "Posterize Levels",  "group": "Grid",       "type": "int", "slot": 3,  "default": 8,   "min": 2,  "max": 32},
         {"id": "shapeChance",    "name": "Shape Chance",      "group": "Shapes",     "type": "float", "slot": 4,  "default": 0.62,  "min": 0.0,  "max": 1.0},
         {"id": "shapeSize",      "name": "Shape Size",        "group": "Shapes",     "type": "float", "slot": 5,  "default": 0.26,  "min": 0.05, "max": 0.45},
         {"id": "sparkleChance",  "name": "Sparkle Chance",    "group": "Shapes",     "type": "float", "slot": 6,  "default": 0.04,  "min": 0.0,  "max": 0.2},

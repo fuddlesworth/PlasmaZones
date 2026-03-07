@@ -8,7 +8,7 @@
     "vertexShader": "zone.vert",
     "multipass": false,
     "parameters": [
-        {"id": "cellScale", "name": "Cell Scale", "group": "Crystalline", "type": "float", "slot": 0, "default": 12, "min": 4, "max": 32},
+        {"id": "cellScale", "name": "Cell Scale", "group": "Crystalline", "type": "int", "slot": 0, "default": 12, "min": 4, "max": 32},
         {"id": "animSpeed", "name": "Animation Speed", "group": "Crystalline", "type": "float", "slot": 1, "default": 0.6, "min": 0, "max": 2},
         {"id": "facetSharpness", "name": "Facet Sharpness", "group": "Crystalline", "type": "float", "slot": 2, "default": 0.7, "min": 0.1, "max": 1},
         {"id": "zoneTintBlend", "name": "Zone Tint Blend", "group": "Crystalline", "type": "float", "slot": 3, "default": 0.35, "min": 0, "max": 1},

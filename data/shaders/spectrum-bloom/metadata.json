@@ -20,7 +20,7 @@
     {"id": "outlineSpread", "name": "Rainbow Outline Spread", "group": "Labels", "type": "float", "slot": 10, "default": 2.5, "min": 1.0, "max": 5.0},
     {"id": "spectrumBright", "name": "Spectrum Core Brightness", "group": "Labels", "type": "float", "slot": 11, "default": 2.2, "min": 1.0, "max": 4.0},
     {"id": "bassPulse", "name": "Bass Outline Pulse", "group": "Labels", "type": "float", "slot": 12, "default": 1.0, "min": 0.0, "max": 2.0},
-    {"id": "auroraRayCount", "name": "Aurora Ray Count", "group": "Background", "type": "float", "slot": 13, "default": 12.0, "min": 4.0, "max": 24.0},
+    {"id": "auroraRayCount", "name": "Aurora Ray Count", "group": "Background", "type": "int", "slot": 13, "default": 12, "min": 4, "max": 24},
     {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#00e6ff"},
     {"id": "accentColor", "name": "Accent Color", "group": "Colors", "type": "color", "slot": 1, "default": "#ff3399"},
     {"id": "warmColor", "name": "Warm / Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#ff9a1a"},

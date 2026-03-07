@@ -41,11 +41,11 @@
             "id": "octaves",
             "name": "Detail Level",
             "group": "Pattern",
-            "type": "float",
+            "type": "int",
             "slot": 3,
-            "default": 6.0,
-            "min": 2.0,
-            "max": 8.0
+            "default": 6,
+            "min": 2,
+            "max": 8
         },
         {
             "id": "gridScale",
@@ -139,7 +139,7 @@
         {"id": "logoScale", "name": "Logo Scale", "group": "Logo", "type": "float", "slot": 21, "default": 0.5, "min": 0.1, "max": 1.0},
         {"id": "logoIntensity", "name": "Logo Intensity", "group": "Logo", "type": "float", "slot": 22, "default": 0.6, "min": 0.0, "max": 1.0},
         {"id": "logoPulse", "name": "Logo Bass Pulse", "group": "Logo", "type": "float", "slot": 23, "default": 0.8, "min": 0.0, "max": 2.0},
-        {"id": "logoCount", "name": "Logo Count", "group": "Logo", "type": "float", "slot": 24, "default": 4.0, "min": 1.0, "max": 8.0},
+        {"id": "logoCount", "name": "Logo Count", "group": "Logo", "type": "int", "slot": 24, "default": 4, "min": 1, "max": 8},
         {"id": "logoSizeMin", "name": "Logo Size Min", "group": "Logo", "type": "float", "slot": 25, "default": 0.4, "min": 0.1, "max": 1.0},
         {"id": "logoSizeMax", "name": "Logo Size Max", "group": "Logo", "type": "float", "slot": 26, "default": 1.0, "min": 0.3, "max": 1.5},
         {"id": "flowCenterX", "name": "Flow Center X", "group": "Animation", "type": "float", "slot": 27, "default": 0.4, "min": -1.0, "max": 2.0},

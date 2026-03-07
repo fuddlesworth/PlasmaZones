@@ -41,11 +41,11 @@
             "id": "octaves",
             "name": "Detail Level",
             "group": "Pattern",
-            "type": "float",
+            "type": "int",
             "slot": 3,
-            "default": 6.0,
-            "min": 2.0,
-            "max": 8.0
+            "default": 6,
+            "min": 2,
+            "max": 8
         },
         {
             "id": "colorShift",
@@ -135,7 +135,7 @@
         {"id": "lensIntensity", "name": "Nebula Lens Intensity", "group": "Labels", "type": "float", "slot": 17, "default": 2.5, "min": 1.0, "max": 4.0},
         {"id": "stellarReact", "name": "Stellar Reactivity", "group": "Labels", "type": "float", "slot": 18, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "fbmRotation", "name": "FBM Rotation Angle", "group": "Pattern", "type": "float", "slot": 19, "default": 0.5, "min": 0.1, "max": 1.5},
-        {"id": "gravityWells", "name": "Gravity Well Count", "group": "Audio", "type": "float", "slot": 20, "default": 3.0, "min": 1.0, "max": 6.0},
+        {"id": "gravityWells", "name": "Gravity Well Count", "group": "Audio", "type": "int", "slot": 20, "default": 3, "min": 1, "max": 6},
         {
             "id": "paletteColorA",
             "name": "Palette Base",
