@@ -98,6 +98,12 @@ public:
         ++m_autotileStaggerGeneration;
     }
 
+    // Cancel any pending staggered restore (called by resnap to prevent stale overrides)
+    void cancelPendingRestore()
+    {
+        ++m_restoreStaggerGeneration;
+    }
+
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
     void slotWindowsTileRequested(const QString& tileRequestsJson);
@@ -144,7 +150,9 @@ private:
     QSet<QString> m_pendingCloses;
     QSet<QString> m_minimizeFloatedWindows;
     uint64_t m_autotileStaggerGeneration = 0;
+    uint64_t m_restoreStaggerGeneration = 0;
     QHash<QString, QRect> m_autotileTargetZones;
+    QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
     QString m_pendingAutotileFocusWindowId;
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;

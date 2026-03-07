@@ -840,7 +840,7 @@
     </entry>
     <entry name="AnimationDuration" type="Int">
       <label>Duration of window geometry animations in milliseconds</label>
-      <default>150</default>
+      <default>300</default>
       <min>50</min>
       <max>500</max>
     </entry>
@@ -862,7 +862,7 @@
     </entry>
     <entry name="AnimationStaggerInterval" type="Int">
       <label>When animating one by one: delay in milliseconds between each window starting its animation (cascading overlap)</label>
-      <default>30</default>
+      <default>50</default>
       <min>10</min>
       <max>200</max>
     </entry>

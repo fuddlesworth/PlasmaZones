@@ -118,22 +118,25 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
         // Invalidate any pending stagger timers from prior autotile operations.
         ++m_autotileStaggerGeneration;
         m_autotileTargetZones.clear();
-        // Apply pre-autotile geometry restore IMMEDIATELY (not staggered).
-        // The daemon sends resnapCurrentAssignments() shortly after this handler
-        // returns, which arrives as moveWindowToZone D-Bus calls. If we used
-        // staggered restore here, the stagger timers would fire AFTER resnap
-        // and override the correct zone positions with stale pre-autotile
-        // positions — causing windows to end up at wrong locations.
-        // Immediate restore ensures zone-assigned windows get briefly restored
-        // then overridden by resnap, while orphaned windows (no zone assignment,
-        // no resnap) keep their pre-autotile positions.
-        for (const RestoreEntry& e : toRestore) {
+        m_centeredWaylandZones.clear();
+        // Restore pre-autotile geometries with stagger animation support.
+        // A generation guard prevents stale restore timers from overriding
+        // the resnap positions — handleResnapToNewLayout() calls
+        // cancelPendingRestore() which bumps the generation, cancelling
+        // any not-yet-fired restore callbacks.
+        ++m_restoreStaggerGeneration;
+        const uint64_t restoreGen = m_restoreStaggerGeneration;
+        m_effect->applyStaggeredOrImmediate(toRestore.size(), [this, toRestore, restoreGen](int i) {
+            if (m_restoreStaggerGeneration != restoreGen) {
+                return;
+            }
+            const RestoreEntry& e = toRestore[i];
             if (e.window && !e.window->isDeleted() && m_effect->shouldHandleWindow(e.window)) {
                 qCInfo(lcEffect) << "Restoring pre-autotile geometry for" << m_effect->getWindowId(e.window) << "to"
                                  << e.geometry;
                 m_effect->applySnapGeometry(e.window, e.geometry);
             }
-        }
+        });
     }
 
     m_autotileScreens = newScreens;

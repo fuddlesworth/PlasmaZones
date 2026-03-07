@@ -1505,11 +1505,11 @@ private:
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     bool m_animationsEnabled = true;
-    int m_animationDuration = 150; // milliseconds
+    int m_animationDuration = 300; // milliseconds
     QString m_animationEasingCurve = QStringLiteral("0.33,1.00,0.68,1.00");
     int m_animationMinDistance = 0; // pixels — skip animation for smaller changes
-    int m_animationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
-    int m_animationStaggerInterval = 30; // ms between windows when animating one by one
+    int m_animationSequenceMode = 1; // 0=all at once, 1=one by one in zone order
+    int m_animationStaggerInterval = 50; // ms between windows when animating one by one
 
     // Additional Autotiling Settings (must match plasmazones.kcfg Autotiling defaults)
     bool m_autotileFocusFollowsMouse = false;

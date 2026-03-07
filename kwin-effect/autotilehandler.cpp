@@ -321,6 +321,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     m_border.zoneGeometries.remove(windowId);
     m_monocleMaximizedWindows.remove(windowId);
     m_autotileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
     if (m_preAutotileGeometries.contains(screenName)) {
         m_preAutotileGeometries[screenName].remove(windowId);
     }

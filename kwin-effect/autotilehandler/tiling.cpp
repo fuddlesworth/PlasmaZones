@@ -240,7 +240,32 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
                 } else {
                     m_border.zoneGeometries.remove(snap.windowId);
                 }
-                m_effect->applySnapGeometry(snap.window, geo);
+
+                // For Wayland windows being retiled to the same zone, skip the
+                // moveResize if the window was previously centered in this zone.
+                // This prevents flicker where the window jumps from its centered
+                // position back to the zone origin, then gets re-centered 200ms later.
+                // It also avoids flooding the Wayland client with configure events
+                // which can freeze terminals like Ghostty.
+                bool skipMoveResize = false;
+                if (snap.window->isWaylandClient()) {
+                    auto prevIt = m_centeredWaylandZones.find(snap.windowId);
+                    if (prevIt != m_centeredWaylandZones.end() && prevIt.value() == geo) {
+                        const QRectF actual = snap.window->frameGeometry();
+                        // Window is still within the zone bounds — already centered
+                        if (actual.x() >= geo.x() - 1 && actual.y() >= geo.y() - 1 && actual.right() <= geo.right() + 2
+                            && actual.bottom() <= geo.bottom() + 2) {
+                            skipMoveResize = true;
+                            qCDebug(lcEffect) << "Skipping redundant moveResize for centered Wayland window"
+                                              << snap.windowId << "zone=" << geo;
+                        }
+                    }
+                }
+
+                if (!skipMoveResize) {
+                    m_centeredWaylandZones.remove(snap.windowId);
+                    m_effect->applySnapGeometry(snap.window, geo);
+                }
             }
 
             if (!snap.isMonocle && snap.window->isWaylandClient()) {
@@ -287,12 +312,20 @@ void AutotileHandler::centerUndersizedAutotileWindows()
             const qreal dy = qMax(0.0, dh) / 2.0;
             const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
+            // Skip moveResize if the window is already at the centered position
+            // to avoid redundant configure events that can freeze Wayland terminals.
+            if (qAbs(actual.x() - centered.x()) < 1.0 && qAbs(actual.y() - centered.y()) < 1.0) {
+                m_centeredWaylandZones[windowId] = targetZone;
+                continue;
+            }
+
             KWin::Window* kw = w->window();
             if (kw) {
                 qCInfo(lcEffect) << "Centering undersized autotile window" << windowId << "actual=" << actual.size()
                                  << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
                 m_effect->m_windowAnimator->removeAnimation(w);
                 kw->moveResize(centered);
+                m_centeredWaylandZones[windowId] = targetZone;
             }
         }
     }

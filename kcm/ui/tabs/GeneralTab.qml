@@ -613,14 +613,14 @@ ScrollView {
                     }
 
                     WideComboBox {
-                        Kirigami.FormData.label: i18n("Overlay display mode:")
+                        Kirigami.FormData.label: i18n("Overlay style:")
                         currentIndex: Math.max(0, Math.min(kcm.overlayDisplayMode, 1))
-                        model: [i18n("Zone rectangles"), i18n("Layout preview")]
+                        model: [i18n("Full zone highlight"), i18n("Compact preview")]
                         onActivated: (index) => {
                             kcm.overlayDisplayMode = index;
                         }
                         ToolTip.visible: hovered
-                        ToolTip.text: currentIndex === 0 ? i18n("Show full-size translucent zone rectangles during drag") : i18n("Show a small layout preview thumbnail inside each zone during drag")
+                        ToolTip.text: currentIndex === 0 ? i18n("Highlight each zone as a full-size translucent rectangle while dragging") : i18n("Show a small layout thumbnail inside each zone while dragging")
                     }
 
                 }

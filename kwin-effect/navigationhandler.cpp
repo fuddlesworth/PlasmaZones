@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "navigationhandler.h"
+#include "autotilehandler.h"
 #include "plasmazoneseffect.h"
 #include "snapassisthandler.h"
 
@@ -934,6 +935,10 @@ void NavigationHandler::handleRotateWindows(bool clockwise, const QString& rotat
 void NavigationHandler::handleResnapToNewLayout(const QString& resnapData)
 {
     qCInfo(lcEffect) << "Resnap to new layout requested";
+
+    // Cancel any pending staggered restore from autotile → snap transition
+    // to prevent stale pre-autotile positions from overriding resnap results.
+    m_effect->m_autotileHandler->cancelPendingRestore();
 
     KWin::EffectWindow* activeWindow = m_effect->getActiveWindow();
     QString screenName = activeWindow ? m_effect->getWindowScreenName(activeWindow) : QString();
