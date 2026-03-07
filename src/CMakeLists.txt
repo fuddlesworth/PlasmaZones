@@ -154,6 +154,12 @@ set(plasmazones_core_SRCS
     autotile/algorithms/WideAlgorithm.h
     autotile/algorithms/CenteredMasterAlgorithm.cpp
     autotile/algorithms/CenteredMasterAlgorithm.h
+    autotile/algorithms/CascadeAlgorithm.cpp
+    autotile/algorithms/CascadeAlgorithm.h
+    autotile/algorithms/StairAlgorithm.cpp
+    autotile/algorithms/StairAlgorithm.h
+    autotile/algorithms/SpreadAlgorithm.cpp
+    autotile/algorithms/SpreadAlgorithm.h
     ${plasmazones_settings_SRCS}
 )
 

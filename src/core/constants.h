@@ -310,6 +310,9 @@ inline constexpr QLatin1String ThreeColumn{"three-column"};
 inline constexpr QLatin1String Grid{"grid"};
 inline constexpr QLatin1String Wide{"wide"};
 inline constexpr QLatin1String CenteredMaster{"centered-master"};
+inline constexpr QLatin1String Cascade{"cascade"};
+inline constexpr QLatin1String Stair{"stair"};
+inline constexpr QLatin1String Spread{"spread"};
 }
 }
 

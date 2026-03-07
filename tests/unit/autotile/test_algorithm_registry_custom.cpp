@@ -217,7 +217,7 @@ private Q_SLOTS:
         auto* registry = AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
-        QCOMPARE(available.size(), 11);
+        QCOMPARE(available.size(), 14);
         QCOMPARE(available[0], DBus::AutotileAlgorithm::BSP);
         QCOMPARE(available[1], DBus::AutotileAlgorithm::CenteredMaster);
         QCOMPARE(available[2], DBus::AutotileAlgorithm::Columns);
@@ -229,6 +229,9 @@ private Q_SLOTS:
         QCOMPARE(available[8], DBus::AutotileAlgorithm::Spiral);
         QCOMPARE(available[9], DBus::AutotileAlgorithm::ThreeColumn);
         QCOMPARE(available[10], DBus::AutotileAlgorithm::Wide);
+        QCOMPARE(available[11], DBus::AutotileAlgorithm::Cascade);
+        QCOMPARE(available[12], DBus::AutotileAlgorithm::Stair);
+        QCOMPARE(available[13], DBus::AutotileAlgorithm::Spread);
     }
 
     void testOrder_matchesAllAlgorithms()

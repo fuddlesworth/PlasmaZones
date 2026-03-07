@@ -60,6 +60,7 @@ Item {
         zones: root.zones
         isHovered: true
         showZoneNumbers: true
+        onlyShowLastZoneNumber: root.algorithmId === "cascade"
         highlightColor: Qt.rgba(root.windowColor.r, root.windowColor.g, root.windowColor.b, 0.7)
         borderColor: Qt.rgba(root.windowBorder.r, root.windowBorder.g, root.windowBorder.b, 0.9)
         zonePadding: 1

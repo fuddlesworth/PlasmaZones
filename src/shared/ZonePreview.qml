@@ -50,33 +50,35 @@ Item {
     property int minZoneSize: 8
     /// Whether to show zone numbers
     property bool showZoneNumbers: true
-    /// Auto-detect monocle layout (stacked full-screen zones with small offsets)
-    readonly property bool isMonocleLayout: {
+    /// Override to force only-show-last-zone-number behavior (e.g. for cascade)
+    property bool onlyShowLastZoneNumber: false
+    /// Auto-detect stacked/overlapping layout (monocle, cascade, etc.)
+    /// When true, only the last zone's number label is shown.
+    readonly property bool isStackedLayout: {
         if (!zones || zones.length <= 1)
             return false;
 
-        // Monocle pattern detection:
-        // - First zone is nearly full-screen (w >= 0.9, h >= 0.9)
-        // - All zones are horizontally centered: x ≈ (1-w)/2
-        // - All zones have symmetric positioning: x ≈ y (equal margins)
-        for (let i = 0; i < zones.length; i++) {
-            const geo = zones[i].relativeGeometry || {
+        // Check if all consecutive zone pairs significantly overlap.
+        // This catches monocle (identical zones) and cascade (offset but overlapping).
+        for (let i = 1; i < zones.length; i++) {
+            const a = zones[i - 1].relativeGeometry || {
             };
-            const x = geo.x || 0;
-            const y = geo.y || 0;
-            const w = geo.width || 1;
-            const h = geo.height || 1;
-            // First zone must be nearly full-screen
-            if (i === 0 && (w < 0.9 || h < 0.9))
+            const b = zones[i].relativeGeometry || {
+            };
+            const ax = a.x || 0, ay = a.y || 0, aw = a.width || 1, ah = a.height || 1;
+            const bx = b.x || 0, by = b.y || 0, bw = b.width || 1, bh = b.height || 1;
+            // Intersection rectangle
+            const ix = Math.max(ax, bx);
+            const iy = Math.max(ay, by);
+            const iw = Math.min(ax + aw, bx + bw) - ix;
+            const ih = Math.min(ay + ah, by + bh) - iy;
+            if (iw <= 0 || ih <= 0)
                 return false;
-
-            // Zone must be horizontally centered
-            const expectedX = (1 - w) / 2;
-            if (Math.abs(x - expectedX) > 0.02)
-                return false;
-
-            // Zone must have symmetric positioning (equal x and y margins)
-            if (Math.abs(x - y) > 0.02)
+ // No overlap at all
+            const overlapArea = iw * ih;
+            const smallerArea = Math.min(aw * ah, bw * bh);
+            // If overlap is less than 50% of the smaller zone, not stacked
+            if (overlapArea / smallerArea < 0.5)
                 return false;
 
         }
@@ -168,10 +170,10 @@ Item {
 
             // Position and size - for monocle, C++ already applies offset, so just use raw geometry
             // For other layouts, apply edge gaps and zone padding
-            x: root.isMonocleLayout ? (relX * root.width) : (relX * root.width + leftGap)
-            y: root.isMonocleLayout ? (relY * root.height) : (relY * root.height + topGap)
-            width: root.isMonocleLayout ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
-            height: root.isMonocleLayout ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
+            x: root.isStackedLayout ? (relX * root.width) : (relX * root.width + leftGap)
+            y: root.isStackedLayout ? (relY * root.height) : (relY * root.height + topGap)
+            width: root.isStackedLayout ? Math.max(root.minZoneSize, relWidth * root.width) : Math.max(root.minZoneSize, relWidth * root.width - leftGap - rightGap)
+            height: root.isStackedLayout ? Math.max(root.minZoneSize, relHeight * root.height) : Math.max(root.minZoneSize, relHeight * root.height - topGap - bottomGap)
             // Scale on hover (only if hoverScale > 1.0)
             scale: isZoneHovered && root.hoverScale > 1 ? root.hoverScale : 1
             z: isZoneHovered ? 10 : 1
@@ -208,7 +210,7 @@ Item {
                 font.family: root.fontFamily
                 color: root.labelFontColor
                 opacity: (root.isActive || root.isHovered || zoneRect.isZoneSelected || zoneRect.isZoneHovered) ? 0.9 : 0.6
-                visible: root.showZoneNumbers && (!root.isMonocleLayout || index === root.zones.length - 1) && parent.width >= 16 && parent.height >= 16
+                visible: root.showZoneNumbers && (!(root.isStackedLayout || root.onlyShowLastZoneNumber) || index === root.zones.length - 1) && parent.width >= 16 && parent.height >= 16
 
                 Behavior on opacity {
                     NumberAnimation {
