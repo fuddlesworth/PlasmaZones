@@ -6,6 +6,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
+#include "../../snap/SnapEngine.h"
 
 namespace PlasmaZones {
 
@@ -98,65 +99,24 @@ void WindowTrackingAdaptor::resolveWindowRestore(const QString& windowId, const 
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (windowId.isEmpty()) {
-        return;
-    }
-    if (screenName.isEmpty()) {
+    if (windowId.isEmpty() || screenName.isEmpty()) {
         return;
     }
 
-    // 0. Floating windows should not be auto-snapped — show OSD so the user
-    //    knows the window is floating (same feedback as autotile mode).
-    if (m_service->isWindowFloating(windowId)) {
-        qCInfo(lcDbusWindow) << "resolveWindowRestore: window" << windowId << "is floating — skipping snap";
-        Q_EMIT navigationFeedback(true, QStringLiteral("float"), QStringLiteral("floated"), QString(), QString(),
-                                  screenName);
+    // Delegate to SnapEngine which owns the 4-level fallback chain.
+    // SnapEngine::resolveWindowRestore() is pure decision logic — it returns
+    // a SnapResult without side effects, so we apply it here for D-Bus compat.
+    if (!m_snapEngine) {
+        qCWarning(lcDbusWindow) << "resolveWindowRestore: no SnapEngine available";
         return;
     }
 
-    // 1. App rules (highest priority)
-    {
-        SnapResult result = m_service->calculateSnapToAppRule(windowId, screenName, sticky);
-        if (result.shouldSnap) {
-            applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
-            qCInfo(lcDbusWindow) << "resolveWindowRestore: appRule matched for" << windowId << "zone=" << result.zoneId;
-            return;
-        }
+    SnapResult result = m_snapEngine->resolveWindowRestore(windowId, screenName, sticky);
+    if (!result.shouldSnap) {
+        return;
     }
 
-    // 2. Persisted zone (session restore)
-    if (m_settings && m_settings->restoreWindowsToZonesOnLogin()) {
-        SnapResult result = m_service->calculateRestoreFromSession(windowId, screenName, sticky);
-        if (result.shouldSnap) {
-            applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
-            m_service->consumePendingAssignment(windowId);
-            qCInfo(lcDbusWindow) << "resolveWindowRestore: persisted matched for" << windowId
-                                 << "zone=" << result.zoneId;
-            return;
-        }
-    }
-
-    // 3. Auto-assign to empty zone
-    {
-        SnapResult result = m_service->calculateSnapToEmptyZone(windowId, screenName, sticky);
-        if (result.shouldSnap) {
-            applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
-            qCInfo(lcDbusWindow) << "resolveWindowRestore: emptyZone matched for" << windowId
-                                 << "zone=" << result.zoneId;
-            return;
-        }
-    }
-
-    // 4. Snap to last zone (final fallback)
-    {
-        SnapResult result = m_service->calculateSnapToLastZone(windowId, screenName, sticky);
-        if (result.shouldSnap) {
-            applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
-            qCInfo(lcDbusWindow) << "resolveWindowRestore: lastZone matched for" << windowId
-                                 << "zone=" << result.zoneId;
-            return;
-        }
-    }
+    applySnapResult(result, windowId, snapX, snapY, snapWidth, snapHeight, shouldSnap);
 }
 
 void WindowTrackingAdaptor::recordSnapIntent(const QString& windowId, bool wasUserInitiated)

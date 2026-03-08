@@ -393,6 +393,54 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     }
 }
 
+bool WindowTrackingService::clearFloatingForSnap(const QString& windowId)
+{
+    if (!isWindowFloating(windowId)) {
+        return false;
+    }
+    setWindowFloating(windowId, false);
+    clearPreFloatZone(windowId);
+    return true;
+}
+
+UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windowId,
+                                                            const QString& fallbackScreen) const
+{
+    UnfloatResult result;
+
+    QStringList zoneIds = preFloatZones(windowId);
+    if (zoneIds.isEmpty()) {
+        return result;
+    }
+
+    // Validate saved screen — fall back to caller's screen if monitor is gone
+    QString restoreScreen = preFloatScreen(windowId);
+    if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
+        restoreScreen.clear();
+    }
+    if (restoreScreen.isEmpty()) {
+        restoreScreen = fallbackScreen;
+    }
+
+    // Compute geometry (combined for multi-zone)
+    QRect geo;
+    if (zoneIds.size() > 1) {
+        geo = multiZoneGeometry(zoneIds, restoreScreen);
+    } else {
+        geo = zoneGeometry(zoneIds.first(), restoreScreen);
+    }
+
+    if (!geo.isValid()) {
+        return result;
+    }
+
+    result.found = true;
+    result.zoneIds = zoneIds;
+    result.geometry = geo;
+    result.screenName = restoreScreen;
+    return result;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Sticky Window Handling
 // ═══════════════════════════════════════════════════════════════════════════════

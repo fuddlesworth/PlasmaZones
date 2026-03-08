@@ -2,26 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
-#include "windowtrackingadaptor/internal.h"
 #include "zonedetectionadaptor.h"
+#include "../autotile/AutotileEngine.h"
+#include "../snap/SnapEngine.h"
+#include "../core/geometryutils.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
-#include "../core/zone.h"
-#include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/types.h"
-#include <QGuiApplication>
-#include <QScreen>
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
-#include <KConfig>
-#include <KConfigGroup>
-#include <KSharedConfig>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -85,6 +77,57 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     if (!m_service->pendingRestoreQueues().isEmpty() && m_layoutManager->activeLayout()) {
         m_hasPendingRestores = true;
         qCDebug(lcDbusWindow) << "Pending restores loaded at init - will emit when panel geometry ready";
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Engine wiring — cross-references and shared navigation feedback
+//
+// Signal relay is handled by dedicated adaptors (SnapAdaptor, AutotileAdaptor).
+// This method only wires cross-engine references and the shared OSD path.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine)
+{
+    // Disconnect previous autotile engine nav feedback (the only signal connected here)
+    if (m_autotileEngine) {
+        disconnect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this, nullptr);
+    }
+
+    m_snapEngine = snapEngine;
+    m_autotileEngine = autotileEngine;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Cross-engine references — SnapEngine needs AutotileEngine for
+    // isActiveOnScreen() routing and ZoneDetectionAdaptor for adjacency queries.
+    // When clearing (nullptr, nullptr), we also clear stale cross-references
+    // to prevent dangling pointer access.
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (m_snapEngine) {
+        m_snapEngine->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
+        m_snapEngine->setAutotileEngine(m_autotileEngine);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AutotileEngine navigation feedback — shared OSD path
+    //
+    // Both engines' navigation feedback routes through this adaptor's
+    // navigationFeedback signal because the KWin effect listens for OSD
+    // data on org.plasmazones.WindowTracking regardless of engine mode.
+    //
+    // SnapEngine's navigation feedback is connected by SnapAdaptor (mirrors
+    // AutotileAdaptor's constructor pattern). This single connection is the
+    // only autotile signal that routes through WTA — all other autotile
+    // signals go through AutotileAdaptor on org.plasmazones.Autotile.
+    //
+    // NOTE: AutotileEngine::windowFloatingChanged is NOT relayed here.
+    // The daemon intercepts it with a lambda (signals.cpp) for cross-mode
+    // state management (autotile-float markers, snap-float preservation,
+    // geometry application). See ADR docs/adr-snapengine-migration.md.
+    // ═══════════════════════════════════════════════════════════════════════════
+    if (m_autotileEngine) {
+        connect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this,
+                &WindowTrackingAdaptor::navigationFeedback);
     }
 }
 
@@ -331,7 +374,7 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
         return QString();
     }
 
-    return rectToJson(geo);
+    return GeometryUtils::rectToJson(geo);
 }
 
 } // namespace PlasmaZones

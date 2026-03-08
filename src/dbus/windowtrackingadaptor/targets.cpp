@@ -9,6 +9,7 @@
 #include "../../core/zone.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../core/geometryutils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -137,9 +138,9 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
     }
 
     Q_EMIT navigationFeedback(true, QStringLiteral("move"), direction, currentZoneId, targetZoneId, screenName);
-    return QString::fromUtf8(
-        QJsonDocument(moveResult(true, QString(), targetZoneId, rectToJson(geo), currentZoneId, screenName))
-            .toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(QJsonDocument(moveResult(true, QString(), targetZoneId, GeometryUtils::rectToJson(geo),
+                                                      currentZoneId, screenName))
+                                 .toJson(QJsonDocument::Compact));
 }
 
 QString WindowTrackingAdaptor::getFocusTargetForWindow(const QString& windowId, const QString& direction,
@@ -369,7 +370,7 @@ QString WindowTrackingAdaptor::getPushTargetForWindow(const QString& windowId, c
 
     Q_EMIT navigationFeedback(true, QStringLiteral("push"), QString(), QString(), emptyZoneId, screenName);
     return QString::fromUtf8(
-        QJsonDocument(moveResult(true, QString(), emptyZoneId, rectToJson(geo), QString(), screenName))
+        QJsonDocument(moveResult(true, QString(), emptyZoneId, GeometryUtils::rectToJson(geo), QString(), screenName))
             .toJson(QJsonDocument::Compact));
 }
 
@@ -426,8 +427,9 @@ QString WindowTrackingAdaptor::getSnapToZoneByNumberTarget(const QString& window
     }
 
     Q_EMIT navigationFeedback(true, QStringLiteral("snap"), QString(), QString(), zoneId, screenName);
-    return QString::fromUtf8(QJsonDocument(moveResult(true, QString(), zoneId, rectToJson(geo), QString(), screenName))
-                                 .toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(
+        QJsonDocument(moveResult(true, QString(), zoneId, GeometryUtils::rectToJson(geo), QString(), screenName))
+            .toJson(QJsonDocument::Compact));
 }
 
 } // namespace PlasmaZones

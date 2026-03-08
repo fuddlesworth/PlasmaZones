@@ -5,6 +5,7 @@
 
 #include "constants.h"
 #include "plasmazones_export.h"
+#include "types.h"
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>
@@ -158,6 +159,26 @@ PLASMAZONES_EXPORT void enforceWindowMinSizes(QVector<QRect>& zones, const QVect
  */
 PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<QSize>& minSizes = {},
                                            int innerGap = 0);
+
+/**
+ * @brief Convert QRect to compact JSON string {x, y, width, height}
+ * @param rect Rectangle to serialize
+ * @return JSON string suitable for D-Bus geometry exchange
+ *
+ * Shared utility for all components that need to serialize zone/window
+ * geometry for D-Bus signals (SnapEngine, WindowTrackingAdaptor, etc.).
+ */
+PLASMAZONES_EXPORT QString rectToJson(const QRect& rect);
+
+/**
+ * @brief Serialize rotation/resnap entries to compact JSON array
+ * @param entries Vector of rotation entries (window moves with source/target zones)
+ * @return JSON array string suitable for D-Bus signals
+ *
+ * Shared by SnapEngine navigation (rotate, resnap) and any future code
+ * that needs to serialize RotationEntry vectors for D-Bus exchange.
+ */
+PLASMAZONES_EXPORT QString serializeRotationEntries(const QVector<RotationEntry>& entries);
 
 } // namespace GeometryUtils
 

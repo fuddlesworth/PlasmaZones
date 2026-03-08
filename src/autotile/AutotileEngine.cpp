@@ -124,6 +124,28 @@ bool AutotileEngine::isAutotileScreen(const QString& screenName) const
     return m_autotileScreens.contains(screenName);
 }
 
+bool AutotileEngine::isActiveOnScreen(const QString& screenName) const
+{
+    return isAutotileScreen(screenName);
+}
+
+void AutotileEngine::swapInDirection(const QString& direction, const QString& action)
+{
+    swapFocusedInDirection(direction, action);
+}
+
+void AutotileEngine::rotateWindows(bool clockwise, const QString& /*screenName*/)
+{
+    // AutotileEngine operates on the active screen internally
+    rotateWindowOrder(clockwise);
+}
+
+void AutotileEngine::moveToPosition(const QString& /*windowId*/, int position, const QString& /*screenName*/)
+{
+    // AutotileEngine uses focused window internally
+    moveFocusedToPosition(position);
+}
+
 void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
 {
     if (m_autotileScreens == screens) {

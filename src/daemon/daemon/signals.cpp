@@ -22,6 +22,7 @@
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include "../../snap/SnapEngine.h"
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -252,9 +253,9 @@ void Daemon::initializeAutotile()
             // windowsReleasedFromTiling (fired by the assignLayout signal chain)
             // clears floating state before this runs, so all zone-assigned
             // windows are resnapped; windows never zone-snapped are left alone.
-            if (applied && wasAutotile && m_windowTrackingAdaptor) {
+            if (applied && wasAutotile && m_snapEngine) {
                 m_suppressResnapOsd = true;
-                m_windowTrackingAdaptor->resnapCurrentAssignments(screen->name());
+                m_snapEngine->resnapCurrentAssignments(screen->name());
             }
         });
 
@@ -453,18 +454,12 @@ void Daemon::connectOverlaySignals()
                 }
             });
 
-    // Connect autotile navigation feedback (same OSD path: shortcut → operation → OSD)
-    connect(m_autotileEngine.get(), &AutotileEngine::navigationFeedbackRequested, this,
-            [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-                   const QString& targetZoneId, const QString& screenName) {
-                if (m_settings && m_settings->showNavigationOsd()) {
-                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId,
-                                                        screenName);
-                }
-            });
-
-    // Note: KWin effect reports navigation feedback via reportNavigationFeedback D-Bus method,
-    // which emits the Qt navigationFeedback signal. No D-Bus signal connection needed.
+    // Note: AutotileEngine::navigationFeedbackRequested is relayed through
+    // WindowTrackingAdaptor::navigationFeedback via setEngines(), so both engines
+    // share the same OSD path through the handler above.
+    //
+    // KWin effect reports navigation feedback via reportNavigationFeedback D-Bus method,
+    // which also emits the Qt navigationFeedback signal.
 
     // Dismiss snap assist when any window zone assignment changes (navigation, snap, unsnap,
     // float toggle, resnap, etc.). Snap assist is only relevant until the user performs another

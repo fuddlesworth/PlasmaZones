@@ -339,10 +339,7 @@ public:
      * adaptor destruction) hit ensureEngine()'s null check instead of a
      * dangling pointer.
      */
-    void clearEngine()
-    {
-        m_engine = nullptr;
-    }
+    void clearEngine();
 };
 
 } // namespace PlasmaZones

@@ -11,17 +11,18 @@
 #include <QStringList>
 #include <QHash>
 #include <QRect>
-#include <QSet>
 #include <QTimer>
-#include <functional>
+#include <QPointer>
 
 namespace PlasmaZones {
 
+class AutotileEngine;
 class LayoutManager; // Concrete type needed for signal connections
 class Layout;
 class Zone;
 class IZoneDetector;
 class ISettings;
+class SnapEngine;
 class VirtualDesktopManager;
 class ZoneDetectionAdaptor;
 
@@ -74,23 +75,18 @@ public:
     }
 
     /**
-     * @brief Set callbacks for routing float toggle to autotile engine
+     * @brief Set engine references for routing operations per-screen
      *
-     * When set, toggleFloatForWindow will check isAutotileScreen and, if true,
-     * delegate to the autotile engine's toggleWindowFloat instead of the
-     * snapping-mode toggle logic.
+     * The adaptor routes IWindowEngine operations to the correct engine:
+     * AutotileEngine for autotile screens, SnapEngine for manual-zone screens.
+     * Both must be set before navigation/float D-Bus calls work.
      *
-     * @param isAutotileScreen Returns true if the screen uses autotile mode
-     * @param autotileToggleFloat Calls AutotileEngine::toggleWindowFloat(windowId, screenName)
+     * Signal connections from SnapEngine to adaptor D-Bus signals are established here.
+     *
+     * @param snapEngine SnapEngine instance (not owned, must outlive adaptor)
+     * @param autotileEngine AutotileEngine instance (not owned, must outlive adaptor)
      */
-    void setAutotileFloatCallbacks(std::function<bool(const QString&)> isAutotileScreen,
-                                   std::function<void(const QString&, const QString&)> autotileToggleFloat,
-                                   std::function<void(const QString&, bool)> autotileSetFloat = nullptr)
-    {
-        m_isAutotileScreen = std::move(isAutotileScreen);
-        m_autotileToggleFloat = std::move(autotileToggleFloat);
-        m_autotileSetFloat = std::move(autotileSetFloat);
-    }
+    void setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine);
 
     /**
      * @brief Access the underlying WindowTrackingService
@@ -826,13 +822,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Get validated active layout with logging
-     * @param operation Name of the operation (for logging)
-     * @return Pointer to active layout, or nullptr if unavailable
-     */
-    Layout* getValidatedActiveLayout(const QString& operation) const;
-
-    /**
      * @brief Validate window ID and log warning if empty
      * @param windowId Window ID to validate
      * @param operation Name of the operation (for logging)
@@ -847,21 +836,6 @@ private:
      * @return true if direction is valid, false if empty
      */
     bool validateDirection(const QString& direction, const QString& action);
-
-    /**
-     * @brief Convert QRect to JSON geometry string for D-Bus
-     * @param rect Rectangle to convert
-     * @return JSON string with x, y, width, height
-     */
-    QString rectToJson(const QRect& rect) const;
-
-    /**
-     * @brief Restore a floating window to its pre-float zone (shared unfloat logic)
-     * @param windowId Window to unfloat
-     * @param screenName Fallback screen if pre-float screen is gone
-     * @return true if successfully restored to a zone, false if no zone to restore to
-     */
-    bool unfloatToZone(const QString& windowId, const QString& screenName);
 
     /**
      * @brief Detect which screen a zone is on by finding where its center falls
@@ -911,10 +885,10 @@ private:
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
 
-    // Autotile routing callbacks (set by daemon after AutotileEngine is created)
-    std::function<bool(const QString&)> m_isAutotileScreen;
-    std::function<void(const QString&, const QString&)> m_autotileToggleFloat;
-    std::function<void(const QString&, bool)> m_autotileSetFloat;
+    // Engine references for per-screen routing (set via setEngines())
+    // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
+    QPointer<SnapEngine> m_snapEngine;
+    QPointer<AutotileEngine> m_autotileEngine;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service

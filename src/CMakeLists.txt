@@ -27,6 +27,7 @@ set(plasmazones_core_SRCS
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
+    core/iwindowengine.h
     core/settings_interfaces.h
     core/types.h
     core/utils.h
@@ -114,6 +115,8 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
+    dbus/snapadaptor.cpp
+    dbus/snapadaptor.h
     autotile/TilingAlgorithm.cpp
     autotile/TilingAlgorithm.h
     autotile/TilingState.cpp
@@ -160,6 +163,11 @@ set(plasmazones_core_SRCS
     autotile/algorithms/StairAlgorithm.h
     autotile/algorithms/SpreadAlgorithm.cpp
     autotile/algorithms/SpreadAlgorithm.h
+    snap/SnapEngine.cpp
+    snap/SnapEngine.h
+    snap/snapengine/float.cpp
+    snap/snapengine/lifecycle.cpp
+    snap/snapengine/navigation.cpp
     ${plasmazones_settings_SRCS}
 )
 

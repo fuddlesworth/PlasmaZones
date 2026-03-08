@@ -304,4 +304,13 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
     }
 }
 
+void AutotileAdaptor::clearEngine()
+{
+    if (m_engine) {
+        // Disconnect all 8 engine→this signal connections established in constructor.
+        disconnect(m_engine, nullptr, this, nullptr);
+        m_engine = nullptr;
+    }
+}
+
 } // namespace PlasmaZones

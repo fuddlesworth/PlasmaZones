@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "core/constants.h"
+#include "core/iwindowengine.h"
 #include <QHash>
 #include <QObject>
 #include <QRect>
@@ -39,7 +40,7 @@ class WindowTrackingService;
  *
  * @see TilingAlgorithm, TilingState, AlgorithmRegistry
  */
-class PLASMAZONES_EXPORT AutotileEngine : public QObject
+class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -70,6 +71,9 @@ public:
      * @return true if the screen has an autotile assignment
      */
     bool isAutotileScreen(const QString& screenName) const;
+
+    // IWindowEngine
+    bool isActiveOnScreen(const QString& screenName) const override;
 
     /**
      * @brief Get the set of screens currently using autotile
@@ -146,7 +150,7 @@ public:
      * masterCount, splitRatio, algorithm) to the [AutoTileState] config group.
      * Called by Daemon::stop() before shutdown.
      */
-    void saveState();
+    void saveState() override;
 
     /**
      * @brief Load tiling state from KConfig
@@ -155,7 +159,7 @@ public:
      * Actual retiling is deferred until windows are announced by the KWin effect.
      * Called by Daemon::start() after initialization.
      */
-    void loadState();
+    void loadState() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Settings synchronization
@@ -380,7 +384,7 @@ public:
      * @param windowId Window identifier from KWin
      * @param screenName Screen where the window is located
      */
-    Q_INVOKABLE void toggleWindowFloat(const QString& windowId, const QString& screenName);
+    Q_INVOKABLE void toggleWindowFloat(const QString& windowId, const QString& screenName) override;
 
     /**
      * @brief Swap the focused window with the adjacent window in tiling order
@@ -402,7 +406,8 @@ public:
      * @param direction Direction string ("left", "right", "up", "down")
      * @param action OSD action label — "focus" or "cycle" (defaults to "focus")
      */
-    Q_INVOKABLE void focusInDirection(const QString& direction, const QString& action = QStringLiteral("focus"));
+    Q_INVOKABLE void focusInDirection(const QString& direction,
+                                      const QString& action = QStringLiteral("focus")) override;
 
     /**
      * @brief Move the focused window to a specific position in the tiling order
@@ -412,6 +417,11 @@ public:
      * @param position Target position (1-based, clamped to valid range)
      */
     Q_INVOKABLE void moveFocusedToPosition(int position);
+
+    // IWindowEngine wrappers (delegate to existing methods)
+    void swapInDirection(const QString& direction, const QString& action) override;
+    void rotateWindows(bool clockwise, const QString& screenName) override;
+    void moveToPosition(const QString& windowId, int position, const QString& screenName) override;
 
     /**
      * @brief Set the floating state of a specific window
@@ -423,7 +433,7 @@ public:
      * @param windowId Window identifier from KWin
      * @param shouldFloat True to float, false to unfloat
      */
-    Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat);
+    Q_INVOKABLE void setWindowFloat(const QString& windowId, bool shouldFloat) override;
 
     /**
      * @brief Float a specific window by its ID (convenience forwarder)
@@ -498,7 +508,8 @@ public:
      * @param minWidth Window minimum width in pixels (0 if unconstrained)
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    void windowOpened(const QString& windowId, const QString& screenName, int minWidth = 0, int minHeight = 0);
+    using IWindowEngine::windowOpened; // Expose 2-arg convenience overload
+    void windowOpened(const QString& windowId, const QString& screenName, int minWidth, int minHeight) override;
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -520,7 +531,7 @@ public:
      *
      * @param windowId Window identifier from KWin
      */
-    void windowClosed(const QString& windowId);
+    void windowClosed(const QString& windowId) override;
 
     /**
      * @brief Notify the engine that a window was focused
@@ -531,7 +542,7 @@ public:
      * @param windowId Window identifier from KWin
      * @param screenName Screen where the window is located
      */
-    void windowFocused(const QString& windowId, const QString& screenName);
+    void windowFocused(const QString& windowId, const QString& screenName) override;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Retile helpers (public — used by extracted classes)

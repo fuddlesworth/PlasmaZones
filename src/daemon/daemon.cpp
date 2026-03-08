@@ -36,8 +36,10 @@
 #include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
+#include "../dbus/snapadaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/AlgorithmRegistry.h"
+#include "../snap/SnapEngine.h"
 
 namespace PlasmaZones {
 
@@ -296,24 +298,29 @@ bool Daemon::init()
     // autotile checks (overlay suppression and snap rejection on autotile screens)
     m_windowDragAdaptor->setAutotileEngine(m_autotileEngine.get());
 
-    // Give WTA autotile routing callbacks so float methods can route to
-    // the autotile engine when the window is on an autotile screen
-    m_windowTrackingAdaptor->setAutotileFloatCallbacks(
-        [this](const QString& screenName) {
-            return m_autotileEngine->isAutotileScreen(screenName);
+    // Initialize SnapEngine for manual zone-based snapping
+    m_snapEngine =
+        std::make_unique<SnapEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(), m_zoneDetector.get(),
+                                     m_settings.get(), m_virtualDesktopManager.get(), this);
+
+    // Wire persistence delegate — SnapEngine delegates save/load to WTA's KConfig layer.
+    // QPointer guards against late calls during shutdown if WTA is destroyed first.
+    m_snapEngine->setPersistenceDelegate(
+        [wta = QPointer(m_windowTrackingAdaptor)]() {
+            if (wta)
+                wta->saveState();
         },
-        [this](const QString& windowId, const QString& screenName) {
-            m_autotileEngine->toggleWindowFloat(windowId, screenName);
-        },
-        [this](const QString& windowId, bool floating) {
-            if (floating) {
-                m_autotileEngine->floatWindow(windowId);
-            } else {
-                m_autotileEngine->unfloatWindow(windowId);
-            }
+        [wta = QPointer(m_windowTrackingAdaptor)]() {
+            if (wta)
+                wta->loadState();
         });
 
-    // Create autotile D-Bus adaptor
+    // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection)
+    m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
+
+    // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
+    // connects signals in its constructor (unified pattern for both engines)
+    m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
     m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
 
     // Register D-Bus service and object with error handling and retry logic
@@ -447,12 +454,15 @@ void Daemon::stop()
         m_autotileEngine->saveState();
     }
 
-    // Clear the adaptor's raw engine pointer BEFORE destroying the engine.
-    // The adaptor is a Qt child of the daemon (destroyed later); a D-Bus call
+    // Clear adaptor engine pointers BEFORE destroying the engines.
+    // Adaptors are Qt children of the daemon (destroyed later); a D-Bus call
     // arriving between engine destruction and adaptor destruction would otherwise
     // access freed memory. After clearing, ensureEngine() returns false.
     if (m_autotileAdaptor) {
         m_autotileAdaptor->clearEngine();
+    }
+    if (m_snapAdaptor) {
+        m_snapAdaptor->clearEngine();
     }
 
     // Null the WindowDragAdaptor's engine pointer for the same reason.
@@ -460,12 +470,13 @@ void Daemon::stop()
         m_windowDragAdaptor->setAutotileEngine(nullptr);
     }
 
-    // Clear the WTA's autotile routing callbacks (they capture m_autotileEngine).
+    // Clear engine references before destruction
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->setAutotileFloatCallbacks(nullptr, nullptr, nullptr);
+        m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
-    // Destroy the engine now (during stop(), before Qt child destruction order).
+    // Destroy engines now (during stop(), before Qt child destruction order).
+    m_snapEngine.reset();
     m_autotileEngine.reset();
 
     // Unregister D-Bus service to prevent late calls during shutdown

@@ -50,6 +50,21 @@ struct PLASMAZONES_EXPORT SnapResult
 };
 
 /**
+ * @brief Result of an unfloat geometry resolution
+ *
+ * Used by SnapEngine and WindowTrackingAdaptor to resolve the geometry
+ * a floating window should return to when unfloated. Encapsulates the
+ * shared screen-validation + zone-geometry resolution sequence.
+ */
+struct PLASMAZONES_EXPORT UnfloatResult
+{
+    bool found = false; ///< Whether a valid restore target was found
+    QStringList zoneIds; ///< Zone UUIDs to restore to
+    QRect geometry; ///< Target geometry for the window
+    QString screenName; ///< Screen where the zones are located
+};
+
+/**
  * @brief Information about a window being dragged
  *
  * Groups window identification and context data that's commonly

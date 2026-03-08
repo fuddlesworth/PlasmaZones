@@ -35,6 +35,9 @@ class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
+class IWindowEngine;
+class SnapAdaptor;
+class SnapEngine;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -112,6 +115,10 @@ private:
     // Navigation handlers — single code path per operation (DRY/SOLID)
     // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /** @brief Return the active IWindowEngine for a screen (autotile or snap) */
+    IWindowEngine* engineForScreen(const QString& screenName) const;
+
     void handleRotate(bool clockwise);
     void handleFloat();
     void handleMove(NavigationDirection direction);
@@ -220,8 +227,10 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
-    // Autotile engine
+    // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;
+    std::unique_ptr<SnapEngine> m_snapEngine;
+    SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)

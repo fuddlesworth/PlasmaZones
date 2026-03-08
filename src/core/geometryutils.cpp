@@ -310,6 +310,36 @@ QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings
     return QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
+QString rectToJson(const QRect& rect)
+{
+    QJsonObject obj;
+    obj[QStringLiteral("x")] = rect.x();
+    obj[QStringLiteral("y")] = rect.y();
+    obj[QStringLiteral("width")] = rect.width();
+    obj[QStringLiteral("height")] = rect.height();
+    return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+}
+
+QString serializeRotationEntries(const QVector<RotationEntry>& entries)
+{
+    if (entries.isEmpty()) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray array;
+    for (const RotationEntry& entry : entries) {
+        QJsonObject obj;
+        obj[QStringLiteral("windowId")] = entry.windowId;
+        obj[QStringLiteral("sourceZoneId")] = entry.sourceZoneId;
+        obj[QStringLiteral("targetZoneId")] = entry.targetZoneId;
+        obj[QStringLiteral("x")] = entry.targetGeometry.x();
+        obj[QStringLiteral("y")] = entry.targetGeometry.y();
+        obj[QStringLiteral("width")] = entry.targetGeometry.width();
+        obj[QStringLiteral("height")] = entry.targetGeometry.height();
+        array.append(obj);
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
 } // namespace GeometryUtils
 
 } // namespace PlasmaZones

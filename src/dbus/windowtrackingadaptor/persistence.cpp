@@ -201,22 +201,6 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
     Q_EMIT pendingRestoresAvailable();
 }
 
-Layout* WindowTrackingAdaptor::getValidatedActiveLayout(const QString& operation) const
-{
-    if (!m_layoutManager) {
-        qCWarning(lcDbusWindow) << "No layout manager for" << operation;
-        return nullptr;
-    }
-
-    auto* layout = m_layoutManager->activeLayout();
-    if (!layout) {
-        qCDebug(lcDbusWindow) << "No active layout for" << operation;
-        return nullptr;
-    }
-
-    return layout;
-}
-
 QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
 {
     if (!m_layoutManager) {
@@ -259,11 +243,6 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         }
     }
     return QString();
-}
-
-QString WindowTrackingAdaptor::rectToJson(const QRect& rect) const
-{
-    return QString::fromUtf8(QJsonDocument(rectToJsonObject(rect)).toJson(QJsonDocument::Compact));
 }
 
 } // namespace PlasmaZones
