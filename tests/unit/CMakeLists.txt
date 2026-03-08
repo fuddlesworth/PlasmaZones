@@ -48,6 +48,17 @@ add_executable(test_wts_queries core/test_wts_queries.cpp)
 target_link_libraries(test_wts_queries PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_queries COMMAND test_wts_queries)
 
+add_executable(test_wts_clearfloat core/test_wts_clearfloat.cpp)
+target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ — SnapEngine Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_snap_engine core/test_snap_engine.cpp)
+target_link_libraries(test_snap_engine PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_engine COMMAND test_snap_engine)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Tiling Algorithm Tests (split by algorithm family)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -95,6 +106,7 @@ pz_add_test(test_overflow_manager autotile/test_overflow_manager.cpp)
 pz_add_test(test_geometry_utils_minsizes core/test_geometry_utils_minsizes.cpp)
 pz_add_test(test_geometry_utils_overlaps core/test_geometry_utils_overlaps.cpp)
 pz_add_test(test_geometry_utils_bsp core/test_geometry_utils_bsp.cpp)
+pz_add_test(test_geometry_utils_serialization core/test_geometry_utils_serialization.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ — Settings Tests (core, validation, per-screen) — need kcfg + KF6::ConfigCore
@@ -188,6 +200,7 @@ set(_all_tests
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
     test_overflow_manager
     test_geometry_utils_minsizes test_geometry_utils_overlaps test_geometry_utils_bsp
+    test_geometry_utils_serialization test_wts_clearfloat test_snap_engine
     test_settings_core test_settings_validation test_settings_perscreen
     test_configdefaults
     test_layout_core test_layout_zones
