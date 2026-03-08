@@ -11,10 +11,27 @@
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
+#include "../../snap/SnapEngine.h"
+#include "../../core/iwindowengine.h"
 #include "../modetracker.h"
 #include <QScreen>
 
 namespace PlasmaZones {
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Engine routing
+// ═══════════════════════════════════════════════════════════════════════════════
+
+IWindowEngine* Daemon::engineForScreen(const QString& screenName) const
+{
+    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenName)) {
+        return m_autotileEngine.get();
+    }
+    if (m_snapEngine) {
+        return m_snapEngine.get();
+    }
+    return nullptr;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation handlers — single code path per operation (DRY/SOLID)
@@ -28,12 +45,8 @@ void Daemon::handleRotate(bool clockwise)
         qCDebug(lcDaemon) << "No screen info for rotate shortcut — skipping";
         return;
     }
-    // Use connector name: m_autotileScreens and m_windowScreenAssignments both use screen->name()
-    QString screenName = screen->name();
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenName)) {
-        m_autotileEngine->rotateWindowOrder(clockwise);
-    } else {
-        m_windowTrackingAdaptor->rotateWindowsInLayout(clockwise, screenName);
+    if (auto* engine = engineForScreen(screen->name())) {
+        engine->rotateWindows(clockwise, screen->name());
     }
 }
 
@@ -62,9 +75,9 @@ void Daemon::handleMove(NavigationDirection direction)
     }
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
         m_autotileEngine->swapFocusedInDirection(dirStr);
-        return;
+    } else if (m_snapEngine) {
+        m_snapEngine->moveInDirection(dirStr);
     }
-    m_windowTrackingAdaptor->moveWindowToAdjacentZone(dirStr);
 }
 
 void Daemon::handleFocus(NavigationDirection direction)
@@ -78,11 +91,9 @@ void Daemon::handleFocus(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
-        m_autotileEngine->focusInDirection(dirStr, QStringLiteral("focus"));
-        return;
+    if (auto* engine = engineForScreen(screen->name())) {
+        engine->focusInDirection(dirStr, QStringLiteral("focus"));
     }
-    m_windowTrackingAdaptor->focusAdjacentZone(dirStr);
 }
 
 void Daemon::handlePush()
@@ -95,7 +106,9 @@ void Daemon::handlePush()
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
         return;
     }
-    m_windowTrackingAdaptor->pushToEmptyZone(screen->name());
+    if (m_snapEngine) {
+        m_snapEngine->pushToEmptyZone(screen->name());
+    }
 }
 
 void Daemon::handleRestore()
@@ -123,11 +136,9 @@ void Daemon::handleSwap(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
-        m_autotileEngine->swapFocusedInDirection(dirStr, QStringLiteral("swap"));
-        return;
+    if (auto* engine = engineForScreen(screen->name())) {
+        engine->swapInDirection(dirStr, QStringLiteral("swap"));
     }
-    m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
 }
 
 void Daemon::handleSnap(int zoneNumber)
@@ -137,11 +148,9 @@ void Daemon::handleSnap(int zoneNumber)
         qCDebug(lcDaemon) << "No screen info for snapToZone shortcut — skipping";
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
-        m_autotileEngine->moveFocusedToPosition(zoneNumber);
-        return;
+    if (auto* engine = engineForScreen(screen->name())) {
+        engine->moveToPosition(QString(), zoneNumber, screen->name());
     }
-    m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screen->name());
 }
 
 void Daemon::handleCycle(bool forward)
@@ -153,9 +162,9 @@ void Daemon::handleCycle(bool forward)
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
         QString dirStr = forward ? QStringLiteral("right") : QStringLiteral("left");
         m_autotileEngine->focusInDirection(dirStr, QStringLiteral("cycle"));
-        return;
+    } else if (m_snapEngine) {
+        m_snapEngine->cycleWindowsInZone(forward);
     }
-    m_windowTrackingAdaptor->cycleWindowsInZone(forward);
 }
 
 void Daemon::handleResnap()
@@ -166,9 +175,9 @@ void Daemon::handleResnap()
     }
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
         m_autotileEngine->retile(screen->name());
-        return;
+    } else if (m_snapEngine) {
+        m_snapEngine->resnapToNewLayout();
     }
-    m_windowTrackingAdaptor->resnapToNewLayout();
 }
 
 void Daemon::handleSnapAll()
@@ -180,9 +189,9 @@ void Daemon::handleSnapAll()
     }
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screen->name())) {
         m_autotileEngine->retile(screen->name());
-        return;
+    } else if (m_snapEngine) {
+        m_snapEngine->snapAllWindows(screen->name());
     }
-    m_windowTrackingAdaptor->snapAllWindows(screen->name());
 }
 
 // DRY macro invocations for identical autotile-only handlers
@@ -215,9 +224,9 @@ void Daemon::resnapIfManualMode()
     // Only resnap for manual layouts — autotile handles its own retile.
     // Resnapping during autotile uses a stale buffer from the old snap-mode
     // layout, sending competing geometry D-Bus signals to the effect.
-    if (m_windowTrackingAdaptor && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
+    if (m_snapEngine && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
         m_suppressResnapOsd = true;
-        m_windowTrackingAdaptor->resnapToNewLayout();
+        m_snapEngine->resnapToNewLayout();
     }
 }
 

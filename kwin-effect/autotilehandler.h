@@ -131,6 +131,7 @@ private:
     void unmaximizeMonocleWindow(const QString& windowId);
     bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenName, const QRectF& frame);
     bool shouldApplyBorderInset(const QString& windowId) const;
+    void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
 
     /**
      * @brief Find key in saved geometries map for a window (exact or stable ID match)
@@ -157,6 +158,7 @@ private:
     uint64_t m_restoreStaggerGeneration = 0;
     QSet<QString> m_resnapOverriddenWindows; ///< windows resnapped by handleResnapToNewLayout (skip stagger restore)
     QHash<QString, QRect> m_autotileTargetZones;
+    QSet<QString> m_autotileRetried; ///< windows that already got one retry of the full zone size
     QHash<QString, QRect> m_centeredWaylandZones; ///< zones where Wayland windows were last centered
     QString m_pendingAutotileFocusWindowId;
     QSet<QString> m_monocleMaximizedWindows;

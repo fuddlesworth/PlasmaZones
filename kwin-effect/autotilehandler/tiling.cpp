@@ -31,6 +31,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
 
     ++m_autotileStaggerGeneration;
     m_autotileTargetZones.clear();
+    m_autotileRetried.clear();
 
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(tileRequestsJson.toUtf8(), &parseError);
@@ -288,7 +289,6 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
     const QRectF actual = w->frameGeometry();
 
     constexpr qreal MinCenteringDelta = 3.0;
-    constexpr qreal MaxCenteringDelta = 64.0;
 
     const qreal dw = targetZone.width() - actual.width();
     const qreal dh = targetZone.height() - actual.height();
@@ -299,10 +299,36 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         return;
     }
 
-    if ((dw > MinCenteringDelta || dh > MinCenteringDelta) && qAbs(dw) < MaxCenteringDelta
-        && qAbs(dh) < MaxCenteringDelta) {
-        const qreal dx = qMax(0.0, dw) / 2.0;
-        const qreal dy = qMax(0.0, dh) / 2.0;
+    // Window doesn't match zone size — either undersized (Wayland race or genuine
+    // constraint) or oversized (refused to shrink, e.g., Wayland min size constraint).
+    //
+    // On first mismatch: retry the full zone moveResize once. This handles Wayland
+    // configure races where the client committed a buffer for an intermediate configure
+    // event (e.g., from unmaximize) instead of the final zone configure.
+    //
+    // On second mismatch (after retry): accept the client's actual size and center it
+    // within the zone so it's visually balanced rather than stuck at the zone origin.
+    if (dw > MinCenteringDelta || dh > MinCenteringDelta || dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+        // First mismatch for this window — retry full zone size before centering.
+        // This gives the Wayland client one more chance to process the correct configure.
+        if (!m_autotileRetried.contains(windowId)) {
+            m_autotileRetried.insert(windowId);
+            KWin::Window* kw = w->window();
+            if (kw) {
+                qCDebug(lcEffect) << "Retrying full zone moveResize for" << windowId << "actual=" << actual.size()
+                                  << "zone=" << targetZone.size();
+                m_effect->m_windowAnimator->removeAnimation(w);
+                kw->moveResize(QRectF(targetZone));
+            } else {
+                // No KWin::Window — consume stale entry to prevent perpetual lookups
+                m_autotileTargetZones.erase(it);
+            }
+            return;
+        }
+
+        // Second mismatch — genuine constraint or persistent race. Center the window.
+        const qreal dx = dw / 2.0;
+        const qreal dy = dh / 2.0;
         const QRectF centered(targetZone.x() + dx, targetZone.y() + dy, actual.width(), actual.height());
 
         // Already at the centered position — record and consume
@@ -313,23 +339,31 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         }
 
         KWin::Window* kw = w->window();
-        if (kw) {
-            qCInfo(lcEffect) << "Centering undersized autotile window (immediate)" << windowId
-                             << "actual=" << actual.size() << "zone=" << targetZone.size() << "offset=(" << dx << ","
-                             << dy << ")";
-            // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits
-            // windowFrameGeometryChanged synchronously, which would re-enter
-            // this slot and find the entry still present → infinite recursion → crash.
-            m_centeredWaylandZones[windowId] = targetZone;
+        if (!kw) {
+            // No KWin::Window — consume stale entry to prevent perpetual lookups
             m_autotileTargetZones.erase(it);
-            m_effect->m_windowAnimator->removeAnimation(w);
-            kw->moveResize(centered);
+            return;
         }
-    } else {
-        // Window size delta exceeds MaxCenteringDelta — too far from zone size
-        // to center meaningfully. Consume the entry to avoid stale lookups on
-        // every subsequent geometry change for this window.
+
+        qCInfo(lcEffect) << "Centering autotile window" << windowId << "actual=" << actual.size()
+                         << "zone=" << targetZone.size() << "offset=(" << dx << "," << dy << ")";
+
+        // Window refused to shrink below its actual size — report discovered
+        // min size to daemon so future retiles can account for it. Only report
+        // when the window is larger than the zone (negative delta = oversized).
+        if (dw < -MinCenteringDelta || dh < -MinCenteringDelta) {
+            const int discoveredMinW = (dw < -MinCenteringDelta) ? qCeil(actual.width()) : 0;
+            const int discoveredMinH = (dh < -MinCenteringDelta) ? qCeil(actual.height()) : 0;
+            reportDiscoveredMinSize(windowId, discoveredMinW, discoveredMinH);
+        }
+
+        // Erase BEFORE moveResize to prevent re-entrancy: moveResize emits
+        // windowFrameGeometryChanged synchronously, which would re-enter
+        // this slot and find the entry still present → infinite recursion → crash.
+        m_centeredWaylandZones[windowId] = targetZone;
         m_autotileTargetZones.erase(it);
+        m_effect->m_windowAnimator->removeAnimation(w);
+        kw->moveResize(centered);
     }
 }
 
@@ -353,6 +387,19 @@ QRect AutotileHandler::applyBorderInset(const QRect& geo) const
 bool AutotileHandler::shouldInsetForBorder(const QString& windowId, const QRect& geo) const
 {
     return shouldApplyBorderInset(windowId) && geo.width() > 2 * m_border.width && geo.height() > 2 * m_border.width;
+}
+
+void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)
+{
+    if (minWidth <= 0 && minHeight <= 0) {
+        return;
+    }
+
+    qCInfo(lcEffect) << "Discovered min size for" << windowId << ":" << minWidth << "x" << minHeight
+                     << "— reporting to daemon for future retiles";
+
+    m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
+                                    {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
 }
 
 } // namespace PlasmaZones
