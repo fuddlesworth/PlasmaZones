@@ -516,9 +516,10 @@ void Daemon::start()
     qCInfo(lcDaemon) << "Overlay service ready -" << m_screenManager->screens().count()
                      << "screens available (windows created on-demand)";
 
-    // Register global shortcuts via ShortcutManager (deferred/batched to avoid
-    // blocking the event loop with ~86 synchronous D-Bus round-trips to KGlobalAccel
-    // during login, when D-Bus is heavily contended by other KDE services)
+    // Register global shortcuts via ShortcutManager.
+    // Phase 1 (sync): setDefaultShortcut for all 43 actions — fast, no key grabbing.
+    // Phase 2 (async): setShortcutKeys via QDBusPendingCall — key grabbing on the
+    // daemon side without blocking our event loop during login contention.
     m_shortcutManager->registerShortcutsDeferred();
 
     // Connect shortcut signals

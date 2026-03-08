@@ -8,7 +8,13 @@
 #include "../core/logging.h"
 #include <QAction>
 #include <QKeySequence>
-#include <QTimer>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QCoreApplication>
+#include <QGuiApplication>
 #include <KGlobalAccel>
 #include <KLocalizedString>
 
@@ -38,7 +44,7 @@ namespace PlasmaZones {
             const QKeySequence defaultShortcut(ConfigDefaults::getterName()); \
             const QKeySequence shortcut(m_settings->getterName()); \
             KGlobalAccel::self()->setDefaultShortcut(actionMember, {defaultShortcut}); \
-            KGlobalAccel::setGlobalShortcut(actionMember, shortcut); \
+            queueAsyncShortcut(actionMember, shortcut); \
             connect(actionMember, &QAction::triggered, this, slot); \
         } \
     } while (0)
@@ -156,59 +162,115 @@ ShortcutManager::~ShortcutManager()
 // Public Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ShortcutManager::buildBatchList()
-{
-    m_pendingBatches = {
-        [this]() {
-            setupEditorShortcut();
-            setupCyclingShortcuts();
-        },
-        [this]() { setupQuickLayoutShortcuts(); },
-        [this]() { setupNavigationShortcuts(); },
-        [this]() {
-            setupSwapWindowShortcuts();
-            setupRotateWindowsShortcuts();
-        },
-        [this]() { setupSnapToZoneShortcuts(); },
-        [this]() {
-            setupCycleWindowsShortcuts();
-            setupResnapToNewLayoutShortcut();
-            setupSnapAllWindowsShortcut();
-            setupLayoutPickerShortcut();
-        },
-    };
-}
-
-void ShortcutManager::registerShortcuts()
-{
-    buildBatchList();
-    while (!m_pendingBatches.isEmpty()) {
-        m_pendingBatches.takeFirst()();
-    }
-    Q_EMIT shortcutsRegistered();
-}
-
 void ShortcutManager::registerShortcutsDeferred()
 {
-    if (!m_pendingBatches.isEmpty()) {
+    if (m_pendingAsyncCount > 0) {
         qCWarning(lcShortcuts) << "registerShortcutsDeferred() called while "
                                   "registration is already in progress — ignoring";
         return;
     }
-    buildBatchList();
-    registerNextBatch();
+
+    // Phase 1: Create all actions and register defaults synchronously.
+    // setDefaultShortcut stores the default key and calls doRegister() which
+    // adds the action to KGlobalAccel's internal dispatch map (nameToAction).
+    // The D-Bus call uses the DefaultShortcut flag — no key grabbing on the
+    // daemon side — so these round-trips are fast even under login contention.
+    setupEditorShortcut();
+    setupCyclingShortcuts();
+    setupQuickLayoutShortcuts();
+    setupNavigationShortcuts();
+    setupSwapWindowShortcuts();
+    setupRotateWindowsShortcuts();
+    setupSnapToZoneShortcuts();
+    setupCycleWindowsShortcuts();
+    setupResnapToNewLayoutShortcut();
+    setupSnapAllWindowsShortcut();
+    setupLayoutPickerShortcut();
+
+    // Phase 2: Register active shortcuts asynchronously via raw D-Bus.
+    // The daemon grabs keys without blocking our event loop. Shortcuts become
+    // functional as the daemon processes each registration.
+    fireAsyncRegistrations();
 }
 
-void ShortcutManager::registerNextBatch()
+void ShortcutManager::queueAsyncShortcut(QAction* action, const QKeySequence& shortcut)
 {
-    if (m_pendingBatches.isEmpty()) {
-        qCInfo(lcShortcuts) << "All shortcuts registered (deferred)";
+    m_asyncQueue.append({action, shortcut});
+}
+
+QStringList ShortcutManager::makeActionId(const QAction* action) const
+{
+    // Must match KGlobalAccelPrivate::makeActionId exactly so the daemon
+    // associates async registrations with the same component+action that
+    // setDefaultShortcut already registered.
+    const QVariant desktopFile = QCoreApplication::instance()->property("desktopFileName");
+    const QString componentUnique = desktopFile.toString().isEmpty()
+        ? QCoreApplication::applicationName()
+        : desktopFile.toString();
+    return {
+        componentUnique,
+        action->objectName(),
+        QGuiApplication::applicationDisplayName(),
+        action->text().remove(QLatin1Char('&'))
+    };
+}
+
+void ShortcutManager::fireAsyncRegistrations()
+{
+    if (m_asyncQueue.isEmpty()) {
+        qCInfo(lcShortcuts) << "All shortcuts registered (no async work needed)";
         Q_EMIT shortcutsRegistered();
         return;
     }
-    auto batch = m_pendingBatches.takeFirst();
-    batch();
-    QTimer::singleShot(0, this, &ShortcutManager::registerNextBatch);
+
+    m_pendingAsyncCount = m_asyncQueue.size();
+    qCInfo(lcShortcuts) << "Firing" << m_pendingAsyncCount
+                        << "async shortcut registrations";
+
+    // KGlobalAccel registers QKeySequence as a D-Bus type at init time
+    // (qDBusRegisterMetaType), so QDBusMessage can marshal QList<QKeySequence>.
+    constexpr uint ActiveShortcutFlag = 0x2;
+    constexpr uint AutoloadingFlag    = 0x4;
+    const uint flags = ActiveShortcutFlag | AutoloadingFlag;
+
+    for (const auto& entry : m_asyncQueue) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.kde.kglobalaccel"),
+            QStringLiteral("/kglobalaccel"),
+            QStringLiteral("org.kde.KGlobalAccel"),
+            QStringLiteral("setShortcutKeys"));
+
+        const QStringList actionId = makeActionId(entry.action);
+        const QList<QKeySequence> keys = {entry.shortcut};
+        msg.setArguments({
+            QVariant::fromValue(actionId),
+            QVariant::fromValue(keys),
+            QVariant::fromValue(flags)
+        });
+
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished,
+                this, &ShortcutManager::onAsyncRegistrationFinished);
+    }
+    m_asyncQueue.clear();
+}
+
+void ShortcutManager::onAsyncRegistrationFinished(QDBusPendingCallWatcher* watcher)
+{
+    watcher->deleteLater();
+
+    QDBusPendingReply<QList<QKeySequence>> reply = *watcher;
+    if (reply.isError()) {
+        qCWarning(lcShortcuts) << "Async shortcut registration failed:"
+                               << reply.error().message();
+    }
+
+    if (--m_pendingAsyncCount <= 0) {
+        m_pendingAsyncCount = 0;
+        qCInfo(lcShortcuts) << "All shortcuts registered (async)";
+        Q_EMIT shortcutsRegistered();
+    }
 }
 
 void ShortcutManager::updateShortcuts()
@@ -217,8 +279,8 @@ void ShortcutManager::updateShortcuts()
     // Refresh all shortcuts from current settings values
     // If deferred registration is still in progress, skip — pending batches will
     // read the current settings when they execute via SETUP_SHORTCUT.
-    if (!m_pendingBatches.isEmpty()) {
-        qCDebug(lcShortcuts) << "Skipping updateShortcuts() — deferred registration in progress";
+    if (m_pendingAsyncCount > 0) {
+        qCDebug(lcShortcuts) << "Skipping updateShortcuts() — async registration in progress";
         return;
     }
 
@@ -278,8 +340,9 @@ void ShortcutManager::updateShortcuts()
 
 void ShortcutManager::unregisterShortcuts()
 {
-    // Cancel any in-flight deferred registration
-    m_pendingBatches.clear();
+    // Cancel any in-flight async registration
+    m_asyncQueue.clear();
+    m_pendingAsyncCount = 0;
 
     // Clear all actions - KGlobalAccel will unregister automatically when actions are deleted
     // Use direct delete instead of deleteLater() because:
@@ -397,7 +460,7 @@ void ShortcutManager::setupQuickLayoutShortcuts()
         auto* quickAction = new QAction(i18n("Apply Layout %1", i + 1), this);
         quickAction->setObjectName(QStringLiteral("quick_layout_%1").arg(i + 1));
         KGlobalAccel::self()->setDefaultShortcut(quickAction, {QKeySequence(quickLayoutDefaults[i])});
-        KGlobalAccel::setGlobalShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
+        queueAsyncShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
 
         const int layoutNumber = i + 1;
         connect(quickAction, &QAction::triggered, this, [this, layoutNumber]() {
@@ -473,7 +536,7 @@ void ShortcutManager::setupSnapToZoneShortcuts()
         auto* snapAction = new QAction(i18n("Snap to Zone %1", i + 1), this);
         snapAction->setObjectName(QStringLiteral("snap_to_zone_%1").arg(i + 1));
         KGlobalAccel::self()->setDefaultShortcut(snapAction, {QKeySequence(snapToZoneDefaults[i])});
-        KGlobalAccel::setGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
+        queueAsyncShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
 
         const int zoneNumber = i + 1;
         connect(snapAction, &QAction::triggered, this, [this, zoneNumber]() {

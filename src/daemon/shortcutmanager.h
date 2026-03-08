@@ -6,7 +6,10 @@
 #include <QObject>
 #include <QAction>
 #include <QList>
-#include <functional>
+#include <QKeySequence>
+#include <QStringList>
+
+class QDBusPendingCallWatcher;
 
 namespace PlasmaZones {
 
@@ -246,9 +249,10 @@ private:
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
     void setupLayoutPickerShortcut();
-    void buildBatchList();
-    void registerShortcuts();
-    void registerNextBatch();
+    void queueAsyncShortcut(QAction* action, const QKeySequence& shortcut);
+    void fireAsyncRegistrations();
+    void onAsyncRegistrationFinished(QDBusPendingCallWatcher* watcher);
+    QStringList makeActionId(const QAction* action) const;
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -297,8 +301,13 @@ private:
     // Layout Picker action
     QAction* m_layoutPickerAction = nullptr;
 
-    // Deferred registration state
-    QList<std::function<void()>> m_pendingBatches;
+    // Async registration state
+    struct PendingAsyncShortcut {
+        QAction* action;
+        QKeySequence shortcut;
+    };
+    QList<PendingAsyncShortcut> m_asyncQueue;
+    int m_pendingAsyncCount = 0;
 };
 
 } // namespace PlasmaZones
