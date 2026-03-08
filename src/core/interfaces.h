@@ -76,6 +76,8 @@ public:
     virtual void setAnimationStaggerInterval(int ms) = 0;
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
+    virtual bool autotileFocusFollowsMouse() const = 0;
+    virtual void setAutotileFocusFollowsMouse(bool enabled) = 0;
     virtual bool autotileHideTitleBars() const = 0;
     virtual void setAutotileHideTitleBars(bool hide) = 0;
     virtual int autotileBorderWidth() const = 0;

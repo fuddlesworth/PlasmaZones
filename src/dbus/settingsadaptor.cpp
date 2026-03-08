@@ -261,6 +261,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_COLOR_SETTING("autotileBorderColor", autotileBorderColor, setAutotileBorderColor)
     REGISTER_BOOL_SETTING("autotileUseSystemBorderColors", autotileUseSystemBorderColors,
                           setAutotileUseSystemBorderColors)
+    REGISTER_BOOL_SETTING("autotileFocusFollowsMouse", autotileFocusFollowsMouse, setAutotileFocusFollowsMouse)
 
 // Clean up macros (local scope)
 #undef REGISTER_STRING_SETTING

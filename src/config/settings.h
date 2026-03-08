@@ -987,11 +987,11 @@ public:
     void setAnimationStaggerInterval(int ms) override;
 
     // Additional Autotiling Settings
-    bool autotileFocusFollowsMouse() const
+    bool autotileFocusFollowsMouse() const override
     {
         return m_autotileFocusFollowsMouse;
     }
-    void setAutotileFocusFollowsMouse(bool focus);
+    void setAutotileFocusFollowsMouse(bool focus) override;
 
     bool autotileRespectMinimumSize() const
     {

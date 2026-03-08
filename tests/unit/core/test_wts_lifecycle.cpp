@@ -589,6 +589,13 @@ public:
     void setAnimationStaggerInterval(int) override
     {
     }
+    bool autotileFocusFollowsMouse() const override
+    {
+        return false;
+    }
+    void setAutotileFocusFollowsMouse(bool) override
+    {
+    }
     bool autotileHideTitleBars() const override
     {
         return false;

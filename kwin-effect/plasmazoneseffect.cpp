@@ -716,14 +716,21 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
     // not on every pixel move. This gives the daemon accurate cursor-based screen info
     // on Wayland where QCursor::pos() is unreliable for background processes.
     auto* output = KWin::effects->screenAt(pos.toPoint());
+    QString screenName;
     if (output) {
-        QString screenName = output->name();
+        screenName = output->name();
         if (screenName != m_lastCursorScreenName) {
             m_lastCursorScreenName = screenName;
             if (ensureWindowTrackingReady("report cursor screen")) {
                 m_windowTrackingInterface->asyncCall(QStringLiteral("cursorScreenChanged"), screenName);
             }
         }
+    }
+
+    // Focus follows mouse: activate autotile window under cursor when not dragging.
+    // Reuses the screenName resolved above to avoid a duplicate screenAt() lookup.
+    if (!m_dragTracker->isDragging()) {
+        m_autotileHandler->handleCursorMoved(pos, screenName);
     }
 }
 
@@ -1208,6 +1215,10 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("autotileBorderColor"), [this](const QVariant& v) {
         m_autotileHandler->setBorderColor(QColor(v.toString()));
         updateActiveBorder();
+    });
+
+    loadSettingAsync(QStringLiteral("autotileFocusFollowsMouse"), [this](const QVariant& v) {
+        m_autotileHandler->setFocusFollowsMouse(v.toBool());
     });
 
     // dragActivationTriggers has complex QDBusArgument deserialization — keep as special case

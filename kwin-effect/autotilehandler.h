@@ -59,6 +59,10 @@ public:
     // Settings update: toggle hide-title-bars with border restore on disable
     void updateHideTitleBarsSetting(bool enabled);
 
+    // Focus follows mouse: focus autotile window under cursor
+    void setFocusFollowsMouse(bool enabled);
+    void handleCursorMoved(const QPointF& pos, const QString& screenName);
+
     // Screen accessors (for gating drag/snap/overlay behavior per-screen)
     bool isAutotileScreen(const QString& screenName) const;
     const QSet<QString>& autotileScreens() const
@@ -156,6 +160,9 @@ private:
     QString m_pendingAutotileFocusWindowId;
     QSet<QString> m_monocleMaximizedWindows;
     int m_suppressMaximizeChanged = 0;
+    // ── Focus follows mouse ──
+    bool m_focusFollowsMouse = false;
+    QString m_lastFocusFollowsMouseWindowId;
     // ── Border state (logically grouped for SRP clarity) ──
     struct BorderState
     {

@@ -159,6 +159,51 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
     }
 }
 
+void AutotileHandler::setFocusFollowsMouse(bool enabled)
+{
+    m_focusFollowsMouse = enabled;
+    if (!enabled) {
+        m_lastFocusFollowsMouseWindowId.clear();
+    }
+}
+
+void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& screenName)
+{
+    if (!m_focusFollowsMouse || m_autotileScreens.isEmpty()) {
+        return;
+    }
+
+    // Only act on autotile screens (screenName already resolved by caller)
+    if (screenName.isEmpty() || !m_autotileScreens.contains(screenName)) {
+        return;
+    }
+
+    // Find the topmost autotile-managed window under the cursor.
+    // Iterate stacking order in reverse (top → bottom).
+    const auto windows = KWin::effects->stackingOrder();
+    for (int i = windows.size() - 1; i >= 0; --i) {
+        KWin::EffectWindow* w = windows[i];
+        if (!w || !m_effect->shouldHandleWindow(w) || w->isMinimized() || !w->isOnCurrentDesktop()
+            || !w->isOnCurrentActivity()) {
+            continue;
+        }
+        if (!w->frameGeometry().contains(pos)) {
+            continue;
+        }
+        const QString windowId = m_effect->getWindowId(w);
+        if (windowId == m_lastFocusFollowsMouseWindowId) {
+            return; // Already focused — no-op
+        }
+        // Only focus windows on autotile screens
+        if (!m_autotileScreens.contains(m_effect->getWindowScreenName(w))) {
+            return;
+        }
+        m_lastFocusFollowsMouseWindowId = windowId;
+        KWin::effects->activateWindow(w);
+        return;
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Geometry persistence
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -329,12 +374,16 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     m_notifiedWindows.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
 
-    // Clean up borderless, monocle-maximize, deferred-centering, border zone, and pre-autotile tracking
+    // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
+    // and pre-autotile tracking
     m_border.borderlessWindows.remove(windowId);
     m_border.zoneGeometries.remove(windowId);
     m_monocleMaximizedWindows.remove(windowId);
     m_autotileTargetZones.remove(windowId);
     m_centeredWaylandZones.remove(windowId);
+    if (m_lastFocusFollowsMouseWindowId == windowId) {
+        m_lastFocusFollowsMouseWindowId.clear();
+    }
     if (m_preAutotileGeometries.contains(screenName)) {
         m_preAutotileGeometries[screenName].remove(windowId);
     }

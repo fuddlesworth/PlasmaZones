@@ -140,6 +140,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenNames)
     }
 
     m_autotileScreens = newScreens;
+    m_lastFocusFollowsMouseWindowId.clear();
 
     if (!added.isEmpty()) {
         // Save current frame geometries and notify windows IMMEDIATELY (non-blocking).
