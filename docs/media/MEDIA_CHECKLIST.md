@@ -6,26 +6,37 @@ Track progress on screenshots and videos for README and marketing.
 
 Save to `docs/media/screenshots/`
 
+### KCM Tabs
+- [x] `kcm-layouts.png` - System Settings (Layouts tab)
+- [x] `kcm-editor.png` - System Settings (Editor tab)
+- [x] `kcm-assignments.png` - System Settings (Assignments tab)
+- [x] `kcm-snapping.png` - System Settings (Snapping tab)
+- [x] `kcm-tiling.png` - System Settings (Tiling tab)
+- [x] `kcm-general.png` - System Settings (General tab)
+- [x] `kcm-exclusions.png` - System Settings (Exclusions tab)
+- [x] `kcm-about.png` - System Settings (About tab)
+
+### Other
 - [x] `shaders-gallery.png` - Grid showing shader effects
 - [x] `layout-osd.png` - Visual layout OSD on screen
-- [x] `kcm-settings.png` - System Settings module (Layouts tab)
-- [x] `kcm-appearance.png` - System Settings (Appearance tab)
-- [x] `kcm-behavior.png` - System Settings (Behavior tab)
-- [x] `kcm-zoneselector.png` - System Settings (Zone Selector tab)
-- [x] `kcm-shortcuts.png` - System Settings (Shortcuts tab)
+- [x] `layout-popup.png` - Layout picker fullscreen overlay
 - [x] `multi-monitor.png` - Dual monitor setup with different layouts
 
 ## GIFs (Optimized, 800px wide max, under 5MB each)
 
 Save to `docs/media/videos/`. Embed in README with `![Description](docs/media/videos/name.gif)`.
 
-- [ ] `hero.gif` - Core workflow: drag window → zones appear → snap (5–8s)
-- [ ] `drag-snap.gif` - Window being dragged with zones highlighted
-- [ ] `editor.gif` - Layout editor with zones being drawn/edited
-- [ ] `zone-selector.gif` - Drag to edge → selector appears → pick zone (6–8s)
-- [x] `keyboard-nav.gif` - Moving window between zones with shortcuts (8–10s)
-- [ ] `layout-switch.gif` - Cycling layouts with OSD feedback (5s)
-- [ ] `shaders.gif` - Showcase 3–4 shader effects (10–15s)
+- [x] `drag-snap.gif` - Window being dragged with zones highlighted
+- [x] `editor.gif` - Layout editor with zones being drawn/edited
+- [x] `keyboard-nav.gif` - Moving window between zones with shortcuts
+- [x] `layout-switch.gif` - Cycling layouts with OSD feedback
+- [x] `shaders.gif` - Showcase shader effects
+- [x] `zone-selector.gif` - Drag to edge → selector appears → pick zone
+
+### Still needed
+- [ ] Autotiling in action (windows auto-arranging with an algorithm)
+- [ ] Snap Assist overlay (window thumbnails after a snap)
+- [ ] Navigation OSD (move/focus/swap feedback overlays)
 
 ## Long-form Videos (MP4/WebM, 1080p)
 
@@ -37,19 +48,9 @@ Host on YouTube, link in README.
 
 ## Progress Summary
 
-**Screenshots:** 8/8 complete ✓  
-**GIFs:** 1/7 complete  
+**Screenshots:** 12/12 complete ✓
+**GIFs:** 6/9 complete
 **Long-form videos:** 0/3 complete
-
-### Priority Order for GIFs
-
-1. `hero.gif` - Main eye-catcher at top of README
-2. `drag-snap.gif` - Shows core functionality
-3. `editor.gif` - Layout editor in action
-4. `zone-selector.gif` - Zone selector animation
-5. `keyboard-nav.gif` ✓ - Power user feature
-6. `layout-switch.gif` - OSD in action
-7. `shaders.gif` - Eye candy showcase
 
 ## Recording Tips
 

@@ -125,7 +125,7 @@ Automatic tiling window manager built into PlasmaZones. Enable per-screen and wi
 - **Per-window floating toggle** (`Meta+F`)
 - **Staggered tiling animations** with cascading overlap
 
-<!-- TODO: screenshot or gif of autotiling in action -->
+<!-- placeholder: autotiling gif/screenshot -->
 
 ### Shader Effects
 
@@ -158,7 +158,7 @@ Custom shaders supported — see the [Shader Guide](https://github.com/fuddleswo
 
 After snapping a window, a Snap Assist overlay shows remaining empty zones with window candidates. Click any window thumbnail to snap it into a zone without dragging.
 
-<!-- TODO: screenshot or gif of Snap Assist overlay -->
+<!-- placeholder: snap assist gif/screenshot -->
 
 ### Zone Selector
 
@@ -172,7 +172,9 @@ Drag to screen edge to reveal a layout picker. Choose any layout and zone withou
 
 Press `Meta+Alt+Space` to open a fullscreen layout picker overlay. Browse all layouts visually and switch with a single click.
 
-<!-- TODO: screenshot or gif of Layout Picker overlay -->
+<p align="center">
+  <img src="docs/media/screenshots/layout-popup.png" alt="Layout Picker" />
+</p>
 
 ### Visual Layout OSD
 
@@ -186,7 +188,7 @@ See a preview of the layout when switching, not just text.
 
 Keyboard navigation actions (move, focus, swap, rotate, push) show brief feedback overlays with zone numbers and directional context.
 
-<!-- TODO: screenshot or gif of Navigation OSD -->
+<!-- placeholder: navigation OSD gif/screenshot -->
 
 ### Multi-Monitor & Virtual Desktops
 
@@ -204,39 +206,45 @@ Full KCM module with 8 tabs — no config file editing required. Includes built-
 <details>
 <summary>Screenshots</summary>
 
-#### Layouts
+#### 1. Layouts
 Create, duplicate, and manage zone layouts with built-in templates, import/export, visibility filtering.
 
-![Layouts](docs/media/screenshots/kcm-settings.png)
+![Layouts](docs/media/screenshots/kcm-layouts.png)
 
-#### Editor
+#### 2. Editor
 Keyboard shortcuts for zone operations (duplicate, split, fill), grid/edge snapping, snap modifier keys.
 
-#### Assignments
+![Editor](docs/media/screenshots/kcm-editor.png)
+
+#### 3. Assignments
 Per-monitor, virtual desktop, and activity layout assignments; quick-switch keyboard slots; app-to-zone auto-snap rules.
 
-#### Autotiling
+![Assignments](docs/media/screenshots/kcm-assignments.png)
+
+#### 4. Snapping
+Colors, opacity, borders, blur, shader effects, zone numbers, animations, activation modifiers, always-active mode, multi-zone selection, zone padding, per-side edge gaps, zone selector popup, and window snap behavior.
+
+![Snapping](docs/media/screenshots/kcm-snapping.png)
+
+#### 5. Tiling
 Enable/disable autotiling per-screen, select algorithm, configure master ratio, master count, inner/outer gaps, per-side outer gaps, smart gaps, max windows, title bar hiding, border rendering, insertion position, focus behavior.
 
-<!-- TODO: screenshot of autotiling tab -->
+![Tiling](docs/media/screenshots/kcm-tiling.png)
 
-#### Zones
-Colors, opacity, borders, blur, shader effects, zone numbers, OSD style, animations, activation modifiers, always-active mode, multi-zone selection, zone padding, per-side edge gaps, and window snap behavior.
+#### 6. General
+OSD style, layout switch notifications, global behavior settings.
 
-![Zones — Appearance](docs/media/screenshots/kcm-appearance.png)
+![General](docs/media/screenshots/kcm-general.png)
 
-![Zones — Behavior](docs/media/screenshots/kcm-behavior.png)
-
-#### Display
-Zone selector popup configuration: enable/disable, screen position, trigger distance, grid/list mode, preview sizing, per-monitor overrides.
-
-![Display](docs/media/screenshots/kcm-zoneselector.png)
-
-#### Exclusions
+#### 7. Exclusions
 Window class exclusion lists with interactive window picker, minimum size thresholds.
 
-#### About
+![Exclusions](docs/media/screenshots/kcm-exclusions.png)
+
+#### 8. About
 Version info, update checker with GitHub release notifications, repository/wiki/bug report links, license, credits.
+
+![About](docs/media/screenshots/kcm-about.png)
 
 </details>
 
@@ -430,9 +438,15 @@ All configurable in **System Settings → Shortcuts → PlasmaZones**.
 
 | Action | Default Shortcut |
 |--------|------------------|
+| Toggle autotile | `Meta+Shift+T` |
 | Toggle float | `Meta+F` |
-
-<!-- TODO: add more autotile shortcuts if applicable -->
+| Focus master window | `Meta+Shift+M` |
+| Swap with master | `Meta+Shift+Return` |
+| Increase master ratio | `Meta+Shift+L` |
+| Decrease master ratio | `Meta+Shift+H` |
+| Increase master count | `Meta+Shift+]` |
+| Decrease master count | `Meta+Shift+[` |
+| Retile windows | `Meta+Shift+R` |
 
 </details>
 
