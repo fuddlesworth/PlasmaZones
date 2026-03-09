@@ -8,6 +8,7 @@
 #include "../core/logging.h"
 #include <QAction>
 #include <QKeySequence>
+#include <QTimer>
 #include <KGlobalAccel>
 #include <KLocalizedString>
 
@@ -37,7 +38,7 @@ namespace PlasmaZones {
             const QKeySequence defaultShortcut(ConfigDefaults::getterName()); \
             const QKeySequence shortcut(m_settings->getterName()); \
             KGlobalAccel::self()->setDefaultShortcut(actionMember, {defaultShortcut}); \
-            KGlobalAccel::setGlobalShortcut(actionMember, shortcut); \
+            queueGlobalShortcut(actionMember, shortcut); \
             connect(actionMember, &QAction::triggered, this, slot); \
         } \
     } while (0)
@@ -157,6 +158,16 @@ ShortcutManager::~ShortcutManager()
 
 void ShortcutManager::registerShortcuts()
 {
+    if (m_registrationInProgress) {
+        qCWarning(lcShortcuts) << "registerShortcuts() called while registration "
+                                  "is already in progress — ignoring";
+        return;
+    }
+    m_registrationInProgress = true;
+
+    // Phase 1: Register all actions with setDefaultShortcut (fast — no key
+    // grabbing contention). All shortcuts are queued for Phase 2 which calls
+    // setGlobalShortcut (with SetPresent flag) to trigger actual key grabs.
     setupEditorShortcut();
     setupCyclingShortcuts();
     setupQuickLayoutShortcuts();
@@ -168,11 +179,69 @@ void ShortcutManager::registerShortcuts()
     setupResnapToNewLayoutShortcut();
     setupSnapAllWindowsShortcut();
     setupLayoutPickerShortcut();
+
+    qCInfo(lcShortcuts) << "Phase 1 complete:" << m_deferredQueue.size()
+                        << "deferred setGlobalShortcut calls queued";
+
+    // Phase 2: Process deferred setGlobalShortcut calls one at a time,
+    // yielding to the event loop between each blocking D-Bus call.
+    // Each call blocks for ~600ms max under login contention, but the
+    // event loop stays responsive between calls — no desktop freeze.
+    if (m_deferredQueue.isEmpty()) {
+        m_registrationInProgress = false;
+        Q_EMIT shortcutsRegistered();
+    } else {
+        processNextDeferredShortcut();
+    }
+}
+
+void ShortcutManager::queueGlobalShortcut(QAction* action, const QKeySequence& shortcut)
+{
+    // setDefaultShortcut (Phase 1) stores defaults in kglobalacceld's database
+    // but does NOT trigger key grabs (daemon returns early for IsDefault flag).
+    // setGlobalShortcut sends the SetPresent flag which calls setIsPresent(true)
+    // on the daemon side, actually grabbing the key. This is required for ALL
+    // shortcuts, not just customized ones.
+    m_deferredQueue.enqueue({action, shortcut});
+}
+
+void ShortcutManager::processNextDeferredShortcut()
+{
+    if (m_deferredQueue.isEmpty()) {
+        m_registrationInProgress = false;
+        qCInfo(lcShortcuts) << "Phase 2 complete: all deferred shortcuts registered";
+        Q_EMIT shortcutsRegistered();
+
+        // If settings changed during Phase 2, apply now
+        if (m_settingsDirty) {
+            m_settingsDirty = false;
+            updateShortcuts();
+        }
+        return;
+    }
+
+    const DeferredShortcut entry = m_deferredQueue.dequeue();
+    if (entry.action) {
+        KGlobalAccel::setGlobalShortcut(entry.action, entry.shortcut);
+    }
+
+    // Yield to the event loop before processing the next one.
+    // Safe: QTimer::singleShot with a QObject* receiver automatically
+    // cancels the invocation if the receiver is destroyed before it fires.
+    QTimer::singleShot(0, this, &ShortcutManager::processNextDeferredShortcut);
 }
 
 void ShortcutManager::updateShortcuts()
 {
     // Called when settingsChanged() is emitted (e.g., after KCM reload)
+    // If deferred registration is still in progress, skip — Phase 2 will
+    // apply the current settings values when it runs.
+    if (m_registrationInProgress) {
+        qCDebug(lcShortcuts) << "Skipping updateShortcuts() — deferred registration in progress";
+        m_settingsDirty = true;
+        return;
+    }
+
     // Refresh all shortcuts from current settings values
     qCInfo(lcShortcuts) << "Updating all shortcuts from settings";
 
@@ -230,6 +299,11 @@ void ShortcutManager::updateShortcuts()
 
 void ShortcutManager::unregisterShortcuts()
 {
+    // Cancel any in-flight deferred registration
+    m_deferredQueue.clear();
+    m_registrationInProgress = false;
+    m_settingsDirty = false;
+
     // Clear all actions - KGlobalAccel will unregister automatically when actions are deleted
     // Use direct delete instead of deleteLater() because:
     // 1. Actions have 'this' as parent, so deleteLater() + parent cleanup = double-free risk
@@ -346,7 +420,7 @@ void ShortcutManager::setupQuickLayoutShortcuts()
         auto* quickAction = new QAction(i18n("Apply Layout %1", i + 1), this);
         quickAction->setObjectName(QStringLiteral("quick_layout_%1").arg(i + 1));
         KGlobalAccel::self()->setDefaultShortcut(quickAction, {QKeySequence(quickLayoutDefaults[i])});
-        KGlobalAccel::setGlobalShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
+        queueGlobalShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
 
         const int layoutNumber = i + 1;
         connect(quickAction, &QAction::triggered, this, [this, layoutNumber]() {
@@ -422,7 +496,7 @@ void ShortcutManager::setupSnapToZoneShortcuts()
         auto* snapAction = new QAction(i18n("Snap to Zone %1", i + 1), this);
         snapAction->setObjectName(QStringLiteral("snap_to_zone_%1").arg(i + 1));
         KGlobalAccel::self()->setDefaultShortcut(snapAction, {QKeySequence(snapToZoneDefaults[i])});
-        KGlobalAccel::setGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
+        queueGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
 
         const int zoneNumber = i + 1;
         connect(snapAction, &QAction::triggered, this, [this, zoneNumber]() {

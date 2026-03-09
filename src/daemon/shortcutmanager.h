@@ -5,6 +5,9 @@
 
 #include <QObject>
 #include <QAction>
+#include <QKeySequence>
+#include <QPointer>
+#include <QQueue>
 
 namespace PlasmaZones {
 
@@ -147,6 +150,11 @@ Q_SIGNALS:
      */
     void layoutPickerRequested();
 
+    /**
+     * @brief Emitted when deferred shortcut registration completes
+     */
+    void shortcutsRegistered();
+
 private Q_SLOTS:
     void onOpenEditor();
     void onPreviousLayout();
@@ -235,6 +243,8 @@ private:
     void setupResnapToNewLayoutShortcut();
     void setupSnapAllWindowsShortcut();
     void setupLayoutPickerShortcut();
+    void queueGlobalShortcut(QAction* action, const QKeySequence& shortcut);
+    void processNextDeferredShortcut();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -282,6 +292,15 @@ private:
 
     // Layout Picker action
     QAction* m_layoutPickerAction = nullptr;
+
+    // Deferred registration state
+    struct DeferredShortcut {
+        QPointer<QAction> action;
+        QKeySequence shortcut;
+    };
+    QQueue<DeferredShortcut> m_deferredQueue;
+    bool m_registrationInProgress = false;
+    bool m_settingsDirty = false;
 };
 
 } // namespace PlasmaZones
