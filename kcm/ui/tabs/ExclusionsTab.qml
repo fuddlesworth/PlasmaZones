@@ -39,7 +39,7 @@ ScrollView {
         Kirigami.InlineMessage {
             Layout.fillWidth: true
             type: Kirigami.MessageType.Information
-            text: i18n("Windows from excluded applications or with excluded window classes will not snap to zones.")
+            text: i18n("Windows from excluded applications or with excluded window classes will be ignored by both snapping and autotiling.")
             visible: true
         }
 
@@ -70,7 +70,7 @@ ScrollView {
                     }
 
                     Label {
-                        text: i18n("Minimum window size for snapping:")
+                        text: i18n("Minimum window size for zone management:")
                         Layout.topMargin: Kirigami.Units.smallSpacing
                     }
 
@@ -116,7 +116,7 @@ ScrollView {
                     }
 
                     Label {
-                        text: i18n("Windows smaller than these dimensions will not snap to zones. Set to 0 to disable.")
+                        text: i18n("Windows smaller than these dimensions will be excluded. Set to 0 to disable.")
                         font.italic: true
                         opacity: 0.7
                         wrapMode: Text.WordWrap
@@ -141,7 +141,7 @@ ScrollView {
                 title: i18n("Excluded Applications")
                 placeholderText: i18n("Application name (e.g., firefox, konsole)")
                 emptyTitle: i18n("No excluded applications")
-                emptyExplanation: i18n("Add application names above to exclude them from zone snapping")
+                emptyExplanation: i18n("Add application names above to exclude them from snapping and autotiling")
                 iconSource: "application-x-executable"
                 model: kcm.excludedApplications
                 useMonospaceFont: false
@@ -169,7 +169,7 @@ ScrollView {
                 title: i18n("Excluded Window Classes")
                 placeholderText: i18n("Window class (e.g., org.kde.dolphin)")
                 emptyTitle: i18n("No excluded window classes")
-                emptyExplanation: i18n("Add window classes above or pick from running windows")
+                emptyExplanation: i18n("Add window classes above to exclude them from snapping and autotiling")
                 iconSource: "window"
                 model: kcm.excludedWindowClasses
                 useMonospaceFont: false

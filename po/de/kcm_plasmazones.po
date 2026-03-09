@@ -1292,12 +1292,13 @@ msgid "Remove %1"
 msgstr "%1 entfernen"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:42
+#, fuzzy
 msgid ""
-"Windows from excluded applications or with excluded window classes will not "
-"snap to zones."
+"Windows from excluded applications or with excluded window classes will be "
+"ignored by both snapping and autotiling."
 msgstr ""
 "Fenster von ausgeschlossenen Anwendungen oder mit ausgeschlossenen "
-"Fensterklassen werden nicht in Zonen eingerastet."
+"Fensterklassen werden vom Einrasten und Autotiling ignoriert."
 
 #: kcm/ui/tabs/ExclusionsTab.qml:58
 msgid "Window Filtering"
@@ -1309,20 +1310,22 @@ msgid "Exclude transient windows (dialogs, popups, toolbars)"
 msgstr "Vorübergehende Fenster ausschließen (Dialoge, Werkzeuge, Tooltips)"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:73
-msgid "Minimum window size for snapping:"
-msgstr "Minimale Fenstergröße zum Einrasten:"
+#, fuzzy
+msgid "Minimum window size for zone management:"
+msgstr "Minimale Fenstergröße für Zonenverwaltung:"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:92 kcm/ui/tabs/ExclusionsTab.qml:110
 msgid "Disabled"
 msgstr "Deaktiviert"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:119
+#, fuzzy
 msgid ""
-"Windows smaller than these dimensions will not snap to zones. Set to 0 to "
+"Windows smaller than these dimensions will be excluded. Set to 0 to "
 "disable."
 msgstr ""
-"Fenster, die kleiner als diese Abmessungen sind, werden nicht in Zonen "
-"eingerastet. Auf 0 setzen zum Deaktivieren."
+"Fenster, die kleiner als diese Abmessungen sind, werden ausgeschlossen. "
+"Auf 0 setzen zum Deaktivieren."
 
 #: kcm/ui/tabs/ExclusionsTab.qml:141
 msgid "Excluded Applications"
@@ -1337,9 +1340,10 @@ msgid "No excluded applications"
 msgstr "Keine ausgeschlossenen Anwendungen"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:144
-msgid "Add application names above to exclude them from zone snapping"
+#, fuzzy
+msgid "Add application names above to exclude them from snapping and autotiling"
 msgstr ""
-"Fügen Sie oben Anwendungsnamen hinzu, um sie vom Zonen-Einrasten "
+"Fügen Sie oben Anwendungsnamen hinzu, um sie vom Einrasten und Autotiling "
 "auszuschließen"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:169
@@ -1355,9 +1359,11 @@ msgid "No excluded window classes"
 msgstr "Keine ausgeschlossenen Fensterklassen"
 
 #: kcm/ui/tabs/ExclusionsTab.qml:172
-msgid "Add window classes above or pick from running windows"
+#, fuzzy
+msgid "Add window classes above to exclude them from snapping and autotiling"
 msgstr ""
-"Fügen Sie oben Fensterklassen hinzu oder wählen Sie aus laufenden Fenstern"
+"Fügen Sie oben Fensterklassen hinzu, um sie vom Einrasten und Autotiling "
+"auszuschließen"
 
 #: kcm/ui/tabs/GeneralTab.qml:43
 #, fuzzy

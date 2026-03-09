@@ -1232,8 +1232,8 @@ msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:42
 msgid ""
-"Windows from excluded applications or with excluded window classes will not "
-"snap to zones."
+"Windows from excluded applications or with excluded window classes will be "
+"ignored by both snapping and autotiling."
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:58
@@ -1245,7 +1245,7 @@ msgid "Exclude transient windows (dialogs, popups, toolbars)"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:73
-msgid "Minimum window size for snapping:"
+msgid "Minimum window size for zone management:"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:92 kcm/ui/tabs/ExclusionsTab.qml:110
@@ -1254,7 +1254,7 @@ msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:119
 msgid ""
-"Windows smaller than these dimensions will not snap to zones. Set to 0 to "
+"Windows smaller than these dimensions will be excluded. Set to 0 to "
 "disable."
 msgstr ""
 
@@ -1271,7 +1271,7 @@ msgid "No excluded applications"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:144
-msgid "Add application names above to exclude them from zone snapping"
+msgid "Add application names above to exclude them from snapping and autotiling"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:169
@@ -1287,7 +1287,7 @@ msgid "No excluded window classes"
 msgstr ""
 
 #: kcm/ui/tabs/ExclusionsTab.qml:172
-msgid "Add window classes above or pick from running windows"
+msgid "Add window classes above to exclude them from snapping and autotiling"
 msgstr ""
 
 #: kcm/ui/tabs/GeneralTab.qml:43
