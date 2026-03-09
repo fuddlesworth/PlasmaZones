@@ -165,7 +165,7 @@ private Q_SLOTS:
     void updateNextLayoutShortcut();
     void updateQuickLayoutShortcut(int index);
 
-    // Phase 1 Keyboard Navigation slots
+    // Keyboard navigation slots
     void onMoveWindowLeft();
     void onMoveWindowRight();
     void onMoveWindowUp();
@@ -244,7 +244,8 @@ private:
     void setupSnapAllWindowsShortcut();
     void setupLayoutPickerShortcut();
     void queueGlobalShortcut(QAction* action, const QKeySequence& shortcut);
-    void processNextDeferredShortcut();
+    void activateKeyGrabs();
+    void onKeyGrabReply();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -299,6 +300,7 @@ private:
         QKeySequence shortcut;
     };
     QQueue<DeferredShortcut> m_deferredQueue;
+    int m_pendingAsyncCalls = 0;
     bool m_registrationInProgress = false;
     bool m_settingsDirty = false;
 };

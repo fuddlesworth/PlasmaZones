@@ -9,6 +9,11 @@
 #include <QAction>
 #include <QKeySequence>
 #include <QTimer>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QGuiApplication>
 #include <KGlobalAccel>
 #include <KLocalizedString>
 
@@ -93,7 +98,7 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::quickLayout8ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(7); });
     connect(m_settings, &Settings::quickLayout9ShortcutChanged, this, [this]() { updateQuickLayoutShortcut(8); });
 
-    // Phase 1 Keyboard Navigation - connect to settings changes
+    // Keyboard navigation - connect to settings changes
     connect(m_settings, &Settings::moveWindowLeftShortcutChanged, this, &ShortcutManager::updateMoveWindowLeftShortcut);
     connect(m_settings, &Settings::moveWindowRightShortcutChanged, this, &ShortcutManager::updateMoveWindowRightShortcut);
     connect(m_settings, &Settings::moveWindowUpShortcutChanged, this, &ShortcutManager::updateMoveWindowUpShortcut);
@@ -165,9 +170,9 @@ void ShortcutManager::registerShortcuts()
     }
     m_registrationInProgress = true;
 
-    // Phase 1: Register all actions with setDefaultShortcut (fast — no key
-    // grabbing contention). All shortcuts are queued for Phase 2 which calls
-    // setGlobalShortcut (with SetPresent flag) to trigger actual key grabs.
+    // Register all actions with setDefaultShortcut (fast — stores defaults in
+    // kglobalacceld without grabbing keys). Each setup call also queues the
+    // shortcut for async key-grab activation below.
     setupEditorShortcut();
     setupCyclingShortcuts();
     setupQuickLayoutShortcuts();
@@ -180,64 +185,117 @@ void ShortcutManager::registerShortcuts()
     setupSnapAllWindowsShortcut();
     setupLayoutPickerShortcut();
 
-    qCInfo(lcShortcuts) << "Phase 1 complete:" << m_deferredQueue.size()
-                        << "deferred setGlobalShortcut calls queued";
+    qCInfo(lcShortcuts) << "Defaults registered," << m_deferredQueue.size() << "key grabs queued";
 
-    // Phase 2: Process deferred setGlobalShortcut calls one at a time,
-    // yielding to the event loop between each blocking D-Bus call.
-    // Each call blocks for ~600ms max under login contention, but the
-    // event loop stays responsive between calls — no desktop freeze.
+    // Now activate key grabs asynchronously via raw D-Bus calls.
+    // setDefaultShortcut already called doRegister + setShortcutKeys(IsDefault);
+    // we only need to send SetPresent to trigger the actual grabs. Using
+    // asyncCall avoids the ~490ms block per shortcut that
+    // KGlobalAccel::setGlobalShortcut() causes (it calls waitForFinished
+    // internally). Cache consistency is handled by the yourShortcutsChanged
+    // D-Bus signal that KGlobalAccel already subscribes to.
     if (m_deferredQueue.isEmpty()) {
         m_registrationInProgress = false;
         Q_EMIT shortcutsRegistered();
     } else {
-        processNextDeferredShortcut();
+        activateKeyGrabs();
     }
 }
 
 void ShortcutManager::queueGlobalShortcut(QAction* action, const QKeySequence& shortcut)
 {
-    // setDefaultShortcut (Phase 1) stores defaults in kglobalacceld's database
-    // but does NOT trigger key grabs (daemon returns early for IsDefault flag).
-    // setGlobalShortcut sends the SetPresent flag which calls setIsPresent(true)
-    // on the daemon side, actually grabbing the key. This is required for ALL
-    // shortcuts, not just customized ones.
+    // Queue for async key-grab activation. setDefaultShortcut already stored
+    // defaults in kglobalacceld (no grab). activateKeyGrabs sends SetPresent
+    // via async D-Bus to trigger the actual grabs without blocking.
     m_deferredQueue.enqueue({action, shortcut});
 }
 
-void ShortcutManager::processNextDeferredShortcut()
+void ShortcutManager::activateKeyGrabs()
 {
-    if (m_deferredQueue.isEmpty()) {
-        m_registrationInProgress = false;
-        qCInfo(lcShortcuts) << "Phase 2 complete: all deferred shortcuts registered";
-        Q_EMIT shortcutsRegistered();
+    const QString appName = QCoreApplication::applicationName();
+    const QString appDisplayName = QGuiApplication::applicationDisplayName();
 
-        // If settings changed during Phase 2, apply now
-        if (m_settingsDirty) {
-            m_settingsDirty = false;
-            updateShortcuts();
+    m_pendingAsyncCalls = 0;
+
+    while (!m_deferredQueue.isEmpty()) {
+        const DeferredShortcut entry = m_deferredQueue.dequeue();
+        if (!entry.action) {
+            continue;
         }
+
+        // Build actionId the same way KGlobalAccelPrivate::makeActionId does:
+        //   [componentUnique, actionUnique, componentFriendly, actionFriendly]
+        const QStringList actionId = {
+            appName,
+            entry.action->objectName(),
+            appDisplayName,
+            entry.action->text().remove(QLatin1Char('&')),
+        };
+
+        // Serialize shortcut as QList<int> for the v1 setShortcut method.
+        // Each QKeySequence key combination becomes one int entry.
+        QList<int> keys;
+        for (int i = 0; i < entry.shortcut.count(); ++i) {
+            keys.append(entry.shortcut[i].toCombined());
+        }
+
+        // SetPresent = 2: activates the shortcut (triggers key grab).
+        // The Autoloading behavior is the default on the daemon side when
+        // SetPresent is used without NoAutoloading — kglobalacceld loads the
+        // user's saved shortcut if one exists, falling back to what we send.
+        constexpr uint SetPresent = 2;
+
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QStringLiteral("org.kde.kglobalaccel"),
+            QStringLiteral("/kglobalaccel"),
+            QStringLiteral("org.kde.KGlobalAccel"),
+            QStringLiteral("setShortcut"));
+        msg.setArguments({
+            QVariant::fromValue(actionId),
+            QVariant::fromValue(keys),
+            QVariant::fromValue(SetPresent),
+        });
+
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+        ++m_pendingAsyncCalls;
+
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            onKeyGrabReply();
+        });
+    }
+
+    if (m_pendingAsyncCalls == 0) {
+        // All entries had null actions
+        m_registrationInProgress = false;
+        Q_EMIT shortcutsRegistered();
+    }
+}
+
+void ShortcutManager::onKeyGrabReply()
+{
+    if (--m_pendingAsyncCalls > 0) {
         return;
     }
 
-    const DeferredShortcut entry = m_deferredQueue.dequeue();
-    if (entry.action) {
-        KGlobalAccel::setGlobalShortcut(entry.action, entry.shortcut);
-    }
+    m_registrationInProgress = false;
+    qCInfo(lcShortcuts) << "All key grabs activated";
+    Q_EMIT shortcutsRegistered();
 
-    // Yield to the event loop before processing the next one.
-    // Safe: QTimer::singleShot with a QObject* receiver automatically
-    // cancels the invocation if the receiver is destroyed before it fires.
-    QTimer::singleShot(0, this, &ShortcutManager::processNextDeferredShortcut);
+    if (m_settingsDirty) {
+        m_settingsDirty = false;
+        updateShortcuts();
+    }
 }
 
 void ShortcutManager::updateShortcuts()
 {
-    // Called when settingsChanged() is emitted (e.g., after KCM reload)
-    // If deferred registration is still in progress, skip — Phase 2 will
-    // apply the current settings values when it runs.
+    // Called when settingsChanged() is emitted (e.g., after KCM reload).
+    // If registration is still in progress, defer — the completion callback
+    // will apply the current settings values when all grabs finish.
     if (m_registrationInProgress) {
-        qCDebug(lcShortcuts) << "Skipping updateShortcuts() — deferred registration in progress";
+        qCDebug(lcShortcuts) << "Skipping updateShortcuts() — key grab activation in progress";
         m_settingsDirty = true;
         return;
     }
