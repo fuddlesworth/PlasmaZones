@@ -154,8 +154,9 @@ void Daemon::connectDesktopActivity()
 
 void Daemon::connectShortcutSignals()
 {
-    // Register global shortcuts via ShortcutManager
-    m_shortcutManager->registerShortcuts();
+    // NOTE: registerShortcuts() is called by Daemon::start() before this method.
+    // Do NOT call it again here — it would hit the m_registrationInProgress guard
+    // and log a spurious warning.
 
     // Connect shortcut signals
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons

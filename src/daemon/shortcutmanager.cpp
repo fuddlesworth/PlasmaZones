@@ -590,22 +590,21 @@ void ShortcutManager::setupLayoutPickerShortcut()
 
 void ShortcutManager::setupAutotileShortcuts()
 {
-    SETUP_SHORTCUT(m_toggleAutotileAction, "Toggle Autotile", "PlasmaZones Toggle Autotile", autotileToggleShortcut,
+    SETUP_SHORTCUT(m_toggleAutotileAction, "Toggle Autotile", "toggle_autotile", autotileToggleShortcut,
                    &ShortcutManager::onToggleAutotile);
-    SETUP_SHORTCUT(m_focusMasterAction, "Focus Master Window", "PlasmaZones Focus Master", autotileFocusMasterShortcut,
+    SETUP_SHORTCUT(m_focusMasterAction, "Focus Master Window", "focus_master", autotileFocusMasterShortcut,
                    &ShortcutManager::onFocusMaster);
-    SETUP_SHORTCUT(m_swapMasterAction, "Swap with Master", "PlasmaZones Swap Master", autotileSwapMasterShortcut,
+    SETUP_SHORTCUT(m_swapMasterAction, "Swap with Master", "swap_master", autotileSwapMasterShortcut,
                    &ShortcutManager::onSwapWithMaster);
-    SETUP_SHORTCUT(m_incMasterRatioAction, "Increase Master Ratio", "PlasmaZones Inc Master Ratio",
+    SETUP_SHORTCUT(m_incMasterRatioAction, "Increase Master Ratio", "increase_master_ratio",
                    autotileIncMasterRatioShortcut, &ShortcutManager::onIncreaseMasterRatio);
-    SETUP_SHORTCUT(m_decMasterRatioAction, "Decrease Master Ratio", "PlasmaZones Dec Master Ratio",
+    SETUP_SHORTCUT(m_decMasterRatioAction, "Decrease Master Ratio", "decrease_master_ratio",
                    autotileDecMasterRatioShortcut, &ShortcutManager::onDecreaseMasterRatio);
-    SETUP_SHORTCUT(m_incMasterCountAction, "Increase Master Count", "PlasmaZones Inc Master Count",
+    SETUP_SHORTCUT(m_incMasterCountAction, "Increase Master Count", "increase_master_count",
                    autotileIncMasterCountShortcut, &ShortcutManager::onIncreaseMasterCount);
-    SETUP_SHORTCUT(m_decMasterCountAction, "Decrease Master Count", "PlasmaZones Dec Master Count",
+    SETUP_SHORTCUT(m_decMasterCountAction, "Decrease Master Count", "decrease_master_count",
                    autotileDecMasterCountShortcut, &ShortcutManager::onDecreaseMasterCount);
-    SETUP_SHORTCUT(m_retileAction, "Retile Windows", "PlasmaZones Retile", autotileRetileShortcut,
-                   &ShortcutManager::onRetile);
+    SETUP_SHORTCUT(m_retileAction, "Retile Windows", "retile", autotileRetileShortcut, &ShortcutManager::onRetile);
 
     qCInfo(lcShortcuts) << "Autotile shortcuts registered";
 }

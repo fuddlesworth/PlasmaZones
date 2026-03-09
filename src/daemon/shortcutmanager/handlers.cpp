@@ -19,6 +19,10 @@ namespace PlasmaZones {
  */
 #define UPDATE_SHORTCUT(actionMember, settingsGetter)                                                                  \
     do {                                                                                                               \
+        if (m_registrationInProgress) {                                                                                \
+            m_settingsDirty = true;                                                                                    \
+            return;                                                                                                    \
+        }                                                                                                              \
         if (actionMember) {                                                                                            \
             KGlobalAccel::setGlobalShortcut(actionMember, QKeySequence(m_settings->settingsGetter()));                 \
         }                                                                                                              \
@@ -201,6 +205,10 @@ void ShortcutManager::updateNextLayoutShortcut()
 
 void ShortcutManager::updateQuickLayoutShortcut(int index)
 {
+    if (m_registrationInProgress) {
+        m_settingsDirty = true;
+        return;
+    }
     if (index >= 0 && index < m_quickLayoutActions.size()) {
         KGlobalAccel::setGlobalShortcut(m_quickLayoutActions[index],
                                         QKeySequence(m_settings->quickLayoutShortcut(index)));
@@ -244,6 +252,10 @@ DIRECTION_UPDATE(SwapWindow, Down, m_swapWindowDownAction, swapWindowDownShortcu
 // Snap to Zone update
 void ShortcutManager::updateSnapToZoneShortcut(int index)
 {
+    if (m_registrationInProgress) {
+        m_settingsDirty = true;
+        return;
+    }
     if (index >= 0 && index < m_snapToZoneActions.size()) {
         KGlobalAccel::setGlobalShortcut(m_snapToZoneActions[index],
                                         QKeySequence(m_settings->snapToZoneShortcut(index)));
