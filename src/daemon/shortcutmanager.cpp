@@ -250,9 +250,34 @@ void ShortcutManager::queueGlobalShortcut(QAction* action, const QKeySequence& s
 
 void ShortcutManager::activateKeyGrabs()
 {
+    // KGlobalAccel::setShortcut() (the C++ API) does two things:
+    //   1. Sends setShortcutKeys(SetPresent) D-Bus call → triggers key grab
+    //   2. Calls getComponent(componentUnique, true) → connects to the
+    //      component's globalShortcutPressed D-Bus signal
+    //
+    // Step 2 is per-component, not per-action — once connected, ALL actions
+    // of the same component receive press notifications. So we only need ONE
+    // synchronous KGlobalAccel::setShortcut() call to establish the signal
+    // connection; the remaining key grabs can use async D-Bus.
+    //
+    // This adds ~490ms for one blocking call instead of ~25s for all 51.
+
+    // First pass: one synchronous call to bootstrap the component connection.
+    bool componentConnected = false;
+    while (!componentConnected && !m_deferredQueue.isEmpty()) {
+        const DeferredShortcut entry = m_deferredQueue.dequeue();
+        if (!entry.action) {
+            continue;
+        }
+        KGlobalAccel::self()->setShortcut(entry.action, {entry.shortcut});
+        componentConnected = true;
+        qCInfo(lcShortcuts) << "Component signal connected via" << entry.action->objectName();
+    }
+
+    // Remaining actions: async D-Bus for key grabs only (signal routing
+    // is already established by the synchronous call above).
     const QString appName = QCoreApplication::applicationName();
     const QString appDisplayName = QGuiApplication::applicationDisplayName();
-
     m_pendingAsyncCalls = 0;
 
     while (!m_deferredQueue.isEmpty()) {
@@ -261,8 +286,6 @@ void ShortcutManager::activateKeyGrabs()
             continue;
         }
 
-        // Build actionId the same way KGlobalAccelPrivate::makeActionId does:
-        //   [componentUnique, actionUnique, componentFriendly, actionFriendly]
         const QStringList actionId = {
             appName,
             entry.action->objectName(),
@@ -270,17 +293,11 @@ void ShortcutManager::activateKeyGrabs()
             entry.action->text().remove(QLatin1Char('&')),
         };
 
-        // Serialize shortcut as QList<int> for the v1 setShortcut method.
-        // Each QKeySequence key combination becomes one int entry.
         QList<int> keys;
         for (int i = 0; i < entry.shortcut.count(); ++i) {
             keys.append(entry.shortcut[i].toCombined());
         }
 
-        // SetPresent = 2: activates the shortcut (triggers key grab).
-        // The Autoloading behavior is the default on the daemon side when
-        // SetPresent is used without NoAutoloading — kglobalacceld loads the
-        // user's saved shortcut if one exists, falling back to what we send.
         constexpr uint SetPresent = 2;
 
         QDBusMessage msg =
@@ -303,7 +320,6 @@ void ShortcutManager::activateKeyGrabs()
     }
 
     if (m_pendingAsyncCalls == 0) {
-        // All entries had null actions
         m_registrationInProgress = false;
         Q_EMIT shortcutsRegistered();
     }
