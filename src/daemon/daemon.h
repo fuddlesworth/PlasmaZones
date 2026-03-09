@@ -178,6 +178,25 @@ private:
      */
     void presaveSnapFloats();
 
+    /**
+     * @brief Capture autotile window order for all autotile screens
+     *
+     * Must be called BEFORE any mode switch that destroys TilingState
+     * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
+     *
+     * @return Map of screenName -> ordered window IDs (master first)
+     */
+    QHash<QString, QStringList> captureAutotileOrders() const;
+
+    /**
+     * @brief Restore pre-tile geometry for autotile-only windows
+     *
+     * Iterates m_lastAutotileOrders and calls applyGeometryForFloat for each
+     * window that has no zone assignment (never manually snapped). Zone-snapped
+     * windows are already handled by resnapCurrentAssignments.
+     */
+    void restoreAutotileOnlyGeometries();
+
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenName);
     /** @brief Show algorithm OSD deferred (avoids blocking on first-time QML compilation) */
@@ -241,7 +260,12 @@ private:
     QString resolveAlgorithmId() const;
 
     bool m_running = false;
-    bool m_suppressResnapOsd = false;
+    int m_suppressResnapOsd = 0;
+
+    // Last autotile window order per screen, captured when leaving autotile.
+    // Used to re-seed the autotile engine with the same order on re-entry,
+    // producing deterministic arrangements across mode toggles.
+    QHash<QString, QStringList> m_lastAutotileOrders;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
     // Initialized from m_settings in init() before settingsChanged is connected.

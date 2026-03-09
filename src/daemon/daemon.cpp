@@ -224,6 +224,12 @@ bool Daemon::init()
             m_layoutAdaptor->notifyLayoutListChanged();
         }
 
+        // Capture autotile window order BEFORE any mode switch destroys TilingState.
+        // Saved for deterministic re-seeding when autotile is re-enabled.
+        if (autotileToggled && !autotileNow) {
+            m_lastAutotileOrders = captureAutotileOrders();
+        }
+
         // Handle autotile feature gate toggle
         if (autotileToggled && !autotileNow) {
             handleAutotileDisabled();
@@ -241,11 +247,13 @@ bool Daemon::init()
         updateAutotileScreens();
         updateLayoutFilter();
 
-        // Resnap after autotile disabled: restore windows to manual-mode zones.
-        // Must run after updateAutotileScreens so floating state is cleared first.
+        // Resnap after autotile disabled: restore windows to their pre-autotile
+        // zone positions. Zone assignments are preserved during autotile (onLayoutChanged
+        // skips autotile screens) so resnap uses original snap assignments.
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
-            m_suppressResnapOsd = true;
+            m_suppressResnapOsd = 1;
             m_windowTrackingAdaptor->resnapCurrentAssignments();
+            restoreAutotileOnlyGeometries();
         }
     });
 

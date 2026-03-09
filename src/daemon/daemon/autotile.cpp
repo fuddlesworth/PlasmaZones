@@ -252,6 +252,40 @@ void Daemon::handleSnappingToAutotile()
     m_modeTracker->setCurrentMode(TilingMode::Autotile);
 }
 
+QHash<QString, QStringList> Daemon::captureAutotileOrders() const
+{
+    QHash<QString, QStringList> orders;
+    if (!m_autotileEngine) {
+        return orders;
+    }
+    for (const QString& s : m_autotileEngine->autotileScreens()) {
+        QStringList order = m_autotileEngine->tiledWindowOrder(s);
+        if (!order.isEmpty()) {
+            orders[s] = order;
+        }
+    }
+    return orders;
+}
+
+void Daemon::restoreAutotileOnlyGeometries()
+{
+    if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
+        return;
+    }
+    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    if (!wts) {
+        return;
+    }
+    for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
+        const QString& screenName = it.key();
+        for (const QString& windowId : it.value()) {
+            if (wts->isWindowSnapped(windowId))
+                continue;
+            m_windowTrackingAdaptor->applyGeometryForFloat(windowId, screenName);
+        }
+    }
+}
+
 void Daemon::presaveSnapFloats()
 {
     if (!m_windowTrackingAdaptor) {
@@ -272,19 +306,26 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenName)
     if (!m_autotileEngine || !m_windowTrackingAdaptor) {
         return;
     }
-    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
-    if (!wts) {
-        return;
+
+    // Prefer saved autotile order from last mode toggle (deterministic re-entry).
+    // Falls back to zone-ordered window list when no saved order exists (first
+    // activation, or windows changed between toggles).
+    QStringList order = m_lastAutotileOrders.value(screenName);
+    if (order.isEmpty()) {
+        WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+        if (wts) {
+            order = wts->buildZoneOrderedWindowList(screenName);
+        }
     }
-    QStringList zoneOrder = wts->buildZoneOrderedWindowList(screenName);
-    if (!zoneOrder.isEmpty()) {
+
+    if (!order.isEmpty()) {
         // Clear saved-floating for windows that were re-snapped to zones.
         // If the user floated a window in autotile then re-snapped it in manual
         // mode, the re-snap shows intent to tile — don't restore as floating.
         // Un-snapped windows (not in zoneOrder) keep their saved floating state
         // so they stay floating when autotile is re-enabled.
-        m_autotileEngine->clearSavedFloatingForWindows(zoneOrder);
-        m_autotileEngine->setInitialWindowOrder(screenName, zoneOrder);
+        m_autotileEngine->clearSavedFloatingForWindows(order);
+        m_autotileEngine->setInitialWindowOrder(screenName, order);
     }
 }
 

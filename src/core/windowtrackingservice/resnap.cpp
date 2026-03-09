@@ -18,6 +18,20 @@
 
 namespace PlasmaZones {
 
+namespace {
+/// Sort zones by zone number ascending, with UUID tie-breaker for determinism
+/// when multiple zones share the same number. Used by resnap, snap-all, and
+/// autotile-order-to-zone-assignment logic.
+void sortZonesByNumber(QVector<Zone*>& zones)
+{
+    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+        if (a->zoneNumber() != b->zoneNumber())
+            return a->zoneNumber() < b->zoneNumber();
+        return a->id() < b->id();
+    });
+}
+} // anonymous namespace
+
 QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout()
 {
     QVector<RotationEntry> result;
@@ -41,9 +55,7 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
         }
 
         QVector<Zone*> newZones = newLayout->zones();
-        std::sort(newZones.begin(), newZones.end(), [](Zone* a, Zone* b) {
-            return a->zoneNumber() < b->zoneNumber();
-        });
+        sortZonesByNumber(newZones);
         const int newZoneCount = newZones.size();
 
         for (const ResnapEntry* entry : screenIt.value()) {
@@ -152,14 +164,8 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromAutotileOrder(c
         return result;
     }
 
-    // Get zones sorted by zone number (stable sort + UUID tie-breaker for
-    // deterministic ordering when multiple zones share the same number)
     QVector<Zone*> zones = layout->zones();
-    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber())
-            return a->zoneNumber() < b->zoneNumber();
-        return a->id() < b->id();
-    });
+    sortZonesByNumber(zones);
 
     // Get screen and gap settings for geometry calculation
     QScreen* screen = screenName.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenName);
@@ -287,14 +293,8 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
         return result;
     }
 
-    // Get zones sorted by zone number (stable sort + UUID tie-breaker for
-    // deterministic ordering when multiple zones share the same number)
     QVector<Zone*> zones = layout->zones();
-    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
-        if (a->zoneNumber() != b->zoneNumber())
-            return a->zoneNumber() < b->zoneNumber();
-        return a->id() < b->id();
-    });
+    sortZonesByNumber(zones);
 
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenName);
 

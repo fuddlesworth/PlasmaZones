@@ -225,7 +225,7 @@ void Daemon::resnapIfManualMode()
     // Resnapping during autotile uses a stale buffer from the old snap-mode
     // layout, sending competing geometry D-Bus signals to the effect.
     if (m_snapEngine && !(m_modeTracker && m_modeTracker->isAutotileMode())) {
-        m_suppressResnapOsd = true;
+        m_suppressResnapOsd = 1;
         m_snapEngine->resnapToNewLayout();
     }
 }

@@ -284,7 +284,7 @@ void Daemon::connectShortcutSignals()
         }
         // Suppress resnap OSD — the layout switch OSD already provides feedback
         if (m_windowTrackingAdaptor) {
-            m_suppressResnapOsd = true;
+            m_suppressResnapOsd = 1;
             m_windowTrackingAdaptor->resnapToNewLayout();
         }
     });

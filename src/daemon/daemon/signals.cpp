@@ -203,10 +203,14 @@ void Daemon::initializeAutotile()
             bool applied = false;
             const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
 
+            // Capture autotile window order BEFORE layout switch destroys TilingState.
+            // Saved in m_lastAutotileOrders for deterministic re-seeding on next entry.
+            if (wasAutotile) {
+                m_lastAutotileOrders = captureAutotileOrders();
+            }
+
             if (wasAutotile) {
                 // Autotile → Snapping: switch to last manual layout.
-                // WTS zone assignments from manual mode are preserved during autotile,
-                // so resnapCurrentAssignments() below restores the exact snap state.
                 QString layoutId = m_modeTracker->lastManualLayoutId();
                 if (!layoutId.isEmpty()) {
                     applied = m_unifiedLayoutController->applyLayoutById(layoutId);
@@ -227,10 +231,9 @@ void Daemon::initializeAutotile()
                 // toggles don't lose snap-mode floats (see presaveSnapFloats doc).
                 presaveSnapFloats();
 
-                // Pre-seed autotile engine with zone-ordered windows.
-                // Seed ALL screens (not just focused) for deterministic ordering on
-                // multi-monitor setups. Without this, non-focused screens get
-                // non-deterministic KWin stacking-order based insertion.
+                // Pre-seed autotile engine with saved autotile order (if available)
+                // or zone-ordered windows. Seed ALL screens for deterministic ordering
+                // on multi-monitor setups.
                 for (QScreen* s : m_screenManager->screens()) {
                     seedAutotileOrderForScreen(s->name());
                 }
@@ -245,17 +248,17 @@ void Daemon::initializeAutotile()
                 updateLayoutFilter();
             }
 
-            // Resnap windows to their original manual-mode zone positions.
-            // Uses WTS zone assignments (preserved during autotile) rather than
-            // autotile tiling order — the tiling order can differ from zone
-            // assignments when windows are floated/reordered in autotile, which
-            // would resnap the wrong windows to the wrong zones.
-            // windowsReleasedFromTiling (fired by the assignLayout signal chain)
-            // clears floating state before this runs, so all zone-assigned
-            // windows are resnapped; windows never zone-snapped are left alone.
+            // Resnap ALL autotile screens (not just focused) using pre-autotile
+            // zone assignments. Zone assignments are preserved during autotile
+            // (onLayoutChanged skips autotile screens) so resnap restores windows
+            // to their original snap positions. Windows never zone-snapped stay in place.
             if (applied && wasAutotile && m_snapEngine) {
-                m_suppressResnapOsd = true;
-                m_snapEngine->resnapCurrentAssignments(screen->name());
+                m_suppressResnapOsd = m_lastAutotileOrders.size();
+                for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
+                    m_snapEngine->resnapCurrentAssignments(it.key());
+                }
+
+                restoreAutotileOnlyGeometries();
             }
         });
 
@@ -439,20 +442,20 @@ void Daemon::connectOverlaySignals()
         });
 
     // Connect navigation feedback signal to show OSD (manual mode: from WindowTrackingAdaptor via KWin effect)
-    connect(m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
-            [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-                   const QString& targetZoneId, const QString& screenName) {
-                // Suppress resnap OSD when triggered by a mode/layout change
-                // (layout switch OSD already provides feedback)
-                if (m_suppressResnapOsd && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
-                    m_suppressResnapOsd = false;
-                    return;
-                }
-                if (m_settings && m_settings->showNavigationOsd()) {
-                    m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId,
-                                                        screenName);
-                }
-            });
+    connect(
+        m_windowTrackingAdaptor, &WindowTrackingAdaptor::navigationFeedback, this,
+        [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
+               const QString& targetZoneId, const QString& screenName) {
+            // Suppress resnap OSD when triggered by a mode/layout change
+            // (layout switch OSD already provides feedback)
+            if (m_suppressResnapOsd > 0 && (action == QStringLiteral("resnap") || action == QStringLiteral("retile"))) {
+                --m_suppressResnapOsd;
+                return;
+            }
+            if (m_settings && m_settings->showNavigationOsd()) {
+                m_overlayService->showNavigationOsd(success, action, reason, sourceZoneId, targetZoneId, screenName);
+            }
+        });
 
     // Note: AutotileEngine::navigationFeedbackRequested is relayed through
     // WindowTrackingAdaptor::navigationFeedback via setEngines(), so both engines
