@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.13] - 2026-03-08
+
+### Fixed
+- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Deferred `KGlobalAccel::setGlobalShortcut()` calls one-at-a-time with event loop yields between each. Phase 1 registers all 39 shortcuts via `setDefaultShortcut()` (fast, no key grabbing). Phase 2 processes `setGlobalShortcut()` individually so each ~600ms blocking D-Bus call never freezes the desktop. Eliminates 20-40s hangs during login when kglobalacceld is under contention.
+
 ## [1.15.12] - 2026-03-08
 
 ### Fixed
