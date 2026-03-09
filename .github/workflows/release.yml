@@ -572,19 +572,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download Arch package artifact
+      - name: Download generic tarball artifact
         uses: actions/download-artifact@v4
         with:
-          name: arch-package
+          name: generic-linux-tarball
           path: dist
 
-      - name: Calculate package hash
+      - name: Calculate tarball hash
         id: hash
         run: |
-          PKG_FILE=$(ls dist/*.pkg.tar.zst | head -1)
-          SHA256=$(sha256sum "$PKG_FILE" | cut -d' ' -f1)
+          TARBALL=$(ls dist/plasmazones-*-linux-x86_64.tar.gz | head -1)
+          SHA256=$(sha256sum "$TARBALL" | cut -d' ' -f1)
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
-          echo "Package: $PKG_FILE"
+          echo "Tarball: $TARBALL"
           echo "SHA256: $SHA256"
 
       - name: Setup SSH for AUR
