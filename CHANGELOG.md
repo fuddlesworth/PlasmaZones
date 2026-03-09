@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.15.15] - 2026-03-09
+
+### Fixed
+- **Shortcuts not working until window is manually snapped**: The async D-Bus key grab refactor (v1.15.14) bypassed `KGlobalAccel::setShortcut()`, which connects to the component's `globalShortcutPressed` D-Bus signal. Without this connection, key grabs succeeded but press events were never received. Fixed by bootstrapping the component signal with one synchronous `setShortcut()` call (~490ms) before firing async D-Bus for the remaining ~50 key grabs.
+
 ## [1.15.14] - 2026-03-09
 
 ### Fixed
