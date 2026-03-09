@@ -516,7 +516,12 @@ void Daemon::start()
     qCInfo(lcDaemon) << "Overlay service ready -" << m_screenManager->screens().count()
                      << "screens available (windows created on-demand)";
 
-    // Register global shortcuts via ShortcutManager
+    // Register global shortcuts via ShortcutManager.
+    // Deferred registration (Phase 2) processes one shortcut per event-loop
+    // tick via QTimer::singleShot(0), so the event loop stays responsive for
+    // Wayland protocol events during login. Shortcut-dependent logic below
+    // works immediately because Phase 1 (setDefaultShortcut) is synchronous;
+    // Phase 2 only triggers the key grabs asynchronously.
     m_shortcutManager->registerShortcuts();
 
     // Connect shortcut signals

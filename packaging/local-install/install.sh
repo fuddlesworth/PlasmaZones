@@ -109,7 +109,7 @@ if [ -f "$SERVICE_SRC" ]; then
     mkdir -p "$HOME/.config/systemd/user"
     cp "$SERVICE_SRC" "$SERVICE_DEST"
     # Patch the service file to use the correct binary path and add library path
-    sed -i "s|ExecStart=/usr/bin/plasmazonesd|ExecStart=$PREFIX/bin/plasmazonesd|g" "$SERVICE_DEST"
+    sed -i "s|ExecStart=.*/plasmazonesd|ExecStart=$PREFIX/bin/plasmazonesd|g" "$SERVICE_DEST"
     # Add LD_LIBRARY_PATH environment variable after [Service] line
     sed -i "/^\[Service\]/a Environment=\"LD_LIBRARY_PATH=$PREFIX/$LIBDIR\"" "$SERVICE_DEST"
 else

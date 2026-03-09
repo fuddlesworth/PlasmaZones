@@ -2,11 +2,11 @@
 Description=PlasmaZones Window Snapping Daemon
 Documentation=https://github.com/fuddlesworth/PlasmaZones
 PartOf=graphical-session.target
-After=plasma-workspace.target
+After=plasma-workspace.target plasma-kglobalaccel.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/plasmazonesd
+ExecStart=@KDE_INSTALL_FULL_BINDIR@/plasmazonesd
 Restart=on-failure
 RestartSec=5
 Slice=session.slice
