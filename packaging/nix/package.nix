@@ -126,11 +126,8 @@ stdenv.mkDerivation {
         'if(TRUE)  # Force relative path for Nix — original: if(NOT DEFINED KDE_INSTALL_SYSTEMDUSERUNITDIR)'
   '';
 
-  # The upstream systemd unit hardcodes /usr/bin; patch to the store path
-  postInstall = ''
-    substituteInPlace $out/lib/systemd/user/plasmazones.service \
-      --replace-fail "/usr/bin/plasmazonesd" "$out/bin/plasmazonesd"
-  '';
+  # The systemd unit uses configure_file(@ONLY) with @KDE_INSTALL_FULL_BINDIR@,
+  # so it already resolves to $out/bin at build time — no post-install patching needed.
 
   meta = {
     description = "Window tiling and autotiling for KDE Plasma 6.6+";

@@ -51,10 +51,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Split `Settings`, `OverlayService`, `WindowTrackingService`, D-Bus adaptors, and editor into subdirectories
 - **Comprehensive unit tests** for all algorithms, engine, tiling state, overflow manager, geometry utils, and algorithm registry (11 test suites)
 
+## [1.15.14] - 2026-03-09
+
+### Fixed
+- **Nix build failure after systemd service template change**: Removed stale `postInstall` `substituteInPlace` that tried to replace `/usr/bin/plasmazonesd` in the systemd service file. Since the service now uses `configure_file(@ONLY)` with `@KDE_INSTALL_FULL_BINDIR@`, the path resolves correctly at build time and no post-install patching is needed.
+
 ## [1.15.13] - 2026-03-08
 
 ### Fixed
-- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Deferred `KGlobalAccel::setGlobalShortcut()` calls one-at-a-time with event loop yields between each. Phase 1 registers all 39 shortcuts via `setDefaultShortcut()` (fast, no key grabbing). Phase 2 processes `setGlobalShortcut()` individually so each ~600ms blocking D-Bus call never freezes the desktop. Eliminates 20-40s hangs during login when kglobalacceld is under contention.
+- **Login freeze with many shortcuts** (fixes [#200](https://github.com/fuddlesworth/PlasmaZones/discussions/200)): Replaced blocking `KGlobalAccel::setGlobalShortcut()` with a two-step approach — `setDefaultShortcut()` registers all shortcuts without key grabs, then async D-Bus calls activate key grabs in parallel without blocking the event loop. Eliminates 20-40s hangs during login when kglobalacceld is under contention.
 
 ## [1.15.12] - 2026-03-08
 
