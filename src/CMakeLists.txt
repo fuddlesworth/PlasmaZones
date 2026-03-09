@@ -422,9 +422,15 @@ endif()
 
 # Systemd user service (preferred over autostart for proper session ordering)
 # This ensures PlasmaZones starts AFTER plasma-workspace.target, avoiding
-# race conditions with KDE's session restore
+# race conditions with KDE's session restore.
+# Uses configure_file to resolve the correct binary path for the install prefix.
+configure_file(
+    daemon/plasmazones.service.in
+    ${CMAKE_CURRENT_BINARY_DIR}/plasmazones.service
+    @ONLY
+)
 install(FILES
-    daemon/plasmazones.service
+    ${CMAKE_CURRENT_BINARY_DIR}/plasmazones.service
     DESTINATION ${KDE_INSTALL_SYSTEMDUSERUNITDIR}
 )
 
