@@ -1435,26 +1435,11 @@ void AutotileEngine::propagateGlobalMasterCount()
 void AutotileEngine::backfillWindows()
 {
     for (const QString& screenName : m_autotileScreens) {
-        // Prioritize recovering overflow-floated windows before inserting new ones.
-        // This ensures previously-tiled windows return to tiling before brand-new
-        // windows take their slots.
-        {
-            TilingState* bfState = stateForScreen(screenName);
-            if (bfState && !m_overflow.isEmpty()) {
-                QStringList unfloated = m_overflow.recoverIfRoom(
-                    screenName, bfState->tiledWindowCount(), effectiveMaxWindows(screenName),
-                    [bfState](const QString& wid) {
-                        return bfState->isFloating(wid);
-                    },
-                    [bfState](const QString& wid) {
-                        return bfState->containsWindow(wid);
-                    });
-                for (const QString& wid : unfloated) {
-                    bfState->setFloating(wid, false);
-                    Q_EMIT windowFloatingChanged(wid, false, screenName);
-                }
-            }
-        }
+        // Overflow recovery is NOT done here — it is handled by retileScreen()
+        // which defers signal emission until after the full retile cycle.
+        // Doing it here would emit windowFloatingChanged synchronously before
+        // the deferred retile fires, creating a feedback loop where the KWin
+        // effect processes float state changes mid-transition.
 
         TilingState* state = stateForScreen(screenName);
         if (!state) {
