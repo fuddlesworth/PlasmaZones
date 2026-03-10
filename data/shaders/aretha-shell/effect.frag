@@ -486,8 +486,6 @@ vec3 glitch(vec2 uv, float t, float treble) {
         float blockRand = hash21(vec2(block, glitchT));
 
         if (blockRand > 0.7) {
-            float separation = (blockRand - 0.7) * 0.02 * intensity;
-
             float colorShift = hash21(vec2(block + 200.0, glitchT));
             vec3 corruptColor;
             if (colorShift < 0.33) corruptColor = arethaCyan;

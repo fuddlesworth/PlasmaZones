@@ -191,14 +191,6 @@
             "max": 2.0
         },
         {
-            "id": "tintColor",
-            "name": "Flow Tint Color",
-            "group": "Colors",
-            "type": "color",
-            "slot": 0,
-            "default": "#4488cc"
-        },
-        {
             "id": "glowColor",
             "name": "Glow Color",
             "group": "Colors",

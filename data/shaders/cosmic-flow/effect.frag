@@ -104,7 +104,6 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
     float innerGlowStr = customParams[3].z >= 0.0 ? customParams[3].z : 0.25;
     float sparkleStr = customParams[3].w >= 0.0 ? customParams[3].w : 2.5;
 
-    int gwCount = int(customParams[5].x >= 0.0 ? customParams[5].x : 3.0);
     float fbmRot = customParams[4].w >= 0.0 ? customParams[4].w : 0.5;
 
     // Convert rect to pixel coordinates
@@ -118,9 +117,6 @@ vec4 renderCosmicZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
 
     // Calculate SDF
     float d = sdRoundedBox(p, halfSize, borderRadius);
-
-    // Zone-local UV (still needed for inner edge glow calculations)
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
 
     // Global screen-space UV for pattern generation -- one continuous field
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));

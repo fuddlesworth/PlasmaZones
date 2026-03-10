@@ -94,6 +94,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
     float edgeSoftness  = customParams[0].y >= 0.0 ? customParams[0].y : 0.18;
     float gridLineW     = customParams[0].z >= 0.0 ? customParams[0].z : 0.75;
     float posterLevels  = customParams[0].w >= 0.0 ? customParams[0].w : 8.0;
+    posterLevels = max(posterLevels, 1.0);
     float shapeChance   = customParams[1].x >= 0.0 ? customParams[1].x : 0.62;
     float shapeSize     = customParams[1].y >= 0.0 ? customParams[1].y : 0.26;
     float sparkleChance = customParams[1].z >= 0.0 ? customParams[1].z : 0.04;
@@ -362,6 +363,7 @@ vec4 compositeMosaicLabels(vec4 color, vec2 fragCoord,
     vec3 hueCenter = colorWithFallback(customColors[0].rgb, vec3(0.251, 0.6, 0.749));
     vec3 shapeTint = colorWithFallback(customColors[1].rgb, vec3(1.0, 1.0, 0.949));
     float posterLevels = customParams[0].w >= 0.0 ? customParams[0].w : 8.0;
+    posterLevels = max(posterLevels, 1.0);
     float reactivity = customParams[2].x >= 0.0 ? customParams[2].x : 1.0;
 
     float labelGlowSpread = customParams[2].z >= 0.0 ? customParams[2].z : 2.0;

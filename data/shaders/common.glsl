@@ -40,11 +40,6 @@ layout(binding = 1) uniform sampler2D uZoneLabels;
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
 
-// Texture coords to screen coords (Y=0 at top). Uses iResolution.
-vec2 fragCoordFromTexCoord(vec2 vTexCoord) {
-    return vec2(vTexCoord.x, 1.0 - vTexCoord.y) * iResolution;
-}
-
 // Clamp color and apply qt_Opacity for final output.
 vec4 clampFragColor(vec4 color) {
     return vec4(clamp(color.rgb, 0.0, 1.0), clamp(color.a, 0.0, 1.0) * qt_Opacity);
@@ -122,7 +117,7 @@ float softBorder(float d, float borderWidth) {
 
 // Exponential falloff glow (e.g. outer glow: d > 0 outside zone)
 float expGlow(float d, float falloff, float strength) {
-    return exp(-d / falloff) * strength;
+    return exp(-d / max(falloff, 0.001)) * strength;
 }
 
 // Color with fallback when unset (length < 0.01)

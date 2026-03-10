@@ -379,8 +379,8 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float logoSizeMin   = customParams[6].y >= 0.0 ? customParams[6].y : 0.4;
     float logoSizeMax   = customParams[6].z >= 0.0 ? customParams[6].z : 1.0;
 
-    float flowCenterX   = customParams[6].w >= 0.0 ? customParams[6].w : 0.4;
-    float flowCenterY   = customParams[7].x >= 0.0 ? customParams[7].x : 0.5;
+    float flowCenterX   = customParams[6].w >= -1.5 ? customParams[6].w : 0.4;
+    float flowCenterY   = customParams[7].x >= -1.5 ? customParams[7].x : 0.5;
 
     vec2 rectPos = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
@@ -389,8 +389,6 @@ vec4 renderCachyZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
     vec2 p = fragCoord - center;
     float d = sdRoundedBox(p, halfSize, borderRadius);
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     float aspect = iResolution.x / max(iResolution.y, 1.0);
     float time = iTime;

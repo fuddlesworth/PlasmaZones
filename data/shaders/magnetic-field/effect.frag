@@ -226,10 +226,6 @@ vec4 renderMagneticZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderCo
     vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
     vec2 mouseGlobal = iMouse.xy / max(iResolution, vec2(1.0));
 
-    // Mouse position relative to zone (for in-zone checks only)
-    vec2 mouseNorm = iMouse.zw;  // Already normalized 0-1
-    vec2 mouseLocal = zoneLocalUV(iMouse.xy, rectPos, rectSize);  // Mouse relative to this zone
-
     float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
 
     // Colors
