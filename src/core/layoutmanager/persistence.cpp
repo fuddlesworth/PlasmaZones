@@ -155,6 +155,11 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
             }
         } else {
             qCWarning(lcLayout) << "Skipping invalid layout entry= " << entry << " reason= empty name or no zones";
+            // Clean up orphaned file from user directory (don't delete system layouts)
+            if (!layout->isSystemLayout()) {
+                QFile::remove(filePath);
+                qCInfo(lcLayout) << "Removed orphaned layout file:" << filePath;
+            }
             delete layout;
         }
     }
@@ -163,6 +168,13 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 void LayoutManager::saveLayout(Layout* layout)
 {
     if (!layout || !layout->isDirty()) {
+        return;
+    }
+
+    // Don't persist invalid layouts (empty name or no zones) — they would be
+    // skipped on reload anyway, creating orphaned files on disk.
+    if (layout->name().isEmpty() || layout->zoneCount() == 0) {
+        qCDebug(lcLayout) << "saveLayout: skipping invalid layout (name empty or no zones)" << layout->id();
         return;
     }
 

@@ -201,52 +201,18 @@ Move, focus, swap, rotate, and push actions show a brief overlay with the affect
 
 ### System Settings Integration
 
-Full KCM module with 8 tabs. Includes update checker with GitHub release notifications.
+Full KCM module with 8 tabs:
 
-<details>
-<summary>Screenshots</summary>
+- **Layouts** — Create, duplicate, import/export zone layouts with 12 built-in templates
+- **Editor** — Keyboard shortcuts for zone operations, grid/edge snapping, snap modifier keys
+- **Assignments** — Per-monitor, virtual desktop, and activity layout assignments; quick-switch slots; app-to-zone rules
+- **Snapping** — Zone appearance (colors, opacity, borders, blur, shaders), activation behavior, animations, zone selector
+- **Tiling** — Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, focus behavior
+- **General** — OSD style, layout switch notifications, global behavior settings
+- **Exclusions** — Window class exclusion lists with interactive picker, minimum size thresholds
+- **About** — Version info, update checker with GitHub release notifications, links, credits
 
-#### 1. Layouts
-Create, duplicate, and manage zone layouts with built-in templates, import/export, visibility filtering.
-
-![Layouts](docs/media/screenshots/kcm-layouts.png)
-
-#### 2. Editor
-Keyboard shortcuts for zone operations (duplicate, split, fill), grid/edge snapping, snap modifier keys.
-
-![Editor](docs/media/screenshots/kcm-editor.png)
-
-#### 3. Assignments
-Per-monitor, virtual desktop, and activity layout assignments; quick-switch keyboard slots; app-to-zone auto-snap rules.
-
-![Assignments](docs/media/screenshots/kcm-assignments.png)
-
-#### 4. Snapping
-Zone appearance (colors, opacity, borders, blur, shaders), activation behavior, animations, zone selector popup, and snap settings.
-
-![Snapping](docs/media/screenshots/kcm-snapping.png)
-
-#### 5. Tiling
-Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, and focus behavior.
-
-![Tiling](docs/media/screenshots/kcm-tiling.png)
-
-#### 6. General
-OSD style, layout switch notifications, global behavior settings.
-
-![General](docs/media/screenshots/kcm-general.png)
-
-#### 7. Exclusions
-Window class exclusion lists with interactive window picker, minimum size thresholds.
-
-![Exclusions](docs/media/screenshots/kcm-exclusions.png)
-
-#### 8. About
-Version info, update checker with GitHub release notifications, repository/wiki/bug report links, license, credits.
-
-![About](docs/media/screenshots/kcm-about.png)
-
-</details>
+<!-- placeholder: settings gif/screenshot -->
 
 ---
 
