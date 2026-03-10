@@ -135,12 +135,13 @@ Enable autotiling per-screen and windows arrange themselves using one of 11 algo
 
 ### Shader Effects
 
-12 built-in GLSL shader effects for zone overlays, including audio-reactive visuals:
+14 built-in GLSL shader effects for zone overlays, including audio-reactive visuals:
 
 | Effect | Description |
 |--------|-------------|
 | Aretha Shell | Cyberpunk hex grid with data streams |
 | Berry Drift | Metaball blobs in berry and violet tones |
+| CachyOS Drift | Crystalline drift with domain-warped FBM and iridescent glow |
 | Cosmic Flow | Fractal noise with animated colors |
 | Liquid Canvas | Wallpaper as a liquid painting with flow distortion |
 | Magnetic Field | Mouse-reactive field with orbiting particles |
@@ -151,6 +152,7 @@ Enable autotiling per-screen and windows arrange themselves using one of 11 algo
 | Spectrum Bloom | Polar contour with frequency-driven shape morphing |
 | Spectrum Pulse | Audio-reactive neon energy with CAVA integration |
 | Toxic Circuit | Glowing circuit traces with digital corruption |
+| Voxel Terrain | Infinite 3D voxel world with neon edges and audio-reactive glow |
 
 Up to 4 custom image textures per shader, plus desktop wallpaper sampling.
 
