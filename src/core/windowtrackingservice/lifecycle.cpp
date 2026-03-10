@@ -73,20 +73,12 @@ void WindowTrackingService::windowClosed(const QString& windowId)
         }
     }
 
-    // Now clean up active tracking state (but NOT floating state or pre-snap geometry -
-    // those persist across close/reopen for proper session restore behavior)
+    // Now clean up active tracking state (but NOT pre-snap geometry -
+    // that persists across close/reopen for proper session restore behavior)
     m_windowZoneAssignments.remove(windowId);
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
 
-    // Convert pre-float entries from full window ID to app ID so unfloating
-    // after reopen works (new window instance will have a different internal ID).
-    if (m_preFloatZoneAssignments.contains(windowId)) {
-        m_preFloatZoneAssignments[appId] = m_preFloatZoneAssignments.take(windowId);
-    }
-    if (m_preFloatScreenAssignments.contains(windowId)) {
-        m_preFloatScreenAssignments[appId] = m_preFloatScreenAssignments.take(windowId);
-    }
     // Convert pre-tile geometry from full windowId to appId for persistence
     // so that when the window reopens (with a new internal ID), the geometry
     // can still be found via appId fallback. storePreTileGeometry writes both
@@ -94,10 +86,20 @@ void WindowTrackingService::windowClosed(const QString& windowId)
     if (m_preTileGeometries.contains(windowId) && appId != windowId) {
         m_preTileGeometries.remove(windowId);
     }
-    // Convert floating state from full windowId to appId for persistence
-    if (m_floatingWindows.contains(windowId) && appId != windowId) {
-        m_floatingWindows.remove(windowId);
-        m_floatingWindows.insert(appId);
+    // Clear floating state on close — floating is a runtime-only state that
+    // should not carry over when the window is reopened. Without this, closing
+    // a floated window and reopening it would inherit the float state (via appId
+    // fallback), causing a spurious "floated" OSD and preventing auto-snap.
+    m_floatingWindows.remove(windowId);
+    if (appId != windowId) {
+        m_floatingWindows.remove(appId);
+    }
+    // Also clear pre-float zone/screen assignments since float state is gone
+    m_preFloatZoneAssignments.remove(windowId);
+    m_preFloatScreenAssignments.remove(windowId);
+    if (appId != windowId) {
+        m_preFloatZoneAssignments.remove(appId);
+        m_preFloatScreenAssignments.remove(appId);
     }
     // Remove autotile-floated tracking outright — do NOT migrate to appId.
     // This set is ephemeral (not persisted); migrating to appId would create

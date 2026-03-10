@@ -130,7 +130,8 @@ void WindowTrackingAdaptor::saveState()
     tracking.deleteEntry(QStringLiteral("PendingWindowLayoutAssignments"));
     tracking.deleteEntry(QStringLiteral("PendingWindowZoneNumbers"));
 
-    // Save unified pre-tile geometries (convert to appId for cross-restart persistence)
+    // Save pre-tile geometries so float-toggle restores to the correct position
+    // even after daemon restart (windows stay at their zone positions across restarts).
     tracking.writeEntry(QStringLiteral("PreTileGeometries"), serializeGeometryMap(m_service->preTileGeometries()));
     // Remove old split keys if present (migration)
     tracking.deleteEntry(QStringLiteral("PreSnapGeometries"));
@@ -302,7 +303,7 @@ void WindowTrackingAdaptor::loadState()
 
     m_service->setPendingRestoreQueues(pendingQueues);
 
-    // Load unified pre-tile geometries (with migration from old split keys)
+    // Load pre-tile geometries (with migration from old split keys)
     QHash<QString, QRect> preTileGeometries;
     auto loadGeometries = [](const QString& json, QHash<QString, QRect>& out) {
         if (json.isEmpty()) {
@@ -325,12 +326,11 @@ void WindowTrackingAdaptor::loadState()
         }
     };
 
-    // Try new unified key first
     QString tileJson = tracking.readEntry(QStringLiteral("PreTileGeometries"), QString());
     if (!tileJson.isEmpty()) {
         loadGeometries(tileJson, preTileGeometries);
     } else {
-        // Migration: merge old split keys (pre-snap wins on conflict since it's the original geometry)
+        // Migration: merge old split keys
         loadGeometries(tracking.readEntry(QStringLiteral("PreAutotileGeometries"), QString()), preTileGeometries);
         loadGeometries(tracking.readEntry(QStringLiteral("PreSnapGeometries"), QString()), preTileGeometries);
     }

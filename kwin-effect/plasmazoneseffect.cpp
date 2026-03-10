@@ -576,9 +576,9 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Delegate to helpers
     m_dragTracker->handleWindowClosed(w);
 
-    // NOTE: Don't clear floating state here - it should persist across window close/reopen
-    // The daemon preserves floating state (keyed by appId) so the window stays floating
-    // when reopened. The effect's local cache will be synced in slotWindowAdded().
+    // Clear floating state — floating is runtime-only and resets on window close.
+    // The daemon clears its side in windowClosed().
+    m_navigationHandler->setWindowFloating(getWindowId(w), false);
 
     m_windowAnimator->removeAnimation(w);
 
@@ -817,7 +817,11 @@ void PlasmaZonesEffect::slotDaemonReady()
         }
     }
 
-    // Re-sync floating windows (async, no QDBusInterface needed)
+    // Re-sync floating windows (async, no QDBusInterface needed).
+    // MUST clear the local set first — after daemon restart, the daemon's float state
+    // is empty (ephemeral). Without clearing, stale entries from the previous daemon
+    // session would persist in the effect, causing isWindowFloating() to return true
+    // for windows that are no longer floating.
     {
         QDBusMessage msg = QDBusMessage::createMethodCall(
             DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
@@ -826,6 +830,7 @@ void PlasmaZonesEffect::slotDaemonReady()
             w->deleteLater();
             QDBusPendingReply<QStringList> reply = *w;
             if (reply.isValid()) {
+                m_navigationHandler->clearAllFloatingState();
                 QStringList floatingIds = reply.value();
                 for (const QString& id : floatingIds) {
                     m_navigationHandler->setWindowFloating(id, true);
@@ -2020,8 +2025,12 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std
     // Single D-Bus call — daemon runs the full appRule → persisted → emptyZone → lastZone chain
     // skipAnimation=true: window is being restored to its snap position on startup/reopen,
     // so teleport directly instead of sliding from KWin's saved position.
+    // storePreSnap=false: the window is already at its snap/zone position (from before
+    // daemon restart or from KWin session restore), so its current frameGeometry is the
+    // zone geometry — NOT the free-floating geometry. Storing it as pre-tile would cause
+    // float toggle to restore to the zone geometry instead of the original free-floating position.
     tryAsyncSnapCall(*m_windowTrackingInterface, QStringLiteral("resolveWindowRestore"), {windowId, screenName, sticky},
-                     safeWindow, windowId, true, nullptr, nullptr, /*skipAnimation=*/true, onComplete);
+                     safeWindow, windowId, false, nullptr, nullptr, /*skipAnimation=*/true, onComplete);
 }
 
 void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)

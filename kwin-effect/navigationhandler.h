@@ -50,6 +50,10 @@ public:
     // Floating window tracking (uses full windowId, with appId fallback)
     bool isWindowFloating(const QString& windowId) const;
     void setWindowFloating(const QString& windowId, bool floating);
+    void clearAllFloatingState()
+    {
+        m_floatingWindows.clear();
+    }
     void syncFloatingWindowsFromDaemon();
     void syncFloatingStateForWindow(const QString& windowId);
 

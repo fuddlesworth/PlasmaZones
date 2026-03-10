@@ -799,19 +799,24 @@ private Q_SLOTS:
         QCOMPARE(geo->width(), 800);
     }
 
-    void testWindowClosed_preFloatZonesConvertedToStableId()
+    void testWindowClosed_floatStateClearedOnClose()
     {
         QString windowId = QStringLiteral("org.kde.kate|55555");
         QString appId = Utils::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[1], QStringLiteral("DP-1"), 1);
         m_service->unsnapForFloat(windowId);
+        m_service->setWindowFloating(windowId, true);
 
         QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[1]);
+        QVERIFY(m_service->isWindowFloating(windowId));
 
         m_service->windowClosed(windowId);
 
-        QCOMPARE(m_service->preFloatZone(appId), m_zoneIds[1]);
+        // Float state and pre-float zones should be fully cleared on close
+        QVERIFY(!m_service->isWindowFloating(windowId));
+        QVERIFY(!m_service->isWindowFloating(appId));
+        QVERIFY(m_service->preFloatZone(appId).isEmpty());
     }
 
     void testWindowClosed_scheduleSaveStateCalled()

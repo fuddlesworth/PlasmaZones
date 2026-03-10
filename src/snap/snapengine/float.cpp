@@ -93,9 +93,11 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
 {
     auto geo = m_windowTracker->validatedPreTileGeometry(windowId);
     if (geo) {
+        qCInfo(lcCore) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
         Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(*geo), QString(), screenName);
         return true;
     }
+    qCWarning(lcCore) << "applyGeometryForFloat:" << windowId << "NO pre-tile geometry found";
     return false;
 }
 

@@ -160,13 +160,18 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
     if (!overwrite) {
         // First-only mode (snap): don't overwrite when moving A→B
         if (m_preTileGeometries.contains(windowId)) {
+            qCDebug(lcCore) << "storePreTileGeometry: skipping (windowId exists)" << windowId
+                            << "existing:" << m_preTileGeometries.value(windowId) << "proposed:" << geometry;
             return;
         }
         if (appId != windowId && m_preTileGeometries.contains(appId)) {
+            qCDebug(lcCore) << "storePreTileGeometry: skipping (appId exists)" << appId
+                            << "existing:" << m_preTileGeometries.value(appId) << "proposed:" << geometry;
             return;
         }
     }
 
+    qCDebug(lcCore) << "storePreTileGeometry:" << windowId << "=" << geometry << "overwrite:" << overwrite;
     m_preTileGeometries[windowId] = geometry;
     if (appId != windowId) {
         m_preTileGeometries[appId] = geometry;
@@ -199,12 +204,16 @@ std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windo
         return std::nullopt;
     }
     if (m_preTileGeometries.contains(windowId)) {
+        qCDebug(lcCore) << "preTileGeometry: found by windowId" << windowId << "="
+                        << m_preTileGeometries.value(windowId);
         return m_preTileGeometries.value(windowId);
     }
     QString appId = Utils::extractAppId(windowId);
     if (appId != windowId && m_preTileGeometries.contains(appId)) {
+        qCDebug(lcCore) << "preTileGeometry: found by appId" << appId << "=" << m_preTileGeometries.value(appId);
         return m_preTileGeometries.value(appId);
     }
+    qCDebug(lcCore) << "preTileGeometry: NOT FOUND for" << windowId;
     return std::nullopt;
 }
 
@@ -231,6 +240,7 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
         removed |= (m_preTileGeometries.remove(appId) > 0);
     }
     if (removed) {
+        qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
         scheduleSaveState();
     }
 }
