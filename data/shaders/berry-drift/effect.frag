@@ -498,6 +498,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeBerryLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[4].w > 0.5)
+        color = compositeBerryLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

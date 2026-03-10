@@ -24,6 +24,7 @@
         {"id": "toxicReact", "name": "Toxic Reactivity", "group": "Labels", "type": "float", "slot": 14, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "dripCount", "name": "Toxic Drip Count", "group": "Effects", "type": "int", "slot": 15, "default": 5, "min": 2, "max": 10},
         {"id": "arcFrequency", "name": "Arc Noise Frequency", "group": "Effects", "type": "int", "slot": 16, "default": 12, "min": 4, "max": 24},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 17, "default": true},
         {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#39FF14"},
         {"id": "secondaryColor", "name": "Secondary Color", "group": "Colors", "type": "color", "slot": 1, "default": "#BF00FF"},
         {"id": "arcColor", "name": "Arc Discharge Color", "group": "Colors", "type": "color", "slot": 2, "default": "#00ff88"},

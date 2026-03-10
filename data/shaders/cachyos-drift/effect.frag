@@ -772,6 +772,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeCachyLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[7].y > 0.5)
+        color = compositeCachyLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

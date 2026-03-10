@@ -444,6 +444,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeBloomLabels(color, fragCoord, bass, hasAudio);
+    if (customParams[3].z > 0.5)
+        color = compositeBloomLabels(color, fragCoord, bass, hasAudio);
     fragColor = clampFragColor(color);
 }

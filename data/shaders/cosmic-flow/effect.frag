@@ -384,7 +384,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeCosmicLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[5].y > 0.5)
+        color = compositeCosmicLabels(color, fragCoord, bass, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

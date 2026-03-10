@@ -431,6 +431,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeMosaicLabels(color, fragCoord, bass, mids, treble, overall, hasAudio);
+    if (customParams[3].z > 0.5)
+        color = compositeMosaicLabels(color, fragCoord, bass, mids, treble, overall, hasAudio);
     fragColor = clampFragColor(color);
 }

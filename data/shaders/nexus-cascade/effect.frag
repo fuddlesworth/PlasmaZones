@@ -305,6 +305,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeNexusLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[5].x > 0.5)
+        color = compositeNexusLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

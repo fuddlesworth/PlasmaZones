@@ -438,6 +438,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeNeonLabels(color, fragCoord, bass, treble, overall, hasAudio);
+    if (customParams[4].x > 0.5)
+        color = compositeNeonLabels(color, fragCoord, bass, treble, overall, hasAudio);
     fragColor = clampFragColor(color);
 }

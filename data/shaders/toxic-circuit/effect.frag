@@ -772,7 +772,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeToxicLabels(color, fragCoord, bass, treble, overall, hasAudio);
+    if (customParams[4].y > 0.5)
+        color = compositeToxicLabels(color, fragCoord, bass, treble, overall, hasAudio);
 
     fragColor = clampFragColor(color);
 }

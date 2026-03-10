@@ -25,6 +25,7 @@
         {"id": "fieldBright", "name": "Field Core Brightness", "group": "Labels", "type": "float", "slot": 13, "default": 2.2, "min": 1.0, "max": 4.0},
         {"id": "arcReact", "name": "Arc Reactivity", "group": "Labels", "type": "float", "slot": 14, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "arcThickness", "name": "Field Line Thickness", "group": "Field", "type": "float", "slot": 15, "default": 0.006, "min": 0.002, "max": 0.015},
-        {"id": "gridFrequency", "name": "Grid Frequency", "group": "Field", "type": "int", "slot": 16, "default": 20, "min": 8, "max": 40}
+        {"id": "gridFrequency", "name": "Grid Frequency", "group": "Field", "type": "int", "slot": 16, "default": 20, "min": 8, "max": 40},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 17, "default": true}
     ]
 }

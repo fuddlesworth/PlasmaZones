@@ -20,6 +20,7 @@
         {"id": "waveReact", "name": "Wave Reactivity", "group": "Labels", "type": "float", "slot": 10, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "shockwaveSlots", "name": "Shockwave Slots", "group": "Audio", "type": "int", "slot": 11, "default": 4, "min": 1, "max": 8},
         {"id": "nebulaScale", "name": "Nebula Scale", "group": "Background", "type": "float", "slot": 12, "default": 8.0, "min": 3.0, "max": 16.0},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 13, "default": true},
         {"id": "primaryColor", "name": "Primary Color", "group": "Colors", "type": "color", "slot": 0, "default": "#00ccff"},
         {"id": "accentColor", "name": "Accent Color", "group": "Colors", "type": "color", "slot": 1, "default": "#ff3399"},
         {"id": "bassColor", "name": "Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#ff6600"}

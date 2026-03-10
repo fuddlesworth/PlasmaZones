@@ -231,6 +231,7 @@
         {"id": "scanlineBright", "name": "Scanline Brightness", "group": "Labels", "type": "float", "slot": 23, "default": 2.0, "min": 1.0, "max": 4.0},
         {"id": "surgeReact", "name": "Data Surge Reactivity", "group": "Labels", "type": "float", "slot": 24, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "glitchFrequency", "name": "Glitch Frequency", "group": "Animation", "type": "float", "slot": 25, "default": 0.5, "min": 0.1, "max": 2.0},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 26, "default": true},
         {
             "id": "arethaCyan",
             "name": "Edge & Glow",

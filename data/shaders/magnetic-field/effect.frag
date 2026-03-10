@@ -561,7 +561,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[4].y > 0.5)
+        color = compositeMagneticLabels(color, fragCoord, bass, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

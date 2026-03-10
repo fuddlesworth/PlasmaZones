@@ -244,6 +244,7 @@
             "default": 0.025,
             "min": 0.005,
             "max": 0.06
-        }
+        },
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 19, "default": true}
     ]
 }

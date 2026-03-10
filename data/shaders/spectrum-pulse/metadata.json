@@ -23,6 +23,7 @@
         {"id": "neonIntensity", "name": "Neon Core Intensity", "group": "Labels", "type": "float", "slot": 13, "default": 2.0, "min": 1.0, "max": 4.0},
         {"id": "electricReact", "name": "Electric Reactivity", "group": "Labels", "type": "float", "slot": 14, "default": 1.0, "min": 0.0, "max": 2.0},
         {"id": "gridResolution", "name": "Grid Resolution", "group": "Effects", "type": "int", "slot": 15, "default": 20, "min": 8, "max": 40},
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 16, "default": true},
         {"id": "primaryColor", "name": "Primary Neon", "group": "Colors", "type": "color", "slot": 0, "default": "#00ffff"},
         {"id": "accentColor", "name": "Accent Glow", "group": "Colors", "type": "color", "slot": 1, "default": "#ff00ff"},
         {"id": "bassColor", "name": "Bass Color", "group": "Colors", "type": "color", "slot": 2, "default": "#ff6600"},

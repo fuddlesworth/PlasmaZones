@@ -21,6 +21,7 @@
         {"id": "tileIntensity", "name": "Fill Intensity",  "group": "Labels",     "type": "float", "slot": 11, "default": 0.7,   "min": 0.3, "max": 1.0},
         {"id": "shockReact", "name": "Shockwave Reactivity",  "group": "Labels",     "type": "float", "slot": 12, "default": 1.0,   "min": 0.0, "max": 2.0},
         {"id": "popFrequency",   "name": "Pop Frequency",      "group": "Audio",      "type": "float", "slot": 13, "default": 4.0,   "min": 1.0, "max": 10.0},
+        {"id": "showLabels",     "name": "Show Labels",       "group": "Labels",     "type": "bool", "slot": 14, "default": true},
         {"id": "hueCenter",      "name": "Hue Center",        "group": "Colors",     "type": "color", "slot": 0,  "default": "#4099bf"},
         {"id": "shapeTint",      "name": "Shape Tint",        "group": "Colors",     "type": "color", "slot": 1,  "default": "#fffff2"},
         {"id": "leadColor",      "name": "Lead Border Color", "group": "Colors",     "type": "color", "slot": 2,  "default": "#403830"},

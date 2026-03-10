@@ -287,6 +287,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeCanvasLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[4].w > 0.5)
+        color = compositeCanvasLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

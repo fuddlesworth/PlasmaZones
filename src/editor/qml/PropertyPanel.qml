@@ -694,15 +694,6 @@ Rectangle {
                 ComboBox {
                     id: zoneOverlayModeCombo
 
-                    readonly property real _longestItemWidth: {
-                        let maxW = 0;
-                        for (let i = 0; i < count; ++i) {
-                            _overlayMetrics.text = textAt(i) || "";
-                            maxW = Math.max(maxW, _overlayMetrics.advanceWidth);
-                        }
-                        return maxW;
-                    }
-
                     visible: panelMode === "single"
                     Layout.fillWidth: true
                     Kirigami.FormData.label: i18nc("@label", "Style:")
@@ -724,15 +715,9 @@ Rectangle {
 
                     }
 
-                    TextMetrics {
-                        id: _overlayMetrics
-
-                        font: zoneOverlayModeCombo.font
-                    }
-
                     popup: T.Popup {
                         y: zoneOverlayModeCombo.height
-                        width: Math.max(zoneOverlayModeCombo.width, zoneOverlayModeCombo._longestItemWidth + Kirigami.Units.gridUnit * 3)
+                        width: Math.max(zoneOverlayModeCombo.width, zoneOverlayModeCombo.implicitContentWidth + Kirigami.Units.gridUnit * 3)
                         height: Math.min(contentItem.implicitHeight + topPadding + bottomPadding, (zoneOverlayModeCombo.Window.window ? zoneOverlayModeCombo.Window.window.height : 600) - topMargin - bottomMargin)
                         topMargin: Kirigami.Units.smallSpacing
                         bottomMargin: Kirigami.Units.smallSpacing

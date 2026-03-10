@@ -328,7 +328,7 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
         result.rgb += primary * innerGlow;
 
         // ── Zone label: Resonance Lens ───────────────────────
-        {
+        if (customParams[3].y > 0.5) {
             vec2 labelUv = fragCoord / max(iResolution, vec2(0.001));
             vec2 texel = 1.0 / max(iResolution, vec2(1.0));
             vec4 labelSample = texture(uZoneLabels, labelUv);

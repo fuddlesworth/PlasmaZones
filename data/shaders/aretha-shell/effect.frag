@@ -790,6 +790,7 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
+    if (customParams[6].z > 0.5)
+        color = compositeArethaLabels(color, fragCoord, bass, treble, hasAudio);
     fragColor = clampFragColor(color);
 }

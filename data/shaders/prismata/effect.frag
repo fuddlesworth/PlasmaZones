@@ -433,7 +433,8 @@ void main() {
         color = blendOver(color, zoneColor);
     }
 
-    color = compositePrismataLabels(color, fragCoord, bass, mids, treble, hasAudio);
+    if (customParams[3].y > 0.5)
+        color = compositePrismataLabels(color, fragCoord, bass, mids, treble, hasAudio);
 
     fragColor = clampFragColor(color);
 }

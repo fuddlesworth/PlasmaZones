@@ -213,6 +213,7 @@
             "type": "color",
             "slot": 2,
             "default": "#66ccbb"
-        }
+        },
+        {"id": "showLabels", "name": "Show Labels", "group": "Labels", "type": "bool", "slot": 19, "default": true}
     ]
 }
