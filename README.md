@@ -124,6 +124,10 @@ Enable autotiling per-screen and windows arrange themselves using one of 11 algo
 - Minimized windows float, unminimized windows rejoin tiling
 - Per-window floating toggle
 - Staggered tiling animations
+- Respect window minimum sizes (toggleable) — tiles expand to honor size hints reported by the application
+
+> **Tip:** Some apps enforce a minimum size that prevents tiles from reaching their intended geometry. To fix this, create a KWin Window Rule:
+> **System Settings → Window Management → Window Rules** → add a rule matching the window class, set **Minimum Size** to **Force** `0×0` under the **Size & Position** tab. This removes the constraint so PlasmaZones can tile the window at any size.
 
 <p align="center">
   <img src="docs/media/videos/autotiling.gif" alt="PlasmaZones Autotiling" width="800">
