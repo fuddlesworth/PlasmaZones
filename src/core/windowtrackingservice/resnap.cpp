@@ -41,6 +41,26 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
     }
     qCDebug(lcCore) << "calculateResnapFromPreviousLayout: buffer has" << m_resnapBuffer.size() << "entries";
 
+    // Helper: create a "__restore__" entry that tells the KWin effect to move
+    // the window back to its pre-tile geometry instead of snapping it to a zone.
+    auto tryAppendRestore = [this, &result](const ResnapEntry* entry) {
+        auto preTile = preTileGeometry(entry->windowId);
+        if (!preTile) {
+            preTile = preTileGeometry(Utils::extractAppId(entry->windowId));
+        }
+        if (preTile && preTile->isValid()) {
+            RotationEntry rotEntry;
+            rotEntry.windowId = entry->windowId;
+            rotEntry.sourceZoneId = QString();
+            rotEntry.targetZoneId = QStringLiteral("__restore__");
+            rotEntry.targetGeometry = *preTile;
+            result.append(rotEntry);
+        } else {
+            qCDebug(lcCore) << "No pre-tile geometry for excess window" << entry->windowId
+                            << "- window will remain at stale position";
+        }
+    };
+
     // Group resnap entries by screen so each screen uses its own layout
     QHash<QString, QVector<const ResnapEntry*>> entriesByScreen;
     for (const ResnapEntry& entry : m_resnapBuffer) {
@@ -61,12 +81,16 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
         const int newZoneCount = newZones.size();
 
         for (const ResnapEntry* entry : screenIt.value()) {
-            // Multi-zone windows: map all zone positions to the new layout
+            // Multi-zone windows: map zone positions to the new layout.
+            // Only include positions that exist in the new layout — don't cycle
+            // excess positions (e.g. zone 3 shouldn't map to zone 1 when going
+            // from a 3-zone to a 2-zone layout).
             if (entry->allZonePositions.size() > 1) {
                 QStringList targetZoneIds;
                 for (int pos : entry->allZonePositions) {
-                    int targetPos = ((pos - 1) % newZoneCount) + 1;
-                    Zone* z = newZones.value(targetPos - 1, nullptr);
+                    if (pos > newZoneCount)
+                        continue; // skip positions beyond new layout
+                    Zone* z = newZones.value(pos - 1, nullptr);
                     if (z)
                         targetZoneIds.append(z->id().toString());
                 }
@@ -81,11 +105,20 @@ QVector<RotationEntry> WindowTrackingService::calculateResnapFromPreviousLayout(
                         rotEntry.targetGeometry = geo;
                         result.append(rotEntry);
                     }
+                } else {
+                    // ALL zone positions exceed the new layout — restore to pre-tile geometry.
+                    tryAppendRestore(entry);
                 }
             } else {
-                // Single-zone: map position with cycling (1->1, 2->2, 4->1 when 5->3 zones)
-                int targetPos = ((entry->zonePosition - 1) % newZoneCount) + 1;
-                Zone* targetZone = newZones.value(targetPos - 1, nullptr);
+                // Single-zone: map 1:1 by position (1->1, 2->2).
+                // Windows whose position exceeds the new zone count are restored to
+                // their pre-tile geometry — a window snapped to zone 3 should go back
+                // to its original size when switching to a 2-zone layout.
+                if (entry->zonePosition > newZoneCount) {
+                    tryAppendRestore(entry);
+                    continue;
+                }
+                Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
                 if (!targetZone) {
                     continue;
                 }

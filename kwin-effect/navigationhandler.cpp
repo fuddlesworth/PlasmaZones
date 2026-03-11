@@ -809,6 +809,8 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
 
     QHash<QString, KWin::EffectWindow*> windowMap = m_effect->buildWindowMap();
 
+    static constexpr QLatin1String RestoreSentinel{"__restore__"};
+
     struct PendingSnap
     {
         QPointer<KWin::EffectWindow> window;
@@ -817,6 +819,7 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
         QString targetZoneId;
         QString sourceZoneId;
         QString windowScreen;
+        bool isRestore = false; // true when targetZoneId == "__restore__"
     };
     QVector<PendingSnap> pending;
 
@@ -875,6 +878,7 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
         p.targetZoneId = targetZoneId;
         p.sourceZoneId = moveObj[QLatin1String("sourceZoneId")].toString();
         p.windowScreen = windowScreen;
+        p.isRestore = (targetZoneId == RestoreSentinel);
         pending.append(p);
     }
 
@@ -882,20 +886,30 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
         return result;
     }
 
-    // successCount reflects attempted entries; windows destroyed before their
-    // stagger timer fires are skipped but still counted here.
-    result.successCount = pending.size();
-    result.firstSourceZoneId = pending.first().sourceZoneId;
-    result.firstTargetZoneId = pending.first().targetZoneId;
-    result.firstScreenName = pending.first().windowScreen;
+    // successCount reflects snap entries only (not restore-to-pretile entries).
+    // Restore entries are still tracked in snappedWindowIds so autotile's
+    // stagger-restore callbacks skip them.
     for (const PendingSnap& p : pending) {
         result.snappedWindowIds.insert(p.snapWindowId);
+        if (!p.isRestore) {
+            ++result.successCount;
+            if (result.firstTargetZoneId.isEmpty()) {
+                result.firstSourceZoneId = p.sourceZoneId;
+                result.firstTargetZoneId = p.targetZoneId;
+                result.firstScreenName = p.windowScreen;
+            }
+        }
+    }
+    // Fallback: if ALL entries are restores, use the first entry's screen for feedback
+    if (result.firstScreenName.isEmpty()) {
+        result.firstScreenName = pending.first().windowScreen;
     }
 
     // Store pre-snap geometries for ALL windows before any timers fire,
     // so each records its true original geometry (not an intermediate state).
+    // Skip restore entries — they're being moved BACK to pre-tile geometry.
     for (const PendingSnap& p : pending) {
-        if (p.window) {
+        if (p.window && !p.isRestore) {
             m_effect->ensurePreSnapGeometryStored(p.window, p.snapWindowId);
         }
     }
@@ -910,7 +924,13 @@ NavigationHandler::BatchSnapResult NavigationHandler::applyBatchSnapFromJson(con
             m_effect->applySnapGeometry(p.window, p.geometry);
             auto* wiface = m_effect->windowTrackingInterface();
             if (wiface && wiface->isValid()) {
-                wiface->asyncCall(QStringLiteral("windowSnapped"), p.snapWindowId, p.targetZoneId, p.windowScreen);
+                if (p.isRestore) {
+                    // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
+                    wiface->asyncCall(QStringLiteral("windowUnsnapped"), p.snapWindowId);
+                    wiface->asyncCall(QStringLiteral("clearPreTileGeometry"), p.snapWindowId);
+                } else {
+                    wiface->asyncCall(QStringLiteral("windowSnapped"), p.snapWindowId, p.targetZoneId, p.windowScreen);
+                }
             }
         },
         onComplete);
